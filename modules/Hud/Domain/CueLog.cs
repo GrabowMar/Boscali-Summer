@@ -6,8 +6,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>Which of the game's own message boxes a cue stands in for: the action report (<c>AircraftActionsReport</c>), the reserve notice (<c>ReserveReport</c>), the funds line (<c>AllocationDisplay</c>) and the score line (<c>KillDisplay.killText</c>).</summary>
     internal enum CueSource : byte { Action, Reserve, Allocation, Score }
 
-    /// <summary>The DIM class word on a cue's shelf.</summary>
-    internal enum CueClass : byte { Sys, Wpn, Dmg, Funds, Rsv }
+    /// <summary>The DIM class word on a cue's shelf. Msn is a mission script's task line (a hint), never a word of the game's.</summary>
+    internal enum CueClass : byte { Sys, Wpn, Dmg, Funds, Rsv, Msn }
 
     /// <summary>Normal is BRIGHT, a caution AMBER, an alert (the game's alert colour: a failure) RED.</summary>
     internal enum CueSeverity : byte { Normal, Caution, Alert }
@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 case CueClass.Dmg: return "DMG";
                 case CueClass.Funds: return "FUNDS";
                 case CueClass.Rsv: return "RSV";
+                case CueClass.Msn: return "MSN";
                 default: return "SYS";
             }
         }
@@ -82,12 +83,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// Keep a message the game just showed: <paramref name="rich"/> is its text as the game wrote it, <paramref name="severity"/> what its native colour says (a failure is alert-coloured), <paramref name="seconds"/> how long the game keeps it.
         /// Returns the cue, or null when there was nothing to show (tags only).
         /// </summary>
-        public Cue Add(CueSource source, string rich, CueSeverity severity, float arrival, float seconds)
+        public Cue Add(CueSource source, string rich, CueSeverity severity, float arrival, float seconds, CueClass? forced = null)
         {
             Tick(arrival);
             string plain = CueText.Plain(rich);
             if (plain.Length == 0) return null;
-            CueClass cls = CueText.Classify(plain, source, ref severity);
+            CueClass cls = forced ?? CueText.Classify(plain, source, ref severity);
             string text = CueFit.Fit(plain, out float size);
             if (count == Capacity)
             {

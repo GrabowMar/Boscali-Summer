@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     /// </summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 3;
+        internal const byte ProtocolVersion = 4; // 4: a HAND order carries the course (X, degrees) and altitude (Y)
         private const float OrderInterval = 0.2f; // per aircraft; a re-designate right after DESIGNATE must not be eaten
 
         private readonly SenderThrottle throttle = new SenderThrottle();
@@ -90,6 +90,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             designated = null;
             designatedFrom = null;
             throttle.Clear();
+            pendingLinks.Clear();
         }
 
         public void Strike()
@@ -117,13 +118,31 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 if (Linkable(aircraft, drone)) SteerOrders.Set(drone, mode, point);
                 return;
             }
-            NetworkManagerNuclearOption.i?.Client?.Send(new VanguardDroneOrder
+            // The host takes one order per aircraft per OrderInterval and drops the rest without a word, while this client's mirror
+            // already shows them: queue per drone (the newest wins) and send at the host's pace (Flush).
+            pendingLinks[drone] = new VanguardDroneOrder
             {
                 Protocol = ProtocolVersion,
                 Link = (byte)(mode + 1),
                 DroneId = drone.persistentID.Id,
                 X = point.x, Y = point.y, Z = point.z,
-            });
+            };
+            Flush();
+        }
+
+        private readonly Dictionary<Missile, VanguardDroneOrder> pendingLinks = new Dictionary<Missile, VanguardDroneOrder>();
+        private float nextLinkSend;
+
+        private void Flush()
+        {
+            if (pendingLinks.Count == 0 || Time.unscaledTime < nextLinkSend) return;
+            Missile first = null;
+            foreach (Missile m in pendingLinks.Keys) { first = m; break; }
+            VanguardDroneOrder order = pendingLinks[first];
+            pendingLinks.Remove(first);
+            if (first == null || first.disabled) return;
+            nextLinkSend = Time.unscaledTime + OrderInterval + 0.05f;
+            NetworkManagerNuclearOption.i?.Client?.Send(order);
         }
 
         /// <summary>The sender's own live, steerable drone inside link range.</summary>
@@ -158,6 +177,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
+            Flush();
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
             NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;

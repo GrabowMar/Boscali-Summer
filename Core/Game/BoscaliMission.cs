@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Scenario;
 using HarmonyLib;
 using Newtonsoft.Json;
 using NuclearOption.SavedMission;
@@ -39,6 +40,9 @@ namespace BoscaliSummer.Core.Game
         /// </summary>
         internal static Func<Mission, string[]> ScriptedModulesOff;
 
+        /// <summary>For a scripted mission, the faction-name pairs its script puts at peace (<see cref="FactionPeace"/>); null for every other mission.</summary>
+        internal static Func<Mission, IEnumerable<KeyValuePair<string, string>>> ScriptedPeace;
+
         internal static readonly Type[] PatchTypes =
         [
             typeof(MissionGroupsPatch), typeof(SetMissionPatch), typeof(SceneLoadedPatch),
@@ -72,7 +76,12 @@ namespace BoscaliSummer.Core.Game
         {
             try
             {
-                if (mission == null || settings == null) return;
+                if (mission == null) return;
+                // Before anything spawns: the first sightings of the mission already have to respect it. Cleared first, so a script that fails to
+                // resolve leaves no peace from the mission before.
+                FactionPeace.Set(null);
+                FactionPeace.Set(ScriptedPeace?.Invoke(mission));
+                if (settings == null) return;
                 string[] scripted = ScriptedModulesOff?.Invoke(mission);
                 if (scripted != null)
                 {

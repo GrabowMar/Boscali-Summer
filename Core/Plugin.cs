@@ -14,7 +14,7 @@ namespace BoscaliSummer
     {
         public const string PluginGuid = "com.marci.boscalisummer";
         public const string PluginName = "Boscali Summer";
-        public const string PluginVersion = "0.2.6.2";
+        public const string PluginVersion = "0.2.7";
 
         internal static new ManualLogSource Logger { get; private set; }
         internal static ModConfiguration Settings { get; private set; }

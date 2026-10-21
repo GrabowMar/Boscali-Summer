@@ -48,24 +48,24 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                             if ((string)faction["factionName"] == Faction(locked)) faction["preventJoin"] = true;
 
             var build = new Build(root, script, errors);
-            // PMC is no faction of the base game: a script that uses it brings it, modelled on the mission's first faction but with nothing in store.
-            if (script.UsesPmc)
+            // PMC and Pirates are no factions of the base game: a script that uses one brings it, modelled on the mission's first faction but with nothing
+            // in store. Nobody joins the pirates.
+            foreach (ScenarioSide extra in new[] { ScenarioSide.Pmc, ScenarioSide.Pirates })
             {
+                if (!script.Uses(extra)) continue;
                 if (!(root["factions"] is JArray all) || all.Count == 0 || !(all[0] is JObject first))
-                    build.Error(1, "the base mission has no factions to model a PMC side on");
-                else
                 {
-                    bool present = false;
-                    foreach (JToken token in all) present |= token is JObject named && (string)named["factionName"] == SideNames.Pmc;
-                    if (!present)
-                    {
-                        var pmc = (JObject)first.DeepClone();
-                        pmc["factionName"] = SideNames.Pmc;
-                        pmc["preventJoin"] = script.Locked.Contains(ScenarioSide.Pmc);
-                        pmc["supplies"] = new JArray();
-                        all.Add(pmc);
-                    }
+                    build.Error(1, "the base mission has no factions to model a " + SideNames.Of(extra) + " side on");
+                    continue;
                 }
+                bool present = false;
+                foreach (JToken token in all) present |= token is JObject named && (string)named["factionName"] == SideNames.Of(extra);
+                if (present) continue;
+                var side = (JObject)first.DeepClone();
+                side["factionName"] = SideNames.Of(extra);
+                side["preventJoin"] = extra == ScenarioSide.Pirates || script.Locked.Contains(extra);
+                side["supplies"] = new JArray();
+                all.Add(side);
             }
             bool world = script.Units.Count + script.Copies.Count + script.Objectives.Count + script.Hold.Count + script.Begin.Count > 0 || script.Ending >= 0f;
             if (root["objectives"] is JArray objectives && root["outcomes"] is JArray outcomes) build.World(objectives, outcomes);

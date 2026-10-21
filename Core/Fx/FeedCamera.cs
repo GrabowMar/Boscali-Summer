@@ -42,7 +42,8 @@ namespace BoscaliSummer.Core.Fx
         private static readonly System.Reflection.FieldInfo GameExposure = AccessTools.Field(typeof(ExposureController), "colorAdjustments");
         private ColorAdjustments ours;
 
-        private bool Hdr => look != FeedLook.Seeker;
+        // Every look is HDR + ACES now: the LDR seeker clipped a bright cloud deck to a white sheet (in game 2026-10-20).
+        private bool Hdr => true;
 
         private static readonly System.Collections.Generic.HashSet<Camera> Lenses = new System.Collections.Generic.HashSet<Camera>();
 
@@ -166,10 +167,10 @@ namespace BoscaliSummer.Core.Fx
             color.saturation.value = mono ? -100f : -35f;
             color.contrast.value = look == FeedLook.Seeker ? 25f : look == FeedLook.WhiteHot ? 18f : 12f;
             color.postExposure.value = look == FeedLook.Seeker ? -0.2f : look == FeedLook.WhiteHot ? 0.15f : 0f;
-            s.GetComponent<Tonemapping>().mode.value = look == FeedLook.Seeker ? TonemappingMode.None : TonemappingMode.ACES;
+            s.GetComponent<Tonemapping>().mode.value = TonemappingMode.ACES;
             Bloom bloom = s.GetComponent<Bloom>();
             bloom.threshold.value = look == FeedLook.WhiteHot ? 1.1f : 0.95f;
-            bloom.intensity.value = look == FeedLook.WhiteHot ? 0.25f : look == FeedLook.Seeker ? 0.35f : 0.15f;
+            bloom.intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.15f;
             bloom.scatter.value = 0.6f;
             FilmGrain grain = s.GetComponent<FilmGrain>();
             grain.type.value = FilmGrainLookup.Custom;      // built-in lookups are stripped from the game (NRE in SetupGrain)

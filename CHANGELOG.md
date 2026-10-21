@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.7 — update
+
+- **Campaign, chapter 1 — Twelve Miles Out**: the old scripted missions are gone and a new campaign
+  mission takes their place. A PMC convoy escort in the middle of the PALA coup, told through animated news screens,
+  voiced radio traffic and mission hint cues. A new Pirates side joins the
+  PMC, and the script can set factions at peace with each other.
+- **VANGUARD drone steering**: TAKE CONTROL now holds the linked drone's course and height instead of
+  chasing your nose. MATCH MY NOSE hands it your heading and height, TURN LEFT / RIGHT 45° steer it
+  while hand-flown, and the UAV terminal lets you click a point to steer to and queue orders. The
+  terminal window is solid again, and the missile and target cards in the UAV screen share its style.
+  Needs everyone on the same version.
+- **OPS rooms**: the map rooms use the game's own 10 km plate grid. Arming and picking is steadier: an
+  arm lasts 30 seconds, a bounce no longer drops it, and one click makes one pick.
+- **HUD**: the NAV DATA block (way home, target, fuel endurance, mission clock) is removed from the
+  cockpit view and from the TAC BOARD and C menu switches, along with its setting.
+- **Cleanup**: the build runs with zero warnings and 34 unused declarations are gone.
+
 ## 0.2.6.2 — hotfix
 
 - **Screen smearing after a mission restart fixed** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):

@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
     /// <summary>
     /// VANGUARD drone link rules, shared by the host (orders, link loss) and every peer's UAV terminal, UAV MFD and feed.
-    /// HAND mirrors the pilot's nose (the drone flies the way the pilot points), WPT flies to a point and circles it.
+    /// HAND holds a commanded course and altitude (set by clicking the feed, the wheel, or MATCH MY NOSE), WPT flies to a point and circles it.
     /// </summary>
     internal static class DroneLink
     {
@@ -88,12 +88,42 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         public static string Word(DroneMode mode) => mode == DroneMode.Hand ? "HAND" : mode == DroneMode.Waypoint ? "WPT" : "AUTO";
 
-        /// <summary>HAND: a point <see cref="HandLookaheadM"/> out from the drone along the pilot's nose, nosed up near the ground.</summary>
-        public static Vector3 HandAim(Vector3 drone, Vector3 pilotForward, float droneAgl)
+        /// <summary>
+        /// HAND (2026-10-20, replaces mirroring the pilot's nose): the drone holds a commanded course and altitude. A point
+        /// <see cref="HandLookaheadM"/> out along <paramref name="courseDeg"/>, at most <see cref="HandClimbStepM"/> above or below the
+        /// drone (a gentle climb or dive toward <paramref name="altitude"/>, global y), nosed up near the ground.
+        /// </summary>
+        public static Vector3 HandAim(Vector3 drone, float courseDeg, float altitude, float droneAgl)
         {
-            Vector3 dir = pilotForward.sqrMagnitude > 1e-6f ? pilotForward.normalized : Vector3.forward;
-            if (droneAgl < FloorAglM) dir.y = Mathf.Max(dir.y, 0.3f * (1f - droneAgl / FloorAglM));
-            return drone + dir.normalized * HandLookaheadM;
+            float r = courseDeg * Mathf.Deg2Rad;
+            float climb = Mathf.Clamp(altitude - drone.y, -HandClimbStepM, HandClimbStepM);
+            if (droneAgl < FloorAglM) climb = Mathf.Max(climb, 0.3f * (1f - droneAgl / FloorAglM) * HandLookaheadM);
+            return drone + new Vector3(Mathf.Sin(r) * HandLookaheadM, climb, Mathf.Cos(r) * HandLookaheadM);
+        }
+
+        public const float HandClimbStepM = 1000f, AltPerDeg = 60f, MinAltM = 150f, MaxAltM = 12000f;
+
+        /// <summary>The HAND order's point carries the course in x (degrees) and the altitude in y (global metres); z is unused.</summary>
+        public static Vector3 HandPoint(float courseDeg, float altitude) =>
+            new Vector3(Mathf.Repeat(courseDeg, 360f), Mathf.Clamp(altitude, MinAltM, MaxAltM), 0f);
+
+        /// <summary>The world direction through a feed point (<paramref name="viewport"/> 0..1 from the bottom left) of a lens.</summary>
+        public static Vector3 LookDirection(Quaternion lens, float fovDeg, float aspect, Vector2 viewport)
+        {
+            float t = Mathf.Tan(fovDeg * 0.5f * Mathf.Deg2Rad);
+            return (lens * new Vector3((viewport.x * 2f - 1f) * t * aspect, (viewport.y * 2f - 1f) * t, 1f)).normalized;
+        }
+
+        /// <summary>
+        /// Click-to-steer: the course is the bearing of the clicked direction; the altitude moves <see cref="AltPerDeg"/> per degree the
+        /// click sits above or below the lens's own line (a click on the cross holds the height).
+        /// </summary>
+        public static Vector3 SteerTo(Vector3 direction, Vector3 lensForward, float droneAlt)
+        {
+            float pitch = Mathf.Asin(Mathf.Clamp(direction.y, -1f, 1f)) * Mathf.Rad2Deg;
+            float lensPitch = Mathf.Asin(Mathf.Clamp(lensForward.y, -1f, 1f)) * Mathf.Rad2Deg;
+            float change = Mathf.Clamp((pitch - lensPitch) * AltPerDeg, -1500f, 1500f);
+            return HandPoint(Bearing(Vector3.zero, direction), droneAlt + change);
         }
 
         /// <summary>WPT: straight at the point while far out, then a left-hand circle of <paramref name="radius"/> round it at its height.</summary>

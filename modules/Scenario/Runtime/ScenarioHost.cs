@@ -50,7 +50,12 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private AudioClip musicClip;
         // Narration: one clip per cut that names a voice, loaded as its cutscene starts and spoken as its shot starts.
         private readonly Dictionary<string, AudioClip> voiceClips = new Dictionary<string, AudioClip>(StringComparer.Ordinal);
-        private AudioSource voice;
+        private AudioSource voice, radio, effects;
+        // Counts shots: an effect still waiting for its moment when its shot is gone stays silent.
+        private int effectRound;
+        private readonly HashSet<string> effectFiles = new HashSet<string>(StringComparer.Ordinal);
+        // Counts missions: a recording that finishes loading after its mission ended is thrown away.
+        private int voiceRound;
         private float musicVolume, musicFadeFrom = -1f, musicEndsAt;
         private int musicAsked;
         private int shotsShown, skippedShots;
@@ -163,9 +168,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             else if (Time.unscaledTime >= musicEndsAt) { StopMusic(); return; }
             if (musicFadeFrom < 0f)
             {
-                // The track steps back while the narrator speaks.
-                bool speaking = voice != null && voice.isPlaying;
-                music.volume = Mathf.MoveTowards(music.volume, musicVolume * (speaking ? 0.25f : 1f), Time.unscaledDeltaTime * 1.5f);
+                // A steady level: every clip was levelled as it loaded, so the voices sit over the track without it stepping back.
+                music.volume = musicVolume;
                 return;
             }
             float faded = (Time.unscaledTime - musicFadeFrom) / MusicFadeSeconds;
@@ -197,12 +201,33 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             view = ScenarioStageView.Create(transform);
             boundAt = Time.time;
             started = joined = hadAircraft = airborne = choosing = ownJoin = false;
+            var recordings = new List<string>();
             foreach (ScenarioBeat beat in running.Beats)
                 foreach (ScenarioAction action in beat.Actions)
+                {
                     if (action.Kind == ActionKind.Enlist || action.Kind == ActionKind.Choose) ownJoin = true;
+                    // A clip is unpacked now, not in the middle of the cutscene that shows it.
+                    if (action.Board == "screen" && action.Words != null && action.Words.TryGetValue("clip", out string clip)) Clip(clip);
+                    if (action.Voice != null && !voiceClips.ContainsKey(action.Voice))
+                    {
+                        voiceClips[action.Voice] = null;
+                        recordings.Add(action.Voice);
+                    }
+                    if (action.Sfx != null)
+                        foreach (string entry in action.Sfx.Split(','))
+                        {
+                            string file = entry.Substring(0, entry.LastIndexOf('@')).Trim();
+                            if (voiceClips.ContainsKey(file)) continue;
+                            voiceClips[file] = null;
+                            effectFiles.Add(file);
+                            recordings.Add(file);
+                        }
+                }
+            // Every recording decodes now, so the first line of a cutscene and a line in a firefight are both ready when they are needed.
+            if (recordings.Count > 0) StartCoroutine(LoadVoices(recordings, voiceRound));
             log?.LogInfo("[Scenario] '" + running.Id + "' is running: " + running.Beats.Count + " beat(s).");
             if (running.Contract != ScenarioSide.Any)
-                log?.LogInfo("[Scenario] contract " + running.Contract + ": not yet acted on; PMC is hostile to every side.");
+                log?.LogInfo("[Scenario] contract " + running.Contract + ": not yet acted on; the script's peace lines decide who fights whom.");
         }
 
         private void Unbind()
@@ -224,12 +249,14 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             StopMusic();
             ReleaseGameMusic();
             if (voice != null) voice.Stop();
+            if (radio != null) radio.Stop();
             foreach (AudioClip clip in voiceClips.Values)
                 if (clip != null) Destroy(clip);
             voiceClips.Clear();
+            voiceRound++;
         }
 
-        public void Music(string file, float volume)
+        public void Music(string file, float volume, bool loop)
         {
             if (file == null)
             {
@@ -237,7 +264,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 else musicAsked++;   // a track still loading must not start after it was told to stop
                 return;
             }
-            StartCoroutine(PlayMusic(file, volume, ++musicAsked));
+            StartCoroutine(PlayMusic(file, volume, ++musicAsked, loop));
         }
 
         private bool gameMusicMuted;
@@ -306,6 +333,18 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             return cached;
         }
 
+        /// <summary>A screen board's clip as a file Unity can play (a built-in one is unpacked into the cache once), or null.</summary>
+        private string Clip(string file)
+        {
+            if (file == null) return null;
+            string path = null;
+            try { path = MusicFile(file); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            if (path == null) log?.LogWarning("[Scenario] clip '" + file + "' could not be read.");
+            return path;
+        }
+
         /// <summary>Speaks a cut's line. A cut without one lets the line before it run on over the cut.</summary>
         private void Speak(string file)
         {
@@ -325,7 +364,18 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             voice.Play();
         }
 
-        private IEnumerator LoadVoice(string file)
+        /// <summary>One recording after another, a frame apart: decoding and the gain pass are main-thread work, and they land in the opening cutscene.</summary>
+        private IEnumerator LoadVoices(List<string> files, int round)
+        {
+            foreach (string file in files)
+            {
+                if (round != voiceRound) yield break;
+                yield return LoadVoice(file, round);
+                yield return null;
+            }
+        }
+
+        private IEnumerator LoadVoice(string file, int round)
         {
             string path = null;
             try { path = MusicFile(file); }
@@ -338,28 +388,41 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 yield return request.SendWebRequest();
                 AudioClip clip = request.result == UnityWebRequest.Result.Success ? DownloadHandlerAudioClip.GetContent(request) : null;
                 if (clip == null) { log?.LogWarning("[Scenario] voice '" + file + "' could not be decoded."); yield break; }
-                // The mission ended while the file was loading.
-                if (runner == null || !voiceClips.ContainsKey(file)) { Destroy(clip); yield break; }
-                Louder(clip);
+                // The mission ended while the file was loading (another may have started and asked for the same file).
+                if (runner == null || round != voiceRound || !voiceClips.ContainsKey(file)) { Destroy(clip); yield break; }
+                Level(clip, effectFiles.Contains(file) ? EffectLevel : VoiceLevel);
                 voiceClips[file] = clip;
             }
         }
 
+        /// <summary>The loudness (RMS) every clip is levelled to as it loads: voices on top, effects under them, the music under both, all steady.</summary>
+        private const float VoiceLevel = 0.17f, EffectLevel = 0.11f, MusicLevel = 0.085f;
+
         /// <summary>
-        /// Narration sits over music and battle, and an AudioSource cannot go past full volume: the samples get about twice the gain, through a soft
-        /// curve so the peaks round off instead of clipping.
+        /// Brings a clip to <paramref name="target"/> RMS so lines, effects and the track keep the same balance whatever level each was made at (an
+        /// AudioSource cannot go past full volume, so quiet clips need their samples raised). Peaks above 0.8 round off through a soft knee instead of
+        /// clipping. Main-thread work, once a clip.
         /// </summary>
-        private static void Louder(AudioClip clip)
+        private static void Level(AudioClip clip, float target)
         {
-            const float Gain = 2.2f;
             var samples = new float[clip.samples * clip.channels];
             if (samples.Length == 0 || !clip.GetData(samples, 0)) return;
-            float norm = 1f / (float)Math.Tanh(Gain);
-            for (int i = 0; i < samples.Length; i++) samples[i] = (float)Math.Tanh(samples[i] * Gain) * norm;
+            double sum = 0;
+            for (int i = 0; i < samples.Length; i++) sum += samples[i] * samples[i];
+            float rms = (float)Math.Sqrt(sum / samples.Length);
+            if (rms < 1e-4f) return;
+            float gain = Mathf.Clamp(target / rms, 0.1f, 8f);
+            const float Knee = 0.8f;
+            for (int i = 0; i < samples.Length; i++)
+            {
+                float x = samples[i] * gain, a = Math.Abs(x);
+                if (a > Knee) x = Math.Sign(x) * (Knee + (1f - Knee) * (float)Math.Tanh((a - Knee) / (1f - Knee)));
+                samples[i] = x;
+            }
             clip.SetData(samples, 0);
         }
 
-        private IEnumerator PlayMusic(string file, float volume, int asked)
+        private IEnumerator PlayMusic(string file, float volume, int asked, bool loop)
         {
             string path = null;
             try { path = MusicFile(file); }
@@ -383,13 +446,15 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                     music.ignoreListenerPause = true;
                 }
                 if (musicClip != null) Destroy(musicClip);
+                Level(clip, MusicLevel);
                 musicClip = clip;
                 musicVolume = volume;
                 musicFadeFrom = -1f;
                 music.clip = clip;
                 music.volume = volume;
+                music.loop = loop;
                 music.Play();
-                musicEndsAt = Time.unscaledTime + clip.length;
+                musicEndsAt = loop ? float.MaxValue : Time.unscaledTime + clip.length;
                 log?.LogInfo("[Scenario] music '" + file + "' playing, " + clip.length.ToString("0") + " s.");
             }
         }
@@ -400,7 +465,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (!joined && GameAccess.TryGetLocalFaction(out FactionHQ hq))
             {
                 int faction = PortraitFactions.Of(hq);
-                ScenarioSide side = hq.faction != null && hq.faction.factionName == SideNames.Pmc ? ScenarioSide.Pmc
+                string name = hq.faction != null ? hq.faction.factionName : null;
+                ScenarioSide side = name == SideNames.Pmc ? ScenarioSide.Pmc : name == SideNames.Pirates ? ScenarioSide.Pirates
                     : faction == 0 ? ScenarioSide.Bdf : faction == 1 ? ScenarioSide.Pala : ScenarioSide.Any;
                 if (side != ScenarioSide.Any)
                 {
@@ -503,8 +569,13 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             view.Card("No contract", why, 8f);
         }
 
-        public void Say(ScenarioCast cast, string text, float seconds)
+        public float Say(ScenarioCast cast, string text, float seconds, string recording)
         {
+            // A recorded line holds the channel (and its words stay up) to its end.
+            AudioClip clip = null;
+            if (recording != null && (!voiceClips.TryGetValue(recording, out clip) || clip == null))
+                log?.LogWarning("[Scenario] voice '" + recording + "' was not loaded in time; the line goes out unvoiced.");
+            if (clip != null) seconds = Mathf.Max(seconds, clip.length + 0.3f);
             ChatterNet net = Net(cast.Net);
             var line = new ChatterAired
             {
@@ -520,16 +591,46 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             linesSaid++;
             lastLine = cast.Callsign + ": " + text;
 #endif
-            if (inComms) return;
-            if (GameAssets.i != null && GameAssets.i.radioStatic != null) SoundManager.PlayInterfaceOneShot(GameAssets.i.radioStatic);
-            if (chatter?.Director == null) return;
+            if (clip != null) Transmit(clip);
+            if (inComms) return seconds;
+            if (clip == null && GameAssets.i != null && GameAssets.i.radioStatic != null) SoundManager.PlayInterfaceOneShot(GameAssets.i.radioStatic);
             // Keep the fallback in the same radio history and hold, without a second HUD readout.
-            chatter.Director.Scripted(chatter.Now, line, present: false);
+            if (chatter?.Director != null) chatter.Director.Scripted(chatter.Now, line, present: false);
+            return seconds;
+        }
+
+        /// <summary>A recorded radio line: band-limited and a little overdriven, the way a voice sounds through a headset, after a squelch click.</summary>
+        private void Transmit(AudioClip clip)
+        {
+            if (radio == null)
+            {
+                // Its own object: a filter works on every source of the object it is on, and the music and the narrator stay clean.
+                var holder = new GameObject("ScenarioRadio");
+                holder.transform.SetParent(transform, false);
+                radio = holder.AddComponent<AudioSource>();
+                radio.playOnAwake = false;
+                radio.spatialBlend = 0f;
+                radio.priority = 0;
+                holder.AddComponent<AudioHighPassFilter>().cutoffFrequency = 320f;
+                holder.AddComponent<AudioLowPassFilter>().cutoffFrequency = 3800f;
+                holder.AddComponent<AudioDistortionFilter>().distortionLevel = 0.32f;
+            }
+            if (GameAssets.i != null && GameAssets.i.radioStatic != null) SoundManager.PlayInterfaceOneShot(GameAssets.i.radioStatic);
+            radio.Stop();
+            radio.clip = clip;
+            radio.volume = 1f;
+            radio.PlayDelayed(0.15f);
         }
 
         public void Card(string title, string text, float seconds) => view.Card(title, text, seconds);
 
-        public void Hint(string text, float seconds) => view.Hint(text, seconds);
+        public void Hint(string text, float seconds)
+        {
+            // In flight a hint is a task line on the HUD's status cues (amber, under MSN), like the game's own ARMED and DISARMED; in a cutscene, or
+            // without the HUD, it is the plate at the top.
+            if (!CutPlaying && ModuleServices.TryGet(out IHudBoard board) && board != null) board.Notice("task", HudTone.Caution, text);
+            else view.Hint(text, seconds);
+        }
 
         public bool Cut(IReadOnlyList<ScenarioCut> cuts)
         {
@@ -551,7 +652,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 if (cut.Voice != null && !voiceClips.ContainsKey(cut.Voice))
                 {
                     voiceClips[cut.Voice] = null;
-                    StartCoroutine(LoadVoice(cut.Voice));
+                    StartCoroutine(LoadVoice(cut.Voice, voiceRound));
                 }
             }
             // The stage may finish inside Play (every shot blocked): the flags are set first so that end is seen.
@@ -585,7 +686,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 skippedShots = index + 1 - shotsShown;
             }
             Speak(cut.Voice);
-            if (!view.Caption(cut, Picture(cut.Photo))) return;
+            PlayEffects(cut.Sfx);
+            if (!view.Caption(cut, Picture(cut.Photo), cut.Board == "screen" ? Clip(cut.Word("clip")) : null)) return;
             AudioClip flip = SfxClips.Get("page-flip");
             if (flip != null) SoundManager.PlayInterfaceOneShot(flip);
         }
@@ -643,9 +745,39 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (GameAccess.IsServer() && NetworkSceneSingleton<LevelInfo>.i != null) NetworkSceneSingleton<LevelInfo>.i.SetTimeOfDay(hour);
         }
 
+        /// <summary>A shot's sound effects, each at its moment after the shot starts; the next shot or the end of the cutscene silences the ones still waiting.</summary>
+        private void PlayEffects(string list)
+        {
+            effectRound++;
+            if (list == null) return;
+            if (effects == null)
+            {
+                effects = gameObject.AddComponent<AudioSource>();
+                effects.playOnAwake = false;
+                effects.spatialBlend = 0f;
+                effects.priority = 0;
+                effects.ignoreListenerPause = true;
+            }
+            foreach (string entry in list.Split(','))
+            {
+                int at = entry.LastIndexOf('@');
+                if (at <= 0 || !float.TryParse(entry.Substring(at + 1).Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float seconds)) continue;
+                StartCoroutine(Effect(entry.Substring(0, at).Trim(), seconds, effectRound));
+            }
+        }
+
+        private IEnumerator Effect(string file, float seconds, int round)
+        {
+            if (seconds > 0f) yield return new WaitForSecondsRealtime(seconds);
+            if (round != effectRound || !cutPlaying || effects == null || !voiceClips.TryGetValue(file, out AudioClip clip) || clip == null) yield break;
+            effects.PlayOneShot(clip);
+        }
+
         private void CutEnded()
         {
             cutPlaying = false;
+            effectRound++;
+            if (effects != null) effects.Stop();
             if (voice != null) voice.Stop();
             if (shotsShown > 0 && shotsShown < playing.Count)
                 log?.LogInfo("[Scenario] cutscene ended after " + shotsShown + " of " + playing.Count + " shots.");

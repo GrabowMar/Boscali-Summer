@@ -599,7 +599,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Arms a right-click on the map that only reports the point back; nothing is sent.</summary>
         public bool ArmLocalPick(string label, Action<GlobalPosition> onPick)
         {
-            if (onPick == null || !TryArmMap(label + " · RIGHT-CLICK MAP")) return false;
+            if (onPick == null) return false;
+            // One pick at a time: a second owner (a FOCUS pin over an armed perk, or the reverse) is refused instead of silently replacing
+            // the first. Owners re-arming their own pick Disarm first (CallsController).
+            if (localPick != null) { Status = "MAP INPUT BUSY — finish or ESC the armed pick first."; return false; }
+            if (!TryArmMap(label + " · RIGHT-CLICK MAP")) return false;
             localPick = onPick;
             ArmedAction = null;
             ArmedFrame = Time.frameCount;

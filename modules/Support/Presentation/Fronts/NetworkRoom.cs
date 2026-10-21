@@ -136,6 +136,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // The plate fills the box body left of the session column (which therefore never covers a node) and clips its own vector layer.
             plate = new FrontMapPlate(b, skin, colX - 4f, TopH, Cols, Rows);
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
+            plate.TopInset = StripH;                                           // and the grid names and ruler start under it
             // A hex-dump watermark down the right edge of the glass: pure ornament (Glyph-named, so it is exempt from the text gate), under every label.
             hexGlyph = FrontKit.Mono(b, "GlyphHex", plate.X + plate.W - 96f, plate.Y + StripH + 10f, 90f, HexLines * 11.5f, 9f, TextAlignmentOptions.TopLeft);
             hexGlyph.color = Phos.WithAlpha(0.11f);
@@ -216,7 +217,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             threatWord = FrontKit.Mono(b, "ThreatWord", colX, 422f, ColW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
             threatNote = FrontKit.Mono(b, "ThreatNote", colX, 440f, ColW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             purge = Button(b, "PURGE", colX + ColW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
-                "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " CR, then " +
+                "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
                 (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.");
             purge.Interactable = false;
             keyHead = Head(b, "KeyHead", colX, 464f, ColW, "// KEY");

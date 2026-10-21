@@ -81,10 +81,6 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
         public static string Slab(bool armed, bool pending, string words) =>
             armed ? "ARMED" : pending ? "WAIT" : StartsNegative(words) ? "NEG" : "READY";
 
-        /// <summary>The footer words: the controller's last words, else the hotline line.</summary>
-        public static string FooterWords(string words) =>
-            !string.IsNullOrEmpty(words) ? words : "HOTLINE OPEN · PRESS A PERK TO ARM";
-
         public static bool StartsNegative(string words) =>
             words != null && words.StartsWith("NEGATIVE", StringComparison.Ordinal);
 

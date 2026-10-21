@@ -75,7 +75,14 @@ beat late when time 50 if=briefed
             public bool Camera = true, Playing;
             public int Finished;
 
-            public void Say(ScenarioCast cast, string text, float seconds) => Log.Add("say " + cast.Callsign + ": " + text);
+            /// <summary>How long a recorded line plays.</summary>
+            public float Recording;
+
+            public float Say(ScenarioCast cast, string text, float seconds, string voice)
+            {
+                Log.Add("say " + cast.Callsign + ": " + text + (voice != null ? " [" + voice + "]" : ""));
+                return voice != null ? Recording : seconds;
+            }
             public void Card(string title, string text, float seconds) => Log.Add("card " + title + "|" + text);
             public void Hint(string text, float seconds) => Log.Add("hint " + text);
 
@@ -87,7 +94,7 @@ beat late when time 50 if=briefed
                 return true;
             }
 
-            public void Music(string file, float volume) => Log.Add("music " + (file ?? "stop"));
+            public void Music(string file, float volume, bool loop) => Log.Add("music " + (file ?? "stop") + (loop ? " loop" : ""));
             public void Enlist(ScenarioSide side) => Log.Add("enlist " + side);
             public void Choose() => Log.Add("choose");
             public void Seat(string aircraft, float x, float y, float z, float heading, float speed) => Log.Add("seat " + aircraft);
@@ -105,6 +112,7 @@ beat late when time 50 if=briefed
             Parses();
             ReportsMistakes();
             KnowsPmc();
+            KnowsPiratesAndPeace();
             PlaysBeats();
             KeepsProgress();
             BuiltInScriptsAreSound();
@@ -141,12 +149,62 @@ beat brief when join side=pmc
             ScenarioDef bad = ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\ncontract pmc\n");
             TestAssert.That(bad.Errors.Exists(e => e.Contains("contract needs the employer")), "PMC cannot be its own employer");
 
-            string chapterOne = File.ReadAllText(Path.Combine(RepoRoot(), "modules", "Scenario", "Assets", "summer-wing.scenario"));
-            ScenarioDef summer = ScenarioParser.Parse("summer-wing.scenario", chapterOne);
-            TestAssert.That(summer.UsesPmc && summer.Locked.Contains(ScenarioSide.Bdf) && summer.Locked.Contains(ScenarioSide.Pala),
-                "chapter 1 is flown for PMC, with both regular sides locked");
-            TestAssert.That(summer.Units.Exists(u => u.Name == "halcyon_dawn" && u.Side == ScenarioSide.Pmc), "the freighter is the PMC's client, on its side");
-            TestAssert.That(summer.Objectives.TrueForAll(o => o.Id != "find_ship" || o.Side == ScenarioSide.Pmc), "the pilot's objectives are PMC's");
+            string chapterOne = File.ReadAllText(Path.Combine(RepoRoot(), "modules", "Scenario", "Assets", "twelve-miles-out.scenario"));
+            ScenarioDef twelve = ScenarioParser.Parse("twelve-miles-out.scenario", chapterOne);
+            TestAssert.That(twelve.UsesPmc && twelve.Uses(ScenarioSide.Pirates) && twelve.Locked.Contains(ScenarioSide.Bdf) && twelve.Locked.Contains(ScenarioSide.Pala),
+                "chapter 1 is flown for PMC against pirates, with both regular sides locked");
+            TestAssert.That(twelve.Peace.Count == 4, "chapter 1 puts the firm and the pirates at peace with both armies");
+            TestAssert.That(twelve.Units.Exists(u => u.Name == "calder_spirit" && u.Side == ScenarioSide.Pmc), "the client's flagship is on the firm's side");
+            TestAssert.That(twelve.Objectives.TrueForAll(o => o.Display == null || o.Side == ScenarioSide.Pmc), "every objective the pilot sees is the firm's");
+        }
+
+        private static void KnowsPiratesAndPeace()
+        {
+            ScenarioDef def = ScenarioParser.Parse("peace.scenario", @"
+scenario peace-one
+title ""P""
+base ""B""
+peace pmc bdf pala
+peace pirates bdf
+unit boat new ship PatrolBoat1 side=pirates at 1 2 3
+cast boss command ""BOSS""
+beat go when start
+  enlist pmc
+  say boss ""Hello."" voice=hello.mp3
+  hint ""After.""
+");
+            TestAssert.Eq(string.Join(" / ", def.Errors), "", "a script with pirates, peace and a recorded line reads without complaint");
+            TestAssert.That(def.Uses(ScenarioSide.Pirates) && def.UsesPmc && !def.Uses(ScenarioSide.Bdf), "a pirate unit brings the pirate side, an enlist the PMC side");
+            TestAssert.Eq(string.Join(",", def.Peace.ConvertAll(p => p.Key + "-" + p.Value)), "Pmc-Bdf,Pmc-Pala,Pirates-Bdf", "peace pairs the first side with each other one");
+            TestAssert.Eq(SideNames.Of(ScenarioSide.Pirates), "Pirates", "the pirate side's mission faction name");
+            TestAssert.Eq(def.Beats[0].Actions[1].Voice, "hello.mp3", "a line can name its recording");
+            TestAssert.That(ScenarioParser.EffectList("boom.mp3@3.2, hiss.mp3@0") && !ScenarioParser.EffectList("boom.mp3") && !ScenarioParser.EffectList("../x.mp3@1") &&
+                !ScenarioParser.EffectList("boom.mp3@200"), "sfx is a list of file@seconds within a shot");
+            ScenarioDef cutSfx = ScenarioParser.Parse("s.scenario", "scenario s\ntitle \"S\"\nbase \"B\"\nshot a orbit at 0 0 0\nbeat go when start\n  cut a \"x\" sfx=\"boom.mp3@3.2,hiss.mp3@0\"\n");
+            TestAssert.That(cutSfx.Errors.Count == 0 && cutSfx.Beats[0].Actions[0].Sfx == "boom.mp3@3.2,hiss.mp3@0", "a cut carries its sound effects");
+
+            FactionPeace.Set(FactionPeace.Of(def));
+            TestAssert.That(FactionPeace.Any && FactionPeace.Between("PMC", "Boscali") && FactionPeace.Between("Primeva", "PMC") && FactionPeace.Between("Pirates", "Boscali"),
+                "peace works both ways, by faction name");
+            TestAssert.That(!FactionPeace.Between("Pirates", "Primeva") && !FactionPeace.Between("Boscali", "Primeva") && !FactionPeace.Between("PMC", "Pirates"),
+                "every pair the script does not name stays at war");
+            FactionPeace.Set(null);
+            TestAssert.That(!FactionPeace.Any && !FactionPeace.Between("PMC", "Boscali"), "a mission without a script has no peace");
+
+            var stage = new Stage { Recording = 20f };
+            var runner = new ScenarioRunner(def, stage, flag => false);
+            runner.Raise(TriggerKind.Start);
+            for (float now = 0f; now < 10f; now += 0.25f) runner.Tick(now);
+            TestAssert.Eq(string.Join(";", stage.Log), "enlist Pmc;say BOSS: Hello. [hello.mp3]", "a recorded line holds the story until the recording ends");
+            for (float now = 10f; now < 22f; now += 0.25f) runner.Tick(now);
+            TestAssert.Eq(stage.Log[stage.Log.Count - 1], "hint After.", "the story goes on after the recording");
+
+            TestAssert.That(ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\npeace pmc bdf typo\n").Peace.Count == 0,
+                "a peace line with a mistake is left out whole");
+            foreach (string bad in new[] { "peace pmc pmc", "peace pmc", "peace any bdf" })
+                TestAssert.That(ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\n" + bad + "\n").Errors.Count == 1, "'" + bad + "' is a mistake");
+            TestAssert.That(ScenarioParser.Parse("b.scenario", "scenario b\ntitle \"B\"\nbase \"B\"\nbeat go when start\n  enlist pirates\n").Errors
+                .Exists(e => e.Contains("enlist needs a side")), "nobody enlists with the pirates");
         }
 
         private static void Parses()

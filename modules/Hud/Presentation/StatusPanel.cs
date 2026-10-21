@@ -273,7 +273,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             HideBoard();
             StandDownCorners();
-            StandDownNav();
         }
 
         /// <summary>The board alone off the screen and the native boxes back, the other corners as they are: what the master switch does (the corners have a switch of their own, LAYOUT.md 8).</summary>

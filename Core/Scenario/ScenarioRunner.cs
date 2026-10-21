@@ -6,7 +6,9 @@ namespace BoscaliSummer.Core.Scenario
     /// <summary>Where a running script shows and says things. Everything here is local presentation: nothing changes the world, nothing is sent.</summary>
     internal interface IScenarioStage
     {
-        void Say(ScenarioCast cast, string text, float seconds);
+        /// <summary>A line on the radio, held for <paramref name="seconds"/>, spoken from <paramref name="voice"/> when it names a recording. Returns how long the
+        /// line actually holds the channel: a recording longer than the reading time holds it to its end.</summary>
+        float Say(ScenarioCast cast, string text, float seconds, string voice);
         void Card(string title, string text, float seconds);
         void Hint(string text, float seconds);
 
@@ -35,7 +37,7 @@ namespace BoscaliSummer.Core.Scenario
         void Seat(string aircraft, float x, float y, float z, float heading, float speed);
 
         /// <summary>Plays a music file under the story, or with a null name fades out what is playing.</summary>
-        void Music(string file, float volume);
+        void Music(string file, float volume, bool loop);
 
         /// <summary>Keep a flag for the campaign's later missions.</summary>
         void Remember(string flag);
@@ -156,8 +158,7 @@ namespace BoscaliSummer.Core.Scenario
                 case ActionKind.Say:
                     if (!def.Cast.TryGetValue(action.Name, out ScenarioCast cast)) return;
                     float seconds = ReadSeconds(action.Text, TextSpeed);
-                    stage.Say(cast, action.Text, seconds);
-                    Hold(seconds + LineGapSeconds);
+                    Hold(System.Math.Max(seconds, stage.Say(cast, action.Text, seconds, action.Voice)) + LineGapSeconds);
                     break;
                 case ActionKind.Card:
                     stage.Card(action.Name, action.Text, action.Seconds);
@@ -178,7 +179,7 @@ namespace BoscaliSummer.Core.Scenario
                         if (!def.Shots.TryGetValue(cut.Name, out ScenarioShot shot)) continue;
                         ScenarioPicture photo = null;
                         if (cut.Photo != null) def.Pictures.TryGetValue(cut.Photo, out photo);
-                        cuts.Add(new ScenarioCut { Shot = shot, Title = cut.Title, Caption = cut.Text, Stamp = cut.Stamp, Photo = photo, Fx = cut.Fx, Board = cut.Board, Words = cut.Words, Voice = cut.Voice });
+                        cuts.Add(new ScenarioCut { Shot = shot, Title = cut.Title, Caption = cut.Text, Stamp = cut.Stamp, Photo = photo, Fx = cut.Fx, Board = cut.Board, Words = cut.Words, Voice = cut.Voice, Sfx = cut.Sfx });
                     }
                     if (cuts.Count == 0 || stage.Cut(cuts)) break;
                     // No camera (the pilot is flying, or cutscenes are off): the words still get read.
@@ -195,7 +196,7 @@ namespace BoscaliSummer.Core.Scenario
                     stage.Clock(action.Seconds);
                     break;
                 case ActionKind.Music:
-                    stage.Music(action.Name, action.Seconds);
+                    stage.Music(action.Name, action.Seconds, action.Text == "loop");
                     break;
                 case ActionKind.Enlist:
                     ScenarioParser.Side(action.Name, out ScenarioSide side);

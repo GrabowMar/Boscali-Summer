@@ -51,6 +51,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (t.color != c) t.color = c;
         }
 
+        /// <summary>A one-line text that steps down from <paramref name="size"/> to the 10 px floor before it would ellipsize (module rule).</summary>
+        public static string Fit(TMP_Text t, string s, float size)
+        {
+            float w = t.rectTransform.rect.width;
+            AvText.Size(t, size);
+            if (!string.IsNullOrEmpty(s) && C2Kit.Width(t, s) > w) AvText.Size(t, AvTokens.FontMicro);
+            return C2Kit.FitTo(t, s, w);
+        }
+
         public static Image Solid(RectTransform p, string name, float x, float y, float w, float h, Color c)
         {
             Image i = AvLay.Solid(p, name, c);

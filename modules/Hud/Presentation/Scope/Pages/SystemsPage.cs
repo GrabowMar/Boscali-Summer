@@ -356,7 +356,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void WeatherBlock(ScopeCanvas g, float x, float y)
         {
-            if (!d.HasWind && !(d.HasCloud && d.InCloud)) return;
             float row = y + 12f;
             if (d.HasWind)
             {
@@ -371,7 +370,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnitSp(d.Units)), x + 44f, row, Ink);
                 row += 16f;
             }
-            if (d.HasCloud && d.InCloud) g.Text("IN CLOUD", x + 44f, row, Hi, bold: true);
+            if (d.HasCloud && d.InCloud) { g.Text("IN CLOUD", x + 44f, row, Hi, bold: true); row += 16f; }
+            // The mission clock under the wind (2026-10-21, user; the NAV DATA block it lived in is gone).
+            if (d.ClockS >= 0f)
+            {
+                int s = (int)d.ClockS;
+                if (s != clockShown) { clockShown = s; clockWords = (s / 3600) + ":" + (s / 60 % 60).ToString("00") + ":" + (s % 60).ToString("00"); }
+                // "T+" and the time: as wide as the wind line above it ("CLOCK 0:00:14" ran off the board's edge in game).
+                g.Text("T+", x + 44f, row, Dim);
+                g.Text(clockWords, x + 44f + 16f, row, Ink);
+            }
         }
+
+        private int clockShown = -1;
+        private string clockWords = "";
     }
 }

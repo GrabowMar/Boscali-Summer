@@ -157,7 +157,6 @@ public static partial class HudLogUnityCheck
         if (pages.Length == 0 || Array.IndexOf(pages, "lines") >= 0) ScopeLines();
         if (pages.Length == 0 || Array.IndexOf(pages, "stores") >= 0) ScopeStoresBlocks();
         if (pages.Length == 0 || Array.IndexOf(pages, "corners") >= 0) ScopeCorners();
-        if (pages.Length == 0 || Array.IndexOf(pages, "nav") >= 0) ScopeNav();
         if (pages.Length == 0 || Array.IndexOf(pages, "cues") >= 0) ScopeCues();
         if (pages.Length == 0 || Array.IndexOf(pages, "left") >= 0) ScopeLeft();
         if (pages.Length == 0 || Array.IndexOf(pages, "repair") >= 0) ScopeRepair();

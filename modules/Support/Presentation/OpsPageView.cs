@@ -346,7 +346,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     PrimaryEnabled = isArmed ? aim != AimSource.None || !CallSheet.NeedsAim(t.Id) : t.State == CallState.Ready, PrimaryFire = isArmed, DisarmEnabled = v.Armed
                 };
             }
-            v.Words = C2Cap.FooterWords(words ?? "");
+            v.Words = words ?? ""; // empty: the panel words its own tab's hint (CallsPanel)
             v.WordsTone = v.Armed ? AvState.Caution : pending ? AvState.Info : C2Cap.StartsNegative(words ?? "") ? AvState.Danger : AvState.Ready;
         }
 

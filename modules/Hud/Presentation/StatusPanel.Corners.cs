@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // Native corner presentation: DL EVT LOG replaces the captured feed, TAC MAP dresses the minimised map.
     // Feed text and plate are restored immediately when capture is unhealthy, chat opens or the presentation gate closes.
     // One faint feathered shadow spans the occupied log, COMMS and status column. It shares their sway and follows Shade/Opacity;
-    // the sections add no shadows of their own. NAV DATA retains its separate bottom-right presentation.
+    // the sections add no shadows of their own.
     internal sealed partial class StatusPanel
     {
         private const int CornerQuads = 120;
@@ -59,7 +59,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void CornersFrame(bool alive, bool tick)
         {
-            NavFrame(alive, tick);
             if (!(alive && Options.Corners && !cornersSuppressed && canvasRect != null)) { StandDownCorners(); return; }
             if (!screenCorners.Complete && findTries < 6 && Time.unscaledTime >= findAt)
             {
@@ -137,7 +136,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The roots follow the board's sway (<see cref="swayShift"/>), and the band stays hung from the top of the screen.</summary>
         private void PlaceCornerRoots()
         {
-            if (navFurniture != null) navShade.offsetMin = navShade.offsetMax = navFurniture.offsetMin = navFurniture.offsetMax = swayShift;
             if (logRoot != null) logRoot.offsetMin = logRoot.offsetMax = swayShift;
             if (cueRoot != null) cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
             if (cornerFurniture == null) return;
@@ -240,7 +238,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void DestroyCorners()
         {
-            DestroyNav();
             DestroyLog();
             DestroyCues();
             screenCorners.Dispose();

@@ -6,12 +6,12 @@ using BoscaliSummer.Modules.Pmc.Runtime;
 namespace BoscaliSummer.Modules.Pmc
 {
     /// <summary>
-    /// A third side, PMC, hostile to BDF and PALA. Always installed and idle: it exists only in a mission whose faction list names it (a mission
-    /// script brings it) and in the mission editor. Single-player and host only for now.
+    /// Two extra sides, PMC and Pirates, and peace between sides. Always installed and idle: a side exists only in a mission whose faction list names
+    /// it (a mission script brings it; the editor offers PMC), and peace only in a script that writes it. Single-player and host only for now.
     /// </summary>
     internal sealed class PmcModule : IModule
     {
-        private static readonly ModuleMetadata Module = new ModuleMetadata("pmc", "A third side, PMC, for scripted missions and the editor");
+        private static readonly ModuleMetadata Module = new ModuleMetadata("pmc", "Extra sides (PMC, Pirates) and peace for scripted missions");
 
         public ModuleMetadata Metadata => Module;
 
@@ -19,8 +19,8 @@ namespace BoscaliSummer.Modules.Pmc
 
         public void Install(ModuleContext context)
         {
-            PmcSide.Install(context.Settings.Pmc, context.Logger);
-            context.OnTeardown(PmcSide.Uninstall);
+            ExtraSides.Install(context.Settings.Pmc, context.Logger);
+            context.OnTeardown(ExtraSides.Uninstall);
         }
     }
 }

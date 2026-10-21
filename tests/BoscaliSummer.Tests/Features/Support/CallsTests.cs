@@ -196,17 +196,20 @@ namespace BoscaliSummer.Tests.Features.Support
             var arm = new ArmState();
             TestAssert.Eq(arm.Press(SupportActionId.Prsm, 0f), ArmStep.Armed, "first press arms");
             TestAssert.Eq(arm.Armed, SupportActionId.Prsm, "armed id");
-            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 7.9f), ArmStep.Fire, "second press within 8 s fires");
-            TestAssert.That(arm.Armed == null, "fire clears");
-            arm.Press(SupportActionId.Prsm, 10f);
-            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 18.01f), ArmStep.Armed, "press after 8 s re-arms");
-            TestAssert.Eq(arm.Press(SupportActionId.Cruise, 19f), ArmStep.Armed, "other call switches the arm");
+            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 0.2f), ArmStep.Bounce, "a double-click is a bounce, never a fire");
+            TestAssert.Eq(arm.Armed, SupportActionId.Prsm, "a bounce keeps the arm");
+            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 29.9f), ArmStep.Fire, "second press within 30 s fires");
+            TestAssert.Eq(arm.Armed, SupportActionId.Prsm, "the fire step keeps the arm until the caller sends (a no-aim refusal leaves it armed)");
+            arm.Clear();
+            arm.Press(SupportActionId.Prsm, 40f);
+            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 70.01f), ArmStep.Armed, "press after 30 s re-arms");
+            TestAssert.Eq(arm.Press(SupportActionId.Cruise, 71f), ArmStep.Armed, "other call switches the arm");
             TestAssert.Eq(arm.Armed, SupportActionId.Cruise, "switched");
-            TestAssert.That(!arm.Tick(26f), "still armed at 7 s");
-            TestAssert.That(arm.Tick(27.1f), "auto-clear after 8 s");
+            TestAssert.That(!arm.Tick(100f), "still armed at 29 s");
+            TestAssert.That(arm.Tick(101.1f), "auto-clear after 30 s");
             TestAssert.That(arm.Armed == null, "cleared");
-            TestAssert.That(!arm.Tick(30f), "tick idle is quiet");
-            arm.Press(SupportActionId.Emp, 31f);
+            TestAssert.That(!arm.Tick(110f), "tick idle is quiet");
+            arm.Press(SupportActionId.Emp, 111f);
             arm.Clear();
             TestAssert.That(arm.Armed == null, "clear");
 
@@ -271,9 +274,10 @@ namespace BoscaliSummer.Tests.Features.Support
 
             var arm = new ArmState();
             arm.Press(SupportActionId.Prsm, 100f);
-            TestAssert.That(!arm.Tick(108f), "arming remains valid at exactly eight seconds");
-            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 108f), ArmStep.Fire, "the boundary second press fires once");
-            TestAssert.That(arm.Armed == null && !arm.Tick(109f), "firing clears the arm without another expiry");
+            TestAssert.That(!arm.Tick(130f), "arming remains valid at exactly thirty seconds");
+            TestAssert.Eq(arm.Press(SupportActionId.Prsm, 130f), ArmStep.Fire, "the boundary second press fires once");
+            arm.Clear(); // the controller clears after a send
+            TestAssert.That(arm.Armed == null && !arm.Tick(131f), "a cleared arm has no later expiry");
             var request = new CallRequestTracker();
             TestAssert.That(request.Begin(42, 70f, 100f), "request begins");
             TestAssert.That(!request.Resolve(41) && request.Pending && request.PendingId == 42,

@@ -107,8 +107,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly FrontVector chrome;
         private readonly TMP_Text[] colLabels, rowLabels;
         private readonly TMP_Text scaleLabel, northLabel, readout;
-        private readonly string[] colNames, rowNames;
         private readonly int cols, rows;
+        private GridAxis colAxis, rowAxis;
+        private Vector2 axesSpan;
         private readonly Rect miniRect;
         private readonly List<Vector2> dotPos = new List<Vector2>(16);
         private readonly List<Color> dotInk = new List<Color>(16);
@@ -145,10 +146,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             chrome = FrontVector.Add(body, "MapChrome");
             AvLay.Place(chrome.rectTransform, 0f, 0f, boxW, boxH);
 
-            FrontMap.AxisLabels(FrontMap.GridSource, BoscaliSummer.Core.Game.TheaterFrame.Resolve(), cols, rows, out colNames, out rowNames);
-            colLabels = new TMP_Text[cols]; rowLabels = new TMP_Text[rows];
-            for (int i = 0; i < cols; i++) colLabels[i] = GridLabel(body, "Col" + i);
-            for (int j = 0; j < rows; j++) rowLabels[j] = GridLabel(body, "Row" + j);
+            colLabels = new TMP_Text[GridAxis.MaxCells]; rowLabels = new TMP_Text[GridAxis.MaxCells];
+            for (int i = 0; i < GridAxis.MaxCells; i++) colLabels[i] = GridLabel(body, "Col" + i);
+            for (int j = 0; j < GridAxis.MaxCells; j++) rowLabels[j] = GridLabel(body, "Row" + j);
             float by = y + h - RowH + 4f;
             scaleLabel = FrontKit.Mono(body, "ScaleLabel", 0f, by, 56f, 16f, 10f, TextAlignmentOptions.MidlineLeft, true);
             northLabel = FrontKit.Mono(body, "North", x + 224f, by, 14f, 16f, 10.5f, TextAlignmentOptions.Midline, true);
@@ -167,6 +167,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public float Y => View.Y;
         public float W => View.W;
         public float H => View.H;
+
+        /// <summary>A strip the room lays over the plate top (NETWORK's bounce chain): the ruler and the grid names start below it.</summary>
+        public float TopInset { get; set; }
 
         public Vector2 P(float u, float v) => View.P(u, v);
 
@@ -217,23 +220,26 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             // A light scrim keeps markers legible over bright terrain without hiding it; with no image it is the old opaque ground.
             G.Rect(v.X, v.Y, v.W, v.H, AvInk.Ground.WithAlpha(has ? 0.16f : 0.9f));
+            ResolveAxes();
             Color hair = AvInk.Hairline, frame = AvInk.Frame;
-            for (int i = 1; i < cols; i++)
+            for (int i = 1; i < colAxis.Count; i++)
             {
-                float gx = v.P((float)i / cols, 0f).x;
-                if (gx > v.X && gx < v.X + v.W) G.Line(new Vector2(gx, v.Y), new Vector2(gx, v.Y + v.H), i % 5 == 0 ? 1.2f : 1f, (i % 5 == 0 ? frame : hair).WithAlpha(0.3f));
+                float gx = v.P(colAxis.Edges[i], 0f).x;
+                if (gx > v.X && gx < v.X + v.W) G.Line(new Vector2(gx, v.Y), new Vector2(gx, v.Y + v.H), 1f, hair.WithAlpha(0.3f));
             }
-            for (int j = 1; j < rows; j++)
+            for (int j = 1; j < rowAxis.Count; j++)
             {
-                float gy = v.P(0f, (float)j / rows).y;
-                if (gy > v.Y && gy < v.Y + v.H) G.Line(new Vector2(v.X, gy), new Vector2(v.X + v.W, gy), j % 4 == 0 ? 1.2f : 1f, (j % 4 == 0 ? frame : hair).WithAlpha(0.3f));
+                float gy = v.P(0f, rowAxis.Edges[j]).y;
+                if (gy > v.Y && gy < v.Y + v.H) G.Line(new Vector2(v.X, gy), new Vector2(v.X + v.W, gy), 1f, hair.WithAlpha(0.3f));
             }
-            for (int i = 0; i <= cols * 5; i++)
-            {
-                float tx = v.P(i / (5f * cols), 0f).x, th = i % 5 == 0 ? 6f : 3f;
-                if (tx < v.X || tx > v.X + v.W) continue;
-                G.Line(new Vector2(tx, v.Y), new Vector2(tx, v.Y + th), 1f, frame.WithAlpha(0.8f));
-            }
+            // Ruler ticks along the top: a long tick on each square edge, four short ones inside it.
+            for (int i = 0; i < colAxis.Count; i++)
+                for (int k = 0; k < 5; k++)
+                {
+                    float tx = v.P(Mathf.Lerp(colAxis.Edges[i], colAxis.Edges[i + 1], k / 5f), 0f).x, th = k == 0 ? 6f : 3f;
+                    if (tx < v.X || tx > v.X + v.W) continue;
+                    G.Line(new Vector2(tx, v.Y + TopInset), new Vector2(tx, v.Y + TopInset + th), 1f, frame.WithAlpha(0.8f));
+                }
             // Vignette: the plate edges fall off into the ground colour.
             Color c0 = AvInk.Ground.WithAlpha(0.55f), c1 = AvInk.Ground.WithAlpha(0f);
             G.Grad(v.X, v.Y, Edge, v.H, c0, c1, c1, c0);
@@ -243,28 +249,53 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             G.Rect(v.X, v.Y + v.H - RowH, v.W, RowH, AvInk.Ground.WithAlpha(0.5f));
 
             // Grid names ride the view: columns along the top edge, rows down the left edge.
-            for (int i = 0; i < cols; i++)
+            // A name sits at its square's top-left corner, or at the plate edge while that corner is panned off (one name per square, never repeated).
+            for (int i = 0; i < GridAxis.MaxCells; i++)
             {
-                float lx = v.P((float)i / cols, 0f).x + 4f;
-                bool on = lx >= v.X + 2f && lx <= v.X + v.W - 28f && !Labels.Blocked(new Rect(lx - 2f, v.Y, 22f, 16f));
+                bool on = i < colAxis.Count;
+                float x0 = 0f;
+                if (on)
+                {
+                    x0 = Mathf.Max(v.P(colAxis.Edges[i], 0f).x, v.X) + 4f;
+                    on = x0 <= v.P(colAxis.Edges[i + 1], 0f).x - 18f && x0 <= v.X + v.W - 28f && !Labels.Blocked(new Rect(x0 - 2f, v.Y + TopInset, 22f, 16f));
+                }
                 colLabels[i].gameObject.SetActive(on);
                 if (!on) continue;
-                colLabels[i].text = colNames != null ? colNames[i] : (30 + i).ToString();
-                AvLay.Place(colLabels[i].rectTransform, lx, v.Y + 2f, 24f, 13f);
-                Labels.Take(new Rect(lx - 2f, v.Y, 22f, 16f));
+                colLabels[i].text = colAxis.Names[i];
+                AvLay.Place(colLabels[i].rectTransform, x0, v.Y + TopInset + 2f, 24f, 13f);
+                Labels.Take(new Rect(x0 - 2f, v.Y + TopInset, 22f, 16f));
             }
-            for (int j = 0; j < rows; j++)
+            for (int j = 0; j < GridAxis.MaxCells; j++)
             {
-                float ly = v.P(0f, (float)j / rows).y + 2f;
-                bool on = ly >= v.Y + 16f && ly <= v.Y + v.H - RowH - 14f && !Labels.Blocked(new Rect(v.X + 2f, ly - 2f, 22f, 15f));
+                bool on = j < rowAxis.Count;
+                float y0 = 0f;
+                if (on)
+                {
+                    y0 = Mathf.Max(v.P(0f, rowAxis.Edges[j]).y + 2f, v.Y + TopInset + 16f);
+                    on = y0 <= v.P(0f, rowAxis.Edges[j + 1]).y - 14f && y0 <= v.Y + v.H - RowH - 14f && !Labels.Blocked(new Rect(v.X + 2f, y0 - 2f, 22f, 15f));
+                }
                 rowLabels[j].gameObject.SetActive(on);
                 if (!on) continue;
-                rowLabels[j].text = rowNames != null ? rowNames[j] : (6 + j).ToString("00");
-                AvLay.Place(rowLabels[j].rectTransform, v.X + 4f, ly, 24f, 13f);
-                Labels.Take(new Rect(v.X + 2f, ly - 2f, 22f, 15f));
+                rowLabels[j].text = rowAxis.Names[j];
+                AvLay.Place(rowLabels[j].rectTransform, v.X + 4f, y0, 24f, 13f);
+                Labels.Take(new Rect(v.X + 2f, y0 - 2f, 22f, 15f));
             }
             Labels.Take(new Rect(v.X, v.Y + v.H - RowH, 560f, RowH));
             Labels.Take(new Rect(miniRect.x - 4f, miniRect.y - 4f, miniRect.width + 8f, miniRect.height + 8f));
+        }
+
+        /// <summary>
+        /// The plate's squares are the vanilla grid's own (lines on its edges, its names), resolved once per theatre span. Until the
+        /// grid answers in names (no map yet, or a kilometre grid) the plate keeps an even numbered lattice and asks again next paint.
+        /// </summary>
+        private void ResolveAxes()
+        {
+            Vector2 span = BoscaliSummer.Core.Game.TheaterFrame.Resolve();
+            if (colAxis != null && span == axesSpan) return;
+            if (FrontMap.Axes(FrontMap.GridSource, span, out colAxis, out rowAxis)) { axesSpan = span; return; }
+            colAxis = GridAxis.Even(cols, i => (30 + i).ToString());
+            rowAxis = GridAxis.Even(rows, j => (6 + j).ToString("00"));
+            axesSpan = new Vector2(float.NaN, float.NaN); // never equal: try the grid again next paint
         }
 
         /// <summary>Finishes a paint: frame, scale bar, north arrow, inset, then pushes both layers.</summary>
@@ -353,6 +384,28 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
     }
 
+    /// <summary>One axis of a plate's grid: <see cref="Count"/> squares, their edges as theatre fractions (Count + 1, 0 to 1) and names.</summary>
+    internal sealed class GridAxis
+    {
+        public const int MaxCells = 24;
+
+        public readonly float[] Edges;
+        public readonly string[] Names;
+
+        public GridAxis(float[] edges, string[] names) { Edges = edges; Names = names; }
+
+        public int Count => Names.Length;
+
+        public static GridAxis Even(int n, System.Func<int, string> name)
+        {
+            n = Mathf.Clamp(n, 1, MaxCells);
+            var e = new float[n + 1]; var s = new string[n];
+            for (int i = 0; i <= n; i++) e[i] = (float)i / n;
+            for (int i = 0; i < n; i++) s[i] = name(i);
+            return new GridAxis(e, s);
+        }
+    }
+
     /// <summary>The theatre picture source and the pure helpers around it.</summary>
     internal static class FrontMap
     {
@@ -387,22 +440,52 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>
-        /// The vanilla grid's own column and row names for a cols x rows plate over the theatre (cell centres through <paramref name="grid"/>,
-        /// which is OpsKit.Grid live). Both arrays are null when the grid is unavailable (it answers in kilometres) or its squares are not a
-        /// letters-plus-digits name, and the caller keeps its numeric labels.
+        /// The vanilla grid's own squares across and down the theatre (through <paramref name="grid"/>, OpsKit.Grid live): each axis's square
+        /// edges as theatre fractions and each square's name. False when the grid is unavailable (it answers in kilometres), its squares are
+        /// not a letters-plus-digits name, or an axis has more than <see cref="GridAxis.MaxCells"/> squares; the caller keeps an even lattice.
         /// </summary>
-        public static void AxisLabels(System.Func<float, float, string> grid, Vector2 span, int cols, int rows, out string[] colNames, out string[] rowNames)
+        public static bool Axes(System.Func<float, float, string> grid, Vector2 span, out GridAxis cols, out GridAxis rows)
         {
-            colNames = rowNames = null;
-            var c = new string[cols][]; var r = new string[rows][];
-            for (int i = 0; i < cols; i++) if ((c[i] = Split(grid((i + 0.5f) / cols * span.x - span.x * 0.5f, 0f))) == null) return;
-            for (int j = 0; j < rows; j++) if ((r[j] = Split(grid(0f, span.y * 0.5f - (j + 0.5f) / rows * span.y))) == null) return;
+            cols = rows = null;
+            System.Func<float, string[]> across = u => Split(grid(u * span.x - span.x * 0.5f, 0f));
+            System.Func<float, string[]> down = t => Split(grid(0f, span.y * 0.5f - t * span.y));
+            string[] c0 = across(0.001f), c1 = across(0.999f), r0 = down(0.001f), r1 = down(0.999f);
+            if (c0 == null || c1 == null || r0 == null || r1 == null) return false;
             // Columns vary in one part of the name (letters or digits), rows in the other; take whichever part actually changes.
-            int cp = c[0][0] != c[cols - 1][0] ? 0 : 1, rp = r[0][1] != r[rows - 1][1] ? 1 : 0;
-            if (cp == rp) return;
-            colNames = new string[cols]; rowNames = new string[rows];
-            for (int i = 0; i < cols; i++) colNames[i] = c[i][cp];
-            for (int j = 0; j < rows; j++) rowNames[j] = r[j][rp];
+            int cp = c0[0] != c1[0] ? 0 : 1, rp = r0[1] != r1[1] ? 1 : 0;
+            if (cp == rp) return false;
+            cols = Walk(across, cp);
+            rows = Walk(down, rp);
+            return cols != null && rows != null;
+        }
+
+        /// <summary>Steps along one axis and bisects every change of name to a square edge (to 1/20 000 of the theatre).</summary>
+        private static GridAxis Walk(System.Func<float, string[]> at, int part)
+        {
+            const int Steps = 160;
+            var edges = new List<float>(GridAxis.MaxCells + 1) { 0f };
+            var names = new List<string>(GridAxis.MaxCells);
+            // Outside the vanilla grid the name is empty: those samples just widen the neighbouring square.
+            string prev = null;
+            for (int s = 0; s < Steps; s++)
+            {
+                float t = (s + 0.5f) / Steps;
+                string[] n = at(t);
+                if (n == null || n[part] == prev) continue;
+                if (prev == null) { names.Add(prev = n[part]); continue; }
+                float lo = t - 1f / Steps, hi = t;
+                for (int k = 0; k < 7; k++)
+                {
+                    float m = (lo + hi) * 0.5f;
+                    string[] q = at(m);
+                    if (q != null && q[part] == prev) lo = m; else hi = m;
+                }
+                if (names.Count == GridAxis.MaxCells) return null;
+                edges.Add((lo + hi) * 0.5f);
+                names.Add(prev = n[part]);
+            }
+            edges.Add(1f);
+            return new GridAxis(edges.ToArray(), names.ToArray());
         }
 
         private static string[] Split(string s)
@@ -413,6 +496,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             string letters = s.Substring(0, k), digits = s.Substring(k).Trim('-', ' ', '_', '/');
             if (letters.Length == 0 || digits.Length == 0) return null;
             for (int i = 0; i < digits.Length; i++) if (!char.IsDigit(digits[i])) return null;
+            // The vanilla name is row letter + 1 km minor letter, column number + 1 km minor digit ("CD47": square C4): keep the 10 km square.
+            if (letters.Length >= 2 && digits.Length >= 2) { letters = letters.Substring(0, letters.Length - 1); digits = digits.Substring(0, digits.Length - 1); }
             return new[] { letters, digits };
         }
 

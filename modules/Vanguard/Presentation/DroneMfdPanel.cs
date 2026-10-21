@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             hand = row.Controls[1];
             next = row.Controls[2];
             open.Help = "Open the UAV terminal: every drone on the link, the live feed, the tactical plot and waypoints.";
-            hand.Help = "Fly the linked drone by hand: it goes the way your nose points.";
+            hand.Help = "Fly the linked drone by hand: it holds its course and height. Steer it in the UAV TERMINAL (click the feed) or with C › DRONE LINK › MATCH MY NOSE / TURN.";
             next.Help = "Link the next drone; while you hand-fly, the stick goes with the link.";
             page.Section(AvIcon.Gauge, "TELEMETRY", "LINKED DRONE");
             mAlt = new AvMetric(page.Content, "ALT");

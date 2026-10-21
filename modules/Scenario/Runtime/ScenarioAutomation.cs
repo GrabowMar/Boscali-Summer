@@ -19,6 +19,74 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         }
 
         /// <summary>
+        /// The scripted world as the game sees it: each named unit (args <c>units</c>, comma-separated) as "x z" or "down" or "absent"; the local
+        /// pilot's aircraft; and for every side, how many units of each other side its HQ is tracking (peace means zero).
+        /// </summary>
+        public static Dictionary<string, object> World(Dictionary<string, object> args)
+        {
+            var report = new Dictionary<string, object> { ["ok"] = true, ["peace"] = Core.Scenario.FactionPeace.Any ? 1 : 0 };
+            string names = args != null && args.TryGetValue("units", out object list) ? list as string : null;
+            foreach (string name in (names ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string key = name.Trim();
+                report["unit_" + key] = !UnitRegistry.customIDLookup.TryGetValue(key, out Unit unit) ? "absent"
+                    : unit == null || unit.disabled ? "down" : unit.GlobalPosition().x.ToString("0") + " " + unit.GlobalPosition().z.ToString("0");
+            }
+            bool flying = GameManager.GetLocalAircraft(out Aircraft own) && own != null;
+            report["pilot"] = !flying ? "none" : own.disabled ? "down" : own.GlobalPosition().x.ToString("0") + " " + own.GlobalPosition().y.ToString("0") + " " +
+                own.GlobalPosition().z.ToString("0") + " " + (own.NetworkHQ?.faction != null ? own.NetworkHQ.faction.factionName : "?");
+            var hqs = new List<FactionHQ>(FactionRegistry.GetAllHQs());
+            foreach (string extra in new[] { Core.Scenario.SideNames.Pmc, Core.Scenario.SideNames.Pirates })
+            {
+                FactionHQ hq = FactionRegistry.HqFromName(extra);
+                if (hq != null && !hqs.Contains(hq)) hqs.Add(hq);
+            }
+            hqs.RemoveAll(hq => hq == null || hq.faction == null);
+            foreach (FactionHQ hq in hqs)
+            {
+                // Every pair is written, zeros included, so a test can assert that a side at peace tracks nobody of the other.
+                var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (FactionHQ other in hqs) counts[other.faction.factionName] = 0;
+                foreach (KeyValuePair<PersistentID, TrackingInfo> tracked in hq.trackingDatabase)
+                {
+                    if (!UnitRegistry.TryGetUnit(tracked.Key, out Unit unit) || unit.NetworkHQ == null || unit.NetworkHQ.faction == null) continue;
+                    string side = unit.NetworkHQ.faction.factionName;
+                    counts[side] = counts.TryGetValue(side, out int n) ? n + 1 : 1;
+                }
+                foreach (KeyValuePair<string, int> count in counts) report["tracks_" + hq.faction.factionName + "_" + count.Key] = count.Value;
+                // A track between two sides at peace is a leak: name it, with its type, so the next run shows where it came from.
+                var leaks = new List<string>();
+                foreach (KeyValuePair<PersistentID, TrackingInfo> tracked in hq.trackingDatabase)
+                    if (UnitRegistry.TryGetUnit(tracked.Key, out Unit unit) && unit.NetworkHQ != null && unit.NetworkHQ.faction != null &&
+                        Core.Scenario.FactionPeace.Between(hq.faction.factionName, unit.NetworkHQ.faction.factionName))
+                        leaks.Add((unit.unitName ?? unit.name) + (unit.disabled ? " (down)" : ""));
+                if (leaks.Count > 0) report["leaks_" + hq.faction.factionName] = string.Join(", ", leaks);
+            }
+            return report;
+        }
+
+        /// <summary>Knocks out the named units (args <c>units</c>, comma-separated), as if shot down or sunk: lets a test walk a script's story.</summary>
+        public static Dictionary<string, object> Disable(Dictionary<string, object> args)
+        {
+            int done = 0;
+            var failed = new List<string>();
+            string names = args != null && args.TryGetValue("units", out object list) ? list as string : null;
+            foreach (string name in (names ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+                if (UnitRegistry.customIDLookup.TryGetValue(name.Trim(), out Unit unit) && unit != null && !unit.disabled)
+                {
+                    // A handler of the game's that throws is a finding, not the end of the test: the unit is down either way.
+                    try { unit.DisableUnit(); }
+                    catch (Exception e)
+                    {
+                        failed.Add(name.Trim());
+                        Plugin.Logger.LogError("[Scenario] disabling '" + name.Trim() + "' threw: " + e);
+                    }
+                    done++;
+                }
+            return new Dictionary<string, object> { ["ok"] = true, ["disabled"] = done, ["threw"] = string.Join(",", failed) };
+        }
+
+        /// <summary>
         /// For writing a script: where the map's airbases are, and the ground under a grid of points (args x, z, step, count; or airbase = a name to centre on).
         /// Each grid cell reads as the height in metres, with a trailing b where something built stands on it.
         /// </summary>

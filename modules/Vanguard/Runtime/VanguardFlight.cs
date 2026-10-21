@@ -249,7 +249,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             Vector3 self = missile.GlobalPosition().AsVector3();
             Vector3 aim = order.Mode == DroneMode.Hand
-                ? DroneLink.HandAim(self, launcher.transform.forward, missile.radarAlt)
+                ? DroneLink.HandAim(self, order.Point.x, order.Point.y, missile.radarAlt)
                 : DroneLink.OrbitAim(self, order.Point.AsVector3(), DroneLink.OrbitRadiusM);
             missile.SetThrottle(role == VanguardRole.Drone ? RemoraArcher.Boost : 0.85f);
             missile.SetAimpoint(new GlobalPosition(aim), Vector3.zero);

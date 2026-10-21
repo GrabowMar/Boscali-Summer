@@ -89,7 +89,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 MeasureScreen();
                 hasBoard = true;
                 presentedAt = Time.unscaledTime;
-                navRows = 0;      // NAV DATA is a block of the board: the master switch takes it with the board
                 CornersFrame(true, true);
                 return;
             }
@@ -134,7 +133,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             PresentLamps(frame);
             PresentGauges();
-            PresentNav(frame);
             hasBoard = true;
             Repaint(true);
             presentedAt = Time.unscaledTime;

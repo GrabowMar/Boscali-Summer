@@ -4,7 +4,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
     /// <summary>
-    /// The first selected target as the HUD reads it, one reader for the third-person target card (range and closure) and the cockpit's NAV DATA block (name, bearing, range and closure): the first of the weapon
+    /// The first selected target as the HUD reads it, the third-person target card's reader (name, range and closure): the first of the weapon
     /// manager's target list, its range, and the closing speed from two reads of the same target (positive = closing; NaN until there are two, and when the target changes). The name is upper-cased once per target,
     /// not once per read. Client-local, read-only.
     /// </summary>
@@ -48,48 +48,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             target = named = null;
             name = null;
-        }
-    }
-
-    /// <summary>
-    /// Reads the NAV DATA block's tick of data (<see cref="NavInput"/>) out of what the board already knows: the fuel watch's nearest field, endurance and flags, the selected target, and the game's mission clock. Cockpit
-    /// view only: in the external views the third-person cluster's target card owns the bottom-right corner, so there is nothing to read.
-    /// </summary>
-    internal static class NavReader
-    {
-        public static void Read(Aircraft aircraft, BoardFrame frame, bool cockpitView, TargetReadout targets)
-        {
-            frame.Nav = default;
-            frame.CockpitView = cockpitView;
-            if (!cockpitView || aircraft == null) { targets.Release(); return; }
-            ref NavInput nav = ref frame.Nav;
-            nav.Units = frame.Units;
-            FuelState fuel = frame.Fuel;
-            if (fuel.Valid)
-            {
-                nav.HasFuel = true;
-                nav.EnduranceS = fuel.EnduranceS;
-                nav.Bingo = fuel.Bingo;
-                nav.Joker = fuel.Joker;
-                if (!string.IsNullOrEmpty(fuel.Field) && float.IsFinite(fuel.FieldM))
-                {
-                    nav.HasHome = true;
-                    nav.HomeName = fuel.Field;
-                    nav.HomeM = fuel.FieldM;
-                    nav.HomeBearingDeg = fuel.FieldBearingDeg;
-                }
-            }
-            if (targets.Read(aircraft, out Unit unit, out float range, out float closure))
-            {
-                Vector3 to = unit.transform.position - aircraft.transform.position;
-                nav.HasTarget = true;
-                nav.TargetName = targets.NameOf(unit);
-                nav.TargetM = range;
-                nav.TargetBearingDeg = (Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg % 360f + 360f) % 360f;
-                nav.ClosureMps = closure;
-            }
-            nav.HasClock = true;
-            nav.ClockS = BoscaliSummer.Core.Game.MissionTimeSource.Now();
         }
     }
 }

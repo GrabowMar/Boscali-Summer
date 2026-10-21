@@ -47,6 +47,12 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Takes hand control of the linked drone (linking the first one when none is), or gives it back to its job.</summary>
         void ToggleHand();
 
+        /// <summary>The linked drone takes the pilot's heading and height (hand control).</summary>
+        void MatchNose();
+
+        /// <summary>Turns the linked drone by <paramref name="degrees"/> (hand control on its present course).</summary>
+        void Turn(float degrees);
+
         void ToggleFeed();
 
         void OpenTerminal();

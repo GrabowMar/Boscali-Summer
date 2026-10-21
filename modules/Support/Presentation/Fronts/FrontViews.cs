@@ -245,23 +245,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             switch (id)
             {
-                case SupportActionId.Recon: return "RADAR bird scans your aim for ground contacts.";
-                case SupportActionId.SatCamera: return "OPTICAL bird looks at the aim, then reveals.";
-                case SupportActionId.Prsm: return "Offboard ballistic strike on the aim.";
+                case SupportActionId.Recon: return "RADAR bird scans the aim, reveals.";
+                case SupportActionId.SatCamera: return "OPTICAL bird images the aim.";
+                case SupportActionId.Prsm: return "Ballistic missile strike on the aim.";
                 case SupportActionId.Cruise: return "Salvo of guided cruise missiles.";
-                case SupportActionId.Artillery: return "Kinetic rod from orbit, needs the rod bird.";
+                case SupportActionId.Artillery: return "Kinetic rod from the KINETIC bird.";
                 case SupportActionId.Overwatch: return "Radar follows movers near the aim.";
                 case SupportActionId.Starfall: return "3 to 5 small rods in a line.";
                 case SupportActionId.Siphon: return "Takes funds from enemy budgets.";
                 case SupportActionId.DirectAction: return "Team raids a SAM, radar or anchor.";
-                case SupportActionId.ElintSweep: return "Locates emitting enemy ground radars.";
-                case SupportActionId.FlareMissile: return "Decoy barrage against inbound missiles.";
+                case SupportActionId.ElintSweep: return "Finds emitting enemy ground radars.";
+                case SupportActionId.FlareMissile: return "Flare barrage against inbound fire.";
                 case SupportActionId.RadarBlind: return "Blinds the enemy radar at the aim.";
                 case SupportActionId.SamNetDown: return "Takes a revealed SAM net offline.";
                 case SupportActionId.Emp: return "Electromagnetic pulse over the aim.";
                 case SupportActionId.JtacMark: return "Team laser mark for any call.";
-                case SupportActionId.ReconTeam: return "Team reveals a circle around the aim.";
-                case SupportActionId.Fortify: return "Reinforces a held zone with defenders.";
+                case SupportActionId.ReconTeam: return "Team reveals a circle at the aim.";
+                case SupportActionId.Fortify: return "Defenders reinforce a held zone.";
                 case SupportActionId.SabotageStrike: return "Team sabotage of an enemy anchor.";
                 default: return "";
             }
@@ -512,7 +512,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!active)
             {
                 n.Meta = known ? "NO EW ASSET STANDING" : "WAITING FOR THE HOST";
-                n.HopLine = "NO INTRUSION";
+                n.HopLine = "NO EW LINK · NOTHING TO HOP FROM";
                 n.Next = known ? "NO EW TRUCK STANDING · QUEUE OR REBUILD ONE UNDER PROGRAMMES TO REACH THE ENEMY NET" : "WAITING FOR THE HOST CYBER STATE · NOTHING TO SHOW YET";
                 n.NextTone = known ? AvState.Caution : AvState.Inert;
                 n.Dossier.Next = n.Next; n.Dossier.NextTone = n.NextTone;
@@ -609,7 +609,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 n.Session = "SESSION " + (n.Operator.Length == 0 ? "YOURS" : n.Operator) + " · " + myHeld + " HELD";
                 n.Prompt = (n.Operator.Length == 0 ? "you" : n.Operator.ToLowerInvariant()) + "@" + TruckTag(mine.Truck).ToLowerInvariant() + ":~$";
             }
-            else n.HopLine = "NO INTRUSION";
+            else n.HopLine = "IDLE · NO HOP RUNNING"; // the dial already says NO INTRUSION
             n.Infocon = (byte)(locked ? 2 : anyDown ? 3 : 5);
             n.ThreatWord = locked ? "TRACED" : anyDown ? "DEGRADED" : "CALM";
             n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · REBUILD IT FROM THE RAIL" : "NO LOSS ON OUR EW NET";
@@ -624,8 +624,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 n.Infocon = (byte)(breached >= 2 ? 1 : 2);
                 n.ThreatWord = purging ? "PURGING" : "BREACHED";
-                n.ThreatNote = breached + " ENEMY HOLD" + (breached == 1 ? "" : "S") + " ON OUR NET · " +
-                    (purging ? "CUT IN " + purgeLeft + " S" : cooling ? "PURGE READY IN " + SpaceRules.Clock(s.PurgeReadyAt - now) : "PURGE NOW");
+                // The PURGE button beside it carries the countdown, so the note only counts the holds.
+                n.ThreatNote = breached == 0 ? "PURGE UNDER WAY" : breached + " ENEMY HOLD" + (breached == 1 ? "" : "S") + " ON OUR NET";
             }
             n.Meta = s.Nodes.Count + " NODES MAPPED · " + s.HeldTotal + " HELD";
 

@@ -65,11 +65,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float TextScale(float hudTextSize) =>
             float.IsNaN(hudTextSize) || hudTextSize <= 0f ? 1f : Math.Max(MinScale, Math.Min(MaxScale, hudTextSize / NativeTextSize));
 
-        public const float TargetCardWidth = 300f;
+        /// <summary>The feed column's cards are all one size (2026-10-20 rework; the UAV card uses the same 264 / 18, Core/Ui/FeedCorner).</summary>
+        public const float TargetCardWidth = 264f;
         /// <summary>Clear space between the target card and the missile feed card stacked on it.</summary>
-        public const float CardGap = 12f;
+        public const float CardGap = 10f;
         public const float TargetCardAspect = 16f / 9f;
-        public const float TargetCardHeaderHeight = 22f;
+        public const float TargetCardHeaderHeight = 18f;
 
         /// <summary>Screen-centre-bottom box the vanilla aircraft model occupies in the Wingview
         /// composition; bottom-anchored, centred horizontally.</summary>
@@ -131,15 +132,15 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>
         /// The missile feed card, top of the column: on the target card (<paramref name="overTarget"/>), else on the UAV card, else in the target card's
-        /// place, or one slot up when <paramref name="raised"/> (the cockpit: NAV DATA has the corner). A card that would run into <paramref name="board"/>
+        /// place. A card that would run into <paramref name="board"/>
         /// (the TAC BOARD's box; no size = none) goes left of the card it would have stood on instead, and drops below <paramref name="keepOff"/>
         /// (<see cref="AltitudeBlock"/>) if it would cover it there.
         /// </summary>
-        public static RectF MissileCard(float width, float height, bool overTarget, bool raised = false, RectF uav = default, RectF board = default, RectF keepOff = default)
+        public static RectF MissileCard(float width, float height, bool overTarget, RectF uav = default, RectF board = default, RectF keepOff = default)
         {
             RectF target = TargetCard(width, height, true, uav);
             bool onUav = !overTarget && uav.Height > 0f;
-            float bottom = overTarget || (raised && !onUav) ? target.Top + CardGap : target.Bottom;
+            float bottom = overTarget ? target.Top + CardGap : target.Bottom;
             RectF card = new RectF(target.CenterX, bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
             RectF under = overTarget ? target : onUav ? uav : default;
             if (under.Height <= 0f || board.Width <= 0f || board.Height <= 0f ||

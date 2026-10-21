@@ -1,0 +1,285 @@
+{
+  "markets": {
+    "duration": 8.8,
+    "beats": [
+      {
+        "t": 4.467,
+        "name": "break"
+      },
+      {
+        "t": 5.867,
+        "name": "slam"
+      }
+    ]
+  },
+  "debt": {
+    "duration": 8.2,
+    "beats": [
+      {
+        "t": 2.967,
+        "name": "downgrade"
+      },
+      {
+        "t": 5.133,
+        "name": "default"
+      },
+      {
+        "t": 7.2,
+        "name": "locked"
+      }
+    ]
+  },
+  "blackout": {
+    "duration": 6,
+    "beats": [
+      {
+        "t": 0.967,
+        "name": "dip"
+      },
+      {
+        "t": 1.433,
+        "name": "restore"
+      },
+      {
+        "t": 2.333,
+        "name": "trip"
+      },
+      {
+        "t": 5,
+        "name": "last-out"
+      }
+    ]
+  },
+  "unpaid": {
+    "duration": 7.4,
+    "beats": [
+      {
+        "t": 1.667,
+        "name": "stamp-01"
+      },
+      {
+        "t": 2.267,
+        "name": "stamp-02"
+      },
+      {
+        "t": 2.567,
+        "name": "stamp-03"
+      },
+      {
+        "t": 2.833,
+        "name": "stamp-04"
+      },
+      {
+        "t": 3.067,
+        "name": "stamp-05"
+      },
+      {
+        "t": 3.267,
+        "name": "stamp-06"
+      },
+      {
+        "t": 3.467,
+        "name": "stamp-07"
+      },
+      {
+        "t": 3.633,
+        "name": "stamp-08"
+      },
+      {
+        "t": 3.8,
+        "name": "stamp-09"
+      },
+      {
+        "t": 3.967,
+        "name": "stamp-10"
+      },
+      {
+        "t": 4.1,
+        "name": "stamp-11"
+      },
+      {
+        "t": 4.267,
+        "name": "stamp-12"
+      },
+      {
+        "t": 4.4,
+        "name": "stamp-13"
+      },
+      {
+        "t": 4.533,
+        "name": "stamp-14"
+      },
+      {
+        "t": 4.667,
+        "name": "stamp-15"
+      },
+      {
+        "t": 4.8,
+        "name": "stamp-16"
+      },
+      {
+        "t": 4.933,
+        "name": "stamp-17"
+      },
+      {
+        "t": 5.067,
+        "name": "stamp-18"
+      },
+      {
+        "t": 5.167,
+        "name": "stamp-19"
+      },
+      {
+        "t": 5.3,
+        "name": "stamp-20"
+      },
+      {
+        "t": 5.4,
+        "name": "stamp-21"
+      },
+      {
+        "t": 5.5,
+        "name": "stamp-22"
+      },
+      {
+        "t": 5.6,
+        "name": "stamp-23"
+      },
+      {
+        "t": 5.667,
+        "name": "stamp-24"
+      },
+      {
+        "t": 5.7,
+        "name": "fourteen"
+      },
+      {
+        "t": 6.033,
+        "name": "ripple"
+      }
+    ]
+  },
+  "riots": {
+    "duration": 7,
+    "beats": [
+      {
+        "t": 1.6,
+        "name": "flare-1"
+      },
+      {
+        "t": 1.633,
+        "name": "wave-1"
+      },
+      {
+        "t": 2.633,
+        "name": "wave-2"
+      },
+      {
+        "t": 2.767,
+        "name": "flare-2"
+      },
+      {
+        "t": 3.567,
+        "name": "wave-3"
+      },
+      {
+        "t": 3.633,
+        "name": "flare-3"
+      },
+      {
+        "t": 3.967,
+        "name": "break"
+      },
+      {
+        "t": 4.367,
+        "name": "flare-4"
+      }
+    ]
+  },
+  "signal": {
+    "duration": 7.6,
+    "beats": [
+      {
+        "t": 1.167,
+        "name": "tear"
+      },
+      {
+        "t": 3.333,
+        "name": "roll"
+      },
+      {
+        "t": 4.733,
+        "name": "collapse"
+      },
+      {
+        "t": 5.067,
+        "name": "off"
+      },
+      {
+        "t": 5.333,
+        "name": "card"
+      }
+    ]
+  },
+  "exodus": {
+    "duration": 7.2,
+    "beats": [
+      {
+        "t": 2.4,
+        "name": "hit-1"
+      },
+      {
+        "t": 2.433,
+        "name": "cross-01"
+      },
+      {
+        "t": 2.867,
+        "name": "cross-02"
+      },
+      {
+        "t": 3.467,
+        "name": "hit-2"
+      },
+      {
+        "t": 4.167,
+        "name": "cross-03"
+      },
+      {
+        "t": 4.5,
+        "name": "hit-3"
+      },
+      {
+        "t": 4.633,
+        "name": "cross-04"
+      },
+      {
+        "t": 4.733,
+        "name": "hit-4"
+      },
+      {
+        "t": 5,
+        "name": "cross-05"
+      },
+      {
+        "t": 5.667,
+        "name": "hit-5"
+      },
+      {
+        "t": 5.7,
+        "name": "cross-06"
+      },
+      {
+        "t": 6.033,
+        "name": "cross-07"
+      },
+      {
+        "t": 6.567,
+        "name": "cross-08"
+      },
+      {
+        "t": 6.7,
+        "name": "cross-09"
+      }
+    ]
+  }
+}

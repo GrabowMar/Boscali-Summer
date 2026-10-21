@@ -1,0 +1,8 @@
+node_modules/
+# scratch frames from debugging renders; the clips and contact sheet in out/ are the deliverable
+out/frames/
+# the clips are copied into modules/Scenario/Assets/, which is where they ship from
+out/*.webm
+# optional 1920x1080 renders (node render.mjs --res=1080)
+out/1080/
+out/1080/

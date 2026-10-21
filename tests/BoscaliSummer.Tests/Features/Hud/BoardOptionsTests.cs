@@ -15,7 +15,7 @@ namespace BoscaliSummer.Tests.Features.Hud
             TestAssert.Near(d.Scale, .85f, "Default size");
             TestAssert.Near(d.Shade, .45f, "Default shade");
             TestAssert.Near(d.ThreatHoldSeconds, 6f, "RWR contact hold");
-            TestAssert.That(d.ShowLamps && d.ShowGauges && d.ShowTicker && d.ShowNavData && d.Sway && d.Corners, "Major sections start enabled");
+            TestAssert.That(d.ShowLamps && d.ShowGauges && d.ShowTicker && d.Sway && d.Corners, "Major sections start enabled");
             BoardOptions clean = d;
             clean.Sanitize();
             TestAssert.That(clean.PageCount == d.PageCount && clean.Page1 == d.Page1 && clean.Page4 == d.Page4 && clean.Scale == d.Scale && clean.Opacity == d.Opacity, "Defaults survive sanitization");
@@ -115,9 +115,9 @@ namespace BoscaliSummer.Tests.Features.Hud
                 BoardEffective e = o.Effective();
                 TestAssert.That(e.ShowStores && e.ShowLamps && e.ShowTicker, level + ": enabled major sections remain enabled");
                 TestAssert.That(e.Furniture == (level == BoardDeclutter.Full) && e.ShowGauges == (level == BoardDeclutter.Full), "Declutter changes decoration and secondary gauges");
-                o.ShowStores = o.ShowLamps = o.ShowGauges = o.ShowTicker = o.ShowNavData = false;
+                o.ShowStores = o.ShowLamps = o.ShowGauges = o.ShowTicker = false;
                 e = o.Effective();
-                TestAssert.That(!e.ShowStores && !e.ShowLamps && !e.ShowGauges && !e.ShowTicker && !e.ShowNavData, "Disabled major elements stay disabled at every declutter level");
+                TestAssert.That(!e.ShowStores && !e.ShowLamps && !e.ShowGauges && !e.ShowTicker, "Disabled major elements stay disabled at every declutter level");
             }
             BoardOptions min = BoardOptions.Default;
             min.Declutter = BoardDeclutter.Minimal;

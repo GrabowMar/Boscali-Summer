@@ -361,7 +361,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         /// that lands beside the action. The picture of the shot before moves up into the timeline. The cut's effects dress this shot alone. A cut that
         /// names a board puts that board up instead, and the feed with its pictures stays hidden for the shot. True when a picture or a page landed.
         /// </summary>
-        internal bool Caption(ScenarioCut cutWords, Texture picture)
+        internal bool Caption(ScenarioCut cutWords, Texture picture, string video = null)
         {
             string title = cutWords.Title, words = cutWords.Caption, stampText = cutWords.Stamp, before = caption.text;
             float now = Time.unscaledTime;
@@ -377,7 +377,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
                 cardInCut = false;
                 titleFull = "";
                 stamp.text = "";
-                bool landed = ShowBoard(cutWords, picture);
+                bool landed = ShowBoard(cutWords, picture, video);
                 // A line of narration carried over a cut stays up instead of fading in again.
                 if (caption.text != before) captionFrom = now;
                 return landed;
@@ -744,6 +744,8 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         {
             foreach (Texture2D texture in textures)
                 if (texture != null) Destroy(texture);
+            if (screenTexture != null) screenTexture.Release();
+            Destroy(screenTexture);
             DestroyLook();
         }
     }

@@ -101,8 +101,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
             ToggleCell(flow, blocks, page, "NOTICES", "The notice line at the foot of the board.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
-            ToggleCell(flow, blocks, page, "NAV DATA", "The cockpit view's bottom-right readout: home, target, fuel, clock. LEAN drops its caption, MIN hides it.",
-                () => board.ShowNavData, v => board.ShowNavData = v, on, off);
             ToggleCell(flow, blocks, page, "FEED AND MAP", "Draw the kill feed and map frame in the board's look. Stays on with the board off.",
                 () => board.Corners, v => board.Corners = v);
 

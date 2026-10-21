@@ -154,6 +154,29 @@
         "action": "link",
         "seated": 1
       },
+      "store": "handHold"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "do": "nose",
+        "seated": 1
+      },
+      "store": "nose"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "link",
+        "seated": 1
+      },
       "store": "handTurn"
     },
     {
@@ -330,6 +353,16 @@
       "check": "result_below",
       "path": "hand1.hostMode",
       "max": 1.5
+    },
+    {
+      "check": "result_above",
+      "path": "handHold.headingGap",
+      "min": 45
+    },
+    {
+      "check": "result_below",
+      "path": "handHold.courseGap",
+      "max": 15
     },
     {
       "check": "result_below",

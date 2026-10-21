@@ -1685,7 +1685,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 idPlate.color = RoomInk.Plate.WithAlpha(0.6f);
                 FrontKit.Set(id, "T--", Mc.Steel);
                 FrontKit.Set(title, name, Mc.Steel);
-                FrontKit.Set(sub, C2Kit.FitTo(sub, note, sub.rectTransform.rect.width), Mc.Steel);
+                // The title already says there are no tracks: drop the line's "NO CONTACTS —" lead-in so the reason itself fits.
+                const string Lead = "NO CONTACTS — ";
+                if (note != null && note.StartsWith(Lead, StringComparison.Ordinal)) note = note.Substring(Lead.Length);
+                FrontKit.Set(sub, FrontKit.Fit(sub, note, 10.5f), Mc.Steel);
                 FrontKit.Set(pct, "", Mc.Steel);
                 FrontKit.Set(cls, "", Mc.Steel);
             }
@@ -1697,6 +1700,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Restyle();
                 FrontKit.Set(id, C2Orbit.TrackId(t.Id), RoomInk.Telemetry);
                 FrontKit.Set(title, t.Title, RoomInk.Engrave);
+                AvText.Size(sub, 10.5f); // a ghost row may have stepped it down
                 FrontKit.Set(sub, (t.Moving ? "MOVING" : "STATIC") + (t.Marked ? " · MARKED" : t.FixedPoint ? " · FIXED POINT" : ""), t.Marked ? FrontKit.Tone(AvState.Ready) : Mc.Steel);
                 FrontKit.Set(pct, t.Percent > 0 && t.Percent <= 100 ? t.Percent + " %" : "", RoomInk.Engrave);
                 FrontKit.Set(cls, klass == ProbableClass.Hostile ? "HOSTILE" : klass == ProbableClass.Friendly ? "FRIENDLY" : klass == ProbableClass.Neutral ? "NEUTRAL" : "UNKNOWN",
