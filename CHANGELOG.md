@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.8 — hotfix
+
+- **Target-selection smearing after mission restart** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
+  integrated [qweaeqew's Feed Stack Fix](https://github.com/qweaeqew/Boscali-Summer-Feed-Stack-Fix).
+  Missile and drone cameras now leave valid post-processing stacks for URP to reuse, with a recovery
+  guard for disposed cached stacks. Thanks to qweaeqew for the fix. The separate fix plugin is no longer needed.
+
 ## 0.2.7 — update
 
 - **Campaign, chapter 1 — Twelve Miles Out**: the old scripted missions are gone and a new campaign
