@@ -22,6 +22,7 @@ namespace BoscaliSummer.Modules.Hud
             new ModuleMetadata("hud", "HUD and interface presentation");
         private static readonly Type[] Patches =
         {
+            typeof(BoscaliSummer.Core.Fx.FeedStackRecoveryPatch),
             typeof(WingviewCameraPatch), typeof(ShotDetonatePatch), typeof(EventFeedPatch),
             typeof(CueReportPatch), typeof(CueReservePatch), typeof(CueAllocationPatch), typeof(CueScorePatch), typeof(CueBonusPatch),
         };
