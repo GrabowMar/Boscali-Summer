@@ -136,6 +136,7 @@ namespace BoscaliSummer.Core.Game
                 label.fontSizeMin = siblingLabel.enableAutoSizing ? siblingLabel.fontSizeMin : siblingLabel.fontSize;
                 label.fontSizeMax = siblingLabel.enableAutoSizing ? siblingLabel.fontSizeMax : siblingLabel.fontSize;
                 label.enableAutoSizing = true;
+                label.enableWordWrapping = false;
                 label.fontStyle = siblingLabel.fontStyle;
                 label.color = siblingLabel.color;
             }

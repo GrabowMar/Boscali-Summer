@@ -2,7 +2,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Core.Game
 {
-    /// <summary>The one answer to "can this missile definition fly a blind aimpoint release": the artillery catalog and the trench barrage both read it.</summary>
+    /// <summary>The one answer to "can this missile definition fly a blind aimpoint release": the artillery catalog reads it.</summary>
     internal static class BallisticShell
     {
         /// <summary>True for aimpoint ballistic seekers only; lock-on seekers (IR, radar, laser) never acquire on a blind release and cruise seekers hug the deck, so anything outside this list fails closed.</summary>

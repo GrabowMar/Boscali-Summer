@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Boscali · Code Atlas</title>
+  <link rel="stylesheet" href="atlas.css">
+  <script defer src="vendor/cytoscape.min.js"></script>
+  <script defer src="vendor/d3.min.js"></script>
+  <script defer src="atlas-data.js"></script>
+  <script defer src="atlas.js"></script>
+</head>
+<body>
+  <main id="atlas">
+    <header class="masthead">
+      <div class="wordmark"><span class="brand-mark" aria-hidden="true">▦</span><span>BOSCALI <span class="slash">/</span> CODE ATLAS</span></div>
+      <div class="snapshot"><span class="status-dot" aria-hidden="true"></span><span id="snapshot">Reading source snapshot…</span></div>
+      <a class="source-link" href="https://github.com/cytoscape/cytoscape.js" target="_blank" rel="noreferrer">Cytoscape.js + D3 ↗</a>
+    </header>
+
+    <section class="intro" aria-labelledby="page-title">
+      <div><p class="eyebrow">SOFTWARE ARCHITECTURE / STATIC ANALYSIS</p><h1 id="page-title">See how the code connects.</h1><p class="subtitle">Explore the source. Follow a dependency. Find the weight.</p></div>
+      <dl id="summary" class="summary"></dl>
+    </section>
+
+    <section class="workspace" aria-label="Code architecture explorer">
+      <div class="toolbar">
+        <nav class="view-tabs" aria-label="Visualization">
+          <button type="button" class="view-tab active" data-view="graph" aria-pressed="true"><span aria-hidden="true">⌘</span> Dependency graph</button>
+          <button type="button" class="view-tab" data-view="matrix" aria-pressed="false"><span aria-hidden="true">▦</span> Matrix</button>
+          <button type="button" class="view-tab" data-view="treemap" aria-pressed="false"><span aria-hidden="true">▤</span> Size treemap</button>
+        </nav>
+        <div class="tools">
+          <label class="scope-label" for="scope">Scope</label><select id="scope" aria-label="Module scope"><option value="">All components</option></select>
+          <button type="button" id="fit" class="quiet-button">Fit view</button>
+        </div>
+      </div>
+      <div class="body-grid">
+        <aside class="explorer" aria-label="Keyboard-accessible source explorer">
+          <label class="search-label" for="search">FIND IN SOURCE</label>
+          <input type="search" id="search" placeholder="Component or file…" autocomplete="off">
+          <div class="explorer-title"><span id="list-title">COMPONENTS</span><span id="list-count"></span></div>
+          <div id="source-list" class="source-list"></div>
+          <div class="explorer-footer"><span class="legend-dot shared"></span> Shared foundation<br><span class="legend-dot feature"></span> Feature module</div>
+        </aside>
+
+        <section class="canvas-shell" aria-label="Architecture visualization">
+          <div class="canvas-heading"><div><h2 id="view-title">Component dependencies</h2><p id="view-caption">Arrows point from the user to the dependency.</p></div><span id="view-count" class="view-count"></span></div>
+          <div id="visualization" class="visualization"><div id="graph" role="img" aria-label="Directed dependency graph. The source explorer provides keyboard access to every component."></div><div id="matrix" hidden></div><div id="treemap" hidden></div><div id="empty" hidden>No source matches this search.</div></div>
+          <div class="canvas-footer"><span id="legend">NODE AREA ≈ SOURCE SIZE <span class="legend-separator">·</span> ARROW = USES</span><label id="strength-wrap">Min. coupling <select id="strength" aria-label="Minimum dependency weight"><option value="1">1 link</option><option value="5" selected>5 links</option><option value="15">15 links</option><option value="50">50 links</option></select></label></div>
+        </section>
+
+        <aside class="inspector" aria-label="Selection details">
+          <div class="inspector-label">INSPECTOR <button id="clear" type="button" aria-label="Clear selection" title="Clear selection">×</button></div>
+          <div id="inspector-content" aria-live="polite"></div>
+        </aside>
+      </div>
+    </section>
+
+    <footer class="method-footer">
+      <span>LOCAL SOURCE SNAPSHOT <span class="legend-separator">/</span> Roslyn semantic analysis</span>
+      <details id="method"><summary>Scope &amp; measurement notes</summary><div id="method-content"></div></details>
+    </footer>
+    <p id="fatal" class="fatal" role="alert" hidden></p>
+  </main>
+</body>
+</html>

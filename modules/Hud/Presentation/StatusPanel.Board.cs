@@ -229,7 +229,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = clock;
             int phase = (int)(clock * FlashHz * 2f);
             bool flashChanged = beat && phase != lastPhase;
-            bool fast = pages[(int)ScopePage.Systems].Fast;
+            bool fast = allow.ShowSystems && pages[(int)ScopePage.Systems].Fast;
             for (int i = 0; i < selectedCount; i++) fast |= selectedPages[i].Fast;
             if (!flashChanged && !transition.Running && !fast) return;
             Repaint(flashChanged || transition.Running);
@@ -249,12 +249,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             float target = scopeOn ? ScopeLayout.Full : 0f;
             transition.Update(signature, target, now);
-            // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read, whatever the slots, the switches or the declutter level.
+            // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read and its switch is on, whatever the slots or the declutter level.
             ScopePageBase systems = pages[(int)ScopePage.Systems];
             var blocks = new BoardBlocks
             {
                 Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
-                StatusH = systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
+                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipe is heading: the size, the anchor and the shade go by it, so pages coming in never pump the scale or move the box.

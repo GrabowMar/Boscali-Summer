@@ -62,6 +62,18 @@ namespace BoscaliSummer.Tests.Features.Spooktober
             TestAssert.That(solutions.Count == 1 && solutions[0] == 0b100101, "breaker: banks 0, 2 and 5 are the only way");
             TestAssert.That(SpookPuzzles.Morse("GHOST") == "--. .... --- ... -", "morse");
             TestAssert.That(SpookPuzzles.Morse("sos") == "... --- ...", "morse: lower case reads the same");
+            // G H O S T, in Morse units: verify every lit/off interval, including the seven-unit repeat gap.
+            var pulses = new[] { (0, 3), (4, 7), (8, 9), (12, 13), (14, 15), (16, 17), (18, 19),
+                (22, 25), (26, 29), (30, 33), (36, 37), (38, 39), (40, 41), (44, 47) };
+            for (int unit = 0; unit < 108; unit++)
+            {
+                bool lit = false;
+                foreach (var pulse in pulses) lit |= unit % 54 >= pulse.Item1 && unit % 54 < pulse.Item2;
+                TestAssert.That(SpookPuzzles.EchoLampLit((unit + 0.5f) * SpookPuzzles.EchoUnitSeconds) == lit,
+                    "echo lamp: standard pulse/gap timing at unit " + unit);
+            }
+            TestAssert.That(!SpookPuzzles.EchoLampLit(-0.1f) && !SpookPuzzles.EchoLampLit(float.NaN) &&
+                !SpookPuzzles.EchoLampLit(float.PositiveInfinity), "echo lamp: no light before start or for invalid time");
             TestAssert.That(SpookPuzzles.EchoSolved("ghost\n") && !SpookPuzzles.EchoSolved("GHOSTS"), "echo answer");
             TestAssert.That(!SpookPuzzles.EchoSolved("") && !SpookPuzzles.EchoSolved(null) && !SpookPuzzles.EchoSolved("G H O S T"), "echo: blanks and spaced-out letters do not solve it");
 

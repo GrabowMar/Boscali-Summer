@@ -69,8 +69,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> DisplayAutoLight { get; }
         public ConfigEntry<float> DisplayScanlines { get; }
         public ConfigEntry<float> DisplayVignette { get; }
-        public ConfigEntry<int> DisplayTint { get; }
-        public ConfigEntry<float> DisplayTintStrength { get; }
         public ConfigEntry<AvThemeId> AvionicsTheme { get; }
         public ConfigEntry<AvFxTier> AvionicsFxTier { get; }
         public ConfigEntry<bool> AvionicsBlurBehind { get; }
@@ -153,10 +151,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 new ConfigDescription("Static CRT scanline strength over the maximized MFD; no flicker.", new AcceptableValueRange<float>(0f, 1f)));
             DisplayVignette = config.Bind("Command", "DisplayVignette", 0f,
                 new ConfigDescription("Soft edge shading over the maximized MFD.", new AcceptableValueRange<float>(0f, 1f)));
-            DisplayTint = config.Bind("Command", "DisplayTint", 0,
-                new ConfigDescription("MFD color wash: 0 Neutral, 1 Green, 2 Amber, 3 Ice, 4 Rose.", new AcceptableValueRange<int>(0, 4)));
-            DisplayTintStrength = config.Bind("Command", "DisplayTintStrength", 0.25f,
-                new ConfigDescription("Color wash strength; limited to preserve symbols and warning colors.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
                 "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS), Custom (built from the three Custom* keys). Unknown saved names fall back to Portal.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,

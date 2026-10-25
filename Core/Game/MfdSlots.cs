@@ -15,5 +15,6 @@ namespace BoscaliSummer.Core.Game
         public const string Comms = "COM";
         public const string Weather = "ENV";
         public const string Uav = "UAV";
+        public const string Misc = "MISC";
     }
 }

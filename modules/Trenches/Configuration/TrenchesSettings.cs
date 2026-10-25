@@ -9,9 +9,6 @@ namespace BoscaliSummer.Modules.Trenches.Configuration
         public readonly ConfigEntry<int> MaxTrenchPositions;
         public readonly ConfigEntry<float> LODDistanceNear;
         public readonly ConfigEntry<float> LODDistanceFar;
-        public readonly ConfigEntry<bool> BarrageEnabled;
-        public readonly ConfigEntry<float> BarrageMinDelaySeconds;
-        public readonly ConfigEntry<float> BarrageMaxDelaySeconds;
         public readonly ConfigEntry<bool> ShowOnTacticalMap;
 
         public TrenchesSettings(ConfigFile config)
@@ -49,24 +46,6 @@ namespace BoscaliSummer.Modules.Trenches.Configuration
 
             ShowOnTacticalMap = config.Bind("Trenches", "ShowOnTacticalMap", true,
                 "Display NATO APP-6 crenellated entrenchment marks and strongpoints on the theater map.");
-
-            // Renamed from BarrageEnabled (default false) so existing installs pick up the
-            // new default: BepInEx applies a default only to a new key, and a blind bump would
-            // also flip players who deliberately opted out. The old key is ignored.
-            BarrageEnabled = config.Bind("Trenches", "HarassingBarrage", true,
-                "Harassing mortar and artillery fire between opposing matured positions: the server " +
-                "fires vanilla shells at no man's land with a radial miss. Immersive churn and " +
-                "suppression; a short round can still damage the ditch like any other hit.");
-
-            BarrageMinDelaySeconds = config.Bind("Trenches", "BarrageMinDelaySeconds", 60f,
-                new ConfigDescription(
-                    "Fastest a position re-fires its harassing mission, before pressure quickening.",
-                    new AcceptableValueRange<float>(15f, 600f)));
-
-            BarrageMaxDelaySeconds = config.Bind("Trenches", "BarrageMaxDelaySeconds", 240f,
-                new ConfigDescription(
-                    "Slowest a position re-fires its harassing mission, before pressure quickening.",
-                    new AcceptableValueRange<float>(30f, 900f)));
         }
     }
 }

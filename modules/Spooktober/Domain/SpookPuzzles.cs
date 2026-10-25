@@ -56,14 +56,18 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
             return (state & all) == all;
         }
 
-        // ECHO: the footer ticker blinks the word in Morse; the player types the word.
+        // ECHO: a dedicated puzzle lamp keys the word; functional readouts never carry the clue.
         public const string EchoWord = "GHOST";
+        public const float EchoUnitSeconds = 0.4f;
 
         private static readonly string[] MorseTable =
         {
             ".-", "-...", "-.-.", "-..", ".", "..-.", "--.", "....", "..", ".---", "-.-", ".-..", "--",
             "-.", "---", ".--.", "--.-", ".-.", "...", "-", "..-", "...-", ".--", "-..-", "-.--", "--.."
         };
+
+        private static readonly string EchoCode = Morse(EchoWord);
+        private static readonly int EchoCycleUnits = MorseCycleUnits();
 
         /// <summary>Standard ITU letters, one space between letters. Anything that is not a letter is dropped.</summary>
         public static string Morse(string word)
@@ -80,6 +84,32 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         }
 
         public static bool EchoSolved(string answer) => Matches(answer, EchoWord);
+
+        // Standard timing: dot 1, dash 3, element gap 1, letter gap 3, repeat gap 7 units.
+        private static int MorseCycleUnits()
+        {
+            int units = 6; // the final element already contributes one unit of the repeat gap
+            foreach (char c in EchoCode) units += c == ' ' ? 2 : c == '-' ? 4 : 2;
+            return units;
+        }
+
+        public static bool EchoLampLit(float elapsedSeconds)
+        {
+            if (elapsedSeconds < 0f || float.IsNaN(elapsedSeconds) || float.IsInfinity(elapsedSeconds)) return false;
+            float unit = elapsedSeconds / EchoUnitSeconds % EchoCycleUnits;
+            foreach (char c in EchoCode)
+            {
+                if (c == ' ') { unit -= 2f; }
+                else
+                {
+                    int pulse = c == '-' ? 3 : 1;
+                    if (unit < pulse) return true;
+                    unit -= pulse + 1;
+                }
+                if (unit < 0f) return false;
+            }
+            return false;
+        }
 
         private static bool Matches(string answer, string expected) =>
             answer != null && string.Equals(answer.Trim(), expected, StringComparison.OrdinalIgnoreCase);

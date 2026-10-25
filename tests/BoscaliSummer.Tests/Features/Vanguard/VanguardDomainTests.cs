@@ -11,6 +11,12 @@ namespace BoscaliSummer.Tests.Features.Vanguard
         {
             TestAssert.That(VanguardKeys.RoleOf(VanguardKeys.Remora) == VanguardRole.Drone &&
                 VanguardKeys.RoleOf("CruiseMissile1") == VanguardRole.None, "only Vanguard keys get a role");
+            foreach (string key in new[] { VanguardKeys.MaldX, VanguardKeys.MaldJ, VanguardKeys.Remora, VanguardKeys.HawcX, VanguardKeys.AegisDart,
+                VanguardKeys.Glaive2A, VanguardKeys.Glaive2S, VanguardKeys.Orca, VanguardKeys.AleX, VanguardKeys.Kestrel, VanguardKeys.Hamilcar })
+                TestAssert.That(VanguardPrices.Munition(key) > 0f && VanguardPrices.Munition(key) < 9f,
+                    key + " is priced, and shooting it down pays less than a vanilla FGA-57 kill (value 9)");
+            TestAssert.That(VanguardPrices.Munition("CruiseMissile1") == 0f && VanguardPrices.Gun("Gun57mm_Pod") == 0f &&
+                VanguardPrices.Gun("WI_VG_Lance") > 0f, "only VANGUARD assets are repriced");
 
             GlidePlan boost = GlideProfile.Plan(5f, 300000f, 2000f);
             TestAssert.That(boost.Phase == GlidePhase.Boost && boost.Altitude == GlideProfile.Ceiling, "launch boosts to the ceiling");

@@ -1,0 +1,90 @@
+{
+  "name": "misc-screen",
+  "_note": "MISC screen: the last rail key, CHEATS and DEBUG tabs, SPOOKTOBER hidden until all four puzzles are solved, then shown with the boss menu; after a reset the tab hides again and the console falls back. Ends with reset (the Spooktober progress entry is real).",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 400,
+  "environment": {
+    "config": {
+      "com.marci.boscalisummer": {
+        "Mission": {
+          "AskAtStart": false
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "altitude": 1500,
+      "speed": 180,
+      "heading": 0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Spooktober.SpooktoberAutomation.Step",
+      "args": { "action": "reset" },
+      "store": "fresh"
+    },
+    { "op": "wait", "seconds": 15 },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
+      "args": { "tab": "CHEATS" },
+      "store": "cheats"
+    },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "misc_cheats" },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
+      "args": { "tab": "DEBUG" },
+      "store": "debug"
+    },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "misc_debug" },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Spooktober.SpooktoberAutomation.Step",
+      "args": { "action": "solve", "puzzle": "all" },
+      "store": "solved"
+    },
+    { "op": "wait", "seconds": 2 },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
+      "args": { "tab": "SPOOKTOBER" },
+      "store": "spook"
+    },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "misc_spooktober" },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Spooktober.SpooktoberAutomation.Step",
+      "args": { "action": "reset" },
+      "store": "reset"
+    },
+    { "op": "wait", "seconds": 2 },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Read",
+      "args": {},
+      "store": "after"
+    },
+    { "op": "end" }
+  ],
+  "checks": [
+    { "check": "result_equals", "path": "cheats.railLast", "value": true },
+    { "check": "result_equals", "path": "cheats.screenActive", "value": true },
+    { "check": "result_equals", "path": "cheats.tabs", "value": "CHEATS,DEBUG" },
+    { "check": "result_equals", "path": "debug.page", "value": 2 },
+    { "check": "result_equals", "path": "spook.tabs", "value": "CHEATS,DEBUG,SPOOKTOBER" },
+    { "check": "result_equals", "path": "spook.page", "value": 3 },
+    { "check": "result_equals", "path": "after.tabs", "value": "CHEATS,DEBUG" },
+    { "check": "result_equals", "path": "after.page", "value": 1 },
+    { "check": "log_match", "pattern": "MISC MFD installed", "min": 1 },
+    { "check": "log_match", "pattern": "Boscali Summer\\].*Exception", "max": 0 }
+  ]
+}

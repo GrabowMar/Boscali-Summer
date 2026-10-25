@@ -19,8 +19,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool DarkLamps;
         /// <summary>Of the lamps only the threat ones: LOCK, SPKE and MSL.</summary>
         public bool ThreatLampsOnly;
-        /// <summary>SYSTEMS notices speak only in their critical form (Minimal). The SYSTEMS block itself always shows.</summary>
+        /// <summary>SYSTEMS notices speak only in their critical form (Minimal). The block itself shows by <see cref="ShowSystems"/>, at every declutter level.</summary>
         public bool SystemsCriticalOnly;
+        public bool ShowSystems;
         public bool ShowGauges;
         public bool ShowTicker;
         /// <summary>Decorative captions and shelves are drawn (the painters' <c>ScopeCanvas.Furniture</c> flag; brackets, ticks and markers stay at every level).</summary>
@@ -57,7 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool ShowStores;
         public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo;
         public float ThreatHoldSeconds, PageMinSeconds;
-        public bool ShowLamps, ShowGauges, ShowTicker;
+        public bool ShowLamps, ShowGauges, ShowTicker, ShowSystems;
         public bool Sway, Corners;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
@@ -68,7 +69,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
             PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true, PageCargo = true,
             ThreatHoldSeconds = 6f, PageMinSeconds = 3f,
-            ShowLamps = true, ShowGauges = true, ShowTicker = true,
+            ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
             Sway = true, Corners = true,
         };
 
@@ -147,6 +148,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 SystemsCriticalOnly = minimal,
                 ShowGauges = ShowGauges && full,
                 ShowTicker = ShowTicker,
+                ShowSystems = ShowSystems,
                 Furniture = full,
             };
         }

@@ -62,6 +62,8 @@ namespace BoscaliSummer.Core.Contracts
         bool ShowLamps { get; set; }
         bool ShowGauges { get; set; }
         bool ShowTicker { get; set; }
+        /// <summary>The SYSTEMS block under the lamp line. Off hides the block only; its warnings still post.</summary>
+        bool ShowSystems { get; set; }
         /// <summary>The symbology lags slightly against head movement.</summary>
         bool Sway { get; set; }
         /// <summary>Restyle the kill feed and the map frame in the board's look.</summary>

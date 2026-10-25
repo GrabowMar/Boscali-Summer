@@ -47,6 +47,7 @@ namespace BoscaliSummer.Vanguard
             switch (Text(args, "action"))
             {
                 case "catalog": return Catalog();
+                case "economy": return Economy(Text(args, "key") ?? VanguardKeys.MaldX, bandit);
                 case "aegisfit": return AegisFit(lead, (int)Number(args, "darts", 0f));
                 case "snap": return Snap(lead, Text(args, "target") == "none" ? null : (Unit)bandit, Number(args, "press", 1f) > 0f);
                 case "launch":
@@ -415,6 +416,35 @@ namespace BoscaliSummer.Vanguard
             foreach (WeaponMount m in e.weaponMounts)
                 if (m != null && m.jsonKey != null && m.jsonKey.StartsWith("VG_", StringComparison.Ordinal)) mounts++;
             return new Dictionary<string, object> { ["ok"] = true, ["missiles"] = missiles, ["mounts"] = mounts };
+        }
+
+        /// <summary>
+        /// Live prices and payouts: each VANGUARD unit value and per-round price as loaded, then the allocation vanilla's own
+        /// FactionHQ.ReportKillAction pays the local player for the launched <paramref name="key"/> munition and for the bandit
+        /// (a vanilla fighter). Nothing is destroyed; the payouts are real allocation, so run this last.
+        /// </summary>
+        private static Dictionary<string, object> Economy(string key, Aircraft bandit)
+        {
+            var result = new Dictionary<string, object> { ["ok"] = true };
+            foreach (MissileDefinition m in Encyclopedia.i.missiles)
+            {
+                if (m == null || VanguardKeys.RoleOf(m.jsonKey) == VanguardRole.None) continue;
+                result[m.jsonKey + "_value"] = m.value;
+                WeaponInfo info = m.unitPrefab != null && m.unitPrefab.TryGetComponent(out Missile prefab) ? prefab.GetWeaponInfo() : null;
+                result[m.jsonKey + "_price"] = info != null ? info.costPerRound : -1f;
+            }
+            if (!GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player) || player == null || player.HQ == null)
+                return Failure("VanguardAutomation", "economy", "no local player");
+            float Pay(Unit target)
+            {
+                float before = player.Allocation;
+                player.HQ.ReportKillAction(player, target, 1f);
+                return player.Allocation - before;
+            }
+            result["killReward"] = player.HQ.killReward;
+            if (Launched.TryGetValue(key, out Missile drone) && drone != null) result["payout_" + key] = Pay(drone);
+            if (bandit != null) result["payout_fighter"] = Pay(bandit);
+            return result;
         }
 
         private static MissileDefinition Find(Func<MissileDefinition, bool> match)

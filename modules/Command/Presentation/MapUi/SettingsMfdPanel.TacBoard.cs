@@ -96,11 +96,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
             ToggleCell(flow, blocks, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
                 () => board.ScopeMode != BoardScopeMode.Off, v => board.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off, on, off);
-            ToggleCell(flow, blocks, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. SYSTEMS always shows. DECLUTTER still sets their detail.",
+            ToggleCell(flow, blocks, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
             ToggleCell(flow, blocks, page, "NOTICES", "The notice line at the foot of the board.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
+            ToggleCell(flow, blocks, page, "SYSTEMS BLOCK", "The fire, engine and fuel strip under the lamps. Its warnings still post when hidden.",
+                () => board.ShowSystems, v => board.ShowSystems = v, on, off);
             ToggleCell(flow, blocks, page, "FEED AND MAP", "Draw the kill feed and map frame in the board's look. Stays on with the board off.",
                 () => board.Corners, v => board.Corners = v);
 

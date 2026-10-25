@@ -24,7 +24,7 @@ namespace Vanguard
         sealed class Spec
         {
             public string Key, Name, Short, Model, Description;
-            public float Mass, Yield, Pierce, Cost, Value, RadarSize, Thrust, BurnTime, GLimit, TurnRate;
+            public float Mass, Yield, Pierce, Cost, RadarSize, Thrust, BurnTime, GLimit, TurnRate;
             public string[] Racks;
         }
 
@@ -32,47 +32,47 @@ namespace Vanguard
         {
             new Spec { Key = "VG_MaldX", Name = "MALD-X BAIT", Short = "BAIT", Model = "MaldX",
                 Description = "Chaff-laying decoy. Weaves toward your designated or locked target at 230 m/s, seeding a chaff cloud every 300 m, and circles it for seven minutes. Each cloud hangs for a minute: a radar missile whose line of sight to a friendly aircraft crosses one is blinded, and that cloud is spent. Enemy radar sites that hold the decoy for 3 s are EXPOSED to your side for 60 s.",
-                Mass = 140, Yield = 1, Cost = 0.3f, Value = 90, RadarSize = 3.0f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
+                Mass = 140, Yield = 1, Cost = 0.4f, RadarSize = 3.0f, Thrust = 900, BurnTime = 600, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_MaldJ", Name = "ADM-160J MALD-J", Short = "MALD-J", Model = "MaldJ",
                 Description = "SHADOW stand-in jammer. Raises its emitter mast and flies straight at 200 m/s toward the locked target (else ahead) for five minutes, projecting a 55 degree jam lobe out to 35 km. Enemy radars in the lobe cannot see friendly aircraft hiding within 12 degrees of the jammer's line, until they close inside 9 km burn-through.",
-                Mass = 150, Yield = 1, Cost = 0.6f, Value = 110, RadarSize = 0.6f, Thrust = 950, BurnTime = 300, GLimit = 6, TurnRate = 12,
+                Mass = 150, Yield = 1, Cost = 0.8f, RadarSize = 0.6f, Thrust = 950, BurnTime = 300, GLimit = 6, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Remora", Name = "XQ-58V REMORA", Short = "REMORA", Model = "Remora",
                 Description = "ARCHER loyal-wingman drone: two mini radar missiles, six flare bursts and a 60 kg warhead under a small radar signature. Holds a wing slot, draws radar-guided missiles and pops flares at IR seekers. VANGUARD: DESIGNATE an aircraft or missile and it hunts inside 12 km; DESIGNATE a ground unit and the drone itself dives in as a guided bomb. Undesignated it guards you, shooting down missiles homing on your aircraft. Eight-minute endurance.",
-                Mass = 450, Yield = 60, Pierce = 300, Cost = 0.6f, Value = 40, RadarSize = 0.05f, Thrust = 4200, BurnTime = 480, GLimit = 12, TurnRate = 30,
+                Mass = 450, Yield = 60, Pierce = 300, Cost = 2.4f, RadarSize = 0.05f, Thrust = 4200, BurnTime = 480, GLimit = 12, TurnRate = 30,
                 Racks = new[] { "ARM1_single" } }, // 4.4 m long and 2.1 m across folded: the ARM pylon is the one slot its size (FitReport)
             new Spec { Key = "VG_HawcX", Name = "HAWC-X SKIP Glider", Short = "HAWC-X", Model = "HawcX",
                 Description = "SKIP glider. Boosts to 24 km and drops its booster, skips three times through glowing phases where nothing can track it (and it takes no updates), then dives. In the final dive, DESIGNATE a new target within 30 km to shift it.",
-                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 3f, Value = 30, RadarSize = 0.003f, Thrust = 180000, BurnTime = 22, GLimit = 25, TurnRate = 18,
+                Mass = 1500, Yield = 150, Pierce = 2500, Cost = 3f, RadarSize = 0.003f, Thrust = 180000, BurnTime = 22, GLimit = 25, TurnRate = 18,
                 Racks = new[] { "BallisticMissile1_single", "BallisticMissile1_internalx2" } }, // 6.4 m: only the ballistic missile's slots hold it
             new Spec { Key = "VG_AegisDart", Name = "AIM-X AEGIS", Short = "AEGIS", Model = "AegisInterceptor",
                 Description = "Low-profile three-dart hit-to-kill pod. Manual fire only: nothing launches on its own. SNAP: tap the station with a locked aircraft, helicopter or drone inside 2.5 km and 70 deg of the nose and one dart drops clear, pitches onto it and ignites for double damage. The last dart is yours to spend like any other: watch your own warning receiver.",
-                Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.15f, Value = 2, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 55,
+                Mass = 25, Yield = .2f, Pierce = 50, Cost = 0.2f, RadarSize = 0.0005f, Thrust = 9000, BurnTime = 2.5f, GLimit = 60, TurnRate = 55,
                 Racks = new string[0] }, // AEGIS gets its own three-dart pod, see AegisPod()
             new Spec { Key = "VG_Glaive2A", Name = "GLAIVE-2A SENTINEL", Short = "GLAIVE-A", Model = "Glaive2A",
                 Description = SentinelDescription,
-                Mass = 80, Yield = 0, Cost = 1.2f, Value = 25, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
+                Mass = 80, Yield = 0, Cost = 2f, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Glaive2S", Name = "GLAIVE-2S SPECTRE Gunship Drone", Short = "SPECTRE", Model = "Glaive2S",
                 Description = "Folding-wing gunship drone. Launch boost, 90 m/s ingress, then a left-hand pylon turn 450 m around the target and 350 m above it while its port-side 30 mm HE cannon fires short bursts: 240 rounds, 210 s on station. Designate a new ground target to HAND-OFF: the orbit slides to it.",
-                Mass = 80, Yield = 0, Cost = 1.6f, Value = 28, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
+                Mass = 80, Yield = 0, Cost = 2.8f, RadarSize = .12f, Thrust = 1600, BurnTime = 3, GLimit = 4, TurnRate = 30,
                 Racks = new[] { "AGM_heavy_single", "CruiseMissile1_internalx2" } },
             new Spec { Key = "VG_Orca", Name = "AGT-80 ORCA Glide Torpedo", Short = "ORCA", Model = "Orca",
                 Description = "Glide torpedo with a clip-on wing kit. Locked on a ship: glides in, sheds the kit at the splash 5 km out and runs at 90 m/s, 6 m deep, into the hull; a hard turn in the last 300 m can beat it. No ship locked: lays a SLEEPER 3-12 km ahead (farther from higher up) that sinks to 35 m and waits up to 15 minutes; the first hostile hull inside 1.6 km wakes it for a rising run. Friendly ships never wake it.",
-                Mass = 600, Yield = 450, Pierce = 600, Cost = 1.5f, Value = 30, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
+                Mass = 600, Yield = 450, Pierce = 600, Cost = 1.8f, RadarSize = 0.05f, Thrust = 1500, BurnTime = 300, GLimit = 8, TurnRate = 20,
                 Racks = new[] { "AGM_heavy_single", "AGM_heavy_triple" } },
             new Spec { Key = "VG_AleX", Name = "ALE-X Towed Decoy", Short = "ALE-X", Model = "AleX",
                 Description = "Fiber-towed decoy on an automatic reel: 60 m of line, 150 m or 250 m once a radar missile tracks you. SUPPRESS slows turret locks, DEFLECT bends missile aimpoints toward it, SEDUCE takes missiles over. Fire again to CUT it loose: it keeps them for 20 s. The fiber snaps above 7 g or below 50 m.",
-                Mass = 20, Yield = 2, Cost = 0.05f, Value = 3, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
+                Mass = 20, Yield = 2, Cost = 0.1f, RadarSize = 1.5f, Thrust = 0, BurnTime = 1, GLimit = 30, TurnRate = 200,
                 Racks = new string[0] }, // ALE-X gets its own two-decoy pod, see AleXPod()
             new Spec { Key = "VG_Kestrel", Name = "KS-01 KESTREL Recon Glider", Short = "KESTREL", Model = "Kestrel",
                 Description = "Unarmed recon glider launched from a cargo hold on a sled. Flies at 80 m/s to your designated target (else a point ahead) and orbits 800 m around it, 1000 m above, for seven minutes. Enemy ground units and ships within 6.5 km of the orbit stay on your side's map, and its laser holds your target so laser-guided weapons can home on it. Designate a new ground target to move the orbit.",
-                Mass = 80, Yield = 0, Cost = 0.8f, Value = 20, RadarSize = 0.05f, Thrust = 600, BurnTime = 900, GLimit = 4, TurnRate = 30,
+                Mass = 80, Yield = 0, Cost = 1.2f, RadarSize = 0.05f, Thrust = 600, BurnTime = 900, GLimit = 4, TurnRate = 30,
                 Racks = new string[0] }, // hold-only sled mount "VG_Kestrel_Sled", see Kestrel() in VanguardBuilder.kestrel.cs
             new Spec { Key = "VG_Hamilcar", Name = "CG-9 HAMILCAR Cargo Glider", Short = "HAMILCAR", Model = "Hamilcar",
                 Description = "Cargo glider with a small pusher propeller, carrying one Hexhound GMG robot. DESIGNATE a ground target and release from a hold: it flies fifteen metres for every metre of height, up to 45 km, lands on its belly about 250 m short of the target and the Hexhound rolls off. Straight-in at 120 m/s, it needs flat dry ground and anything that hits it on the way in loses both.",
-                Mass = 3650, Yield = 1, Pierce = 0, Cost = 1.6f, Value = 25, RadarSize = 0.5f, Thrust = 0, BurnTime = 1, GLimit = 4, TurnRate = 12,
+                Mass = 3650, Yield = 1, Pierce = 0, Cost = 2f, RadarSize = 0.5f, Thrust = 0, BurnTime = 1, GLimit = 4, TurnRate = 12,
                 Racks = new[] { "AGM_heavy_single" } }, // hold-floor station, see Hamilcar() in VanguardBuilder.hamilcar.cs
         };
 
@@ -594,7 +594,7 @@ namespace Vanguard
                 P(s, "unitName").stringValue = spec.Name;
                 P(s, "description").stringValue = spec.Description;
                 P(s, "mass").floatValue = spec.Mass;
-                P(s, "value").floatValue = spec.Value;
+                P(s, "value").floatValue = spec.Cost; // vanilla rule: a munition's unit value is its price, so shooting one down pays like a vanilla missile
                 P(s, "radarSize").floatValue = spec.RadarSize;
                 P(s, "disabled").boolValue = false;
             });

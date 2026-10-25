@@ -68,7 +68,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             float body = height - Pad * 2f - (keys - 1) * Gap;
             float dressed = (body - HeaderHeight - Gap - groups * GroupHeight) / keys;
-            if (dressed >= 52f) return new MfdRailPlan(true, true, true, dressed);
+            // Group labels outrank tall keys (user ruling 2026-10-25): they stay down to 46px keys.
+            if (dressed >= 46f) return new MfdRailPlan(true, true, true, dressed);
             float headed = (body - HeaderHeight - Gap) / keys;
             if (headed >= 48f) return new MfdRailPlan(true, true, false, headed);
             return new MfdRailPlan(body / keys >= KeyMin, false, false, body / keys);
@@ -109,6 +110,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Tasking, 1);
                 case "WMC": return new MfdRailEntry(code, "WING CMD", AvIcon.Formation, MfdRailGroup.Tasking, 2);
                 case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.CallDown, MfdRailGroup.Tasking, 3);
+                case "UAV": return new MfdRailEntry(code, "DRONE LINK", AvIcon.Drone, MfdRailGroup.Tasking, 4);
                 case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.Comms, 0);
                 case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.Comms, 1);
                 case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", AvIcon.FlightPath, MfdRailGroup.System, 0);
@@ -116,6 +118,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case "PILOT": return new MfdRailEntry(code, "PERSONNEL", AvIcon.Pilot, MfdRailGroup.System, 2);
                 case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.Pilot, MfdRailGroup.System, 3);
                 case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 4);
+                // Last key of the rail, under any unknown code too, and pinned to its bottom edge (MfdRail.Lay).
+                case "MISC": return new MfdRailEntry(code, "EXTRAS", AvIcon.Stack2, MfdRailGroup.Aux, 99);
                 default: return new MfdRailEntry(code, null, NeutralGlyph, MfdRailGroup.Aux, 0);
             }
         }

@@ -1,0 +1,312 @@
+{
+  "name": "vg-economy",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 180,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "lead",
+      "faction": "Boscali",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        0,
+        0
+      ],
+      "altitude": 6000,
+      "speed": 230,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "spawn",
+      "id": "bandit",
+      "type": "FS-20 Vortex",
+      "faction": "Primeva",
+      "at": {
+        "map": [
+          0,
+          30000
+        ]
+      },
+      "altitude": 6000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "wait",
+      "seconds": 30
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "launch",
+        "key": "VG_MaldX",
+        "at": "point",
+        "x": 0,
+        "z": 20000,
+        "seated": true
+      },
+      "store": "launch"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.VanguardAutomation.Step",
+      "args": {
+        "action": "economy",
+        "key": "VG_MaldX",
+        "seated": true
+      },
+      "store": "eco"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_MaldX_value",
+      "min": 0.399
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_MaldX_value",
+      "max": 0.401
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_MaldX_price",
+      "min": 0.399
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_MaldX_price",
+      "max": 0.401
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_MaldJ_value",
+      "min": 0.799
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_MaldJ_value",
+      "max": 0.801
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_MaldJ_price",
+      "min": 0.799
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_MaldJ_price",
+      "max": 0.801
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Remora_value",
+      "min": 2.399
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Remora_value",
+      "max": 2.401
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Remora_price",
+      "min": 2.399
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Remora_price",
+      "max": 2.401
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_HawcX_value",
+      "min": 2.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_HawcX_value",
+      "max": 3.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_HawcX_price",
+      "min": 2.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_HawcX_price",
+      "max": 3.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_AegisDart_value",
+      "min": 0.199
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_AegisDart_value",
+      "max": 0.201
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_AegisDart_price",
+      "min": 0.199
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_AegisDart_price",
+      "max": 0.201
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Glaive2A_value",
+      "min": 1.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Glaive2A_value",
+      "max": 2.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Glaive2A_price",
+      "min": 1.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Glaive2A_price",
+      "max": 2.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Glaive2S_value",
+      "min": 2.799
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Glaive2S_value",
+      "max": 2.8009999999999997
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Glaive2S_price",
+      "min": 2.799
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Glaive2S_price",
+      "max": 2.8009999999999997
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Orca_value",
+      "min": 1.7990000000000002
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Orca_value",
+      "max": 1.801
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Orca_price",
+      "min": 1.7990000000000002
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Orca_price",
+      "max": 1.801
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_AleX_value",
+      "min": 0.099
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_AleX_value",
+      "max": 0.101
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_AleX_price",
+      "min": 0.099
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_AleX_price",
+      "max": 0.101
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Kestrel_value",
+      "min": 1.199
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Kestrel_value",
+      "max": 1.2009999999999998
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Kestrel_price",
+      "min": 1.199
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Kestrel_price",
+      "max": 1.2009999999999998
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Hamilcar_value",
+      "min": 1.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Hamilcar_value",
+      "max": 2.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.VG_Hamilcar_price",
+      "min": 1.999
+    },
+    {
+      "check": "result_below",
+      "path": "eco.VG_Hamilcar_price",
+      "max": 2.001
+    },
+    {
+      "check": "result_above",
+      "path": "eco.payout_VG_MaldX",
+      "min": 0
+    },
+    {
+      "check": "result_above",
+      "path": "eco.payout_fighter",
+      "min": 0
+    },
+    {
+      "check": "result_below",
+      "path": "eco.payout_VG_MaldX",
+      "max": 1
+    }
+  ]
+}

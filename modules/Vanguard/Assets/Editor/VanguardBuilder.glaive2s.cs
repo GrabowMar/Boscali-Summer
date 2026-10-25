@@ -27,7 +27,7 @@ namespace Vanguard
                 P(s, "blastDamage").floatValue = .15f;
                 P(s, "armorTierEffectiveness").floatValue = 5f;
                 P(s, "massPerRound").floatValue = .5f;
-                P(s, "costPerRound").floatValue = .0001f;
+                P(s, "costPerRound").floatValue = .0003f; // vanilla 30mm Cannon round
                 P(s, "fireInterval").floatValue = .2f;
             });
             var root = PrefabUtility.LoadPrefabContents(path);

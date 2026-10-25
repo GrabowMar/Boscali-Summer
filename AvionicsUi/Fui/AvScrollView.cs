@@ -19,10 +19,11 @@ namespace NOAvionics
 
         public AvScrollView(RectTransform host, bool withContent)
         {
-            Scroll = host.gameObject.AddComponent<ScrollRect>();
-            Scroll.horizontal = false; Scroll.movementType = ScrollRect.MovementType.Clamped; Scroll.scrollSensitivity = 24f;
+            Scroll = host.gameObject.AddComponent<AvSmoothScroll>();
+            Scroll.horizontal = false; Scroll.movementType = ScrollRect.MovementType.Clamped; Scroll.scrollSensitivity = AvSmoothScroll.Step;
             Viewport = AvLay.Child(host, "Viewport");
             Viewport.gameObject.AddComponent<RectMask2D>();
+            Viewport.gameObject.AddComponent<Image>().color = Color.clear;   // wheel hits the gaps between rows too
             if (withContent)
             {
                 Content = AvLay.Child(Viewport, "Content");

@@ -52,7 +52,6 @@ namespace BoscaliSummer.Core.Config
             s.TheaterOps.FrontlineTacticsEnabled,
 
             s.Trenches.GrowthIntervalSeconds, s.Trenches.MaxTrenchPositions,
-            s.Trenches.BarrageEnabled,
 
             s.UrbanCombat.GarrisonsEnabled, s.UrbanCombat.GarrisonsPerZone,
             s.UrbanCombat.TroopsPerDeploy, s.UrbanCombat.SiegeEnabled,

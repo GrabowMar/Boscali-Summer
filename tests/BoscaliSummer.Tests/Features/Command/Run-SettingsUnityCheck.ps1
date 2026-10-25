@@ -14,6 +14,7 @@ Copy-Item -LiteralPath "$repo/Core/Math/Scalar.cs", "$repo/modules/Command/Domai
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/StrNodeBoard.cs", "$repo/modules/Command/Presentation/StrConsoleParts.cs", "$repo/modules/Command/Domain/TacticalTheaterState.cs", "$repo/modules/Command/Domain/SortieClassifier.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/modules/Command/Presentation/StrLogBoard.cs", "$repo/modules/Command/Domain/TheaterReadout.cs", "$repo/Core/Contracts/IThreatPicture.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-GameDlls "$PreviewDirectory/Assets/" -BepInExMatch '^(BepInEx\.dll$|Mono|0Harmony\.dll$)'
+Copy-Item -LiteralPath "$repo/modules/Command/Presentation/MapUi/SettingsMfdPanel.Maintenance.cs", "$repo/Core/Config/SettingsMaintenance.cs", "$PSScriptRoot/SettingsMaintenanceUiCheck.cs", "$PSScriptRoot/SettingsMaintenanceUiStubs.cs" -Destination "$PreviewDirectory/Assets/"
 Copy-Item -LiteralPath "$repo/AvionicsUi/Assets/avionics-ui.bundle" -Destination "$PreviewDirectory/avionics-ui.bundle"
 Copy-AvionicsStyles $PreviewDirectory $AtlasStyles -NoDefaults
 $process = Invoke-UnityCheck $Unity $PreviewDirectory 'SettingsUnityCheck.Run' -Flags '-batchmode'

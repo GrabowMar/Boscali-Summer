@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private void BuildDisplayPage(AvFlow flow, int page)
         {
             BuildSchemeSection(flow, page);
-            flow.Section(AvIcon.Typography, "DISPLAY & AUDIO", "GLASS · SURFACE · TINT · SOUND");
+            flow.Section(AvIcon.Typography, "DISPLAY & AUDIO", "GLASS · TEXTURE · SIGNAL · SOUND");
 
             AvCellGrid switches = flow.Grid(3);
             ToggleCell(flow, switches, page, "DISPLAY EFFECTS", "OFF removes glass and overlays. Your tuning is retained.",
@@ -28,6 +28,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, switches, page, "REDUCED MOTION", "Snap every panel animation to its end state.",
                 () => settings.AvionicsReducedMotion.Value,
                 v => settings.AvionicsReducedMotion.Value = v);
+
+            string[] finishes = { "CLEAR", "GLASS", "CRT" };
+            string[] finishBriefs =
+            {
+                "CLEAR: no reflection, texture, edge shading or signal motion. Maximum readability.",
+                "GLASS: subtle light-adaptive reflection and the default live signal.",
+                "CRT: restrained scan texture, edge shading and live signal, with low reflection.",
+            };
+            var finishStrip = flow.Add(new AvSegmented(flow.Content, "SCREEN FINISH", finishes,
+                DisplayFinishIndex, i =>
+                {
+                    SetDisplayFinish(i);
+                    Echo("SCREEN FINISH — " + finishes[i]);
+                    Changed();
+                }));
+            for (int i = 0; i < finishStrip.Options.Length; i++)
+                finishStrip.Options[i].Help = finishBriefs[i] + " Applies immediately; fine-tune with the controls below.";
+            flow.Ticker.Add(page, AvTickRate.Slow, finishStrip.Refresh);
 
             var finish = flow.Add(new SetRingRow(flow.Content));
             PercentRing(flow, finish, page, "GLASS REFLECTION", settings.DisplayGlass, 0f, 1f, .1f,
@@ -41,58 +59,44 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "The display powers on from a line, a slow refresh band rolls down it, and jamming breaks the picture up harder. 0% is a still display.",
                 EffectsEnabled, EffectsDisabled);
 
-            string[] tints = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
-            string[] tintBriefs =
-            {
-                "NEUTRAL: no colour wash.", "GREEN: a phosphor-green wash.", "AMBER: a warm amber wash.",
-                "ICE: a cool blue wash.", "ROSE: a soft rose wash.",
-            };
-            var tintStrip = flow.Add(new AvSegmented(flow.Content, "COLOR TINT", tints,
-                () => Mathf.Clamp(settings.DisplayTint.Value, 0, tints.Length - 1),
-                i =>
-                {
-                    settings.DisplayTint.Value = i;
-                    Echo("COLOR TINT — " + tints[i]);
-                    Changed();
-                }));
-            void RefreshTint()
-            {
-                bool on = EffectsEnabled();
-                tintStrip.Refresh();
-                for (int i = 0; i < tintStrip.Options.Length; i++)
-                {
-                    tintStrip.Options[i].Interactable = on;
-                    tintStrip.Options[i].Help = on ? tintBriefs[i] + " Warning colours stay distinct." : EffectsDisabled();
-                }
-            }
-            RefreshTint();
-            flow.Ticker.Add(page, AvTickRate.Slow, RefreshTint);
-
             var tone = flow.Add(new SetRingRow(flow.Content));
-            PercentRing(flow, tone, page, "TINT STRENGTH", settings.DisplayTintStrength, 0f, 1f, .1f,
-                "How strong the colour wash is.", () => EffectsEnabled() && settings.DisplayTint.Value != 0,
-                () => "Enable effects and choose a color tint first.");
             PercentRing(flow, tone, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
                 "Volume of interface clicks and hover sounds. 0% is silent.", () => true, () => "");
 
             AvControl resetDisplay = flow.Buttons(new AvControl.Spec("RESET DISPLAY FILTER", () =>
             {
-                settings.DisplayEffects.Value = true;
-                settings.DisplayGlass.Value = .35f;
-                settings.DisplayAutoLight.Value = true;
-                settings.DisplayScanlines.Value = 0f;
-                settings.DisplayVignette.Value = 0f;
-                settings.DisplayLife.Value = .6f;
-                settings.DisplayTint.Value = 0;
-                settings.DisplayTintStrength.Value = .25f;
+                SetDisplayFinish(1);
                 Echo("Display filter reset.");
                 Changed();
             }, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];
-            resetDisplay.Help = "Restore the default glass finish and remove CRT, edge shading and tint.";
+            resetDisplay.Help = "Restore the default GLASS finish, without scan texture or edge shading.";
 
             var preview = flow.Add(new SetFinishPreview(flow.Content), 1f);
             preview.Refresh(settings);
             flow.Ticker.Add(page, AvTickRate.Slow, () => preview.Refresh(settings));
+        }
+
+        // Presets write the existing saved controls; manual tuning leaves no preset selected.
+        private void SetDisplayFinish(int index)
+        {
+            settings.DisplayEffects.Value = true;
+            settings.DisplayAutoLight.Value = true;
+            settings.DisplayGlass.Value = index == 0 ? 0f : index == 1 ? .35f : .15f;
+            settings.DisplayScanlines.Value = index == 2 ? .25f : 0f;
+            settings.DisplayVignette.Value = index == 2 ? .15f : 0f;
+            settings.DisplayLife.Value = index == 0 ? 0f : index == 1 ? .6f : .35f;
+        }
+
+        private int DisplayFinishIndex()
+        {
+            if (!EffectsEnabled()) return -1;
+            for (int i = 0; i < 3; i++)
+                if ((i == 0 || settings.DisplayAutoLight.Value) &&
+                    Mathf.Approximately(settings.DisplayGlass.Value, i == 0 ? 0f : i == 1 ? .35f : .15f) &&
+                    Mathf.Approximately(settings.DisplayScanlines.Value, i == 2 ? .25f : 0f) &&
+                    Mathf.Approximately(settings.DisplayVignette.Value, i == 2 ? .15f : 0f) &&
+                    Mathf.Approximately(settings.DisplayLife.Value, i == 0 ? 0f : i == 1 ? .6f : .35f)) return i;
+            return -1;
         }
 
         private void SetBackground(int mode)
@@ -128,6 +132,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v, expanded, needExpanded);
             ToggleCell(flow, switches, page, "NEWS TICKER", "Show theater dispatches above the map.",
                 () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v, expanded, needExpanded);
+            ToggleCell(flow, switches, page, "INDUSTRY MARKS", "Squares, diamonds and triangles on known factories, depots and ammo dumps. Same switch as the MAP bezel's INDUSTRY layer.",
+                () => settings.MapIndustry.Value, v => settings.MapIndustry.Value = v);
 
             var levels = flow.Add(new SetRingRow(flow.Content));
             Ring(flow, levels, page, "SECTOR REFRESH",

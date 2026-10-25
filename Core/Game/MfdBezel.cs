@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using NOAvionics;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -63,6 +64,7 @@ namespace BoscaliSummer.Core.Game
             mfd.SetupButtons();
 
             Button bezel = buttons[slot];
+            MatchLabel(bezel, buttons);
             AvInput.StripNavigation(bezel); // a flight stick must never steer focus across the bezel and fire a screen
             bezel.gameObject.SetActive(DynamicMap.mapMaximized);
             bezel.enabled = true;
@@ -80,6 +82,29 @@ namespace BoscaliSummer.Core.Game
 
             screen.CloseScreen(Screen.width * (left ? Vector3.left : Vector3.right));
             return true;
+        }
+
+        /// <summary>
+        /// The classic layout shows the bezel button itself, so its label must read like the stock ones: the first
+        /// stock button's type sizes, on one line. A spare slot or a hosted button kept TMP's word wrap, so autosize
+        /// broke a three-letter code over two lines at a larger size ("CO / M").
+        /// </summary>
+        private static void MatchLabel(Button bezel, List<Button> buttons)
+        {
+            TMP_Text label = bezel.GetComponentInChildren<TMP_Text>(true);
+            if (label == null) return;
+            TMP_Text model = buttons.Count > 0 && buttons[0] != null && buttons[0] != bezel ? buttons[0].GetComponentInChildren<TMP_Text>(true) : null;
+            if (model != null)
+            {
+                label.font = model.font;
+                label.fontStyle = model.fontStyle;
+                label.fontSizeMin = model.enableAutoSizing ? model.fontSizeMin : model.fontSize;
+                label.fontSizeMax = model.enableAutoSizing ? model.fontSizeMax : model.fontSize;
+                label.fontSize = model.fontSize;
+            }
+            label.enableAutoSizing = true;
+            label.enableWordWrapping = false;
+            label.alignment = TextAlignmentOptions.Center;
         }
 
         public static MFDScreen FindTemplate(VirtualMFD mfd)

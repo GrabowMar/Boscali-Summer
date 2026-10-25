@@ -68,11 +68,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             AvRegions regions = AvGrid.Resolve(canvasSize.x, canvasSize.y, panelWidth, RailWidth, spec);
 
+            // The bottom reserve holds the map footer, which spans only the map's width: the rail runs on down to the screen's
+            // bottom margin, so its last key (MISC) stands at the bottom of the screen.
+            Rect rail = ToUnityRect(regions.Rail);
+            rail.height = Mathf.Max(rail.height, rail.y - (-canvasSize.y * 0.5f + Margin));
+
             return new Columns
             {
                 Panel = ToUnityRect(regions.Panel),
                 Map = ToUnityRect(regions.Map),
-                Rail = ToUnityRect(regions.Rail),
+                Rail = rail,
                 Canvas = canvasSize,
             };
         }

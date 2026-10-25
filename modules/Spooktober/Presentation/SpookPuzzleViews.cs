@@ -11,13 +11,10 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Spooktober.Presentation
 {
     /// <summary>
-    /// What the four puzzles and the menu share on one SET console: the solve, the footer lines they borrow (the solve flash, the ECHO blink,
-    /// the menu's idle line) and the seal lines to redraw when a puzzle falls.
+    /// What the puzzles and menu share: progress and their own message rows. Never writes SET's functional footer.
     /// </summary>
     internal sealed class SpookConsole
     {
-        public const int EchoPage = 4, MenuPage = 5;
-
         /// <summary>Real time. The offline check drives it by hand (the override is not in the public build).</summary>
 #if !PUBLIC_RELEASE
         internal static Func<float> Clock = () => Time.unscaledTime;
@@ -27,62 +24,70 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
 
         private readonly AvConsole console;
         private readonly List<Action> seals = new List<Action>(5);
+        private readonly Dictionary<int, AvNote> messages = new Dictionary<int, AvNote>();
         private string line;
-        private float lineUntil, nextBlink = -1f, blinkUntil;
-        private bool armed;
+        private float lineUntil;
+        private int messagePage;
+        private int menuPage = -1;
 
         public SpookConsole(AvConsole console)
         {
             this.console = console;
-            // Command refreshes the footer on its own Slow tick, and it registers that tick after the extras are built, so anything set
-            // earlier in the same pass is overwritten before it is drawn. The first tick runs after the build: it adds the real driver behind Command's.
-            console.Ticker.Add(-1, AvTickRate.Slow, Arm);
+            console.Ticker.Add(-1, AvTickRate.Slow, Tick);
         }
 
-        private void Arm()
+        /// <param name="menu">The boss menu's row: it shows the standing spawn hint between messages.</param>
+        public void RegisterMessage(int page, AvFlow flow, bool menu = false)
         {
-            if (armed) return;
-            armed = true;
-            console.Ticker.Add(-1, AvTickRate.Slow, Tick);
+            messages[page] = flow.Add(new AvNote(flow.Content) { CollapseEmpty = true });
+            if (menu) menuPage = page;
+            Tick();
         }
 
         public void RegisterSeal(Action redraw) => seals.Add(redraw);
 
-        /// <summary>Records a solve (once), saves it, flashes the footer and redraws every seal line.</summary>
+        /// <summary>Records a solve (once), saves it, updates the puzzle's message and redraws every seal line.</summary>
         public bool Solve(SpookPuzzle puzzle)
         {
             SpookProgress progress = SpookStore.Current;
             if (!progress.Solve(puzzle)) return false;
             SpookStore.Save();
-            Say("\u2593\u2592\u2591 SEAL " + progress.SolvedCount + "/4" + (progress.Unlocked ? " \u00B7 SOMETHING IS LISTENING" : ""), 2f);
+            // ASCII noise: the console font has no block glyphs (they print as empty boxes in game).
+            Say("#%: SEAL " + progress.SolvedCount + "/4" + (progress.Unlocked ? " \u00B7 SOMETHING IS LISTENING" : ""), 2f);
             foreach (Action redraw in seals) redraw();
             return true;
         }
 
-        /// <summary>Shows <paramref name="text"/> in the footer for a few seconds.</summary>
+        /// <summary>Shows <paramref name="text"/> in this page's Spooktober message row for a few seconds.</summary>
         public void Say(string text, float seconds)
         {
             line = text;
             lineUntil = Clock() + seconds;
-            console.Footer.Set(text, AvState.Info);
+            messagePage = console.CurrentPage;
+            Tick();
         }
+
+        // Every fourth 7-second slot the menu's hint gives way to one of these.
+        private static readonly string[] Whispers =
+        {
+            "...is someone else on this net?",
+            "Your wingman did not answer the last call.",
+            "The kaiju was here first.",
+            "Static on 131.0. Do not tune it.",
+            "It knows which seat you fly from."
+        };
 
         private void Tick()
         {
             float now = Clock();
-            if (now < lineUntil) { console.Footer.Set(line, AvState.Info); return; }
-            int page = console.CurrentPage;
-            if (page == EchoPage && !SpookStore.Current.Has(SpookPuzzle.Echo))
-            {
-                if (nextBlink < 0f) nextBlink = now + 2.5f;   // a moment after the page opens, then every 20 s
-                if (now >= nextBlink) { blinkUntil = now + 4f; nextBlink = now + 20f; }
-                if (now < blinkUntil) console.Footer.Set(SpookPuzzles.Morse(SpookPuzzles.EchoWord));
-            }
-            else nextBlink = -1f;
-            if (page == MenuPage)
-                console.Footer.Set(SpookMenu.SpawnBlocked(GameAccess.IsServer())
+            int slot = (int)(now / 7f);
+            string hint = slot % 4 == 3
+                ? Whispers[(slot / 4) % Whispers.Length]
+                : SpookMenu.SpawnBlocked(GameAccess.IsServer())
                     ? "Only the host can spawn. Your chain still counts."
-                    : "SPAWN drops a boss ahead of you. One at a time.");
+                    : "SPAWN drops a boss ahead of you. One at a time.";
+            foreach (var message in messages)
+                message.Value.Set(message.Key == messagePage && now < lineUntil ? line : message.Key == menuPage ? hint : "", AvState.Info);
         }
     }
 
@@ -104,6 +109,7 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
                 case PerfPage: new Echo(flow, console, page); break;
             }
             Seal(flow, console, page);
+            console.RegisterMessage(page, flow);
         }
 
         // ---- SEAL: one block per puzzle (full = solved, light = open) on every PILOT page; nothing shows until the first one falls ----
@@ -130,7 +136,7 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
             for (int i = 0; i < 4; i++)
             {
                 if (i > 0) sb.Append(' ');
-                sb.Append(p.Has((SpookPuzzle)i) ? '\u2588' : '\u2591');
+                sb.Append(p.Has((SpookPuzzle)i) ? '#' : '-');
             }
             return sb.ToString();
         }
@@ -304,24 +310,90 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
             }
         }
 
-        // ---- ECHO: the footer keys a word in Morse; a field on PERFORMANCE takes it ----
+        // ---- ECHO: an isolated lamp keys a word in Morse; no telemetry or shared chrome is touched ----
+
+        private sealed class EchoLamp : AvPart
+        {
+            private readonly AvFrame bulb;
+            private readonly AvRow row;
+            private bool lit, solved;
+
+            public EchoLamp(RectTransform parent)
+            {
+                Rect = AvLay.Child(parent, "Echo RX Indicator");
+                row = new AvRow(Rect) { Parent = this };
+                row.Help = "Receiver self-test. Short pulse = dot, long pulse = dash; a longer pause separates letters.";
+                bulb = AvFrame.Add(row.Rect, "Bulb", AvChamfer.All(4f));
+                Refresh();
+            }
+
+            public void Set(bool on)
+            {
+                on &= !solved;
+                if (lit == on) return;
+                lit = on;
+                Refresh();
+            }
+
+            public void SetSolved(bool value)
+            {
+                if (solved == value) return;
+                solved = value;
+                if (solved) lit = false;
+                Refresh();
+            }
+
+            private void Refresh()
+            {
+                row.Set("RX INDICATOR", solved ? "CALL SIGN CONFIRMED" :
+                    "Short pulse = dot. Long pulse = dash. Enter the call sign.",
+                    solved ? SpookPuzzles.EchoWord : lit ? "RX" : "IDLE", solved ? AvState.Ready : AvState.Info);
+                Restyle();
+            }
+
+            public override float Measure(float width) => row.Measure(width);
+
+            public override void Place(AvSlot s)
+            {
+                base.Place(s);
+                row.Place(new AvSlot(0f, 0f, s.W, s.H));
+                AvLay.Place(bulb.rectTransform, s.W - 94f, 8f, 12f, 12f);
+            }
+
+            public override void Restyle()
+            {
+                Color on = AvStyleHost.FuiColor("ready", AvTheme.RailReady);
+                Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+                bulb.Paint(lit ? on : new Color(0.025f, 0.035f, 0.025f, 1f), lit ? on : dim);
+                row.Restyle();
+            }
+        }
 
         private sealed class Echo
         {
             private readonly SpookConsole console;
-            private readonly AvRow row;
             private readonly AvField field;
+            private readonly EchoLamp lamp;
+            private float started = -1f, lastTick = -1f;
             private string seen = "";
 
             public Echo(AvFlow flow, SpookConsole console, int page)
             {
                 this.console = console;
                 flow.Section(AvIcon.Activity, "LINK ECHO", "DIAGNOSTIC");
-                row = flow.Add(new AvRow(flow.Content));
-                row.Help = "Keyed on the status line while this page is open.";
+                lamp = flow.Add(new EchoLamp(flow.Content));
                 field = flow.Add(new AvField(flow.Content, "CALL SIGN", 12, v => Submit(v, true)));
                 Refresh();
                 flow.Ticker.Add(page, AvTickRate.Slow, Tick);
+                flow.Ticker.Add(page, AvTickRate.Fast, Blink);
+            }
+
+            private void Blink()
+            {
+                float now = SpookConsole.Clock();
+                if (started < 0f || now - lastTick > 0.5f || now < lastTick) started = now + 1.2f;
+                lastTick = now;
+                lamp.Set(!SpookStore.Current.Has(SpookPuzzle.Echo) && SpookPuzzles.EchoLampLit(now - started));
             }
 
             private void Submit(string text, bool enter)
@@ -341,8 +413,7 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
             private void Refresh()
             {
                 bool solved = SpookStore.Current.Has(SpookPuzzle.Echo);
-                row.Set("ECHO TEST", solved ? "SOLVED" : "The status line keys a call sign. Enter it.", solved ? SpookPuzzles.EchoWord : "",
-                    solved ? AvState.Ready : AvState.Info);
+                lamp.SetSolved(solved);
                 field.SetShown(!solved);
             }
         }

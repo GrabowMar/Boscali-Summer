@@ -196,9 +196,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             chrome.LayHeader(plan.Header, width, keys.Count);
             if (plan.Header) y += MfdRailPlan.HeaderHeight + MfdRailPlan.Gap;
 
+            // MISC stands on the rail's bottom edge, its group label over it; the spare height (and the scheme line) opens above it.
+            int count = keys.Count;
+            bool pinned = count > 1 && keys[count - 1].Entry.Code == "MISC";
+            float pinTop = height - MfdRailPlan.Pad - plan.KeyHeight;
+            if (pinned && plan.Groups && keys[count - 1].Entry.Group != keys[count - 2].Entry.Group) pinTop -= MfdRailPlan.GroupHeight;
+            float used = 0f;
+
             int labels = 0;
-            for (int i = 0; i < keys.Count; i++)
+            for (int i = 0; i < count; i++)
             {
+                if (pinned && i == count - 1)
+                {
+                    used = y;
+                    y = Mathf.Max(y, pinTop);
+                }
                 if (plan.Groups && (i == 0 || keys[i].Entry.Group != keys[i - 1].Entry.Group))
                 {
                     chrome.LayGroup(labels++, MfdRailCatalog.GroupName(keys[i].Entry.Group), y, width);
@@ -208,7 +220,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 y += plan.KeyHeight + MfdRailPlan.Gap;
             }
             chrome.HideGroupsFrom(labels);
-            chrome.LayFooter(y, width, height);
+            if (pinned) chrome.LayFooter(used, width, pinTop + MfdRailPlan.Pad);
+            else chrome.LayFooter(y, width, height);
             laidSize = rail.sizeDelta;
         }
 

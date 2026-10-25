@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
         public int Broken { get; private set; }
         /// <summary>Sounds started since spawn (automation readout).</summary>
         public int Sounds { get; private set; }
+        /// <summary>Worst vertical gap (m) between a fully planted foot and the ground under it after the ground IK (automation readout).</summary>
+        public float FootGap { get; private set; }
 
         private Transform model;
         private Animator animator;
@@ -54,6 +56,8 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
         private Vector3 shownAim; // global; clients ease it between the 10 Hz states so the beam and head sweep instead of stepping
         private float shownYaw, shownStart = -1f, aimWeight, nextScan, nextBeamFx, walkPhase = -1f;
         private KaijuAction shownAction = (KaijuAction)255;
+        private readonly float[] planted = new float[KaijuRig.Limbs.Length]; // ground-IK weight per leg, 0..1
+        private readonly Vector3[] footGround = new Vector3[KaijuRig.Limbs.Length]; // where each foot last landed
         private LineRenderer core, glow;
         private Material coreMat, glowMat;
         private Light mouthLight, beamLight;
@@ -246,10 +250,85 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             }
             animator.speed = KaijuRig.Playback(Action) * (Action == KaijuAction.Walk || Action == KaijuAction.Rise ? WalkPlayback : 1f);
 
+            GroundLimbs(dt);
             AimHead(dt);
             PoseNodes();
             Footfalls();
             Effects(dt);
+        }
+
+        /// <summary>
+        /// Plant each foot on whatever is under it (terrain, plaza, runway). The clip is authored off the body's origin, which
+        /// is only the ground under its centre, and the toes sit ~20 m above that origin, so unadjusted feet float on flat
+        /// ground and sink on slopes. Each leg's lowest contact is probed down to the nearest surface that is not the kaiju,
+        /// and the leg is bent to put that contact on it. A swinging foot (Walk) and a raised arm (any attack) keep the clip; a
+        /// dying kaiju lets go.
+        /// </summary>
+        private void GroundLimbs(float dt)
+        {
+            AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
+            bool walking = info.IsName("Walk") && !animator.IsInTransition(0);
+            float phase = Mathf.Repeat(info.normalizedTime, 1f), gap = 0f;
+            for (int i = 0; i < KaijuRig.Limbs.Length; i++)
+            {
+                KaijuRig.Limb limb = KaijuRig.Limbs[i];
+                Vector3 contact = LowestOf(limb.Contact);
+                bool hit = Surface(contact, out float ground);
+                footGround[i] = hit ? new Vector3(contact.x, ground, contact.z) : contact;
+                bool standing = Action == KaijuAction.Walk || Action == KaijuAction.Rise || Action == KaijuAction.Idle;
+                bool bearing = !limb.Fore || standing; // the arms only carry weight when walking or standing
+                bool want = hit && bearing && Action != KaijuAction.Death && (!walking || limb.Planted(phase));
+                planted[i] = Mathf.MoveTowards(planted[i], want ? 1f : 0f, dt * 6f);
+                if (planted[i] <= 0f) continue;
+
+                Transform end = bones[limb.End];
+                Quaternion endRotation = end.rotation;
+                float lift = hit ? ground - contact.y : 0f; // no surface: fade out where the clip has it
+                Solve(bones[limb.Root], bones[limb.Mid], end, end.position + Vector3.up * lift, planted[i]);
+                end.rotation = endRotation; // the foot keeps its clip orientation; only the legs above it bend
+                if (hit && planted[i] >= 1f) gap = Mathf.Max(gap, Mathf.Abs(LowestOf(limb.Contact).y - ground));
+            }
+            FootGap = gap;
+        }
+
+        /// <summary>Highest surface below a point that is not one of the kaiju's own colliders.</summary>
+        private bool Surface(Vector3 from, out float y)
+        {
+            int n = Physics.RaycastNonAlloc(from + Vector3.up * 300f, Vector3.down, Hits, 600f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
+            y = float.MinValue;
+            for (int i = 0; i < n; i++)
+                if (!Owns(Hits[i].collider) && Hits[i].point.y > y) y = Hits[i].point.y;
+            return y > float.MinValue;
+        }
+
+        private Vector3 LowestOf(string[] names)
+        {
+            Vector3 low = bones[names[0]].position;
+            for (int i = 1; i < names.Length; i++)
+            {
+                Vector3 p = bones[names[i]].position;
+                if (p.y < low.y) low = p;
+            }
+            return low;
+        }
+
+        /// <summary>
+        /// Two-bone IK: swing the root so the mid joint sits on the same side of the root-to-target line as the clip's knee,
+        /// then the mid so the end reaches the target. <paramref name="weight"/> blends the rotations towards the clip.
+        /// </summary>
+        private static void Solve(Transform root, Transform mid, Transform end, Vector3 target, float weight)
+        {
+            Vector3 a = root.position, b = mid.position;
+            float l1 = Vector3.Distance(a, b), l2 = Vector3.Distance(b, end.position);
+            Vector3 toward = target - a;
+            float reach = Mathf.Clamp(toward.magnitude, 0.01f, (l1 + l2) * 0.999f);
+            Vector3 dir = toward.normalized, side = Vector3.Cross(dir, b - a);
+            if (side.sqrMagnitude < 1e-8f) return;
+            float bend = Mathf.Acos(Mathf.Clamp((l1 * l1 + reach * reach - l2 * l2) / (2f * l1 * reach), -1f, 1f)) * Mathf.Rad2Deg;
+            Vector3 knee = a + Quaternion.AngleAxis(bend, side.normalized) * dir * l1;
+            root.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(b - a, knee - a), weight) * root.rotation;
+            Vector3 m = mid.position;
+            mid.rotation = Quaternion.Slerp(Quaternion.identity, Quaternion.FromToRotation(end.position - m, target - m), weight) * mid.rotation;
         }
 
         /// <summary>Turn the neck and head towards <see cref="Aim"/> on top of the clip, spread over the chain.</summary>
@@ -319,7 +398,7 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             Shake(at, 15000f, 1f);
         }
 
-        /// <summary>Walk-cycle footfalls: dust, a ground shake, and (host) <see cref="OnStomp"/> crush damage.</summary>
+        /// <summary>Walk-cycle footfalls at each foot's landing ground: dust, a ground shake, and (host) <see cref="OnStomp"/> crush damage.</summary>
         private void Footfalls()
         {
             AnimatorStateInfo info = animator.GetCurrentAnimatorStateInfo(0);
@@ -330,15 +409,16 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             }
             float phase = Mathf.Repeat(info.normalizedTime, 1f);
             if (walkPhase >= 0f)
-                foreach ((float at, string bone) in KaijuRig.Footfalls)
-                    if (walkPhase < phase ? walkPhase < at && at <= phase : at > walkPhase || at <= phase)
-                    {
-                        Vector3 foot = bones[bone].position;
-                        ParticleFx.Spawn("fx-collapse-dust", foot, Quaternion.identity, 8f);
-                        Shake(foot, 20000f, 0.8f);
-                        OnStomp?.Invoke(foot);
-                        Step(foot);
-                    }
+                for (int i = 0; i < KaijuRig.Limbs.Length; i++)
+                {
+                    float at = KaijuRig.Limbs[i].Landing;
+                    if (!(walkPhase < phase ? walkPhase < at && at <= phase : at > walkPhase || at <= phase)) continue;
+                    Vector3 foot = footGround[i];
+                    ParticleFx.Spawn("fx-collapse-dust", foot, Quaternion.identity, 8f);
+                    Shake(foot, 20000f, 0.8f);
+                    OnStomp?.Invoke(foot);
+                    Step(foot);
+                }
             walkPhase = phase;
         }
 

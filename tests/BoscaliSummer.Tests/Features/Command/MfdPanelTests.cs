@@ -70,6 +70,9 @@ namespace BoscaliSummer.Tests.Features.Command
             MfdRailEntry unknown = MfdRailCatalog.For("<SUD>");
             TestAssert.That(unknown.Code == "SUD" && !unknown.HasName && unknown.Glyph == AvIcon.ListDetails,
                 "unknown codes survive sanitising without an invented meaning, keeping the neutral fallback icon");
+            TestAssert.That(MfdRailCatalog.OrderRank("MISC") > MfdRailCatalog.OrderRank("SET") &&
+                            MfdRailCatalog.OrderRank("MISC") > MfdRailCatalog.OrderRank("SUD"),
+                "MISC is the last rail key, under unknown codes too");
             TestAssert.That(MfdRailCatalog.For(null).Code == "" && MfdRailCatalog.For("  ").Code == "",
                 "empty labels stay empty");
             TestAssert.That(MfdRailCatalog.OrderRank("FAC") < MfdRailCatalog.OrderRank("BDF") &&
@@ -93,6 +96,7 @@ namespace BoscaliSummer.Tests.Features.Command
             MfdRailPlan roomy = MfdRailPlan.Resolve(964f, 14, 4);
             TestAssert.That(roomy.Fits && roomy.Header && roomy.Groups && roomy.KeyHeight >= 52f && roomy.KeyHeight <= MfdRailPlan.KeyMax,
                 "fourteen keys wear the header and group labels on a 1080p rail");
+            TestAssert.That(MfdRailPlan.Resolve(964f, 16, 5).Groups, "sixteen keys keep their group labels (labels outrank tall keys)");
             MfdRailPlan tight = MfdRailPlan.Resolve(964f, 18, 5);
             TestAssert.That(tight.Fits && !tight.Groups && tight.KeyHeight >= MfdRailPlan.KeyMin,
                 "a crowded rail drops its group labels before its keys go under the pointer floor");

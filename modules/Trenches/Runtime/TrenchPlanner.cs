@@ -326,6 +326,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             for (int s = 0; s < count; s++)
             {
                 if (route[s] < 0) continue;
+                if (s > 0 && TrenchTraceMath.LevelJump(route[s - 1], route[s])) continue;   // a restarted stretch: break the run, never jog across
                 valid[s] = true;
                 float depth = depthCenter +
                     (route[s] - sector) * TrenchTraceMath.DepthSearchStep;

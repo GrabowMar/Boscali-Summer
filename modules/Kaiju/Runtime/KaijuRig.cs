@@ -64,9 +64,38 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             ("Tail0_M", "Tail2_M", 5f), ("Tail2_M", "Tail4_M", 4f), ("Tail4_M", "joint1_M", 3f), ("joint1_M", "joint3_M", 2f),
         };
 
-        /// <summary>Walk-cycle footfalls (clip phase when each foot lands) and the bone that lands.</summary>
-        public static readonly (float phase, string bone)[] Footfalls =
-            { (0.35f, "Toes_L"), (0.60f, "Wrist_L"), (0.85f, "Toes_R"), (0.10f, "Wrist_R") };
+        /// <summary>
+        /// A leg for <see cref="KaijuBody"/>'s ground IK: root-mid-end bones (hip-knee-ankle or shoulder-elbow-wrist), the bones
+        /// that touch the ground (the lowest one is the contact), and its walk offset: KaijuAssetsBuilder.Walk runs each leg
+        /// Offset of a cycle behind the hind-left leg, and a leg swings for the first 35 % of its own cycle.
+        /// </summary>
+        internal readonly struct Limb
+        {
+            public readonly string Root, Mid, End;
+            public readonly string[] Contact;
+            public readonly float Offset;
+            /// <summary>Forelimbs are arms: they bear weight only when walking or standing, not while swiping or roaring.</summary>
+            public readonly bool Fore;
+
+            public Limb(string root, string mid, string end, float offset, bool fore, params string[] contact)
+            {
+                Root = root; Mid = mid; End = end; Offset = offset; Fore = fore; Contact = contact;
+            }
+
+            /// <summary>Walk-cycle phase when this foot lands (the end of its swing).</summary>
+            public float Landing => Mathf.Repeat(0.35f - Offset, 1f);
+            /// <summary>True while the foot is on the ground at this walk-cycle phase.</summary>
+            public bool Planted(float phase) => Mathf.Repeat(phase + Offset, 1f) >= 0.35f;
+        }
+
+        /// <summary>Lateral sequence, LF-LH-RF-RH: the same order and offsets as KaijuAssetsBuilder.Walk.</summary>
+        public static readonly Limb[] Limbs =
+        {
+            new Limb("Hip_L", "Knee_L", "Ankle_L", 0.00f, false, "Toes_L"),
+            new Limb("Shoulder_L", "Elbow_L", "Wrist_L", 0.25f, true, "IndexFinger3_L", "MiddleFinger3_L", "RingFinger3_L", "PinkyFinger3_L"),
+            new Limb("Hip_R", "Knee_R", "Ankle_R", 0.50f, false, "Toes_R"),
+            new Limb("Shoulder_R", "Elbow_R", "Wrist_R", 0.75f, true, "IndexFinger3_R", "MiddleFinger3_R", "RingFinger3_R", "PinkyFinger3_R"),
+        };
 
         public const float SpikeRelease = 1.55f, SwipeHitStart = 0.95f, SwipeHitEnd = 1.35f; // clip seconds
 

@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased
+
+- **VANGUARD economy**: shooting down a VANGUARD decoy or drone now pays like a vanilla missile kill. MALD-J used to
+  pay about three fighter kills. Reusable drones that kill several targets a sortie now cost about what that many
+  vanilla missiles would: REMORA 2.4 M, SPECTRE 2.8 M, SENTINEL 2.0 M, HAMILCAR 2.0 M, KESTREL 1.2 M, ORCA 1.8 M,
+  MALD-J 0.8 M, MALD-X 0.4 M, AEGIS dart 0.2 M, ALE-X 0.1 M. LANCE slugs cost 0.08 M and SPECTRE shells are at the
+  vanilla 30 mm price.
+
+- **MISC screen**: a new last key on the map's button rail. Developer builds keep CHEATS (bypass requirements,
+  no OPS cooldowns, hunting-wing spawner) and DEBUG (logging, footprint, wing dev tools) there; the SPOOKTOBER boss
+  menu moved there from SET and got a status strip and dossier cards. In the public build it stays empty until earned.
+
+- **SET maintenance**: THIS PILOT → PERF now offers confirmed CLEAR CACHE and FACTORY RESET actions.
+  Cache clearing removes generated Boscali files and unused renderer stacks. Factory reset backs up the
+  config and restores defaults while keeping progress and saved presets; restart the game afterwards.
+  Factory reset is locked while connected to another host.
+
+- **Target-selection smearing after mission restart** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
+  missile and drone feed cameras now leave their post-processing stacks alive for URP to recycle.
+  The earlier hotfix reset the active stack but still disposed the cached one, breaking the next target camera.
+  Thanks to [qweaeqew's feed-stack fix](https://github.com/qweaeqew/Boscali-Summer-Feed-Stack-Fix) for identifying the remaining cause.
+
+- **Trench generation** ([#26](https://github.com/GrabowMar/Boscali-Summer/issues/26)): ditches and wire now lie on
+  the ground on slopes. They used to rise into tall fins and hang wire in the air wherever the hill was steeper than
+  digging allows. Lines no longer jog sideways in square steps either: a position moves at most one depth band
+  between neighbouring stations and breaks the line instead of jumping.
+- **TAC BOARD SYSTEMS** ([#23](https://github.com/GrabowMar/Boscali-Summer/issues/23)): SET → COCKPIT → TAC BOARD
+  PARTS has a SYSTEMS BLOCK switch. Its warnings still reach the lamps and notices when it is hidden.
+- **Map industry markers** ([#24](https://github.com/GrabowMar/Boscali-Summer/issues/24)): SET → MAP has an
+  INDUSTRY MARKS switch for the squares, diamonds and triangles on factories, depots and ammo dumps. It is the
+  same switch as the MAP screen's INDUSTRY layer.
+- **COM / UAV / EVN buttons** ([#25](https://github.com/GrabowMar/Boscali-Summer/issues/25)): on the classic map
+  layout their labels use the stock buttons' size on one line, instead of large letters broken over two lines.
+
 ## 0.2.7 — update
 
 - **Campaign, chapter 1 — Twelve Miles Out**: the old scripted missions are gone and a new campaign

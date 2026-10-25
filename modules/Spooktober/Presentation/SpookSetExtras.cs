@@ -7,8 +7,8 @@ using NOAvionics;
 namespace BoscaliSummer.Modules.Spooktober.Presentation
 {
     /// <summary>
-    /// What Spooktober adds to SET's PILOT console: the four puzzles disguised as settings on pages 0 to 4 and, once all four are solved,
-    /// the SPOOKTOBER tab. Command resolves it through <see cref="ISetExtras"/>; with this module gone SET is exactly as it was.
+    /// What Spooktober adds: the four puzzles disguised as settings on SET's PILOT pages 0 to 4 and, once all four are solved,
+    /// the SPOOKTOBER tab on MISC. Command resolves it through <see cref="ISetExtras"/>; with this module gone SET is exactly as it was.
     /// </summary>
     internal sealed class SpookSetExtras : ISetExtras
     {
@@ -23,14 +23,14 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
         }
 
         public string ExtraTabLabel => "SPOOKTOBER";
-        public string ExtraTabTitle => "PILOT \u00B7 SPOOKTOBER";
+        public string ExtraTabTitle => "MISC \u00B7 SPOOKTOBER";
         public bool ExtraTabShown => SpookStore.Current.Unlocked;
 
         public void BuildPilotPage(int page, AvFlow flow, AvConsole console) =>
             SpookPuzzleViews.Build(page, flow, For(console));
 
         public void BuildExtraPage(int page, AvFlow flow, AvConsole console) =>
-            SpookMenuPage.Build(page, flow, For(console), kaijuAvailable);
+            SpookMenuPage.Build(page, flow, console, For(console), kaijuAvailable);
 
         private SpookConsole For(AvConsole console) => consoles.GetValue(console, c => new SpookConsole(c));
     }

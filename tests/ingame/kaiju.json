@@ -324,6 +324,16 @@
       "min": 21
     },
     {
+      "check": "result_below",
+      "path": "s_risen.footGap",
+      "max": 1
+    },
+    {
+      "check": "result_below",
+      "path": "s_fight1.footGap",
+      "max": 1
+    },
+    {
       "check": "result_above",
       "path": "s_heart.broken",
       "min": 12

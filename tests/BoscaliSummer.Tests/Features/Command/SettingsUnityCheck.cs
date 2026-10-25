@@ -19,7 +19,7 @@ using UnityEngine.UI;
 using Object = UnityEngine.Object;
 using static UnityCheckHarness;
 
-public static class SettingsUnityCheck
+public static partial class SettingsUnityCheck
 {
     private static readonly List<string> Failures = new List<string>();
     private static int checkedTexts;
@@ -42,10 +42,10 @@ public static class SettingsUnityCheck
             File.WriteAllText("result.txt", "PASS: SET renders THIS PILOT (DISPLAY/MAP/COCKPIT/IMMERSION/PERFORMANCE) and SERVER (WORLD/FORCES/EFFECTS/TASKING) " +
                 "consoles as client and host at 896, 596 and 420 units (" + checkedTexts + " texts gated for overflow, overlap, gutter and 11 px floor); " +
                 "mode switch and remembered mode, toggles, background replacement and row reveal, disabled dependencies, +/- bounds, " +
-                "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, manual selection of up to four pages in a 2 x 2 grid, six major parts, a strip and a dial writing through the options contract, " +
+                "the COCKPIT tab's TAC BOARD section (four groups, every control with one line of help, manual selection of up to four pages in a 2 x 2 grid, seven major parts, a strip and a dial writing through the options contract, " +
                 "inert options with the board off, RESET TO DEFAULTS, the long page rendered stop by stop), " +
                 "the COCKPIT tab's VISOR TERRAIN section (the TERRAIN GHOST dial in 5% steps from 0% to 100%, its help, its saved level; the TAC MAP strip (HOLO / CLASSIC) and the MINI RANGE strip (10, 20, 40 KM) in their place after it, each with one line of help, writing their saved entries, the range strip locked on CLASSIC; the HOLO MAP switch, the HOLO RANGE strip of 20, 40 and 80 KM and the NORTH UP switch, each with one line of help, writing their saved entries, the strip waiting on the switch and NORTH UP on the switch or the TAC MAP; a config saved with the old round hologram's ranges doubled once, then left alone), " +
-                "host-only lock on SERVER rows and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
+                "host-only lock on SERVER rows, maintenance confirmation/cancel/authority recheck, cache clearing, factory reset with saved data retained, and the flat page tree (no GameObject churn) are checked. Game adapters are stubbed; in-game acceptance remains required.");
             EditorApplication.Exit(0);
         }
         catch (Exception ex)
@@ -202,21 +202,16 @@ public static class SettingsUnityCheck
                     if (height == 596 && !server && page == CDisplay && !host)
                     {
                         Image finish = AvDisplayGlass.AttachFullDisplay((RectTransform)canvas.transform);
-                        for (int color = 1; color <= 4; color++)
+                        foreach (string preset in new[] { "CLEAR", "GLASS", "CRT" })
                         {
-                            config.DisplayTint.Value = color;
-                            config.DisplayTintStrength.Value = .7f;
-                            config.DisplayScanlines.Value = .5f;
-                            config.DisplayVignette.Value = .4f;
+                            Click(FindControl(con.Page(CDisplay).Content, preset));
+                            Settle(con);
                             Invoke(panel, "ApplyDisplayEffects");
                             foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
-                            Render(camera, canvas, height, "tint-" + color);
+                            Render(camera, canvas, height, "finish-" + preset.ToLowerInvariant());
                         }
                         Object.DestroyImmediate(finish.gameObject);
-                        config.DisplayTint.Value = 0;
-                        config.DisplayTintStrength.Value = .25f;
-                        config.DisplayScanlines.Value = 0f;
-                        config.DisplayVignette.Value = 0f;
+                        Invoke(panel, "SetDisplayFinish", 1);
                         Invoke(panel, "ApplyDisplayEffects");
                         foreach (var glass in canvas.GetComponentsInChildren<AvDisplayGlass>()) glass.Update();
                     }
@@ -330,16 +325,31 @@ public static class SettingsUnityCheck
         Settle(clientCon);
         for (int i = 0; i < 20; i++) Click(Plus(displayContent, "GLASS REFLECTION"));
         Check(Mathf.Approximately(config.DisplayGlass.Value, 1f), "Glass stepper must clamp at full strength");
-        Click(Plus(displayContent, "SCAN TEXTURE"));
-        Click(FindControl(displayContent, "GREEN"));
-        Check(config.DisplayScanlines.Value > 0f && config.DisplayTint.Value == 1,
-            "CRT and tint controls must write their saved entries");
+        Check(!HasText(displayContent, "COLOR TINT") && !HasText(displayContent, "TINT STRENGTH") &&
+              FindControl(displayContent, "ROSE") == null, "Retired colour wash controls stay absent");
+        Click(FindControl(displayContent, "CLEAR"));
+        Check(config.DisplayEffects.Value && config.DisplayGlass.Value == 0f && config.DisplayScanlines.Value == 0f &&
+              config.DisplayVignette.Value == 0f && config.DisplayLife.Value == 0f, "CLEAR removes finish effects");
+        Check((int)Invoke(panel, "DisplayFinishIndex") == 0, "CLEAR selection follows the saved controls");
+        Click(FindControl(displayContent, "CRT"));
+        Check(Mathf.Approximately(config.DisplayScanlines.Value, .25f) &&
+              Mathf.Approximately(config.DisplayGlass.Value, .15f) &&
+              Mathf.Approximately(config.DisplayVignette.Value, .15f) &&
+              Mathf.Approximately(config.DisplayLife.Value, .35f), "CRT applies a restrained screen texture");
         var saved = new CommandSettings(new ConfigFile(config.ExpandedMapUi.ConfigFile.ConfigFilePath, false));
-        Check(saved.DisplayScanlines.Value == config.DisplayScanlines.Value && saved.DisplayTint.Value == 1,
-            "Display effects survive config reload");
+        Check(saved.DisplayScanlines.Value == config.DisplayScanlines.Value && saved.DisplayLife.Value == config.DisplayLife.Value,
+            "Finish controls survive config reload");
+        Click(Plus(displayContent, "SCAN TEXTURE"));
+        Check((int)Invoke(panel, "DisplayFinishIndex") == -1, "Manual tuning clears the preset selection");
+        config.DisplayEffects.Value = false;
+        Click(FindControl(displayContent, "GLASS"));
+        Check(config.DisplayEffects.Value && (int)Invoke(panel, "DisplayFinishIndex") == 1,
+            "Choosing a finish re-enables effects and selects GLASS");
+        Click(FindControl(displayContent, "CRT"));
         Click(FindControl(displayContent, "RESET DISPLAY FILTER"));
-        Check(config.DisplayScanlines.Value == 0f && config.DisplayTint.Value == 0 &&
-            Mathf.Approximately(config.DisplayGlass.Value, .35f), "Reset restores the current default filter");
+        Check(config.DisplayScanlines.Value == 0f && config.DisplayVignette.Value == 0f &&
+            Mathf.Approximately(config.DisplayGlass.Value, .35f) && Mathf.Approximately(config.DisplayLife.Value, .6f),
+            "Reset restores the default GLASS finish");
         Check(config.AvionicsTheme.Value == AvThemeId.Portal, "Theme defaults to Portal");
         Check(FindControl(displayContent, "ACE") == null && FindControl(displayContent, "STEEL") == null,
             "Retired theme switching stays absent from the display page");
@@ -388,13 +398,14 @@ public static class SettingsUnityCheck
         ModuleServices.Services.Remove(typeof(ITacBoardSettings));
         Invoke(panel, "BuildTacBoardRows", clientCon.Page(CCockpit), CCockpit);
         Check(HasText(cockpitContent, "TAC BOARD NOT INSTALLED"), "An absent TAC BOARD options contract reads unavailable");
+        CheckMaintenance(camera, canvas, height, panel, clientCon, serverCon, config);
         ModuleServices.Services.Remove(typeof(ISecondaryObjectivesView));
         Object.DestroyImmediate(canvas.gameObject);
         Object.DestroyImmediate(camera.gameObject);
     }
 
     /// <summary>
-    /// The TAC BOARD section on the COCKPIT tab: four groups, manual full-page choices, six major parts, and controls writing through the contract
+    /// The TAC BOARD section on the COCKPIT tab: four groups, manual full-page choices, seven major parts, and controls writing through the contract
     /// (<see cref="ITacBoardSettings"/>, here a plain object). Also the long page scrolled stop by stop so each part of it is rendered and gated, the page with the board
     /// switched off (its options inert, RESET still live), and RESET TO DEFAULTS. Leaves the fixture at its defaults.
     /// </summary>
@@ -402,7 +413,7 @@ public static class SettingsUnityCheck
     {
         foreach (string group in new[] { "TAC BOARD", "TAC BOARD PAGES", "TAC BOARD PARTS", "TAC BOARD EXTRAS" })
             Check(content.Find("Section " + group) != null, "COCKPIT carries the " + group + " section");
-        foreach (string toggle in new[] { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "FEED AND MAP", "VISOR SWAY" })
+        foreach (string toggle in new[] { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "SYSTEMS BLOCK", "FEED AND MAP", "VISOR SWAY" })
             Check(content.Find("Cell " + toggle) != null, "TAC BOARD switch " + toggle + " exists");
         foreach (string retired in new[] { "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "CARGO", "LAMPS", "SYSTEMS STRIP", "GAUGES", "PAGE MIN STAY" })
             Check(content.Find("Cell " + retired) == null, "Retired granular TAC BOARD control " + retired + " stays removed");
@@ -436,7 +447,7 @@ public static class SettingsUnityCheck
         scroll.verticalNormalizedPosition = 1f;
 
         // Every major switch flips only its group and flips it back. TAC BOARD goes last so the options remain live.
-        string[] cells = { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "FEED AND MAP", "VISOR SWAY" };
+        string[] cells = { "TAC BOARD", "STORES AND POWER", "TACTICAL PAGES", "LAMPS AND GAUGES", "NOTICES", "SYSTEMS BLOCK", "FEED AND MAP", "VISOR SWAY" };
         for (int n = 1; n <= cells.Length; n++)
         {
             int at = n % cells.Length;      // TAC BOARD last: with the board off the others are inert
@@ -800,7 +811,7 @@ public static class SettingsUnityCheck
     private static object Field(SettingsMfdPanel panel, string name) =>
         typeof(SettingsMfdPanel).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance).GetValue(panel);
 
-    private static void Invoke(SettingsMfdPanel panel, string method, params object[] args) =>
+    private static object Invoke(SettingsMfdPanel panel, string method, params object[] args) =>
         typeof(SettingsMfdPanel).GetMethod(method, BindingFlags.NonPublic | BindingFlags.Instance)
             .Invoke(panel, args);
 
@@ -1020,16 +1031,16 @@ public static class SettingsUnityCheck
         public void SelectForHud(int id) => SelectedForHud = id;
         private readonly SecondaryObjectiveView[] cards =
         {
-            new SecondaryObjectiveView(1, "RELAY STRIKE", "Destroy the relay.", "RADAR RELAY NORTH", "IN PROGRESS", "$14,000 · 300 XP",
+            new SecondaryObjectiveView(1, "RELAY STRIKE", "Destroy the relay.", "RADAR RELAY NORTH", "IN PROGRESS", "$14,000 Ă‚Â· 300 XP",
                 .45f, 420f, 14000, 300, false, false, true, true, 100f, 100f, 400f, "MARCI"),
-            new SecondaryObjectiveView(2, "CONVOY INTERDICTION", "Stop the convoy.", "ROUTE 7", "OFFERED", "$9,500 · 200 XP",
+            new SecondaryObjectiveView(2, "CONVOY INTERDICTION", "Stop the convoy.", "ROUTE 7", "OFFERED", "$9,500 Ă‚Â· 200 XP",
                 0f, 900f, 9500, 200, false, true, false, true, 300f, 200f, 300f),
-            new SecondaryObjectiveView(3, "AIRFIELD DENIAL", "Crater the runway.", "PORT AIRFIELD", "COMPLETE", "$20,000 · 450 XP",
+            new SecondaryObjectiveView(3, "AIRFIELD DENIAL", "Crater the runway.", "PORT AIRFIELD", "COMPLETE", "$20,000 Ă‚Â· 450 XP",
                 1f, 0f, 20000, 450, true),
         };
 
         public IReadOnlyList<SecondaryObjectiveView> Objectives => cards;
-        public string Status => "3 CONTRACTS · HOST BOARD";
+        public string Status => "3 CONTRACTS Ă‚Â· HOST BOARD";
         public int ActiveLimit => 2;
         public void Refresh() { }
         public void RequestAccept(int id) { }
@@ -1073,15 +1084,16 @@ public static class SettingsUnityCheck
         public bool ShowLamps { get; set; }
         public bool ShowGauges { get; set; }
         public bool ShowTicker { get; set; }
+        public bool ShowSystems { get; set; }
         public bool Sway { get; set; }
         public bool Corners { get; set; }
 
         public void ResetToDefaults() { ResetCount++; Defaults(); }
 
-        /// <summary>The master, six major parts and sway in their control order.</summary>
+        /// <summary>The master, seven major parts and sway in their control order.</summary>
         public string Switches()
         {
-            bool[] all = { Enabled, ShowStores, ScopeMode != BoardScopeMode.Off, ShowLamps || ShowGauges, ShowTicker, Corners, Sway };
+            bool[] all = { Enabled, ShowStores, ScopeMode != BoardScopeMode.Off, ShowLamps || ShowGauges, ShowTicker, ShowSystems, Corners, Sway };
             var text = new System.Text.StringBuilder();
             foreach (bool b in all) text.Append(b ? '1' : '0');
             return text.ToString();
@@ -1094,7 +1106,7 @@ public static class SettingsUnityCheck
             PageCount = 1; Page1 = BoardPage.Threat; Page2 = BoardPage.Shot; Page3 = BoardPage.Wing; Page4 = BoardPage.Objective;
             PageThreat = PageShot = PageMissileCam = PageApproach = PageWing = PageStrike = PageDock = PageObjective = PageCargo = PageSystems = true;
             ThreatHoldSeconds = 6f; PageMinSeconds = 3f;
-            ShowStores = ShowLamps = ShowGauges = ShowTicker = true;
+            ShowStores = ShowLamps = ShowGauges = ShowTicker = ShowSystems = true;
             Sway = Corners = true;
         }
 
@@ -1106,7 +1118,7 @@ public static class SettingsUnityCheck
                    PageCount == fresh.PageCount && Page1 == fresh.Page1 && Page2 == fresh.Page2 && Page3 == fresh.Page3 && Page4 == fresh.Page4 &&
                    PageThreat && PageShot && PageMissileCam && PageApproach && PageWing && PageStrike && PageDock && PageObjective && PageCargo && PageSystems &&
                    ThreatHoldSeconds == fresh.ThreatHoldSeconds && PageMinSeconds == fresh.PageMinSeconds &&
-                   ShowStores && ShowLamps && ShowGauges && ShowTicker && Sway && Corners;
+                   ShowStores && ShowLamps && ShowGauges && ShowTicker && ShowSystems && Sway && Corners;
         }
     }
 

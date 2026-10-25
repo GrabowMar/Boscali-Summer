@@ -103,6 +103,7 @@ namespace BoscaliSummer.Kaiju
             result["broken"] = body.Broken;
             result["heart"] = body.Nodes[KaijuRig.HeartIndex] != null ? (body.Nodes[KaijuRig.HeartIndex].disabled ? "dead" : "open") : "shut";
             result["nodePoseError"] = worstPose;
+            result["footGap"] = body.FootGap;
             result["nodeName"] = body.Nodes[0] != null ? body.Nodes[0].unitName : null;
             result["nodeHq"] = body.Nodes[0] != null && body.Nodes[0].NetworkHQ != null ? body.Nodes[0].NetworkHQ.faction.factionName : null;
             result["hasAim"] = body.HasAim;

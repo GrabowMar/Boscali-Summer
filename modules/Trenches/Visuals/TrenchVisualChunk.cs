@@ -345,11 +345,18 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         /// <summary>Ring <paramref name="i"/> of <paramref name="count"/> laid on the ground: one terrain ray.</summary>
         private Vector3 SnapRing(Vector3[] curve, int i, int count)
         {
-            // A missed or refused ground probe keeps the curve's own height (planned from
-            // successful probes): falling back to y=0 buries the ring under the terrain
-            // and spikes the mesh wherever the ray hits water, a tree or a building first.
-            int curveIndex = Mathf.RoundToInt((float)i / (count - 1) * (curve.Length - 1));
-            return TrenchTerrain.SnapToGround(new Vector3(pathX[i], curve[curveIndex].y, pathZ[i]));
+            // A missed probe takes the height of the nearest curve station. Not the station at the
+            // ring's share of the ring count: rings are not spread evenly over the stations, so that
+            // read a height from far along the line and stood the ring metres in the air.
+            if (TrenchTerrain.TryTerrain(pathX[i], pathZ[i], out Vector3 ground)) return ground;
+            int nearest = 0;
+            float bestSq = float.MaxValue;
+            for (int c = 0; c < curve.Length; c++)
+            {
+                float dx = curve[c].x - pathX[i], dz = curve[c].z - pathZ[i], sq = dx * dx + dz * dz;
+                if (sq < bestSq) { bestSq = sq; nearest = c; }
+            }
+            return new Vector3(pathX[i], curve[nearest].y, pathZ[i]);
         }
 
         private void AddPath(Transform parent, string name, Vector3[] curve, float step, float width,

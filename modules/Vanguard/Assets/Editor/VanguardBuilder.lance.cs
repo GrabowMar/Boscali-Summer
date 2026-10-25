@@ -45,7 +45,7 @@ namespace Vanguard
                 P(s, "blastDamage").floatValue = 0.6f;
                 P(s, "fireInterval").floatValue = 0.3f; // must stay > 0: fireInterval 0 makes WeaponStation.Fire start remote auto-fire
                 P(s, "visibilityWhenFired").floatValue = 3000;
-                P(s, "costPerRound").floatValue = 0.02f;
+                P(s, "costPerRound").floatValue = 0.08f; // a slug kills armour like an AT-145 (0.08)
                 P(s, "massPerRound").floatValue = 4;
                 P(s, "armorTierEffectiveness").floatValue = 8;
                 P(s, "pK").floatValue = 0.25f;

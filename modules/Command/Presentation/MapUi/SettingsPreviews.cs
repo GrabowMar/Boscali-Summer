@@ -103,22 +103,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvLay.Place(t.rectTransform, Inset + x, HeadH + 6f + y, Mathf.Max(20f, w), 15f);
     }
 
-    /// <summary>DISPLAY: the display finish (tint, CRT lines, edge shading, glass sheen) over a sample of the panel vocabulary.</summary>
+    /// <summary>DISPLAY: the display finish (CRT lines, edge shading, glass sheen) over a sample of the panel vocabulary.</summary>
     internal sealed class SetFinishPreview : SetPreview
     {
-        private static readonly string[] TintNames = { "NEUTRAL", "GREEN", "AMBER", "ICE", "ROSE" };
-        private static readonly Color[] Tints =
-        {
-            Color.white, new Color(.22f, 1f, .48f), new Color(1f, .64f, .18f), new Color(.25f, .75f, 1f), new Color(1f, .38f, .57f),
-        };
         private static readonly float[] Wave = { .35f, .6f, .85f, .5f, .95f, .7f, .4f, .8f, .55f };
         private bool effects = true;
-        private float glass, scan, edge, strength;
-        private int tint;
+        private float glass, scan, edge;
 
         public SetFinishPreview(RectTransform parent) : base(parent, "FinishPreview", "// FINISH PREVIEW", 72f)
         {
-            Help = "A sample panel under the display finish you have set: tint wash, scan texture, edge shading and the glass sheen, " +
+            Help = "A sample panel under the display finish you have set: scan texture, edge shading and the glass sheen, " +
                    "each at its real strength. The finish covers every maximized MFD, this one included.";
             Restyle();
         }
@@ -127,13 +121,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             bool e = settings.DisplayEffects.Value;
             float g = settings.DisplayGlass.Value, sc = settings.DisplayScanlines.Value, ed = settings.DisplayVignette.Value;
-            float st = settings.DisplayTintStrength.Value;
-            int t = Mathf.Clamp(settings.DisplayTint.Value, 0, TintNames.Length - 1);
-            SetNote(!e ? "EFFECTS OFF" : TintNames[t] + (t > 0 ? " " + AvNum.Percent(st) : "") +
+            SetNote(!e ? "EFFECTS OFF" : "GLASS " + AvNum.Percent(g) +
                          " · TEXTURE " + AvNum.Percent(sc) + " · EDGE " + AvNum.Percent(ed));
             if (e == effects && Mathf.Approximately(g, glass) && Mathf.Approximately(sc, scan) &&
-                Mathf.Approximately(ed, edge) && Mathf.Approximately(st, strength) && t == tint) return;
-            effects = e; glass = g; scan = sc; edge = ed; strength = st; tint = t;
+                Mathf.Approximately(ed, edge)) return;
+            effects = e; glass = g; scan = sc; edge = ed;
             Redraw();
         }
 
@@ -159,12 +151,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Quads.Add(ex + k * (bw + 3f), h - pad - bh, bw, bh, info);
             }
             if (!effects) return;
-            if (tint > 0 && strength > 0f)
-            {
-                Color c = Tints[tint];
-                c.a = strength * .18f;
-                Quads.Add(0f, 0f, w, h, c);
-            }
             if (scan > 0f)
             {
                 var line = new Color(0f, 0f, 0f, scan * .28f);

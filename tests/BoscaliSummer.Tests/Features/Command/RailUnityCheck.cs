@@ -175,26 +175,28 @@ public static class RailUnityCheck
             "reconciling the map must reuse the single screen finish");
         CheckFinishTexture();
         var glass = finish.GetComponentInChildren<AvDisplayGlass>();
-        AvDisplayGlass.Configure(true, .4f, false, .8f, .6f, 2, .5f);
+        AvDisplayGlass.Configure(true, .4f, false, .8f, .6f);
         glass.Update();
         Image finishImage = glass.GetComponent<Image>();
         bool shaderFinish = finishImage.material != null && finishImage.material.HasProperty("_Reflection");
         Check(shaderFinish ? Mathf.Approximately(finishImage.material.GetFloat("_Reflection"), .4f * .45f) :
-            Mathf.Approximately(finishImage.color.a, .4f), "manual glass strength must not depend on ambient light");
+            Mathf.Approximately(finishImage.color.a, .4f * .45f), "manual glass strength must not depend on ambient light");
+        if (shaderFinish) Check(Mathf.Approximately(finishImage.material.GetFloat("_TintStrength"), 0f),
+            "the retired colour wash stays disabled even with an older shader bundle");
         var layers = finish.GetComponentsInChildren<RawImage>();
-        Check(layers.Length == (shaderFinish ? 0 : 3),
-            "shader finish is one quad; fallback owns exactly three bounded overlays");
+        Check(layers.Length == (shaderFinish ? 0 : 2),
+            "shader finish is one quad; fallback owns exactly two bounded overlays");
         foreach (var layer in layers)
             Check(layer.enabled && !layer.raycastTarget && layer.color.a > 0f && layer.color.a <= .5f,
                 "enabled overlays must remain bounded and input transparent");
-        AvDisplayGlass.Configure(false, .4f, false, .8f, .6f, 2, .5f);
+        AvDisplayGlass.Configure(false, .4f, false, .8f, .6f);
         glass.Update();
         Check(!glass.GetComponent<Image>().enabled, "master OFF removes the original glass");
         foreach (var layer in layers) Check(!layer.enabled, "master OFF removes every extra overlay");
-        AvDisplayGlass.Configure(true, .35f, true, 0f, 0f, 0, .25f);
+        AvDisplayGlass.Configure(true, .35f, true, 0f, 0f);
         glass.Update();
         Check(glass.GetComponent<Image>().enabled, "master ON restores glass without rebuilding");
-        foreach (var layer in layers) Check(!layer.enabled, "default finish has no CRT, vignette or tint");
+        foreach (var layer in layers) Check(!layer.enabled, "default finish has no CRT or vignette");
 
         var buttons = new List<Button>();
         var screens = new List<MFDScreen>();

@@ -9,19 +9,15 @@ namespace NOAvionics
         private Image image;
         private float nextLightSample;
         private static bool effects = true, autoLight = true;
-        private static float reflection = .35f, scanStrength, edgeStrength, tintStrength = .25f;
-        private static int tintIndex, revision;
+        private static float reflection = .35f, scanStrength, edgeStrength;
+        private static int revision;
         private static Texture2D scanTexture, edgeTexture;
-        private static readonly Color[] Tints = { Color.white,
-            new Color(.22f, 1f, .48f), new Color(1f, .64f, .18f),
-            new Color(.25f, .75f, 1f), new Color(1f, .38f, .57f) };
         private int appliedRevision = -1;
-        private RawImage scanlines, vignette, tint;
+        private RawImage scanlines, vignette;
         private bool shaderMode;
         private static readonly int ReflectionId = Shader.PropertyToID("_Reflection");
         private static readonly int ScanId = Shader.PropertyToID("_Scan");
         private static readonly int EdgeId = Shader.PropertyToID("_Edge");
-        private static readonly int TintColorId = Shader.PropertyToID("_TintColor");
         private static readonly int TintStrengthId = Shader.PropertyToID("_TintStrength");
         private static readonly int LightId = Shader.PropertyToID("_Light");
         private static readonly int LifeId = Shader.PropertyToID("_Life");
@@ -49,15 +45,13 @@ namespace NOAvionics
 
         // Presentation values only: the owning feature binds and persists its settings.
         public static void Configure(bool enabled, float glass, bool adaptToLight,
-            float scan, float edge, int color, float colorStrength)
+            float scan, float edge)
         {
             effects = enabled;
             reflection = Mathf.Clamp01(glass);
             autoLight = adaptToLight;
             scanStrength = Mathf.Clamp01(scan);
             edgeStrength = Mathf.Clamp01(edge);
-            tintIndex = Mathf.Clamp(color, 0, Tints.Length - 1);
-            tintStrength = Mathf.Clamp01(colorStrength);
             revision++;
         }
 
@@ -75,7 +69,7 @@ namespace NOAvionics
             Material glassMat = AvFxDriver.GlassMaterial;
             if (glassMat != null)
             {
-                // One procedural quad replaces the tint/scanline/vignette layers (kit v2, spec §7.2).
+                // One procedural quad replaces the scanline/vignette layers (kit v2, spec §7.2).
                 glass.sprite = null;
                 glass.material = glassMat;
                 driver.shaderMode = true;
@@ -85,7 +79,6 @@ namespace NOAvionics
             else
             {
                 EnsureTextures();
-                driver.tint = Layer(glass.rectTransform, "ColorTint", Texture2D.whiteTexture);
                 driver.scanlines = Layer(glass.rectTransform, "CrtScanlines", scanTexture);
                 driver.vignette = Layer(glass.rectTransform, "EdgeShading", edgeTexture);
             }
@@ -139,8 +132,8 @@ namespace NOAvionics
                 m.SetFloat(ReflectionId, reflection * .45f);
                 m.SetFloat(ScanId, scanStrength);
                 m.SetFloat(EdgeId, edgeStrength);
-                m.SetColor(TintColorId, Tints[tintIndex]);
-                m.SetFloat(TintStrengthId, tintIndex > 0 ? tintStrength : 0f);
+                // Older asset bundles still expose the retired colour-wash property.
+                m.SetFloat(TintStrengthId, 0f);
                 m.SetFloat(LightId, level);
                 m.SetFloat(LifeId, AvFxDriver.ReducedMotion ? 0f : life);
                 image.color = Color.white;
@@ -157,10 +150,6 @@ namespace NOAvionics
             scanlines.uvRect = new Rect(0f, 0f, 1f, Mathf.Max(1f, image.rectTransform.rect.height / 4f));
             vignette.enabled = effects && edgeStrength > 0f;
             vignette.color = new Color(0f, 0f, 0f, edgeStrength * .5f);
-            tint.enabled = effects && tintIndex != 0 && tintStrength > 0f;
-            Color wash = Tints[tintIndex];
-            wash.a = tintStrength * .18f;
-            tint.color = wash;
         }
 
         private static RawImage Layer(RectTransform parent, string name, Texture texture)

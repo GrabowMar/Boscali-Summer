@@ -71,9 +71,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private readonly float[] airfieldX = new float[TrenchTraceMath.MaximumAirfields];
         private readonly float[] airfieldZ = new float[TrenchTraceMath.MaximumAirfields];
         private int airfieldCount;
-        private readonly TrenchBarrage barrage = new TrenchBarrage();
-        private float nextShellResolve;
-        private float nextBarrageLog;
 
         private int nextLineId = 1;
         private float nextTraceRefresh;
@@ -196,8 +193,8 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         }
 
         /// <summary>
-        /// Lays a plan-view trace from the wire on this peer's terrain. A point whose probe refuses
-        /// (steep or wet ground) takes the height between its snapped neighbours instead of the
+        /// Lays a plan-view trace from the wire on this peer's terrain, at any slope. A point whose probe
+        /// misses the terrain takes the height between its snapped neighbours instead of the
         /// wire's y=0, which spiked the ditch down to sea level.
         /// </summary>
         private static void SnapHeights(Vector3[] trace)
@@ -206,7 +203,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             int last = -1;   // index of the last snapped point
             for (int i = 0; i < trace.Length; i++)
             {
-                if (!TrenchTerrain.TryGround(trace[i].x, trace[i].z, out Vector3 ground)) continue;
+                if (!TrenchTerrain.TryTerrain(trace[i].x, trace[i].z, out Vector3 ground)) continue;
                 trace[i].y = ground.y;
                 for (int gap = last + 1; gap < i; gap++)
                     trace[gap].y = last < 0 ? ground.y : Mathf.Lerp(trace[last].y, ground.y, (gap - last) / (float)(i - last));
@@ -256,11 +253,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
 
             TrenchMaterialResolver.ResetForScene();
             TrenchRoadIndex.ResetForScene();
-            TrenchBarrageCatalog.ResetForScene();
-            barrage.Reset();
             airfieldCount = 0;
-            nextShellResolve = 0f;
-            nextBarrageLog = 0f;
 
             nextLineId = 1;
             factionCount = 0;
@@ -302,7 +295,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             if (Datum.origin == null) return;
             if (Time.unscaledTime < nextSeedDelay) return;
 
-            barrage.Pump(Time.time);
             if (reinforceLine != null) FinishReinforce();
             if (commitJob != null)
             {
@@ -702,7 +694,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             line.DugAt = Time.time;
             line.HostileSince = -1f;
             line.NextGrowthAt = Time.time + TrenchTraceMath.GrowthInterval(settings.GrowthIntervalSeconds.Value, line.Pressure);
-            line.NextBarrageAt = Time.time + TrenchTraceMath.BarrageDelay(settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value, line.Pressure, UnityEngine.Random.value);
             Plugin.Logger?.LogInfo($"[TRENCHES] '{line.Name}' dug at global {line.Center}: {line.Curve.Length} curve stations, {line.Anchors.Length} anchors, pressure {line.Pressure:0.00}.");
             TrenchNet.BroadcastGeometry(line);
             TrenchNet.BroadcastState(line);
@@ -846,8 +837,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 }
             }
 
-            TickBarrage(now);
-
             if (anyChanged) OnLinesChanged?.Invoke();
         }
 
@@ -932,68 +921,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                 airfieldZ[airfieldCount] = at.z;
                 airfieldCount++;
             }
-        }
-
-        /// <summary>
-        /// One harassing fire mission per tick between paired lines: the due position
-        /// shells no-man's-land with vanilla missiles, which replicate, scorch and
-        /// suppress through the game's own impact path.
-        /// </summary>
-        private void TickBarrage(float now)
-        {
-            if (settings == null || !settings.BarrageEnabled.Value) return;
-            if (barrage.Inflight >= TrenchTraceMath.BarrageInflightCeiling) return;
-            TrenchLine shooter = null;
-            TrenchLine target = null;
-            float pairDistance = 0f;
-            for (int i = 0; i < lines.Count; i++)
-            {
-                TrenchLine line = lines[i];
-                if (line == null || line.Overrun || line.Stage < TrenchStage.FireTrench ||
-                    line.DefenderCount <= 0 || now < line.NextBarrageAt) continue;
-                if (!FindBarrageTarget(line, out TrenchLine enemy, out float distance)) continue;
-                shooter = line;
-                target = enemy;
-                pairDistance = distance;
-                break;
-            }
-            if (shooter == null) return;
-            if (Time.unscaledTime < nextShellResolve) return;
-            MissileDefinition shell = TrenchBarrageCatalog.Resolve();
-            if (shell == null)
-            {
-                nextShellResolve = Time.unscaledTime + 5f;
-                return;
-            }
-            int fired = barrage.Fire(shooter, target, pairDistance, shell, now);
-            // A dry tube waits the same window as a fired one: retrying in seconds
-            // turned a full sky into a spawn loop.
-            shooter.NextBarrageAt = now + TrenchTraceMath.BarrageDelay(
-                settings.BarrageMinDelaySeconds.Value, settings.BarrageMaxDelaySeconds.Value,
-                shooter.Pressure, UnityEngine.Random.value);
-            if (fired > 0 && Time.unscaledTime >= nextBarrageLog)
-            {
-                nextBarrageLog = Time.unscaledTime + 60f;
-                Plugin.Logger?.LogInfo($"[TRENCHES] '{shooter.Name}' fired {fired} harassing round(s) into '{target.Name}' no-man's-land ({pairDistance:0}m).");
-            }
-        }
-
-        /// <summary>Nearest live enemy position inside harassing range, by centre distance.</summary>
-        private bool FindBarrageTarget(TrenchLine shooter, out TrenchLine enemy, out float distance)
-        {
-            enemy = null;
-            distance = float.MaxValue;
-            for (int i = 0; i < lines.Count; i++)
-            {
-                TrenchLine candidate = lines[i];
-                if (candidate == null || candidate.Overrun || candidate.DefenderCount <= 0) continue;
-                if (candidate.OwnerHq == null || shooter.OwnerHq == null || candidate.OwnerHq == shooter.OwnerHq) continue;
-                float d = Scalar.Distance2D(candidate.Center.x, candidate.Center.z, shooter.Center.x, shooter.Center.z);
-                if (!TrenchTraceMath.InBarrageRange(d) || d >= distance) continue;
-                distance = d;
-                enemy = candidate;
-            }
-            return enemy != null;
         }
 
         private bool StillOwned(TrenchLine line)

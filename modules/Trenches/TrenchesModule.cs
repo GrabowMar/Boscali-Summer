@@ -39,11 +39,9 @@ namespace BoscaliSummer.Modules.Trenches
                     "Maximum concurrent trench positions per theater. Lower values limit future positions; existing lines remain.", 1)
                 .Number(2, context.Settings.Trenches.GrowthIntervalSeconds, "GROWTH INTERVAL",
                     "Seconds between trench growth passes. Higher values reduce host work and slow fortification.",
-                    15f, v => v.ToString("0") + "s")
-                .Toggle(3, context.Settings.Trenches.BarrageEnabled, "HARASSING BARRAGE",
-                    "Allow matured opposing trench lines to exchange native shells. Off reduces shell activity."));
+                    15f, v => v.ToString("0") + "s"));
 
-            context.Logger.LogInfo("[Trenches] Combat fortifications ready: Command's front traces become owned-side trench curves sited on defensible relief, forest edges, clear of roads and off airfields, with beachheads dug one band landward and opposing mirror pairs facing each other across no-man's-land. Hot sectors dig fast and stand heavy, quiet ones mature slowly behind an MG screen. Each position matures from scrape through fire trench, support line and redoubt to forward saps, with up to eight native MG/ATGM/MANPADS/23mm defenders (the ATGM team watches the nearest road) and infantry works. When enabled, matured pairs trade harassing mortar and artillery fire through vanilla shells. Damage suppresses growth; losses never respawn. The theater director counts observed fieldworks when sizing attacks. Native defenders, works and shells replicate; ditch curves replicate so clients carve the same meshes, wire and map marks locally.");
+            context.Logger.LogInfo("[Trenches] Combat fortifications ready: Command's front traces become owned-side trench curves sited on defensible relief, forest edges, clear of roads and off airfields, with beachheads dug one band landward and opposing mirror pairs facing each other across no-man's-land. Hot sectors dig fast and stand heavy, quiet ones mature slowly behind an MG screen. Each position matures from scrape through fire trench, support line and redoubt to forward saps, with up to eight native MG/ATGM/MANPADS/23mm defenders (the ATGM team watches the nearest road) and infantry works. Damage suppresses growth; losses never respawn. The theater director counts observed fieldworks when sizing attacks. Native defenders and works replicate; ditch curves replicate so clients carve the same meshes, wire and map marks locally.");
         }
     }
 }

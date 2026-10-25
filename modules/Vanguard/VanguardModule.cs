@@ -48,6 +48,7 @@ namespace BoscaliSummer.Modules.Vanguard
 
         public void Install(ModuleContext context)
         {
+            context.AddSceneService<VanguardPricing>(60);
             context.AddSceneService<Presentation.VanguardHudFeeds>(60);
             context.AddSceneService<AegisService>(60);
             context.AddSceneService<Networking.AegisNet>(60);

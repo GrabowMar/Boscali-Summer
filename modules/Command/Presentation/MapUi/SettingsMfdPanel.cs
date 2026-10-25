@@ -22,8 +22,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         // Page indices are per console (each console has its own ticker and page set).
-        // CExtra exists only when a module provides ISetExtras (Modes.cs); ClientPageNames stays the five built-in pages.
-        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4, CExtra = 5;
+        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4;
         private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
         private static readonly string[] ClientPageNames =
@@ -128,6 +127,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool mapOpen = DynamicMap.mapMaximized &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             bool visible = screen != null && screen.isActive && mapOpen;
+            if (!visible && maintenanceAction != MaintenanceAction.None) CancelMaintenance();
 
             // Vanilla's close path is authoritative for showing. This keeps the surface in
             // step with the screen's own state, so a close path that skips CloseScreen can no
@@ -149,7 +149,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? "Host controls are saved automatically."
                     : "Locked. These are the host's values for this server.";
             }
-            if (page == CPerf || page == CImmersion || page == CCockpit) return "Changes apply now. No mission or game restart.";
+            if (page == CPerf) return "Saved automatically. Maintenance shows any restart needed.";
+            if (page == CImmersion || page == CCockpit) return "Changes apply now. No mission or game restart.";
             return "Saved automatically. Hover a control for help.";
         }
 
@@ -247,7 +248,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             AvDisplayGlass.Configure(settings.DisplayEffects.Value, settings.DisplayGlass.Value,
                 settings.DisplayAutoLight.Value, settings.DisplayScanlines.Value,
-                settings.DisplayVignette.Value, settings.DisplayTint.Value, settings.DisplayTintStrength.Value);
+                settings.DisplayVignette.Value);
         }
 
         private void ApplyPending()
@@ -378,6 +379,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public void ResetForScene()
         {
+            maintenanceAction = MaintenanceAction.None;
+            maintenanceMessage = null;
+            maintenanceState = AvState.Inert;
+            refreshMaintenance = null;
             ReleaseClaim();
             if (root != null) Destroy(root);
             root = null;
@@ -402,6 +407,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         private void ReleaseClaim()
         {
+            maintenanceAction = MaintenanceAction.None;
+            refreshMaintenance = null;
             MfdBezel.Release(MfdSlots.Set);
             if (boundScreens != null && boundSlot >= 0 && boundSlot < boundScreens.Count &&
                 ReferenceEquals(boundScreens[boundSlot], screen)) boundScreens[boundSlot] = null;

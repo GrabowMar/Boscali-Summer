@@ -292,7 +292,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bodyWidth = Mathf.Max(0f, size.x - 24f);
             viewportHeight = feedHeight;
 
-            var scrollGo = new GameObject("EventScroll", typeof(RectTransform), typeof(Image), typeof(ScrollRect));
+            var scrollGo = new GameObject("EventScroll", typeof(RectTransform), typeof(Image), typeof(AvSmoothScroll));
             var scrollRect = scrollGo.GetComponent<RectTransform>();
             scrollRect.SetParent(panel, worldPositionStays: false);
             MfdChromeLay.Place(scrollRect,
@@ -334,7 +334,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             scroll.movementType = ScrollRect.MovementType.Clamped;
             scroll.inertia = true;
             scroll.decelerationRate = 0.12f;
-            scroll.scrollSensitivity = 28f;
+            scroll.scrollSensitivity = AvSmoothScroll.Step;
             scroll.verticalNormalizedPosition = 1f;
         }
 

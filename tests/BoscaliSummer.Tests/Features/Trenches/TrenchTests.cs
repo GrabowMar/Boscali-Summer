@@ -33,7 +33,6 @@ namespace BoscaliSummer.Tests.Features.Trenches
             TestBeltLadder();
             TestMirrorSpacing();
             TestPressureLife();
-            TestBarrageMath();
             TestAirfieldClear();
             TestFactionRotation();
         }
@@ -509,6 +508,10 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 "A hollow off the line is where the trench settles");
             TestAssert.That(Route((s, k) => k == 2 ? 3f : 0f)[1] != 2,
                 "A rise on the intended line is avoided instead of climbed");
+            int[] pulled = Route((s, k) => s == 1 ? (k == 4 ? -40f : 0f) : (k == 0 ? -40f : 0f));
+            bool stepped = true;
+            for (int s = 1; s < stations; s++) stepped &= Math.Abs(pulled[s] - pulled[s - 1]) <= TrenchTraceMath.MaximumLevelStep;
+            TestAssert.That(stepped, "Neighbouring stations move at most one depth level, never a square jog across the band");
 
             // An unbuildable station breaks the line instead of failing it whole; the
             // stretches on either side still get a level each.
@@ -777,45 +780,6 @@ namespace BoscaliSummer.Tests.Features.Trenches
                 TrenchTraceMath.MaxDefendersForPressure(1f) == 8 &&
                 TrenchTraceMath.MaxDefendersForPressure(float.NaN) == 4,
                 "Quiet lines hold four MGs, warm lines six, only hot lines the full eight");
-        }
-
-        /// <summary>
-        /// Harassing bombardment: mortars work close pairs with single shells, guns work
-        /// distant pairs with salvos, every round lands on the no-man's-land midpoint
-        /// plus a bounded miss, and hot sectors shoot first and often.
-        /// </summary>
-        private static void TestBarrageMath()
-        {
-            TestAssert.That(TrenchTraceMath.InBarrageRange(160f) && TrenchTraceMath.InBarrageRange(2500f) &&
-                !TrenchTraceMath.InBarrageRange(2501f) && !TrenchTraceMath.InBarrageRange(0f),
-                "Pairs shell each other out to 2500m, never past it or on top of themselves");
-            TestAssert.That(TrenchTraceMath.BarrageRounds(799f) == 1 && TrenchTraceMath.BarrageRounds(800f) == 3,
-                "Close pairs draw single mortar shells, distant pairs three-round salvos");
-            TestAssert.That(Near(TrenchTraceMath.BarrageScatter(799f), 60f) &&
-                Near(TrenchTraceMath.BarrageScatter(800f), 150f),
-                "Mortars miss by 60m, guns by 150m");
-            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 0f, 0f, 60f, out float x, out float z);
-            TestAssert.That(Near(x, 100f) && Near(z, 0f), "A zero miss lands on the midpoint");
-            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 1f, -1f, 60f, out x, out z);
-            TestAssert.That(Near(x, 160f) && Near(z, -60f), "A full miss walks the shell 60m off the midpoint");
-            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 5f, 0f, 60f, out x, out z);
-            TestAssert.That(Near(x, 160f), "The miss is clamped to the scatter box");
-            TrenchTraceMath.BarrageAim(0f, 0f, 200f, 0f, 1f, 1f, 0f, out x, out z);
-            TestAssert.That(Near(x, 100f) && Near(z, 0f), "Zero scatter ignores the miss");
-            TestAssert.That(Near(TrenchTraceMath.BarrageDelay(60f, 240f, 1f, 0f), 30f) &&
-                Near(TrenchTraceMath.BarrageDelay(60f, 240f, 0f, 1f), 312f),
-                "A hot line can re-fire in 30s, a quiet one waits up to 312s");
-            TestAssert.That(TrenchTraceMath.BarrageDelay(60f, 240f, 0f, 0.5f) > TrenchTraceMath.BarrageDelay(60f, 240f, 1f, 0.5f),
-                "Pressure quickens the guns at the same draw");
-            TestAssert.That(TrenchTraceMath.BarrageDelay(240f, 60f, 0f, 0f) >= 5f,
-                "A swapped window still yields a sane delay");
-            TestAssert.That(Near(TrenchTraceMath.BarrageDelay(5f, 5f, 1f, 0f), 5f) &&
-                TrenchTraceMath.BarrageDelay(15f, 30f, 1f, 0f) >= 5f,
-                "Pressure quickening never collapses a mission delay below the 5s floor");
-            TestAssert.That(TrenchTraceMath.BarrageDelay(float.NaN, float.NaN, float.NaN, float.NaN) >= 5f &&
-                !float.IsNaN(TrenchTraceMath.BarrageDelay(float.NaN, float.NaN, float.NaN, float.NaN)) &&
-                Near(TrenchTraceMath.BarrageDelay(-10f, -20f, 1f, 0f), 5f),
-                "Corrupt delay inputs fail closed to the floor instead of a NaN that fires every tick");
         }
 
         /// <summary>

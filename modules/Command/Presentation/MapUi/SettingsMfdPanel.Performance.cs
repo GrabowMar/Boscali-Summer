@@ -79,6 +79,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Row(blurCell, fxSeg);
             flow.Ticker.Add(page, AvTickRate.Slow, () => { fxSeg.Refresh(); blurCell.Refresh(); });
 
+            BuildMaintenance(flow, page);
+
             // Live frame time: three dials and a trace that grows to fill the page, so the effect of every
             // switch above can be watched here. Sampled while this page shows, four times a second.
             flow.Section(AvIcon.Activity, "FRAME TIME", "LIVE");

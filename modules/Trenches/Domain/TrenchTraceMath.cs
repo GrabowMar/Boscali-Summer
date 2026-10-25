@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         public const float DepthSearchStep = 12f;
         public const int DepthSearchLevels = 5;
         public const float DepthStayWeight = 0.045f;
-        public const float UndulationWeight = 6f;
+        public const float UndulationWeight = 1f;   // was 6: it outweighed every siting term, so a line crossing a slope climbed sideways to stay level and sawtoothed (issue 26)
         public const float SapDepth = 45f;
         public const float SapLateralFraction = 0.3f;
         public const int MaximumLinkTraces = 3;
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         public const float MinimumGroundHeight = 2f;
         public const float MinimumNormalY = 0.97f;
         public const float ConstructionSuppressionSeconds = 60f;
-        // A hit that kills nothing pauses digging briefly: harassing fire nicked some nest every
+        // A hit that kills nothing pauses digging briefly: stray fire nicked some nest every
         // minute on a hot front, so the full pause on every hit kept the hottest lines from ever
         // growing, the opposite of pressure pacing. A lost defender still pauses the full minute.
         public const float HitSuppressionSeconds = 20f;
@@ -668,6 +668,18 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             if (count < steps.Length) steps[count++] = step;
         }
 
+        /// <summary>
+        /// Depth levels a route may move between neighbouring stations, and what each level costs. Levels
+        /// are <see cref="DepthSearchStep"/> (12m) apart and stations ~10m, so an unbounded switch jumped the
+        /// ditch up to 48m sideways in one station: the square jogs of issue 26.
+        /// </summary>
+        public const int MaximumLevelStep = 1;
+        public const float LevelChangeCost = 3f;
+
+        /// <summary>True where two routed neighbours sit more than a step apart (a restarted stretch): the run breaks there.</summary>
+        public static bool LevelJump(int previous, int current)
+            => previous >= 0 && current >= 0 && Math.Abs(current - previous) > MaximumLevelStep;
+
         public static bool PlanRoute(float[,] groundHeight, float[,] positionCost, int stations,
             float undulationWeight, int[] route)
         {
@@ -697,17 +709,26 @@ namespace BoscaliSummer.Modules.Trenches.Domain
                     cumulative[s, k] = float.PositiveInfinity;
                     back[s, k] = -1;
                     if (!RouteValid(groundHeight, positionCost, s, k)) continue;
-                    for (int j = 0; j < candidates; j++)
+                    for (int j = Math.Max(0, k - MaximumLevelStep); j <= Math.Min(candidates - 1, k + MaximumLevelStep); j++)
                     {
                         float prefix = cumulative[s - 1, j];
                         if (float.IsPositiveInfinity(prefix)) continue;
                         float cost = prefix + positionCost[s, k] +
-                            undulationWeight * Math.Abs(groundHeight[s, k] - groundHeight[s - 1, j]);
+                            undulationWeight * Math.Abs(groundHeight[s, k] - groundHeight[s - 1, j]) +
+                            LevelChangeCost * Math.Abs(k - j);
                         if (cost >= cumulative[s, k]) continue;
                         cumulative[s, k] = cost;
                         back[s, k] = j;
                     }
                 }
+                // No level of this station is reachable within a step of the last: start a new
+                // stretch here rather than lose the rest of the window. The caller splits the run
+                // where neighbours sit more than a step apart (LevelJump).
+                bool reached = false;
+                for (int k = 0; k < candidates && !reached; k++) reached = !float.IsPositiveInfinity(cumulative[s, k]);
+                if (!reached)
+                    for (int k = 0; k < candidates; k++)
+                        if (RouteValid(groundHeight, positionCost, s, k)) cumulative[s, k] = positionCost[s, k];
             }
 
             for (int s = 0; s < stations; s++) route[s] = -1;
@@ -913,66 +934,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         {
             float p = float.IsNaN(pressure) ? 0f : Math.Clamp(pressure, 0f, 1f);
             return p < 0.3f ? 4 : p < 0.6f ? 6 : 8;
-        }
-
-        // Harassing bombardment between opposing lines. Mortars work close pairs with
-        // single shells, guns work distant pairs with three-round salvos, and every
-        // round aims at no-man's-land with a radial miss: the wire gets churned, the
-        // ditch only catches the odd short round, and the payoff is suppression — the
-        // historical creeping barrage worked the same way.
-        public const float BarragePairRange = 2500f;
-        public const float MortarPairDistance = 800f;
-        public const float MortarScatter = 60f;
-        public const float ArtilleryScatter = 150f;
-        public const int MortarRounds = 1;
-        public const int ArtilleryRounds = 3;
-        public const int BarrageInflightCeiling = 4;
-
-        public static bool InBarrageRange(float distance)
-            => distance > 1f && distance <= BarragePairRange;
-
-        public static int BarrageRounds(float pairDistance)
-            => pairDistance < MortarPairDistance ? MortarRounds : ArtilleryRounds;
-
-        public static float BarrageScatter(float pairDistance)
-            => pairDistance < MortarPairDistance ? MortarScatter : ArtilleryScatter;
-
-        /// <summary>
-        /// Aim point of one shell: the no-man's-land midpoint of the two centres plus
-        /// a square miss of <paramref name="scatter"/> metres. <paramref name="ux"/> and
-        /// <paramref name="uz"/> are unit offsets (-1..1, clamped); zero scatter lands
-        /// exactly on the midpoint.
-        /// </summary>
-        public static void BarrageAim(float ownX, float ownZ, float enemyX, float enemyZ,
-            float ux, float uz, float scatter, out float x, out float z)
-        {
-            float mx = (ownX + enemyX) * 0.5f;
-            float mz = (ownZ + enemyZ) * 0.5f;
-            if (!(scatter > 0f))
-            {
-                x = mx;
-                z = mz;
-                return;
-            }
-            x = mx + Math.Clamp(ux, -1f, 1f) * scatter;
-            z = mz + Math.Clamp(uz, -1f, 1f) * scatter;
-        }
-
-        /// <summary>
-        /// Seconds until a position's next fire mission: a uniform draw from the
-        /// configured window, quickened by pressure so hot sectors shoot often and
-        /// quiet ones only occasionally. Corrupt inputs fail closed to the 5s floor
-        /// instead of a NaN that would fire every tick.
-        /// </summary>
-        public static float BarrageDelay(float minSeconds, float maxSeconds, float pressure, float unit)
-        {
-            float lo = Math.Max(5f, Math.Min(minSeconds, maxSeconds));
-            float hi = Math.Max(lo, Math.Max(minSeconds, maxSeconds));
-            if (!(lo >= 5f)) lo = 5f;
-            if (!(hi >= lo)) hi = lo;
-            float p = float.IsNaN(pressure) ? 0f : Math.Clamp(pressure, 0f, 1f);
-            float u = float.IsNaN(unit) ? 0.5f : Math.Clamp(unit, 0f, 1f);
-            return Math.Max(5f, (lo + (hi - lo) * u) * (1.3f - 0.8f * p));
         }
 
         // Runways are never dug: ground inside the clear radius of any airbase centre
