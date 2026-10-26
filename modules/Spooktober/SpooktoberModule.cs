@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Spooktober
             context.AddSceneService<RadGhostWatcher>(74); // the rad look on the kaiju and the ace (every peer, local)
             context.AddSceneService<FallenAceDirector>(75);
             // Last: SET builds its PILOT console against this (puzzles, then the SPOOKTOBER tab). The kaiju card reads whether the kaiju service exists.
+            context.AddService<IFallenAce>(new SpookAce());
             context.AddService<ISetExtras>(new SpookSetExtras(() => ModuleServices.TryGet(out IKaijuBoss _)));
             context.Logger.LogInfo("[Spooktober] Ready.");
         }

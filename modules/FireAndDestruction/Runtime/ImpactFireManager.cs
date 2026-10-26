@@ -16,7 +16,7 @@ using UnityEngine.Rendering;
 
 namespace BoscaliSummer.Fire
 {
-    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService, IFireSuppressionService, IFoliageCover
+    internal sealed class ImpactFireManager : MonoBehaviour, ISceneService, IFireSuppressionService, IFoliageCover, IFireStarter
     {
         private struct ImpactEvent
         {
@@ -199,6 +199,23 @@ namespace BoscaliSummer.Fire
                 Explosive = explosive,
                 Salt = salt
             });
+        }
+
+        /// <summary>ARES's FIRE: a site at the ground under <paramref name="at"/>, no ignition roll and no cell cooldown. A building
+        /// there burns as that building (fire on its roof), forest as a fire front, open ground as a plain site.</summary>
+        bool IFireStarter.Ignite(GlobalPosition at)
+        {
+            if (!Fire.FiresEnabled.Value || !GameAccess.IsServer() || fires.Count >= Fire.MaxActiveFires) return false;
+            Vector3 local = at.ToLocalPosition();
+            var origin = new Vector3(local.x, Mathf.Max(local.y, Datum.LocalSeaY) + 3000f, local.z);
+            if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 8000f, PhysicsLayers.StaticsMask)) local = hit.point;
+            if (local.y < Datum.LocalSeaY + 0.5f) return false;
+            FindBuildings(local, out Building networkBuilding, out MapBuilding mapBuilding);
+            GlobalPosition anchor = local.ToGlobalPosition();
+            bool forest = networkBuilding == null && mapBuilding == null && forestIndex.Contains(anchor);
+            if (!forest && (networkBuilding != null || mapBuilding != null)) anchor = SnapBuildingFireToRoof(anchor, networkBuilding, mapBuilding);
+            Ignite(anchor, Time.timeSinceLevelLoad, forest, 0, true, networkBuilding, mapBuilding);
+            return true;
         }
 
         internal void SubmitVehicleExplosion(GlobalPosition position, int instanceId)

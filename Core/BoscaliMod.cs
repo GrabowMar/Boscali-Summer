@@ -171,6 +171,7 @@ namespace BoscaliSummer.Core
             if (settings.Trenches.Enabled.Value) modules.Add(new TrenchesModule());
             if (settings.Kaiju.Enabled.Value) modules.Add(new BoscaliSummer.Modules.Kaiju.KaijuModule());
             if (settings.Spooktober.Enabled.Value) modules.Add(new BoscaliSummer.Modules.Spooktober.SpooktoberModule());
+            if (settings.Ares.Enabled.Value) modules.Add(new BoscaliSummer.Modules.Ares.AresModule());
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());

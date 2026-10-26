@@ -36,6 +36,7 @@ namespace BoscaliSummer.Modules.FireAndDestruction
             context.AddSceneService<ModNet>(100);
             context.AddService<IFireSuppressionService>(fires);
             context.AddService<IFoliageCover>(fires);
+            context.AddService<IFireStarter>(fires);
 
             context.AddHostSettings(new HostSettingsTable("FIRE AND DESTRUCTION", HostSettingsPage.Effects)
                 .Toggle(1, context.Settings.FireAndDestruction.FiresEnabled, "FIRE IGNITION",

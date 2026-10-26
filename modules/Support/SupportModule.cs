@@ -64,6 +64,7 @@ namespace BoscaliSummer.Modules.Support
             context.AddService<ICameraTargetService>(manager);
             context.AddService<ITheaterStrikePicture>(manager);
             context.AddService<IGroundForceReadiness>(manager);
+            context.AddService<ISupportCast>(manager);
             calls.Configure(manager, context.Settings.Support, observations);
             manager.AttachCalls(calls);
             hudLine.Configure(manager, calls);

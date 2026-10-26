@@ -13,18 +13,21 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// MISC, the last key on the rail: the drawer for everything that is not a cockpit system. CHEATS and DEBUG drive the [Debug]
-    /// config entries and are compiled out of the public build; a module may add one tab of its own (<see cref="ISetExtras"/>,
-    /// Spooktober), which shows only while it says so. With nothing to show, the console sits on an empty STANDBY page.
+    /// MISC, the last key on the rail: the drawer for everything that is not a cockpit system. A module may add tabs first
+    /// (<see cref="IMiscTabs"/>: ARES's SPAWN, UNITS, POWERS and CHEATS); DEBUG drives the [Debug] config entries. Both stay locked
+    /// behind the DEV ACCESS page until the player accepts the cheating warning (<see cref="DevAccess"/>, this session only).
+    /// Spooktober adds one tab (<see cref="ISetExtras"/>) that shows only while it says so.
     /// </summary>
     internal sealed class MiscMfdPanel : MonoBehaviour, ISceneService
     {
-        private const int Standby = 0;
+        private const int Standby = 0, Gate = 1;
 
         private readonly MfdPanelInstaller installer =
             new MfdPanelInstaller(MfdSlots.Misc, "MISC", "BoscaliMisc.Screen", preferLeft: false) { Host = true };
         private ModConfiguration settings;
-        private AvConsole console;
+#if !PUBLIC_RELEASE
+        private AvConsole console; // the dev automation hook reads it
+#endif
         private AvTabBar bar;
         private List<(AvIcon icon, string label)> tabs;
 
@@ -43,7 +46,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public void ResetForScene()
         {
             installer.Reset();
+#if !PUBLIC_RELEASE
             console = null;
+#endif
             bar = null;
             tabs = null;
         }
@@ -58,16 +63,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private RectTransform BuildScreen(RectTransform host, float height)
         {
             ModuleServices.TryGet(out ISetExtras extras);
-            var titles = new List<string> { "MISC · STANDBY" };
-            tabs = new List<(AvIcon icon, string label)> { (AvIcon.Stack2, "STANDBY") };
-#if !PUBLIC_RELEASE
-            int cheats = titles.Count;
-            titles.Add("MISC · CHEATS");
-            tabs.Add((AvIcon.Bolt, "CHEATS"));
+            ModuleServices.TryGet(out IMiscTabs added);
+            var titles = new List<string> { "MISC · STANDBY", "MISC · DEV ACCESS" };
+            tabs = new List<(AvIcon icon, string label)> { (AvIcon.Stack2, "STANDBY"), (AvIcon.AlertTriangle, "DEV ACCESS") };
+            int firstAdded = titles.Count;
+            for (int i = 0; added != null && i < added.Count; i++)
+            {
+                titles.Add(added.Title(i));
+                tabs.Add((added.Icon(i), added.Label(i)));
+            }
             int debug = titles.Count;
             titles.Add("MISC · DEBUG");
             tabs.Add((AvIcon.Terminal, "DEBUG"));
-#endif
             int extra = -1;
             if (extras != null)
             {
@@ -78,28 +85,46 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             AvConsole c = AvConsole.Build(host, MfdSlots.Misc, titles[0], titles.Count, AvTokens.PanelWidth, height);
             c.PageChanged += index => c.SetTitle(titles[index]);
+#if !PUBLIC_RELEASE
             console = c;
+#endif
             bar = c.Tabs(tabs.ToArray());
             bar.SetShown(Standby, false);
 
             BuildStandby(c, c.Page(Standby));
-#if !PUBLIC_RELEASE
-            BuildCheats(c, c.Page(cheats), cheats);
+            BuildGate(c, c.Page(Gate));
+            if (added != null)
+            {
+                var hints = new string[tabs.Count];
+                for (int i = 0; i < added.Count; i++)
+                {
+                    added.Build(i, firstAdded + i, c.Page(firstAdded + i), c);
+                    hints[firstAdded + i] = added.Help(i);
+                }
+                AvControl[] tabControls = bar.Rect.GetComponentsInChildren<AvControl>(true);
+                for (int i = 0; i < tabControls.Length && i < hints.Length; i++)
+                    if (hints[i] != null) tabControls[i].Help = hints[i];
+            }
             BuildDebug(c, c.Page(debug), debug);
-#endif
             if (extras != null) extras.BuildExtraPage(extra, c.Page(extra), c);
 
             // STANDBY is only the fallback: the console sits on the first tab it shows, and leaves a tab that hides while open.
+            // DEV ACCESS shows until the warning is accepted; ARES and DEBUG show only after it.
             Action sync = () =>
             {
+                bool granted = DevAccess.Granted;
                 bool spook = extra >= 0 && extras.ExtraTabShown;
+                bool Shown(int tab) => tab == Gate ? !granted : tab >= firstAdded && tab <= debug ? granted : tab != extra || spook;
+                bar.SetShown(Gate, !granted);
+                for (int i = firstAdded; i <= debug; i++) bar.SetShown(i, granted);
                 if (extra >= 0) bar.SetShown(extra, spook);
                 int first = Standby;
                 for (int i = 1; i < titles.Count && first == Standby; i++)
-                    if (i != extra || spook) first = i;
+                    if (Shown(i)) first = i;
                 int page = c.CurrentPage;
-                if (page < 0 || page == Standby || (page == extra && !spook)) { if (page != first) c.SetPage(first); }
-                c.Footer.Set(c.CurrentPage == Standby ? "Nothing assigned." : "Applies now. Saved with the game's config.", AvState.Inert);
+                if (page < 0 || page == Standby || !Shown(page)) { if (page != first) c.SetPage(first); }
+                if (c.CurrentPage == Gate) c.Footer.Set("Developer tools are locked until you accept.", AvState.Caution);
+                else c.Footer.Set(c.CurrentPage == Standby ? "Nothing assigned." : "Applies now. Saved with the game's config.", AvState.Inert);
             };
             c.Ticker.Add(-1, AvTickRate.Slow, sync);
             c.Finish();
@@ -133,45 +158,33 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Some pages here are earned, not issued.");
         }
 
-#if !PUBLIC_RELEASE
-        private void BuildCheats(AvConsole c, AvFlow flow, int page)
+        /// <summary>
+        /// The cheating warning. ARES (spawn, units, powers, cheats) and DEBUG stay hidden until ACCEPT; DENY keeps them locked.
+        /// Accepting lasts until the game closes and is never written to the config.
+        /// </summary>
+        private void BuildGate(AvConsole c, AvFlow flow)
         {
-            flow.Section(AvIcon.Bolt, "CHEATS", "TESTING AIDS");
-            AvCellGrid grid = flow.Grid(2);
-            Toggle(flow, grid, page, "BYPASS REQS", settings.Diagnostics.BypassRequirements);
-            Toggle(flow, grid, page, "NO OPS COOLDOWN", settings.Diagnostics.DisableOpsCooldowns);
-
-            var squad = settings.Squad;
-            flow.Section(AvIcon.Skull, "HUNTING WING", "HOST ONLY");
-            ConfigEntry<int> tier = squad.DebugWingTier;
-            var tierRow = new AvRow(flow.Content);
-            AvControl minus = tierRow.AddTrailing(new AvControl.Spec("", () => tier.Value = Mathf.Max(1, tier.Value - 1), AvButtonStyle.Quiet, AvIcon.Minus));
-            AvControl plus = tierRow.AddTrailing(new AvControl.Spec("", () => tier.Value = Mathf.Min(5, tier.Value + 1), AvButtonStyle.Quiet, AvIcon.Plus));
-            tierRow.Help = tier.Description.Description;
-            flow.Add(tierRow);
-            var result = new AvNote(flow.Content, "Host only. Fly an aircraft in a running mission.");
-            AvButtons actions = flow.Buttons(
-                new AvControl.Spec("SPAWN", () => result.Set(squad.SpawnDebugWing?.Invoke(tier.Value) ?? "", AvState.Info), AvButtonStyle.Primary, AvIcon.Skull),
-                new AvControl.Spec("CLEAR MINE", () => result.Set(squad.ClearDebugWings?.Invoke() ?? "", AvState.Info), AvButtonStyle.Quiet, AvIcon.Trash));
-            flow.Add(result);
-            void Refresh()
-            {
-                tierRow.Set("TIER", tier.Value <= 2 ? "Two aircraft" : tier.Value <= 4 ? "Three aircraft" : "Four aircraft",
-                    tier.Value + "/5", AvState.Info);
-                minus.Interactable = tier.Value > 1;
-                plus.Interactable = tier.Value < 5;
-                bool installed = squad.SpawnDebugWing != null;
-                actions.Controls[0].Interactable = installed;
-                actions.Controls[1].Interactable = squad.ClearDebugWings != null;
-                if (!installed) result.Set("Enable Progression and restart to install Squad.", AvState.Caution);
-            }
-            Refresh();
-            flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
-
-            c.Orders(page,
-                "Testing aids, never in a public build.",
-                "On a server only the host's BYPASS and COOLDOWN count.",
-                "A new hunting wing replaces your previous debug wings.");
+            flow.Section(AvIcon.AlertTriangle, "DEVELOPER TOOLS", "TESTING ONLY");
+            AvNote note = flow.Add(new AvNote(flow.Content));
+            AvNote detail = flow.Add(new AvNote(flow.Content, AvTextRole.ProseSmall));
+            const string warning = "WARNING: THIS IS CHEATING. ARES and DEBUG change the world, the rules and your config. " +
+                "Using them outside testing breaks the game for everyone who shares your session.";
+            note.Set(warning, AvState.Danger);
+            detail.Set("ARES: spawn units, take control, strikes, weather, god mode, infinite fuel and ammo. DEBUG: logging and developer tools. " +
+                "Host only. Accepting lasts until the game closes; nothing is saved.", AvState.Info);
+            AvButtons answer = flow.Buttons(
+                new AvControl.Spec("ACCEPT", () =>
+                {
+                    DevAccess.Accept();
+                    installer.Log?.LogWarning("MISC: developer tools unlocked for this session (the player accepted the cheating warning).");
+                }, AvButtonStyle.Danger),
+                new AvControl.Spec("DENY", () =>
+                {
+                    note.Set("ACCESS DENIED. ARES and DEBUG stay locked. Press ACCEPT only if you are testing.", AvState.Caution);
+                }, AvButtonStyle.Quiet));
+            answer.Controls[0].Help = "I understand this is cheating outside testing. Unlock ARES and DEBUG until the game closes.";
+            answer.Controls[1].Help = "Keep the developer tools locked.";
+            c.Orders(Gate, warning, "Pressing ACCEPT unlocks them until the game closes.");
         }
 
         private void BuildDebug(AvConsole c, AvFlow flow, int page)
@@ -208,6 +221,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
-#endif
     }
 }

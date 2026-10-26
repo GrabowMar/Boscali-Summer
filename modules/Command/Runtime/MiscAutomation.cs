@@ -1,5 +1,6 @@
 #if !PUBLIC_RELEASE
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
 using TMPro;
@@ -10,7 +11,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Hook for the unattended MISC check: <c>Open {tab}</c> maximises the map, presses the MISC rail key's bezel button (the click path) and
-    /// shows the tab with that label; <c>Read</c> reports where the key sits on the rail, which tabs show, the title and the page text. Dev tooling.
+    /// shows the tab with that label (<c>accept</c> first answers the DEV ACCESS warning with ACCEPT); <c>Read</c> reports where the key sits on the rail, which tabs show, the title and the page text. Dev tooling.
     /// </summary>
     public static class MiscAutomation
     {
@@ -22,6 +23,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (map != null && !DynamicMap.mapMaximized) map.Maximize();
             MfdRailKey key = Key();
             if (key != null && key.Screen != null && !key.Screen.isActive) key.Source.onClick.Invoke();
+            if (Bool(args, "accept")) DevAccess.Accept(); // the player's ACCEPT on the DEV ACCESS page, for the unattended check
             string tab = Text(args, "tab");
             AvConsole console = panel.ConsoleForAutomation;
             int index = tab == null ? -1 : panel.TabIndexForAutomation(tab);

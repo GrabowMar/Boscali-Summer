@@ -50,6 +50,7 @@ namespace BoscaliSummer.Core.Config
         public TrenchesSettings Trenches { get; }
         public KaijuSettings Kaiju { get; }
         public BoscaliSummer.Modules.Spooktober.Configuration.SpooktoberSettings Spooktober { get; }
+        public BoscaliSummer.Modules.Ares.Configuration.AresSettings Ares { get; }
         public EventsSettings Events { get; }
         public CommsSettings Comms { get; }
         public QoLSettings QoL { get; }
@@ -93,6 +94,7 @@ namespace BoscaliSummer.Core.Config
                 Trenches = new TrenchesSettings(config);
                 Kaiju = new KaijuSettings(config);
                 Spooktober = new BoscaliSummer.Modules.Spooktober.Configuration.SpooktoberSettings(config);
+                Ares = new BoscaliSummer.Modules.Ares.Configuration.AresSettings(config);
                 Events = new EventsSettings(config);
                 Comms = new CommsSettings(config);
                 QoL = new QoLSettings(config);

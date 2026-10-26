@@ -32,7 +32,15 @@
     {
       "op": "call",
       "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
-      "args": { "tab": "CHEATS" },
+      "args": { "tab": "DEV ACCESS" },
+      "store": "gate"
+    },
+    { "op": "wait", "seconds": 2 },
+    { "op": "capture", "name": "misc_gate" },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
+      "args": { "tab": "CHEATS", "accept": true },
       "store": "cheats"
     },
     { "op": "wait", "seconds": 2 },
@@ -76,14 +84,16 @@
     { "op": "end" }
   ],
   "checks": [
+    { "check": "result_equals", "path": "gate.tabs", "value": "DEV ACCESS" },
+    { "check": "result_equals", "path": "gate.page", "value": 1 },
     { "check": "result_equals", "path": "cheats.railLast", "value": true },
     { "check": "result_equals", "path": "cheats.screenActive", "value": true },
-    { "check": "result_equals", "path": "cheats.tabs", "value": "CHEATS,DEBUG" },
-    { "check": "result_equals", "path": "debug.page", "value": 2 },
-    { "check": "result_equals", "path": "spook.tabs", "value": "CHEATS,DEBUG,SPOOKTOBER" },
-    { "check": "result_equals", "path": "spook.page", "value": 3 },
-    { "check": "result_equals", "path": "after.tabs", "value": "CHEATS,DEBUG" },
-    { "check": "result_equals", "path": "after.page", "value": 1 },
+    { "check": "result_equals", "path": "cheats.tabs", "value": "SPAWN,UNITS,POWERS,CHEATS,DEBUG" },
+    { "check": "result_equals", "path": "debug.page", "value": 6 },
+    { "check": "result_equals", "path": "spook.tabs", "value": "SPAWN,UNITS,POWERS,CHEATS,DEBUG,SPOOKTOBER" },
+    { "check": "result_equals", "path": "spook.page", "value": 7 },
+    { "check": "result_equals", "path": "after.tabs", "value": "SPAWN,UNITS,POWERS,CHEATS,DEBUG" },
+    { "check": "result_equals", "path": "after.page", "value": 2 },
     { "check": "log_match", "pattern": "MISC MFD installed", "min": 1 },
     { "check": "log_match", "pattern": "Boscali Summer\\].*Exception", "max": 0 }
   ]

@@ -154,6 +154,7 @@
     <Compile Include="..\..\modules\Trenches\Domain\TrenchWire.cs" Link="Features\Trenches\TrenchWire.cs" />
     <Compile Include="..\..\modules\Kaiju\Domain\*.cs" LinkBase="Features\Kaiju" />
     <Compile Include="..\..\modules\Spooktober\Domain\*.cs" LinkBase="Features\Spooktober" />
+    <Compile Include="..\..\modules\Ares\Domain\*.cs" LinkBase="Features\Ares" />
     <Compile Include="..\..\Core\Modules\ModuleMetadata.cs" Link="Framework\FeatureMetadata.cs" />
     <Compile Include="..\..\Core\Modules\ModuleGraph.cs" Link="Framework\FeatureGraph.cs" />
     <Compile Include="..\..\Core\Game\MissionProfile.cs" Link="Framework\MissionProfile.cs" />

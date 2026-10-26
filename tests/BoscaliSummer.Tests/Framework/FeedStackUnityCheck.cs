@@ -23,10 +23,31 @@ public static class FeedStackUnityCheck
         try
         {
             ReproduceNativeFaults();
+            Type recovery = Feed.Assembly.GetType("BoscaliSummer.Core.Fx.FeedStackRecoveryPatch", true);
+            var harmony = new HarmonyLib.Harmony("boscali.feedstack.offline-check");
+            harmony.CreateClassProcessor(recovery).Patch();
+            RecoverDisposedCache();
             Cases();
             Finish("PASS: " + assertions + " assertions; disposed-cache control reproduces ReplaceData and CheckPostProcessForDepth NREs; fixed release preserves native volume update/depth checks before and after cache reuse. All feed grades, both destruction orders, repeated release, current/other stack, default-grade reset. Production DLL and game URP; synthetic cameras in offline edit mode.", true);
         }
         catch (Exception e) { Debug.LogException(e); Finish("FAIL: " + e, false); }
+    }
+
+    private static void RecoverDisposedCache()
+    {
+        VolumeManager manager = VolumeManager.instance;
+        Camera camera = NewTarget(out UniversalAdditionalCameraData data);
+        VolumeStack disposed = manager.CreateStack();
+        data.volumeStack = disposed;
+        disposed.Dispose();
+        Object.DestroyImmediate(camera.gameObject);
+        Camera target = NewTarget(out UniversalAdditionalCameraData targetData);
+        UpdateFramework.Invoke(null, new object[] { target, targetData });
+        Check(!ReferenceEquals(targetData.volumeStack, disposed), "recovery replaces a disposed cached stack");
+        Check(targetData.volumeStack.GetComponent<DepthOfField>() != null, "recovery creates valid post-processing components");
+        Check(!(bool)DepthCheck.Invoke(null, null), "native depth check survives recovered cache entry");
+        Object.DestroyImmediate(target.gameObject);
+        manager.ResetMainStack();
     }
 
     private static void ReproduceNativeFaults()
