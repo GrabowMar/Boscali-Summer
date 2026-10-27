@@ -1,12 +1,12 @@
-using BoscaliSummer.Modules.Kaiju.Domain;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Runtime
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
     /// Facts about the kaiju model (Kaiju.fbx, native scale, metres, model space = bind pose, +Z forward): the weak spots
     /// measured on the body surface in the Unity MCP editor, the capsule colliders, and the clip timings, which mirror
-    /// modules/Kaiju/Assets/Editor/KaijuAssetsBuilder.cs.
+    /// modules/Spooktober/Kaiju/Assets/Editor/KaijuAssetsBuilder.cs.
     /// </summary>
     internal static class KaijuRig
     {

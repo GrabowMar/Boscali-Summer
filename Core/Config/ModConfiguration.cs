@@ -17,7 +17,7 @@ using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Squad.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.Trenches.Configuration;
-using BoscaliSummer.Modules.Kaiju.Configuration;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Configuration;
 using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Wing.Configuration;

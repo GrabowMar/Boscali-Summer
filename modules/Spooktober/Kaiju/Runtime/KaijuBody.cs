@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
-using BoscaliSummer.Modules.Kaiju.Domain;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Runtime
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
     /// The kaiju as every peer sees it: the skinned, animated body under <c>Datum.origin</c> at 15x, solid capsule colliders

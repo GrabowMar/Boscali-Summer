@@ -186,7 +186,7 @@
       <LogicalName>BoscaliSummer.Fx.particles.bundle</LogicalName>
     </EmbeddedResource>
     <!-- Built by tools/Compile-KaijuAssets.ps1. Optional: without it the Kaiju summon reports the bundle missing. -->
-    <EmbeddedResource Include="modules\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Kaiju\Assets\kaiju.bundle')">
+    <EmbeddedResource Include="modules\Spooktober\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Spooktober\Kaiju\Assets\kaiju.bundle')">
       <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
     </EmbeddedResource>
     <!-- Built by tools/Compile-VanguardStoreArt.ps1. Optional: without it the runtime-built Vanguard stores keep their vanilla parts. -->

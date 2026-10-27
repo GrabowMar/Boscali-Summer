@@ -1,12 +1,12 @@
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
-using BoscaliSummer.Modules.Kaiju.Configuration;
-using BoscaliSummer.Modules.Kaiju.Domain;
-using BoscaliSummer.Modules.Kaiju.Networking;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Configuration;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Runtime
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
     /// One kaiju per mission. The host summons it (F1 button or the sim hook) in front of its own aircraft, runs the

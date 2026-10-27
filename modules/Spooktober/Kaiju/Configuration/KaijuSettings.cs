@@ -2,7 +2,7 @@ using System;
 using BepInEx.Configuration;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Configuration
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Configuration
 {
     internal sealed class KaijuSettings
     {

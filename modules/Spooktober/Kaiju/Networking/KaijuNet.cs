@@ -2,13 +2,13 @@ using System;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Net;
-using BoscaliSummer.Modules.Kaiju.Runtime;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Runtime;
 using Mirage;
 using Mirage.Serialization;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Networking
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Networking
 {
     [NetworkMessage]
     internal struct KaijuState

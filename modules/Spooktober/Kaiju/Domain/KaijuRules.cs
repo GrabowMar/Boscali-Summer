@@ -1,9 +1,9 @@
 using System;
 
-namespace BoscaliSummer.Modules.Kaiju.Domain
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Domain
 {
     /// <summary>What the kaiju is doing; every action but Rise has an animator state of the same name
-    /// (clips made by modules/Kaiju/Assets/Editor/KaijuAssetsBuilder.cs).</summary>
+    /// (clips made by modules/Spooktober/Kaiju/Assets/Editor/KaijuAssetsBuilder.cs).</summary>
     internal enum KaijuAction : byte { Rise, Walk, Idle, Roar, LaserCharge, LaserFire, Spike, SwipeL, SwipeR, Flinch, Death }
 
     internal enum Weakspot : byte { Throat, Eye, Sac, Shoulder, Elbow, Wrist, Knee, Ankle, Tail, Heart }

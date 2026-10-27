@@ -1,12 +1,12 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
-using BoscaliSummer.Modules.Kaiju.Configuration;
-using BoscaliSummer.Modules.Kaiju.Domain;
-using BoscaliSummer.Modules.Kaiju.Networking;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Configuration;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Runtime
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
     /// Host-only fight logic for one kaiju: rises out of the ground or sea, marches on the nearest airbase and turns on

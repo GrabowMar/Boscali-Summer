@@ -3,8 +3,8 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
-using BoscaliSummer.Modules.Kaiju.Domain;
-using BoscaliSummer.Modules.Kaiju.Runtime;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
+using BoscaliSummer.Modules.Spooktober.Kaiju.Runtime;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 

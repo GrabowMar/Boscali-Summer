@@ -6,7 +6,7 @@ using Mirage;
 using NuclearOption.Networking;
 using UnityEngine;
 
-namespace BoscaliSummer.Modules.Kaiju.Runtime
+namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
     /// The art (embedded kaiju.bundle, built by tools/Compile-KaijuAssets.ps1) and the hardpoint unit. A hardpoint is the
