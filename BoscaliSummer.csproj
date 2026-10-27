@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.9</Version>
+    <Version>0.2.10</Version>
     <DebugType>portable</DebugType>
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>

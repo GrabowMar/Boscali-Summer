@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.10 — update
 
 - **Combat adjustments** (new module, on by default; every rule has its own switch on SET SERVER, same rules for
   both sides): radars and aircraft still share what they see at once, but ground and ship lookouts report distant
