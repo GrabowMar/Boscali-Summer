@@ -140,17 +140,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return ladder[0];
         }
 
-        /// <summary>The first row of a <paramref name="shown"/>-row window over <paramref name="count"/> rows that keeps
-        /// <paramref name="focus"/> in view (a little below the top).</summary>
-        public static int Window(int count, int shown, int focus)
-        {
-            if (count <= shown || focus < 0) return 0;
-            int first = focus - 3;
-            if (first < 0) first = 0;
-            if (first > count - shown) first = count - shown;
-            return first;
-        }
-
         public static string AltitudeText(float m) =>
             float.IsNaN(m) ? "AUTO" : m.ToString("0", CultureInfo.InvariantCulture) + " m";
 

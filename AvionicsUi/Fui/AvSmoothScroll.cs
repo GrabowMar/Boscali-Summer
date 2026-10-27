@@ -14,8 +14,8 @@ namespace NOAvionics
         /// <summary>Pixels per wheel notch; one notch is roughly three rows of kit text.</summary>
         public const float Step = 56f;
 
-        // Exponential approach rate: ~90% of a step lands in 0.1 s.
-        private const float Sharpness = 22f;
+        // Exponential approach rate: ~90% of a step lands in 0.05 s.
+        private const float Sharpness = 22f * AvFxPacking.AnimationSpeed;
 
         private Vector2 target, written;
         private bool gliding;

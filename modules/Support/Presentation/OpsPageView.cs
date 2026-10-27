@@ -70,14 +70,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// <summary>Everything the OPS page paints. Built each refresh by <see cref="OpsPageViews"/> from the manager, the controller and the front mirror.</summary>
     internal sealed class OpsPageView
     {
-        public const int FavouriteSlots = 4;
 
         public int Allocation, PerksReady, PerksTotal, FrontsAhead, Alerts;
         public readonly FrontCardView[] Cards = new FrontCardView[FrontRules.FrontCount];
         public readonly List<PerkRowView> Perks = new List<PerkRowView>(24);
         /// <summary>Per front: <c>POWER ×1.25 · AHEAD</c>, the line the PERKS tab puts on each group header (empty before the host has spoken).</summary>
         public readonly string[] PowerLine = { "", "", "" };
-        public readonly CallTile?[] Favourites = new CallTile?[FavouriteSlots];
         public string Words = "";
         public AvState WordsTone = AvState.Ready;
         public bool Armed, Pending;
@@ -137,8 +135,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 c.Power = FrontSuperiority.PowerWord(row.Superiority);
                 v.PowerLine[i] = FrontSuperiority.PowerLine(row.Superiority);
                 c.Tone = row.Superiority >= 20 ? AvState.Ready : row.Superiority > -20 ? AvState.Info : row.Superiority > -60 ? AvState.Caution : AvState.Danger;
-                c.Directive = FrontRules.Name(row.Directive) + (row.DirectiveLockUntil > now
-                    ? Dot + "LOCK " + FrontRules.Clock(row.DirectiveLockUntil - now) + (string.IsNullOrEmpty(row.DirectiveBy) ? "" : " " + row.DirectiveBy) : "");
+                c.Directive = FrontRules.Name(row.Directive); // the lock and its holder live in the front window, where the posture is changed
                 if (row.Superiority >= 20) ahead++;
 
                 // The current blocker: unresolved conditions only, in a fixed priority (no link, a lost anchor still being rebuilt, enemy superiority).

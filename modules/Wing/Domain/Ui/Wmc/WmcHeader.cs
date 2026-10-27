@@ -140,18 +140,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return "THREAT " + (hostiles > 99 ? "99+" : N(hostiles)) + " AIR";
         }
 
-        /// <summary>The armed map order, else who runs the wing here.</summary>
-        public static string Mode(MapMode armed, bool client, out string state)
-        {
-            if (armed != MapMode.Off)
-            {
-                state = "warn";
-                return "ARMED " + MapOrders.Label(armed);
-            }
-            state = client ? "info" : "live";
-            return client ? "CLIENT" : "HOST";
-        }
-
         private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

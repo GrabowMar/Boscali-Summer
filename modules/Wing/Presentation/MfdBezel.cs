@@ -15,41 +15,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public static bool TryClaim(
             bool preferLeft, VirtualMFD mfd,
-            out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left)
-        {
-            buttons = null;
-            screens = null;
-            slot = -1;
-            left = preferLeft;
-            if (mfd == null || !CoreGameAccess.MfdAvailable) return false;
-
-            List<Button> leftButtons = CoreGameAccess.GetLeftMfdButtons(mfd);
-            List<Button> rightButtons = CoreGameAccess.GetRightMfdButtons(mfd);
-            List<MFDScreen> leftScreens = CoreGameAccess.GetLeftMfdScreens(mfd);
-            List<MFDScreen> rightScreens = CoreGameAccess.GetRightMfdScreens(mfd);
-
-            if (!BezelRegistry.TryClaim(
-                BezelRegistry.Wmc, preferLeft,
-                leftButtons == null ? 0 : leftButtons.Count,
-                rightButtons == null ? 0 : rightButtons.Count,
-                (isLeft, index) => CoreMfdBezel.IsFree(
-                    isLeft ? leftButtons : rightButtons,
-                    isLeft ? leftScreens : rightScreens, index),
-                out left, out slot))
-                return false;
-
-            buttons = left ? leftButtons : rightButtons;
-            screens = left ? leftScreens : rightScreens;
-            if (buttons != null && screens != null && CoreMfdBezel.IsFree(buttons, screens, slot))
-                return true;
-
-            BezelRegistry.Release(BezelRegistry.Wmc);
-            buttons = null;
-            screens = null;
-            slot = -1;
-            left = preferLeft;
-            return false;
-        }
+            out List<Button> buttons, out List<MFDScreen> screens, out int slot, out bool left) =>
+            CoreMfdBezel.TryClaim(BezelRegistry.Wmc, preferLeft, mfd, out buttons, out screens, out slot, out left);
 
         /// <summary>Bind <paramref name="screen"/> to the claimed slot. Returns false if another plugin
         /// took the slot in the same frame between the scan and here; the caller retries next second.</summary>

@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 return;
             }
             string second = link.Stores(out RemoraView stores)
-                ? "AAM " + RemoraArcher.Left(stores.Fired) + "/" + RemoraArcher.Rounds + " · FLR " + stores.Flares + " · " + Phase(stores.Phase)
+                ? "AAM " + RemoraBoard.Left(stores) + "/" + RemoraBoard.Capacity(stores.Drone) + " · FLR " + stores.Flares + " · " + Phase(stores.Phase)
                 : "SYS " + (v.Mode == DroneMode.Auto ? "ON TASK" : "HOLD");
             // The card's header already names the drone and its order: the small view keeps its corners empty.
             AvText.Set(topLeft, big ? "REC  " + v.Callsign + " · " + v.Job + "\n" + second : "");

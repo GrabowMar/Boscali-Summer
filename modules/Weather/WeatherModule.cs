@@ -71,6 +71,9 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "AURORA & SPRITES",
                 "Aurora on clear nights; red sprites and blue jets above distant night storms. Client-local; applies now.",
                 context.Settings.Weather.SkyPhenomenaEnabled, ClientPreset.Light);
+            context.AddClientSetting("SKY", "DARK NIGHTS",
+                "Darker, moonlit blue-grey nights: a new moon is truly dark, a full moon lights the ground. Client-local; applies now.",
+                context.Settings.Weather.DarkNightsEnabled);
             context.AddClientSetting("SEA", "OCEAN WAVES",
                 "Waves that follow the wind and build under storms, with whitecaps, gale streaks and surf. " +
                 "Off restores the game's own water. Client-local; applies now.",

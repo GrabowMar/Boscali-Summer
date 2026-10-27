@@ -56,6 +56,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 #pragma warning restore CS0649
         private Missile lensOn;
         private Quaternion lens = Quaternion.identity;
+        private Vector3 lensAt;
         private float nextSpi;
 
 #if !PUBLIC_RELEASE
@@ -197,10 +198,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         public void Strike() => net?.Strike();
         public void Screen() => net?.Screen();
+        public bool RamMode => net != null && net.RamMode;
+        public void ToggleRamMode() => net?.SetRamMode(!RamMode);
         public int Linkable => Count;
         public string Name(int index) => index >= 0 && index < Count ? views[index].Callsign : "";
         public string State(int index) => index >= 0 && index < Count ? views[index].State : "";
-        public bool HandFlying => Linked != null && Linked.Mode == DroneMode.Hand;
+        public bool Ordered => Linked != null && Linked.Mode != DroneMode.Auto;
         public bool FeedShown => feedShown;
 
         public void Link(int index)
@@ -218,20 +221,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             lostAt = -9f;
         }
 
-        public void Cycle(int step)
-        {
-            bool hand = HandFlying;
-            Link(DroneLink.Step(Count, LinkedIndex, step));
-            if (hand && Linked != null && Linked.Mode != DroneMode.Hand) Order(Linked, DroneMode.Hand, Hold(Linked)); // the stick follows the link
-        }
-
-        /// <summary>Hand control starts on the drone's own course and height: taking the stick never throws it into a turn.</summary>
-        public void ToggleHand()
-        {
-            if (Linked == null) Link(0);
-            DroneView v = Linked;
-            if (v != null) Order(v, v.Mode == DroneMode.Hand ? DroneMode.Auto : DroneMode.Hand, Hold(v));
-        }
+        /// <summary>Moves the link only: every drone keeps flying its own order (2026-10-26; the stick no longer follows the link).</summary>
+        public void Cycle(int step) => Link(DroneLink.Step(Count, LinkedIndex, step));
 
         private static Vector3 Hold(DroneView v) => DroneLink.HandPoint(v.HeadingDeg, v.AltM);
 
@@ -245,6 +236,17 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Order(v, DroneMode.Hand, DroneLink.SteerTo(dir, lens * Vector3.forward, v.Mode == DroneMode.Hand ? v.Point.y : v.AltM));
         }
 
+        /// <summary>Right-click on the feed: the linked drone flies to the ground under the click and circles it (WPT). False when the
+        /// click is on open sky.</summary>
+        public bool SteerGround(Vector2 viewport)
+        {
+            DroneView v = Linked;
+            if (v == null || v.Missile == null || lensOn != v.Missile) return false;
+            if (!Ground(lensAt, DroneLink.LookDirection(lens, FieldOfView, 16f / 9f, viewport), out Vector3 hit)) return false;
+            SendTo(hit.ToGlobalPosition().AsVector3());
+            return true;
+        }
+
         /// <summary>Raises (or lowers) the hand-flown drone's commanded height; takes hand control on the present course first.</summary>
         public void Climb(float metres)
         {
@@ -254,16 +256,27 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Order(v, DroneMode.Hand, DroneLink.HandPoint(p.x, p.y + metres));
         }
 
-        /// <summary>Turns the hand-flown drone (or takes hand control) by <paramref name="degrees"/>.</summary>
-        public void Turn(float degrees)
+        public void SendToLook()
         {
-            DroneView v = Linked;
-            if (v == null) return;
-            Vector3 p = v.Mode == DroneMode.Hand ? v.Point : Hold(v);
-            Order(v, DroneMode.Hand, DroneLink.HandPoint(p.x + degrees, p.y));
+            Camera cam = SceneSingleton<CameraStateManager>.i != null ? SceneSingleton<CameraStateManager>.i.mainCamera : Camera.main;
+            if (cam == null) return;
+            Vector3 from = cam.transform.position, dir = cam.transform.forward;
+            // Looking at the horizon finds no ground inside the link: send it that way instead, a full-link distance out.
+            if (!Ground(from, dir, out Vector3 hit))
+            {
+                Vector3 flat = new Vector3(dir.x, 0f, dir.z);
+                hit = from + (flat.sqrMagnitude > 1e-4f ? flat.normalized : Vector3.forward) * DroneLink.FullRangeM;
+            }
+            SendTo(hit.ToGlobalPosition().AsVector3());
         }
 
-        /// <summary>MATCH MY NOSE: the linked drone takes your heading and your height (the C-menu's way to steer it from the cockpit).</summary>
+        public void SendToTarget()
+        {
+            Unit target = net != null ? net.Target : null;
+            if (target != null) SendTo(target.GlobalPosition().AsVector3());
+        }
+
+        /// <summary>FLY MY HEADING: the linked drone takes your heading and your height (the C-menu's way to steer it from the cockpit).</summary>
         public void MatchNose()
         {
             if (Linked == null) Link(0);
@@ -291,6 +304,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         /// <summary>WPT for the linked drone at a ground point (x/z); it circles there at its present height.</summary>
         public void SendTo(Vector3 ground)
         {
+            if (Linked == null) Link(0);
             DroneView v = Linked;
             if (v == null) return;
             Order(v, DroneMode.Waypoint, new Vector3(ground.x, Mathf.Max(v.AltM, 300f), ground.z));
@@ -318,12 +332,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private void Order(DroneView v, DroneMode mode, Vector3 point)
         {
-            if (mode == DroneMode.Hand)
-            {
-                stale.Clear();
-                foreach (KeyValuePair<Missile, SteerOrders.Order> pair in mirror) if (pair.Value.Mode == DroneMode.Hand) stale.Add(pair.Key);
-                foreach (Missile m in stale) mirror.Remove(m);
-            }
             if (mode == DroneMode.Auto) mirror.Remove(v.Missile);
             else mirror[v.Missile] = new SteerOrders.Order { Mode = mode, Point = new GlobalPosition(point) };
             bool steer = mode == DroneMode.Hand && v.Mode == DroneMode.Hand; // a new course for a drone already in hand
@@ -368,7 +376,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private void LateUpdate()
         {
             DroneView v = Linked;
-            feedLive = v != null && v.Missile != null && !v.Missile.disabled && (Time.unscaledTime < wantedUntil || feedShown || HandFlying);
+            feedLive = v != null && v.Missile != null && !v.Missile.disabled && (Time.unscaledTime < wantedUntil || feedShown || v.Mode == DroneMode.Hand);
             if (!feedLive) { feed.Idle(); return; }
             Transform t = v.Missile.transform;
             // A stabilised sensor ball under the nose: it slews (a new link snaps), never rolls with the drone.
@@ -376,6 +384,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Quaternion want = Aim(v, t, at);
             lens = v.Missile != lensOn ? want : Quaternion.RotateTowards(lens, want, SlewDegPerSec * Time.deltaTime);
             lensOn = v.Missile;
+            lensAt = at;
             Vector3 look = lens * Vector3.forward;
             LensElevation = Mathf.Asin(Mathf.Clamp(look.y, -1f, 1f)) * Mathf.Rad2Deg;
             LensAzimuth = Mathf.DeltaAngle(DroneLink.Bearing(Vector3.zero, t.forward), DroneLink.Bearing(Vector3.zero, look));
@@ -417,14 +426,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             Unit mark = Tracking ? Mark : null;
             Vector3 hit;
-            float sea = look.y < -0.01f ? (at.y - Datum.LocalSeaY) / -look.y : float.MaxValue;
             if (mark != null) hit = mark.transform.position;
-            else if (Physics.Raycast(at, look, out RaycastHit ray, DroneLink.MaxRangeM, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)) hit = ray.point;
-            else if (sea < DroneLink.MaxRangeM) hit = at + look * sea;
-            else { HasSpi = false; return; }
+            else if (!Ground(at, look, out hit)) { HasSpi = false; return; }
             HasSpi = true;
             SpiSlantM = Vector3.Distance(at, hit);
             SpiGlobal = hit.ToGlobalPosition().AsVector3();
+        }
+
+        // The first terrain or the sea along a ray (local space), inside the link limit.
+        private static bool Ground(Vector3 from, Vector3 dir, out Vector3 hit)
+        {
+            if (Physics.Raycast(from, dir, out RaycastHit ray, DroneLink.MaxRangeM, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)) { hit = ray.point; return true; }
+            float sea = dir.y < -0.01f ? (from.y - Datum.LocalSeaY) / -dir.y : float.MaxValue;
+            hit = from + dir * Mathf.Min(sea, DroneLink.MaxRangeM);
+            return sea < DroneLink.MaxRangeM;
         }
 
         private void Refresh()
@@ -448,6 +463,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             SelfPosition = self;
             SelfHeading = me != null ? DroneLink.Bearing(Vector3.zero, me.transform.forward) : 0f;
             float now = Time.unscaledTime;
+            float linkScale = WatchtowerPod.LinkScale(me); // the relay pod stretches the link
             for (int i = 0; i < Count; i++)
             {
                 DroneRoster.Entry e = entries[i];
@@ -458,7 +474,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     v.Missile = e.Missile;
                     v.Role = e.Role;
                     v.Callsign = e.Callsign;
-                    v.Type = DroneLink.Type(e.Role);
+                    v.Type = e.Missile.definition != null && e.Missile.definition.jsonKey == VanguardKeys.Manta ? "MANTA" : DroneLink.Type(e.Role);
                     v.Job = DroneLink.Job(e.Role);
                     v.SampledAt = -1f;
                     v.SpeedMs = 0f;
@@ -472,9 +488,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 v.HeadingDeg = DroneLink.Bearing(Vector3.zero, fwd);
                 v.RangeM = me != null ? Vector3.Distance(self, pos) : 0f;
                 v.BearingDeg = DroneLink.Bearing(self, pos);
-                v.Quality = me != null ? DroneLink.Quality(v.RangeM) : 0f;
+                v.Quality = me != null ? DroneLink.Quality(v.RangeM, linkScale) : 0f;
                 v.Age = Time.time - e.SeenAt;
-                if (mirror.TryGetValue(e.Missile, out SteerOrders.Order order) && !DroneLink.InRange(v.RangeM)) { mirror.Remove(e.Missile); order = default; } // the host drops it too
+                if (mirror.TryGetValue(e.Missile, out SteerOrders.Order order) && !DroneLink.InRange(v.RangeM, linkScale)) { mirror.Remove(e.Missile); order = default; } // the host drops it too
                 v.Mode = mirror.TryGetValue(e.Missile, out order) ? order.Mode : DroneMode.Auto;
                 v.Point = order.Point.AsVector3();
                 v.State = DroneLink.Word(v.Mode) + " · " + AvNum.Fixed(v.RangeM / 1000f, 1) + " KM";

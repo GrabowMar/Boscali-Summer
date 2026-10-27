@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
     /// Targets, Reach, Weapons, Radar. Fall back / winchester / bingo are the stance's wing-wide follow-ons (-1 = leave as is).</summary>
     internal static class StanceWords
     {
-        public const int Guard = 0, Response = 1, Interval = 2, Spread = 3, Targets = 4, Reach = 5, Weapons = 6, Radar = 7;
+        public const int Guard = 0, Response = 1, Interval = 2, Targets = 4, Reach = 5, Weapons = 6, Radar = 7;
 
         private static readonly string[] Names = { "MSL GUARD", "RESPONSE", "INTERVAL", "SPREAD", "TARGETS", "RANGE", "WEAPONS", "RADAR" };
         private static readonly string[][] Short =

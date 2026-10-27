@@ -30,8 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             haveFrom = false;
         }
 
-        public bool Step(Vec3 position, float speed, ref HoldSpec spec) => Step(position, speed, float.NaN, 0f, ref spec);
-
         /// <summary>Steers <paramref name="spec"/> for this tick; false once the route is flown (or none is loaded).
         /// <paramref name="floorY"/> is the terrain ahead (NaN unknown); <paramref name="minSpeed"/> the slowest safe speed.</summary>
         public bool Step(Vec3 position, float speed, float floorY, float minSpeed, ref HoldSpec spec)

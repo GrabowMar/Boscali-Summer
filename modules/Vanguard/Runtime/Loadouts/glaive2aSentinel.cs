@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static readonly string[] ArmNames = { "ArmFL", "ArmFR", "ArmRL", "ArmRR" };
         private static readonly string[] RotorNames = { "RotorFL", "RotorFR", "RotorRL", "RotorRR" };
 
-        private static class Shot
+        internal static class Shot
         {
             internal static readonly System.Action<Gun> Sound = AccessTools.MethodDelegate<System.Action<Gun>>(AccessTools.Method(typeof(Gun), "ShotSound"));
             internal static readonly AccessTools.FieldRef<Gun, ParticleSystem[]> Flashes = AccessTools.FieldRefAccess<Gun, ParticleSystem[]>("muzzleParticles");

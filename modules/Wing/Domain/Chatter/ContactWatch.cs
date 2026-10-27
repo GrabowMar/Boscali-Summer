@@ -25,7 +25,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>Report ground contacts (scouting).</summary>
         public bool Ground;
-        public int Known => known;
 
         public void Clear() => known = 0;
 

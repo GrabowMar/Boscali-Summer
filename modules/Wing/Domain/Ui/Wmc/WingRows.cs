@@ -26,15 +26,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        /// <summary>BINGO over JOKER, then WINCHESTER; empty when none.</summary>
-        public static string Flags(byte flags)
-        {
-            var f = (SnapshotFlags)flags;
-            string fuel = (f & SnapshotFlags.Bingo) != 0 ? "BINGO" : (f & SnapshotFlags.Joker) != 0 ? "JOKER" : "";
-            string ammo = (f & SnapshotFlags.Winchester) != 0 ? "WINCHESTER" : "";
-            return fuel.Length == 0 ? ammo : ammo.Length == 0 ? fuel : fuel + " " + ammo;
-        }
-
         public static float Fraction(byte b) => b / 255f;
 
         /// <summary>A fill fraction: NaN (nobody) → 0, clamped to 0–1 (review M7b-1 I1).</summary>
@@ -49,26 +40,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (rows[i].Id == id) return i;
             return -1;
         }
-
-        /// <summary>The metric row: the lowest fuel and ammo (NaN for nobody) and whether anyone is at bingo.</summary>
-        public static WingSummary Summary(SnapshotMember[] rows, int count)
-        {
-            var s = new WingSummary { Count = count, MinFuel = float.NaN, MinAmmo = float.NaN };
-            for (int i = 0; i < count; i++)
-            {
-                float fuel = Fraction(rows[i].Fuel), ammo = Fraction(rows[i].Ammo);
-                if (float.IsNaN(s.MinFuel) || fuel < s.MinFuel) s.MinFuel = fuel;
-                if (float.IsNaN(s.MinAmmo) || ammo < s.MinAmmo) s.MinAmmo = ammo;
-                if ((rows[i].Flags & (byte)SnapshotFlags.Bingo) != 0) s.Bingo = true;
-            }
-            return s;
-        }
-    }
-
-    internal struct WingSummary
-    {
-        public int Count;
-        public float MinFuel, MinAmmo;
-        public bool Bingo;
     }
 }

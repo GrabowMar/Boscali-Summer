@@ -127,17 +127,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Frame.Spacing = definition.ClampSpacing(spacing);
         }
 
-        public WingFrame Update(in AnchorSample leader, WingMemberInput[] members, int count, float floorY,
-            float clearance, float leaderRadius, float dt) =>
-            Update(leader, false, default, members, count, null, 0, floorY, clearance, leaderRadius, dt);
-
-        /// <summary>As <see cref="Update(in AnchorSample, WingMemberInput[], int, float, float, float, float)"/>, with
-        /// <paramref name="body"/> as the wing's collision body 0 instead of the anchor (the player's aircraft while the
-        /// wing forms on a task's virtual lead, review M4a C2; not present: no body 0).</summary>
-        public WingFrame Update(in AnchorSample leader, in AnchorSample body, WingMemberInput[] members, int count, float floorY,
-            float clearance, float leaderRadius, float dt) =>
-            Update(leader, true, body, members, count, null, 0, floorY, clearance, leaderRadius, dt);
-
         /// <summary>The full update: <paramref name="separateBody"/> makes <paramref name="body"/> the collision body 0 instead
         /// of the anchor; <paramref name="others"/> are aircraft outside this wing's slots (other elements' members) that
         /// its members also keep clear of, each with its own rank (spec WMC program §3.3).</summary>

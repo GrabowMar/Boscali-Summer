@@ -178,6 +178,12 @@ namespace BoscaliSummer.Fire
         private CarveField field;
         private NativeSurface source;
 
+        // ponytail: six spare cutters (a few MB of grown lists) instead of ~1 MB of garbage per hit.
+        private static readonly Stack<SurfaceCutter> Spare = new Stack<SurfaceCutter>(6);
+        internal static SurfaceCutter Rent() { lock (Spare) return Spare.Count > 0 ? Spare.Pop() : new SurfaceCutter(); }
+        /// <summary>Main thread, once the result is uploaded and nothing still reads it.</summary>
+        internal void Return() { lock (Spare) if (Spare.Count < 6) Spare.Push(this); }
+
         /// <summary>Carve every native triangle. Submeshes: native slots, interior, broken edges.</summary>
         internal void Run(NativeSurface surface, CarveField removal, bool interior)
         {
@@ -185,8 +191,13 @@ namespace BoscaliSummer.Fire
             source = surface;
             int slots = surface.Sub.Length;
             InteriorSlot = slots; BandSlot = slots + 1;
-            Triangles = new List<int>[slots + 2];
-            for (int i = 0; i < Triangles.Length; i++) Triangles[i] = new List<int>(1024);
+            Positions.Clear(); Normals.Clear(); Uvs.Clear(); Bounds = default;
+            if (Triangles == null || Triangles.Length != slots + 2)
+            {
+                Triangles = new List<int>[slots + 2];
+                for (int i = 0; i < Triangles.Length; i++) Triangles[i] = new List<int>(1024);
+            }
+            else foreach (List<int> t in Triangles) t.Clear();
             any = false;
             for (int s = 0; s < slots; s++)
             {

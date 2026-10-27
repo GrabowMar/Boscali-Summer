@@ -37,12 +37,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly CockpitShake shake = new CockpitShake();
         private readonly SunGlare glare = new SunGlare();
         private readonly MfdGlow mfdGlow = new MfdGlow();
+        private readonly CockpitLights cockpitLights = new CockpitLights();
         private readonly SurfaceImmersion surface = new SurfaceImmersion();
         private readonly VisorOverlay visor = new VisorOverlay();
         private AirframeAudio airframeAudio;
         private CanopyWindAudio windAudio;
         private PilotBreathingAudio pilotBreathingAudio;
         private CockpitFoley foley;
+        private CockpitWarnings warnings;
         private readonly PilotPhysiology physiology = new PilotPhysiology();
         private readonly PilotVitals vitals = new PilotVitals();
         private float debugG, debugGUntil = -1f, debugLookUntil = -1f;
@@ -76,6 +78,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (windAudio != null) { windAudio.Release(); Object.Destroy(windAudio); }
             if (pilotBreathingAudio != null) { pilotBreathingAudio.Release(); Object.Destroy(pilotBreathingAudio); }
             foley?.Release();
+            warnings?.Release();
+            warnings = null;
             airframeAudio = null;
             windAudio = null;
             pilotBreathingAudio = null;
@@ -97,6 +101,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             vitals.AddHit(blastDamage);
             // Every display loses its picture for a moment; a blast shakes it harder than a round going through.
             NOAvionics.AvFxDriver.Kick(blastDamage > pierceDamage ? 0.9f : 0.6f);
+            cockpitLights.Kick(blastDamage > pierceDamage ? 0.6f : 0.3f);
             if (settings.AirframeAudioEnabled.Value) foley?.Hit(pierceDamage, blastDamage);
             if (GameManager.GetLocalAircraft(out Aircraft hit) && hit != null) // sparks ride with the jet, not left in the air behind it
                 ParticleFx.Spawn("fx-hit-sparks", hit.transform.position, hit.transform.rotation, 1f, hit.transform);
@@ -217,6 +222,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             shake.Release();
             glare.Release();
             mfdGlow.Release();
+            cockpitLights.Release();
             visor.Hide();
             surface.Reset();
             if (airframeAudio != null) airframeAudio.Silence();
@@ -263,6 +269,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
             Camera camera = cameras != null ? cameras.mainCamera : null;
             bool cockpit = cameras != null && CameraStateManager.cameraMode == CameraMode.cockpit && cameras.currentState == cameras.cockpitState;
+            // Voice warnings follow the player's own aircraft in every view; the canopy and gear foley only in the cockpit.
+            if (!Application.isBatchMode && GameManager.GetLocalAircraft(out Aircraft own))
+            {
+                if (warnings == null) { warnings = new CockpitWarnings(); warnings.Initialize(gameObject); }
+                warnings.Tick(own, settings.Enabled.Value && settings.VoiceWarningsEnabled.Value,
+                    settings.Enabled.Value && settings.AirframeAudioEnabled.Value, cockpit && own == aircraft);
+            }
             Pilot seated = aircraft != null && aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
             if (Application.isBatchMode || !settings.Enabled.Value || !cockpit ||
                 camera == null || aircraft == null || aircraft.disabled || aircraft.rb == null ||
@@ -347,6 +360,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt,
                 sunViewport, facing, settings.HelmetCurvature.Value, settings.HelmetReflection.Value);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
+            // The night cockpit lights ride on the MFD GLOW switch ("instruments glow at dusk and night").
+            cockpitLights.Tick(aircraft, camera, sunLight != null ? -sunLight.transform.forward.y : 1f, settings.MfdGlowEnabled.Value, dt);
             surface.Tick(aircraft, true, settings.SurfaceImmersionEnabled.Value);
             EnsureAudioComponents();
             if (airframeAudio != null)
@@ -432,6 +447,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["sunGlare"] = glare.Intensity;
             state["mfdPanels"] = mfdGlow.PanelCount;
             state["mfdBoost"] = mfdGlow.Boost;
+            state["cockpitLights"] = cockpitLights.Intensity;
             state["surfaceWetness"] = surface.Wetness;
             state["surfaceFrost"] = surface.Frost;
             state["surfaceScorch"] = surface.Scorch;
@@ -473,6 +489,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
             state["immersionRecordedVoices"] = pilotBreathingAudio != null ? pilotBreathingAudio.RecordedVoices : 0;
             state["immersionFoleyPlayed"] = foley != null ? foley.Played : 0;
+            state["immersionWarningsSaid"] = warnings != null ? warnings.Said : 0;
+            state["immersionWarningsFoley"] = warnings != null ? warnings.Foley : 0;
+            state["immersionWarningsBound"] = warnings != null && warnings.Bound;
+            if (warnings != null) { WarningInput w = warnings.Last; state["immersionWarningsAgl"] = w.RadarAltM; state["immersionWarningsClimb"] = w.ClimbMps; }
             state["visorVisible"] = visor.Visible;
             state["visorTint"] = visor.Tint;
             state["visorSunLit"] = visor.SunLit;

@@ -1,5 +1,3 @@
-// The sceneId HQ and the registry patches are ported from ThirdFaction by 9138noms (https://github.com/9138noms/ThirdFaction),
-// MIT licence, Copyright (c) 9138noms. That mod credits MinecrackTyler's NOFactionMod for the sceneId idea.
 using System;
 using System.Collections.Generic;
 using System.Reflection;

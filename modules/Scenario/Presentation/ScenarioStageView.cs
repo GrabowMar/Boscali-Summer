@@ -523,7 +523,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             float lineAlpha = Window(game, lineFrom, lineUntil, 0.25f);
             float hintAlpha = Window(game, hintFrom, hintUntil, 0.4f);
 
-            bool any = bars > 0.001f || dip > 0.001f || cardAlpha > 0.001f || lineAlpha > 0.001f || hintAlpha > 0.001f;
+            bool any = bars > 0.001f || dip > 0.001f || cardAlpha > 0.001f || lineAlpha > 0.001f || hintAlpha > 0.001f || CombatShown;
             if (canvas.enabled != any) canvas.enabled = any;
             if (!any) return;
 
@@ -569,6 +569,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             hintPlate.color = AvTheme.Ground.WithAlpha(0.8f * hintAlpha);
             hintAccent.color = AvTheme.Warning.WithAlpha(hintAlpha);
             hint.color = AvTheme.TextPrimary.WithAlpha(hintAlpha);
+            PaintCombat(game, real);
         }
 
         /// <summary>A cutscene title comes in scrambled and resolves left to right.</summary>

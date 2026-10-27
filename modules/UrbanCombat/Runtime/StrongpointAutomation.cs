@@ -37,8 +37,8 @@ namespace BoscaliSummer.Garrisons
             if (shell == null) return new Dictionary<string, object> { { "ok", true }, { "destroyed", 1 }, { "hp_drop", 0f } };
 
             float before = GameAccess.GetMapBuildingHitPoints(shell);
-            // "nest" and "unit" blast a unit part instead of the shell: the nest has to pass the hit on to its
-            // shell and take nothing, any other unit has to take it itself.
+            // "nest" and "unit" blast a unit part instead of the shell: the nest takes the hit itself and leaves
+            // its shell untouched, like any other unit.
             UnitPart part = null;
             string partName = null;
             float partBefore = 0f;

@@ -18,6 +18,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private const int DetailWorleyOctaves = 2;
         private const int BasePeriod = 4;
         private const int DetailPeriod = 8;
+        // A: fine inverted Worley fBm, three octaves (12, 24, 48 cells a tile): the small cauliflower billows on cloud edges (2026-10-26).
+        private const int FinePeriod = 12;
+        private const int FineWorleyOctaves = 3;
 
         /// <summary>Returns size^3 RGBA bytes (4 per voxel), x-major then y then z.</summary>
         public static byte[] Generate(int size, int seed)
@@ -25,6 +28,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             int count = size * size * size;
             float[] baseShape = new float[count];
             float[] detail = new float[count];
+            float[] fine = new float[count];
             byte[] bytes = new byte[count * 4];
 
             float inv = 1f / size;
@@ -47,12 +51,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                         // Same bounded remap as the 2D field: divisor is 2 - billow, in [1,2].
                         baseShape[index] = (value - (billow - 1f)) / (2f - billow);
                         detail[index] = WorleyFbm(fx, fy, fz, DetailPeriod, DetailWorleyOctaves, seed + 313, out _);
+                        fine[index] = WorleyFbm(fx, fy, fz, FinePeriod, FineWorleyOctaves, seed + 577, out _);
                     }
                 }
             }
 
             Normalise(baseShape);
             Normalise(detail);
+            Normalise(fine);
 
             for (int i = 0; i < count; i++)
             {
@@ -61,7 +67,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 int o = i * 4;
                 bytes[o + 0] = r;
                 bytes[o + 1] = g;
-                bytes[o + 3] = 255;
+                bytes[o + 3] = (byte)(fine[i] * 255f);
             }
 
             return bytes;

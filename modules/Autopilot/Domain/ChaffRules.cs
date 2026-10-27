@@ -42,11 +42,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         /// <summary>
-        /// Should the dispenser run this frame? A salvo from the menu or the key always does. Linked to the countermeasure button it runs
-        /// only while that button is held AND a radar missile is inbound, so flares against a heat seeker never spend chaff.
+        /// Should the dispenser run this frame? A salvo from the menu or the key always does; the countermeasure button only while chaff is
+        /// the selected countermeasure. One selection, one countermeasure: with flares or the jammer selected the button never spends chaff
+        /// (2026-10-27, user: "jamming works together with chaff" — the old link to the button fired both at a radar missile).
         /// </summary>
-        public static bool ShouldRun(bool salvo, bool linked, bool countermeasureHeld, bool radarMissileInbound, int ammo) =>
-            ammo > 0 && (salvo || (linked && countermeasureHeld && radarMissileInbound));
+        public static bool ShouldRun(bool salvo, bool selectedAndPressed, int ammo) => ammo > 0 && (salvo || selectedAndPressed);
 
         /// <summary>
         /// The dispenser is one more stop of the Next Countermeasure cycle, after the game's last station: FLARES, JAMMER, CHAFF, FLARES.

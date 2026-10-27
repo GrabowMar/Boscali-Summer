@@ -24,7 +24,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal sealed class FrontController : MonoBehaviour, ISceneService, IFrontActions
     {
         private const float Refresh = 0.2f, PressGap = 0.35f, WordsHold = 8f;
-        private const string Resting = "Keyboard and joystick stay live; the mouse drives this window. It closes with Esc.";
+        // The footer's resting line: how to use the room on screen, in the order the clicks happen (the latest answer replaces it for a few seconds).
+        private static readonly string[] Resting =
+        {
+            "Click a track (row or camera bracket) > MARK > TRANSMIT. Click a satellite to RELOCATE it. ENLARGE the camera. Esc closes.",
+            "Click a node in reach > HOP. Hold it to blind the SAMs, or BURN it for a strike package. PURGE clears intruders. Esc closes.",
+            "Pick a team > pick a target (or click the map for RECON) > click a mission to send it. SWEEP hunts intruders. Esc closes.",
+        };
 
         private SupportManager manager;
         private CallsController calls;
@@ -38,14 +44,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int lastFaction, selectedNode, selectedTeam = -1, selectedTarget;
         private int pendingRequest;
         private float pendingAtWall, failedUntil;
-        private bool refreshFaulted, suspended;
+        private bool refreshFaulted;
         private Front pendingFront;
+        private string pendingWhat = "";
         private SpaceCommandKind pendingKind;
         private string words = "";
         private AvState wordsTone = AvState.Inert;
         private readonly bool[] hasBird = new bool[3];
 
-        public bool IsOpen => open && (suspended || (window != null && window.IsOpen));
+        public bool IsOpen => open && window != null && window.IsOpen;
         public Front Current => current;
         /// <summary>The last front verdict in words (the footer shows it for a few seconds).</summary>
         public string LastWords => words;
@@ -114,13 +121,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Close()
         {
-            if (suspended) { suspended = false; manager?.Disarm(); OnClosed(); return; } // hidden for a map pick: there is no window to hide, but the pick must not outlive the room
             window?.Close();
         }
 
         private void Shut()
         {
-            suspended = false;
             if (window != null && window.IsOpen) window.Close();
             open = false;
             feed?.SetVisible(false);
@@ -129,7 +134,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void OnClosed()
         {
             open = false;
-            suspended = false;
             feed?.SetVisible(false);
         }
 
@@ -154,7 +158,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (manager == null) return;
             WantFeeds(open);
             if (!open) return;
-            if (!suspended && (window == null || !window.IsOpen)) { OnClosed(); return; }
+            if (window == null || !window.IsOpen) { OnClosed(); return; }
             try
             {
                 // A probe or faction read can blink for a frame (respawn handover, ownship swap): only a stretch of bad reads is a real death, despawn or faction change.
@@ -166,15 +170,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (Time.unscaledTime - badSince >= BadGraceSeconds) { badSince = -1f; Close(); return; }
                 }
                 if (pendingRequest != 0 && Time.unscaledTime - pendingAtWall > 6f) { pendingRequest = 0; Say("NEGATIVE: NO ANSWER \u2014 PRESS AGAIN", AvState.Danger); }
-                if (suspended)
-                {
-                    if (manager.LocalPickArmed) return; // the pick is still on the map
-                    suspended = false; // picked or cancelled (Esc): the same room comes back
-                    Build();
-                    if (!window.Open(view)) { OnClosed(); return; }
-                    nextRefresh = Time.unscaledTime + Refresh;
-                    return;
-                }
                 if (Time.unscaledTime < failedUntil || Time.unscaledTime < nextRefresh) return;
                 nextRefresh = Time.unscaledTime + Refresh;
                 Build();
@@ -213,7 +208,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontInputs c = Inputs(now);
             FrontMirror fm = manager.FrontMirror;
             FrontViews.Common(view, current, fm.State, fm.Known, c);
-            window?.PriorityLock(fm.Known ? fm.State.PriorityBy : "", fm.Known ? fm.State.PriorityLockUntil : 0f);
             switch (current)
             {
                 case Front.Space:
@@ -303,7 +297,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void Footer()
         {
             float now = SupportManager.MissionNow();
-            string text = Resting; AvState tone = AvState.Inert;
+            string text = Resting[Mathf.Clamp((int)current, 0, Resting.Length - 1)]; AvState tone = AvState.Inert;
+            if (pendingRequest != 0)
+            {
+                // Sent and not answered yet: say so at once, so a press is never met with silence.
+                window.Window.Footer.Set("SENDING" + (pendingWhat.Length > 0 ? " " + pendingWhat : "") + " · WAITING FOR THE HOST · " + Mathf.Max(0, (int)(Time.unscaledTime - pendingAtWall)) + " S", AvState.Info);
+                return;
+            }
             bool mine = words.Length > 0 && now - wordsAt < WordsHold;
             bool theirs = calls != null && calls.LastWords.Length > 0 && now - calls.LastWordsAt < WordsHold;
             if (theirs && (!mine || calls.LastWordsAt >= wordsAt)) { text = calls.LastWords; tone = text.StartsWith("NEGATIVE", StringComparison.Ordinal) ? AvState.Danger : AvState.Info; }
@@ -336,10 +336,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <param name="kind">The CYBER or SOF command whose receipt releases the gate; None for a front verb (worded here).</param>
-        private bool Sent(Front front, int request, string refusal, SpaceCommandKind kind = SpaceCommandKind.None)
+        private bool Sent(Front front, int request, string refusal, SpaceCommandKind kind = SpaceCommandKind.None, string what = "")
         {
             if (pendingRequest != 0) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return false; }
-            if (request > 0) { pendingRequest = request; pendingFront = front; pendingKind = kind; pendingAtWall = Time.unscaledTime; return true; }
+            if (request > 0) { pendingRequest = request; pendingFront = front; pendingKind = kind; pendingAtWall = Time.unscaledTime; pendingWhat = what; AvUiSound.Play(AvUiCue.Press); return true; }
             Say("NEGATIVE: " + refusal, AvState.Danger);
             return false;
         }
@@ -364,51 +364,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void SetDirective(Front front, FrontDirective directive)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontSetDirective(front, directive), "NO HOST LINK");
-        }
-
-        public void SetPriority(Front front, int deltaPct)
-        {
-            if (!Gate()) return;
-            FrontStateData d = manager.FrontMirror.State;
-            if (!manager.FrontMirror.Known) { Say("NEGATIVE: WAITING FOR THE HOST", AvState.Danger); return; }
-            int[] w = new int[FrontRules.FrontCount];
-            for (int i = 0; i < w.Length; i++) w[i] = d.Fronts[i].PriorityPct;
-            int f = (int)front, target = Mathf.Clamp(w[f] + deltaPct, 0, 100), others = 0;
-            for (int i = 0; i < w.Length; i++) if (i != f) others += w[i];
-            int rest = 100 - target;
-            for (int i = 0; i < w.Length; i++)
-                if (i != f) w[i] = others > 0 ? Mathf.RoundToInt(w[i] / (float)others * rest) : rest / (w.Length - 1);
-            w[f] = target;
-            Sent(front, manager.FrontSetPriority(w[0], w[1], w[2]), "NO HOST LINK");
-        }
-
-        public void SetFocus(Front front)
-        {
-            if (!Gate()) return;
-            bool armed = manager.ArmLocalPick("FOCUS " + FrontRules.Name(front), point =>
-            {
-                if (!manager.FrontMirror.Known) return;
-                Sent(front, manager.FrontSetFocus(front, (float)point.x, (float)point.z), "NO HOST LINK");
-            });
-            if (armed)
-            {
-                suspended = true; // the room covers the map: hide it and hand the pointer back; Update reopens the same room on the pick or its Esc
-                window.Suspend();
-            }
-            else Say("NEGATIVE: MAP INPUT BUSY, DISARM THE ARMED CALL FIRST", AvState.Danger);
+            Sent(front, manager.FrontSetDirective(front, directive), "NO HOST LINK", SpaceCommandKind.None, FrontRules.Name(directive) + " POSTURE");
         }
 
         public void Queue(Front front, ProgrammeId id)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontQueue(front, id), "NOT A " + FrontRules.Name(front) + " PROGRAMME");
+            Sent(front, manager.FrontQueue(front, id), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontRules.Info(id).Name);
         }
 
         public void Donate(Front front, ProgrammeId id, int amount)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontDonate(front, id, amount), "NOTHING TO FUND");
+            Sent(front, manager.FrontDonate(front, id, amount), "NOTHING TO FUND", SpaceCommandKind.None, "CHIP IN " + amount + " AP");
         }
 
         public void SelectFront(Front front)
@@ -425,11 +393,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void SelectNode(int nodeId) { selectedNode = selectedNode == nodeId ? FrontViews.Gone : nodeId; nextRefresh = 0f; }
 
-        public void Hop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberHop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberHop); }
-        public void Burn(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberBurn(nodeId), "NO HOST LINK", SpaceCommandKind.CyberBurn); }
-        public void Drop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberDrop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberDrop); }
-        public void Purge() { if (Gate()) Sent(Front.Cyber, manager.CyberPurge(), "NO HOST LINK", SpaceCommandKind.CyberPurge); }
-        public void Sweep() { if (Gate()) Sent(Front.Sof, manager.SofSweep(), "NO HOST LINK", SpaceCommandKind.SofSweep); }
+        public void Hop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberHop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberHop, "HOP"); }
+        public void Burn(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberBurn(nodeId), "NO HOST LINK", SpaceCommandKind.CyberBurn, "BURN"); }
+        public void Drop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberDrop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberDrop, "DROP"); }
+        public void Purge() { if (Gate()) Sent(Front.Cyber, manager.CyberPurge(), "NO HOST LINK", SpaceCommandKind.CyberPurge, "PURGE"); }
+        public void Sweep() { if (Gate()) Sent(Front.Sof, manager.SofSweep(), "NO HOST LINK", SpaceCommandKind.SofSweep, "SWEEP"); }
 
         // ---- IFrontActions: SHADOW --------------------------------------------------------------------------------------
 
@@ -441,7 +409,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (slot < 0 || verb < 0 || verb > 3 || !Gate() || !TeamOk(slot)) return;
             TeamVerb v = verb == 0 ? TeamVerb.Push : verb == 1 ? TeamVerb.Hold : verb == 2 ? TeamVerb.Exfil : TeamVerb.Lift;
-            Sent(Front.Sof, manager.SofOrder(slot, v), "NO HOST LINK", SpaceCommandKind.SofOrder);
+            Sent(Front.Sof, manager.SofOrder(slot, v), "NO HOST LINK", SpaceCommandKind.SofOrder, v.ToString().ToUpperInvariant());
         }
 
         public void TeamMission(int slot, int missionKind, int targetId)
@@ -455,12 +423,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (kind == MissionKind.Recon)
             {
                 // RECON also takes a ground point (the draft click on the SHADOW map), carried in the target slot as FrontViews.PointId.
-                if (FrontViews.TryPoint(targetId, out float px, out float pz)) sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, px, pz), "NO HOST LINK", SpaceCommandKind.SofMission);
+                if (FrontViews.TryPoint(targetId, out float px, out float pz)) sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, px, pz), "NO HOST LINK", SpaceCommandKind.SofMission, SofWords.Kind(kind));
                 else if (!have) { Say("NEGATIVE: PICK A TARGET OR CLICK A MAP POINT FIRST", AvState.Danger); return; }
-                else sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, target.X, target.Z), "NO HOST LINK", SpaceCommandKind.SofMission);
+                else sent = Sent(Front.Sof, manager.SofMission(slot, kind, 0, target.X, target.Z), "NO HOST LINK", SpaceCommandKind.SofMission, SofWords.Kind(kind));
             }
             else if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
-            else sent = Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK", SpaceCommandKind.SofMission);
+            else sent = Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK", SpaceCommandKind.SofMission, SofWords.Kind(kind));
             if (sent) { view.Shadow.HasDraft = false; view.Shadow.DraftMission = MissionKind.None; } // one press, one order; a refused press keeps the reviewed draft
         }
 
@@ -494,7 +462,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void RelocateBird(int birdKind, float u, float v)
         {
             Touch();
-            if (Gate()) Sent(Front.Space, manager.RelocateBird(birdKind, u, v), "NO HOST LINK");
+            if (Gate()) Sent(Front.Space, manager.RelocateBird(birdKind, u, v), "NO HOST LINK", SpaceCommandKind.None, "RELOCATION BURN");
         }
 
         public ISpaceFeedActions Orbit => feed;

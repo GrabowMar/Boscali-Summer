@@ -43,6 +43,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public const int Rows = 6, Columns = 4;
         public static readonly string[] RowLabels = { "OFFENSE", "DEFENSE", "MOVE", "AREA", "SUPPORT", "WING" };
+        /// <summary>The command card's row gutter: <see cref="RowLabels"/> cut to fit it.</summary>
+        public static readonly string[] RowTags = { "ATK", "DEF", "MOVE", "AREA", "SUP", "WING" };
         private static readonly string[] rowRails = { "danger", "warn", "info", "info", "live", "inert" };
         public const string ReactLabel = "REACT", ReactRail = "armed";
 

@@ -11,24 +11,25 @@ using Object = UnityEngine.Object;
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
     /// <summary>
-    /// Thigh kneeboard: one quad on the thigh away from the stick. Its mission card is drawn once per aircraft
+    /// Thigh kneeboard: a small strapped clipboard on the thigh away from the stick. Its mission card is drawn once per aircraft
     /// (and again on rearm / loadout change) straight into a 512 px texture: one text mesh, one immediate draw,
-    /// no camera and no canvas (a temporary URP camera cost 23 ms in game). Steady state is one draw call and a
-    /// bool check. If a warm redraw ever exceeds 2 ms, later cards keep the last one.
+    /// no camera and no canvas (a temporary URP camera cost 23 ms in game). Steady state is two draw calls (card, board)
+    /// and a bool check. If a warm redraw ever exceeds 2 ms, later cards keep the last one.
     /// </summary>
     internal sealed class Kneeboard
     {
         private const int Size = 512;
-        private const float Width = .14f, Height = .18f;
         // Lit by the cockpit sun: mid-grey paper and near-black bold ink keep contrast without blowing out.
         private static readonly Color Paper = new Color(.4f, .39f, .34f), Ink = new Color(.02f, .022f, .02f);
+        // Worn paper tint (also tames the brighter gallery pictures) and a dark olive board close to the flight suit.
+        private static readonly Color PaperTint = new Color(.8f, .78f, .7f), Board = new Color(.075f, .08f, .07f);
         private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap"), LightId = Shader.PropertyToID("_LightLevel");
         private readonly List<KeyValuePair<string, int>> loadout = new List<KeyValuePair<string, int>>(12);
         private readonly Action markDirty;
         private readonly KneeboardSchedule schedule = new KneeboardSchedule();
         private GameObject quad;
         private Mesh mesh;
-        private Material material;
+        private Material material, hardware;
         private RenderTexture card;
         private Texture2D plain;
         private Aircraft aircraft;
@@ -74,13 +75,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Side = rightThigh ? "right" : "left";
             RightThigh = rightThigh;
             quad = new GameObject("Boscali.Kneeboard") { layer = 3 }; // PhysicsLayers.Cockpit, like the body
-            quad.transform.SetPositionAndRotation(thigh.position + along * .68f + top * .112f, Quaternion.LookRotation(-top, forward));
+            // Origin is the board's underside resting on the thigh; local -z points up out of the leg, +y toward the knee.
+            quad.transform.SetPositionAndRotation(thigh.position + along * .68f + top * .104f, Quaternion.LookRotation(-top, forward));
             quad.transform.SetParent(thigh, true);
-            mesh = new Mesh { name = "Boscali.Kneeboard" };
-            mesh.vertices = new[] { new Vector3(-Width / 2, -Height / 2), new Vector3(Width / 2, -Height / 2), new Vector3(-Width / 2, Height / 2), new Vector3(Width / 2, Height / 2) };
-            mesh.uv = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) };
-            mesh.triangles = new[] { 0, 3, 1, 3, 0, 2 };
-            mesh.RecalculateNormals(); mesh.RecalculateTangents(); mesh.RecalculateBounds();
+            mesh = BoardMesh();
             quad.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = quad.AddComponent<MeshRenderer>();
             Renderer = renderer;
@@ -90,12 +88,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             renderer.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.Off;
             if (material == null)
             {
-                material = new Material(shader) { name = "Boscali.Kneeboard", hideFlags = HideFlags.HideAndDontSave };
-                material.SetFloat("_BodyVisible", 1f);
-                material.SetFloat("_HeadMaskMode", 0f);
-                material.SetFloat("_Smoothness", .05f);
+                material = BodyMaterial(shader, "Boscali.Kneeboard", PaperTint, .05f);
+                hardware = BodyMaterial(shader, "Boscali.KneeboardBoard", Board, .22f);
             }
-            renderer.sharedMaterial = material;
+            renderer.sharedMaterials = new[] { material, hardware };
             if (!ApplyPicture() && cardValid) material.SetTexture(BaseMapId, card);
         }
 
@@ -115,7 +111,76 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         }
 
         internal void SetVisible(bool visible) { if (quad != null && quad.activeSelf != visible) quad.SetActive(visible); }
-        internal void SetLight(float level) { if (material != null) material.SetFloat(LightId, level); }
+        internal void SetLight(float level)
+        {
+            if (material != null) material.SetFloat(LightId, level);
+            if (hardware != null) hardware.SetFloat(LightId, level);
+        }
+
+        private static Material BodyMaterial(Shader shader, string name, Color tint, float smoothness)
+        {
+            var made = new Material(shader) { name = name, hideFlags = HideFlags.HideAndDontSave };
+            made.SetFloat("_BodyVisible", 1f);
+            made.SetFloat("_HeadMaskMode", 0f);
+            made.SetFloat("_Smoothness", smoothness);
+            made.SetColor("_BaseColor", tint);
+            return made;
+        }
+
+        /// <summary>A strapped clipboard instead of a bare sheet: dark board with thickness, the card inset on it, a clip at the
+        /// knee end and elastic tabs that run down the board's sides into the thigh. Submesh 0 is the card, 1 the hardware.</summary>
+        private static Mesh BoardMesh()
+        {
+            var vertices = new List<Vector3>(96);
+            var normals = new List<Vector3>(96);
+            var uvs = new List<Vector2>(96);
+            var card = new List<int>(6);
+            var board = new List<int>(140);
+            void Face(List<int> into, Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 n, bool mapped)
+            {
+                int i = vertices.Count;
+                vertices.Add(a); vertices.Add(b); vertices.Add(c); vertices.Add(d);
+                normals.Add(n); normals.Add(n); normals.Add(n); normals.Add(n);
+                uvs.Add(mapped ? new Vector2(0, 0) : Vector2.zero); uvs.Add(mapped ? new Vector2(1, 0) : Vector2.zero);
+                uvs.Add(mapped ? new Vector2(1, 1) : Vector2.zero); uvs.Add(mapped ? new Vector2(0, 1) : Vector2.zero);
+                // Unity's front face is the side its triangle normal points to; wind each face to its outward normal.
+                bool flip = Vector3.Dot(Vector3.Cross(b - a, c - a), n) < 0f;
+                if (flip) into.AddRange(new[] { i, i + 2, i + 1, i, i + 3, i + 2 });
+                else into.AddRange(new[] { i, i + 1, i + 2, i, i + 2, i + 3 });
+            }
+            void Box(Vector3 min, Vector3 max)
+            {
+                Vector3 p(float x, float y, float z) => new Vector3(x == 0 ? min.x : max.x, y == 0 ? min.y : max.y, z == 0 ? min.z : max.z);
+                Face(board, p(0, 0, 0), p(1, 0, 0), p(1, 1, 0), p(0, 1, 0), Vector3.back, false);   // top (out of the leg)
+                Face(board, p(0, 0, 1), p(0, 1, 1), p(1, 1, 1), p(1, 0, 1), Vector3.forward, false); // underside
+                Face(board, p(0, 0, 0), p(0, 1, 0), p(0, 1, 1), p(0, 0, 1), Vector3.left, false);
+                Face(board, p(1, 0, 0), p(1, 0, 1), p(1, 1, 1), p(1, 1, 0), Vector3.right, false);
+                Face(board, p(0, 0, 0), p(0, 0, 1), p(1, 0, 1), p(1, 0, 0), Vector3.down, false);
+                Face(board, p(0, 1, 0), p(1, 1, 0), p(1, 1, 1), p(0, 1, 1), Vector3.up, false);
+            }
+            const float boardX = .071f, boardLow = -.092f, boardHigh = .098f, thick = .005f;
+            Box(new Vector3(-boardX, boardLow, -thick), new Vector3(boardX, boardHigh, 0f));
+            // Card sits 0.5 mm proud of the board so it never fights it for depth.
+            const float cardX = .065f, cardLow = -.085f, cardHigh = .079f, cardZ = -thick - .0005f;
+            Face(card, new Vector3(-cardX, cardLow, cardZ), new Vector3(cardX, cardLow, cardZ), new Vector3(cardX, cardHigh, cardZ),
+                new Vector3(-cardX, cardHigh, cardZ), Vector3.back, true);
+            Box(new Vector3(-.032f, .071f, -.012f), new Vector3(.032f, .094f, -thick)); // clip over the card's top edge
+            // Elastic tabs: from the board edge, sloping in and down, ending inside the thigh so the board reads as strapped on.
+            for (int side = -1; side <= 1; side += 2)
+            {
+                float edge = side * (boardX + .003f), sunk = side * .062f;
+                const float low = -.022f, high = .008f, topZ = -thick + .001f, endZ = .045f;
+                Vector3 outward = new Vector3(side * (endZ - topZ), 0f, side * (edge - sunk)).normalized;
+                Face(board, new Vector3(edge, low, topZ), new Vector3(edge, high, topZ), new Vector3(sunk, high, endZ), new Vector3(sunk, low, endZ), outward, false);
+                Face(board, new Vector3(side * boardX, low, topZ), new Vector3(edge, low, topZ), new Vector3(edge, high, topZ),
+                    new Vector3(side * boardX, high, topZ), Vector3.back, false);
+            }
+            var built = new Mesh { name = "Boscali.Kneeboard", subMeshCount = 2 };
+            built.SetVertices(vertices); built.SetNormals(normals); built.SetUVs(0, uvs);
+            built.SetTriangles(card, 0); built.SetTriangles(board, 1);
+            built.RecalculateTangents(); built.RecalculateBounds();
+            return built;
+        }
 
         /// <summary>Leaving the cockpit view: drop the quad, keep the aircraft's rendered card and its rearm subscription.</summary>
         internal void Detach()
@@ -131,6 +196,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Detach();
             Unsubscribe();
             if (material != null) Object.Destroy(material);
+            if (hardware != null) Object.Destroy(hardware);
+            hardware = null;
             if (card != null) { card.Release(); Object.Destroy(card); }
             if (plain != null) Object.Destroy(plain);
             material = null; card = null; plain = null; aircraft = null; cardValid = false;

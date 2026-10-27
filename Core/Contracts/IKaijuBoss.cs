@@ -9,6 +9,9 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Host only: raises the kaiju ahead of the local aircraft. The answer is a line for the UI.</summary>
         string Summon();
 
+        /// <summary>Why <see cref="Summon"/> would refuse right now (a line for the UI), or null when it can rise.</summary>
+        string CannotSummon();
+
         /// <summary>Host only: sends the kaiju away (a dying one too). The answer is a line for the UI.</summary>
         string Dismiss();
 

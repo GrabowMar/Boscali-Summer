@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     MfdTerrainRelief.Restore();
                     mapWasMaximized = false;
                 }
+                MfdTerrainRelief.Prewarm();
                 return;
             }
             mapWasMaximized = true;

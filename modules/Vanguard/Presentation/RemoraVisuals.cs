@@ -19,6 +19,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private float bank, rollRate;
         private ParticleSystem flares;
         private int seenFlares = -1;
+        private bool manta; // XQ-90 MANTA: four rounds on two rails, a bigger flare burst
+        private Gun gun;            // REMORA nose gun: clients replay the host's rounds as tracers (RemoraView.Shots)
+        private BulletSim bullets;
+        private Transform gunAim;
+        private int seenShots = -1;
 
         public static void Attach(Missile missile)
         {
@@ -27,6 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (visual == null) return;
             var v = missile.gameObject.AddComponent<RemoraVisuals>();
             v.missile = missile;
+            v.manta = missile.definition.jsonKey == VanguardKeys.Manta;
             foreach (Transform joint in visual.GetComponentsInChildren<Transform>(true))
                 switch (joint.name)
                 {
@@ -48,6 +54,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             v.bank = Bank(missile.transform);
             v.flares = FlareParticles(missile.transform);
+            if (!v.manta && (v.gun = missile.GetComponentInChildren<Gun>(true)) != null)
+            {
+                v.gunAim = new GameObject("RemoraTracerAim").transform;
+                v.gunAim.SetParent(missile.transform, false);
+            }
         }
 
         /// <summary>Rail of round 0 (MissileL) / 1 (MissileR), or null when the model has none.</summary>
@@ -106,7 +117,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 {
                     position = t.position,
                     velocity = velocity,
-                    startSize = Random.Range(0.6f, 1.3f),
+                    startSize = Random.Range(0.6f, 1.3f) * (manta ? MantaRules.Scale : 1f),
                     startLifetime = Random.Range(0.8f, 1.5f),
                     startColor = new Color(2.2f, 1.3f, 0.55f, 1f),
                 }, 1);
@@ -122,10 +133,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             if (RemoraBoard.Views.TryGetValue(missile.persistentID.Id, out RemoraView view))
             {
-                Hide(missileL, (view.Fired & 1) != 0);
-                Hide(missileR, (view.Fired & 2) != 0);
+                int rounds = manta ? MantaRules.Rounds : RemoraArcher.Rounds;
+                Hide(missileL, DroneRounds.RailSpent(view.Fired, 0, rounds));
+                Hide(missileR, DroneRounds.RailSpent(view.Fired, 1, rounds));
                 if (seenFlares >= 0 && view.Flares < seenFlares) Burst();
                 seenFlares = view.Flares;
+                if (gun != null && !missile.IsServer && seenShots >= 0 && view.Shots != seenShots)
+                {
+                    int fired = Mathf.Min((byte)(view.Shots - seenShots), 4);
+                    gunAim.SetPositionAndRotation(gun.transform.position, Quaternion.LookRotation(missile.transform.forward, missile.transform.up));
+                    for (int i = 0; i < fired; i++) VanguardFlight.FireGun(gun, ref bullets, gunAim, missile, null, i == 0);
+                }
+                seenShots = view.Shots;
             }
             float dt = Time.deltaTime;
             if (dt <= 0f || (elevonL == null && elevonR == null)) return;

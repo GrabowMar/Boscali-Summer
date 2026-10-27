@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private readonly ContractCard[] cards = new ContractCard[MaxTags];
         private readonly Vector2[] positions = new Vector2[MaxTags];
         private readonly bool[] shown = new bool[MaxTags];
+        private readonly float[] lifts = new float[MaxTags];
         private int cardCount;
         private float nextContent;
 
@@ -49,7 +50,9 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void OnDestroy() => ResetForScene();
 
-        private void Update()
+        // LateUpdate: the relief commits its pose in MapUiManager.LateUpdate (order 100);
+        // projecting in Update reads last frame's pose and the tags trail a pan.
+        private void LateUpdate()
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (manager == null || map == null || map.mapImage == null || !DynamicMap.mapMaximized)
@@ -148,15 +151,43 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 ContractMapTag tag = tags[i];
                 tag.SetVisible(true);
                 tag.Place(positions[i].x, positions[i].y, inverse, screenScale);
-                float lift = 0f;
-                for (int j = 0; j < i; j++)
-                    if (shown[j] && Mathf.Abs(positions[i].x-positions[j].x)*screenScale < 230f &&
-                        Mathf.Abs(positions[i].y-positions[j].y)*screenScale < 60f)
-                        lift += 58f;
+                float lift = LabelLift(i, screenScale);
                 tag.Apply(cards[i], lift);
                 tag.SetRing(cards[i], map, projected ? projection : null, positions[i], screenScale);
             }
         }
+
+        /// <summary>
+        /// Lifts tag <paramref name="i"/>'s label clear of every label placed before it. The boxes are
+        /// the labels' real screen rectangles (lift included), so a lifted label never lands on a third.
+        /// </summary>
+        private float LabelLift(int i, float screenScale)
+        {
+            float x = positions[i].x * screenScale, y = positions[i].y * screenScale;
+            float height = LabelHeight(i), lift = 0f;
+            for (int pass = 0; pass < MaxTags; pass++)
+            {
+                bool moved = false;
+                for (int j = 0; j < i; j++)
+                {
+                    if (!shown[j]) continue;
+                    float jx = positions[j].x * screenScale, jTop = positions[j].y * screenScale + LabelTop + lifts[j];
+                    float top = y + LabelTop + lift;
+                    bool overlapX = Mathf.Abs(x - jx) < LabelWidth;
+                    bool overlapY = top > jTop - LabelHeight(j) - LabelGap && top - height < jTop + LabelGap;
+                    if (!overlapX || !overlapY) continue;
+                    lift = jTop + height + LabelGap - (y + LabelTop);
+                    moved = true;
+                }
+                if (!moved) break;
+            }
+            lifts[i] = lift;
+            return lift;
+        }
+
+        // Matches ContractMapTag: label top-left at (12, 11 + lift), 200 px wide, one line per row.
+        private const float LabelTop = 11f, LabelWidth = 200f, LabelGap = 2f;
+        private float LabelHeight(int i) => cards[i].IsOffered ? 14f : 28f;
 
         private void Hide()
         {

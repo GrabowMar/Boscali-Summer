@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             const int n = 64;
             byte[] raw = Visuals.CloudNoise3D.Generate(n, 47);
             var px = new Color32[n * n * n];
-            for (int i = 0; i < px.Length; i++) px[i] = new Color32(raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], 255);
+            for (int i = 0; i < px.Length; i++) px[i] = new Color32(raw[i * 4], raw[i * 4 + 1], raw[i * 4 + 2], raw[i * 4 + 3]);
             var tex = new Texture3D(n, n, n, TextureFormat.RGBA32, true);
             tex.SetPixels32(px);
             tex.Apply(true, false);

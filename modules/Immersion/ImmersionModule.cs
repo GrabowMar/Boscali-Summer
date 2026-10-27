@@ -17,7 +17,19 @@ namespace BoscaliSummer.Modules.Immersion
             typeof(CockpitHeadRotationPatch),
             typeof(CockpitHeadResetPatch),
             typeof(GunShotShakePatch),
-            typeof(PlayerHitPatch)
+            typeof(PlayerHitPatch),
+            typeof(RadarToneCapturePatch),
+            typeof(RadarToneSwapPatch),
+            typeof(MissileAlarmSoftPatch),
+            typeof(InterfaceSoftPatch),
+            typeof(StallHornPatch),
+            typeof(RpmWarningSoftPatch),
+            typeof(VrsWarningSoftPatch),
+            typeof(NearMissCrackPatch),
+            typeof(ExplosionMufflePatch),
+            typeof(ParkedEnterPatch),
+            typeof(ParkedLeavePatch),
+            typeof(ParkedNavLightPatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -36,6 +48,9 @@ namespace BoscaliSummer.Modules.Immersion
                 () => { pilot.DebugRefreshKneeboard(); ImmersionManager.Live?.PageFlip(); });
             pilot.SetKneeboardGallery(gallery);
             context.AddService<IKneeboardGallery>(gallery);
+            WorldFx world = context.AddSceneService<WorldFx>(49);
+            world.Configure(context.Settings.Immersion);
+            context.AddClientEffect(world);
 
             context.AddClientSetting("IMMERSION", "IMMERSION MASTER",
                 "Master switch for all client-side cockpit immersion features.",
@@ -70,6 +85,14 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "CANOPY WIND",
                 "Cockpit view: procedural canopy wind rush and aerodynamic slipstream audio.",
                 context.Settings.Immersion.WindAudioEnabled);
+            SoftTones.Master = context.Settings.Immersion.Enabled;
+            SoftTones.Soft = context.Settings.Immersion.SoftTonesEnabled;
+            context.AddClientSetting("IMMERSION", "COCKPIT ALARMS",
+                "Modern missile lock, track and launch alarms and stall horn; soft radar bell and tick; rounder clicks and RPM/VRS warnings. Alarm changes apply from the next aircraft.",
+                context.Settings.Immersion.SoftTonesEnabled);
+            context.AddClientSetting("IMMERSION", "VOICE WARNINGS",
+                "PULL UP with a GPWS whoop, TERRAIN, OVER G and BINGO FUEL for your own aircraft, in every view.",
+                context.Settings.Immersion.VoiceWarningsEnabled);
             context.AddClientSetting("IMMERSION", "PILOT BREATHING",
                 "Cockpit view: oxygen-mask breathing, anti-G straining grunts, G-suit hiss and a faint heartbeat near blackout, paced by the game's G-LOC model.",
                 context.Settings.Immersion.PilotBreathingEnabled);
@@ -81,6 +104,21 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting("IMMERSION", "PILOT REFLECTION",
                 "Faint pilot and helmet reflection on the windscreen; small pilot-only capture at most ten times per second.",
                 context.Settings.Immersion.PilotReflectionEnabled, ClientPreset.Heavy);
+            context.AddClientSetting("IMMERSION", "NEAR-MISS CRACK",
+                "Supersonic rounds passing within 40 m snap with a sharp crack; heavy cannon rounds also jolt the view.",
+                context.Settings.Immersion.NearMissCrackEnabled);
+            context.AddClientSetting("IMMERSION", "CANOPY MUFFLE",
+                "Cockpit view: outside explosions are heard through the canopy, with their top end cut.",
+                context.Settings.Immersion.CockpitMuffleEnabled);
+            context.AddClientSetting("IMMERSION", "CONTRAILS",
+                "Jet engines leave long white contrails above about 7.5 km, spreading and drifting with the wind.",
+                context.Settings.Immersion.ContrailsEnabled, ClientPreset.Light);
+            context.AddClientSetting("IMMERSION", "DUST WAKE",
+                "Aircraft fast and very low over land kick up a dust wake behind them.",
+                context.Settings.Immersion.DustWakeEnabled, ClientPreset.Light);
+            context.AddClientSetting("IMMERSION", "QUIET PARKED AI",
+                "Parked AI aircraft switch navigation lights off and leave the cockpit empty until they start up.",
+                context.Settings.Immersion.ParkedAircraftEnabled);
         }
     }
 }

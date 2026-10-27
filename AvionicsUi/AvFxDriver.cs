@@ -20,6 +20,7 @@ namespace NOAvionics
         public static bool ReducedMotion { get; private set; }
         public static Func<float> GlitchSource { get; set; }
         public static int Revision { get; private set; }
+        public static float Now => Time.unscaledTime * AvFxPacking.AnimationSpeed;
 
         public static void Configure(AvFxTier tier, bool reducedMotion)
         {
@@ -89,15 +90,16 @@ namespace NOAvionics
 
             private void Update()
             {
-                Shader.SetGlobalFloat(NowId, Time.unscaledTime);
+                Shader.SetGlobalFloat(NowId, Now);
                 AvConsole.ParkHidden();
                 float target = 0f;
                 if (Tier == AvFxTier.Full && GlitchSource != null)
                 {
                     try { target = Mathf.Clamp01(GlitchSource()); } catch (Exception) { GlitchSource = null; }
                 }
-                glitch = Mathf.MoveTowards(glitch, target, Time.unscaledDeltaTime * 3f);
-                kick = Tier == AvFxTier.Full ? Mathf.MoveTowards(kick, 0f, Time.unscaledDeltaTime * 2f) : 0f;
+                float delta = Time.unscaledDeltaTime * AvFxPacking.AnimationSpeed;
+                glitch = Mathf.MoveTowards(glitch, target, delta * 3f);
+                kick = Tier == AvFxTier.Full ? Mathf.MoveTowards(kick, 0f, delta * 2f) : 0f;
                 Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : Mathf.Max(glitch, kick));
             }
         }

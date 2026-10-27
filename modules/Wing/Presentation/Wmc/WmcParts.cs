@@ -134,8 +134,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl this[int i] => cells[i];
 
-        public int Count => cells.Length;
-
         /// <summary>The first <paramref name="n"/> cells show. Returns true when that changed (the caller relayouts).</summary>
         public bool SetShownCount(int n)
         {
@@ -238,8 +236,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < count; i++) lines[i] = AvText.Make(Rect, "Line" + i, role, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
         }
-
-        public int Count => lines.Length;
 
         /// <summary>Sets line <paramref name="i"/>; true when the text changed (the caller relayouts).</summary>
         public bool Set(int i, string text)

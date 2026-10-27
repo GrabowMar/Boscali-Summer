@@ -16,6 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private bool asleep;
         private GlobalPosition orcaAim;
         private float restDepth = OrcaSleeper.SleepDepth;
+        private float runDepth = WaterRun.Depth;
         private float sleptAge = -1f;  // missile age at the first sleep; the SleepSeconds budget counts from here
         private float nextScan;
 
@@ -150,6 +151,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // Water phase (5 Hz): home on the ship; lead it until StopLeadRange; snake-search when the track is lost.
         private void PlanSwim(GlobalPosition pos)
         {
+            Vector3 here = missile.transform.position;
+            runDepth = Physics.Raycast(here + Vector3.up * 5f, Vector3.down, out RaycastHit floor, 60f, (int)PhysicsLayers.StaticsMask)
+                ? WaterRun.RunDepth(floor.point.GlobalY())
+                : WaterRun.Depth;
             bool tracking = target is Ship ship && !ship.disabled;
             Vector3 to = tracking ? target.GlobalPosition() - pos : Vector3.zero;
             Vector3 flatTo = new Vector3(to.x, 0f, to.z);
@@ -226,7 +231,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             Vector3 v = swimHeading * WaterRun.RunSpeed(new Vector2(rb.velocity.x, rb.velocity.z).magnitude, dt);
             // Gravity is cancelled underwater; otherwise the spring settles 2.45 m deep of the run depth.
-            v.y = rb.velocity.y + (WaterRun.VerticalAccel(y, rb.velocity.y) - Physics.gravity.y) * dt;
+            v.y = rb.velocity.y + (WaterRun.VerticalAccel(y, rb.velocity.y, runDepth) - Physics.gravity.y) * dt;
             rb.velocity = v;
             rb.angularVelocity = Vector3.zero;
             rb.MoveRotation(Quaternion.LookRotation(new Vector3(v.x, v.y * 0.2f, v.z)));

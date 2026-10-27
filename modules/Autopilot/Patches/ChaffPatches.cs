@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Modules.Autopilot.Runtime;
 using HarmonyLib;
 
@@ -40,6 +41,20 @@ namespace BoscaliSummer.Modules.Autopilot.Patches
                 PatchGuard.Report("Autopilot.ChaffTrigger", e);
                 return true;
             }
+        }
+    }
+
+    /// <summary>Every flare (any aircraft's) burns bigger and stays a few pixels on screen at range: easier to spot (2026-10-27). Looks only.</summary>
+    [HarmonyPatch(typeof(IRFlare), nameof(IRFlare.LaunchFlare))]
+    internal static class FlareLookPatch
+    {
+        private static readonly AccessTools.FieldRef<IRFlare, UnityEngine.ParticleSystem> Core =
+            AccessTools.FieldRefAccess<IRFlare, UnityEngine.ParticleSystem>("flareParticles");
+
+        private static void Postfix(IRFlare __instance)
+        {
+            try { ChaffVisuals.BrightenFlare(Core(__instance)); }
+            catch (Exception e) { PatchGuard.Report("Autopilot.FlareLook", e); }
         }
     }
 

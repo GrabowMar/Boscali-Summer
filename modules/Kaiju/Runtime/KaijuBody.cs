@@ -49,6 +49,7 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
         private readonly HashSet<Collider> own = new HashSet<Collider>();
         private readonly List<GameObject> torso = new List<GameObject>();
         private Vector3[] offsets;
+        private float nextTrack;
         private Renderer[] blisters;
         private bool[] popped, attached;
         private MaterialPropertyBlock block;
@@ -148,6 +149,8 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             // The hulls are coarser than the skin, so most weak spots measured on it sit inside one, where nothing can touch
             // them: missiles burst on the hull and the game's blast traces stop there (tests/ingame/kaiju-tune.json: throat,
             // eyes, knees took 0 from five AGMs). Lift each hitbox centre just out of every hull; the blister stays on the skin.
+            // The unit stays on the lifted centre too: guided missiles home on the unit, and one on the blister burst every AGM on
+            // the hide (kaiju-tune 2026-10-27: throat, eyes, knees untouched by six AGM-1), so the marker sits 14-54 m off it.
             var lifted = new List<string>();
             for (int i = 0; i < spots.Length; i++)
             {
@@ -371,6 +374,28 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
                 if (popped[i] && i != KaijuRig.HeartIndex) broken++;
             }
             Broken = broken;
+            if (Time.time >= nextTrack)
+            {
+                nextTrack = Time.time + 1f;
+                KeepTracked();
+            }
+        }
+
+        /// <summary>
+        /// Every peer, 1 Hz: each side that already tracks a live weak spot sees it as just spotted. A side's known position
+        /// follows the unit only within 4 s of a spot (<c>TrackingInfo.GetPosition</c>), and buildings are never re-spotted, so
+        /// without this a HUD marker turned "outdated" once the spot moved 20 m and stayed pinned where the kaiju had been
+        /// until the host's next 4 s reveal. Discovery stays with the host's reveal (<see cref="KaijuBrain"/>).
+        /// </summary>
+        private void KeepTracked()
+        {
+            foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+            {
+                if (hq == null) continue;
+                foreach (Building node in Nodes)
+                    if (node != null && !node.disabled && node.NetworkHQ != hq)
+                        hq.GetTrackingData(node.persistentID)?.UpdateInfo(node.GlobalPosition());
+            }
         }
 
         private void ScanNodes()

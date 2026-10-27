@@ -25,6 +25,15 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Most quads LaneBar writes for a track up to 440 wide and 12 high.</summary>
         public const int LaneQuads = 64;
 
+        /// <summary>Most centre-line points an offensive takes; more are ignored.</summary>
+        public const int MaxCurve = 17;
+        /// <summary>Most quads Offensive writes: a fill and two edges per body step, the head, the tail cap and four head edges.</summary>
+        public const int OffensiveQuads = 3 * (MaxCurve - 1) + 6;
+        /// <summary>Quads Chevrons writes: three chevrons of two strokes.</summary>
+        public const int ChevronQuads = 6;
+
+        private static readonly float[] bodyX = new float[MaxCurve], bodyY = new float[MaxCurve], bodyS = new float[MaxCurve];
+
         private const float Root2 = 1.4142135f, Cos30 = 0.8660254f;
         private const float HatchSpacing = 8f, HatchWidth = 1.5f, TickWidth = 1f, NotchWidth = 2.5f, NotchHead = 4f, GhostWidth = 1.5f;
         private const int MaxGhostDashes = 20;
@@ -151,6 +160,117 @@ namespace BoscaliSummer.Modules.Command.Domain
                         lane.Notch, lane.Notch, lane.Notch, lane.Notch);
             return ok;
         }
+
+        /// <summary>
+        /// A HOI4 battle-plan arrow along a centre line ending at its last point: a body that swells from the tail half width to the
+        /// neck half width, a head head-half wide and 1.5 times that long, a fill and an outline. Main thread only (shared scratch).
+        /// </summary>
+        public static bool Offensive(AvQuadBuffer b, float[] xs, float[] ys, int n, float tail, float neck, float head, float width, Rgba fill, Rgba line)
+        {
+            if (xs == null || ys == null) return true;
+            n = Math.Min(n, Math.Min(MaxCurve, Math.Min(xs.Length, ys.Length)));
+            if (n < 2 || Bad(tail) || Bad(neck) || Bad(head) || Bad(width) || tail < 0f || neck <= 0f || head <= 0f) return true;
+            float total = 0f;
+            for (int i = 0; i < n; i++)
+            {
+                if (Bad(xs[i]) || Bad(ys[i])) return true;
+                if (i > 0) total += Len(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
+            }
+            if (total < 1e-3f) return true;
+
+            // The body runs to the neck, the head's length short of the tip, cut mid-segment where it falls.
+            float headLen = Math.Min(head * 1.5f, total * 0.45f), neckAt = total - headLen, s = 0f;
+            int m = 0;
+            bodyX[m] = xs[0]; bodyY[m] = ys[0]; bodyS[m++] = 0f;
+            for (int i = 1; i < n; i++)
+            {
+                float seg = Len(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
+                if (s + seg >= neckAt)
+                {
+                    float t = seg > 1e-6f ? (neckAt - s) / seg : 0f;
+                    bodyX[m] = xs[i - 1] + (xs[i] - xs[i - 1]) * t; bodyY[m] = ys[i - 1] + (ys[i] - ys[i - 1]) * t; bodyS[m++] = neckAt;
+                    break;
+                }
+                s += seg;
+                bodyX[m] = xs[i]; bodyY[m] = ys[i]; bodyS[m++] = s;
+            }
+            if (m < 2) return true;
+
+            float tipX = xs[n - 1], tipY = ys[n - 1];
+            bool ok = true;
+            float plx = 0f, ply = 0f, prx = 0f, pry = 0f, l0x = 0f, l0y = 0f, r0x = 0f, r0y = 0f;
+            for (int k = 0; k < m; k++)
+            {
+                int a = Math.Max(0, k - 1), c = Math.Min(m - 1, k + 1);
+                float tx = bodyX[c] - bodyX[a], ty = bodyY[c] - bodyY[a], tl = Len(tx, ty);
+                if (tl < 1e-6f) { tx = tipX - bodyX[0]; ty = tipY - bodyY[0]; tl = Len(tx, ty); }
+                if (tl < 1e-6f) return ok;
+                float half = tail + (neck - tail) * (neckAt > 1e-6f ? bodyS[k] / neckAt : 1f);
+                float nx = -ty / tl * half, ny = tx / tl * half;
+                float lx = bodyX[k] + nx, ly = bodyY[k] + ny, rx = bodyX[k] - nx, ry = bodyY[k] - ny;
+                if (k == 0) { l0x = lx; l0y = ly; r0x = rx; r0y = ry; }
+                else
+                {
+                    ok &= b.Add(plx, ply, lx, ly, rx, ry, prx, pry, fill, fill, fill, fill);
+                    ok &= AvStrokes.Line(b, plx, ply, lx, ly, width, line);
+                    ok &= AvStrokes.Line(b, prx, pry, rx, ry, width, line);
+                }
+                plx = lx; ply = ly; prx = rx; pry = ry;
+            }
+
+            // The head: a triangle from the neck to the tip, its base square to the last stretch.
+            float nkX = bodyX[m - 1], nkY = bodyY[m - 1], hx = tipX - nkX, hy = tipY - nkY, hl = Len(hx, hy);
+            if (hl < 1e-6f) return ok;
+            float hnx = -hy / hl * head, hny = hx / hl * head;
+            float alx = nkX + hnx, aly = nkY + hny, arx = nkX - hnx, ary = nkY - hny;
+            ok &= b.Add(tipX, tipY, alx, aly, arx, ary, tipX, tipY, fill, fill, fill, fill);
+            ok &= AvStrokes.Line(b, l0x, l0y, r0x, r0y, width, line);
+            ok &= AvStrokes.Line(b, plx, ply, alx, aly, width, line);
+            ok &= AvStrokes.Line(b, prx, pry, arx, ary, width, line);
+            ok &= AvStrokes.Line(b, alx, aly, tipX, tipY, width, line);
+            ok &= AvStrokes.Line(b, arx, ary, tipX, tipY, width, line);
+            return ok;
+        }
+
+        /// <summary>
+        /// Three chevrons marching along a centre line toward its end, phase 0..1 of a cycle, size the chevron's half span. They keep out
+        /// of the last fifth (the head) and fade in and out at the ends of their run.
+        /// </summary>
+        public static bool Chevrons(AvQuadBuffer b, float[] xs, float[] ys, int n, float phase, float size, float width, Rgba c)
+        {
+            if (xs == null || ys == null) return true;
+            n = Math.Min(n, Math.Min(xs.Length, ys.Length));
+            if (n < 2 || Bad(phase) || Bad(size) || Bad(width) || size <= 0f) return true;
+            float total = 0f;
+            for (int i = 1; i < n; i++)
+            {
+                if (Bad(xs[i]) || Bad(ys[i]) || Bad(xs[i - 1]) || Bad(ys[i - 1])) return true;
+                total += Len(xs[i] - xs[i - 1], ys[i] - ys[i - 1]);
+            }
+            if (total < 1e-3f) return true;
+            bool ok = true;
+            for (int j = 0; j < 3; j++)
+            {
+                float f = phase + j / 3f;
+                f -= (float)Math.Floor(f);
+                float at = f * total * 0.8f, s = 0f;
+                for (int i = 1; i < n; i++)
+                {
+                    float dx = xs[i] - xs[i - 1], dy = ys[i] - ys[i - 1], seg = Len(dx, dy);
+                    if (s + seg < at || seg < 1e-6f) { s += seg; continue; }
+                    float t = (at - s) / seg, ux = dx / seg, uy = dy / seg;
+                    float px = xs[i - 1] + dx * t, py = ys[i - 1] + dy * t;
+                    var fade = new Rgba(c.R, c.G, c.B, c.A * Math.Min(1f, Math.Min(f, 1f - f) * 5f));
+                    float bx0 = px - ux * size * 0.6f, by0 = py - uy * size * 0.6f, fx = px + ux * size * 0.4f, fy = py + uy * size * 0.4f;
+                    ok &= AvStrokes.Line(b, bx0 - uy * size, by0 + ux * size, fx, fy, width, fade);
+                    ok &= AvStrokes.Line(b, bx0 + uy * size, by0 - ux * size, fx, fy, width, fade);
+                    break;
+                }
+            }
+            return ok;
+        }
+
+        private static float Len(float dx, float dy) => (float)Math.Sqrt(dx * dx + dy * dy);
 
         // The head is a triangle written as one quad with the tip repeated; its base is the arrow's last h units.
         private static bool Head(AvQuadBuffer b, float tipX, float tipY, float baseX, float baseY, float ux, float uy, float h, Rgba c)

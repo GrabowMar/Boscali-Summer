@@ -10,7 +10,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Modules.Performance.Runtime
 {
     /// <summary>
-    /// Explicit opt-in Unity-level tunings: LOD floor, shadow cap, and a
+    /// Explicit opt-in Unity-level tunings: LOD floor, shadow cap, render scale cap, and a
     /// scene-transition cleanup. Unlike the adaptive cosmetic budget, these touch the
     /// game's own render settings — but only while the toggle is on, only in the cheaper
     /// direction, and only client-locally. Each knob captures the game's value on first
@@ -28,6 +28,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private float shadowOriginal;
         // The game renders with URP, which ignores QualitySettings.shadowDistance.
         private UniversalRenderPipelineAsset shadowAsset;
+        private bool scaleApplied;
+        private float scaleOriginal = 1f;
+        private UniversalRenderPipelineAsset scaleAsset;
         private float lastCleanup = -CleanupSpacingSeconds;
         private const float CleanupSpacingSeconds = 30f;
 
@@ -62,6 +65,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             SyncLod(usable && settings.LodBiasFloor.Value);
             SyncShadow(usable && settings.ShadowDistanceCap.Value);
             HoldShadowCap();
+            SyncScale(usable && settings.RenderScaleCap.Value);
+            HoldScaleCap();
             BaseGameTuningReport.LodFloorActive = lodApplied;
             BaseGameTuningReport.ShadowCapActive = shadowApplied;
         }
@@ -144,6 +149,53 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             shadowAsset.shadowDistance = ClientTuningMath.ShadowDistanceCapMeters;
         }
 
+        private void SyncScale(bool want)
+        {
+            if (want == scaleApplied) return;
+            try
+            {
+                if (want)
+                {
+                    var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+                    if (asset == null) return;
+                    scaleAsset = asset;
+                    scaleOriginal = asset.renderScale;
+                    asset.renderScale = ClientTuningMath.PlanRenderScale(scaleOriginal, true);
+                    scaleApplied = true;
+                    Plugin.Logger?.LogInfo("Performance: render scale cap on (game " +
+                        scaleOriginal.ToString("F2") + " -> " + asset.renderScale.ToString("F2") + ").");
+                }
+                else
+                {
+                    scaleApplied = false;
+                    if (scaleAsset == null) return;
+                    scaleAsset.renderScale = ClientTuningMath.RestoreRenderScale(scaleOriginal, scaleAsset.renderScale);
+                    Plugin.Logger?.LogInfo("Performance: render scale restored to " +
+                        scaleAsset.renderScale.ToString("F2") + ".");
+                    scaleAsset = null;
+                }
+            }
+            catch (Exception error)
+            {
+                Plugin.Logger?.LogWarning("Performance: render scale tuning failed: " + error.Message);
+            }
+        }
+
+        // Held like the shadow cap: a graphics change or mission load may write the asset back.
+        private void HoldScaleCap()
+        {
+            if (!scaleApplied || scaleAsset == null) return;
+            if (!ReferenceEquals(GraphicsSettings.currentRenderPipeline, scaleAsset))
+            {
+                SyncScale(false);
+                return;
+            }
+            float current = scaleAsset.renderScale;
+            if (current <= ClientTuningMath.RenderScaleCap) return;
+            scaleOriginal = current;
+            scaleAsset.renderScale = ClientTuningMath.RenderScaleCap;
+        }
+
         private void RunCleanup()
         {
             // A mission load fires several scene resets in a row; one cleanup covers them.
@@ -165,6 +217,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         {
             SyncLod(false);
             SyncShadow(false);
+            SyncScale(false);
             BaseGameTuningReport.LodFloorActive =
                 BaseGameTuningReport.ShadowCapActive = false;
         }

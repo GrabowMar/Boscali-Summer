@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public bool Pick(int proposalId, int revision) => ModuleServices.TryGet(out ITheaterWarView war) && war.RequestPick(proposalId, revision);
 
         public bool Cancel(int operationId, int revision) => ModuleServices.TryGet(out ITheaterWarView war) && war.RequestCancel(operationId, revision);
+        public bool Draw(float startX, float startZ, float fixX, float fixZ) => ModuleServices.TryGet(out ITheaterWarView war) && war.RequestDraw(startX, startZ, fixX, fixZ);
 
         public bool Posture(TheaterWarPosture posture) => ModuleServices.TryGet(out ITheaterWarView war) && war.RequestPosture(posture);
 

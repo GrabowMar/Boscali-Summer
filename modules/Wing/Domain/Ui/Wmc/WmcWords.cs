@@ -8,35 +8,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// fields — invariant culture, a dash when unknown, bounded length so nothing is cut with "…".</summary>
     internal static class WmcWords
     {
-        /// <summary>"2 ATK · 1 FORM · 1 DEF" in that order (then RTB, GND); NONE for nobody.</summary>
-        public static string Posture(SnapshotMember[] rows, int count)
-        {
-            int atk = 0, form = 0, def = 0, rtb = 0, gnd = 0;
-            for (int i = 0; i < count; i++)
-                switch ((MemberDuty)rows[i].Duty)
-                {
-                    case MemberDuty.Engaged: atk++; break;
-                    case MemberDuty.Defending: def++; break;
-                    case MemberDuty.Recovering: rtb++; break;
-                    case MemberDuty.Grounded:
-                    case MemberDuty.Settled: gnd++; break;
-                    default: form++; break;
-                }
-            var sb = new StringBuilder();
-            Part(sb, atk, "ATK");
-            Part(sb, form, "FORM");
-            Part(sb, def, "DEF");
-            Part(sb, rtb, "RTB");
-            Part(sb, gnd, "GND");
-            return sb.Length > 0 ? sb.ToString() : "NONE";
-        }
-
-        private static void Part(StringBuilder sb, int n, string word)
-        {
-            if (n == 0) return;
-            if (sb.Length > 0) sb.Append(" · ");
-            sb.Append(n.ToString(CultureInfo.InvariantCulture)).Append(' ').Append(word);
-        }
 
         /// <summary>The scope row's words: the wing or an element with its size; up to three member numbers, else a count.</summary>
         public static string ScopeText(string label, int members)

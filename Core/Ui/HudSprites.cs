@@ -6,7 +6,7 @@ namespace BoscaliSummer.Core.Ui
     /// <summary>
     /// The HUD's own white alpha mask, tinted by <c>Image.color</c> so theme/tone changes are a
     /// colour write, never a re-bake: the native panel's chamfered slab, signed-distance rasterised with a one-pixel
-    /// anti-aliased edge (the KaceyTronic-RWR technique), baked once as a small 9-sliced texture. Square or chamfered
+    /// anti-aliased edge, baked once as a small 9-sliced texture. Square or chamfered
     /// shapes only: the HUD has no rounded rectangles or capsules. Built lazily on the main thread.
     /// </summary>
     internal static class HudSprites

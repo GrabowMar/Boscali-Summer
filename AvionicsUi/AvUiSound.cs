@@ -6,14 +6,23 @@ namespace NOAvionics
 {
     public enum AvUiCue { Hover, Navigate, Press, Engage, Release, Confirm, Caution }
 
-    /// <summary>Quiet, scene-owned, two-dimensional feedback for cockpit controls.</summary>
+    /// <summary>
+    /// Quiet, scene-owned, two-dimensional feedback for cockpit controls: recorded panel keys and blips by name from
+    /// <see cref="Recorded"/> (the host's clip library), with synthesized tones as the fallback when a clip is missing.
+    /// </summary>
     public static class AvUiSound
     {
         private const int SampleRate = 44100;
         private static readonly AudioClip[] clips = new AudioClip[7];
-        private static readonly float[] gains = { 0f, .15f, .15f, .18f, .13f, .20f, .17f };
+        // Hover, Navigate, Press, Engage, Release, Confirm, Caution
+        private static readonly string[] recorded = { null, "ui-click-1", "ui-click-0", "ui-click-0", "ui-click-1", "ui-confirm", "ui-caution" };
+        private static readonly float[] gains = { 0f, .35f, .35f, .4f, .3f, .14f, .16f };
+        private static readonly float[] pitches = { 1f, 1.08f, 1f, .9f, .94f, 1f, 1f };
         private static AudioSource source;
         private static float lastAction = -1f;
+
+        /// <summary>The host's recorded clips by name (ui-click-0/1, ui-confirm, ui-caution); null keeps the synthesized tones.</summary>
+        public static System.Func<string, AudioClip> Recorded { get; set; }
 
         /// <summary>Independent UI level; zero mutes every cue.</summary>
         public static float Volume { get; set; } = .7f;
@@ -25,7 +34,7 @@ namespace NOAvionics
             float now = Time.unscaledTime;
             if (now - lastAction < .025f) return;
             lastAction = now;
-            source.pitch = 1f;
+            source.pitch = pitches[(int)cue];
             source.PlayOneShot(clips[(int)cue], gains[(int)cue] * Mathf.Clamp01(Volume));
         }
 
@@ -38,7 +47,7 @@ namespace NOAvionics
             source = null;
             for (int i = 0; i < clips.Length; i++)
             {
-                if (clips[i] != null) Object.Destroy(clips[i]);
+                if (clips[i] != null && clips[i].name.StartsWith("NOAvionics.")) Object.Destroy(clips[i]); // the recorded ones are shared
                 clips[i] = null;
             }
             lastAction = -1f;
@@ -54,7 +63,7 @@ namespace NOAvionics
             source.loop = false;
             source.spatialBlend = 0f;
             source.volume = 1f;
-            for (int i = 0; i < clips.Length; i++) clips[i] = Build((AvUiCue)i);
+            for (int i = 0; i < clips.Length; i++) clips[i] = (recorded[i] != null ? Recorded?.Invoke(recorded[i]) : null) ?? Build((AvUiCue)i);
             return clips[0] != null;
         }
 

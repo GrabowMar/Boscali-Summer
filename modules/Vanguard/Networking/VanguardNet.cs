@@ -31,7 +31,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
     /// </summary>
     internal sealed class VanguardNet : MonoBehaviour, ISceneService
     {
-        internal const byte ProtocolVersion = 4; // 4: a HAND order carries the course (X, degrees) and altitude (Y)
+        internal const byte ProtocolVersion = 5; // 4: a HAND order carries the course (X, degrees) and altitude (Y); 5: RAM MODE (Link = RamLink)
+        internal const byte RamLink = 200;      // Link value of a RAM MODE switch: X > 0.5 = on
         private const float OrderInterval = 0.2f; // per aircraft; a re-designate right after DESIGNATE must not be eaten
 
         private readonly SenderThrottle throttle = new SenderThrottle();
@@ -46,6 +47,14 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             GameManager.GetLocalAircraft(out Aircraft me) && me == designatedFrom;
 
         public bool CanStrike => LocalTarget(out _, out _);
+
+        /// <summary>RAM MODE as this client last set it (local view; the host holds the rule in DroneOrders).</summary>
+        public bool RamMode => ramMode && ramFrom != null && !ramFrom.disabled && GameManager.GetLocalAircraft(out Aircraft me) && me == ramFrom;
+        private bool ramMode;
+        private Aircraft ramFrom;
+
+        /// <summary>The local pilot's first selected target, else null (DRONE LINK's SEND TO TARGET).</summary>
+        public Unit Target => LocalTarget(out _, out Unit target) ? target : null;
 
         /// <summary>The local pilot's live designation (what the drones work on), else null: the UAV feed tracks and boxes it.</summary>
         public Unit Designated => Striking ? designated : null;
@@ -89,6 +98,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             designated = null;
             designatedFrom = null;
+            ramMode = false;
+            ramFrom = null;
             throttle.Clear();
             pendingLinks.Clear();
         }
@@ -107,6 +118,16 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             designated = null;
             designatedFrom = null;
             Send(aircraft, false, null);
+        }
+
+        /// <summary>RAM MODE on or off for the local aircraft's REMORAs: they ram instead of firing.</summary>
+        public void SetRamMode(bool on)
+        {
+            if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
+            ramMode = on;
+            ramFrom = aircraft;
+            if (GameAccess.IsServer()) { DroneOrders.SetRamMode(aircraft, on); return; }
+            NetworkManagerNuclearOption.i?.Client?.Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Link = RamLink, X = on ? 1f : 0f });
         }
 
         /// <summary>A drone link order for one of the local aircraft's drones (AUTO releases it); the host applies it to SteerOrders.</summary>
@@ -149,7 +170,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         private static bool Linkable(Aircraft aircraft, Missile drone) =>
             drone != null && !drone.disabled && drone.owner == aircraft && drone.definition != null &&
             VanguardKeys.IsSteerable(VanguardKeys.RoleOf(drone.definition.jsonKey)) &&
-            DroneLink.InRange(FastMath.Distance(aircraft.GlobalPosition(), drone.GlobalPosition()));
+            DroneLink.InRange(FastMath.Distance(aircraft.GlobalPosition(), drone.GlobalPosition()), WatchtowerPod.LinkScale(aircraft));
 
         private static bool LocalTarget(out Aircraft aircraft, out Unit target)
         {
@@ -192,6 +213,11 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             Aircraft aircraft = player.Aircraft;
             if (aircraft == null || aircraft.disabled) return;
             if (!throttle.Allow((ulong)aircraft.persistentID.Id, Time.unscaledTime, OrderInterval)) return;
+            if (message.Link == RamLink)
+            {
+                DroneOrders.SetRamMode(aircraft, message.X > 0.5f);
+                return;
+            }
             if (message.Link > 0)
             {
                 if (message.Link > (byte)DroneMode.Waypoint + 1 || !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;

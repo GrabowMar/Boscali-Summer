@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static bool TryGetRail(out RectTransform rect)
         {
             rect = rail;
-            return rail != null;
+            return rail != null && rail.gameObject.activeInHierarchy;
         }
 
         /// <summary>False when even bare 44px keys would not fit; the caller then leaves the stock bezel alone.</summary>
@@ -85,6 +85,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ticker.Add(-1, AvTickRate.Fast, Refresh);
             }
 
+            if (!rail.gameObject.activeSelf) rail.gameObject.SetActive(true);
             rail.anchorMin = rail.anchorMax = rail.pivot = new Vector2(0.5f, 0.5f);
             rail.sizeDelta = new Vector2(columns.Rail.width, columns.Rail.height);
             rail.anchoredPosition = MfdLayout.CentreOf(columns.Rail);
@@ -225,16 +226,29 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             laidSize = rail.sizeDelta;
         }
 
+        /// <summary>Map closed: hide the rail and keep its keys; the next open shows it again instead of rebuilding (~20 ms).</summary>
+        public static void Park()
+        {
+            if (rail == null) return;
+            ReleaseStowed();
+            rail.gameObject.SetActive(false);
+        }
+
+        // The patch hands every bezel button back before it parks or resets. If one is still
+        // here, hiding or destroying it with the rail would strand the game's button, so it is
+        // released onto the canvas instead.
+        private static void ReleaseStowed()
+        {
+            while (stowage != null && stowage.childCount > 0)
+                stowage.GetChild(0).SetParent(rail.parent, worldPositionStays: false);
+        }
+
         /// <summary>Forget the rail; the next map open builds its own.</summary>
         public static void Reset()
         {
             if (rail != null)
             {
-                // The patch hands every bezel button back before it calls this. If one is
-                // still here, destroying it with the rail would leave the game holding a dead
-                // button, so it is released onto the canvas instead.
-                while (stowage != null && stowage.childCount > 0)
-                    stowage.GetChild(0).SetParent(rail.parent, worldPositionStays: false);
+                ReleaseStowed();
                 Kill(rail.gameObject);
             }
             rail = null;

@@ -1,6 +1,7 @@
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
@@ -27,6 +28,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly CyberNoticeTracker cyberNotices = new CyberNoticeTracker();
         private readonly SofNoticeTracker sofNotices = new SofNoticeTracker();
         private readonly OpsNoticeTracker opsNotices = new OpsNoticeTracker();
+        private readonly FrontNoticeTracker frontNotices = new FrontNoticeTracker();
+        /// <summary>Front milestones said so far, and the last one (automation reads them back).</summary>
+        internal int FrontNoticeCount { get; private set; }
+        internal string LastFrontNotice { get; private set; } = "";
         private string text, detail, noticeText;
         private float noticeUntil;
         private HudTone tone;
@@ -102,6 +107,16 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     opsNotice.Kind == OpsNoticeKind.Done ? C2HudKind.OpsDone : C2HudKind.OpsPing;
                 noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
                 AvUiSound.Play(opsNotice.Kind == OpsNoticeKind.Done ? AvUiCue.Confirm : AvUiCue.Caution);
+            }
+            // The fronts' milestones: a programme done (readiness names its new perks), failed, or an asset lost.
+            FrontNotice front = frontNotices.Observe(manager.FrontMirror.Known, manager.FrontMirror.State, now, quiet);
+            if (front.Kind != FrontNoticeKind.None)
+            {
+                noticeText = front.Text;
+                FrontNoticeCount++; LastFrontNotice = front.Text;
+                noticeKind = front.Kind == FrontNoticeKind.Lost ? C2HudKind.FrontLost : front.Kind == FrontNoticeKind.Failed ? C2HudKind.FrontFailed : C2HudKind.FrontUp;
+                noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
+                AvUiSound.Play(front.Kind == FrontNoticeKind.Up ? AvUiCue.Confirm : AvUiCue.Caution);
             }
             SpaceNotice notice = notices.Observe(mirror.Known, mirror.State, now, quiet);
             if (notice.Kind == SpaceNoticeKind.None) return;

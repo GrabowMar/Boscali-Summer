@@ -1,5 +1,60 @@
 # Changelog
 
+## Unreleased
+
+- **Combat adjustments** (new module, on by default; every rule has its own switch on SET SERVER, same rules for
+  both sides): radars and aircraft still share what they see at once, but ground and ship lookouts report distant
+  contacts only now and then; a contact nobody is reporting drifts on the map and in the AI's picture, then leaves
+  it (aircraft after 1 minute, ground and ships after 3); about 8 % of guided missiles fail on their own and flares,
+  chaff and jamming are 1.5× as strong; armoured vehicles pop smoke at laser, TV and IR guided weapons; ships fire
+  decoy salvos at incoming missiles; ground radars switch off when an anti-radiation missile comes for them. With
+  another combat overhaul installed, the sharing, drift and missile rules leave the job to it.
+- **OPS, simpler**: click a perk on the PERKS tab to arm it (the strip then offers FIRE; a map right-click still fires
+  at once). The quick-slot buttons are gone from the page (their hotkeys still work).
+- **OPS front windows**: the rail keeps the three postures and drops the funding-split nudges and the focus pin;
+  each programme has one CHIP IN button (up to 25 AP, never more than it still needs).
+- **SHADOW**: a mission button sends the order straight away when the team and target are ready; otherwise it
+  drafts the mission and the form names what is missing.
+- **OPS maps first**: the front window is wider and every extra pixel goes to the room, so the ORBIT, NETWORK and SHADOW
+  maps are larger. The logs are gone (radio log, station log, session log, signal log, standing orders, the event line
+  on the FRONTS cards), and the SHADOW map no longer carries the held/footprint/key notes; only the QRF note stays.
+- **Satellite camera**: ENLARGE gives the camera the whole room, with MARK and TRANSMIT in its toolbar (click a bracket
+  to pick a track). SHRINK or Esc docks it again.
+- **OPS guidance**: each room's footer now says how to use it, in the order of the clicks. An empty track file or
+  target list says why and what to do next (an SOF front with no camp points at the CAMP programme). The perk list on
+  the rail is easier to read.
+- **TASKED**: click a posted package to arm it, then FIRE (the same two steps as a perk).
+- **Less noise**: the FRONTS cards drop the funding share and the lock detail; the NETWORK room drops the invented
+  numbers (open ports, IP addresses, round-trip times and the hex dump) so everything shown is real game state.
+- **OPS feedback**: every programme says what it does (READINESS names the perks it unlocks); hovering a
+  posture tells you what it does before you pick it; a sent command shows SENDING … WAITING FOR THE HOST in the
+  footer until the answer comes back.
+- **OPS side column, streamlined**: superiority reads as one figure (+34 AHEAD) instead of a five-word scale;
+  the strategy lock moved into its header; queued programmes are no longer listed twice; the active programme
+  lost its repeated numbers line; the perks list says where perks are used (OPS page or C menu).
+- **OPS milestones in the cockpit**: when a front programme finishes, fails or an asset is lost, the cockpit line
+  says so once with a chime; READINESS UP names the perks it just unlocked. Hovering the superiority bar says what
+  raises it on that front and what being ahead gives you.
+
+## 0.2.9 — update
+
+- **World effects**: contrails form behind aircraft at altitude, low passes over land kick up a dust wake, a fast
+  close pass gives a sharp crack, the canopy muffles outside sound, and parked AI aircraft sit quiet.
+- **Cockpit sound**: new softer RWR tones and missile alarm; switch clicks and the RPM and vortex-ring cues are gentler.
+- **Night**: nights are darker and bluer, scaled by the moon (a full moon still lights the ground). The cockpit has
+  night lighting. Night vision goggles now cover the eyes as they flip down, open from the middle while the tube
+  warms, and show a few scintillating specks.
+- **VANGUARD new stores**: SRB-2 TORCH (strap-on booster), HEL-60 SUNSPEAR (pylon laser), PCU-9 STORMCELL (capacitor
+  pod), ASQ-X WATCHTOWER (recon pod) and XQ-90 MANTA (a large two-slot wing drone). AI aircraft do not pick them in
+  random loadouts.
+- **VANGUARD drones**: SEND WHERE I LOOK and SEND TO TARGET; orders stay with each drone, and a right-click on the
+  feed sends the drone there.
+- **STR map**: front lines draw as striped bands with teeth, offensives show as arrows, and you can draw your own
+  offensive.
+- **Rod impact**: no more black cloud hanging over the crater; the crater gets soot marks and a new impact sound.
+- **Performance**: building damage culls far debris and pools pieces; clouds blend their detail levels between 27
+  and 45 km and no longer flicker on the horizon.
+
 ## 0.2.8 — update
 
 - **Target-selection smearing after mission restart** ([#22](https://github.com/GrabowMar/Boscali-Summer/issues/22)):
@@ -196,8 +251,7 @@
 - **OPS TASKED tab**: claim posted strikes and steer the cruise missile; the CRUISE perk now flies
   the game's own cruise missile, so steering works.
 - **Distant clouds** no longer boil.
-- **PMC third faction**: scripted missions and the editor can bring in a PMC side (a port of
-  ThirdFaction, MIT); the Summer Wing mission is flown for the PMC.
+- **PMC third faction**: scripted missions and the editor can bring in a PMC side; the Summer Wing mission is flown for the PMC.
 - **WMC LOADOUT symmetry**: pylon pairs can be linked or split (issue 19).
 - **Wing on the map**: wing markers carry tethers and outlined badges, and the right-click card has
   wing orders.
@@ -239,7 +293,7 @@
   hills over the Archipelago). They now check the loaded map every frame and fetch its own relief. The ghost's lines are about a
   quarter fainter and its twice-a-second repaint costs about half.
 - **Boscali Summer, the mission:** the **Boscali Summer** entry in the mission picker is now a scripted mission on top of the game's own Escalation. A cutscene tells the build-up in a storm at sunset (the night of the coup, the fall of Agrapol, the fleet coming home), with armoured columns already rolling, place-and-date stamps and the mod's event paintings landing as photographs along a timeline, framed as a surveillance feed and set to its own music. You pick a side as a contract pilot, your handler and your side's command talk you through an opening (fly to the picket station, break the raid on your strip), and then the war opens into the full Escalation sandbox with the story following its milestones to the end. Existing user missions are preserved; no mission file is shipped.
-- **Mission scripts:** the mission above is one text file. Your own go in `BepInEx/config/BoscaliSummer/scenarios/`: objectives and spawns written into a copy of any mission, named characters with dialogue, cutscene camera shots with captions, stamps and pinned photographs, hints, and campaigns whose chapters unlock one after another. A dedicated server starts one with `-mission scenario:<id>`. See [docs/SCENARIOS.md](docs/SCENARIOS.md). New F1 switch: **Cutscenes in scripted missions**.
+- **Mission scripts:** the mission above is one text file. Your own go in `BepInEx/config/BoscaliSummer/scenarios/`: objectives and spawns written into a copy of any mission, named characters with dialogue, cutscene camera shots with captions, stamps and pinned photographs, hints, and campaigns whose chapters unlock one after another. A dedicated server starts one with `-mission scenario:<id>`. New F1 switch: **Cutscenes in scripted missions**.
 - **Mission systems prompt:** every mission, vanilla and workshop included, runs the whole mod again; nothing is locked. When a mission starts, a prompt on the map screen lists the systems with **FULL EXPERIENCE** and **IMMERSION ONLY** presets (immersion only keeps the cockpit, HUD, wing, radio and comms and leaves the mission as its author made it). Start, keep the answer for that mission, or never be asked again; F1 > Mission brings the prompt back.
 
 ## 0.2.2 — update

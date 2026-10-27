@@ -146,6 +146,6 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         /// <summary>The HUD line: "FALLEN ACE", a middle dot, then a full block per life left and a light shade per life spent
         /// (the kit and HUD fonts have no diamonds).</summary>
         public string LivesLine() =>
-            "FALLEN ACE \u00b7 " + new string('\u2588', Lives) + new string('\u2591', Tuning.Lives - Lives);
+            "FALLEN ACE \u00b7 LIVES " + Lives + "/" + Tuning.Lives; // plain text: the game's HUD fonts have no block glyphs
     }
 }

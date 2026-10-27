@@ -67,43 +67,6 @@ namespace BoscaliSummer.Garrisons
         }
     }
 
-    [HarmonyPatch]
-    internal static class PartShockwavePatch
-    {
-        private static MethodBase TargetMethod() => AccessTools.Method(typeof(UnitPart), "TakeShockwave");
-        private static bool Prepare() => TargetMethod() != null;
-
-        private static void Prefix(UnitPart __instance, UnityEngine.Vector3 origin, float blastPower)
-        {
-            if (GameAccess.IsServer()) ZoneGarrisonManager.NoteShockwave(__instance, origin, blastPower);
-        }
-    }
-
-    /// <summary>
-    /// Server-side: a strongpoint nest never takes damage itself; hits on it wear its
-    /// shell's structure, so clearing an occupied building means levelling it.
-    /// </summary>
-    [HarmonyPatch]
-    internal static class NestDamageRedirectPatch
-    {
-        private static MethodBase TargetMethod() => AccessTools.Method(typeof(UnitPart), "TakeDamage");
-        private static bool Prepare() => TargetMethod() != null && GameAccess.MapBuildingHitPointsAvailable;
-
-        private static bool Prefix(UnitPart __instance)
-        {
-            if (ZoneGarrisonManager.SelfDamage || !ZoneGarrisonManager.SiegeActive) return true;
-            try
-            {
-                return ZoneGarrisonManager.ApplyNestHit(__instance);
-            }
-            catch (Exception e)
-            {
-                PatchGuard.Report("Garrisons.NestDamageRedirect", e);
-                return true;
-            }
-        }
-    }
-
     /// <summary>
     /// Client-side guard: local damage is skipped on known strongpoint shells so client
     /// guns never kill through the local copy and send the destroy command. Applies to

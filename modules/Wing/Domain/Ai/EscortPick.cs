@@ -4,6 +4,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <see cref="RangeM"/> and <see cref="ConeDeg"/> of the player's nose (spec M2 §6).</summary>
     internal static class EscortPick
     {
-        public static float RangeM = 5000f, ConeDeg = 60f;
     }
 }

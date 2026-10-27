@@ -88,6 +88,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool hide = feedLive && logRoot != null && logRoot.gameObject.activeInHierarchy;
             screenCorners.HidePlate(hide);
             screenCorners.HideText(hide);
+            LeftHudStack.NativeFeedBottomPx = hide ? 0f : screenCorners.FeedBottomPx();
         }
 
         /// <summary>Corners off for now: nothing of ours shows and the feed's plate and text are the game's again.</summary>
@@ -95,6 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             screenCorners.HidePlate(false);
             screenCorners.HideText(false);
+            LeftHudStack.NativeFeedBottomPx = screenCorners.FeedBottomPx();      // the game's feed is the one on screen: the radio column goes under it
             if (cornerShade != null) Show(cornerShade, false);
             if (cornerFurniture != null) Show(cornerFurniture, false);
             StandDownLog();
@@ -241,6 +243,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             DestroyLog();
             DestroyCues();
             screenCorners.Dispose();
+            LeftHudStack.NativeFeedBottomPx = 0f;
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);
             if (cornerFurniture != null) UnityEngine.Object.Destroy(cornerFurniture.gameObject);
             cornerShade = cornerFurniture = cornerSurface = null;

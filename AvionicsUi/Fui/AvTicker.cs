@@ -28,6 +28,9 @@ namespace NOAvionics
         /// <summary>Raised each time the console or window comes back on screen (never in an offline harness).</summary>
         public Action Shown;
 
+        /// <summary>Presentation-only animation cleanup; live data stays on its bounded tick rates.</summary>
+        public Action Frame;
+
         private void OnEnable() { if (Application.isPlaying) Shown?.Invoke(); }
 
         public bool Add(int page, AvTickRate rate, Action tick)
@@ -48,6 +51,7 @@ namespace NOAvionics
 
         private void Update()
         {
+            Frame?.Invoke();
             if (generation != AvStyleHost.FuiGeneration) RestyleAll();
             float now = Time.unscaledTime;
             bool fast = now >= nextFast, slow = now >= nextSlow;

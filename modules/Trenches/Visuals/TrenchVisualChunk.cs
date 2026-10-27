@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
     internal sealed class TrenchVisualChunk : MonoBehaviour
     {
         private const int MaximumColliders = 48;
+        private static PhysicMaterial blastPass;
+        private static PhysicMaterial BlastPassMaterial =>
+            blastPass != null ? blastPass : (blastPass = new PhysicMaterial("TrenchParapet"));
         private const int MaximumRings = 1200;
         private const float TraceStep = TrenchTraceMath.MeshSpacing;
         private const float CoarseStep = 9f;
@@ -504,6 +507,9 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 colObj.transform.localRotation = Quaternion.LookRotation(fwd, Vector3.up);
                 var box = colObj.AddComponent<BoxCollider>();
                 box.size = new Vector3(0.9f, wallHeight, len + 0.5f);
+                // Vanilla FragTrace stops at a non-damageable collider with no physic material,
+                // so a bare box made every nest behind it blast-proof; any material lets it pass.
+                box.sharedMaterial = BlastPassMaterial;
                 colliders.Add(box);
             }
             colliderAt = -1;

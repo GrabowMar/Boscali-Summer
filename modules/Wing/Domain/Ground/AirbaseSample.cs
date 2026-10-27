@@ -63,42 +63,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public HangarSample[] Hangars = new HangarSample[0];
         public WingPose[] ServicePoints = new WingPose[0], Pads = new WingPose[0];
 
-        private static AirbaseSample Read(Dictionary<string, object> a) => new AirbaseSample
-        {
-            Name = MiniJson.GetString(a, "name"),
-            Center = V(a, "center"),
-            Radius = F(a, "radius"),
-            Attached = B(a, "attached"),
-            Runways = Map(a, "runways", r => new RunwaySample
-            {
-                Index = (int)F(r, "index"),
-                Start = V(r, "start"),
-                End = V(r, "end"),
-                Width = F(r, "width"),
-                Length = F(r, "length"),
-                Reversable = B(r, "reversable"),
-                Takeoff = B(r, "takeoff"),
-                Landing = B(r, "landing"),
-                Arrestor = B(r, "arrestor"),
-                SkiJump = B(r, "skiJump"),
-                Entries = Map(r, "entryPoints", PoseOf),
-                Exits = Map(r, "exitPoints", PoseOf),
-            }),
-            Roads = Map(a, "taxiRoads", r => MiniJson.TryGetList(r, "points", out List<object> points)
-                ? points.ConvertAll(p => Vec((List<object>)p)).ToArray()
-                : new Vec3[0]),
-            Hangars = Map(a, "hangars", h => new HangarSample
-            {
-                Index = (int)F(h, "index"),
-                Spawn = new WingPose(V(h, "position"), V(h, "forward")),
-                Available = B(h, "available"),
-                CarrierDoors = B(h, "carrierDoors"),
-                Types = MiniJson.TryGetList(h, "types", out List<object> types) ? types.ConvertAll(t => t as string).ToArray() : new string[0],
-            }),
-            ServicePoints = Map(a, "servicePoints", PoseOf),
-            Pads = Map(a, "verticalPads", PoseOf),
-        };
-
         /// <summary>Samples written in the dump format <see cref="FromDumpJson"/> reads (a field as the mod saw it in
         /// game, replayed in the FlightSim).</summary>
         public static string ToDumpJson(string mission, IEnumerable<AirbaseSample> fields)
@@ -182,27 +146,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
             sb.Append(']');
         }
-
-        private static WingPose PoseOf(Dictionary<string, object> p) => new WingPose(V(p, "position"), V(p, "forward"));
-
-        private static T[] Map<T>(Dictionary<string, object> d, string key, Func<Dictionary<string, object>, T> read)
-        {
-            if (!MiniJson.TryGetList(d, key, out List<object> list)) return new T[0];
-            var result = new List<T>(list.Count);
-            foreach (object item in list)
-                if (item is Dictionary<string, object> entry) result.Add(read(entry));
-            return result.ToArray();
-        }
-
-        private static Vec3 V(Dictionary<string, object> d, string key) =>
-            d.TryGetValue(key, out object v) && v is List<object> xyz ? Vec(xyz) : Vec3.Zero;
-
-        private static Vec3 Vec(List<object> xyz) => xyz != null && xyz.Count >= 3 ? new Vec3(Num(xyz[0]), Num(xyz[1]), Num(xyz[2])) : Vec3.Zero;
-
-        private static float F(Dictionary<string, object> d, string key) => d.TryGetValue(key, out object v) ? Num(v) : 0f;
-
-        private static bool B(Dictionary<string, object> d, string key) => d.TryGetValue(key, out object v) && v is bool b && b;
-
-        private static float Num(object v) => v == null ? 0f : Convert.ToSingle(v, CultureInfo.InvariantCulture);
     }
 }

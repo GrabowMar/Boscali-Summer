@@ -19,9 +19,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         private static readonly float[] PlotSteps = { 5f, 10f, 20f, 40f };
 
         /// <summary>1 inside <see cref="FullRangeM"/>, falling linearly to 0 at <see cref="MaxRangeM"/>.</summary>
-        public static float Quality(float rangeM) => Mathf.Clamp01((MaxRangeM - rangeM) / (MaxRangeM - FullRangeM));
+        public static float Quality(float rangeM, float scale = 1f) => Mathf.Clamp01((MaxRangeM * scale - rangeM) / ((MaxRangeM - FullRangeM) * scale));
 
-        public static bool InRange(float rangeM) => rangeM < MaxRangeM;
+        /// <summary><paramref name="scale"/> stretches both link distances (<see cref="PodRules.LinkScale"/>, the WATCHTOWER relay).</summary>
+        public static bool InRange(float rangeM, float scale = 1f) => rangeM < MaxRangeM * scale;
 
         /// <summary>Signal bars 0..5; any live link shows at least one.</summary>
         public static int Bars(float quality) => quality <= 0f ? 0 : Mathf.Clamp(Mathf.CeilToInt(quality * 5f), 1, 5);
@@ -85,6 +86,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         }
 
         public static string Callsign(VanguardRole role, int ordinal) => Type(role) + " " + Mathf.Max(1, ordinal);
+
+        /// <summary>The XQ-90 MANTA shares the REMORA's role but is its own type with its own numbering.</summary>
+        public static string Callsign(string jsonKey, VanguardRole role, int ordinal) =>
+            jsonKey == VanguardKeys.Manta ? "MANTA " + Mathf.Max(1, ordinal) : Callsign(role, ordinal);
 
         public static string Word(DroneMode mode) => mode == DroneMode.Hand ? "HAND" : mode == DroneMode.Waypoint ? "WPT" : "AUTO";
 

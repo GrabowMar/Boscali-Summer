@@ -123,33 +123,18 @@ namespace BoscaliSummer.Modules.Wing.Domain
             for (int i = 0; i < list.Count; i++)
             {
                 if (!(list[i] is Dictionary<string, object> p)) return "a point that is not an object";
-                float x = Number(p, "x"), z = Number(p, "z");
+                float x = MiniJson.GetNumber(p, "x"), z = MiniJson.GetNumber(p, "z");
                 if (float.IsNaN(x) || float.IsNaN(z) || Math.Abs(x) > MaxCoord || Math.Abs(z) > MaxCoord) return "a point off the map";
                 Waypoint w = Waypoint.At(x, z);
-                w.Altitude = Number(p, "alt");
-                w.Speed = Number(p, "speed");
+                w.Altitude = MiniJson.GetNumber(p, "alt");
+                w.Speed = MiniJson.GetNumber(p, "speed");
                 Enum.TryParse(MiniJson.GetString(p, "action") ?? "", out ArrivalAction action);
                 w.Action = Enum.IsDefined(typeof(ArrivalAction), action) ? action : ArrivalAction.None;
-                float seconds = Number(p, "seconds");
+                float seconds = MiniJson.GetNumber(p, "seconds");
                 w.Seconds = float.IsNaN(seconds) || seconds < 0f ? 0f : seconds;
                 points[i] = w;
             }
             return null;
-        }
-
-        /// <summary>A finite number, else NaN (missing, null, text, infinite).</summary>
-        private static float Number(Dictionary<string, object> d, string key)
-        {
-            if (!d.TryGetValue(key, out object v) || v == null) return float.NaN;
-            double x;
-            switch (v)
-            {
-                case double dv: x = dv; break;
-                case long lv: x = lv; break;
-                case int iv: x = iv; break;
-                default: return float.NaN;
-            }
-            return double.IsNaN(x) || double.IsInfinity(x) || Math.Abs(x) > float.MaxValue ? float.NaN : (float)x;
         }
     }
 }

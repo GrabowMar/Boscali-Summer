@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Performance.Domain
     {
         public const float LodBiasCap = 1.5f;
         public const float ShadowDistanceCapMeters = 1000f;
+        // URP renders the 3D scene at this share of the screen and upscales it (0.8 = 64% of the pixels).
+        public const float RenderScaleCap = 0.8f;
 
         // Distance bands of the ported NO_Optimisation client savings (its defaults).
         public const float ReducedMeters = 2500f;
@@ -50,11 +52,20 @@ namespace BoscaliSummer.Modules.Performance.Domain
             return ShadowDistanceCapMeters;
         }
 
+        public static float PlanRenderScale(float current, bool enabled)
+        {
+            if (!enabled || current <= 0f || current <= RenderScaleCap) return current;
+            return RenderScaleCap;
+        }
+
         // Restore only a value we still own; a new game preset becomes the next baseline.
         public static float RestoreLodBias(float original, float current) =>
             current == PlanLodBias(original, true) ? original : current;
 
         public static float RestoreShadowDistance(float original, float current) =>
             current == PlanShadowDistance(original, true) ? original : current;
+
+        public static float RestoreRenderScale(float original, float current) =>
+            current == PlanRenderScale(original, true) ? original : current;
     }
 }

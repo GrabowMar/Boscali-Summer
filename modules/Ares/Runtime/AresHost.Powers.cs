@@ -130,6 +130,13 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             return Say(weather.Hold(name) ? "WEATHER: " + name.ToUpperInvariant() + " held." : "The weather refused " + name.ToUpperInvariant() + ".");
         }
 
+        public string OpenWeatherConsole()
+        {
+            if (!ModuleServices.TryGet(out IWeatherDirector weather)) return Say("The Weather module is off.");
+            weather.OpenConsole();
+            return Say("WEATHER: console open (Ctrl+O).");
+        }
+
         public float Hour => NetworkSceneSingleton<LevelInfo>.i != null ? NetworkSceneSingleton<LevelInfo>.i.NetworktimeOfDay : 12f;
 
         public string SetHour(float hour)

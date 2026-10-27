@@ -38,6 +38,11 @@ namespace BoscaliSummer.Modules.Performance
                 "Helps a GPU-limited machine only. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.ShadowDistanceCap, ClientPreset.LastResort);
+            context.AddClientSetting("BASE GAME", "RENDER SCALE",
+                "Render the 3D world at 80% resolution and upscale it, for about a third fewer pixels. " +
+                "Helps a GPU-limited machine only; the world looks softer. " +
+                "Client-local; the game's own value is restored when switched off.",
+                context.Settings.Performance.RenderScaleCap, ClientPreset.LastResort);
             context.AddClientSetting("BASE GAME", "SCENE CLEANUP",
                 "Unload unused assets and collect garbage on scene transitions " +
                 "(menu/mission loads), never during flight. Frees memory; loads take slightly longer. Client-local.",

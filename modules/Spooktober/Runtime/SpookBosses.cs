@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             Settings = spookSettings;
             log = logger;
             FallenAce.Defeated += OnAceDefeated;
+            HellGate.Defeated += OnGateShut;
         }
 
         public void ResetForScene() => creditedGen = -1;
@@ -37,6 +38,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             if (watched != null) watched.Defeated -= OnKaijuDefeated;
             watched = null;
             FallenAce.Defeated -= OnAceDefeated;
+            HellGate.Defeated -= OnGateShut;
             Settings = null;
         }
 
@@ -68,14 +70,19 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
         private void OnAceDefeated() => Credit(SpookBoss.FallenAce);
 
-        /// <summary>A defeat counts for a player whose menu is unlocked, and only moves the chain one step (the kaiju even when F1 summoned it).</summary>
+        private void OnGateShut() => Credit(SpookBoss.HellsArmy);
+
+        /// <summary>A defeat only moves the chain one step (the kaiju even when F1 summoned it).</summary>
         private static void Credit(SpookBoss boss)
         {
             SpookProgress progress = SpookStore.Current;
-            if (!progress.Unlocked || !progress.RecordDefeat(boss)) return;
+            if (!progress.RecordDefeat(boss)) return;
             SpookStore.Save();
             log?.LogInfo("[Spooktober] " + boss + " defeated; the chain is at " + progress.ChainLevel + ".");
         }
+
+        /// <summary>A kaiju body stands on the field, alive or dying (a dying one can still be dismissed).</summary>
+        public static bool KaijuBodyOut => KaijuService?.Body != null;
 
         /// <summary>The boss on the field, if it is still alive (a kaiju that is dying is not).</summary>
         public static SpookBoss? Active
@@ -84,6 +91,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             {
                 IKaijuBoss boss = KaijuService;
                 if (boss != null && boss.Body != null && !boss.Dead) return SpookBoss.Kaiju;
+                if (HellGate.Alive) return SpookBoss.HellsArmy;
                 return FallenAce.Alive ? SpookBoss.FallenAce : (SpookBoss?)null;
             }
         }
@@ -94,12 +102,15 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         public static string Spawn(SpookBoss boss)
         {
             if (!GameAccess.IsServer()) return "HOST ONLY";
-            if (boss == SpookBoss.Redacted) return "[REDACTED]";
             IKaijuBoss kaiju = KaijuService;
-            string refused = boss == SpookBoss.Kaiju ? (kaiju == null ? "KAIJU MODULE OFF" : null) : FallenAce.CannotSpawn();
+            string refused = boss == SpookBoss.Kaiju ? (kaiju == null ? "KAIJU MODULE OFF" : kaiju.CannotSummon())
+                : boss == SpookBoss.HellsArmy ? HellGate.CannotSpawn() : FallenAce.CannotSpawn();
             if (refused != null) return refused;
             Dismiss();
-            return boss == SpookBoss.Kaiju ? kaiju.Summon() : FallenAce.Spawn(Settings);
+            string line = boss == SpookBoss.Kaiju ? kaiju.Summon() : boss == SpookBoss.HellsArmy ? HellGate.Spawn() : FallenAce.Spawn(Settings);
+            // Its sting, only when it really came out (a late refusal stays silent).
+            if (Active == boss) SpookAudio.Play(boss == SpookBoss.Kaiju ? SpookAudio.Wake : boss == SpookBoss.HellsArmy ? SpookAudio.Gate : SpookAudio.Ace, 1f);
+            return line;
         }
 
         /// <summary>Clears the kaiju (a dying one's body too) and the fallen ace, each on its own: neither is ever left behind.</summary>
@@ -109,6 +120,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             IKaijuBoss kaiju = KaijuService;
             string gone = kaiju != null && kaiju.Body != null ? kaiju.Dismiss() : null;
             if (FallenAce.Alive) gone = gone == null ? FallenAce.Dismiss() : gone + " / " + FallenAce.Dismiss();
+            if (HellGate.Alive) gone = gone == null ? HellGate.Dismiss() : gone + " / " + HellGate.Dismiss();
             return gone ?? "NO BOSS";
         }
     }

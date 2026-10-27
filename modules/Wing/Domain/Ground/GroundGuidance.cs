@@ -159,8 +159,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             integrator = Scalar.Clamp(integrator + SpeedKi * error * dt, 0f, limit);
             return new ControlOutput { Yaw = yaw, Throttle = Scalar.Clamp(SpeedKp * error + integrator, 0f, limit) };
         }
-
-        /// <summary>Taking over (a spawn, or a native state): the integrator restarts.</summary>
-        public void Reset() => integrator = stuck = 0f;
     }
 }

@@ -56,11 +56,14 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             // gone before it could receive them.
             if (GhostSide.Made && GameAccess.IsServer() && GhostSide.RemoteClients()) Evict();
             if (!FallenAce.Alive || !GameAccess.IsServer()) return;
-            FallenAce.Frame();
-            Aircraft ace = FallenAce.Current;
-            if (ace == null || ace.disabled || Time.time < nextStep) return;
-            nextStep = Time.time + Step;
-            try { Tick(ace, Time.time); }
+            try
+            {
+                FallenAce.Frame();
+                Aircraft ace = FallenAce.Current;
+                if (ace == null || ace.disabled || Time.time < nextStep) return;
+                nextStep = Time.time + Step;
+                Tick(ace, Time.time);
+            }
             catch (Exception e)
             {
                 if (!failed) Plugin.Logger.LogError("[Spooktober] FALLEN ACE director: " + e);

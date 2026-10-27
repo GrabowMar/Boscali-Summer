@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 if (!DynamicMap.TryGetMapIcon(unit, out UnitMapIcon icon) || icon == null) return;
                 // The unit repaint keeps the game's filter dimming and player highlight (MapIcon.UpdateColor does not).
-                icon.UnitMapIcon_UpdateColor();
+                icon.UpdateColor();
                 Apply(icon);
             }
             catch (Exception e)
@@ -85,7 +85,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             private static IEnumerable<MethodBase> TargetMethods()
             {
                 yield return AccessTools.Method(typeof(MapIcon), nameof(MapIcon.UpdateColor));
-                yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UnitMapIcon_UpdateColor));
+                yield return AccessTools.DeclaredMethod(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateColor));
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.SetIcon));
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon));
             }

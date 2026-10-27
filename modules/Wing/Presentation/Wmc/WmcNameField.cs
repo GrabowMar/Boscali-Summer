@@ -114,14 +114,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             input.interactable = on;
         }
 
-        /// <summary>Automation: focus the field as a click would.</summary>
-        public void Focus()
-        {
-            if (input == null || !input.interactable || EventSystem.current == null) return;
-            EventSystem.current.SetSelectedGameObject(input.gameObject);
-            input.ActivateInputField();
-        }
-
         private void OnFocus()
         {
             // A blur pending from an edit that ended some other way (a click away, a tab switch) must not end this one.

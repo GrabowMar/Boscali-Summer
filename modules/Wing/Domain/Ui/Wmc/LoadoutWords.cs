@@ -32,9 +32,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return supplyFit ? "SUPPLY FIT" : "SAVED";
         }
 
-        public static string Chain(string code, string template, int stations) =>
-            template == null ? code + " › " + NoTemplate : code + " › " + template + " › " + Count(stations, "STATION", "STATIONS");
-
         /// <summary>The build card's second line (spec bezel v2: the STATIONS, MASS and ROLE tiles are gone; the card carries them):
         /// fitted of stations, stores mass, role, then what does not fly.</summary>
         public static string Build(in FitSummary f, bool hasTemplate, int emptyHere)
@@ -138,8 +135,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (sb.Length > 0) sb.Append(" · ");
             sb.Append(part);
         }
-
-        private static string Count(int n, string one, string many) => N(n) + " " + (n == 1 ? one : many);
 
         private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }

@@ -31,6 +31,15 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private float nextRefresh;
         private readonly float[] densityCurve = new float[13];
+        private readonly EnvData data = new EnvData();
+        private readonly EnvData noMission = new EnvData
+        {
+            HasMission = false,
+            Title = "METOC / NO MISSION",
+            Footer = "NO MISSION",
+            FooterState = AvState.Inert,
+        };
+        private EnvForecastRow[] forecastRows;
 
 
         public void Configure(WeatherSettings config, WeatherManager manager, ManualLogSource log)
@@ -48,6 +57,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             console = null;
             view = null;
             nextRefresh = 0f;
+            data.Forecast = null;
+            forecastRows = null;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -92,13 +103,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             LevelInfo level = LevelInfo.i;
             if (level == null)
             {
-                view.Apply(new EnvData
-                {
-                    HasMission = false,
-                    Title = "METOC / NO MISSION",
-                    Footer = "NO MISSION",
-                    FooterState = AvState.Inert,
-                });
+                view.Apply(noMission);
                 return;
             }
 
@@ -135,75 +140,78 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             float nextFrac = held || brief.NextKm < 0f ? 0f : Mathf.Clamp01(1f - brief.NextKm / 150f);
             string footer = weather.IsManualOverride ? "HELD // CTRL+O // " + regime.Name : held ? "HELD // TAPE" : "TAPE // " + brief.Story.ToUpperInvariant();
 
-            var data = new EnvData
-            {
-                Title = "METOC / BATTLEFIELD",
-                Next = nextText,
-                NextFrac = nextFrac,
-                Footer = footer,
-                FooterState = AvState.Info,
-                Regime = regime.Type,
-                Code = regime.Code,
-                Name = skyName,
-                Metar = hasBrief ? brief.Metar : (built ? WeatherMetar.Line(localPoint) : ""),
-                Story = hasBrief ? brief.Story : "",
-                Role = hasBrief ? brief.Role : "",
-                NextMarker = hasBrief ? brief.NextMarker : "",
-                ForecastHeld = hasBrief && brief.Held,
-                AtPosition = hasBrief && brief.AtPosition,
-                Briefing = regime.TacticalBriefing,
-                Cover = built ? localPoint.SkyCover : cond,
-                Deck = deck,
-                Top = cloudTop,
-                VisibilityKm = built ? localPoint.VisibilityKm : -1f,
-                Rain = weather.LocalRainIntensity,
-                Turbulence = weather.CurrentTurbulence,
-                WindKts = kts,
-                WindFrom = from,
-                WindTo = towards,
-                HasCamera = camera != null,
-                CameraAlt = cameraAltitude,
-                AirDensity = camera != null ? LevelInfo.GetAirDensity(cameraAltitude) : 0f,
-                SoundSpeed = camera != null ? LevelInfo.GetSpeedOfSound(cameraAltitude) : 0f,
-                HasViewAir = hasViewAir,
-                ViewCloud = hasViewAir ? viewAir.CloudDensity01 : 0f,
-                ViewRain = hasViewAir ? viewAir.Precipitation01 : 0f,
-                ViewMoisture = hasViewAir ? viewAir.Condensation01 : 0f,
-                ViewTemperature = hasViewAir ? viewAir.TemperatureC : 0f,
-                SunElevation = solar.ElevationDegrees,
-                SunAzimuth = solar.AzimuthDegrees,
-                TimeOfDay = level.timeOfDay,
-                Sunrise = solar.SunriseHour,
-                Sunset = solar.SunsetHour,
-                PolarDay = solar.PolarDay,
-                PolarNight = solar.PolarNight,
-                SunEvent = solar.NextEventName + " in " + AvNum.Fixed(solar.TimeToNextEventMinutes, 0) + " min.",
-                MoonPhase = lunar.PhaseName,
-                MoonLit = lunar.IlluminationFraction,
-                MoonGlow = lunar.MoonlightIntensity,
-                MoonWaxing = lunar.PhaseName.StartsWith("Waxing", StringComparison.Ordinal) ||
-                             lunar.PhaseName.StartsWith("First", StringComparison.Ordinal),
-                Moonless = lunar.IsMoonless,
-            };
+            data.Title = "METOC / BATTLEFIELD";
+            data.Next = nextText;
+            data.NextFrac = nextFrac;
+            data.Footer = footer;
+            data.FooterState = AvState.Info;
+            data.Regime = regime.Type;
+            data.Code = regime.Code;
+            data.Name = skyName;
+            data.Metar = hasBrief ? brief.Metar : (built ? WeatherMetar.Line(localPoint) : "");
+            data.Story = hasBrief ? brief.Story : "";
+            data.Role = hasBrief ? brief.Role : "";
+            data.NextMarker = hasBrief ? brief.NextMarker : "";
+            data.ForecastHeld = hasBrief && brief.Held;
+            data.AtPosition = hasBrief && brief.AtPosition;
+            data.Briefing = regime.TacticalBriefing;
+            data.Cover = built ? localPoint.SkyCover : cond;
+            data.Deck = deck;
+            data.Top = cloudTop;
+            data.VisibilityKm = built ? localPoint.VisibilityKm : -1f;
+            data.Rain = weather.LocalRainIntensity;
+            data.Turbulence = weather.CurrentTurbulence;
+            data.WindKts = kts;
+            data.WindFrom = from;
+            data.WindTo = towards;
+            data.HasCamera = camera != null;
+            data.CameraAlt = cameraAltitude;
+            data.AirDensity = camera != null ? LevelInfo.GetAirDensity(cameraAltitude) : 0f;
+            data.SoundSpeed = camera != null ? LevelInfo.GetSpeedOfSound(cameraAltitude) : 0f;
+            data.HasViewAir = hasViewAir;
+            data.ViewCloud = hasViewAir ? viewAir.CloudDensity01 : 0f;
+            data.ViewRain = hasViewAir ? viewAir.Precipitation01 : 0f;
+            data.ViewMoisture = hasViewAir ? viewAir.Condensation01 : 0f;
+            data.ViewTemperature = hasViewAir ? viewAir.TemperatureC : 0f;
+            data.SunElevation = solar.ElevationDegrees;
+            data.SunAzimuth = solar.AzimuthDegrees;
+            data.TimeOfDay = level.timeOfDay;
+            data.Sunrise = solar.SunriseHour;
+            data.Sunset = solar.SunsetHour;
+            data.PolarDay = solar.PolarDay;
+            data.PolarNight = solar.PolarNight;
+            data.SunEvent = solar.NextEventName + " in " + AvNum.Fixed(solar.TimeToNextEventMinutes, 0) + " min.";
+            data.MoonPhase = lunar.PhaseName;
+            data.MoonLit = lunar.IlluminationFraction;
+            data.MoonGlow = lunar.MoonlightIntensity;
+            data.MoonWaxing = lunar.PhaseName.StartsWith("Waxing", StringComparison.Ordinal) ||
+                             lunar.PhaseName.StartsWith("First", StringComparison.Ordinal);
+            data.Moonless = lunar.IsMoonless;
 
             for (int i = 0; i < densityCurve.Length; i++) densityCurve[i] = LevelInfo.GetAirDensity(i * 1000f);
             data.DensityByAlt = densityCurve;
 
             ForecastStep[] steps = weather.GetForecastTimeline();
+            data.Forecast = null;
             if (steps != null && !(hasBrief && brief.Held))
             {
                 int[] offsets = Domain.WeatherForecast.DefaultOffsetsMinutes;
-                data.Forecast = new EnvForecastRow[steps.Length];
+                if (forecastRows == null || forecastRows.Length != steps.Length)
+                {
+                    forecastRows = new EnvForecastRow[steps.Length];
+                    for (int i = 0; i < forecastRows.Length; i++) forecastRows[i] = new EnvForecastRow();
+                }
                 for (int i = 0; i < steps.Length; i++)
-                    data.Forecast[i] = new EnvForecastRow
-                    {
-                        OffsetMinutes = i < offsets.Length ? offsets[i] : 0,
-                        Regime = steps[i].Regime.Type,
-                        Code = steps[i].Regime.Code,
-                        Cover = steps[i].Conditions,
-                        Deck = steps[i].CloudDeckMetres,
-                        Rain = steps[i].RainProbability,
-                    };
+                {
+                    EnvForecastRow row = forecastRows[i];
+                    row.OffsetMinutes = i < offsets.Length ? offsets[i] : 0;
+                    row.Regime = steps[i].Regime.Type;
+                    row.Code = steps[i].Regime.Code;
+                    row.Cover = steps[i].Conditions;
+                    row.Deck = steps[i].CloudDeckMetres;
+                    row.Rain = steps[i].RainProbability;
+                }
+                data.Forecast = forecastRows;
             }
 
             view.Apply(data);

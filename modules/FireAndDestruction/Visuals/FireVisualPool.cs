@@ -27,6 +27,8 @@ namespace BoscaliSummer.Fire
             public float LifetimeScale = 1f;
             public float ClusterScale = 1f;
             public bool Sleeping;
+            /// <summary>Emission share by camera distance: far fronts are a few pixels and need far fewer particles.</summary>
+            public float LodScale = 1f;
             public CloudDeckSorting Deck;
             public bool BehindDeck;
             public FireFrontCell Cell;
@@ -196,6 +198,11 @@ namespace BoscaliSummer.Fire
                 FlameIntensity = (0.018f + growth * 0.982f) * flameEnd * EmissionScale * flare;
                 if (Forest && Cell == null)
                     FlameIntensity *= Mathf.Lerp(1f, 1.30f, (ClusterScale - 1f) / 2f);
+                // Crown flare-up: the canopy goes up in one last surge just before the cell
+                // collapses to embers, peaking at 30% life left.
+                if (Forest) FlameIntensity *= 1f + 0.55f * Mathf.Clamp01(1f - Mathf.Abs(remainingFraction - 0.3f) / 0.1f);
+                // Embers keep drifting off the ash after the flames die.
+                float smoulder = Forest ? 0.24f * growth * EmissionScale : 0f;
                 float spread = Mathf.Lerp(FootprintScale * 0.24f, FootprintScale, growth) *
                     (Forest ? ClusterScale : 1f);
 
@@ -239,8 +246,8 @@ namespace BoscaliSummer.Fire
                     ParticleSystem.EmissionModule emission = system.emission;
                     float layerPulse = Forest ? 0.65f + Mathf.PerlinNoise(
                         FlickerSeed + i * 7.31f, Time.timeSinceLevelLoad * (ember ? 0.45f : 1.1f)) * 0.7f : 1f;
-                    emission.rateOverTimeMultiplier = BaseRates[i] * FlameIntensity * layerPulse *
-                        (Cell == null ? 1f : frontFraction) * FxBus.Scales.Particles;
+                    emission.rateOverTimeMultiplier = BaseRates[i] * (ember ? Mathf.Max(FlameIntensity, smoulder) : FlameIntensity) *
+                        layerPulse * (Cell == null ? 1f : frontFraction) * LodScale * FxBus.Scales.Particles;
                     ParticleSystem.ShapeModule shape = system.shape;
                     shape.scale = Cell != null && Forest ? Vector3.one : new Vector3(
                         BaseShapes[i].x * spread,
@@ -455,7 +462,8 @@ namespace BoscaliSummer.Fire
 
             ParticleSystem.NoiseModule noise = system.noise;
             noise.enabled = true;
-            noise.quality = ParticleSystemNoiseQuality.Medium;
+            // Low (1D-per-axis) noise: three flame layers x 32 sites made Medium the fire's main CPU cost.
+            noise.quality = ParticleSystemNoiseQuality.Low;
             noise.strength = 1.8f;
             noise.frequency = 0.32f;
             noise.scrollSpeed = 0.42f;
@@ -668,6 +676,7 @@ namespace BoscaliSummer.Fire
             visual.Active = true;
             visual.Sleeping = false;
             visual.ClusterScale = 1f;
+            visual.LodScale = 1f;
             visual.FlameIntensity = 0f;
             visual.Cell = null;
             visual.Configure(forest, position);

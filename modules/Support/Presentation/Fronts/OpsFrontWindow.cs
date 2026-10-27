@@ -23,9 +23,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class OpsFrontWindow : MonoBehaviour
     {
-        public const float WindowWidth = 1760f, WindowHeight = 1040f; // AvWindow caps at 1040: the shared footer is taller than the 30 this window used to force
+        public const float WindowWidth = 1880f, WindowHeight = 1040f; // AvWindow caps at 1040: the shared footer is taller than the 30 this window used to force
         private const int SortOrder = 30006;
-        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = AvGridTokens.Footer, Gap = 8f, HeroW = 1170f;
+        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = AvGridTokens.Footer, Gap = 8f, HeroW = 1290f; // the room (maps) takes every pixel the 572 px rail leaves
 
         private IFrontActions actions;
         private AvWindow window;
@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly FeedInputLease lease = new FeedInputLease();
         private readonly List<AvHit> hits = new List<AvHit>(160);
         private AvHit hovered;
-        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas, closing, suspending;
+        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas, closing;
         private float nextHits;
         private FrontRoomView lastView;
 
@@ -216,24 +216,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window.Hide(); // raises Closed -> OnWindowClosed hands the input back
         }
 
-        /// <summary>Hides the window and hands its input holds back without telling the owner it closed (a map pick runs behind it); <see cref="Open"/> brings it back.</summary>
-        internal void Suspend()
-        {
-            if (!IsOpen || closing) return;
-            suspending = true;
-            Close();
-        }
-
-        /// <summary>Who holds the faction-wide funding-share lock and until when (host mission seconds); the rail disables the share buttons for everyone else.</summary>
-        internal void PriorityLock(string by, float until) => rail.PriorityLock(by, until);
-
         private void OnWindowClosed()
         {
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
             GiveBackInput();
             closing = false;
-            if (suspending) { suspending = false; return; }
             Closed?.Invoke();
         }
 

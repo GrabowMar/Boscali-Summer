@@ -19,6 +19,19 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const int MaxExposed = 8;          // per launcher faction, at once
 
         // CHAFF: the bait seeds one cloud every ChaffSpacing metres flown; each hangs ChaffSeconds and blinds one missile.
+        // Shed decoys (2026-10-27 rework: the bait was shot down by the SAM it lured before it got close): a radar missile
+        // closing on the bait inside ShedRange spends a charge, a chaff burst on the bait itself, and each radar missile homing
+        // on it then rolls ShedBreak to lose its lock. The bait lives long enough to reach the orbit and keep drawing shots.
+        public const int ShedCharges = 4;
+        public const float ShedRange = 2500f;
+        public const float ShedClosing = 80f;    // m/s: slower is geometry, not a shot
+        public const float ShedInterval = 2f;
+        public const float ShedBreak = 0.8f;
+
+        /// <summary>A radar missile this close, closing this fast, with charges left and the last one spent.</summary>
+        public static bool ShouldShed(bool radarSeeker, float range, float closing, int charges, float sinceShed) =>
+            radarSeeker && charges > 0 && range <= ShedRange && closing >= ShedClosing && sinceShed >= ShedInterval;
+
         public const float ChaffSpacing = 300f;
         public const float ChaffSeconds = 60f;
         public const float ChaffRadius = 750f;

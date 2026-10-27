@@ -196,19 +196,19 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 for (int i = 0; i < list.Count; i++)
                 {
                     if (!(list[i] is Dictionary<string, object> p)) return "a point that is not an object";
-                    float x = Number(p, "x"), z = Number(p, "z");
+                    float x = MiniJson.GetNumber(p, "x"), z = MiniJson.GetNumber(p, "z");
                     if (float.IsNaN(x) || float.IsNaN(z) || Math.Abs(x) > MaxCoord || Math.Abs(z) > MaxCoord) return "a point off the map";
                     Waypoint w = Waypoint.At(x, z);
-                    w.Altitude = Number(p, "alt");
+                    w.Altitude = MiniJson.GetNumber(p, "alt");
                     s.Points[i] = w;
                 }
             }
-            float radius = Number(d, "radius");
+            float radius = MiniJson.GetNumber(d, "radius");
             s.Radius = float.IsNaN(radius) || radius <= 0f ? 0f : AreaGuard.Clamp(radius);
             if (Enum.TryParse(MiniJson.GetString(d, "start") ?? "", out PlanStart start) && Enum.IsDefined(typeof(PlanStart), start)) s.Start = start;
             if (Enum.TryParse(MiniJson.GetString(d, "end") ?? "", out PlanEnd end) && Enum.IsDefined(typeof(PlanEnd), end)) s.End = end;
-            s.Delay = NonNegative(Number(d, "delay"));
-            s.EndSeconds = NonNegative(Number(d, "endSeconds"));
+            s.Delay = NonNegative(MiniJson.GetNumber(d, "delay"));
+            s.EndSeconds = NonNegative(MiniJson.GetNumber(d, "endSeconds"));
             s.AfterLane = MiniJson.GetInt(d, "afterLane", -1);
             s.AfterStep = MiniJson.GetInt(d, "afterStep", -1);
             step = s;
@@ -216,20 +216,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         private static float NonNegative(float v) => float.IsNaN(v) || v < 0f ? 0f : Math.Min(v, 7200f);
-
-        /// <summary>A finite number, else NaN (missing, null, text, infinite).</summary>
-        private static float Number(Dictionary<string, object> d, string key)
-        {
-            if (!d.TryGetValue(key, out object v) || v == null) return float.NaN;
-            double x;
-            switch (v)
-            {
-                case double dv: x = dv; break;
-                case long lv: x = lv; break;
-                case int iv: x = iv; break;
-                default: return float.NaN;
-            }
-            return double.IsNaN(x) || double.IsInfinity(x) ? float.NaN : (float)x;
-        }
     }
 }

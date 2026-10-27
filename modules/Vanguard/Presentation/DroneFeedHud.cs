@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (lost && !wasLost) lostFlashUntil = Time.unscaledTime + 1.2f;
             wasLost = lost;
             bool show = link.HasAircraft && !link.TerminalOpen && !DynamicMap.mapMaximized &&
-                (link.Linked != null || lost) && (link.HandFlying || link.FeedShown || lost);
+                (link.Linked != null || lost) && (link.Linked?.Mode == DroneMode.Hand || link.FeedShown || lost);
             if (!show)
             {
                 FeedCorner.Uav = default;

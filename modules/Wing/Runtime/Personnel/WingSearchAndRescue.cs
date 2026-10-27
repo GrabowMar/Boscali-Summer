@@ -223,23 +223,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
         }
 
-        public static string Status(WingPilot pilot)
-        {
-            if (pilot == null) return "";
-            if (pilot.Lost) return "KIA";
-            float localRemaining = LocalRecoveryRemaining(pilot);
-            if (localRemaining >= 0f)
-                return "LOCAL SAR — " + FormatTime(localRemaining) + " REMAINING";
-            switch (pilot.RecoveryStatus)
-            {
-                case PilotRecoveryStatus.Downed:
-                    return "DOWNED — AWAITING SAR";
-                case PilotRecoveryStatus.Captured: return "CAPTURED";
-                case PilotRecoveryStatus.Missing: return "MIA";
-                default: return "AVAILABLE";
-            }
-        }
-
         public static float LocalRecoveryRemaining(WingPilot pilot)
         {
             foreach (Survivor survivor in survivors.Values)

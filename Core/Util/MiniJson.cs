@@ -50,6 +50,21 @@ namespace BoscaliSummer.Core.Util
         public static string GetString(Dictionary<string, object> dict, string key) =>
             dict.TryGetValue(key, out object value) ? value?.ToString() : null;
 
+        /// <summary>A finite number that fits a float, else NaN (missing, null, text, infinite).</summary>
+        public static float GetNumber(Dictionary<string, object> dict, string key)
+        {
+            if (!dict.TryGetValue(key, out object value) || value == null) return float.NaN;
+            double x;
+            switch (value)
+            {
+                case double d: x = d; break;
+                case long l: x = l; break;
+                case int i: x = i; break;
+                default: return float.NaN;
+            }
+            return double.IsNaN(x) || double.IsInfinity(x) || System.Math.Abs(x) > float.MaxValue ? float.NaN : (float)x;
+        }
+
         public static int GetInt(Dictionary<string, object> dict, string key, int defaultValue)
         {
             if (!dict.TryGetValue(key, out object value)) return defaultValue;

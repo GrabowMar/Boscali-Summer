@@ -1,5 +1,6 @@
 using System;
 using BepInEx.Configuration;
+using BoscaliSummer.Core.Config;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Squad.Configuration

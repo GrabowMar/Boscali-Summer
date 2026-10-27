@@ -35,6 +35,7 @@ namespace NOAvionics
         private readonly TMP_Text bootText;
         private readonly string id;
         private int bootLine = -1;
+        private float nextBootLine;
         private bool booted;
         // Hidden consoles keep only their current page active, so coming back on screen regenerates one page of
         // text and graphics instead of all of them; the rest wake one per fast tick behind their disabled canvases.
@@ -106,8 +107,7 @@ namespace NOAvionics
             Footer = new AvFooter(Root);
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
-            Ticker.Add(-1, AvTickRate.Fast, EndScan);
-            Ticker.Add(-1, AvTickRate.Fast, BootTick);
+            Ticker.Frame = Animate;
             Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
             Ticker.Add(-1, AvTickRate.Slow, SeatBay);
             Ticker.Add(-1, AvTickRate.Fast, Unpark);
@@ -180,7 +180,6 @@ namespace NOAvionics
                 if (ray != null) ray.enabled = on;
             }
             scrollView.Scroll.content = pageRects[index];
-            scrollView.Scroll.verticalNormalizedPosition = 1f;
             Ticker.ActivePage = index;
             if (tabs != null && tabs.Selected != index) tabs.Select(index, false);
             pageIndex.text = (index + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture) + "/" +
@@ -188,6 +187,9 @@ namespace NOAvionics
             bool changed = CurrentPage != index;
             CurrentPage = index;
             if (changed) { StartScan(); PageChanged?.Invoke(index); }
+            // Flush deferred layout after page callbacks, including a same-page reopen.
+            flows[CurrentPage].Relayout();
+            scrollView.Scroll.verticalNormalizedPosition = 1f;
             SeatBay();
         }
 
@@ -280,7 +282,7 @@ namespace NOAvionics
             scanCover.color = AvStyleHost.FuiColor("ground", AvTheme.Ground);
             scanCover.enabled = true;
             scanFx.Play(AvFxKind.Scan, 0.9f, 1f); // param 1 = cover mode (P0 shader)
-            scanUntil = Time.unscaledTime + 0.3f;
+            scanUntil = Time.unscaledTime + 0.3f / AvFxPacking.AnimationSpeed;
         }
 
         private float scanUntil;
@@ -288,6 +290,19 @@ namespace NOAvionics
         private void EndScan()
         {
             if (scanCover.enabled && Time.unscaledTime >= scanUntil) scanCover.enabled = false;
+        }
+
+        private void Animate()
+        {
+            if (bootLine < 0 && !scanCover.enabled) return;
+            if (AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None)
+            {
+                bootLine = -1;
+                bootText.enabled = scanCover.enabled = false;
+                return;
+            }
+            BootTick();
+            EndScan();
         }
 
         private static readonly string[] BootSteps = { "BIT", "BUS A/B", "SYMBOLOGY" };
@@ -307,11 +322,13 @@ namespace NOAvionics
             bootText.text = "";
             bootText.enabled = true;
             bootLine = 0;
+            nextBootLine = Time.unscaledTime;
         }
 
         private void BootTick()
         {
-            if (bootLine < 0) return;
+            if (bootLine < 0 || Time.unscaledTime < nextBootLine) return;
+            nextBootLine = Time.unscaledTime + .025f;
             if (bootLine == 0) bootText.text = id + " DISPLAY PROCESSOR · " + AvPortalMath.Serial(id);
             else if (bootLine <= BootSteps.Length) bootText.text += "\n" + BootSteps[bootLine - 1].PadRight(12, '.') + " OK";
             else

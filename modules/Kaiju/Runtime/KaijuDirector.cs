@@ -77,12 +77,18 @@ namespace BoscaliSummer.Modules.Kaiju.Runtime
             Broadcast();
         }
 
-        public string Summon()
+        public string CannotSummon()
         {
             if (!settings.Enabled.Value) return "Kaiju is switched off in the config.";
             if (!GameAccess.IsServer() || !MissionManager.IsRunning) return "Host a running mission first.";
             if (KaijuAssets.Body == null) return "The kaiju art bundle is missing from this build.";
-            if (KaijuAssets.Node == null) return "No game building to clone for weak spots.";
+            return KaijuAssets.Node == null ? "No game building to clone for weak spots." : null;
+        }
+
+        public string Summon()
+        {
+            string why = CannotSummon();
+            if (why != null) return why;
             Dismiss();
             Transform eye = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null ? aircraft.transform
                 : Camera.main != null ? Camera.main.transform : null;

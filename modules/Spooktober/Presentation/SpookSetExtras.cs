@@ -1,15 +1,11 @@
 using System;
 using System.Runtime.CompilerServices;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Modules.Spooktober.Runtime;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Spooktober.Presentation
 {
-    /// <summary>
-    /// What Spooktober adds: the four puzzles disguised as settings on SET's PILOT pages 0 to 4 and, once all four are solved,
-    /// the SPOOKTOBER tab on MISC. Command resolves it through <see cref="ISetExtras"/>; with this module gone SET is exactly as it was.
-    /// </summary>
+    /// <summary>The SPOOKTOBER tab on MISC. Command resolves it through <see cref="ISetExtras"/>; with this module gone MISC has no such tab.</summary>
     internal sealed class SpookSetExtras : ISetExtras
     {
         private readonly Func<bool> kaijuAvailable;
@@ -23,15 +19,9 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
         }
 
         public string ExtraTabLabel => "SPOOKTOBER";
-        public string ExtraTabTitle => "MISC \u00B7 SPOOKTOBER";
-        public bool ExtraTabShown => SpookStore.Current.Unlocked;
-
-        public void BuildPilotPage(int page, AvFlow flow, AvConsole console) =>
-            SpookPuzzleViews.Build(page, flow, For(console));
+        public string ExtraTabTitle => "MISC · SPOOKTOBER";
 
         public void BuildExtraPage(int page, AvFlow flow, AvConsole console) =>
-            SpookMenuPage.Build(page, flow, console, For(console), kaijuAvailable);
-
-        private SpookConsole For(AvConsole console) => consoles.GetValue(console, c => new SpookConsole(c));
+            SpookMenuPage.Build(page, flow, console, consoles.GetValue(console, c => new SpookConsole(c)), kaijuAvailable);
     }
 }

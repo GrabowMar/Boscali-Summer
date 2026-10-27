@@ -20,5 +20,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         }
 
         public void Resume() => ApplyScenario(WeatherScenario.ResetAll);
+
+        public void OpenConsole()
+        {
+            if (console == null || !console.IsOpen) ToggleConsole();
+        }
     }
 }

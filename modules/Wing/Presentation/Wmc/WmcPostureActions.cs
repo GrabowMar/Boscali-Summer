@@ -35,16 +35,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void Spacing(WmcContext c, int i) => WmcUi.Order(c, () => WingCommands.SetSpacing((SpacingPreset)i));
 
-        public static void Stack(WmcContext c, int i) => WmcUi.Order(c, () =>
-        {
-            switch (i)
-            {
-                case 0: WingCommands.Stack(WingCommands.GoHighMetres, "Going high"); break;
-                case 1: WingCommands.Stack(0f, "Level with you"); break;
-                default: WingCommands.Stack(WingCommands.GoLowMetres, "Going low"); break;
-            }
-        });
-
         /// <summary>0 BUSTER (no afterburner), 1 GATE.</summary>
         public static void Power(WmcContext c, int i) => WmcUi.Order(c, () => WingCommands.Afterburner(i == 1));
 

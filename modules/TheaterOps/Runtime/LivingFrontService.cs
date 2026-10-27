@@ -97,6 +97,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal FrontSource Source;
             internal TheaterCarrier Carrier;
             internal bool CarrierBased, HasHold;
+            /// <summary>A pilot drew it: the fix stays on the drawn objective (it does not follow the front) and the hold is read there.</summary>
+            internal bool Drawn;
             internal float X, Z, OriginX, OriginZ, Started, InitialHold, HoldNow, PhaseSince, Progress = -1f;
             internal TheaterPhase Phase;
             internal TheaterPhaseNote PhaseNote;
@@ -326,7 +328,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         {
             Operation op = war?.Active;
             if (op == null || territory == null) return;
-            op.HasHold = territory.TryGetHoldStrength(war.HQ.GetInstanceID(), op.OriginX, op.OriginZ, out float hold);
+            op.HasHold = territory.TryGetHoldStrength(war.HQ.GetInstanceID(), op.Drawn ? op.X : op.OriginX, op.Drawn ? op.Z : op.OriginZ, out float hold);
             if (op.HasHold) op.HoldNow = hold;
         }
 

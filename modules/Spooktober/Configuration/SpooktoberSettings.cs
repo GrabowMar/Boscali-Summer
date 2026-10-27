@@ -14,10 +14,10 @@ namespace BoscaliSummer.Modules.Spooktober.Configuration
         public SpooktoberSettings(ConfigFile config)
         {
             Enabled = config.Bind("Spooktober", "Enabled", true,
-                "Seasonal easter egg: a mystery transmission, puzzles hidden in SET and a secret boss menu.");
+                "Seasonal easter egg: a boss menu (MISC › SPOOKTOBER) with the kaiju, the fallen ace and Hell's Army.");
             // Browsable = false rides ahead of ConfigMenu's own hint, which leaves Browsable unset in the ExpertSettings view, so it stays hidden.
             Progress = config.Bind("Spooktober", "Progress", "", new ConfigDescription(
-                "What this player has solved and beaten (written by the game; delete the value to start over).", null,
+                "Which bosses this player has beaten (written by the game; delete the value to start over).", null,
                 new ConfigurationManagerAttributes { Browsable = false }));
             AceDamageScale = config.Bind("Spooktober", "AceDamageScale", 0.35f, new ConfigDescription(
                 "How much of the damage it is dealt the fallen ace takes. Host only; applies from the next ace spawn.", new AcceptableValueRange<float>(0.05f, 1f)));

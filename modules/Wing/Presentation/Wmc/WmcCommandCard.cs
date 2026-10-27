@@ -17,15 +17,22 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     internal sealed class WmcCommandCard : AvPart
     {
         public const int Count = OrderGrid.Rows * OrderGrid.Columns;
-        private const float KeyH = 36f, Gap = 3f, LedW = 24f;
+        private const float KeyH = 36f, Gap = 3f, LedW = 24f, Gutter = 34f;
 
         public readonly AvControl[] Cells = new AvControl[Count];
         private readonly Image[] rails = new Image[Count], leds = new Image[Count];
         private readonly TMP_Text[] keys = new TMP_Text[Count], marks = new TMP_Text[Count], ledText = new TMP_Text[Count], whys = new TMP_Text[Count];
+        // The row's group in the left gutter (ATK, DEF...), in its rail colour: the spec's "six labelled rows".
+        private readonly TMP_Text[] rowTags = new TMP_Text[OrderGrid.Rows];
 
         public WmcCommandCard(RectTransform parent, Action<int> press)
         {
             Rect = AvLay.Child(parent, "CommandCard");
+            for (int r = 0; r < OrderGrid.Rows; r++)
+            {
+                rowTags[r] = Mark(Rect, "RowTag" + r, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
+                rowTags[r].text = OrderGrid.RowTags[r];
+            }
             for (int k = 0; k < Count; k++)
             {
                 int i = k;
@@ -58,11 +65,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float w = AvFlowMath.ColumnWidth(s.W, OrderGrid.Columns, Gap);
+            float w = AvFlowMath.ColumnWidth(s.W - Gutter, OrderGrid.Columns, Gap);
+            for (int r = 0; r < OrderGrid.Rows; r++) AvLay.Place(rowTags[r].rectTransform, 0f, r * (KeyH + Gap), Gutter - 2f, KeyH);
             for (int k = 0; k < Count; k++)
             {
                 int r = k / OrderGrid.Columns, c = k % OrderGrid.Columns;
-                float x = c * (w + Gap), y = r * (KeyH + Gap);
+                float x = Gutter + c * (w + Gap), y = r * (KeyH + Gap);
                 AvLay.Place(Cells[k].Rect, x, y, w, KeyH);
                 AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 3f);
                 AvLay.Place(keys[k].rectTransform, 5f, 1f, 18f, 18f);
@@ -115,6 +123,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 ledText[k].color = ink;
                 rails[k].color = WmcState.Color(OrderGrid.RowRail(k / OrderGrid.Columns));
             }
+            // The inert rail is too dim to read as text: that row's tag takes the hint ink instead.
+            for (int r = 0; r < OrderGrid.Rows; r++) rowTags[r].color = OrderGrid.RowRail(r) == "inert" ? hint : WmcState.Color(OrderGrid.RowRail(r));
         }
     }
 }

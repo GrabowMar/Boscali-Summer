@@ -50,8 +50,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string Hint => StudioWords.Hint;
 
-        public DraftState State => StateOf();
-
         /// <summary>The studio in <paramref name="pageFlow"/> (a sub-page's flow, or a page's): pilot picker, NEW · CLONE · DELETE and
         /// IMPORT · EXPORT · FOLDER, the look, identity and bio, the problem line, SAVE · REVERT · RECRUIT / DISCHARGE and the SERVICE
         /// line. The picker's list opens the toolkit popup; <see cref="UsePopup"/> hands it the page's own (else one is made in the flow).</summary>
@@ -71,8 +69,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             popup = shared;
             popupParent = content;
         }
-
-        public void Show(WmcContext c) => Refresh(c);
 
         public void Hide()
         {
@@ -106,10 +102,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 layout = false;
                 flow.RequestRelayout();
             }
-        }
-
-        public void Tick(WmcContext c)
-        {
         }
 
         /// <summary>ROSTER's STUDIO ›: the studio opens on this pilot.</summary>

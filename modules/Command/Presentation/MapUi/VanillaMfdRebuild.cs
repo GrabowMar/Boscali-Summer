@@ -27,6 +27,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static readonly Dictionary<MFDScreen, Binding> bindings =
             new Dictionary<MFDScreen, Binding>();
+        // Consoles kept, hidden, between map opens: building them was most of the open hitch.
+        private static readonly Dictionary<MFDScreen, Binding> parked =
+            new Dictionary<MFDScreen, Binding>();
 
         /// <summary>
         /// Attach an owned surface to a supported stock controller. Unknown and
@@ -36,6 +39,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (screen == null || bindings.ContainsKey(screen)) return false;
             if (screen.displayPanel == null) return false;
+
+            // Reopening the map: re-hide the native view and show the console built last time.
+            if (parked.TryGetValue(screen, out Binding old))
+            {
+                parked.Remove(screen);
+                if (old.View != null)
+                {
+                    var again = new Binding(screen, old.View.transform);
+                    again.Attach(old.View, old.Presenter);
+                    bindings.Add(screen, again);
+                    old.Presenter.Refresh(force: true);
+                    return true;
+                }
+            }
 
             Presenter presenter = CreatePresenter(screen);
             if (presenter == null) return false;
@@ -86,12 +103,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Restore()
         {
             MissionContractWindow.CloseOpen();
-            foreach (Binding binding in bindings.Values) binding.Restore();
+            foreach (Binding binding in bindings.Values)
+            {
+                binding.Restore(keepView: true);
+                if (binding.Screen != null && binding.View != null) parked[binding.Screen] = binding;
+            }
             bindings.Clear();
         }
 
-        /// <summary>Scene cleanup has the same restoration contract as a settings toggle.</summary>
-        public static void Reset() => Restore();
+        /// <summary>Scene cleanup restores the native screens and frees the parked consoles.</summary>
+        public static void Reset()
+        {
+            Restore();
+            foreach (Binding binding in parked.Values)
+                if (binding.View != null) UnityEngine.Object.Destroy(binding.View);
+            parked.Clear();
+        }
 
         private static Presenter CreatePresenter(MFDScreen screen)
         {
@@ -156,14 +183,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly List<BehaviourState> layoutDrivers = new List<BehaviourState>();
             private readonly List<GraphicState> externalGraphics = new List<GraphicState>();
             private readonly List<SelectableState> externalSelectables = new List<SelectableState>();
+            private readonly Transform ownView;
 
             public readonly MFDScreen Screen;
             public GameObject View;
             public Presenter Presenter;
 
-            public Binding(MFDScreen screen)
+            // ownView: a parked console being re-attached. It sits beside the native panel, so the chrome mute
+            // below would otherwise blank its text and lock its controls.
+            public Binding(MFDScreen screen, Transform ownView = null)
             {
                 Screen = screen;
+                this.ownView = ownView;
                 originalDisplay = screen.displayPanel;
 
                 originalGroup = originalDisplay.GetComponent<CanvasGroup>();
@@ -214,7 +245,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 view.SetActive(Screen.isActive);
             }
 
-            public void Restore()
+            public void Restore(bool keepView = false)
             {
                 if (Screen != null)
                 {
@@ -239,9 +270,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                     if (originalGroup != null)
                     {
-                        if (addedGroup)
+                        // Parking resets the added group to neutral rather than destroying it: Destroy lands at frame
+                        // end, and a reopen in the same frame would bind (and hide behind) the dying component.
+                        if (addedGroup && !keepView)
                         {
                             UnityEngine.Object.Destroy(originalGroup);
+                        }
+                        else if (addedGroup)
+                        {
+                            originalGroup.alpha = 1f;
+                            originalGroup.interactable = true;
+                            originalGroup.blocksRaycasts = true;
+                            originalGroup.ignoreParentGroups = false;
                         }
                         else
                         {
@@ -255,6 +295,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (originalDisplay != null) originalDisplay.SetActive(Screen.isActive);
                 }
 
+                if (keepView && View != null) { View.SetActive(false); return; }
                 if (View != null) UnityEngine.Object.Destroy(View);
                 View = null;
             }
@@ -280,7 +321,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < graphics.Length; i++)
                 {
                     Graphic graphic = graphics[i];
-                    if (graphic == null || graphic == rootImage || graphic.transform.IsChildOf(source)) continue;
+                    if (graphic == null || graphic == rootImage || graphic.transform.IsChildOf(source) || Own(graphic.transform)) continue;
                     externalGraphics.Add(new GraphicState(graphic));
                     graphic.color = Color.clear;
                     graphic.raycastTarget = false;
@@ -290,11 +331,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < selectables.Length; i++)
                 {
                     Selectable selectable = selectables[i];
-                    if (selectable == null || selectable.transform.IsChildOf(source)) continue;
+                    if (selectable == null || selectable.transform.IsChildOf(source) || Own(selectable.transform)) continue;
                     externalSelectables.Add(new SelectableState(selectable));
                     selectable.interactable = false;
                 }
             }
+
+            private bool Own(Transform t) => ownView != null && t.IsChildOf(ownView);
         }
 
         private sealed class BehaviourState

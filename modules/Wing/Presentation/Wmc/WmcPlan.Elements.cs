@@ -42,11 +42,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private AvControl execute, abort, save, skip, plansButton, selectLane, fitLane, formLane, resume, retry, up, down, delete;
         private string delayText = "", timeText = "";
         private int startValue = -1, endValue = -1;
-        private int selLane, selStep = -1, lanesShown, version;
+        private int selLane, selStep = -1, version;
         private bool laneHeld, laneBlocked;
-
-        /// <summary>Lanes showing now (automation; was the element cards).</summary>
-        public int Cards => lanesShown;
         public int SelectedLane => selLane;
         public int SelectedStep => selStep;
 

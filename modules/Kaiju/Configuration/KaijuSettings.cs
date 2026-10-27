@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Kaiju.Configuration
                 "How far ahead of your aircraft the kaiju rises.", new AcceptableValueRange<float>(4f, 40f)));
             config.Bind("Kaiju", "Summon", false, new ConfigDescription(
                 "Summon the kaiju in front of you, or send it away. Host only.", null,
-                new global::ConfigurationManagerAttributes { CustomDrawer = Draw, HideDefaultButton = true }));
+                new Core.Config.ConfigurationManagerAttributes { CustomDrawer = Draw, HideDefaultButton = true }));
         }
 
         private void Draw(ConfigEntryBase entry)

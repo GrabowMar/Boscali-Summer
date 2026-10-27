@@ -17,11 +17,18 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         internal sealed class Profile
         {
             public float NoiseScale, ScanDensity, ShimmerCm, FarDistance, EmberRate, EmberScale;
+            /// <summary>Hell's Army: Boscali/Hellfire (solid char, lava cracks) and fire-coloured embers instead of the blue ghost.</summary>
+            public bool Hell;
 
             /// <summary>A fighter: 2 m heat cells, a scanline every 0.5 m, embers 0.15-0.4 m rising 0.4-1.2 m/s. Still see-through at
             /// 1.5 km (far glow 14 %; at 2000 m it was a solid blue cut-out there), a solid blue silhouette from about 3 km.</summary>
             public static readonly Profile Aircraft = new Profile
                 { NoiseScale = 0.5f, ScanDensity = 2f, ShimmerCm = 4f, FarDistance = 4000f, EmberRate = 400f, EmberScale = 1f };
+
+            /// <summary>A Hell's Army vehicle (any unit, ground or air): 3 m crack cells, the whole body glowing red from about 2 km,
+            /// bigger and slower embers than the ghost's (a tank sheds sparks, not a ghost's mist).</summary>
+            public static readonly Profile HellVehicle = new Profile
+                { NoiseScale = 0.35f, FarDistance = 3000f, EmberRate = 150f, EmberScale = 1.5f, Hell = true };
         }
 
         /// <summary>One target wearing the look.</summary>
@@ -42,10 +49,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             {
                 Root = root;
                 rate = profile.EmberRate;
-                Shader shader = SpookAssets.RadGhost;
+                Shader shader = profile.Hell ? SpookAssets.Hellfire : SpookAssets.RadGhost;
                 if (shader != null)
                 {
-                    material = new Material(shader) { name = "BoscaliSummer.RadGhost" };
+                    material = new Material(shader) { name = profile.Hell ? "BoscaliSummer.Hellfire" : "BoscaliSummer.RadGhost" };
                     material.SetFloat(NoiseScaleId, profile.NoiseScale);
                     material.SetFloat(ScanDensityId, profile.ScanDensity);
                     material.SetFloat(ShimmerId, profile.ShimmerCm);
@@ -104,7 +111,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private static readonly int FarId = Shader.PropertyToID("_FarDistance");
         private static readonly int StrengthId = Shader.PropertyToID("_Strength");
         private static readonly List<Handle> Live = new List<Handle>();
-        private static Gradient emberColour;
+        private static Gradient emberColour, fireColour;
 
         /// <summary>
         /// Put the look on every mesh renderer under <paramref name="root"/>.
@@ -128,11 +135,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             return found;
         }
 
-        /// <summary>A one-shot puff of embers at a world point (the FALLEN ACE's blink and rebirth), aircraft-sized.</summary>
-        public static void Burst(Vector3 worldPos)
+        /// <summary>A one-shot puff of embers at a world point (the FALLEN ACE's blink and rebirth; fire-coloured for Hell's Army),
+        /// aircraft-sized.</summary>
+        public static void Burst(Vector3 worldPos, bool fire = false)
         {
             if (Datum.origin == null) return;
-            ParticleSystem ps = NewEmbers("RadGhostBurst", Datum.origin, 1f, 300);
+            ParticleSystem ps = NewEmbers("RadGhostBurst", Datum.origin, 1f, 300, fire ? FireColour : EmberColour);
             ps.transform.position = worldPos;
             ParticleSystem.MainModule main = ps.main;
             main.loop = false;
@@ -182,8 +190,8 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         {
             Mesh mesh = MeshOf(source);
             bool surface = mesh.isReadable;
-            ParticleSystem ps = NewEmbers("RadGhostEmbers", surface ? root : source.transform, profile.EmberScale,
-                Mathf.CeilToInt(profile.EmberRate * 2f));
+            ParticleSystem ps = NewEmbers(profile.Hell ? "HellEmbers" : "RadGhostEmbers", surface ? root : source.transform, profile.EmberScale,
+                Mathf.CeilToInt(profile.EmberRate * 2f), profile.Hell ? FireColour : EmberColour);
             ParticleSystem.ShapeModule shape = ps.shape;
             shape.enabled = true;
             if (!surface)
@@ -213,9 +221,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             return ps;
         }
 
-        /// <summary>Additive embers: 0.8-1.6 s, blue to cyan to deep blue to nothing, drifting up with a little noise. Sizes and
+        /// <summary>Additive embers: 0.8-1.6 s in <paramref name="colour"/>, drifting up with a little noise. Sizes and
         /// speeds are world metres times <paramref name="scale"/>, whatever the parent's scale.</summary>
-        private static ParticleSystem NewEmbers(string name, Transform parent, float scale, int max)
+        internal static ParticleSystem NewEmbers(string name, Transform parent, float scale, int max, Gradient colour)
         {
             var go = new GameObject(name);
             go.SetActive(false);
@@ -252,9 +260,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             noise.scrollSpeed = 0.3f;
             noise.quality = ParticleSystemNoiseQuality.Low;
             noise.octaveCount = 1;
-            ParticleSystem.ColorOverLifetimeModule colour = ps.colorOverLifetime;
-            colour.enabled = true;
-            colour.color = EmberColour;
+            ParticleSystem.ColorOverLifetimeModule tint = ps.colorOverLifetime;
+            tint.enabled = true;
+            tint.color = colour;
             ParticleSystem.SizeOverLifetimeModule shrink = ps.sizeOverLifetime;
             shrink.enabled = true;
             shrink.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.Linear(0f, 1f, 1f, 0.3f));
@@ -268,6 +276,22 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             renderer.minParticleSize = 0.0015f; // a 0.3 m ember at 1.5 km would be under a pixel: keep a spark
             go.SetActive(true);
             return ps;
+        }
+
+        /// <summary>Hell's embers: yellow-white to orange to deep red to nothing.</summary>
+        internal static Gradient FireColour
+        {
+            get
+            {
+                if (fireColour != null) return fireColour;
+                fireColour = new Gradient();
+                fireColour.SetKeys(
+                    new[] { new GradientColorKey(new Color(1f, 0.85f, 0.4f), 0f), new GradientColorKey(new Color(1f, 0.4f, 0.05f), 0.3f),
+                        new GradientColorKey(new Color(0.6f, 0.03f, 0f), 0.75f) },
+                    new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.08f), new GradientAlphaKey(0.7f, 0.6f),
+                        new GradientAlphaKey(0f, 1f) });
+                return fireColour;
+            }
         }
 
         private static Gradient EmberColour

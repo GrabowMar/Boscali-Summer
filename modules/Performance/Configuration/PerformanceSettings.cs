@@ -7,6 +7,7 @@ namespace BoscaliSummer.Modules.Performance.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> LodBiasFloor { get; }
         public ConfigEntry<bool> ShadowDistanceCap { get; }
+        public ConfigEntry<bool> RenderScaleCap { get; }
         public ConfigEntry<bool> CleanupOnSceneChange { get; }
         public ConfigEntry<bool> SkipRemoteTurretSearch { get; }
         public ConfigEntry<bool> ThinDistantTracers { get; }
@@ -25,6 +26,10 @@ namespace BoscaliSummer.Modules.Performance.Configuration
             ShadowDistanceCap = config.Bind("Performance", "ShadowDistanceCap", false,
                 "Client-local Unity tuning: cap shadow distance at 1000 m (game default 2000 m), dropping far " +
                 "shadow-cascade work. Restored exactly when switched off. " +
+                "Applies immediately; no restart required.");
+            RenderScaleCap = config.Bind("Performance", "RenderScaleCap", false,
+                "Client-local Unity tuning: render the 3D scene at most at 80% resolution and upscale it " +
+                "(screen-overlay HUD stays sharp). Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
             CleanupOnSceneChange = config.Bind("Performance", "CleanupOnSceneChange", false,
                 "Client-local Unity tuning: unload unused assets and collect garbage on " +

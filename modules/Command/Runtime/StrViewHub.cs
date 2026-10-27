@@ -230,6 +230,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return act;
         }
 
+        public StrAct Draw(float startX, float startZ, float fixX, float fixZ)
+        {
+            if (settings != null && !MissionProfile.AllowsModule("strategic-command"))
+                return new StrAct(StrWhy.Forbidden, "STR IS SWITCHED OFF FOR THIS MISSION");
+            StrAct act = StrActions.Draw(Current, Verbs ?? verbs, ref ui, startX, startZ, fixX, fixZ, Time.unscaledTime);
+            TickNow();
+            return act;
+        }
+
         /// <summary>Writes the layer into the interface state and the client config.</summary>
         public void SetLayer(StrLayers layer, bool on)
         {

@@ -438,10 +438,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl this[int i] => cells[i];
 
-        public int Count => cells.Length;
-
-        public new int Shown => shown;
-
         public bool Set(int i, FormationDefinition shape, string name, bool latched)
         {
             shapes[i] = shape;

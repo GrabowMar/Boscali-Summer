@@ -161,7 +161,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         private void Paint(float canvasHeight)
         {
-            float top = LeftHudStack.CommsTop;
+            // The game's own feed is up in our log's place (free camera hides the HUD canvas the log lives on): start under it.
+            float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, host.ScaleFactor) + 16f : 0f);
             float y = canvasHeight - top;
             Color frame = VanillaHudStyle.Colours.AllClear;
             frame.a = 0.70f;
@@ -191,7 +192,10 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             }
             SetBar(bracket, Left + 1f, cursor + RowGap, 1f, bodyTop - cursor - RowGap, frame);
             LeftHudStack.CommsBottom = top + Height();
+            paintedTop = top;
         }
+
+        private float paintedTop = LeftHudStack.CommsTop;
 
         private static float Clock(in Row row) => row.Scripted ? Time.time : Time.unscaledTime;
         private static ChatterPriority Priority(in Row row) => row.Scripted ? ChatterPriority.Tactical : row.Priority;
@@ -246,7 +250,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         {
             for (int i = used - 1; i >= 0; i--) if (rows[i].Scripted) Drop(i);
             if (used == 0) Clear();
-            else LeftHudStack.CommsBottom = LeftHudStack.CommsTop + Height();
+            else LeftHudStack.CommsBottom = paintedTop + Height();
         }
 
         public void Destroy() { Clear(); host.Destroy(); }

@@ -13,22 +13,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Spec FUI §tabs (the user, 2026-09-28): the 0.9 tabs plus BEHAVIOUR. TACTICAL holds ORDERS · FORMATION · ROUTE·AP;
         /// BEHAVIOUR holds TUNING · PLAN · TIMELINE · LOG; WING holds the roster with INSPECT, and the STUDIO.</summary>
         public static readonly string[] Labels = { "TACTICAL", "BEHAVIOUR", "SUPPLY", "LOADOUT", "WING" };
-
-        /// <summary>A tab by its label (any case; older names open the tab that holds them now); −1 when there is none. Numbers are
-        /// refused: the 4-tab numbers meant other tabs (critic §14.9), so a scenario that still uses one fails instead of opening the
-        /// wrong page.</summary>
-        public static int Index(string name)
-        {
-            if (string.IsNullOrEmpty(name)) return -1;
-            if (Is(name, "SQUADRON") || Is(name, "INSPECT")) return Wing;
-            if (Is(name, "FORM") || Is(name, "FORMATION") || Is(name, "ROUTE") || Is(name, "ORDERS")) return Tactical;
-            if (Is(name, "PLAN") || Is(name, "TUNING") || Is(name, "OPTIONS") || Is(name, "STANCES") || Is(name, "SORTIE") || Is(name, "RECORD")) return Behaviour;
-            if (Is(name, "ROSTER") || Is(name, "AIRCRAFT") || Is(name, "STUDIO")) return Wing;
-            for (int i = 0; i < Labels.Length; i++)
-                if (string.Equals(name, Labels[i], StringComparison.OrdinalIgnoreCase)) return i;
-            return -1;
-        }
-
-        private static bool Is(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
     }
 }

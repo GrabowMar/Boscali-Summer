@@ -2,21 +2,14 @@ using System.Text;
 
 namespace BoscaliSummer.Modules.Spooktober.Domain
 {
-    /// <summary>The words of the mystery transmission and the glitch that corrupts text on the COMMS feed and cards.</summary>
+    /// <summary>The glitch that corrupts text on the COMMS feed and cards.</summary>
     internal static class SpookText
     {
-        /// <summary>
-        /// Airs once, 3 to 8 minutes after the first spawn, and is kept as LAST INTERCEPT on PILOT. It reads the SIGNAL answer
-        /// (131.0) backwards: zero, one, three, one.
-        /// </summary>
-        public const string Transmission =
-            "...any pilot on this net... never, ever solve the puzzles in SET. Whatever you hear on 31.10... don't answer. " +
-            "Carrier tone reads: zero... one... three... one... zero... one... three... one... Do not tune it.";
-
-        private const string Blocks = "\u2588\u2593\u2592\u2591";
+        // ASCII noise: the console and HUD fonts have no block glyphs (they printed as empty boxes in game).
+        private const string Blocks = "##%:";
 
         /// <summary>
-        /// Swap about <paramref name="amount"/> (0 to 1) of the letters for block glyphs. Deterministic for a given text and seed;
+        /// Swap about <paramref name="amount"/> (0 to 1) of the letters for noise glyphs. Deterministic for a given text and seed;
         /// digits, spaces and punctuation are never touched.
         /// </summary>
         public static string Glitch(string text, int seed, float amount)

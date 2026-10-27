@@ -36,7 +36,7 @@ namespace NOAvionics
 
         public void Play(AvFxKind k, float strength = 1f, float p = 0f)
         {
-            kind = k; intensity = strength; param = p; start = Time.unscaledTime;
+            kind = k; intensity = strength; param = p; start = AvFxDriver.Now;
             Dirty();
         }
 

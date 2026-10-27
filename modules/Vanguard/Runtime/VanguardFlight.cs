@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Vector3 swimHeading;
         private float lostFor;
         private float searchFor = -1f;
+        private bool huntingOrder; // a drone sent to a point is on a target there (Steer)
         private readonly System.Collections.Generic.List<Missile> inbound = new System.Collections.Generic.List<Missile>();
 
         public VanguardFlight(Missile missile, VanguardRole role, Unit target, GlobalPosition aimpoint, int slot)
@@ -53,6 +54,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             this.slot = slot;
             seed = unchecked((uint)missile.GetInstanceID()) % 997 / 997f;
             launcher = missile.owner;
+            manta = missile.definition != null && missile.definition.jsonKey == VanguardKeys.Manta;
+            statKey = manta ? "manta." : "remora.";
+            if (manta) flareBursts = MantaRules.FlareBursts;
             if (role == VanguardRole.Interceptor) InitAegis();
             if (role == VanguardRole.Towed) KiteInit();
             fallbackAim = aimpoint;
@@ -81,7 +85,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 missile.DeployFins();
                 fins = true;
             }
-            if (VanguardKeys.IsSteerable(role) && SteerOrders.TryGet(missile, out SteerOrders.Order order) && Steer(order)) return;
+            if (VanguardKeys.IsSteerable(role) && SteerOrders.TryGet(missile, out SteerOrders.Order order) && Steer(order))
+            {
+                // A REMORA or MANTA on an order keeps its flares, seduction and sensor: the pilot steers the airframe, not its self-defence.
+                if (role == VanguardRole.Drone && Time.timeSinceLevelLoad >= nextEffect)
+                {
+                    nextEffect = Time.timeSinceLevelLoad + EffectInterval;
+                    Effects();
+                }
+                return;
+            }
             if (role == VanguardRole.Sentinel)
             {
                 TickSentinel();
@@ -115,6 +128,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 RamFuse();
                 if (missile.disabled) return;
+                GunTick();
             }
             float now = Time.timeSinceLevelLoad;
             if (now >= nextPlan)
@@ -137,7 +151,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!missile.IsTangible() && age > (role == VanguardRole.Scout ? KestrelProfile.ClearSeconds : role == VanguardRole.Lander ? 2.5f : 1.5f)) missile.SetTangible(true); // the gliders leave through the hold
             if (role == VanguardRole.Scout) return; // KESTREL ends itself, quietly: station clock, hard cap, ground (KestrelDrone)
             float minimumSpeed = role == VanguardRole.Sentinel ? 0f : role == VanguardRole.Lander ? HamilcarMinSpeed()
-                : VanguardKeys.IsGunDrone(role) ? 25f : 60f; // the sentry hovers, the cargo glider lands
+                : VanguardKeys.IsGunDrone(role) || role == VanguardRole.Drone ? 25f : 60f; // the sentry hovers, the cargo glider lands; a 30 g REMORA bleeds speed in a hard turn and must not read it as a stall (2026-10-27)
             if (age > Lifetime() || (age > 10f && missile.speed < minimumSpeed && role != VanguardRole.Towed && !underwater)) Detonate();
         }
 
@@ -146,7 +160,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             switch (role)
             {
                 case VanguardRole.Decoy: return MaldxRules.Lifetime;
-                case VanguardRole.Drone: return 480f;
+                case VanguardRole.Drone: return manta ? MantaRules.Lifetime : 480f;
                 case VanguardRole.Interceptor: return AegisLifetime();
                 case VanguardRole.Torpedo: return OrcaLifetime();
                 case VanguardRole.Carrier: return 300f;
@@ -212,7 +226,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (role == VanguardRole.Decoy) { CountDrawn(); return; }
             if (role == VanguardRole.Drone)
-            { SeduceThreats(); PopFlares(); }
+            { SeduceThreats(); PopFlares(); PopJam(); DroneSense(); }
             if (role == VanguardRole.Jammer) JamNoise();
             if (role == VanguardRole.Towed) SeduceTowed();
         }
@@ -227,17 +241,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 Missile threat = inbound[i];
                 float range = FastMath.Distance(threat.GlobalPosition(), self);
-                if (SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
+                if (manta ? MantaRules.Seduces(threat.GetSeekerType(), range, Random.value) : SeductionRule.Seduces(threat.GetSeekerType(), range, Random.value))
                     SeekerCapture.Retarget(threat, missile);
             }
         }
 
         // Drone link (UAV terminal / UAV MFD / C-menu DRONE LINK): HAND flies the way the pilot's nose points, WPT flies to a point
-        // and circles it. The drone's own job holds meanwhile; a hand-flown REMORA keeps its ram fuse live. A dead pilot or a
-        // broken link (past DroneLink.MaxRangeM) hands the drone back to its job.
+        // and circles it. A REMORA or MANTA sent to a point hunts its kind of target around it (DroneEngage) and circles when there
+        // is none; a hand-flown one keeps its ram fuse live. A dead pilot or a broken link (past DroneLink.MaxRangeM) hands the
+        // drone back to its job.
         private bool Steer(SteerOrders.Order order)
         {
-            if (launcher == null || launcher.disabled || !DroneLink.InRange(FastMath.Distance(launcher.GlobalPosition(), missile.GlobalPosition())))
+            if (launcher == null || launcher.disabled || !DroneLink.InRange(FastMath.Distance(launcher.GlobalPosition(), missile.GlobalPosition()), WatchtowerPod.LinkScale(launcher)))
             {
                 SteerOrders.Remove(missile);
                 return false;
@@ -246,6 +261,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 RamFuse();
                 if (missile.disabled) return true;
+                GunTick();
+                if (order.Mode == DroneMode.Waypoint)
+                {
+                    float now = Time.timeSinceLevelLoad;
+                    if (now >= nextPlan)
+                    {
+                        nextPlan = now + PlanInterval;
+                        huntingOrder = Recover(missile.GlobalPosition()) || DroneEngage(missile.GlobalPosition(), order.Point);
+                    }
+                    if (huntingOrder) return true;
+                }
             }
             Vector3 self = missile.GlobalPosition().AsVector3();
             Vector3 aim = order.Mode == DroneMode.Hand

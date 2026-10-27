@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private const float HamilcarSettle = 1f;        // seconds to close a height error
         private const float HamilcarMaxSink = 0.6f;     // steepest descent, metres down per metre flown
         private const float HamilcarMaxClimb = 15f;     // m/s, over rising ground
+        private const float HamilcarAheadSeconds = 3f;  // the height floor also holds over the ground this far ahead
         private const float HamilcarLift = 20f;        // m/s2 of MaxAccel the height channel may take before heading and speed
         private const float HamilcarLevelRate = 60f;    // deg/s onto the ground normal after touchdown
 
@@ -38,7 +39,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private Vector3 hamilcarApproach, hamilcarHeading, hamilcarGround, hamilcarNormal = Vector3.up;
         private Quaternion hamilcarRestRot;
         private bool hamilcarNoLz, hamilcarShort, hamilcarLocked, hamilcarDry;
-        private float hamilcarPhaseAt, hamilcarDist, hamilcarAgl = 1000f, hamilcarLineDist, hamilcarLineHeight;
+        private float hamilcarPhaseAt, hamilcarDist, hamilcarAgl = 1000f, hamilcarAheadAgl = 1000f, hamilcarLineDist, hamilcarLineHeight;
         private float hamilcarReleaseSpeed, hamilcarSeat, hamilcarSlid, hamilcarNextProbe;
         private float hamilcarLandDist, hamilcarTouchSink, hamilcarTouchSpeed, hamilcarDrift;
         private Unit hamilcarVehicle;
@@ -76,7 +77,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!landingZone.HasValue) hamilcarAim.y = 0f;
             HamilcarPlan();
             HamilcarLast = this;
-            missile.onDisableUnit += _ => { if (hamilcarPhase != HamilcarPhase.Husk) VanguardStats.Bump("hamilcar.lost"); };
+            missile.onDisableUnit += _ =>
+            {
+                if (hamilcarPhase == HamilcarPhase.Husk) return;
+                VanguardStats.Bump("hamilcar.lost");
+                // Why it was lost (2026-10-27: a hold-launch run lost the glider on approach with no trace).
+                Plugin.Logger?.LogWarning("[Vanguard] HAMILCAR lost in phase " + hamilcarPhase + " at agl " + missile.radarAlt.ToString("F0") +
+                    " m, speed " + missile.speed.ToString("F0") + " m/s, age " + missile.timeSinceSpawn.ToString("F0") + " s, to aim " +
+                    FastMath.Distance(missile.GlobalPosition(), hamilcarAim).ToString("F0") + " m");
+            };
             VanguardStats.Bump("hamilcar.released");
         }
 
@@ -92,7 +101,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         // Stopped dead in the air is a loss (vanilla collisions zero the velocity on a hillside); on the ground it is the plan.
-        private float HamilcarMinSpeed() => hamilcarPhase >= HamilcarPhase.Slide ? 0f : 20f;
+        private float HamilcarMinSpeed() => hamilcarPhase >= HamilcarPhase.Final ? 0f : 20f; // a slow flare a few metres up is a landing, not a stall (2026-10-27: hold launches were lost at 5 m agl, 14 m/s)
 
         // 900 s to get down. Once down only the husk timer takes it away: the lifetime rule ends in a blast, a landed glider never does.
         private float HamilcarLifetime() => hamilcarPhase >= HamilcarPhase.Slide ? float.MaxValue : 900f;
@@ -206,10 +215,21 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 hamilcarNextProbe = age + PlanInterval;
                 hamilcarDry = HamilcarGround(here, out hamilcarGround, out hamilcarNormal);
                 hamilcarAgl = here.y - hamilcarGround.y;
+                // Rising ground on the approach (2026-10-27: a hold launch flew into a slope 430 m short on final). Cast from high
+                // up: a point inside the hill would start the ray under the terrain and miss it.
+                HamilcarGround(here + hamilcarHeading * (rb.velocity.magnitude * HamilcarAheadSeconds) + Vector3.up * 1000f, out Vector3 ahead, out _);
+                hamilcarAheadAgl = here.y - ahead.y;
             }
             float slide = HamilcarProfile.PhaseSpeed(HamilcarPhase.Slide, hamilcarSlid);
             HamilcarPhase next = HamilcarProfile.Next(hamilcarPhase, age, hamilcarDist, hamilcarAgl, slide, age - hamilcarPhaseAt, !hamilcarNoLz);
             if (next == HamilcarPhase.Slide && hamilcarPhase == HamilcarPhase.Flare && !hamilcarDry) next = HamilcarPhase.Lost; // came down on water
+            // Stopped on dry ground short of the spot (a slope it could not clear; Final has no stall rule): it landed where it stands.
+            if (next == hamilcarPhase && (hamilcarPhase == HamilcarPhase.Final || hamilcarPhase == HamilcarPhase.Flare) && hamilcarDry &&
+                hamilcarAgl <= HamilcarProfile.FlareHeight && rb.velocity.sqrMagnitude < 1f)
+            {
+                HamilcarEnter(HamilcarPhase.Slide, here); // the touchdown record
+                next = HamilcarPhase.Unload;
+            }
             if (next != hamilcarPhase)
             {
                 HamilcarEnter(next, here);
@@ -284,7 +304,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float height = flare ? hamilcarAgl - HamilcarProfile.RestHeight : pos.y - hamilcarSpot.y;
             float path = HamilcarPath(hamilcarDist), slope = HamilcarPath(hamilcarDist + 1f) - path;
             float floor = hamilcarPhase == HamilcarPhase.Final ? HamilcarProfile.FlareHeight : HamilcarProfile.GateHeight;
-            if (!flare) path = Mathf.Max(path, height - hamilcarAgl + floor); // never under the ground below
+            if (!flare) path = Mathf.Max(path, height - Mathf.Min(hamilcarAgl, hamilcarAheadAgl) + floor); // never under the ground below or ahead
             float climb = Mathf.Clamp((path - height) / HamilcarSettle - slope * speed, -HamilcarMaxSink * speed, HamilcarMaxClimb);
             // No more sink than the servo can stop: a late flare still touches down softly, and a steep glide line does not carry
             // its sink through the gate into the ground (it rounds out above the floor and makes up the height on final).

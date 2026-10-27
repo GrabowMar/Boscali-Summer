@@ -66,9 +66,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// lost pilots cannot be selected.</summary>
         private static WingPilot selectedPilot;
 
-        /// <summary>Current pilot choice for the next aircraft.</summary>
-        public static WingPilot Selected => selectedPilot;
-
         /// <summary>Bumped on every roster change (a pick, a seat, a reservation, XP, a kill or sortie, a loss, a search): SUPPLY
         /// and WING rebuild only when it moved.</summary>
         public static int Version { get; private set; }
@@ -114,9 +111,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (IsFree(roster[i])) into.Add(roster[i]);
             into.Sort(ByXp);
         }
-
-        /// <summary>Whether the pilot belongs to the roster.</summary>
-        public static bool Contains(WingPilot pilot) => pilot != null && roster.Contains(pilot);
 
         /// <summary>Whether the roster already contains this callsign.</summary>
         public static bool ContainsCallsign(string callsign) => FindByCallsign(callsign) != null;

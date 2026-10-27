@@ -39,10 +39,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl Next { get; }
 
-        public string Name => nameFull;
-
-        public string Info => infoFull;
-
         /// <summary>Callsign line; rank and status share the second line.</summary>
         public void Set(string name, string rank, string status, AvState s)
         {
@@ -125,14 +121,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>REQUISITION, on the card.</summary>
         public AvControl Button { get; }
-
-        public string Title => title.text;
-
-        public string Line => line.text;
-
-        public string Blocker => blocker.text;
-
-        public string Meta => meta.text;
 
         /// <summary>The next-call figures beside the button (price, funds after, crew).</summary>
         public void SetMeta(string text)

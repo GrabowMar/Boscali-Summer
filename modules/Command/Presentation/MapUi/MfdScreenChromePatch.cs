@@ -41,6 +41,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             MfdPresentation.Apply(__instance);
             SetRootChrome(__instance, true);
+            // Hidden screens dock a few per pass after the map opens; one shown sooner docks now.
+            if (MfdPresentation.Expanded && DynamicMap.mapMaximized) MfdPanelDock.DockOnShow(__instance);
             if (MfdPresentation.Expanded && MfdPanelDock.IsDocked(__instance))
             {
                 MfdPanelDock.OnScreenShown(__instance);

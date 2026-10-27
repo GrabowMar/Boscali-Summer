@@ -98,16 +98,55 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             else Cues[launcher] = new Cue { Target = strikeTarget, Seq = ++nextSeq };
         }
 
-        public static void Clear() => Cues.Clear();
+        public static void Clear()
+        {
+            Cues.Clear();
+            Rammers.Clear();
+            Claims.Clear();
+        }
 
         private static bool Alive(Unit unit) => unit != null && !unit.disabled;
+
+        // RAM MODE (C menu, host): launchers whose REMORAs ram instead of firing.
+        private static readonly HashSet<Unit> Rammers = new HashSet<Unit>();
+        // Target claims (host, every REMORA / MANTA): what each drone is shooting at or ramming right now, so drones spread over the
+        // targets instead of all firing at the same inbound missile (2026-10-27). A drone holds one claim; escort drops it.
+        private static readonly Dictionary<Missile, Unit> Claims = new Dictionary<Missile, Unit>();
+        private static readonly List<Missile> StaleClaims = new List<Missile>();
+
+        public static bool RamMode(Unit launcher) => launcher != null && Rammers.Contains(launcher);
+
+        public static void SetRamMode(Unit launcher, bool on)
+        {
+            if (launcher == null) return;
+            if (on) Rammers.Add(launcher); else Rammers.Remove(launcher);
+        }
+
+        /// <summary>Another live drone is already shooting at or ramming <paramref name="target"/>.</summary>
+        public static bool Claimed(Unit target, Missile by)
+        {
+            if (target == null) return false;
+            foreach (KeyValuePair<Missile, Unit> claim in Claims)
+                if (claim.Key != by && claim.Value == target && Alive(claim.Key)) return true;
+            return false;
+        }
+
+        /// <summary><paramref name="by"/> now works <paramref name="target"/> (null: back on escort, the claim goes).</summary>
+        public static void Claim(Missile by, Unit target)
+        {
+            if (by == null) return;
+            StaleClaims.Clear();
+            foreach (Missile drone in Claims.Keys) if (!Alive(drone)) StaleClaims.Add(drone);
+            foreach (Missile drone in StaleClaims) Claims.Remove(drone);
+            if (target == null || by.disabled) Claims.Remove(by); else Claims[by] = target;
+        }
     }
 
     /// <summary>
     /// Drone link orders, host-side (UAV terminal, UAV MFD and C-menu DRONE LINK via IDroneCommand -> VanguardNet). A steerable
-    /// flight with an order here flies it instead of its own job (VanguardFlight.Steer). One HAND drone per launcher: taking
-    /// another hands the stick over. An order drops with its drone, its launcher or the link (DroneLink.MaxRangeM).
-    /// AEGIS darts, ORCA and the ALE-X kite never get one (VanguardKeys.IsSteerable).
+    /// flight with an order here flies it instead of its own job (VanguardFlight.Steer). Every drone keeps its own order (2026-10-26:
+    /// HAND is a held course, not the pilot's stick, so several can hold at once). An order drops with its drone, its launcher or the
+    /// link (DroneLink.MaxRangeM). AEGIS darts, ORCA and the ALE-X kite never get one (VanguardKeys.IsSteerable).
     /// </summary>
     internal static class SteerOrders
     {
@@ -118,19 +157,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         private static readonly Dictionary<Missile, Order> Orders = new Dictionary<Missile, Order>();
-        private static readonly List<Missile> Handed = new List<Missile>();
 
         public static void Set(Missile drone, DroneMode mode, GlobalPosition point)
         {
             if (drone == null) return;
             if (mode == DroneMode.Auto) { Orders.Remove(drone); return; }
-            if (mode == DroneMode.Hand)
-            {
-                Handed.Clear();
-                foreach (KeyValuePair<Missile, Order> pair in Orders)
-                    if (pair.Value.Mode == DroneMode.Hand && pair.Key != drone && (pair.Key == null || pair.Key.owner == drone.owner)) Handed.Add(pair.Key);
-                foreach (Missile other in Handed) Orders.Remove(other);
-            }
             Orders[drone] = new Order { Mode = mode, Point = point };
         }
 

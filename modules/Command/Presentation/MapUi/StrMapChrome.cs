@@ -19,7 +19,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly RectTransform plate, legend;
         private readonly AvFrame plateFrame, legendFrame;
         private readonly TMP_Text plateTitle, plateLine;
-        private readonly StrButton fronts, operation, sorties;
+        private readonly StrButton fronts, operation, sorties, draw;
+        /// <summary>The DRAW tool's prompt or answer; shown in place of the board line while set.</summary>
+        internal string Note = "";
         private readonly AvVector[] swatches = new AvVector[StrOverlayPlan.MaxLegend];
         private readonly TMP_Text[] labels = new TMP_Text[StrOverlayPlan.MaxLegend];
         private string lastLine = "";
@@ -43,6 +45,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fronts = Toggle(StrLayers.Fronts);
             operation = Toggle(StrLayers.Operation);
             sorties = Toggle(StrLayers.Sorties);
+            draw = new StrButton(plate, "DRAW", AvButtonStyle.Default, () => owner.ToggleDraw());
 
             legend = Panel(viewport, "StrLegend", new Vector2(0f, 0f), new Vector2(12f, 10f), out legendFrame);
             for (int i = 0; i < swatches.Length; i++)
@@ -105,7 +108,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Bind(fronts, "layer.fronts", "FRONTS", ui.ShowFronts, "Platform badges and lane bars of every front.");
             Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "The main effort, its axis, groups and wave route, and the proposals.");
             Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "Sortie markers and zones, and the enemy command posts when the host reports any.");
-            string line = StrPanelText.LayerLine(vm);
+            draw.Bind(controls, "layer.draw", "DRAW", () => StrMapOverlay.DrawArmed ? new StrAct(StrWhy.None, "") : StrGate.DrawGate(vm),
+                "Draw your own offensive: press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
+            string line = string.IsNullOrEmpty(Note) ? StrPanelText.LayerLine(vm) : Note;
 
             float x = 8f, y = 6f;
             float titleW = Mathf.Ceil(AvText.Width(plateTitle)) + 6f;
@@ -114,6 +119,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             x = Place(fronts, x, y);
             x = Place(operation, x, y);
             x = Place(sorties, x, y);
+            x = Place(draw, x + 6f, y);
             if (line != lastLine)
             {
                 lastLine = line;
@@ -173,6 +179,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             legendFrame.Paint(AvInk.Ground.WithAlpha(0.88f), AvInk.Frame.WithAlpha(0.8f));
         }
 
+        private static readonly float[] swatchX = new float[3], swatchY = new float[3];
+
         private static void DrawSwatch(AvVector v, StrLegendEntry e)
         {
             AvQuadBuffer b = v.Buffer;
@@ -187,6 +195,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     break;
                 case StrShape.DashedLine:
                     StrStrokes.DashedLine(b, 1f, cy, SwatchW - 1f, cy, 4f, 2.5f, 0f, StrShapeInk.StrokeWidth, ink);
+                    break;
+                case StrShape.Offensive:
+                    swatchX[0] = 1f; swatchX[1] = SwatchW * 0.5f; swatchX[2] = SwatchW - 1f;
+                    swatchY[0] = swatchY[1] = swatchY[2] = cy;
+                    StrStrokes.Offensive(b, swatchX, swatchY, 3, 1.6f, 2.2f, 5f, 0.8f, new Rgba(ink.R, ink.G, ink.B, ink.A * 0.92f), new Rgba(0f, 0f, 0f, ink.A * 0.55f));
                     break;
                 case StrShape.DashedRing:
                     AvStrokes.DashedRing(b, cx, cy, 6.5f, 8, 0.6f, StrShapeInk.StrokeWidth, ink);

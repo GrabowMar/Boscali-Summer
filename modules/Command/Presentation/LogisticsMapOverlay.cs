@@ -160,11 +160,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     if (!(icons[i] is UnitMapIcon icon) || icon.unit == null || icon.unit.disabled) continue;
                     Unit unit = icon.unit;
                     bool friendly = hq == null || unit.NetworkHQ == hq;
-                    if (unit is Building && unit.definition is BuildingDefinition building &&
+                    if (unit is Building site && unit.definition is BuildingDefinition building &&
                         TryKind(building.buildingType, out SiteKind kind))
                     {
-                        if (siteCount < MaxSites && TryPosition(unit, hq, out Vector3 at))
-                            sites[siteCount++] = new Site { Position = at, Kind = kind, Friendly = friendly };
+                        // A base's factory or dump works for whoever holds the base (its own HQ can lag a capture); one with no side at all is nobody's.
+                        Airbase airbase = site.GetAirbase();
+                        FactionHQ owner = airbase != null && airbase.CurrentHQ != null ? airbase.CurrentHQ : unit.NetworkHQ;
+                        if (owner != null && siteCount < MaxSites && TryPosition(unit, hq, out Vector3 at, owner))
+                            sites[siteCount++] = new Site { Position = at, Kind = kind, Friendly = hq == null || owner == hq };
                     }
                     else if (unit is GroundVehicle && unit.definition is VehicleDefinition vehicle &&
                         vehicle.vehicleType == VehicleType.TRUCK && truckCount < MaxTrucks &&
@@ -196,9 +199,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
 
         /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
-        private static bool TryPosition(Unit unit, FactionHQ hq, out Vector3 position)
+        private static bool TryPosition(Unit unit, FactionHQ hq, out Vector3 position, FactionHQ owner = null)
         {
-            GlobalPosition? at = hq == null || unit.NetworkHQ == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
+            GlobalPosition? at = hq == null || (owner ?? unit.NetworkHQ) == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
             position = at.HasValue ? at.Value.AsVector3() : default;
             return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
         }

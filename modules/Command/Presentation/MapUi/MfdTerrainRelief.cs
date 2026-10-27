@@ -361,7 +361,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (!Requested)
             {
-                if (sceneRoot != null || view != null || nativeImage != null) Restore();
+                // Map closed: park. Relief switched off: free it.
+                bool on = Plugin.Settings?.Command?.MapRelief3D?.Value == true &&
+                    Plugin.Settings?.Command?.MapTerrainImage?.Value == true;
+                if (!on && sceneRoot != null) Release();
+                else if (view != null || nativeImage != null) Restore();
                 return;
             }
 
@@ -379,8 +383,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (unavailable) return;
 
             if (!ready && !LoadHeightfield()) return;
-            bool opening = sceneRoot == null;
-            if (opening && !BuildScene()) return;
+            bool opening = sceneRoot == null || !sceneRoot.activeSelf;
+            // Opening before prewarm finishes must keep its one-piece budget. The
+            // native map remains usable until the parked relief is complete.
+            if ((sceneRoot == null || tilesBuilt < TileCount) && !BuildScene()) return;
+            if (!sceneRoot.activeSelf) sceneRoot.SetActive(true);
             if (view == null || view.transform.parent != map.mapBackground.transform)
             {
                 if (view != null) Object.Destroy(view.gameObject);
@@ -434,7 +441,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 UpdateMinis();
                 if (!RenderTerrain())
                 {
-                    Restore();
+                    Release();
                     Unavailable("Render pipeline cannot render the terrain; using the native map.");
                     return;
                 }
@@ -648,15 +655,85 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return false;
         }
 
+        private const int TileCount = 16;
+        private static int tilesBuilt;
+        private static bool styleTried;
+
+        /// <summary>
+        /// While the map is closed, build the terrain scene ahead of its first open, one piece per frame, parked
+        /// (inactive). The first open of a mission used to make all of it in one ~0.6 s frame.
+        /// </summary>
+        internal static void Prewarm()
+        {
+            if (unavailable || (sceneRoot != null && tilesBuilt >= TileCount)) return;
+            if (Plugin.Settings?.Command?.MapRelief3D?.Value != true ||
+                Plugin.Settings?.Command?.MapTerrainImage?.Value != true) return;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            Image image = map != null && map.mapImage != null ? MapImageComponent(map.mapImage) : null;
+            if (image == null || image.sprite == null) return;
+            DropIfMapChanged(map, image.sprite);
+            owner = map;
+            sprite = image.sprite;
+            if (!ready) { LoadHeightfield(); return; }
+            BuildScene();
+        }
+
+        /// <summary>
+        /// Builds one piece of the parked terrain scene (style, coast, the scene shell, then a tile) per call.
+        /// False until complete, and for good when unavailable.
+        /// </summary>
         private static bool BuildScene()
         {
             Shader shader = Shader.Find("Sprites/Default");
             if (shader == null) return Unavailable("Display shader unavailable; using the native map.");
-            if (styleTexture == null) LoadStyle();
+            if (sceneRoot == null)
+            {
+                if (!styleTried)
+                {
+                    styleTried = true;
+                    LoadStyle();
+                    return false;
+                }
+                if (shore == null || shore.Length != land.Length)
+                {
+                    shore = ReliefLight.CoastDistance(dryLand, Samples);
+                    return false;
+                }
+                BuildShell(shader);
+                return false;
+            }
+            if (tilesBuilt < TileCount)
+            {
+                BuildTile(tilesBuilt % 4, tilesBuilt / 4);
+                tilesBuilt++;
+            }
+            return tilesBuilt >= TileCount;
+        }
+
+        private static void BuildTile(int tx, int tz)
+        {
+            Mesh mesh = MakeTile(tx, tz);
+            meshes.Add(mesh);
+            // Cook the collider now, in this step, not on the frame the map first shows it.
+            Physics.BakeMesh(mesh.GetInstanceID(), false);
+            var tile = new GameObject("Terrain", typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
+            tile.layer = TerrainLayer;
+            tile.transform.SetParent(sceneRoot.transform, false);
+            tile.GetComponent<MeshFilter>().sharedMesh = mesh;
+            tile.GetComponent<MeshRenderer>().sharedMaterial = groundMaterial;
+            MeshCollider collider = tile.GetComponent<MeshCollider>();
+            collider.sharedMesh = mesh;
+            colliders.Add(collider);
+            controlRenderers.Add(AddFieldTile(mesh, "Control", controlMaterial, 0.12f));
+        }
+
+        /// <summary>The scene root (parked), materials, grid, sea and camera; the tiles follow.</summary>
+        private static void BuildShell(Shader shader)
+        {
             peakMeters = highestModelPoint * 81920f / (VerticalScale * ModelWidth) + seaLevel;
-            if (shore == null || shore.Length != land.Length)
-                shore = ReliefLight.CoastDistance(dryLand, Samples);
+            tilesBuilt = 0;
             sceneRoot = new GameObject("NOAvionics.IntelligenceTerrainScene");
+            sceneRoot.SetActive(false);
             sceneRoot.transform.position = new Vector3(0f, -100000f, 0f);
             sceneRoot.layer = TerrainLayer;
 
@@ -686,22 +763,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             seaControlMaterial = FieldMaterial(shader, 1f, 3101);
             gridMaterial = new Material(shader) { mainTexture = Texture2D.whiteTexture,
                 color = Color.white };
-
-            for (int tz = 0; tz < 4; tz++)
-            for (int tx = 0; tx < 4; tx++)
-            {
-                Mesh mesh = MakeTile(tx, tz);
-                meshes.Add(mesh);
-                var tile = new GameObject("Terrain", typeof(MeshFilter), typeof(MeshRenderer), typeof(MeshCollider));
-                tile.layer = TerrainLayer;
-                tile.transform.SetParent(sceneRoot.transform, false);
-                tile.GetComponent<MeshFilter>().sharedMesh = mesh;
-                tile.GetComponent<MeshRenderer>().sharedMaterial = groundMaterial;
-                MeshCollider collider = tile.GetComponent<MeshCollider>();
-                collider.sharedMesh = mesh;
-                colliders.Add(collider);
-                controlRenderers.Add(AddFieldTile(mesh, "Control", controlMaterial, 0.12f));
-            }
 
             Mesh grid = MakeGroundGrid();
             meshes.Add(grid);
@@ -763,7 +824,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             data.requiresDepthTexture = false;
             data.antialiasing = AntialiasingMode.None;
             data.volumeLayerMask = 0;
-            return true;
         }
 
         private static Material FieldMaterial(Shader shader, float alpha, int queue)
@@ -1166,7 +1226,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float length = size * MiniLength * (selectedForClusters.Contains(icon) ? 1.16f : 1f);
                 var at = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
                     ground + 1f + lift + length * .05f, fix.Z / source.MapSize.y * ModelSpanZ);
-                if (!MapMinis.Add(glyph, at, forward, length, image.color, lift <= .5f)) continue;
+                // Fixed-wing types stand as their own icon's silhouette, one model per airframe.
+                Sprite own = glyph == MapGlyph.Aircraft && icon.unit != null && icon.unit.definition != null
+                    ? icon.unit.definition.mapIcon : null;
+                if (!MapMinis.Add(own, glyph, at, forward, length, image.color, lift <= .5f)) continue;
                 nextGhosted.Add(image);
                 // The sweep re-asserts the fade in case anything put the glyph's alpha back.
                 if (sweep || !ghosted.Contains(image)) image.canvasRenderer.SetAlpha(0f);
@@ -1819,13 +1882,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var go = new GameObject("NOAvionics.ContactCount", typeof(RectTransform), typeof(CanvasRenderer));
             RectTransform rect = go.GetComponent<RectTransform>();
             rect.SetParent(viewport, false);
-            rect.sizeDelta = new Vector2(24f, 17f);
+            // A quiet tally beside the stack, not a block: small, borderless, half-glass.
+            rect.sizeDelta = new Vector2(20f, 14f);
             AvFrame fill = go.AddComponent<AvFrame>();
-            fill.Chamfer = AvChamfer.Diagonal(3f);
+            fill.Chamfer = AvChamfer.Diagonal(2f);
             fill.raycastTarget = false;
-            fill.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.95f),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame));
-            TMP_Text label = AvText.Make(rect, "Count", AvTextRole.DataStrong, "", TextAlignmentOptions.Center);
+            fill.Paint(AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.62f), Color.clear);
+            TMP_Text label = AvText.Make(rect, "Count", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
             AvLay.Fill(label.rectTransform);
             label.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
             AvText.Fit(label, false);
@@ -1955,6 +2018,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (aircraftTrails != null) Object.Destroy(aircraftTrails.gameObject);
             aircraftTrails = null;
             nextTrailSample = 0f;
+            nextRender = 0f;
+            cameraWasMoving = false;
+            nextIconRefresh = 0f;
+            ReliefNavigator.Release();
+            lastCameraPosition = Vector3.zero;
+            lastCameraRotation = Quaternion.identity;
+            lastCameraSize = lastCameraAspect = 0f;
+            lastImageTransform = lastViewportTransform = default;
+            // Park, do not rebuild: the tiles and their colliders cost ~0.5 s to make, which was
+            // the hitch on every map open. Only the render texture's GPU memory goes; it comes
+            // back on the next render. Release() frees everything.
+            if (sceneRoot != null) sceneRoot.SetActive(false);
+            if (texture != null) texture.Release();
+        }
+
+        /// <summary>Restore and free the parked terrain scene: scene reset, setting off, or a failed render.</summary>
+        internal static void Release()
+        {
+            Restore();
             if (sceneRoot != null) Object.Destroy(sceneRoot);
             sceneRoot = null;
             foreach (Mesh mesh in meshes) if (mesh != null) Object.Destroy(mesh);
@@ -1971,19 +2053,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             texture = null;
             renderRequest.destination = null;
             camera = null;
-            nextRender = 0f;
-            cameraWasMoving = false;
-            nextIconRefresh = 0f;
-            ReliefNavigator.Release();
-            lastCameraPosition = Vector3.zero;
-            lastCameraRotation = Quaternion.identity;
-            lastCameraSize = lastCameraAspect = 0f;
-            lastImageTransform = lastViewportTransform = default;
         }
 
         internal static void Reset()
         {
-            Restore();
+            Release();
             markerCanvases.Clear();
             owner = null;
             source = null;
@@ -1999,6 +2073,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             shore = null;
             if (styleTexture != null) Object.Destroy(styleTexture);
             styleTexture = null;
+            styleTried = false;
             ready = false;
             unavailable = false;
             rig.Reset();

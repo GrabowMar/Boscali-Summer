@@ -253,9 +253,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         }
 
         /// <summary>
-        /// DRONE LINK: the VANGUARD drones flying, one of them linked. TAKE CONTROL holds the linked drone's course and height, MATCH MY
-        /// NOSE gives it the pilot's, TURN LEFT/RIGHT 45 steer it while hand-flown, NEXT / PREV move the link and a hand-flown link hands the stick over, the HUD feed card, the UAV
-        /// terminal and a pick list. Only while a linkable drone is in the air.
+        /// DRONES (2026-10-27, one home for drone control; DEFENCE's strike/screen toggle moved here): the VANGUARD drones flying.
+        /// Two kinds of order. ATTACK MY TARGET sends every drone at the pilot's selected target, each by its trade (REMORA the air,
+        /// MANTA the ground, the rest as their loadout reads a designation) until CALL OFF. The rest go to the linked drone: SEND
+        /// WHERE I LOOK flies it to the ground at the view centre, where it hunts its kind of target and circles; FLY MY HEADING
+        /// holds the pilot's heading and height; BACK ON TASK (only with an order) clears it. NEXT moves the link (orders stay with
+        /// their drones), then the HUD feed card, the UAV terminal and a pick list. Only while a linkable drone is in the air.
         /// </summary>
         private static MenuRow DroneLink(MenuWorld w)
         {
@@ -264,28 +267,32 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             int linked = w.DroneLinked >= 0 && w.DroneLinked < n ? w.DroneLinked : -1;
             string name = linked >= 0 ? w.DroneNames[linked] : w.DroneNames[0];
             var kids = new List<MenuRow>();
-            MenuRow hand = MenuRow.Toggle("weapons/drones/hand", "drone-strike", w.DroneHand,
-                F("TAKE CONTROL", "LINK: " + name, "HOLD ITS COURSE AND HEIGHT; STEER IT FROM HERE OR THE UAV TERMINAL", "HAND CONTROL: " + name),
-                F("RELEASE CONTROL", "HAND: " + name, "THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution), checkbox: false);
-            hand.IconOn = "drone-screen";
-            kids.Add(hand);
-            kids.Add(MenuRow.Action("weapons/drones/nose", "drone-strike", "MATCH MY NOSE", w.DroneHand ? "HAND: " + name : "LINK: " + name,
-                "THE DRONE TAKES YOUR HEADING AND HEIGHT", "COURSE SET: " + name));
-            if (w.DroneHand)
-            {
-                kids.Add(MenuRow.Action("weapons/drones/left", "station-prev", "TURN LEFT 45°", "HAND: " + name, "THE DRONE TURNS 45° LEFT AND HOLDS IT", "LEFT 45: " + name));
-                kids.Add(MenuRow.Action("weapons/drones/right", "station-next", "TURN RIGHT 45°", "HAND: " + name, "THE DRONE TURNS 45° RIGHT AND HOLDS IT", "RIGHT 45: " + name));
-            }
+            MenuRow attack = MenuRow.Toggle("weapons/drones/attack", "drone-strike", w.DronesStriking,
+                F("ATTACK MY TARGET", "ALL DRONES: ESCORTING", "EVERY DRONE GOES AFTER YOUR TARGET: REMORAS TAKE AIR, MANTAS TAKE GROUND", "DRONES ATTACKING"),
+                F("CALL OFF ATTACK", "ALL DRONES: ATTACKING", "EVERY DRONE COMES BACK TO ESCORT YOU", "DRONES ESCORTING", MenuTone.Caution), checkbox: false);
+            attack.IconOn = "drone-screen";
+            if (!w.DronesStriking && !w.DronesCanStrike) attack.Blocked = "NO TARGET SELECTED";
+            kids.Add(attack);
+            if (w.DroneRamMode || w.DroneNames.Exists(d => d.StartsWith("REMORA", StringComparison.Ordinal)))
+                kids.Add(MenuRow.Toggle("weapons/drones/ram", "drone-strike", w.DroneRamMode,
+                    F("REMORA RAM MODE", "REMORAS: MISSILES", "REMORAS KEEP THEIR AAMS AND RAM AIRCRAFT AND INBOUND MISSILES WITH THE AIRFRAME", "REMORAS RAMMING"),
+                    F("REMORA MISSILE MODE", "REMORAS: RAMMING", "REMORAS GO BACK TO FIRING THEIR AAMS FIRST", "REMORAS ON MISSILES", MenuTone.Caution), checkbox: false));
+            kids.Add(MenuRow.Action("weapons/drones/look", "map", "SEND WHERE I LOOK", "LINK: " + name,
+                "IT FLIES TO THE GROUND YOU ARE LOOKING AT, HUNTS ITS KIND OF TARGET THERE AND CIRCLES", "SENT: " + name));
+            kids.Add(MenuRow.Action("weapons/drones/nose", "station-next", "FLY MY HEADING", "LINK: " + name,
+                "THE DRONE TAKES YOUR HEADING AND HEIGHT AND HOLDS THEM", "COURSE SET: " + name));
+            if (w.DroneOrdered)
+                kids.Add(MenuRow.Action("weapons/drones/auto", "drone-screen", "BACK ON TASK", "ORDERED: " + name,
+                    "CLEAR ITS ORDER: THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution));
             if (n > 1)
             {
-                int next = linked < 0 ? 0 : (linked + 1) % n, prev = linked < 0 ? n - 1 : (linked + n - 1) % n;
-                string carry = w.DroneHand ? ", THE STICK GOES WITH IT" : "";
-                kids.Add(MenuRow.Action("weapons/drones/next", "station-next", "NEXT DRONE", "NEXT: " + w.DroneNames[next], "LINK THE NEXT DRONE" + carry, "LINK: " + w.DroneNames[next]));
-                kids.Add(MenuRow.Action("weapons/drones/prev", "station-prev", "PREV DRONE", "PREV: " + w.DroneNames[prev], "LINK THE PREVIOUS DRONE" + carry, "LINK: " + w.DroneNames[prev]));
+                int next = linked < 0 ? 0 : (linked + 1) % n;
+                kids.Add(MenuRow.Action("weapons/drones/next", "station-next", "NEXT DRONE", "NEXT: " + w.DroneNames[next],
+                    "LINK THE NEXT DRONE; THIS ONE KEEPS ITS ORDER", "LINK: " + w.DroneNames[next]));
             }
             kids.Add(MenuRow.Toggle("weapons/drones/feed", "missile-view", w.DroneFeed,
                 F("SHOW DRONE FEED", "HUD FEED: OFF", "THE LINKED DRONE'S CAMERA ON YOUR HUD", "DRONE FEED ON"),
-                F("HIDE DRONE FEED", "HUD FEED: ON", "FEED CARD OFF THE HUD; IT STAYS WHILE YOU HAND-FLY", "DRONE FEED OFF")));
+                F("HIDE DRONE FEED", "HUD FEED: ON", "FEED CARD OFF THE HUD; IT STAYS WHILE THE DRONE HOLDS YOUR HEADING", "DRONE FEED OFF")));
             kids.Add(MenuRow.Action("weapons/drones/terminal", "map", "OPEN UAV TERMINAL", "ON LINK: " + MenuText.Plural(n, "DRONE", "DRONES"),
                 "EVERY DRONE, ITS FEED, THE PLOT AND WAYPOINTS", "UAV TERMINAL"));
             if (n > 1)
@@ -294,15 +301,17 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 for (int i = 0; i < n; i++)
                 {
                     MenuRow pick = MenuRow.Pick("weapons/drones/pick/d" + (i + 1), "drone-strike", w.DroneNames[i], w.DroneStates[i], "LINKED" + D + w.DroneStates[i],
-                        i == linked, "LINK THIS DRONE: FEED, TERMINAL AND STICK FOLLOW IT", "LINK: " + w.DroneNames[i]);
+                        i == linked, "LINK THIS DRONE: THE FEED, THE TERMINAL AND YOUR ORDERS GO TO IT", "LINK: " + w.DroneNames[i]);
                     pick.Index = i;
                     picks.Add(pick);
                 }
                 kids.Add(MenuRow.Submenu("weapons/drones/pick", "station-select", "SELECT DRONE", linked >= 0 ? "LINK: " + name : "LINK: NONE",
-                    "PICK THE DRONE THE LINK FOLLOWS", "DRONE LINK" + D + MenuText.Plural(n, "DRONE", "DRONES"), "DRONES", picks));
+                    "PICK THE DRONE THE LINK FOLLOWS", "DRONES" + D + MenuText.Plural(n, "DRONE", "DRONES"), "DRONES", picks));
             }
-            return MenuRow.Submenu("weapons/drones", "drone-strike", "DRONE LINK", w.DroneHand ? "HAND: " + name : linked >= 0 ? "LINK: " + name : "ON LINK: " + n,
-                "HAND-FLY, SWITCH AND WATCH YOUR VANGUARD DRONES", "DRONE LINK", "DRONES", kids);
+            return MenuRow.Submenu("weapons/drones", "drone-strike", "DRONES",
+                w.DronesStriking ? "ATTACKING" + D + MenuText.Plural(n, "DRONE", "DRONES")
+                    : linked >= 0 && linked < w.DroneStates.Count ? name + D + w.DroneStates[linked] : "ON LINK: " + n,
+                "ATTACK, SEND, SWITCH AND WATCH YOUR VANGUARD DRONES", "DRONES", "DRONES", kids);
         }
 
         // ------------------------------------------------------------------ HUD (the AR visor: the TAC BOARD in the top right)
@@ -713,6 +722,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 cam.IconOn = "cockpit-view";
                 if (w.Camera == ViewKind.Orbit && !w.HasCockpitPoint) cam.Blocked = "NO COCKPIT VIEW";
                 c.Rows.Add(b.Reg(cam));
+                c.Rows.Add(b.Reg(MenuRow.Toggle("view/cinematic", "external-view", w.CinematicCamera,
+                    F("ENABLE CINEMATIC CAM", "CINEMATIC CAM: OFF", "SWITCH VIEW GOES EXTERNAL, THEN CINEMATIC", "CINEMATIC CAM ON"),
+                    F("DISABLE CINEMATIC CAM", "CINEMATIC CAM: ON", "SWITCH VIEW SKIPS THE CINEMATIC CAMERA", "CINEMATIC CAM OFF"))));
             }
             if (w.MapAvailable) c.Rows.Add(b.Reg(MenuRow.Action("view/map", "map", "OPEN MAP", "MAP: CLOSED", "FULL-SCREEN TACTICAL MAP", "MAP OPEN")));
             if (w.MissileViewAvailable)
@@ -779,19 +791,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (lit.Count == 0) dark.Blocked = "ALREADY DARK";
                 c.Rows.Add(b.Reg(dark));
             }
-            if (w.HasDrones)
-            {
-                MenuRow drones = MenuRow.Toggle("defence/drones", "drone-strike", w.DronesStriking,
-                    F("SEND DRONES TO STRIKE", w.Drones > 0 ? "DRONES: " + w.Drones + " READY" : "DRONES: NONE READY", "SEND ESCORT DRONES AT THE TARGET", "DRONES STRIKING"),
-                    F("SCREEN WITH DRONES", "DRONES: STRIKING", "DRONES RETURN TO SCREEN YOU", "DRONES SCREENING", MenuTone.Caution), checkbox: false);
-                drones.IconOn = "drone-screen";
-                if (!w.DronesStriking && !w.DronesCanStrike) drones.Blocked = "NO TARGET SELECTED";
-                c.Rows.Add(b.Reg(drones));
-            }
-            if (w.HasChaff)
-                c.Rows.Add(b.Reg(MenuRow.Toggle("defence/chafflink", "countermeasure-cycle", w.ChaffLinked,
-                    F("LINK CHAFF TO CM KEY", "CHAFF: MENU ONLY", "CM KEY ALSO POPS CHAFF AT RADAR MISSILES", "CHAFF LINKED"),
-                    F("UNLINK CHAFF", "CHAFF: ON CM KEY", "CHAFF ONLY FROM THIS MENU OR ITS OWN KEY", "CHAFF UNLINKED"))));
             if (w.HasFlares && w.Airborne && w.Flares <= 0) Badge(c, "FLR 0", show: true, alert: true);
             else if (w.CountermeasureIndex > 0 && w.Countermeasure.Length > 0) Badge(c, w.Countermeasure.Substring(w.Countermeasure.LastIndexOf(' ') + 1), show: true); // JAMMER
             else if (w.HasRadar && !w.RadarOn) Badge(c, "SILENT", show: true);

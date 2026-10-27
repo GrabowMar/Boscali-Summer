@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
                 case VanguardKeys.AleX: return 0.1f;
                 case VanguardKeys.Kestrel: return 1.2f;
                 case VanguardKeys.Hamilcar: return 2f;
+                case VanguardKeys.Manta: return 6f; // four AAMs, flares and a long station: two and a half REMORAs
                 default: return 0f;
             }
         }

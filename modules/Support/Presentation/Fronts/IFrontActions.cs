@@ -10,9 +10,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal interface IFrontActions
     {
         void SetDirective(Front front, FrontDirective directive);
-        /// <summary>Asks for this front's funding share to move by <paramref name="deltaPct"/> points.</summary>
-        void SetPriority(Front front, int deltaPct);
-        void SetFocus(Front front);
         void Queue(Front front, ProgrammeId id);
         void Donate(Front front, ProgrammeId id, int amount);
         void SelectFront(Front front);

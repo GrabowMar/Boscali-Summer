@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class StrMapTag : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float RowH = 18f, Pad = 6f, LaneW = 84f, LaneH = 7f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 4f, RestLaneW = 48f;
+        private const float RowH = 17f, Pad = 6f, LaneW = 84f, LaneH = 6f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 3f, RestLaneW = 40f;
 
         internal StrItemId Id;
         internal StrTagKind Kind;
@@ -122,8 +122,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void Paint(Color ink, float fade, bool hot, bool selected)
         {
-            plate.Paint(AvInk.Ground.WithAlpha(selected ? 0.96f : 0.88f * fade + 0.05f), ink.WithAlpha(selected || hot ? 1f : 0.85f * fade));
-            plate.Stroke = selected || hot ? 1.6f : 1f;
+            // At rest the plate is glass with a hairline, so the map reads through it; hover and selection bring the full ink back.
+            bool lit = selected || hot;
+            plate.Paint(AvInk.Ground.WithAlpha(lit ? 0.94f : 0.55f * fade), ink.WithAlpha(lit ? 1f : 0.38f * fade));
+            plate.Stroke = lit ? 1.4f : 1f;
             plate.Bracket = selected ? 4f : 0f;
             plate.BracketColor = ink;
             plate.SetVerticesDirty();   // stroke and bracket are not colours, so Paint alone would not redraw them

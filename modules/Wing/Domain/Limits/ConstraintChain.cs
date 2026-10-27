@@ -206,9 +206,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary><paramref name="a"/> without its part along the unit <paramref name="path"/>.</summary>
         private static Vec3 AcrossPath(Vec3 a, Vec3 path) => a - path * Vec3.Dot(a, path);
 
-        /// <summary>Seed the authority stage from the aircraft's actual attitude (handover, spawn).</summary>
-        public void Track(in AircraftState s) => Track(s, null);
-
         /// <summary>Takes over from the aircraft as it is; the load factor it starts slewing from is held to the airframe's
         /// envelope (review M5a C1: a stale sensor once seeded −66 g, and the slew then held it for seconds).</summary>
         public void Track(in AircraftState s, AirframeProfile p)

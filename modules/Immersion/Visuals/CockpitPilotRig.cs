@@ -465,21 +465,93 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             pole -= direction * Vector3.Dot(pole, direction);
             if (pole.sqrMagnitude < .000001f) pole = Vector3.Cross(direction, upper.right);
             if (pole.sqrMagnitude < .000001f) return;
-            float along = (a * a - b * b + distance * distance) / (2f * distance);
-            Vector3 nextElbow = origin + direction * along + pole.normalized * Mathf.Sqrt(Mathf.Max(0, a * a - along * along));
-            upper.rotation = Quaternion.FromToRotation(elbow - origin, nextElbow - origin) * upper.rotation;
-            lower.position = nextElbow;
-            lower.rotation = Quaternion.FromToRotation(hand.position - lower.position, target - lower.position) * lower.rotation;
-            // Turning the palm rolls the forearm; it should not twist the wrist joint.
             Vector3 axis = hand.localPosition.normalized;
-            Quaternion wrist = Quaternion.Inverse(lower.rotation) * gripRotation * Quaternion.Inverse(hand.localRotation);
-            float axial = Vector3.Dot(new Vector3(wrist.x, wrist.y, wrist.z), axis);
-            float twist = Mathf.DeltaAngle(0, 2f * Mathf.Atan2(axial, wrist.w) * Mathf.Rad2Deg);
+            Vector3 bend = Vector3.Cross(elbow - origin, end - elbow);
+            Vector3 nextElbow;
+            float twist;
+            if (bend.sqrMagnitude > 1e-8f)
+            {
+                // Keep the elbow a hinge: carry the native bend axis (in each bone's own frame) onto the
+                // solved bend plane; shortest-arc turns rolled the two bones apart and wrung the sleeve.
+                // The palm's remaining roll is pronation. The native lap pose hinges the elbow about 90
+                // degrees away from a stick grip, so swivel the elbow about the shoulder-hand line until
+                // that roll is gone, as far as the elbow moves at most 5 cm (a nearly straight arm swivels
+                // freely; a bent one would raise a chicken wing). The forearm takes whatever is left.
+                Vector3 upperHinge = Quaternion.Inverse(upper.rotation) * bend, lowerHinge = Quaternion.Inverse(lower.rotation) * bend;
+                Quaternion lowerRotation = PlaceForearm(origin, direction, pole, a, b, distance, target, lower.rotation, lowerHinge,
+                    hand, gripRotation, out nextElbow, out twist);
+                float along = (a * a - b * b + distance * distance) / (2f * distance);
+                float radius = Mathf.Sqrt(Mathf.Max(0, a * a - along * along));
+                float limit = radius <= .025f ? 180f : 2f * Mathf.Asin(.025f / radius) * Mathf.Rad2Deg;
+                PlaceForearm(origin, direction, Quaternion.AngleAxis(30f, direction) * pole, a, b, distance, target, lower.rotation, lowerHinge,
+                    hand, gripRotation, out _, out float probe);
+                // Secant steps on swivel -> roll: first toward no roll within the elbow-travel cap, then,
+                // only if the forearm would still roll past 90 (a bent arm), as far as keeps it at 90.
+                float lastSwivel = 30f, lastTwist = probe, swivel = 0f;
+                for (int phase = 0; phase < 2; phase++)
+                {
+                    float goal = phase == 0 ? 0f : Mathf.Sign(twist) * 90f, range = phase == 0 ? limit : 180f;
+                    if (phase == 1 && Mathf.Abs(twist) <= 90f) break;
+                    for (int step = 0; step < 3; step++)
+                    {
+                        float slope = Mathf.DeltaAngle(twist, lastTwist) / (lastSwivel - swivel);
+                        if (Mathf.Abs(slope) < .05f || Mathf.Abs(Mathf.DeltaAngle(goal, twist)) < .5f) break;
+                        float next = Mathf.Clamp(swivel - Mathf.DeltaAngle(goal, twist) / slope, -range, range);
+                        if (Mathf.Abs(next - swivel) < .1f) break;
+                        Quaternion rotation = PlaceForearm(origin, direction, Quaternion.AngleAxis(next, direction) * pole, a, b, distance,
+                            target, lower.rotation, lowerHinge, hand, gripRotation, out Vector3 swungElbow, out float swungTwist);
+                        lastSwivel = swivel; lastTwist = twist;
+                        if (Mathf.Abs(Mathf.DeltaAngle(goal, swungTwist)) >= Mathf.Abs(Mathf.DeltaAngle(goal, twist))) break;
+                        swivel = next; lowerRotation = rotation; nextElbow = swungElbow; twist = swungTwist;
+                    }
+                }
+                upper.rotation = Hinge(nextElbow - origin, Vector3.Cross(nextElbow - origin, target - nextElbow), upper.rotation, upperHinge, lower.localPosition);
+                lower.position = nextElbow;
+                lower.rotation = lowerRotation;
+            }
+            else
+            {
+                float along = (a * a - b * b + distance * distance) / (2f * distance);
+                nextElbow = origin + direction * along + pole.normalized * Mathf.Sqrt(Mathf.Max(0, a * a - along * along));
+                upper.rotation = Quaternion.FromToRotation(elbow - origin, nextElbow - origin) * upper.rotation;
+                lower.position = nextElbow;
+                lower.rotation = Quaternion.FromToRotation(hand.position - lower.position, target - lower.position) * lower.rotation;
+                twist = WristRoll(lower.rotation, hand, gripRotation, axis);
+            }
+            // Turning the palm rolls the forearm; it should not twist the wrist joint.
             lower.rotation *= Quaternion.AngleAxis(Mathf.Clamp(twist, -90f, 90f), axis);
             // Keep the owned wrist exactly on its anchor at full throw. The reach guard
             // bounds segment extension to eight centimetres; native bones remain untouched.
             hand.position = target;
             hand.rotation = gripRotation;
+        }
+
+        private static Quaternion PlaceForearm(Vector3 origin, Vector3 direction, Vector3 pole, float a, float b, float distance, Vector3 target,
+            Quaternion lowerNow, Vector3 lowerHinge, Transform hand, Quaternion gripRotation, out Vector3 elbow, out float twist)
+        {
+            float along = (a * a - b * b + distance * distance) / (2f * distance);
+            elbow = origin + direction * along + pole.normalized * Mathf.Sqrt(Mathf.Max(0, a * a - along * along));
+            Quaternion rotation = Hinge(target - elbow, Vector3.Cross(elbow - origin, target - elbow), lowerNow, lowerHinge, hand.localPosition);
+            twist = WristRoll(rotation, hand, gripRotation, hand.localPosition.normalized);
+            return rotation;
+        }
+
+        private static float WristRoll(Quaternion lowerRotation, Transform hand, Quaternion gripRotation, Vector3 axis)
+        {
+            Quaternion wrist = Quaternion.Inverse(lowerRotation) * gripRotation * Quaternion.Inverse(hand.localRotation);
+            float axial = Vector3.Dot(new Vector3(wrist.x, wrist.y, wrist.z), axis);
+            return Mathf.DeltaAngle(0, 2f * Mathf.Atan2(axial, wrist.w) * Mathf.Rad2Deg);
+        }
+
+        // World rotation whose bone axis (toward the child) lies along `along` and whose local `hinge` lies along `bend`.
+        private static Quaternion Hinge(Vector3 along, Vector3 bend, Quaternion current, Vector3 hinge, Vector3 child)
+        {
+            Vector3 bone = child.normalized;
+            hinge = Vector3.ProjectOnPlane(hinge, bone);
+            bend = Vector3.ProjectOnPlane(bend, along);
+            if (bone.sqrMagnitude < .5f || hinge.sqrMagnitude < 1e-8f || bend.sqrMagnitude < 1e-8f)
+                return Quaternion.FromToRotation(current * bone, along) * current;
+            return Quaternion.LookRotation(bend, along) * Quaternion.Inverse(Quaternion.LookRotation(hinge, bone));
         }
 
         private void UpdateHeadMask()

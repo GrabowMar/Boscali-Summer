@@ -1,5 +1,0 @@
-{
-  "name": "BoscaliWingHudPreview",
-  "references": ["Unity.TextMeshPro", "Unity.ugui", "BoscaliWingHudNativeAdapter"],
-  "includePlatforms": ["Editor"]
-}

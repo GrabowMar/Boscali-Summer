@@ -86,7 +86,121 @@ namespace BoscaliSummer.Core.Fx
             renderer.receiveShadows = false;
             renderer.sortMode = ParticleSystemSortMode.Distance;
             renderer.lightProbeUsage = LightProbeUsage.BlendProbes;
+            if (!ribbon) Bloom(particles, origin, visibleSeconds);
             return true;
+        }
+
+        // 2026-10-27 (user: countermeasures "should be easier to spot"): the fibres alone vanish past a few hundred metres.
+        // Each burst bundle also blooms a pale cloud, as real chaff does, kept at least BloomMinScreen of the view tall at any range.
+        public const float BloomMinScreen = 0.006f, BloomAlpha = 0.55f;
+        // Vanilla flares: a bigger burning core that never shrinks below FlareMinScreen of the view (about 4 px at 1080p).
+        public const float FlareSize = 1.4f, FlareMinScreen = 0.004f;
+
+        private Material puff;
+        private Texture2D soft;
+
+        private void Bloom(ParticleSystem parent, Transform origin, float seconds)
+        {
+            Transform child = parent.transform.Find("Bloom");
+            GameObject go = child != null ? child.gameObject : new GameObject("Bloom");
+            go.transform.SetParent(parent.transform, false);
+            ParticleSystem cloud = go.GetComponent<ParticleSystem>();
+            if (cloud == null) cloud = go.AddComponent<ParticleSystem>();
+            cloud.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            var main = cloud.main;
+            main.loop = true;       // same reason as the fibres: one burst, kept alive until RadarChaff stops the bundle
+            main.duration = seconds * 2f;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(seconds * 0.8f, seconds);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(0.5f, 2f);
+            main.startSize = new ParticleSystem.MinMaxCurve(2.5f, 4f);
+            main.startRotation = new ParticleSystem.MinMaxCurve(0f, Mathf.PI * 2f);
+            main.startColor = new Color(0.86f, 0.89f, 0.93f, BloomAlpha);
+            main.gravityModifier = 0.004f;
+            main.maxParticles = 8;
+            main.simulationSpace = ParticleSystemSimulationSpace.Custom;
+            main.customSimulationSpace = origin;
+            main.cullingMode = ParticleSystemCullingMode.AlwaysSimulate;
+            var emission = cloud.emission;
+            emission.rateOverTime = 0f;
+            emission.SetBursts(new[] { new ParticleSystem.Burst(0.02f, 3) });
+            var shape = cloud.shape;
+            shape.shapeType = ParticleSystemShapeType.Sphere;
+            shape.radius = 0.5f;
+            var drag = cloud.limitVelocityOverLifetime;
+            drag.enabled = true;
+            drag.drag = 1.2f;
+            drag.multiplyDragByParticleSize = false;
+            drag.multiplyDragByParticleVelocity = false;
+            var size = cloud.sizeOverLifetime;
+            size.enabled = true;
+            size.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(
+                new Keyframe(0f, 0.4f), new Keyframe(0.25f, 1f), new Keyframe(1f, 2.2f)));
+            var fade = cloud.colorOverLifetime;
+            fade.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.06f),
+                    new GradientAlphaKey(0.6f, 0.5f), new GradientAlphaKey(0f, 1f) });
+            fade.color = gradient;
+
+            var renderer = cloud.GetComponent<ParticleSystemRenderer>();
+            renderer.enabled = EnsurePuff();
+            if (!renderer.enabled) return;
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.sharedMaterial = puff;
+            renderer.minParticleSize = BloomMinScreen;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.sortMode = ParticleSystemSortMode.Distance;
+        }
+
+        private bool EnsurePuff()
+        {
+            if (puff != null) return true;
+            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (shader == null) return false;
+            const int n = 32;
+            soft = new Texture2D(n, n, TextureFormat.RGBA32, false) { name = "Boscali chaff / soft puff", wrapMode = TextureWrapMode.Clamp };
+            var pixels = new Color32[n * n];
+            for (int y = 0; y < n; y++)
+                for (int x = 0; x < n; x++)
+                {
+                    float r = new Vector2(x - (n - 1) * 0.5f, y - (n - 1) * 0.5f).magnitude / (n * 0.5f);
+                    float a = Mathf.Pow(Mathf.Clamp01(1f - r), 1.6f);
+                    pixels[y * n + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            soft.SetPixels32(pixels);
+            soft.Apply(false, true);
+            puff = new Material(shader) { name = "Boscali chaff / bloom", renderQueue = (int)RenderQueue.Transparent };
+            puff.SetTexture("_BaseMap", soft);
+            puff.SetColor("_BaseColor", Color.white);
+            Transparent(puff);
+            return true;
+        }
+
+        /// <summary>The vanilla flare's burning core, bigger and kept on screen at range. Idempotent: a flare launched twice is not grown twice.</summary>
+        public static void BrightenFlare(ParticleSystem core)
+        {
+            var renderer = core != null ? core.GetComponent<ParticleSystemRenderer>() : null;
+            if (renderer == null || renderer.minParticleSize >= FlareMinScreen) return;
+            renderer.minParticleSize = FlareMinScreen;
+            var main = core.main;
+            main.startSizeMultiplier *= FlareSize;
+        }
+
+        private static void Transparent(Material m)
+        {
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_ColorMode", 0f);
+            m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
+            m.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetFloat("_Cull", (float)CullMode.Off);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.SetOverrideTag("RenderType", "Transparent");
         }
 
         private bool EnsureAssets()
@@ -99,21 +213,11 @@ namespace BoscaliSummer.Core.Fx
             foil.SetColor("_BaseColor", new Color(0.88f, 0.91f, 0.95f, 1f));
             foil.SetFloat("_Metallic", 0.6f);
             foil.SetFloat("_Smoothness", 0.55f);
-            foil.SetFloat("_Surface", 1f);
-            foil.SetFloat("_Blend", 0f);
-            foil.SetFloat("_ColorMode", 0f);
-            foil.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
-            foil.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
-            foil.SetFloat("_SrcBlendAlpha", (float)BlendMode.One);
-            foil.SetFloat("_DstBlendAlpha", (float)BlendMode.OneMinusSrcAlpha);
-            foil.SetFloat("_ZWrite", 0f);
-            foil.SetFloat("_Cull", (float)CullMode.Off);
+            Transparent(foil);
             foil.SetFloat("_ReceiveShadows", 0f);
             foil.SetColor("_EmissionColor", Color.black);
-            foil.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             foil.EnableKeyword("_RECEIVE_SHADOWS_OFF");
             foil.DisableKeyword("_EMISSION");
-            foil.SetOverrideTag("RenderType", "Transparent");
             // A lightly folded strip catches sunlight as it tumbles, without emissive sparkle sprites.
             strip = new Mesh { name = "Folded chaff fibre cluster" };
             strip.vertices = new[] { new Vector3(-0.1f, -0.5f, 0f), new Vector3(0f, -0.5f, 0.025f),
@@ -131,8 +235,12 @@ namespace BoscaliSummer.Core.Fx
         {
             if (foil != null) Object.Destroy(foil);
             if (strip != null) Object.Destroy(strip);
+            if (puff != null) Object.Destroy(puff);
+            if (soft != null) Object.Destroy(soft);
             foil = null;
             strip = null;
+            puff = null;
+            soft = null;
         }
     }
 }

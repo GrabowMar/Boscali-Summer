@@ -172,6 +172,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             object room = Room(window);
             if (room == null) return r;
             r["room"] = room.GetType().Name;
+            r["enlarged"] = room is OrbitRoom orbit && orbit.Enlarged ? 1 : 0;
             r["selKind"] = Int(Field(room, "selKind"));
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));

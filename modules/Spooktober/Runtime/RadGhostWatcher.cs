@@ -18,7 +18,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private List<RadGhostLook.Handle> worn = new List<RadGhostLook.Handle>(), kept = new List<RadGhostLook.Handle>();
         private float next;
 
-        public void ResetForScene() => RemoveAll();
+        public void ResetForScene()
+        {
+            RemoveAll();
+            HellPortal.CloseAll();
+            HellArmy.Clear();
+        }
 
         private void Update()
         {
@@ -55,6 +60,8 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         {
             worn.Clear();
             RadGhostLook.RemoveAll();
+            HellPortal.CloseAll();
+            HellArmy.Clear();
             SpookAssets.Release();
         }
     }

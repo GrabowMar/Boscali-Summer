@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// <c>RadarChaff</c> and a cloud of tumbling metallic fibres. No new network message.
     /// <para>The ejector is deliberately NOT registered with the aircraft's <c>CountermeasureManager</c>: the game addresses countermeasures
     /// by their index in that list, over the network too, and a station only this machine knows would shift or overrun it elsewhere.
-    /// It is fired directly instead (the menu's POP CHAFF, the optional key, or the countermeasure button while a radar missile is inbound).
+    /// It is fired directly instead (the menu's POP CHAFF, the optional key, or the countermeasure button while chaff is selected).
     /// For the pilot it is still one more stop of the game's Next Countermeasure cycle, after the last real station (<see cref="TakeNext"/>):
     /// while it is the selected one the countermeasure button runs the dispenser and the game's own trigger is never raised
     /// (<see cref="TakeTrigger"/>), so the selection stays on this machine and no index it does not know goes to another.
@@ -126,13 +126,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             hud.DisplayCountermeasureAmmo(ejector.ammo);
         }
 
-        /// <summary>The countermeasure button also runs the dispenser while a radar missile is inbound.</summary>
-        public bool Linked
-        {
-            get => settings != null && settings.ChaffOnCountermeasureKey.Value;
-            set { if (settings != null) settings.ChaffOnCountermeasureKey.Value = value; }
-        }
-
         public void Configure(AutopilotSettings value)
         {
             settings = value;
@@ -173,9 +166,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (now >= nextService) { nextService = now + ServiceSeconds; Service(aircraft); }
             if (KeyPressed()) Pop();
 
-            bool held = aircraft.countermeasureTrigger;
             bool chosen = Selected && Time.frameCount - heldFrame <= 1;     // the button, asked for by the game this frame or the last (update order)
-            if (!ChaffRules.ShouldRun(now < salvoUntil || chosen, Linked, held, held && RadarMissileInbound(aircraft), ejector.ammo) || now < nextFire) return;
+            if (!ChaffRules.ShouldRun(now < salvoUntil, chosen, ejector.ammo) || now < nextFire) return;
             nextFire = now + ChaffRules.Interval;
             ejector.Fire();
             Seduce(aircraft);
@@ -190,15 +182,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         {
             KeyCode key = settings.ChaffKey.Value;
             return key != KeyCode.None && Input.GetKeyDown(key) && !GameplayUI.GameIsPaused && !InputFieldChecker.InsideInputField;
-        }
-
-        private static bool RadarMissileInbound(Aircraft aircraft)
-        {
-            MissileWarning warning = aircraft.GetMissileWarningSystem();
-            List<Missile> known = warning != null ? warning.knownMissiles : null;
-            for (int i = 0; known != null && i < known.Count; i++)
-                if (known[i] != null && !known[i].disabled && ChaffRules.IsRadarSeeker(known[i].GetSeekerType())) return true;
-            return false;
         }
 
         /// <summary>
@@ -275,6 +258,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 // Awake runs here with no aircraft set, so the game's station list never hears of this ejector
                 ChaffEjector fitted = go.AddComponent<ChaffEjector>();
                 fitted.displayName = DisplayName;
+                fitted.displayImage = flareIcon;      // Fire() writes it into the cockpit readout; null drew a white block there
                 fitted.ammo = load;
                 ChaffMax.SetValue(fitted, load);
                 ChaffPorts.SetValue(fitted, chaffPorts);

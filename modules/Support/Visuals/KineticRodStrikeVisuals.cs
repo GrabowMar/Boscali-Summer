@@ -1,13 +1,14 @@
 using NuclearOption.Effects;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// ORBITAL ROD: a hypersonic tungsten rod. The descent is an incandescent plasma streak (white-hot head, orange wake, spalling sparks) with a thick vapour contrail that
     /// hangs and drifts behind it; the strike is a blinding flash, a ground-hugging dust and debris shock skirt with a pressure ring running out in front of it, a roiling
-    /// fireball, embers, and a dirty column that keeps feeding and blooms into a cap, hanging for about a minute with the crater burning under it. All of it is local
+    /// fireball, embers, and a dirty column that keeps feeding and blooms into a cap, thinning and shearing off in the wind within about half a minute, leaving a scorched crater. All of it is local
     /// particles (about 1000 live at the peak, two strikes and four descents at most) and two lights; the gameplay (blast damage, the missile) is untouched.
     /// </summary>
     internal static class KineticRodStrikeVisuals
@@ -21,6 +22,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         {
             SupportParticles.DestroyPool(impacts, FreeImpacts);
             SupportParticles.DestroyPool(trails, FreeTrails);
+            for (int i = 0; i < craters.Count; i++) if (craters[i] != null) Object.Destroy(craters[i]);
+            craters.Clear(); craterHead = 0;
         }
 
         public static void Track(Missile missile)
@@ -48,6 +51,40 @@ namespace BoscaliSummer.Modules.Support.Visuals
         }
 
         internal static void Release(RodImpactFx fx) => SupportParticles.Recycle(impacts, FreeImpacts, fx);
+
+        // ponytail: a ring of 12 scene-long craters, the oldest reused; the vanilla soot decal stacked twice (scar + darker core) stands in for a real crater mesh
+        private const int MaxCraters = 12;
+        private static readonly List<GameObject> craters = new List<GameObject>(MaxCraters * 2);
+        private static int craterHead;
+
+        /// <summary>The burnt crater a strike leaves for the rest of the scene: a wide scorched scar with a dark core, projected down onto terrain and roofs.</summary>
+        internal static void StampCrater(Vector3 ground, Vector3 normal, float scale)
+        {
+            GameObject prefab = GameAssets.i != null ? GameAssets.i.scorchMarkDecal : null;
+            if (prefab == null || Datum.origin == null) return;
+            float roll = Random.Range(0f, 360f);
+            Place(ground, normal, 120f * scale, roll);
+            Place(ground, normal, 48f * scale, roll + 137f);
+
+            void Place(Vector3 at, Vector3 n, float size, float spin)
+            {
+                GameObject mark;
+                if (craters.Count < MaxCraters * 2) { mark = Object.Instantiate(prefab, Datum.origin, false); mark.name = "BoscaliSummer.RodCrater"; craters.Add(mark); }
+                else { mark = craters[craterHead]; craterHead = (craterHead + 1) % craters.Count; }
+                if (mark == null) return;
+                mark.SetActive(true);
+                var projector = mark.GetComponent<DecalProjector>();
+                if (projector == null) return;
+                float depth = Mathf.Max(12f, size * 0.3f);
+                mark.transform.rotation = Quaternion.AngleAxis(spin, n) * Quaternion.LookRotation(-n, Vector3.ProjectOnPlane(Vector3.forward, n));
+                mark.transform.position = at + n * (depth * 0.45f);
+                projector.renderingLayerMask = ~0u;
+                projector.size = new Vector3(size, size, depth);
+                projector.startAngleFade = 60f; projector.endAngleFade = 85f;
+                projector.fadeFactor = 1f;
+                projector.drawDistance = 6000f;
+            }
+        }
 
         internal static RodTrailFx RentTrail()
         {
@@ -230,7 +267,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
     internal sealed class RodImpactFx : MonoBehaviour
     {
-        private const float Life = 75f, StemSeconds = 15f, CapAt = 9.5f, CraterFire = 34f;
+        private const float Life = 55f, StemSeconds = 15f, CapAt = 9.5f, CraterFire = 34f;
         private static AudioClip boom;
         private ParticleSystem flash, fireGlow, fireBody, skirt, lift, haze, rings, ringsAdd, embers, chunks, stem, cap, crater;
         private Light flashLight, glowLight;
@@ -251,14 +288,16 @@ namespace BoscaliSummer.Modules.Support.Visuals
             life = small ? 16f : Life;
             int N(int n) => small ? Mathf.Max(4, Mathf.RoundToInt(n * s)) : n;
             ground = point;
-            if (Physics.Linecast(point + Vector3.up * 200f, point - Vector3.up * 400f, out RaycastHit hit, PhysicsLayers.StaticsMask)) ground = hit.point;
+            Vector3 normal = Vector3.up;
+            if (Physics.Linecast(point + Vector3.up * 200f, point - Vector3.up * 400f, out RaycastHit hit, PhysicsLayers.StaticsMask)) { ground = hit.point; normal = hit.normal; }
+            KineticRodStrikeVisuals.StampCrater(ground, normal, s);
             if (!small) BoscaliSummer.Core.Fx.ParticleFx.Spawn("ops-rod-impact", ground, Quaternion.identity); // authored debris/skirt/embers on top
             transform.localPosition = Vector3.zero;
             born = Time.time; nextStem = small ? float.MaxValue : 0f; nextCrater = small ? float.MaxValue : 0f; capDone = small;
             day = CineFx.Day01();
             Vector3 wind = CineFx.Wind();
             foreach (var ps in new[] { flash, fireGlow, fireBody, skirt, lift, haze, rings, ringsAdd, embers, chunks, stem, cap, crater }) { ps.Clear(); ps.Play(); }
-            CineFx.Drift(stem, wind * 0.7f); CineFx.Drift(cap, wind * 1.6f); CineFx.Drift(haze, wind * 0.5f); CineFx.Drift(lift, wind * 0.4f);
+            CineFx.Drift(stem, wind * 1.6f); CineFx.Drift(cap, wind * 1.6f); CineFx.Drift(haze, wind * 0.5f); CineFx.Drift(lift, wind * 0.4f);
 
             try { SceneSingleton<BlastManager>.i?.AddBlast(ground.ToGlobalPosition(), 70f * s); } catch (System.Exception) { }
 
@@ -300,7 +339,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             for (int i = 0; i < (small ? 0 : 36); i++)
             {
                 float a = Random.value * Mathf.PI * 2f;
-                haze.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(0f, 350f) + Vector3.up * Random.Range(8f, 40f)), velocity = Random.insideUnitSphere * 3f, startSize = Random.Range(260f, 420f), startLifetime = Random.Range(40f, 60f), rotation = Random.Range(0f, 360f), startColor = new Color(shade * 0.62f, shade * 0.56f, shade * 0.5f, 1f) }, 1);
+                haze.Emit(new ParticleSystem.EmitParams { position = CineFx.ToSim(ground + new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a)) * Random.Range(0f, 350f) + Vector3.up * Random.Range(8f, 40f)), velocity = Random.insideUnitSphere * 3f, startSize = Random.Range(260f, 420f), startLifetime = Random.Range(30f, 45f), rotation = Random.Range(0f, 360f), startColor = new Color(shade * 0.62f, shade * 0.56f, shade * 0.5f, 1f) }, 1);
             }
             // 4. the pressure ring and the condensation ring that races it
             Ring(0.0f, 2700f * s, 3.8f, new Color(0.9f, 0.82f, 0.7f, 0.5f), CineFx.RingAlpha);
@@ -322,7 +361,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             glowLight.transform.position = ground + Vector3.up * 60f;
             float dist = CineFx.CameraDistance(ground);
             shakeAt = Mathf.Min(dist / 1800f, 4f); shakeStrength = s;
-            if (boom == null) boom = BuildBoom();
+            if (boom == null) boom = BoscaliSummer.Core.Fx.SfxClips.Get("rod-impact") ?? BuildBoom();
             audioSource.clip = boom; audioSource.transform.position = ground;
             audioSource.PlayDelayed(Mathf.Clamp(dist / 700f, 0f, 7f));
         }
@@ -375,9 +414,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
             chunks = CineFx.Layer(transform, "Debris chunks", CineFx.Smoke, 60, ParticleSystemRenderMode.Billboard, true);
             var gc = chunks.main; gc.gravityModifier = 1.2f; CineFx.Spin(chunks, 200f);
             CineFx.Tint(chunks, CineFx.Fade(0.02f, 0.75f, 0.9f));
+            // The stem slows to a crawl within ~10 s (strong dampen) and thins out from mid-life: with a weak dampen and a near-black middle the puffs climbed
+            // 600-900 m after the feed stopped and hung there as a detached black cloud for most of a minute.
             stem = CineFx.Layer(transform, "Smoke stem", CineFx.Smoke, 300, ParticleSystemRenderMode.Billboard, true);
-            CineFx.Drag(stem, 0.002f, 8f); CineFx.Spin(stem, 8f); CineFx.Grow(stem, 0.55f, 2.8f, 0.55f); CineFx.Turbulence(stem, 16f, 0.07f);
-            CineFx.Tint(stem, CineFx.Ramp(new Color(1f, 0.55f, 0.25f, 0f), 0f, new Color(0.6f, 0.4f, 0.28f, 0.88f), 0.06f, new Color(0.22f, 0.2f, 0.19f, 0.8f), 0.4f, new Color(0.3f, 0.29f, 0.28f, 0f), 1f));
+            CineFx.Drag(stem, 0.012f, 6f); CineFx.Spin(stem, 8f); CineFx.Grow(stem, 0.55f, 2.8f, 0.55f); CineFx.Turbulence(stem, 16f, 0.07f);
+            CineFx.Tint(stem, CineFx.Ramp(new Color(1f, 0.55f, 0.25f, 0f), 0f, new Color(0.6f, 0.45f, 0.32f, 0.85f), 0.06f, new Color(0.42f, 0.4f, 0.38f, 0.55f), 0.35f, new Color(0.55f, 0.54f, 0.53f, 0f), 1f));
             cap = CineFx.Layer(transform, "Smoke cap", CineFx.Smoke, 120, ParticleSystemRenderMode.Billboard, true);
             CineFx.Drag(cap, 0.018f, 1f); CineFx.Spin(cap, 6f); CineFx.Grow(cap, 0.7f, 2.4f, 0.5f); CineFx.Turbulence(cap, 10f, 0.05f);
             CineFx.Tint(cap, CineFx.Ramp(new Color(1f, 1f, 1f, 0f), 0f, new Color(0.55f, 0.52f, 0.5f, 0.7f), 0.1f, new Color(0.5f, 0.48f, 0.47f, 0.55f), 0.65f, new Color(0.5f, 0.5f, 0.5f, 0f), 1f));
@@ -431,7 +472,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     {
                         position = CineFx.ToSim(ground + new Vector3(c.x, 14f, c.y)),
                         velocity = new Vector3(Random.Range(-4f, 4f), Random.Range(48f, 80f) * fade, Random.Range(-4f, 4f)),
-                        startSize = Random.Range(55f, 90f) * (0.8f + 0.4f * fade), startLifetime = Random.Range(40f, 52f), rotation = Random.Range(0f, 360f),
+                        startSize = Random.Range(55f, 90f) * (0.8f + 0.4f * fade), startLifetime = Random.Range(22f, 30f), rotation = Random.Range(0f, 360f),
                         startColor = new Color(s, s, s, 1f)
                     }, 1);
                 }
@@ -449,7 +490,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     {
                         position = CineFx.ToSim(ground + Vector3.up * (top + Random.Range(-60f, 60f)) + dir * Random.Range(10f, 60f)),
                         velocity = dir * Random.Range(22f, 45f) + Vector3.up * Random.Range(-1f, 9f),
-                        startSize = Random.Range(120f, 200f), startLifetime = Random.Range(34f, 46f), rotation = Random.Range(0f, 360f),
+                        startSize = Random.Range(120f, 200f), startLifetime = Random.Range(22f, 30f), rotation = Random.Range(0f, 360f),
                         startColor = new Color(s, s, s, 1f)
                     }, 1);
                 }

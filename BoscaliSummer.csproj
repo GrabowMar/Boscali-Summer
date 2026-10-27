@@ -3,9 +3,8 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.8</Version>
+    <Version>0.2.9</Version>
     <DebugType>portable</DebugType>
-    <!-- CS0436: the vendored avionics sources compile into this assembly and the test assembly. -->
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <EnableNETAnalyzers>true</EnableNETAnalyzers>
@@ -13,7 +12,7 @@
     <LangVersion>12</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- The project lives at the repo root, so the SDK's implicit **/*.cs glob would also
-         sweep tests/ and any local tooling scratch. Enumerate the source roots explicitly
+         sweep local scratch. Enumerate the source roots explicitly
          instead. -->
     <EnableDefaultItems>false</EnableDefaultItems>
   </PropertyGroup>
@@ -25,30 +24,14 @@
     <DebugType>none</DebugType>
   </PropertyGroup>
 
-  <ItemGroup Label="Offline render harness">
-    <!-- The nomod panel-atlas harness (scratch Unity project) builds CallsPanel and paints CallTile directly. -->
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>BoscaliSupportPreview</_Parameter1>
-    </AssemblyAttribute>
-    <!-- The offline map-overlay harness (MapOverlayUnityCheck) builds the STR overlay from a fixture model and reads its tags. -->
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>BoscaliMapOverlayPreview</_Parameter1>
-    </AssemblyAttribute>
-    <!-- The Met Office check (BoscaliWeatherEnv asmdef) builds the weather console window and drives it with fake world and command seams. -->
-    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
-      <_Parameter1>BoscaliWeatherEnv</_Parameter1>
-    </AssemblyAttribute>
-  </ItemGroup>
-
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
     <Compile Include="modules\**\*.cs" Exclude="modules\**\Assets\Editor\**" />
     <!-- Vendored avionics protocol, widget kit, and pure design tokens (namespace
          NOAvionics, engine-free sources under Pure/). Wing Command was merged in as modules/Wing/, so this
          is the only copy: the bezel registry and map-input picker coordinate panels
-         in-process (see "Shared avionics" in README.md). Unit tests
-         (*Tests.cs) build only into BoscaliSummer.Tests. -->
-    <Compile Include="AvionicsUi\**\*.cs" Exclude="AvionicsUi\Pure\**\*Tests.cs" />
+         in-process (see "Shared avionics" in README.md). -->
+    <Compile Include="AvionicsUi\**\*.cs" />
 
     <EmbeddedResource Include="AvionicsUi\ThirdParty\**\*.txt" />
   </ItemGroup>
@@ -206,9 +189,17 @@
     <EmbeddedResource Include="modules\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Kaiju\Assets\kaiju.bundle')">
       <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
     </EmbeddedResource>
+    <!-- Built by tools/Compile-VanguardStoreArt.ps1. Optional: without it the runtime-built Vanguard stores keep their vanilla parts. -->
+    <EmbeddedResource Include="modules\Vanguard\Assets\vanguard-stores.bundle" Condition="Exists('modules\Vanguard\Assets\vanguard-stores.bundle')">
+      <LogicalName>BoscaliSummer.Vanguard.vanguard-stores.bundle</LogicalName>
+    </EmbeddedResource>
     <!-- Built by tools/Compile-SpooktoberAssets.ps1. Optional: without it the rad look is embers only. -->
     <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
       <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
+    </EmbeddedResource>
+    <!-- Spooktober's own sounds (ElevenLabs, see modules/Spooktober/Assets/Sfx/LICENSES.txt), served by Core/Fx/SfxClips. -->
+    <EmbeddedResource Include="modules\Spooktober\Assets\Sfx\*.wav">
+      <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>

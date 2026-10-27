@@ -176,7 +176,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Ladder.Split(genus.LobeRung, out float edgeRung, out float edgeW);
                 float sheet = genus.SheetBlend;
                 float detail = 0.5f;
-                if (genus.Billow > 0.01f && edge > 0.08f)
+                float billow = Math.Max(genus.Billow, 0.45f); // the shader's billow floor (2026-10-26)
+                if (edge > 0.08f)
                 {
                     float d0 = 0f;
                     if (edgeW < 0.98f) d0 = EdgeDetail(nx, y, nz, Ladder.EdgeScale(Ladder.LobeMetres(edgeRung)), edge, sheet);
@@ -187,9 +188,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 }
                 // The shader's nibble and its steeper rim on heaped cloud (not on the front shield), so the mirror and the march
                 // agree on the boundary at a standing camera. The far map's smoothing (coarse >= 1) is not mirrored.
-                float nibble = Math.Max(0f, WeatherMath.Lerp(0.72f, 0.65f, sheet) - detail) * genus.Billow * edge * WeatherMath.Lerp(0.70f, 0.45f, sheet);
-                layerShape = Scalar.Clamp01(layerShape - nibble); tower = Scalar.Clamp01(tower - nibble);
-                float crisp = (1f - sheet) * 0.5f * edge;
+                // The shader's remap erosion (2026-10-26): gaps between billows cut deep, dense cores keep their mass.
+                float erode = Math.Max(0f, 0.80f - detail) * billow * edge * WeatherMath.Lerp(0.75f, 0.55f, sheet);
+                float keep = Math.Max(0.05f, 1f - erode);
+                layerShape = Scalar.Clamp01((layerShape - erode) / keep); tower = Scalar.Clamp01((tower - erode) / keep);
+                float crisp = (1f - 0.6f * sheet) * 0.65f * edge;
                 layerShape = WeatherMath.Lerp(layerShape, Scalar.Clamp01((layerShape - 0.08f) * 1.6f), crisp);
                 tower = WeatherMath.Lerp(tower, Scalar.Clamp01((tower - 0.08f) * 1.6f), crisp);
             }
@@ -561,10 +564,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>The boundary erosion at one edge scale k (1 = the 1250 m erosion and 340/300 m micro periods).</summary>
         private float EdgeDetail(float nx, float y, float nz, float k, float edge, float sheetBlend)
         {
-            // Cumulus edges take the rounded lobes (channel 2) for the near octave, sheets the stringy erosion (channel 1).
-            float detail = Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 0) * 0.72f +
+            // Both octaves take the rounded lobes (channel 2); a sheet keeps a third of the broad (0) and stringy (1) texture (the shader's cauliflower pass, 2026-10-26).
+            float s = sheetBlend * 0.35f;
+            float detail = WeatherMath.Lerp(Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 2),
+                    Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 0), s) * 0.72f +
                 WeatherMath.Lerp(Sample(nx / (1250f * k) * 3.1f + 0.21f, nz / (1250f * k) * 3.1f + 0.21f, y / (1250f * k) * 3.1f + 0.21f, 2),
-                    Sample(nx / (1250f * k) * 3.1f + 0.21f, nz / (1250f * k) * 3.1f + 0.21f, y / (1250f * k) * 3.1f + 0.21f, 1), sheetBlend) * 0.28f;
+                    Sample(nx / (1250f * k) * 3.1f + 0.21f, nz / (1250f * k) * 3.1f + 0.21f, y / (1250f * k) * 3.1f + 0.21f, 1), s) * 0.28f;
+            // The fine Worley octave (A) at the main tap, like the shader.
+            detail = detail * 0.75f + Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 3) * 0.25f;
             if (edge > 0.35f)
                 detail = detail * 0.65f + Sample(nx / (340f * k) + 0.19f, nz / (340f * k) + 0.19f, y / (300f * k) + 0.83f, 1) * 0.35f;
             return detail;
@@ -638,7 +645,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// density check runs it on the GPU.</summary>
         internal static bool QuantiseWeights;
 
-        /// <summary>Trilinear, repeating read of one channel (R = body, G = detail, B = lobe), like the shader's tex3D.</summary>
+        /// <summary>Trilinear, repeating read of one channel (R = body, G = detail, B = lobe, A = fine billows), like the shader's tex3D.</summary>
         private float Sample(float u, float v, float w, int channel)
         {
             float fx = u * size - 0.5f, fy = v * size - 0.5f, fz = w * size - 0.5f;

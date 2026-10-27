@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// MISC, the last key on the rail: the drawer for everything that is not a cockpit system. A module may add tabs first
     /// (<see cref="IMiscTabs"/>: ARES's SPAWN, UNITS, POWERS and CHEATS); DEBUG drives the [Debug] config entries. Both stay locked
     /// behind the DEV ACCESS page until the player accepts the cheating warning (<see cref="DevAccess"/>, this session only).
-    /// Spooktober adds one tab (<see cref="ISetExtras"/>) that shows only while it says so.
+    /// Spooktober adds one tab (<see cref="ISetExtras"/>), always shown.
     /// </summary>
     internal sealed class MiscMfdPanel : MonoBehaviour, ISceneService
     {
@@ -113,11 +113,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Action sync = () =>
             {
                 bool granted = DevAccess.Granted;
-                bool spook = extra >= 0 && extras.ExtraTabShown;
-                bool Shown(int tab) => tab == Gate ? !granted : tab >= firstAdded && tab <= debug ? granted : tab != extra || spook;
+                bool Shown(int tab) => tab == Gate ? !granted : tab < firstAdded || tab > debug || granted;
                 bar.SetShown(Gate, !granted);
                 for (int i = firstAdded; i <= debug; i++) bar.SetShown(i, granted);
-                if (extra >= 0) bar.SetShown(extra, spook);
                 int first = Standby;
                 for (int i = 1; i < titles.Count && first == Standby; i++)
                     if (Shown(i)) first = i;

@@ -60,7 +60,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             string s = code + " · " + km.ToString(CultureInfo.InvariantCulture) + " KM · " + brg.ToString("000", CultureInfo.InvariantCulture);
             return r.Kind == ThreatKind.Air ? s + (r.Hot ? " · HOT" : " · COLD") : s;
         }
-
-        public static string Rail(in ThreatRow r) => r.Kind == ThreatKind.AirDefence ? "armed" : r.Hot ? "danger" : "info";
     }
 }

@@ -122,9 +122,13 @@ namespace BoscaliSummer.Core.Scenario
         Warm = 32, Cold = 64, Night = 128,
     }
 
-    internal enum TriggerKind : byte { Start, Join, Spawn, Airborne, Landed, Time, Started, Done, Flag }
+    /// <summary>
+    /// What starts a beat. <see cref="Destroyed"/>, <see cref="Damaged"/>, <see cref="Near"/>, <see cref="Below"/> and <see cref="Above"/> are watched by the
+    /// runner through <see cref="IScenarioWorld"/> and fire when their condition becomes true; <see cref="Down"/> is raised by the host.
+    /// </summary>
+    internal enum TriggerKind : byte { Start, Join, Spawn, Airborne, Landed, Time, Started, Done, Flag, Destroyed, Damaged, Near, Below, Above, Down }
 
-    internal enum ActionKind : byte { Cut, Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat }
+    internal enum ActionKind : byte { Cut, Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat, Start, Complete, Cancel, Countdown, Ace, Random }
 
     internal struct ScenarioAction
     {
@@ -147,6 +151,8 @@ namespace BoscaliSummer.Core.Scenario
         public float Seconds;
         /// <summary>Where a <c>seat</c> puts the pilot: a point, a compass heading and a speed in metres a second.</summary>
         public float X, Y, Z, Heading, Speed;
+        /// <summary>The objectives a <c>start</c>, <c>complete</c> or <c>cancel</c> acts on; the flags a <c>random</c> picks one of.</summary>
+        public string[] Names;
     }
 
     /// <summary>
@@ -172,7 +178,10 @@ namespace BoscaliSummer.Core.Scenario
     {
         public string Id, Arg, If, Unless;
         public TriggerKind Trigger;
+        /// <summary><c>time</c>: seconds; <c>damaged</c>: the health share 0..1; <c>below</c>/<c>above</c>: metres above the ground.</summary>
         public float Seconds;
+        /// <summary><c>near</c>: the point and the range in metres.</summary>
+        public float X, Z, Range = 2000f;
         public ScenarioSide Side;
         public bool Repeat;
         public readonly List<ScenarioAction> Actions = new List<ScenarioAction>();

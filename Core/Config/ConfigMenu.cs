@@ -15,6 +15,9 @@ namespace BoscaliSummer.Core.Config
         public int? Order;
         public bool? ReadOnly;
         public bool? Browsable;
+        /// <summary>Custom IMGUI value drawer; ConfigurationManager looks this exact delegate type up by reflection.</summary>
+        public Action<ConfigEntryBase> CustomDrawer;
+        public bool? HideDefaultButton;
     }
 
     /// <summary>
@@ -60,6 +63,7 @@ namespace BoscaliSummer.Core.Config
             new[] { "1 Battlefield", "Trenches", "Enabled", "Trenches and fortifications" },
             new[] { "1 Battlefield", "Garrisons", "Enabled", "Zone garrisons" },
             new[] { "1 Battlefield", "Fires", "Enabled", "Fire ignition and spread" },
+            new[] { "1 Battlefield", "CombatAdjust", "Enabled", "Combat adjustments (fog, missile failures, smoke)" },
             new[] { "1 Battlefield", "Weather", "Enabled", "Dynamic weather" },
             new[] { "1 Battlefield", "Kaiju", "Enabled", "Kaiju" },
             new[] { "1 Battlefield", "Kaiju", "Summon", "KAIJU: summon / dismiss" },

@@ -23,6 +23,8 @@ namespace NOAvionics
         private readonly List<AvPart> suspects = new List<AvPart>(8);
         private bool pending, tickHooked;
         private Canvas pageCanvas;
+        private float[] heights = Array.Empty<float>(), grow = Array.Empty<float>();
+        private bool[] live = Array.Empty<bool>();
 
         public AvFlow(RectTransform content, AvTicker ticker, float width, float gutter = AvGridTokens.Gutter)
         {
@@ -120,6 +122,8 @@ namespace NOAvionics
 
         private void FastTick()
         {
+            // Keep hidden changes queued until this page is shown.
+            if (!Visible()) return;
             if (++sweep >= 5) { sweep = 0; SlowTick(); }
             if (!pending && suspects.Count > 0)
                 for (int i = 0; i < suspects.Count && !pending; i++) pending = Moved(suspects[i]);
@@ -159,9 +163,12 @@ namespace NOAvionics
                 suspects.Clear();
                 float before = ContentHeight;
                 // Pass 1: measure every line. Pass 2: hand leftover viewport height to growing lines, then place.
-                var heights = new float[lines.Count];
-                var live = new bool[lines.Count];
-                var grow = new float[lines.Count];
+                if (heights.Length < lines.Count)
+                {
+                    heights = new float[lines.Count];
+                    live = new bool[lines.Count];
+                    grow = new float[lines.Count];
+                }
                 float natural = 2f * AvGridTokens.Pad - AvGridTokens.Gap, weights = 0f;
                 for (int i = 0; i < lines.Count; i++)
                 {
@@ -170,6 +177,7 @@ namespace NOAvionics
                     float w = cols == 1 ? math.Inner : AvFlowMath.ColumnWidth(math.Inner, cols, AvGridTokens.Gap);
                     float h = 0f;
                     bool any = false;
+                    grow[i] = 0f;
                     foreach (AvPart p in line)
                     {
                         bool shown = p.Shown;
@@ -197,8 +205,10 @@ namespace NOAvionics
                     if (cols == 1) line[0].Place(math.Take(h));
                     else
                     {
-                        AvSlot[] slots = math.TakeColumns(cols, h);
-                        for (int c = 0; c < line.Length; c++) if (line[c].PlacedShown) line[c].Place(slots[c]);
+                        AvSlot row = math.Take(h);
+                        float columnWidth = AvFlowMath.ColumnWidth(row.W, cols, AvGridTokens.Gap);
+                        for (int c = 0; c < line.Length; c++)
+                            if (line[c].PlacedShown) line[c].Place(new AvSlot(row.X + c * (columnWidth + AvGridTokens.Gap), row.Y, columnWidth, row.H));
                     }
                 }
                 ContentHeight = math.ContentHeight;
@@ -223,9 +233,10 @@ namespace NOAvionics
         private readonly int columns;
         internal AvCellGrid(AvFlow flow, int columns) { this.flow = flow; this.columns = columns; }
 
-        public AvCell Toggle(string title, string sub, Func<bool> get, Action<bool> set)
+        public AvCell Toggle(string title, string sub, Func<bool> get, Action<bool> set,
+            AvIcon icon = AvIcon.None, string onWord = "ON", string offWord = "OFF")
         {
-            var cell = AvCell.Toggle(flow.Content, title, sub, get, set);
+            var cell = AvCell.Toggle(flow.Content, title, sub, get, set, onWord, offWord, icon);
             flow.AppendToGrid(cell, columns);
             return cell;
         }

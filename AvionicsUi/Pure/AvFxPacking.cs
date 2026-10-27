@@ -11,13 +11,16 @@ namespace NOAvionics
     /// </summary>
     public static class AvFxPacking
     {
+        // The shader keeps its authored durations; its clock and start times advance together.
+        public const float AnimationSpeed = 2f;
+
         public static float DurationOf(AvFxKind k)
         {
             switch (k)
             {
-                case AvFxKind.Shine: return 0.40f;
-                case AvFxKind.Dissolve: return 0.35f;
-                case AvFxKind.Scan: return 0.25f;
+                case AvFxKind.Shine: return 0.40f / AnimationSpeed;
+                case AvFxKind.Dissolve: return 0.35f / AnimationSpeed;
+                case AvFxKind.Scan: return 0.25f / AnimationSpeed;
                 default: return 0f;
             }
         }

@@ -90,15 +90,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return false;
         }
 
-        /// <summary>The step's point is put somewhere else (its altitude and arrival kept); a route starts again from it.</summary>
-        public static void Replace(PlanStep p, float x, float z)
-        {
-            Waypoint w = p.Points != null && p.Points.Length > 0 ? p.Points[0] : new Waypoint { Altitude = float.NaN, Speed = float.NaN };
-            w.X = x;
-            w.Z = z;
-            p.Points = new[] { w };
-        }
-
         /// <summary>Where the step leaves its element: its last point (false for ATTACK, RTB, REFIT and FORM UP).</summary>
         public static bool EndPoint(PlanStep p, out float x, out float z)
         {

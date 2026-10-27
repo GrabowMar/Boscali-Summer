@@ -1,5 +1,0 @@
-{
-  "name": "BoscaliMapChromePreview",
-  "references": ["Unity.TextMeshPro", "Unity.ugui", "BoscaliMapChromeNative"],
-  "includePlatforms": ["Editor"]
-}

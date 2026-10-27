@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
     /// UAV: the VANGUARD drone link on the maximised-map MFD (host slot, left column). A brief summary in the OPS layout the owner ruled
-    /// for: the linked drone's live feed as the hero, the asset list (click = link), TAKE CONTROL / NEXT and the button that opens the
+    /// for: the linked drone's live feed as the hero, the asset list (click = link), BACK ON TASK / NEXT and the button that opens the
     /// UAV TERMINAL. Every press goes to <see cref="DroneLinkService"/>.
     /// </summary>
     internal sealed class DroneMfdPanel : MonoBehaviour, ISceneService
@@ -88,14 +88,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             feed = page.Add(new DroneFeedView(page.Content, "Feed", 11f));
             AvButtons row = page.Buttons(
                 new AvControl.Spec("UAV TERMINAL", () => link.OpenTerminal(), AvButtonStyle.Primary, AvIcon.Terminal),
-                new AvControl.Spec("TAKE CONTROL", () => { link.ToggleHand(); Refresh(); }, AvButtonStyle.Default, AvIcon.Drone),
+                new AvControl.Spec("BACK ON TASK", () => { link.Release(); Refresh(); }, AvButtonStyle.Default, AvIcon.Refresh),
                 new AvControl.Spec("NEXT", () => { link.Cycle(1); Refresh(); }, AvButtonStyle.Default, AvIcon.ChevronRight));
             open = row.Controls[0];
             hand = row.Controls[1];
             next = row.Controls[2];
             open.Help = "Open the UAV terminal: every drone on the link, the live feed, the tactical plot and waypoints.";
-            hand.Help = "Fly the linked drone by hand: it holds its course and height. Steer it in the UAV TERMINAL (click the feed) or with C › DRONE LINK › MATCH MY NOSE / TURN.";
-            next.Help = "Link the next drone; while you hand-fly, the stick goes with the link.";
+            hand.Help = "Clear the linked drone's order: it goes back to its own job. Give orders in the UAV TERMINAL or with C › WEAPONS › DRONES.";
+            next.Help = "Link the next drone; every drone keeps flying its last order.";
             page.Section(AvIcon.Gauge, "TELEMETRY", "LINKED DRONE");
             mAlt = new AvMetric(page.Content, "ALT");
             mSpd = new AvMetric(page.Content, "SPD");
@@ -105,8 +105,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             page.Section(AvIcon.Drone, "ASSETS ON LINK", "CLICK TO LINK");
             list = page.Add(new AvList(page.Content, console.Ticker, 5, BindRow) { RowClicked = i => { link.Link(i); Refresh(); } });
             console.Orders(0,
-                "ONE DRONE ON THE STICK AT A TIME: NEXT HANDS IT OVER",
-                "IN FLIGHT: C › WEAPONS › DRONE LINK",
+                "IN FLIGHT: C › WEAPONS › DRONES › SEND WHERE I LOOK",
+                "ORDERS STAY WITH THEIR DRONE WHEN YOU LINK ANOTHER",
                 "LINK DROPS PAST " + AvNum.Fixed(DroneLink.MaxRangeM / 1000f, 0) + " KM: THE DRONE RETURNS TO TASK");
             console.Finish();
             console.SetPage(0);
@@ -137,9 +137,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 mLink.Set("—", "%", 0f, AvState.Inert);
                 mSpi.Set("—", "KM", 0f, AvState.Inert);
             }
-            hand.Label = v != null && v.Mode == DroneMode.Hand ? "RELEASE" : "TAKE CONTROL";
-            hand.Latched = v != null && v.Mode == DroneMode.Hand;
-            hand.Interactable = link.Count > 0;
+            hand.Interactable = v != null && v.Mode != DroneMode.Auto;
             next.Interactable = link.Count > 1;
             console.Footer.Set(v == null ? (link.Count > 0 ? "PICK A DRONE TO LINK IT" : "LAUNCH A VANGUARD DRONE TO PUT IT ON THE LINK")
                 : v.Callsign + " · " + AvNum.Fixed(v.RangeM / 1000f, 1) + " KM · LINK " + AvNum.Fixed(v.Quality * 100f, 0) + "%",

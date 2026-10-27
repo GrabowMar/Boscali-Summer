@@ -22,6 +22,14 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string SkywellInfo = "WI_VG_Skywell";   // SKYWELL kit WeaponInfo (cargo MountedMissile)
         public const string SkywellMount = "VG_Skywell_Kit";
 
+        // Runtime stores (Runtime/RuntimeStores): cloned from vanilla or bundle mounts at load, no bundle content.
+        public const string TorchMount = "VG_Torch";           // SRB-2 TORCH strap-on boost rockets
+        public const string SunspearMount = "VG_Sunspear";     // HEL-60 SUNSPEAR laser pod
+        public const string StormcellMount = "VG_Stormcell";   // PCU-9 STORMCELL capacitor pod
+        public const string WatchtowerMount = "VG_Watchtower"; // ASQ-X WATCHTOWER recon pod (IRST, ESM, MAWS, relay)
+        public const string Manta = "VG_Manta";                // XQ-90 MANTA heavy escort drone (runtime missile clone of REMORA)
+        public const string MantaMount = "VG_Manta_Wing";      // MANTA on its wing station; it blocks the neighbouring station
+
         /// <summary>GLAIVE family (gun drones carried as missiles); Carrier is the legacy shared role.</summary>
         public static bool IsGunDrone(VanguardRole role) => role == VanguardRole.Sentinel || role == VanguardRole.Gunship || role == VanguardRole.Carrier;
 
@@ -37,6 +45,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
                 case MaldX: return VanguardRole.Decoy;
                 case MaldJ: return VanguardRole.Jammer;
                 case Remora: return VanguardRole.Drone;
+                case Manta: return VanguardRole.Drone;
                 case HawcX: return VanguardRole.Glider;
                 case AegisDart: return VanguardRole.Interceptor;
                 case Glaive2A: return VanguardRole.Sentinel;

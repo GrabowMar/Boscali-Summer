@@ -68,12 +68,48 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return lure != null && !lure.disabled && lure != missile ? lure : null;
         }
 
-        // Every distinct missile chasing the bait itself counts as drawn (sim gauge).
+        // Every distinct missile chasing the bait itself counts as drawn (sim gauge); a closing radar missile makes it shed a decoy.
         private void CountDrawn()
         {
             ThreatScan.Inbound(missile, inbound);
             for (int i = 0; i < inbound.Count; i++)
                 if (baitDrawn.Add(inbound[i].persistentID.Id)) VanguardStats.Bump("maldx.drawn");
+            ShedDecoy();
+        }
+
+        private int shedCharges = MaldxRules.ShedCharges;
+        private float lastShed = -99f;
+
+        // Shed decoy: a chaff burst on the bait (MaldxService.Seed, every peer draws it) and each radar missile homing on the bait
+        // inside ShedRange rolls to lose its lock (SeekerCapture.Drop), so the bait survives the SAM it is luring.
+        private void ShedDecoy()
+        {
+            float now = Time.timeSinceLevelLoad;
+            if (shedCharges <= 0 || now - lastShed < MaldxRules.ShedInterval) return;
+            GlobalPosition self = missile.GlobalPosition();
+            Vector3 selfVel = missile.rb != null ? missile.rb.velocity : Vector3.zero;
+            bool shed = false;
+            for (int i = 0; i < inbound.Count && !shed; i++)
+            {
+                Missile threat = inbound[i];
+                if (threat.NetworkHQ == missile.NetworkHQ) continue;
+                Vector3 to = self - threat.GlobalPosition();
+                float range = to.magnitude;
+                float closing = range > 0.01f && threat.rb != null ? Vector3.Dot(threat.rb.velocity - selfVel, to / range) : 0f;
+                shed = MaldxRules.ShouldShed(SeductionRule.IsRadarSeeker(threat.GetSeekerType()), range, closing, shedCharges, now - lastShed);
+            }
+            if (!shed) return;
+            shedCharges--;
+            lastShed = now;
+            MaldxService.Seed(missile, self);
+            VanguardStats.Bump("maldx.shed");
+            for (int i = 0; i < inbound.Count; i++)
+            {
+                Missile threat = inbound[i];
+                if (threat.NetworkHQ == missile.NetworkHQ || !SeductionRule.IsRadarSeeker(threat.GetSeekerType()) ||
+                    !FastMath.InRange(threat.GlobalPosition(), self, MaldxRules.ShedRange)) continue;
+                if (Random.value < MaldxRules.ShedBreak) { SeekerCapture.Drop(threat); VanguardStats.Bump("maldx.shedBreaks"); }
+            }
         }
     }
 }

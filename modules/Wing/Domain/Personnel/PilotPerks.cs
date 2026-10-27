@@ -137,39 +137,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        public static string IconKey(PilotPerk perk)
-        {
-            switch (perk)
-            {
-                case PilotPerk.Toughness: return "cover";
-                case PilotPerk.Commando: return "land";
-                case PilotPerk.NotchExpert: return "formation";
-                case PilotPerk.FastLearner: return "tasking";
-                case PilotPerk.QuickDraw: return "attack";
-                case PilotPerk.Standoff: return "orbit";
-                case PilotPerk.Countermeasures: return "jam";
-                case PilotPerk.Ghost: return "fallback";
-                case PilotPerk.Talented: return "selection";
-                case PilotPerk.Marksman: return "engage";
-                case PilotPerk.Snapshot: return "attack";
-                case PilotPerk.LeadPursuit: return "maneuver";
-                case PilotPerk.HeadOnJoust: return "engage";
-                case PilotPerk.EnergyFighter: return "posture";
-                case PilotPerk.ApexHunter: return "orbit";
-                case PilotPerk.Bombardier: return "attack";
-                case PilotPerk.SalvoSpecialist: return "attack";
-                case PilotPerk.WildWeasel: return "engage";
-                case PilotPerk.TargetMaster: return "selection";
-                case PilotPerk.WingmanInstinct: return "rejoin";
-                case PilotPerk.CombatSpread: return "shape_CombatSpread";
-                case PilotPerk.TerrainHugger: return "land";
-                case PilotPerk.BreakTurn: return "maneuver";
-                case PilotPerk.EarlyWarning: return "disc";
-                case PilotPerk.Burnthrough: return "jam";
-                default: return "root";
-            }
-        }
-
         // Pure mathematical and deterministic multipliers.
 
         public static float PilotDamage(float amount, bool enabled) => amount > 0f && enabled ? amount * 0.5f : amount;

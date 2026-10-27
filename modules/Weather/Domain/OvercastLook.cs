@@ -46,6 +46,41 @@ namespace BoscaliSummer.Modules.Weather.Domain
             b = (b + (lum - b) * night) * dark;
         }
 
+        /// <summary>Night light keeps this share under a new moon and <see cref="NightLightFull"/> under a full one (vanilla moon intensity 0.5).</summary>
+        public const float NightLightNew = 0.35f, NightLightFull = 0.4f;
+        /// <summary>How far the night ambient is pulled to a moonlit blue-grey (scotopic vision: colour fades, blues hold).</summary>
+        public const float NightBlue = 0.6f;
+
+        /// <summary>0 by day, 1 from about 7 degrees below the horizon; the same ramp as <see cref="NightHaze"/>.</summary>
+        public static float Night(float sunHeight) =>
+            Scalar.IsFinite(sunHeight) ? 1f - WeatherMath.Smoothstep(-0.12f, 0f, sunHeight) : 0f;
+
+        /// <summary>
+        /// Dark nights (2026-10-26): the factor on the night ambient, fog colour and sky dome. Vanilla lifts the night ambient by its gradients and adds the moon on top,
+        /// so a moonless night reads as grey dusk. 1 by day; <see cref="NightLightNew"/> to <see cref="NightLightFull"/> at night by the moon's <c>Light.intensity</c>.
+        /// </summary>
+        public static float NightLight(float sunHeight, float moon)
+        {
+            float night = Night(sunHeight);
+            if (night <= 0f) return 1f;
+            float full = Scalar.IsFinite(moon) ? Scalar.Clamp01(moon / 0.5f) : 0f;
+            float floor = NightLightNew + (NightLightFull - NightLightNew) * full;
+            return 1f + (floor - 1f) * night;
+        }
+
+        /// <summary>Night ambient colour: scaled by <see cref="NightLight"/> and pulled toward a moonlit blue-grey of the same luminance. Identity by day; no clamp.</summary>
+        public static void NightAmbient(float sunHeight, float moon, ref float r, ref float g, ref float b)
+        {
+            float night = Night(sunHeight);
+            if (night <= 0f) return;
+            float k = NightLight(sunHeight, moon), pull = NightBlue * night;
+            float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            // Blue-grey of luminance 1: 0.2126*0.78 + 0.7152*1.02 + 0.0722*1.5 = 1.0.
+            r = (r + (lum * 0.78f - r) * pull) * k;
+            g = (g + (lum * 1.02f - g) * pull) * k;
+            b = (b + (lum * 1.5f - b) * pull) * k;
+        }
+
         /// <summary>The factor on <c>sun.intensity</c>: 1 in the open, <see cref="SunFloor"/> under a full shade.</summary>
         public static float SunScale(float shade) => 1f - (1f - SunFloor) * Scalar.Clamp01(shade);
 

@@ -6,7 +6,7 @@ using BoscaliSummer.Modules.Ares.Runtime;
 
 namespace BoscaliSummer.Modules.Ares
 {
-    /// <summary>ARES, the game-master console (locked behind the DEV ACCESS warning on MISC): SPAWN, UNITS, POWERS and CHEATS tabs.</summary>
+    /// <summary>ARES, the game-master console (locked behind the DEV ACCESS warning on MISC): SPAWN, POWERS and CHEATS tabs.</summary>
     internal sealed class AresModule : IModule
     {
         private static readonly ModuleMetadata Module = new ModuleMetadata("ares", "ARES game master");

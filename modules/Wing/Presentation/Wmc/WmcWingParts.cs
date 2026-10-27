@@ -105,8 +105,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public WingRank Rank => rank;
-
         public void SetIdentity(WingRank r, string callsignText, string nameText, int killCount, int sortieCount)
         {
             rank = r;
@@ -518,8 +516,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public AvControl this[int i] => chips[i];
-
-        public int Count => chips.Length;
 
         public override float Measure(float width) => AvGridTokens.Row;
 

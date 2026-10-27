@@ -64,6 +64,7 @@ namespace BoscaliSummer.Core.Config
         public BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings Scenario { get; }
         public BoscaliSummer.Modules.Pmc.Configuration.PmcSettings Pmc { get; }
         public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
+        public BoscaliSummer.Modules.CombatAdjust.Configuration.CombatAdjustSettings CombatAdjust { get; }
 
         public ModConfiguration(ConfigFile config)
         {
@@ -108,6 +109,7 @@ namespace BoscaliSummer.Core.Config
                 Scenario = new BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings(config);
                 Pmc = new BoscaliSummer.Modules.Pmc.Configuration.PmcSettings(config);
                 Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);
+                CombatAdjust = new BoscaliSummer.Modules.CombatAdjust.Configuration.CombatAdjustSettings(config);
                 LegacyConfigMigration.RemoveEntries(config);
                 // Last, so every module's entries are present to be sorted into what the
                 // F1 window lists and what stays in the config file only.

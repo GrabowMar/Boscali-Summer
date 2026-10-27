@@ -236,13 +236,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/count": return OnBoard(board => board.PageCount = board.PageCount % MenuCatalog.BoardPageCounts.Length + 1);
                 case "hud/sway": return OnBoard(board => board.Sway = !board.Sway);
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
-                case "defence/drones": return StrikeOrScreen;
-                case "weapons/drones/hand": return () => Service<IDroneCommand>()?.ToggleHand();
+                case "weapons/drones/attack": return StrikeOrScreen;
+                case "weapons/drones/ram": return () => Service<IDroneCommand>()?.ToggleRamMode();
+                case "weapons/drones/look": return () => Service<IDroneCommand>()?.SendToLook();
                 case "weapons/drones/nose": return () => Service<IDroneCommand>()?.MatchNose();
-                case "weapons/drones/left": return () => Service<IDroneCommand>()?.Turn(-45f);
-                case "weapons/drones/right": return () => Service<IDroneCommand>()?.Turn(45f);
+                case "weapons/drones/auto": return () => Service<IDroneCommand>()?.Release();
                 case "weapons/drones/next": return () => Service<IDroneCommand>()?.Cycle(1);
-                case "weapons/drones/prev": return () => Service<IDroneCommand>()?.Cycle(-1);
                 case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();
                 case "weapons/drones/terminal": return () => Service<IDroneCommand>()?.OpenTerminal();
             }

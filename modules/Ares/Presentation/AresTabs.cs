@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using BepInEx.Configuration;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Contracts;
@@ -12,21 +11,20 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Ares.Presentation
 {
     /// <summary>
-    /// ARES's four MISC tabs, kit parts only. Every button calls the matching <see cref="AresHost"/> method; the host's answer shows in
+    /// ARES's three MISC tabs, kit parts only. Every button calls the matching <see cref="AresHost"/> method; the host's answer shows in
     /// the ARES line at the end of each page, and the map pick in progress latches its button.
     /// </summary>
     internal sealed class AresTabs : IMiscTabs
     {
-        private const int Spawn = 0, Units = 1, Powers = 2, Cheats = 3;
+        private const int Spawn = 0, Powers = 1, Cheats = 2;
 
-        private static readonly string[] Labels = { "SPAWN", "UNITS", "POWERS", "CHEATS" };
-        private static readonly string[] Titles = { "ARES · SPAWN", "ARES · UNITS", "ARES · POWERS", "ARES · CHEATS" };
-        private static readonly AvIcon[] Icons = { AvIcon.MapPin, AvIcon.UsersGroup, AvIcon.Bolt, AvIcon.Star };
+        private static readonly string[] Labels = { "SPAWN", "POWERS", "CHEATS" };
+        private static readonly string[] Titles = { "ARES · SPAWN", "ARES · POWERS", "ARES · CHEATS" };
+        private static readonly AvIcon[] Icons = { AvIcon.MapPin, AvIcon.Bolt, AvIcon.Star };
         private static readonly string[] Helps =
         {
             "Spawn aircraft, ground units, ships, buildings or whole kits on map clicks, for any side.",
-            "Act on the units selected on the map: repair, rearm, kill, delete, switch side, freeze, move, teleport.",
-            "Strikes anywhere, weather, the clock, bosses, free OPS casts, fire and levelling.",
+            "Strikes anywhere, the weather console, the clock, free OPS casts, fire and levelling.",
             "God mode, infinite fuel and ammo, boost, low gravity, reveal all, time stop and more. This session only."
         };
 
@@ -50,7 +48,6 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             switch (tab)
             {
                 case Spawn: BuildSpawn(page, flow, console); break;
-                case Units: BuildUnits(page, flow, console); break;
                 case Powers: BuildPowers(page, flow, console); break;
                 case Cheats: BuildCheats(page, flow, console); break;
             }
@@ -61,11 +58,17 @@ namespace BoscaliSummer.Modules.Ares.Presentation
         private static AvControl.Spec Button(string label, Action press, AvIcon icon, AvButtonStyle style = AvButtonStyle.Default) =>
             new AvControl.Spec(label, press, style, icon);
 
-        /// <summary>A button that arms a map pick: latched while that pick waits for its click.</summary>
+        /// <summary>A button that arms a map pick: it glows amber and reads ARMED while that pick waits for its click.</summary>
         private void PickButton(AvFlow flow, int page, AvControl control, string pick)
         {
             control.Help = "Then click the map. Esc cancels.";
-            flow.Ticker.Add(page, AvTickRate.Slow, () => control.Latched = host.Armed && host.PickLabel == pick);
+            string idle = control.Label;
+            flow.Ticker.Add(page, AvTickRate.Fast, () =>
+            {
+                bool on = host.Armed && host.PickLabel == pick;
+                control.Armed = on;
+                control.Label = on ? "ARMED · CLICK MAP" : idle;
+            });
         }
 
         /// <summary>Arms the pick, or cancels it when it is already waiting.</summary>
@@ -139,97 +142,28 @@ namespace BoscaliSummer.Modules.Ares.Presentation
                 "UNDO takes back the last placement; CLEAR ALL takes back every one.");
         }
 
-        // ------------------------------------------------------------------ UNITS
-
-        private void BuildUnits(int page, AvFlow flow, AvConsole console)
-        {
-            AvSection header = flow.Section(AvIcon.UsersGroup, "SELECTION", "0 UNITS");
-            AvNote names = flow.Add(new AvNote(flow.Content, AvTextRole.ProseSmall) { MinHeight = 14f });
-            AvButtons care = flow.Buttons(
-                Button("REPAIR", () => host.RepairSelection(), AvIcon.Refresh),
-                Button("REARM", () => host.RearmSelection(), AvIcon.Rocket),
-                Button("SIDE", () => host.CycleSideSelection(), AvIcon.Flag));
-            AvButtons state = flow.Buttons(
-                Button("INVULN", () => host.ToggleProtectSelection(), AvIcon.Shield),
-                Button("FREEZE", () => host.ToggleFreezeSelection(), AvIcon.PlayerPause),
-                Button("FOLLOW ME", () => host.ToggleFollowSelection(), AvIcon.Formation));
-            AvButtons go = flow.Buttons(
-                Button("MOVE HERE", Pick("MOVE", host.ArmMove), AvIcon.CurrentLocation),
-                Button("TELEPORT", Pick("TELEPORT", host.ArmTeleport), AvIcon.ArrowUpRight),
-                Button("TAKE CONTROL", () => host.TakeControl(), AvIcon.Pilot));
-            AvButtons end = flow.Buttons(
-                Button("KILL", () => host.KillSelection(), AvIcon.Burst, AvButtonStyle.Quiet),
-                Button("DELETE", () => host.DeleteSelection(), AvIcon.Trash, AvButtonStyle.Quiet));
-            care.Controls[0].Help = "Every attached part back to full hit points; a destroyed building rises again. Burn marks stay.";
-            care.Controls[1].Help = "Full weapon stations, flares and chaff; aircraft also refuel.";
-            care.Controls[2].Help = "Moves the selection to the next side in the mission.";
-            state.Controls[0].Help = "Toggle: the selection takes no damage.";
-            state.Controls[1].Help = "Toggle: aircraft hang in the air, ground units and ships hold still.";
-            state.Controls[2].Help = "Toggle: ground units and ships keep driving to your aircraft.";
-            go.Controls[2].Help = "One aircraft selected: you are seated in it (your old jet ejects you, as the game does).";
-            end.Controls[0].Help = "Destroys the selection.";
-            end.Controls[1].Help = "Removes the selection silently, no wreck and no credit.";
-            PickButton(flow, page, go.Controls[0], "MOVE");
-            PickButton(flow, page, go.Controls[1], "TELEPORT");
-
-            void Refresh()
-            {
-                List<Unit> units = host.Selection();
-                header.SetCaption(units.Count == 1 ? "1 UNIT" : units.Count + " UNITS");
-                if (units.Count == 0)
-                {
-                    names.Set("Nothing selected. Click a contact on the map or drag a box over several.", AvState.Inert);
-                    return;
-                }
-                var parts = new List<string>();
-                int invulnerable = 0, still = 0;
-                foreach (Unit unit in units)
-                {
-                    if (parts.Count < 4) parts.Add(Describe(unit));
-                    if (host.IsProtected(unit)) invulnerable++;
-                    if (host.IsFrozen(unit)) still++;
-                }
-                string more = units.Count > 4 ? " +" + (units.Count - 4) + " more" : "";
-                string flags = (invulnerable > 0 ? " · " + invulnerable + " INVULN" : "") + (still > 0 ? " · " + still + " FROZEN" : "");
-                names.Set(string.Join(", ", parts) + more + flags, AvState.Info);
-            }
-            Refresh();
-            flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
-            console.Orders(page,
-                "Select on the map first: click a contact or drag a box.",
-                "MOVE HERE and FOLLOW ME drive ground units and ships.",
-                "Aircraft fly their own war; TELEPORT keeps their height.");
-        }
-
-        private static string Describe(Unit unit)
-        {
-            string type = unit.definition != null ? unit.definition.unitName : unit.name;
-            string side = unit.NetworkHQ != null && unit.NetworkHQ.faction != null ? unit.NetworkHQ.faction.factionName : "NO SIDE";
-            return (type ?? "?").ToUpperInvariant() + " (" + (side ?? "?").ToUpperInvariant() + (unit.disabled ? ", DOWN" : "") + ")";
-        }
-
         // ------------------------------------------------------------------ POWERS
 
         private void BuildPowers(int page, AvFlow flow, AvConsole console)
         {
-            flow.Section(AvIcon.Bolt, "STRIKE", "FOR THE SPAWN SIDE");
+            AvSection strikeHead = flow.Section(AvIcon.Bolt, "STRIKE", "FOR THE SPAWN SIDE");
             var munition = new AvStepper(flow.Content, "MUNITION", () => host.MunitionName, () => host.Munition--, () => host.Munition++);
             flow.Add(munition);
             AvSegmented pattern = flow.Add(AvSegmented.Strip(flow.Content, AresHost.Patterns, () => host.Pattern, v => host.Pattern = v));
-            AvButtons strike = flow.Buttons(Button("STRIKE", Pick("STRIKE", host.ArmStrike), AvIcon.Target, AvButtonStyle.Primary));
+            AvButtons strike = flow.Buttons(Button("STRIKE", Pick("STRIKE", host.ArmStrike), AvIcon.Target));
             PickButton(flow, page, strike.Controls[0], "STRIKE");
-            strike.Controls[0].Help = "SINGLE drops from 1.5 km, BARRAGE lays 8 rounds over 250 m, CRUISE flies in from 12 km.";
+            strike.Controls[0].Help = "Arms the map: the next click is the target. Press again or Esc to cancel.";
+            AvNote brief = flow.Add(new AvNote(flow.Content, AvTextRole.Micro) { MinHeight = 12f });
+            flow.Ticker.Add(page, AvTickRate.Fast, () =>
+            {
+                bool armed = host.Armed && host.PickLabel == "STRIKE";
+                strikeHead.SetCaption(armed ? "ARMED · ESC CANCELS" : "FOR THE SPAWN SIDE");
+                brief.Set((armed ? "TARGETING · " : "") + host.MunitionName + " · " + PatternBrief[host.Pattern], armed ? AvState.Caution : AvState.Inert);
+            });
 
-            flow.Section(AvIcon.CloudRain, "WEATHER", "HELD UNTIL LIVE");
-            AvButtons weatherA = flow.Buttons(
-                Button("LIVE", () => host.Weather("live"), AvIcon.Refresh),
-                Button("STORM", () => host.Weather("storm"), AvIcon.CloudRain),
-                Button("HURRICANE", () => host.Weather("hurricane"), AvIcon.Wind));
-            flow.Buttons(
-                Button("FRONT", () => host.Weather("front"), AvIcon.Cloud),
-                Button("FOG", () => host.Weather("fog"), AvIcon.EyeOff),
-                Button("WAVE", () => host.Weather("wave"), AvIcon.WaveSine));
-            weatherA.Controls[0].Help = "Hands the sky back to the live weather.";
+            flow.Section(AvIcon.CloudRain, "WEATHER", "CTRL+O");
+            AvButtons weather = flow.Buttons(Button("OPEN WEATHER CONSOLE", () => host.OpenWeatherConsole(), AvIcon.CloudRain));
+            weather.Controls[0].Help = "The Met Office: hold states, set-pieces, scenarios, back to live.";
 
             flow.Section(AvIcon.Clock, "TIME", "HOST");
             var hour = new AvStepper(flow.Content, "HOUR", () => AresMath.Hour(host.Hour), () => host.SetHour(host.Hour - 1f), () => host.SetHour(host.Hour + 1f));
@@ -237,16 +171,9 @@ namespace BoscaliSummer.Modules.Ares.Presentation
                 () => host.SetSpeed(host.SpeedIndex - 1), () => host.SetSpeed(host.SpeedIndex + 1));
             flow.Row(hour, speed);
 
-            flow.Section(AvIcon.Skull, "SUMMON", "AHEAD OF YOU");
-            flow.Buttons(
-                Button("KAIJU", () => host.SummonKaiju(), AvIcon.Skull),
-                Button("DISMISS", () => host.DismissBosses(), AvIcon.X, AvButtonStyle.Quiet));
-            // The FALLEN ACE belongs to the secret season content: its button appears only once the player has earned it.
-            AvButtons fallenAce = flow.Buttons(Button("FALLEN ACE", () => host.SummonAce(), AvIcon.Plane));
-
             flow.Section(AvIcon.CallDown, "OPS", "FREE CAST");
             AvSegmented ops = flow.Add(AvSegmented.Strip(flow.Content, AresHost.OpsNames, () => host.OpsAction, v => host.OpsAction = v));
-            AvButtons cast = flow.Buttons(Button("CAST", Pick("CAST", host.ArmCast), AvIcon.CallDown, AvButtonStyle.Primary));
+            AvButtons cast = flow.Buttons(Button("CAST", Pick("CAST", host.ArmCast), AvIcon.CallDown));
             PickButton(flow, page, cast.Controls[0], "CAST");
             cast.Controls[0].Help = "The OPS action at a map click, as your side. Switches BYPASS REQS and NO OPS COOLDOWN on.";
 
@@ -264,15 +191,16 @@ namespace BoscaliSummer.Modules.Ares.Presentation
                 hour.Refresh();
                 speed.Refresh();
                 ops.Refresh();
-                fallenAce.SetShown(ModuleServices.TryGet(out ISetExtras season) && season.ExtraTabShown);
             }
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
             console.Orders(page,
                 "Strikes fly for the side picked on SPAWN.",
-                "Weather holds until LIVE; the clock moves the sun now.",
-                "Bosses come out ahead of your aircraft.");
+                "An armed button glows amber until the map click lands.",
+                "Weather lives in the Ctrl+O console; the clock moves the sun now.");
         }
+
+        private static readonly string[] PatternBrief = { "ONE ROUND FROM 1.5 KM", "8 ROUNDS OVER 250 M", "ONE ROUND FROM 12 KM OUT" };
 
         // ------------------------------------------------------------------ CHEATS
 

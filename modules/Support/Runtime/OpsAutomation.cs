@@ -98,6 +98,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     break;
                 case "steer": request = Steer(m) ? 1 : 0; break;
 #if !PUBLIC_RELEASE
+                case "team": // TEST ONLY: what a finished TRAIN TEAM programme does (one free team at the camp), so a run need not wait minutes for one
+                    request = SofService.Active != null && GameManager.GetLocalPlayer(out Player tp) && tp != null ? (int)SofService.Active.TrainTeam(tp.HQ).Outcome : -2;
+                    break;
                 case "relocate": request = Relocate(m, Mathf.Clamp((int)Number(args, "bird", 1f), 0, 2), Number(args, "range", 0f)); break; // own bird over an enemy mover (tests/ingame/ops-overwatch.json)
 #endif
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
@@ -356,14 +359,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["sofKnown"] = m.SofMirror.Known;
             r["sofActive"] = m.SofMirror.State.Active;
             r["sofTeams"] = m.SofMirror.State.Teams.Count;
-            int ready = 0;
+            int ready = 0, tasked = 0;
             foreach (SofTeamRow t in m.SofMirror.State.Teams)
             {
                 if (t.State == TeamState.Ready) ready++;
+                if (t.Mission != MissionKind.None) tasked++;
                 if (t.Slot == reconSlot) { r["reconState"] = (int)t.State; r["reconMission"] = (int)t.Mission; r["reconMine"] = t.Mine ? 1 : 0; }
                 if (t.Slot == directSlot) { r["directState"] = (int)t.State; r["directMission"] = (int)t.Mission; }
             }
             r["sofReady"] = ready;
+            r["sofTasked"] = tasked;
             int myHeld = 0, hopping = 0;
             foreach (CyberIntrusionRow x in m.CyberMirror.State.Intrusions)
                 if (x.Own) { myHeld = x.Held != null ? x.Held.Length : 0; hopping = x.Phase == IntrusionPhase.Hopping ? 1 : 0; }
@@ -592,5 +597,58 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         private static Dictionary<string, object> Fail(string hook, string error) => Failure("OpsAutomation", hook, error);
+
+#if !PUBLIC_RELEASE
+        /// <summary>
+        /// The OPS page as a pilot clicks it: <c>do</c> = <c>perk</c> (a perk card, <c>action</c> = the SupportActionId name), <c>post</c> (the first posted package's card),
+        /// <c>strip</c> (the strip's primary button as painted), <c>disarm</c>, or nothing (read only). Reads back the arm, the tab, the strip and the spoken words.
+        /// </summary>
+        public static Dictionary<string, object> Mfd(Dictionary<string, object> args)
+        {
+            CallsPanel panel = Find<CallsPanel>();
+            CallsController calls = Find<CallsController>();
+            SupportManager m = SupportManager.Active;
+            if (panel == null || calls == null || m == null) return Fail("Mfd", "no OPS page in this scene");
+            string what = Text(args, "do") ?? "";
+            var r = new Dictionary<string, object>();
+            switch (what)
+            {
+                case "perk":
+                    if (!System.Enum.TryParse(Text(args, "action") ?? "", out SupportActionId id)) return Fail("Mfd", "unknown perk '" + Text(args, "action") + "'");
+                    panel.SelectTab(OpsTab.Perks);
+                    panel.ClickPerk(id);
+                    break;
+                case "post":
+                    panel.SelectTab(OpsTab.Tasked);
+                    var posts = m.SpaceMirror.State.Posts;
+                    if (posts.Count == 0) { r["found"] = 0; break; }
+                    r["found"] = 1; r["post"] = posts[0].CallId;
+                    panel.ClickPost(posts[0].CallId);
+                    break;
+                case "strip": panel.PressStrip(); break;
+                case "disarm": panel.PressDisarm(); break;
+            }
+            r["ok"] = true;
+            r["tab"] = (int)panel.Tab;
+            r["armed"] = calls.Armed.HasValue ? (int)calls.Armed.Value : 0;
+            r["armedName"] = calls.Armed.HasValue ? calls.Armed.Value.ToString() : "";
+            r["taskedArmed"] = calls.TaskedArmedId;
+            r["claimPending"] = calls.TaskedClaimPending ? 1 : 0;
+            r["pending"] = calls.Pending ? 1 : 0;
+            r["words"] = calls.LastWords ?? "";
+            r["allocation"] = (int)m.LocalAllocation;
+            r["posts"] = m.SpaceMirror.State.Posts.Count;
+            OpsPageView v = panel.View;
+            StripView sv = panel.Tab == OpsTab.Tasked ? v.PostStrip : v.PerkStrip;
+            r["stripHas"] = sv.Has ? 1 : 0;
+            r["stripPrimary"] = sv.Primary ?? "";
+            r["stripFire"] = sv.PrimaryFire ? 1 : 0;
+            r["stripId"] = sv.Id;
+            SupportHudLine hud = Find<SupportHudLine>();
+            r["frontNotices"] = hud != null ? hud.FrontNoticeCount : -1;
+            r["frontNotice"] = hud != null ? hud.LastFrontNotice : "";
+            return r;
+        }
+#endif
     }
 }

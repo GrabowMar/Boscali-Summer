@@ -366,7 +366,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static bool ControlHeld() =>
             Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 
-        private static bool LeftDragClaimed() =>
+        private static bool LeftDragClaimed() => StrMapOverlay.DrawArmed ||
             ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
 
         private static bool Typing()

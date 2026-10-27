@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         /// The answer is the line for the menu.</summary>
         public static string Spawn(SpooktoberSettings settings)
         {
-            string why = CannotSpawn();
+            string why = settings == null ? Name + ": NOT IN A MISSION" : CannotSpawn(); // ARES may ask before SpookBosses exists
             if (why != null) return why;
             if (Alive) Dismiss();
             FactionHQ ghost = GhostSide.Ensure();

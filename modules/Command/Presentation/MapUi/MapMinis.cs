@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private static Shape[] shapes;
+        /// <summary>One extruded silhouette per airframe icon, built on first sight (null = unreadable icon).</summary>
+        private static readonly Dictionary<Sprite, Shape> iconShapes = new Dictionary<Sprite, Shape>();
         private static Vector3[] points = new Vector3[8192];
         private static Color32[] colours = new Color32[8192];
         private static int[] triangles = new int[16384];
@@ -97,9 +99,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <paramref name="forward"/> its unit heading on the ground plane, <paramref name="length"/>
         /// its nose-to-tail size in the same units.
         /// </summary>
-        internal static bool Add(MapGlyph glyph, Vector3 at, Vector2 forward, float length, Color32 tint, bool grounded)
+        internal static bool Add(MapGlyph glyph, Vector3 at, Vector2 forward, float length, Color32 tint, bool grounded) =>
+            Write(shapes[(int)glyph], (uint)((int)glyph * 2 + (grounded ? 1 : 0)), at, forward, length, tint, grounded);
+
+        /// <summary>
+        /// Writes a miniature extruded from the airframe's own map icon, so every type stands as its
+        /// own silhouette; falls back to <paramref name="fallback"/> when the icon cannot be read.
+        /// </summary>
+        internal static bool Add(Sprite icon, MapGlyph fallback, Vector3 at, Vector2 forward, float length, Color32 tint, bool grounded)
         {
-            Shape shape = shapes[(int)glyph];
+            if (icon == null) return Add(fallback, at, forward, length, tint, grounded);
+            if (!iconShapes.TryGetValue(icon, out Shape shape)) iconShapes[icon] = shape = IconShape(icon);
+            return shape == null ? Add(fallback, at, forward, length, tint, grounded)
+                : Write(shape, (uint)icon.GetInstanceID() * 2u + 0x9e3779b9u + (grounded ? 1u : 0u), at, forward, length, tint, grounded);
+        }
+
+        private static bool Write(Shape shape, uint key, Vector3 at, Vector2 forward, float length, Color32 tint, bool grounded)
+        {
             int vertices = grounded ? shape.Points.Length : shape.BodyPoints;
             int indices = grounded ? shape.Triangles.Length : shape.BodyTriangles;
             if (count + vertices > MaximumVertices) return false;
@@ -133,7 +149,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             indexCount += indices;
             // What is drawn (which shapes, in which order) and how it is tinted, as two running hashes:
             // the upload skips whatever did not change.
-            layout = (layout ^ (uint)((int)glyph * 2 + (grounded ? 1 : 0))) * 16777619u;
+            layout = (layout ^ key) * 16777619u;
             tints = (tints ^ (uint)(tint.r | tint.g << 8 | tint.b << 16)) * 16777619u;
             return true;
         }
@@ -257,10 +273,110 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Base(s, .4f, 1.3f);
 
             var built = new Shape[all.Length];
-            for (int i = 0; i < all.Length; i++)
-                built[i] = new Shape { Points = all[i].Points.ToArray(), Shade = all[i].Shade.ToArray(),
-                    Triangles = all[i].Triangles.ToArray(), BodyPoints = all[i].BodyPoints, BodyTriangles = all[i].BodyTriangles };
+            for (int i = 0; i < all.Length; i++) built[i] = Finish(all[i]);
             return built;
+        }
+
+        private static Shape Finish(Draft draft) => new Shape { Points = draft.Points.ToArray(), Shade = draft.Shade.ToArray(),
+            Triangles = draft.Triangles.ToArray(), BodyPoints = draft.BodyPoints, BodyTriangles = draft.BodyTriangles };
+
+        /// <summary>Silhouette grid along the icon's longest side.</summary>
+        private const int IconCells = 24, IconSamples = 4;
+
+        /// <summary>
+        /// Extrudes a map icon (top-down, nose up) into a miniature: the whole silhouette as a thin
+        /// wing slab, the cells along its centre line raised as a fuselage spine, both greedily merged
+        /// into as few boxes as the outline allows. The icon is read back once through a blit, so an
+        /// unreadable or atlas-packed texture works too.
+        /// </summary>
+        private static Shape IconShape(Sprite icon)
+        {
+            bool[] solid;
+            int w, h;
+            try
+            {
+                // ponytail: tight-packed or rotated atlas sprites throw/read wrong; they keep the common shape.
+                Rect rect = icon.textureRect;
+                Texture texture = icon.texture;
+                if (texture == null || rect.width < 4f || rect.height < 4f) return null;
+                bool wide = rect.width >= rect.height;
+                w = wide ? IconCells : Mathf.Max(4, Mathf.RoundToInt(IconCells * rect.width / rect.height));
+                h = wide ? Mathf.Max(4, Mathf.RoundToInt(IconCells * rect.height / rect.width)) : IconCells;
+                int sw = w * IconSamples, sh = h * IconSamples;
+                RenderTexture target = RenderTexture.GetTemporary(sw, sh, 0, RenderTextureFormat.ARGB32);
+                RenderTexture active = RenderTexture.active;
+                Graphics.Blit(texture, target, new Vector2(rect.width / texture.width, rect.height / texture.height),
+                    new Vector2(rect.x / texture.width, rect.y / texture.height));
+                RenderTexture.active = target;
+                var read = new Texture2D(sw, sh, TextureFormat.RGBA32, false);
+                read.ReadPixels(new Rect(0, 0, sw, sh), 0, 0, false);
+                Color32[] pixels = read.GetPixels32();
+                RenderTexture.active = active;
+                RenderTexture.ReleaseTemporary(target);
+                Object.Destroy(read);
+                // A cell is solid when a third of its samples are: thin wings survive the downsample.
+                solid = new bool[w * h];
+                for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int hits = 0;
+                    for (int j = 0; j < IconSamples; j++)
+                    for (int i = 0; i < IconSamples; i++)
+                        if (pixels[(y * IconSamples + j) * sw + x * IconSamples + i].a > 110) hits++;
+                    solid[y * w + x] = hits * 3 >= IconSamples * IconSamples;
+                }
+            }
+            catch (System.Exception)
+            {
+                return null;
+            }
+
+            int minX = w, maxX = -1, minY = h, maxY = -1;
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                if (solid[y * w + x])
+                {
+                    minX = Mathf.Min(minX, x); maxX = Mathf.Max(maxX, x);
+                    minY = Mathf.Min(minY, y); maxY = Mathf.Max(maxY, y);
+                }
+            if (maxX < 0) return null;
+            float cell = 1f / Mathf.Max(maxX - minX + 1, maxY - minY + 1);
+            float midX = (minX + maxX + 1) * .5f, midY = (minY + maxY + 1) * .5f;
+            var spine = new bool[w * h];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+                spine[y * w + x] = solid[y * w + x] && Mathf.Abs(x + .5f - midX) <= 1.6f;
+
+            var shape = new Draft();
+            Extrude(shape, solid, w, h, midX, midY, cell, .02f, .08f);
+            Extrude(shape, spine, w, h, midX, midY, cell, .02f, .16f);
+            Base(shape, (maxX - minX + 1) * cell, (maxY - minY + 1) * cell);
+            return Finish(shape);
+        }
+
+        /// <summary>Greedy rectangles over a cell mask, each extruded between two heights.</summary>
+        private static void Extrude(Draft shape, bool[] mask, int w, int h, float midX, float midY, float cell,
+            float bottom, float top)
+        {
+            var used = new bool[mask.Length];
+            for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                if (!mask[y * w + x] || used[y * w + x]) continue;
+                int across = 1;
+                while (x + across < w && mask[y * w + x + across] && !used[y * w + x + across]) across++;
+                int down = 1;
+                for (bool grow = true; grow && y + down < h; )
+                {
+                    for (int i = 0; i < across && grow; i++)
+                        grow = mask[(y + down) * w + x + i] && !used[(y + down) * w + x + i];
+                    if (grow) down++;
+                }
+                for (int j = 0; j < down; j++)
+                for (int i = 0; i < across; i++) used[(y + j) * w + x + i] = true;
+                Box(shape, (x + across * .5f - midX) * cell, (bottom + top) * .5f, (y + down * .5f - midY) * cell,
+                    across * cell, top - bottom, down * cell);
+            }
         }
 
         /// <summary>The dark slab a ground contact stands on: contrast on any terrain, and a footprint.</summary>

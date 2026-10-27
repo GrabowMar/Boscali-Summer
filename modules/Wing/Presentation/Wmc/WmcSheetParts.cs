@@ -681,8 +681,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl Next { get; }
 
-        public string Position => posFull;
-
         /// <summary><paramref name="swatchColor"/> (alpha 0 for none) and <paramref name="sprite"/> (null for none) lead the word.</summary>
         public void Set(string word, string position, Sprite sprite, Color swatchColor)
         {
@@ -859,24 +857,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public int Count => count;
-
         public int Page => page;
 
-        public int Selected => selected;
-
         public int Pages => Mathf.Max(1, (count + RowsPerPage - 1) / RowsPerPage);
-
-        public new int Shown
-        {
-            get
-            {
-                int n = 0;
-                foreach (Row r in rows)
-                    if (r.Shown) n++;
-                return n;
-            }
-        }
 
         /// <summary>How many stations, and each one's pylon count (a pair is two boxes on the map).</summary>
         public void SetStations(int n, IList<int> pylonCounts, IList<bool> withPrev = null)
@@ -1156,10 +1139,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             Restyle();
         }
-
-        public new int Shown => shown;
-
-        public int Page => page;
 
         /// <summary><paramref name="title"/> names the station, <paramref name="holding"/> what it holds now.</summary>
         public void SetHead(string title, string holding)

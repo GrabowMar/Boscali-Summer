@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public bool Active(int set) => set >= 0 && set < MaxSets && count[set] > 0;
 
-        public int Count(int set) => set >= 0 && set < MaxSets ? count[set] : 0;
-
         /// <summary>The set that has member <paramref name="id"/>, or -1.</summary>
         public int SetOf(uint id)
         {

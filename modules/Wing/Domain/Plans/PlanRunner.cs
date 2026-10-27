@@ -211,12 +211,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             current[lane]++;
         }
 
-        public void Hold(int lane)
-        {
-            int i = current[lane];
-            if (i < plan.Steps[lane].Count) state[lane, i] = StepState.Held;
-        }
-
         /// <summary>A held lane goes on: its step's order is sent again.</summary>
         public void Resume(int lane)
         {

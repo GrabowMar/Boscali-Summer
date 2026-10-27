@@ -8,6 +8,7 @@ using BoscaliSummer.Core.Scenario;
 using BoscaliSummer.Modules.Ares.Domain;
 using NOAvionics;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 namespace BoscaliSummer.Modules.Ares.Runtime
 {
@@ -135,14 +136,16 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 Disarm();
                 return;
             }
-            if (Input.GetKeyDown(KeyCode.Escape))
+            // Esc or a right click on the map stops; a click on a panel is that panel's, never a pick.
+            bool right = Input.GetMouseButtonDown(1) && !OverPanel();
+            if (Input.GetKeyDown(KeyCode.Escape) || right)
             {
                 Disarm();
                 Say("Stopped.");
                 return;
             }
             if (Time.frameCount <= armedFrame + 1) return; // the click that pressed the button is not a pick
-            if (Input.GetMouseButtonDown(0) && map.TryGetCursorCoordinates(out GlobalPosition at))
+            if (Input.GetMouseButtonDown(0) && !OverPanel() && map.TryGetCursorCoordinates(out GlobalPosition at))
             {
                 pickDown = true;
                 downScreen = Input.mousePosition;
@@ -162,6 +165,18 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 Say("Failed: " + error.Message);
                 log?.LogWarning("[Ares] pick action failed: " + error);
             }
+        }
+
+        private static readonly List<RaycastResult> uiHits = new List<RaycastResult>(8);
+
+        // Only asked on a press, so the raycast never runs per frame.
+        private static bool OverPanel()
+        {
+            EventSystem events = EventSystem.current;
+            if (events == null) return false;
+            uiHits.Clear();
+            events.RaycastAll(new PointerEventData(events) { position = Input.mousePosition }, uiHits);
+            return uiHits.Count > 0 && uiHits[0].gameObject.GetComponentInParent<AvTicker>() != null;
         }
 
         // ------------------------------------------------------------------ world helpers

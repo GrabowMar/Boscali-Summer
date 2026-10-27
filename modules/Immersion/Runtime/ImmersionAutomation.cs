@@ -73,6 +73,25 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Every playing AudioSource (args: mod = also idle ones holding a clip): clip, time, volume, mixer and owner path.</summary>
+        public static Dictionary<string, object> AudioCensus(Dictionary<string, object> args)
+        {
+            var lines = new List<string>();
+            bool mod = Arg(args, "mod") is bool m && m;
+            foreach (AudioSource s in Object.FindObjectsOfType<AudioSource>())
+            {
+                if (!s.isPlaying && !(mod && s.clip != null)) continue;
+                string path = s.name;
+                for (Transform t = s.transform.parent; t != null; t = t.parent) path = t.name + "/" + path;
+                lines.Add((s.clip != null ? s.clip.name : "-") + " t=" + s.time.ToString("0.00") + " v=" + s.volume.ToString("0.00") +
+                    " p=" + s.pitch.ToString("0.00") + " 3d=" + s.spatialBlend.ToString("0.0") + " mix=" +
+                    (s.outputAudioMixerGroup != null ? s.outputAudioMixerGroup.name : "-") + " fx=" + !s.bypassEffects + " @" + path);
+            }
+            lines.Sort();
+            Plugin.Logger?.LogInfo("[AudioCensus] " + lines.Count + " playing\n  " + string.Join("\n  ", lines));
+            return new Dictionary<string, object> { ["playing"] = lines.Count, ["sources"] = lines };
+        }
+
         /// <summary>Drive pilot cues from a fixed G (args: g -5..12, seconds 0..30) through the vanilla-equation fallback.</summary>
         public static Dictionary<string, object> InjectG(Dictionary<string, object> args)
         {

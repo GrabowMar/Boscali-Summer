@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// KaceyTronic-RWR style threat lamps (2026-10-07), pure. LOCK flashes for a second after a fresh lock then holds
+    /// Threat lamps (2026-10-07), pure. LOCK flashes for a second after a fresh lock then holds
     /// while locks keep arriving; SPKE (a search radar painting you) holds 1.5 s per ping; MSL flashes while anything is
     /// inbound and shows the count.
     /// </summary>

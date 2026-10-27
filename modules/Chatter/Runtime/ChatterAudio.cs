@@ -14,7 +14,6 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private const float MinimumGap = 0.35f;
         private static readonly string[] Tails = { "radio-tail-0", "radio-tail-1" };
         private static AudioSource tailSource;
-        private static AudioClip chime;
         private static float lastClick = float.NegativeInfinity;
         private static bool unavailable;
 
@@ -61,25 +60,15 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
         }
 
-        /// <summary>A short rising two-tone: an order went out to the whole wing.</summary>
+        /// <summary>A short rising blip (Core/Fx/Sfx ui-confirm): an order went out to the whole wing.</summary>
         public static void Chime()
         {
             if (unavailable || Application.isBatchMode) return;
             try
             {
                 if (SoundManager.i == null) return;
-                if (chime == null)
-                {
-                    const int rate = 22050;
-                    var samples = new float[(int)(rate * 0.14f)];
-                    for (int i = 0; i < samples.Length; i++)
-                    {
-                        float t = i / (float)rate, k = i / (float)samples.Length;
-                        samples[i] = Mathf.Sin(2f * Mathf.PI * (k < 0.5f ? 880f : 1100f) * t) * 0.25f * Mathf.Sin(Mathf.PI * k);
-                    }
-                    chime = AudioClip.Create("BoscaliChatterChime", samples.Length, 1, rate, false);
-                    chime.SetData(samples, 0);
-                }
+                AudioClip chime = SfxClips.Get("ui-confirm");
+                if (chime == null) return;
                 SoundManager.PlayInterfaceOneShot(chime);
             }
             catch (Exception)

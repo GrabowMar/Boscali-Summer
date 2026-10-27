@@ -30,3 +30,18 @@ voices layer a synthesized growling throat with "strenuous_grunts" by takareads 
 SuddenDice (558618) and "Masked_Breathing_Raspy_Loop" by Mediasaur (788055), slowed three to four times (sources in
 modules/Immersion/Assets/Voice/LICENSES.txt); the shriek adds the leather creak above, the footfall the building collapse
 above, the laser charge a slowed breath. The beam, spike and claw sounds are pure synthesis.
+
+rod-impact.wav         The boom is an ElevenLabs sound-effects generation (eleven_text_to_sound_v2) made for this mod on 2026-10-26;
+                       the crack, rolling thunder tail and debris patter layered around it are synthesized (scratch mix, numpy).
+
+radar-new.wav          SOFT COCKPIT TONES. ElevenLabs sound-effects generations (eleven_text_to_sound_v2) made for this mod on 2026-10-26:
+radar-sweep.wav        a warm bell (flow UCZg7H7zpuQU23nIS2cK) and a felt mallet tick (flow xJjlb2IRagwLkLwMIREt), cut and levelled by
+                       tools/Build-SoundClips.py.
+missile-alert.wav      COCKPIT ALARMS, 2026-10-27. ElevenLabs flow 89lBGhO1h2QbcoVgyTWO, generated for this mod: sound effects
+missile-alarm-0..2.wav (eleven_text_to_sound_v2) and the warning voice "Levi A." (eleven_v3, ElevenLabs library voice). The
+stall-horn.wav         missile loops are one generated beep and the stall loop one generated warble laid out by `pulse`; the rest
+gpws-whoop.wav         are cuts made by `build` in tools/Build-SoundClips.py.
+master-caution.wav
+vo-pull-up.wav  vo-terrain.wav  vo-bingo.wav  vo-over-g.wav
+ui-click-0.wav  ui-click-1.wav  ui-confirm.wav  ui-caution.wav
+near-crack-0.wav  near-crack-1.wav  gear-lever.wav  canopy-close.wav

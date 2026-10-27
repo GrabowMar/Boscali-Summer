@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// pose of the frame (execution order 101), and does nothing while the map is closed.
     /// </summary>
     [DefaultExecutionOrder(101)]
-    internal sealed class StrMapOverlay : MonoBehaviour, ISceneService
+    internal sealed partial class StrMapOverlay : MonoBehaviour, ISceneService
     {
         internal const int InkCapacity = 900, PulseCapacity = 120;
         private const float PoseSeconds = 0.066f, PulseSeconds = 1f / 15f, WindowSeconds = 5f, LeaderClear = 14f, ViewMargin = 6f;
@@ -29,6 +29,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Test seam: the harness supplies its own hub (the real one needs a live scene).</summary>
         internal IStrHub HubOverride;
         internal IStrHub Hub => HubOverride ?? (IStrHub)StrViewHub.Active;
+        /// <summary>Test seam: the harness supplies where offensives jump off (the real finder reads the live sector field).</summary>
+        internal StrStartFinder StartOverride;
 
         internal StrOverlayPlan Plan { get; } = new StrOverlayPlan();
         internal StrCardPlan CardPlan { get; } = new StrCardPlan();
@@ -50,12 +52,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly float[] ringX = new float[RingSegments], ringY = new float[RingSegments];
         private readonly bool[] ringOk = new bool[RingSegments];
         private readonly Vector3[] corners = new Vector3[4];
-        // The marching axis, kept projected so the pulse mesh can redraw at 15 Hz without projecting again.
+        // The marching offensive, its centre line kept projected so the pulse mesh can redraw at 15 Hz without projecting again.
         private const int MaxPulse = 2;
-        private readonly float[] pulseX = new float[MaxPulse], pulseY = new float[MaxPulse], pulseX2 = new float[MaxPulse], pulseY2 = new float[MaxPulse];
-        private readonly StrInkRole[] pulseInk = new StrInkRole[MaxPulse];
+        private readonly float[][] pulseCurveX = { new float[StrStrokes.MaxCurve], new float[StrStrokes.MaxCurve] };
+        private readonly float[][] pulseCurveY = { new float[StrStrokes.MaxCurve], new float[StrStrokes.MaxCurve] };
+        private readonly int[] pulseN = new int[MaxPulse];
+        private readonly float[] pulseSize = new float[MaxPulse];
         private int pulseCount;
         private float pulsePx = 1f, nextPulse;
+        private readonly float[] curveX = new float[StrStrokes.MaxCurve], curveY = new float[StrStrokes.MaxCurve];
+        // Who holds the ground, for where an offensive jumps off: the local faction's sector field, read once per plan.
+        private TacticalSectorGrid startGrid;
+        private StrStartFinder startFinder;
+        private System.Func<float, float, int> sideOf;
+        // Own ground vehicles, for the garrison an offensive jumps off from.
+        private const int MaxGarrisonUnits = 256;
+        private readonly float[] garrisonX = new float[MaxGarrisonUnits], garrisonZ = new float[MaxGarrisonUnits];
+        private int garrisonCount;
 
         private RectTransform root, tagLayer;
         private AvVector ink, pulse;
@@ -90,7 +103,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (Visible && !Application.isBatchMode && Input.GetKeyDown(KeyCode.Escape))
             {
                 IStrHub hub = Hub;
-                if (hub != null && !hub.Ui.Selected.IsNone) hub.ClearSelection();
+                if (DrawArmed) CancelDraw("DRAW CANCELLED");
+                else if (hub != null && !hub.Ui.Selected.IsNone) hub.ClearSelection();
             }
         }
 
@@ -118,7 +132,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (planChanged)
             {
                 planModel = vm; planRevision = vm.Revision; planLayers = layers; planSelected = vm.SelectedId; planHover = vm.HoverId;
-                StrOverlayPlan.Build(Plan, vm, layers);
+                startGrid = HubOverride == null ? OwnGrid(map) : null;
+                garrisonCount = HubOverride == null ? OwnGround(map) : 0;
+                StrOverlayPlan.Build(Plan, vm, layers, StartOverride ?? (startGrid != null || garrisonCount > 0 ? startFinder ?? (startFinder = FindStart) : null));
                 StrCardPlan.Build(CardPlan, vm, worldOn ? vm.SelectedId : StrItemId.None);
                 cardDirty = true;
                 chrome.BindPlate(vm, in ui);
@@ -132,7 +148,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bool rebuilt = false;
             if (worldOn && (planChanged || poseChanged)) rebuilt = Rebuild(map, projection, now, planChanged);
             else if (!worldOn) Plan.TagCount = 0;
-            if (worldOn && pulseCount > 0 && !AvFxDriver.ReducedMotion && now >= nextPulse && !rebuilt)
+            TickDraw(map, now);
+            if (worldOn && drawHeld && !rebuilt)
+            {
+                DrawPulse(now);   // the draft follows the cursor every frame
+                pulse.Commit();
+                PulseQuads = pulse.Buffer.Count;
+            }
+            else if (worldOn && pulseCount > 0 && !AvFxDriver.ReducedMotion && now >= nextPulse && !rebuilt)
             {
                 nextPulse = now + PulseSeconds;
                 DrawPulse(now);
@@ -215,6 +238,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void Hide()
         {
+            if (DrawArmed) CancelDraw("");
             if (!Visible) return;
             Visible = false;
             if (root != null) root.gameObject.SetActive(false);
@@ -244,7 +268,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Plan.PrimCount = Plan.TagCount = Plan.LegendCount = 0;
             CardPlan.Valid = false;
             planModel = null; planRevision = -1; planLayers = StrLayers.None; planSelected = planHover = StrItemId.None;
-            pulseCount = 0; cardDirty = false; warnedShape = false;
+            pulseCount = 0; cardDirty = false; warnedShape = false; startGrid = null; garrisonCount = 0;
+            if (DrawArmed) CancelDraw("");
             Visible = false; Relief = false;
             tagsStale = true;
             gate.Reset(); reliefGate.Reset();
@@ -258,6 +283,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float factor = map.mapDisplayFactor, zoom = Mathf.Abs(map.mapImage.transform.localScale.x);
             if (!(zoom > 1e-4f) || (projection == null && !(factor > 1e-6f))) return false;
             float px = 1f / zoom;
+            drawProjection = projection; drawFactor = factor;
             Camera camera = CameraOf(map);
             RectTransform viewport = map.mapBackground.rectTransform;
             Rect screen = ScreenRect(viewport, camera);
@@ -382,12 +408,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case StrShape.DashedArrow:
                 case StrShape.DashedLine:
                     if (!Project(projection, factor, p.X2, p.Z2, out float x2, out float y2)) return;
-                    if (p.Pulse && pulseCount < MaxPulse)
-                    {
-                        pulseX[pulseCount] = x; pulseY[pulseCount] = y; pulseX2[pulseCount] = x2; pulseY2[pulseCount] = y2; pulseInk[pulseCount++] = p.Ink;
-                        return;
-                    }
                     Line(b, p.Shape, x, y, x2, y2, 0f, px, c);
+                    break;
+                case StrShape.Offensive:
+                    Offensive(b, in p, projection, factor, px, c);
                     break;
                 default:
                     if (!warnedShape) { warnedShape = true; Plugin.Logger?.LogWarning("[STR] the map overlay has no drawer for shape " + p.Shape + "."); }
@@ -428,16 +452,91 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        // The marching axis: the dashes slide toward the fix, and stand still under reduced motion.
+        // A HOI4 battle plan: a fat arrow bowed to one side, its centre line projected point by point so it lies true on the relief's tilt.
+        // A proposal nobody points at is hollow (outline, faint fill); the live operation is filled, and its chevrons march while it advances.
+        private void Offensive(AvQuadBuffer b, in StrPrim p, IMapProjection projection, float factor, float px, Rgba c)
+        {
+            float dx = p.X2 - p.X, dz = p.Z2 - p.Z;
+            if (!(dx * dx + dz * dz > 1f)) return;
+            float bow = (p.Id.Key & 1) == 0 ? 0.08f : -0.08f;
+            float cx = (p.X + p.X2) * 0.5f - dz * bow, cz = (p.Z + p.Z2) * 0.5f + dx * bow, run = 0f;
+            int n = 0;
+            for (int k = 0; k < StrStrokes.MaxCurve; k++)
+            {
+                float t = k / (StrStrokes.MaxCurve - 1f), u = 1f - t;
+                float wx = u * u * p.X + 2f * u * t * cx + t * t * p.X2, wz = u * u * p.Z + 2f * u * t * cz + t * t * p.Z2;
+                if (!Project(projection, factor, wx, wz, out curveX[n], out curveY[n])) continue;
+                if (n > 0) run += Mathf.Sqrt((curveX[n] - curveX[n - 1]) * (curveX[n] - curveX[n - 1]) + (curveY[n] - curveY[n - 1]) * (curveY[n] - curveY[n - 1]));
+                n++;
+            }
+            if (n < 2) return;
+            // HOI4 look: a slim ribbon of near-constant width in solid ink, a dark rim to lift it off the relief, a modest head.
+            float neck = Mathf.Clamp(run * 0.012f, 2.2f * px, 3.4f * px), tail = neck * 0.75f, head = neck * 2.6f;
+            float fillA = p.Hollow ? 0.45f : 0.92f;
+            var fill = new Rgba(c.R, c.G, c.B, c.A * fillA);
+            var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.3f : 0.55f));
+            StrStrokes.Offensive(b, curveX, curveY, n, tail, neck, head, 0.9f * px, fill, line);
+            if (!p.Pulse || pulseCount >= MaxPulse) return;
+            System.Array.Copy(curveX, pulseCurveX[pulseCount], n);
+            System.Array.Copy(curveY, pulseCurveY[pulseCount], n);
+            pulseN[pulseCount] = n;
+            pulseSize[pulseCount++] = neck * 0.8f;
+        }
+
+        // The marching offensive: chevrons slide toward the fix inside the arrow, and stand still under reduced motion.
         private void DrawPulse(float now)
         {
             AvQuadBuffer pb = pulse.Buffer;
             pb.Clear();
+            var chevron = new Rgba(1f, 1f, 1f, 0.5f);
             for (int i = 0; i < pulseCount; i++)
             {
-                float phase = AvFxDriver.ReducedMotion ? 0f : -now * 30f * pulsePx;
-                Line(pb, StrShape.DashedArrow, pulseX[i], pulseY[i], pulseX2[i], pulseY2[i], phase, pulsePx, StrInk.RgbaOf(pulseInk[i]));
+                float phase = AvFxDriver.ReducedMotion ? 0.5f : now * 0.35f;
+                StrStrokes.Chevrons(pb, pulseCurveX[i], pulseCurveY[i], pulseN[i], phase, pulseSize[i], 1.1f * pulsePx, chevron);
             }
+            DrawDraft(pb);
+        }
+
+        // ---- where an offensive jumps off ------------------------------------------------------------------------------------
+
+        private static TacticalSectorGrid OwnGrid(DynamicMap map)
+        {
+            FactionHQ hq = map != null ? map.HQ : null;
+            return hq != null && ModuleServices.TryGet(out ITerritoryIngress t) && t is TerritoryControlView view ? view.Read(hq) : null;
+        }
+
+        // Own ground vehicles on the map, where the garrisons stand; read once per plan.
+        private int OwnGround(DynamicMap map)
+        {
+            int n = 0;
+            FactionHQ hq = map.HQ;
+            var icons = map.mapIcons;
+            if (hq == null || icons == null) return 0;
+            for (int i = 0; i < icons.Count && n < MaxGarrisonUnits; i++)
+            {
+                if (!(icons[i] is UnitMapIcon icon) || !(icon.unit is GroundVehicle unit) || unit.disabled || unit.NetworkHQ != hq) continue;
+                GlobalPosition at = unit.GlobalPosition();
+                if (!float.IsFinite(at.x) || !float.IsFinite(at.z)) continue;
+                garrisonX[n] = at.x; garrisonZ[n] = at.z; n++;
+            }
+            return n;
+        }
+
+        // The garrison the push comes from; else a start on own ground behind the line from the sector field.
+        private bool FindStart(float fx, float fz, out float sx, out float sz)
+        {
+            System.Func<float, float, int> side = startGrid != null ? sideOf ?? (sideOf = SideOf) : null;
+            if (StrArrowStart.Garrison(garrisonX, garrisonZ, garrisonCount, side, fx, fz, out sx, out sz)) return true;
+            TacticalSectorGrid g = startGrid;
+            return g != null && StrArrowStart.Find(side, fx, fz, Mathf.Max(250f, g.CellSize), out sx, out sz);
+        }
+
+        private int SideOf(float x, float z)
+        {
+            TacticalSectorGrid g = startGrid;
+            if (g == null || !g.WorldToCell(x, z, out int col, out int row)) return 0;
+            SectorControl s = g.GetSectorControl(col, row);
+            return s == SectorControl.Friendly ? 1 : s == SectorControl.Hostile ? -1 : 0;
         }
 
         // ---- the card -------------------------------------------------------------------------------------------------------

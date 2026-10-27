@@ -193,6 +193,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public static void Reset() => Restore();
 
+        /// <summary>Map closed: hide the built panel and keep it, so the next open skips the ~20 ms rebuild.</summary>
+        public static void Park() => HidePanel();
+
         private static void ResolveSources()
         {
             MessageUI ui = SceneSingleton<MessageUI>.i;

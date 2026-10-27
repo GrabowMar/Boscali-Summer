@@ -43,8 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return p;
         }
 
-        public static void Clear() => cache.Clear();
-
         private static AirframeClass SafeClassOf(Aircraft a)
         {
             try

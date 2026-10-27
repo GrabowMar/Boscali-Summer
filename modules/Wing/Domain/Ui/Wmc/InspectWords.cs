@@ -16,14 +16,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return s;
         }
 
-        public static string Pilot(string callsign, string rank, int xp, int kills, string perks)
-        {
-            if (string.IsNullOrEmpty(callsign)) return "NO PILOT RECORD";
-            string s = callsign + " · " + (rank ?? WmcText.Unknown) + " · XP " + xp.ToString(CultureInfo.InvariantCulture) + " · "
-                + kills.ToString(CultureInfo.InvariantCulture) + (kills == 1 ? " KILL" : " KILLS");
-            return string.IsNullOrEmpty(perks) ? s : s + " · " + perks;
-        }
-
         public static string Empty(bool client) => client
             ? "Wingman details come from the host."
             : "NO AIRCRAFT · INSPECT › ON TACTICAL, OR A MEMBER CHIP ABOVE";

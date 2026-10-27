@@ -13,14 +13,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// <summary>
     /// The CYBER front's room (R4, an Uplink-style intrusion terminal). Top: the theatre node graph under a BOUNCE CHAIN strip (your route as
     /// linked chips, the trace crawling back along it), beside YOUR session (trace dial, hop countdown, held pips, the faction's network, INFOCON,
-    /// key). Bottom: the selected node's inspector as a remote-host login (HOP / BURN / DROP), the node list as an `ls -l`, and the session log
-    /// as a real shell. Paints from <see cref="NetworkRoomView"/> only; every flavour line (addresses, banners, permission bits, hex dump) is
+    /// key). Bottom: the selected node's inspector as a remote-host login (HOP / BURN / DROP) and the node list as an `ls -l` (no session log:
+    /// the window footer carries the latest answer). Paints from <see cref="NetworkRoomView"/> only; every flavour line (addresses, banners, permission bits, hex dump) is
     /// derived from existing fields and never read as data.
     /// </summary>
     internal sealed class NetworkRoom : IFrontRoom
     {
-        private const float PurgeW = 96f, TopH = 540f, Gap = 8f, ColW = 270f, LinkKm = 12f, InspW = 440f, ListW = 410f, RowH = 24f, ListY = 42f, LogY = 30f, LogPitch = 19f, StripH = 34f, Adv = 6.3f;
-        private const int Cols = 12, Rows = 8, MaxNodes = 16, MaxAnchors = 4, MaxHops = 3, LogRows = 15, ListRows = 12, MaxChips = 8, HexLines = 22, DosRows = 7;
+        private const float PurgeW = 96f, TopH = 540f, Gap = 8f, ColW = 270f, LinkKm = 12f, InspW = 540f, RowH = 24f, ListY = 42f, StripH = 34f, Adv = 6.3f;
+        private const int Cols = 12, Rows = 8, MaxNodes = 16, MaxAnchors = 4, MaxHops = 3, ListRows = 12, MaxChips = 8, DosRows = 6;
         private static readonly string[] KindName = { "RADAR", "SAM C2", "RELAY", "UPLINK", "DATA CENTER" };
 
         // The terminal's own fixed inks (a different console in a different room: they sit on top of the pilot's scheme). Keep text on them at 4.5:1 over the glass.
@@ -34,8 +34,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private float heroW, colX;
         private FrontMapPlate plate;
 
-        private FrontBox graph, inspector, list, log;
-        private FrontVector side, routeVec, inspGlyph, listGlyph, logGlyph;
+        private FrontBox graph, inspector, list;
+        private FrontVector side, routeVec, inspGlyph, listGlyph;
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] nodeLabels = new TMP_Text[MaxNodes], anchorLabels = new TMP_Text[MaxAnchors], hopLabels = new TMP_Text[MaxHops];
         private readonly Image[] nodeHits = new Image[MaxNodes];
@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly Vector2[] nodeTrue = new Vector2[MaxNodes], nodeAt = new Vector2[MaxNodes];
         private readonly int[] nodeCluster = new int[MaxNodes];
         private const float StackGap = 22f;
-        private TMP_Text hexGlyph;
-        private int hexKey = int.MinValue;
 
         // The bounce chain strip over the top of the graph.
         private readonly TMP_Text[] chipText = new TMP_Text[MaxChips];
@@ -80,11 +78,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int scroll, listCount, lastPick = int.MinValue;
         private static readonly Dictionary<string, string> PermInk = new Dictionary<string, string>(8);
 
-        // Session log.
-        private readonly TMP_Text[] logStamp = new TMP_Text[LogRows], logText = new TMP_Text[LogRows];
-        private TMP_Text logPrompt;
-        private float logTextW, logW;
-
         private int selected = -1, locateId;
 
         public NetworkRoom(IFrontActions actions, FrontSkin skin)
@@ -102,10 +95,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             heroW = w;
             colX = w - 12f - ColW;
             BuildGraph(hero);
-            float by = TopH + Gap, bh = h - by, lx = InspW + ListW + 2f * Gap;
+            float by = TopH + Gap, bh = h - by;
             BuildInspector(hero, 0f, by, InspW, bh);
-            BuildList(hero, InspW + Gap, by, ListW, bh);
-            BuildLog(hero, lx, by, w - lx, bh);
+            BuildList(hero, InspW + Gap, by, w - InspW - Gap, bh);
         }
 
         // ---- Graph and session column ------------------------------------------------------------------------------------
@@ -137,9 +129,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             plate = new FrontMapPlate(b, skin, colX - 4f, TopH, Cols, Rows);
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
             plate.TopInset = StripH;                                           // and the grid names and ruler start under it
-            // A hex-dump watermark down the right edge of the glass: pure ornament (Glyph-named, so it is exempt from the text gate), under every label.
-            hexGlyph = FrontKit.Mono(b, "GlyphHex", plate.X + plate.W - 96f, plate.Y + StripH + 10f, 90f, HexLines * 11.5f, 9f, TextAlignmentOptions.TopLeft);
-            hexGlyph.color = Phos.WithAlpha(0.11f);
             side = FrontVector.Add(b, "Side"); // the session column's dial, pips, blocks and key swatches
             AvLay.Place(side.rectTransform, 0f, 0f, heroW, TopH);
             airbases = new FrontMap.AirbaseLayer(b);
@@ -236,7 +225,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             });
         }
 
-        // ---- Inspector, node list, session log ---------------------------------------------------------------------------
+        // ---- Inspector and node list ---------------------------------------------------------------------------
 
         private void BuildInspector(RectTransform hero, float x, float y, float w, float h)
         {
@@ -249,7 +238,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             dosStamp = FrontKit.Mono(b, "DosStamp", w - 136f, 31f, 126f, 30f, 12f, TextAlignmentOptions.Midline, true, 1f);
             bannerA = FrontKit.Mono(b, "BannerA", 20f, 72f, w - 32f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             bannerB = FrontKit.Mono(b, "BannerB", 20f, 86f, w - 32f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            string[] keys = { "owner", "reach", "ports", "holding", "hop", "burn", "drop" };
+            string[] keys = { "owner", "reach", "holding", "hop", "burn", "drop" };
             for (int i = 0; i < DosRows; i++)
             {
                 dosKey[i] = FrontKit.Mono(b, "DosKey" + i, 10f, 108f, 74f, 14f, 10f, TextAlignmentOptions.TopLeft, false, 1f);
@@ -319,23 +308,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.SelectNode(id);
         }
 
-        private void BuildLog(RectTransform hero, float x, float y, float w, float h)
-        {
-            log = new FrontBox(hero, skin, "Log", x, y, w, h, "SESSION LOG", AvIcon.Terminal, FrontLook.Terminal).Tagged("tty4");
-            logW = w;
-            logTextW = w - 12f - 40f - 8f;
-            RectTransform b = log.Rect;
-            FrontKit.Solid(b, "Well", 8f, 26f, w - 16f, h - 34f, Glass.WithAlpha(0.8f));
-            logGlyph = FrontVector.Add(b, "Glyph");
-            AvLay.Place(logGlyph.rectTransform, 0f, 0f, w, h);
-            for (int i = 0; i < LogRows; i++)
-            {
-                logStamp[i] = FrontKit.Mono(b, "LogStamp" + i, 12f, LogY + i * LogPitch, 40f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                logText[i] = FrontKit.Mono(b, "LogText" + i, 52f, LogY + i * LogPitch, logTextW, 18f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            }
-            logPrompt = FrontKit.Mono(b, "LogPrompt", 12f, LogY + LogRows * LogPitch, w - 36f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-        }
-
         // ---- Paint -----------------------------------------------------------------------------------------------------
 
         public void Paint(FrontRoomView v)
@@ -345,7 +317,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             PaintGraph(v, n);
             PaintInspector(v, n);
             PaintList(n);
-            PaintLog(v, n);
         }
 
         private Vector2 P(float x, float y) => plate.P(x, y);
@@ -398,20 +369,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static void Leader(FrontVector g, float x0, float x1, float y, Color k)
         {
             for (float x = x0; x < x1 - 1f; x += 4f) g.Rect(x, y, 1.4f, 1.4f, k);
-        }
-
-        /// <summary>Cosmetic flavour: a stable hex dump for the watermark, seeded from the net's size and the pick so it changes when the picture does.</summary>
-        private static string HexDump(int seed)
-        {
-            var sb = new StringBuilder(HexLines * 16);
-            uint s = (uint)seed * 2654435761u + 12345u;
-            for (int i = 0; i < HexLines; i++)
-            {
-                sb.Append((0x4A00 + i * 8).ToString("X4"));
-                for (int k = 0; k < 4; k++) { s = s * 1664525u + 1013904223u; sb.Append(' ').Append(((s >> 24) & 0xFF).ToString("X2")); }
-                if (i < HexLines - 1) sb.Append('\n');
-            }
-            return sb.ToString();
         }
 
         /// <summary>
@@ -473,8 +430,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             g.Grad(px, py, pw, e * 0.55f, v0, v0, v1, v1);
             g.Grad(px, py + ph - e * 0.55f, pw, e * 0.55f, v1, v1, v0, v0);
 
-            int hk = n.Nodes.Count * 977 + n.Trace * 31 + n.SelectedId * 7 + (n.HasIntrusion ? 1 : 0);
-            if (hk != hexKey) { hexKey = hk; hexGlyph.text = HexDump(hk); }
 
             FrontMap.AirbaseLayer.Glyphs(g, v.Airbases, P);
 
@@ -754,9 +709,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             float fillX = x1 - (x1 - x0) * trace / 100f;
             bool traced = n.HasIntrusion && trace > 0f;
             NetAnchorView anc = chainAnchor >= 0 ? n.Anchors[chainAnchor] : default;
-            // Cosmetic flavour: the bounce count (real, one per link) and a round-trip time that grows with every bounce (made up, never a reading).
-            int hops = chipCount - 1, rtt = hops * 41 + (n.Nodes.Count * 13 + hops * 7) % 29;
-            string meta = hops + (hops == 1 ? " HOP" : " HOPS") + " · RTT ~" + rtt + " MS";
+            // The bounce count (real, one per link).
+            int hops = chipCount - 1;
+            string meta = hops + (hops == 1 ? " HOP" : " HOPS");
             float mx = x1 + 26f;
             bool metaFits = mx + meta.Length * Adv <= sx + sw - 236f;
             routeMeta.gameObject.SetActive(metaFits);
@@ -1033,8 +988,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // ---- Inspector -----------------------------------------------------------------------------------------------
 
-        /// <summary>Cosmetic flavour: a stable made-up address for a node, from its kind and id. It is never a reading.</summary>
-        private static string Ip(in NetNodeView nd) => "10." + (20 + (int)nd.Kind) + "." + ((nd.Id * 7 + 3) % 200 + 10) + "." + ((nd.Id * 37 + 17) % 240 + 10);
 
         private void PaintInspector(FrontRoomView v, NetworkRoomView n)
         {
@@ -1067,14 +1020,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 bool mine = at >= 0 && (sel.Owner == "YOU" && (sel.State == NetNodeState.Held || sel.State == NetNodeState.Hopping));
                 bool ally = at >= 0 && sel.Owner.Length > 0 && sel.Owner != "YOU" && (sel.State == NetNodeState.Held || sel.State == NetNodeState.Hopping);
                 string kind = at >= 0 ? KindName[(int)sel.Kind] : "HOST";
-                FrontKit.Set(bannerA, C2Kit.Tint("CONNECTED TO ", PhosDim) + C2Kit.Tint(handle, Phos) + C2Kit.Tint(at >= 0 ? " [" + Ip(sel) + "]" : "", PhosDim), Phos);
+                FrontKit.Set(bannerA, C2Kit.Tint("CONNECTED TO ", PhosDim) + C2Kit.Tint(handle, Phos), Phos);
                 FrontKit.Set(bannerB, Fit(bannerB, "** " + (mine ? kind + " // ROOTED BY YOU" : ally ? kind + " // ROOTED BY " + sel.Owner : "ENEMY " + kind + " // AUTHORISED USE ONLY") + " **", w - 32f), mine ? PhosDim : ally ? Ally : WarnRed);
                 bar = mine ? Phos : ally ? Ally : WarnRed;
-                vals[0] = d.Owner; vals[1] = d.Reach; vals[2] = at >= 0 ? Ports(sel) : "—"; vals[3] = d.Hold; vals[4] = d.Hop; vals[5] = d.Burn; vals[6] = d.Drop;
+                vals[0] = d.Owner; vals[1] = d.Reach; vals[2] = d.Hold; vals[3] = d.Hop; vals[4] = d.Burn; vals[5] = d.Drop;
                 for (int i = 0; i < DosRows; i++)
                 {
-                    bool dead = i >= 5 && !n.CanBurn;   // BURN and DROP speak of a node your session does not hold
-                    Color ink = dead || i == 4 && !n.CanHop ? PhosDim : i == 0 ? (mine ? Phos : ally ? Ally : Bright) : i == 2 ? PhosDim : Bright;
+                    bool dead = i >= 4 && !n.CanBurn;   // BURN and DROP speak of a node your session does not hold
+                    Color ink = dead || i == 3 && !n.CanHop ? PhosDim : i == 0 ? (mine ? Phos : ally ? Ally : Bright) : Bright;
                     FrontKit.Set(dosVal[i], vals[i], ink);
                 }
             }
@@ -1131,15 +1084,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private static int Rank(NetNodeState s) =>
             s == NetNodeState.Held ? 0 : s == NetNodeState.Hopping ? 1 : s == NetNodeState.InReach ? 2 : s == NetNodeState.Traced ? 3 : 4;
-
-        /// <summary>Cosmetic flavour: the services a host of this kind would answer on (an nmap line). Derived from the node's kind and reach only; it is never a reading.</summary>
-        private static string Ports(in NetNodeView nd)
-        {
-            if (nd.State == NetNodeState.OutOfReach) return "NO ROUTE · ALL FILTERED";
-            string list = nd.Kind == NodeKind.Radar ? "554/rtsp  4840/opc-ua  22/ssh" : nd.Kind == NodeKind.SamC2 ? "102/s7  20000/dnp3  22/ssh"
-                : nd.Kind == NodeKind.Relay ? "179/bgp  2404/iec104  22/ssh" : nd.Kind == NodeKind.Uplink ? "443/tls  5060/sip  22/ssh" : "22/ssh  443/https  3306/sql";
-            return list + " · 3 OPEN";
-        }
 
         /// <summary>Cosmetic flavour: `ls -l` mode bits (held by you drwx, an ally dr-x, in reach d---, out of reach ----). Not a reading of anything.</summary>
         private static string Perms(in NetNodeView n) =>
@@ -1212,60 +1156,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     : (nd.State == NetNodeState.InReach ? "IN REACH" : "OUT OF REACH") + (nd.Reach.Length > 0 ? " · " + nd.Reach.Replace(" · ", " ") : "");
                 FrontKit.Set(rowState[r], Fit(rowState[r], state, listW - 222f - 4f), nd.State == NetNodeState.InReach ? Amber : out_ ? OutInk : k);
             }
-            g.Flush();
-        }
-
-        // ---- Session log ---------------------------------------------------------------------------------------------
-
-        private void Line(int row, string stamp, string text, Color stampInk, Color ink)
-        {
-            FrontKit.Set(logStamp[row], stamp, stampInk);
-            FrontKit.Set(logText[row], Fit(logText[row], text, logTextW), ink);
-        }
-
-        /// <summary>Who did it: burns and trace events print in trace red, your lines in phosphor, an ally's in cool cyan.</summary>
-        private static Color ActorInk(string text, AvState tone)
-        {
-            if (tone == AvState.Danger || text.Contains(" burned")) return TraceRed;
-            if (text.EndsWith("[ALLY]", StringComparison.Ordinal)) return Ally;
-            if (text.EndsWith("[YOU]", StringComparison.Ordinal)) return Phos;
-            return Tone(tone);
-        }
-
-        private void PaintLog(FrontRoomView v, NetworkRoomView n)
-        {
-            log.SetMeta(n.Session, PhosDim);
-            FrontVector g = logGlyph;
-            g.Clear();
-            Color muted = PhosDim;
-            int row = 0, last = LogRows;
-            Line(row++, "#", (v.Faction.Length > 0 ? v.Faction + " " : "") + "NET · ALL SESSIONS LOGGED", muted, PhosDim);
-            Line(row++, "$", "who", muted, Bright);
-            for (int i = 0; i < n.Roster.Count && row < last; i++, row++)
-            {
-                FrontLogLine l = n.Roster[i];
-                bool you = l.Stamp == "YOU";
-                Color ink = you ? (l.Tone == AvState.Ready ? Phos : Tone(l.Tone)) : Ally;
-                Line(row, l.Stamp, l.Text, you ? Phos : Ally, ink);
-            }
-            if (n.Roster.Count == 0 && row < last) Line(row++, "", n.Active ? "no operator online" : "no link", muted, PhosDim);
-            if (row < last) Line(row++, "$", "tail net.log", muted, Bright);
-            if (n.History.Count == 0 && row < last) Line(row++, "", "(empty) hops and burns print here", muted, PhosDim);
-            int from = Math.Max(0, n.History.Count - (last - row));
-            for (int i = from; i < n.History.Count && row < last; i++, row++)
-            {
-                FrontLogLine l = n.History[i];
-                Line(row, l.Stamp, l.Text, muted, ActorInk(l.Text, l.Tone));
-            }
-            for (; row < last; row++) Line(row, "", "", muted, PhosDim);
-
-            // The shell prompt on the last row, a block cursor after it.
-            int colon = n.Prompt.IndexOf(':');
-            FrontKit.Set(logPrompt, colon > 0 ? C2Kit.Tint(n.Prompt.Substring(0, colon), Phos) + C2Kit.Tint(n.Prompt.Substring(colon), PhosDim) : n.Prompt, Phos);
-            float py = LogY + LogRows * LogPitch;
-            g.Line(new Vector2(12f, py - 2f), new Vector2(logW - 12f, py - 2f), 1f, Faint.WithAlpha(0.6f));
-            g.Rect(12f + n.Prompt.Length * Adv + 6f, py + 3f, 7f, 12f, Phos.WithAlpha(0.9f));
-            g.Line(new Vector2(50f, LogY), new Vector2(50f, py - 6f), 1f, Faint.WithAlpha(0.35f));
             g.Flush();
         }
     }

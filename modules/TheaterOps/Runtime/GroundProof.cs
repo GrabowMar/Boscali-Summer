@@ -513,6 +513,88 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
         }
 
+        // ---- Draw: a pilot-drawn offensive through the real RequestDraw path ------------------------------------------------------------
+
+        private static int drawOpId = -1;
+        private static float drawAt = -1f, drawFixX, drawFixZ, drawMean0 = -1f;
+
+        /// <summary>
+        /// {depth: metres, default 6000}: the local faction's live front with the most friendly ground in reach is the press; the release is depth metres
+        /// along whichever of sixteen rays ends on ground the enemy holds most strongly. Sent through ITheaterWarView.RequestDraw, as the map tool sends it.
+        /// </summary>
+        public static Dictionary<string, object> Draw(Dictionary<string, object> args)
+        {
+            if (!InSimRun) return Failure("GroundProof", "Draw", "requires a nomodkit scenario run");
+            LivingFrontService living = LivingFrontService.Active;
+            if (living == null || !ModuleServices.TryGet(out ITheaterWarView view) || !ModuleServices.TryGet(out ITerritoryIngress territory) ||
+                !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null || !living.Wars.TryGetValue(hq.faction.factionName, out LivingFrontService.FactionWar war))
+                return Failure("GroundProof", "Draw", "no war, view or territory for the local faction");
+            float depth = Number(args, "depth", 6000f);
+            int best = -1;
+            for (int i = 0; i < war.Reads.Count; i++)
+                if (war.Reads[i].Live && (best < 0 || war.Reads[i].ReachFriendlyGround > war.Reads[best].ReachFriendlyGround)) best = i;
+            if (best < 0) return Failure("GroundProof", "Draw", "no live front (" + war.Reads.Count + " reads)");
+            WarFrontRead read = war.Reads[best];
+            int id = hq.GetInstanceID();
+            float bestHold = float.MaxValue, ox = 0f, oz = 0f;
+            for (int r = 0; r < 16; r++)
+            {
+                float a = r * Mathf.PI / 8f, x = read.X + Mathf.Cos(a) * depth, z = read.Z + Mathf.Sin(a) * depth;
+                if (territory.TryGetHoldStrength(id, x, z, out float hold) && hold < bestHold) { bestHold = hold; ox = x; oz = z; }
+            }
+            if (bestHold == float.MaxValue) return Failure("GroundProof", "Draw", "no hold read round the front");
+            bool sent = view.RequestDraw(read.X, read.Z, ox, oz);
+            LivingFrontService.Operation op = war.Active;
+            drawAt = Time.timeSinceLevelLoad; drawFixX = ox; drawFixZ = oz; drawMean0 = -1f;
+            drawOpId = op != null && op.Drawn ? op.Id : -1;
+            TheaterCommandResult said = view.LastCommand;
+            Plugin.Logger?.LogInfo("[GroundProof] DRAW sent " + sent + " code " + (said != null ? said.Code.ToString() : "none") + " front " + read.Key +
+                " start " + (int)read.X + "," + (int)read.Z + " fix " + (int)ox + "," + (int)oz + " hold " + bestHold.ToString("0.00") +
+                " drawn " + (op != null && op.Drawn) + " pinned " + (op != null && op.X == ox && op.Z == oz) + " kind " + (op != null ? op.Kind.ToString() : "-"));
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "sent", sent ? 1 : 0 }, { "code", said != null ? said.Code.ToString() : "none" }, { "detail", said?.Detail ?? "" },
+                { "front", read.Key }, { "frontName", read.Name }, { "friendlyGround", read.ReachFriendlyGround },
+                { "startX", read.X }, { "startZ", read.Z }, { "fixX", ox }, { "fixZ", oz }, { "holdAtFix", bestHold },
+                { "drawn", op != null && op.Drawn ? 1 : 0 }, { "kind", op != null ? op.Kind.ToString().ToUpperInvariant() : "" },
+                { "pinned", op != null && op.X == ox && op.Z == oz ? 1 : 0 }, { "originOnPress", op != null && op.OriginX == read.X && op.OriginZ == read.Z ? 1 : 0 },
+            };
+        }
+
+        /// <summary>The drawn operation since Draw: still live and pinned on the drawn fix, its phase and forces, and how far its groups are from the fix.</summary>
+        public static Dictionary<string, object> DrawRead(Dictionary<string, object> args)
+        {
+            if (!InSimRun) return Failure("GroundProof", "DrawRead", "requires a nomodkit scenario run");
+            LivingFrontService living = LivingFrontService.Active;
+            if (living == null || !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq.faction == null ||
+                !living.Wars.TryGetValue(hq.faction.factionName, out LivingFrontService.FactionWar war))
+                return Failure("GroundProof", "DrawRead", "no war for the local faction");
+            float now = Time.timeSinceLevelLoad;
+            LivingFrontService.Operation op = war.Active;
+            bool same = op != null && drawOpId > 0 && op.Id == drawOpId;
+            int count = 0, onFix = 0;
+            float meanC = -1f, meanT = -1f;
+            if (same && GroundFrontService.Active != null) GroundFrontService.Active.EffortDistances(hq, op.Id, drawFixX, drawFixZ, out count, out onFix, out meanC, out meanT);
+            if (same && drawMean0 < 0f && count > 0) drawMean0 = meanC;
+            TheaterForcesView f = same ? op.Forces : null;
+            TheaterResultView last = war.LastResult;
+            Plugin.Logger?.LogInfo("[GroundProof] DRAWREAD since " + (int)(drawAt >= 0f ? now - drawAt : -1f) + " live " + same + " pinned " + (same && op.X == drawFixX && op.Z == drawFixZ) +
+                " phase " + (same ? op.Phase.ToString() : "-") + " groups " + count + " onFix " + onFix + " meanCentroid " + (int)meanC + " meanTarget " + (int)meanT +
+                " baseline " + (int)drawMean0 + " nearest " + (f == null ? -1 : (int)f.NearestToFixMeters) + " last " + (last != null ? last.Outcome.ToString() : "-"));
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "since", drawAt >= 0f ? now - drawAt : -1f }, { "live", same ? 1 : 0 },
+                { "pinned", same && op.X == drawFixX && op.Z == drawFixZ ? 1 : 0 }, { "kind", same ? op.Kind.ToString().ToUpperInvariant() : "" },
+                { "phase", same ? op.Phase.ToString().ToUpperInvariant() : "" }, { "progress", same ? op.Progress : -1f },
+                { "groups", count }, { "groupsOnFix", count > 0 ? onFix : -1 }, { "onFixShare", count > 0 ? onFix / (float)count : -1f },
+                { "meanCentroidM", meanC }, { "meanTargetM", meanT }, { "baselineM", drawMean0 },
+                { "closedM", drawMean0 >= 0f && meanC >= 0f ? drawMean0 - meanC : 0f },
+                { "forcesGroups", f == null || f.Groups == 255 ? -1 : f.Groups }, { "moving", f == null || f.Moving == 255 ? -1 : f.Moving },
+                { "nearestToFixM", f == null ? -1f : f.NearestToFixMeters },
+                { "lastResult", last != null && last.OperationId == drawOpId ? last.Outcome.ToString().ToUpperInvariant() : "" },
+            };
+        }
+
         private static bool TryFaction(string name, out FactionHQ hq)
         {
             hq = null;

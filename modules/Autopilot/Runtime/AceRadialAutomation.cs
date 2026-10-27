@@ -48,13 +48,16 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return result;
         }
 
-        private static int chaffHeard, chaffDazzled, threatsGone;
+        private static int chaffHeard, chaffDazzled, threatsGone, ammoAtPress;
         private static float threatMiss = -1f;
         private static bool listening;
 
         /// <summary>
         /// The chaff dispenser on the seated player (tests/ingame/chaff.json). Args: <c>action</c> = <c>status</c> (default), <c>pop</c> (one salvo), or
-        /// <c>threat</c> (an enemy radar missile fired from <c>range</c> metres on the player's beam; needs one hostile aircraft in the mission).
+        /// <c>threat</c> (an enemy radar missile fired from <c>range</c> metres on the player's beam; needs one hostile aircraft in the mission),
+        /// <c>press</c> / <c>release</c> / <c>next</c> (the Countermeasures and Next Countermeasure buttons) or <c>flares</c> (POP FLARES).
+        /// Also returns selected / active / trigger (the selection and the game's trigger), flares and flareMin (live flares, their screen-size floor)
+        /// and blooms (live chaff cloud particles).
         /// Returns fitted, ammo, max, bundles (chaff bundles alive in the scene), heard / dazzled (times a seeker reported a bundle, and reported itself
         /// jammed by one: the game's own log line), threatsGone and miss (metres between the last threat and the player when it ended).
         /// </summary>
@@ -77,6 +80,25 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             }
             string action = Text(args, "action") ?? "status";
             if (action == "pop") chaff.Pop();
+            GameManager.GetLocalAircraft(out Aircraft own);
+            CountermeasureManager cm = own != null ? own.countermeasureManager : null;
+            // what PilotPlayerState does for the Countermeasures / Next Countermeasure buttons
+            if (cm != null && action == "press") { ammoAtPress = chaff.Ammo; own.Countermeasures(true, cm.activeIndex); }
+            for (int i = 0; cm != null && action == "chaffsel" && !chaff.Selected && i < 8; i++) cm.NextCountermeasure();
+            if (cm != null && action == "release") own.Countermeasures(false, cm.activeIndex);
+            if (cm != null && action == "next") cm.NextCountermeasure();
+            if (cm != null && action == "flares") cm.PopFlares();
+            float flareMin = 0f;
+            var flares = UnityEngine.Object.FindObjectsOfType<IRFlare>();
+            foreach (IRFlare f in flares)
+                foreach (ParticleSystemRenderer r in f.GetComponentsInChildren<ParticleSystemRenderer>())
+                    flareMin = Mathf.Max(flareMin, r.minParticleSize);
+            int blooms = 0;
+            foreach (RadarChaff bundle in UnityEngine.Object.FindObjectsOfType<RadarChaff>())
+            {
+                Transform bloom = bundle.transform.Find("Bloom");
+                if (bloom != null) blooms += bloom.GetComponent<ParticleSystem>().particleCount;
+            }
             if (action == "threat")
             {
                 string error = Threat(Number(args, "range", 6000f));
@@ -88,7 +110,13 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 { "fitted", chaff.Fitted },
                 { "ammo", chaff.Ammo },
                 { "max", chaff.MaxAmmo },
-                { "linked", chaff.Linked },
+                { "selected", chaff.Selected },
+                { "spentSincePress", ammoAtPress - chaff.Ammo },
+                { "active", cm != null && cm.activeIndex != byte.MaxValue ? cm.GetActiveCountermeasure()?.displayName ?? "" : "" },
+                { "trigger", own != null && own.countermeasureTrigger },
+                { "flares", flares.Length },
+                { "flareMin", flareMin },
+                { "blooms", blooms },
                 { "bundles", UnityEngine.Object.FindObjectsOfType<RadarChaff>().Length },
                 { "heard", chaffHeard },
                 { "dazzled", chaffDazzled },

@@ -14,5 +14,8 @@ namespace BoscaliSummer.Core.Contracts
 
         /// <summary>Back to the changing weather, starting from the sky on screen.</summary>
         void Resume();
+
+        /// <summary>Opens the weather console (the Ctrl+O window); read-only on a client.</summary>
+        void OpenConsole();
     }
 }

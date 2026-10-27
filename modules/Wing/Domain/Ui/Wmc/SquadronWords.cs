@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public const string Empty = "NO PILOTS · RECRUIT below, or requisition on SUPPLY";
         public const string NoFocus = "NO PILOT SELECTED";
         public const string StudioTip = "Open this pilot in STUDIO: save them for every mission, edit the look and bio.";
-        public const string Title = "SQUADRON", PerksTitle = "PERKS";
+        public const string PerksTitle = "PERKS";
         public const string RowTip = "Open this pilot's dossier (SUPPLY's pilot card picks who flies next).";
         public const string RecruitTip = "Recruit a pilot into the squadron (free). A new pilot starts at 0 XP.";
         public const string AirTip = "Send the nearest helicopter able to pick this pilot up (free; the rescue pays a bounty).";
@@ -68,17 +68,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public const string SquadronTitle = "WING SQUADRON", FileTitle = "PERSONNEL FILE";
 
-        public static string Stamp(PilotStatus s, bool next, int number)
-        {
-            switch (s)
-            {
-                case PilotStatus.Downed: return "DOWNED";
-                case PilotStatus.Rescue: return "SAR GOING";
-                case PilotStatus.Free: return next ? "NEXT UP" : "FREE";
-                default: return Row(s, next, number);
-            }
-        }
-
         public static string Rail(PilotStatus s, bool next)
         {
             switch (s)
@@ -90,22 +79,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case PilotStatus.Kia: return "danger";
                 default: return "warn";
             }
-        }
-
-        public static string Level(PilotStatus s) =>
-            s == PilotStatus.Flying ? "ok" : s == PilotStatus.Captured || s == PilotStatus.Kia ? "bad" : PilotStatuses.Lost(s) ? "warn" : "";
-
-        public static string Badge(WingRank r) => PilotPerks.RankName(r).Substring(0, 1);
-
-        /// <summary>The roster's head: pilots, then how many fly, are free and are out of action (SAR, missing, POW or KIA).</summary>
-        public static string Head(int pilots, int flying, int free, int lost)
-        {
-            if (pilots <= 0) return "NO PILOTS";
-            var sb = new StringBuilder(N(pilots) + (pilots == 1 ? " PILOT" : " PILOTS"));
-            if (flying > 0) sb.Append(" · ").Append(N(flying)).Append(" FLYING");
-            if (free > 0) sb.Append(" · ").Append(N(free)).Append(" FREE");
-            if (lost > 0) sb.Append(" · ").Append(N(lost)).Append(" LOST");
-            return sb.ToString();
         }
 
         // ---- the pinned AIRFRAME ASSIGNMENT bar

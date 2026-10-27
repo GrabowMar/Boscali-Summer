@@ -167,25 +167,6 @@ namespace BoscaliSummer.Garrisons
             return ApplyStrongpointHit(shell, power, origin);
         }
 
-        /// <summary>
-        /// Nest-part TakeDamage verdict. The rooftop emplacement is the building's targetable
-        /// face: while its shell stands, every hit on it wears the shell's structure instead and
-        /// the nest itself takes nothing, so only levelling the building clears it. True runs
-        /// vanilla (siege off, encampments, nests without a known shell).
-        /// </summary>
-        internal static bool ApplyNestHit(UnitPart part)
-        {
-            if (SelfDamage || part == null || Instance == null || !SiegeActive || !GameAccess.IsServer()) return true;
-            if (!(part.GetUnit() is Building nest) || !NestRegistry.TryGetShell(nest, out GameObject shellObject))
-                return true;
-            if (shellObject == null || !GarrisonOccupancy.IsOccupied(shellObject)) return true;
-            MapBuilding shell = shellObject.GetComponent<MapBuilding>();
-            if (shell == null) return true;
-            float power = ShockFor(part, out Vector3 origin);
-            ApplyStrongpointHit(shell, power, origin);
-            return false;
-        }
-
         private static bool ApplyStrongpointHit(MapBuilding shell, float power, Vector3 origin)
         {
             if (shell == null || Instance == null || !SiegeActive) return true;
@@ -297,7 +278,8 @@ namespace BoscaliSummer.Garrisons
         }
 
 
-        private void SeedShellState(GameObject shell, Building defense, int key)
+        private void SeedShellState(GameObject shell, Building defense, int key,
+            BuildingDefinition definition, Airbase airbase, string nameHead, string nameTail)
         {
             if (shell == null) return;
             MapBuilding map = shell.GetComponent<MapBuilding>();
@@ -308,8 +290,61 @@ namespace BoscaliSummer.Garrisons
                 Defense = defense,
                 Map = map,
                 Key = key,
-                LastStage = UrbanRuinMath.StageIntact
+                LastStage = UrbanRuinMath.StageIntact,
+                Definition = definition,
+                Airbase = airbase,
+                NameHead = nameHead,
+                NameTail = nameTail
             };
+        }
+
+        /// <summary>Rooftop emplacements one standing shell fields over its life, the first included.</summary>
+        private const int MaxNestSpawns = 3;
+
+        /// <summary>
+        /// A nest killed on a standing shell is replaced on the same roof after a short random
+        /// delay, up to <see cref="MaxNestSpawns"/> in all, so a garrisoned building keeps
+        /// fighting until it is levelled. True keeps the slot; false releases it.
+        /// </summary>
+        private bool HoldForRespawn(GarrisonRecord record, int index, GameObject shell)
+        {
+            if (!BoscaliMission.FortificationsAllowed || !Urban.GarrisonsEnabled.Value ||
+                !shellStates.TryGetValue(shell, out ShellState state) || state.Definition == null ||
+                state.Spawns >= MaxNestSpawns || (state.Airbase != null && state.Airbase.CurrentHQ != record.Owner))
+                return false;
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null) return false;
+            if (state.RespawnAt <= 0f)
+            {
+                // Clear the wreck now so the roof probe finds the bare roof when the delay ends.
+                DestroyNetworked(record.Defenses[index]);
+                record.Defenses[index] = null;
+                state.Defense = null;
+                state.RespawnAt = Time.unscaledTime + UnityEngine.Random.Range(30f, 60f);
+                return true;
+            }
+            if (Time.unscaledTime < state.RespawnAt) return true;
+            state.RespawnAt = 0f;
+            if (!RooftopPlacement.TryPlace(shell, GetShellBounds(shell), state.Definition,
+                out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) return false;
+            state.Spawns++;
+            Building spawned = spawner.SpawnBuilding(state.Definition.unitPrefab, position.ToGlobalPosition(), rotation,
+                record.Owner, state.Airbase,
+                RooftopPlacement.BuildMarkerName(state.NameHead + "r" + state.Spawns + state.NameTail, roofExtents),
+                false, null);
+            if (spawned == null) return false;
+            NestRegistry.Add(spawned);
+            GarrisonVisual.Apply(spawned);
+            record.Defenses[index] = spawned;
+            state.Defense = spawned;
+            // The new nest wears the building's damage so far: carrier stage and charred marking.
+            if (strongpoints.TryGetValue(shell.GetInstanceID(), out StrongpointRecord worn))
+                TickCarrier(shell, StrongpointHitPolicy.Fraction(worn.Damage, worn.Structure));
+            state.LastStage = int.MinValue;
+            NoteShellDamage(state.Map);
+            if (Diagnostics.VerboseLogging.Value)
+                Plugin.Logger.LogInfo($"[GARRISON] Nest {state.Spawns}/{MaxNestSpawns} respawned on {shell.name}.");
+            return true;
         }
 
         internal static int TierAt(Vector3 position)
@@ -434,11 +469,10 @@ namespace BoscaliSummer.Garrisons
                 out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) return false;
             int generation = generations.TryGetValue(key, out int current) ? current + 1 : 1;
             generations[key] = generation;
+            string nameHead = $"{RooftopPlacement.NamePrefix}{tag}{shell.GetInstanceID()}:{generation}:{slot}";
             Building core = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                 defense.unitPrefab, position.ToGlobalPosition(), rotation, owner, airbase,
-                RooftopPlacement.BuildMarkerName(
-                    $"{RooftopPlacement.NamePrefix}{tag}{shell.GetInstanceID()}:{generation}:{slot}",
-                    roofExtents), false, null);
+                RooftopPlacement.BuildMarkerName(nameHead, roofExtents), false, null);
             if (core == null) return false;
             NestRegistry.Add(core);
             if (previous == null)
@@ -449,7 +483,7 @@ namespace BoscaliSummer.Garrisons
             GarrisonVisual.Apply(core);
             previous.Defenses.Add(core);
             previous.Shells.Add(shell);
-            SeedShellState(shell, core, key);
+            SeedShellState(shell, core, key, defense, airbase, nameHead, string.Empty);
 
             Building shellBuilding = shell.GetComponentInParent<Building>();
             if (shellBuilding != null && !shellBuilding.disabled) shellBuilding.NetworkHQ = owner;
@@ -495,6 +529,13 @@ namespace BoscaliSummer.Garrisons
             public MapBuilding Map;
             public int Key;
             public int LastStage;
+            // What a lost nest respawns as: same emplacement, owner zone and marker name.
+            public BuildingDefinition Definition;
+            public Airbase Airbase;
+            public string NameHead;
+            public string NameTail;
+            public int Spawns = 1;
+            public float RespawnAt;
         }
 
         private sealed class StrongpointRecord
@@ -737,11 +778,11 @@ namespace BoscaliSummer.Garrisons
             Bounds bounds = GetShellBounds(shell);
             if (roofDefense == null || !RooftopPlacement.TryPlace(shell, bounds, roofDefense,
                 out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) { job.RoofSkips++; return true; }
+            string nameHead = RooftopPlacement.NamePrefix + Sanitize(job.ZoneName) + ":" + job.Generation + ":" + slot;
+            string nameTail = ":t" + job.Tier;
             Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                 roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, job.Owner, job.Airbase,
-                RooftopPlacement.BuildMarkerName(
-                    RooftopPlacement.NamePrefix + Sanitize(job.ZoneName) + ":" + job.Generation + ":" + slot + ":t" + job.Tier,
-                    roofExtents),
+                RooftopPlacement.BuildMarkerName(nameHead + nameTail, roofExtents),
                 false, null);
             if (spawned == null) { job.SpawnSkips++; return true; }
             NestRegistry.Add(spawned);
@@ -751,7 +792,7 @@ namespace BoscaliSummer.Garrisons
             GarrisonVisual.Apply(spawned);
             job.Record.Defenses.Add(spawned);
             job.Record.Shells.Add(shell);
-            SeedShellState(shell, spawned, job.Key);
+            SeedShellState(shell, spawned, job.Key, roofDefense, job.Airbase, nameHead, nameTail);
             return true;
         }
 
@@ -797,6 +838,10 @@ namespace BoscaliSummer.Garrisons
                     if (shell != null && shell.activeInHierarchy &&
                         (shellBuilding == null || !shellBuilding.disabled) &&
                         defense != null && !defense.disabled && defense.NetworkHQ == record.Owner)
+                        continue;
+                    // A dead (not captured) nest on a standing shell: the building fields another.
+                    if (shell != null && shell.activeInHierarchy && (shellBuilding == null || !shellBuilding.disabled) &&
+                        (defense == null || defense.disabled) && HoldForRespawn(record, i, shell))
                         continue;
                     DestroyNetworked(defense);
                     if (shellBuilding != null && shellBuilding.NetworkHQ == record.Owner)

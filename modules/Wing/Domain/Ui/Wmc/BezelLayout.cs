@@ -6,13 +6,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// tabs 34, status 56 and three 8 px gaps) leaves H − 176 for a page; TACTICAL stacks a scope row, the flight list and ORDERS.</summary>
     internal static class BezelLayout
     {
-        public const float Chrome = 176f;
         public const int BaseRows = 3;
         public const int InboundMax = 4;
         public const float PopupRowPitch = 32f, PopupPad = 8f;
         public const int PopupMaxRows = 7;
-
-        public static float Body(float panelHeight) => panelHeight - Chrome;
 
         /// <summary>The toolkit popup's height for <paramref name="entries"/> rows (seven at most: it pages beyond).</summary>
         public static float PopupHeight(int entries) =>

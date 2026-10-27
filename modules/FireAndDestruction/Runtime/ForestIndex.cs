@@ -32,6 +32,8 @@ namespace BoscaliSummer.Fire
 
         private readonly Dictionary<long, CellSpan> occupied = new Dictionary<long, CellSpan>();
         private Vector2[] points = Array.Empty<Vector2>();
+        // Clump base height, sorted with points; the tree clear shader needs the real centre.
+        private float[] heights = Array.Empty<float>();
         private float cellSize;
 
         public bool Ready { get; private set; }
@@ -66,6 +68,7 @@ namespace BoscaliSummer.Fire
             }
 
             points = new Vector2[totalCount];
+            heights = new float[totalCount];
             long[] keys = new long[totalCount];
             int writeIdx = 0;
             int sinceYield = 0;
@@ -80,6 +83,7 @@ namespace BoscaliSummer.Fire
                     long key = Deterministic.CellKey(x, z, cellSize);
                     keys[writeIdx] = key;
                     points[writeIdx] = new Vector2(x, z);
+                    heights[writeIdx] = BitConverter.ToSingle(data, offset + 4);
                     writeIdx++;
 
                     if (++sinceYield >= 200000)
@@ -116,6 +120,7 @@ namespace BoscaliSummer.Fire
 
             int totalCount = pointList.Count;
             points = new Vector2[totalCount];
+            heights = new float[totalCount];
             long[] keys = new long[totalCount];
 
             for (int i = 0; i < totalCount; i++)
@@ -139,7 +144,9 @@ namespace BoscaliSummer.Fire
                 return;
             }
 
+            long[] heightKeys = (long[])keys.Clone();
             Array.Sort(keys, points, 0, count);
+            Array.Sort(heightKeys, heights, 0, count);
 
             int spanStart = 0;
             while (spanStart < count)
@@ -185,6 +192,30 @@ namespace BoscaliSummer.Fire
         }
 
         public bool Contains(Vector2 position) => Contains(position.x, position.y);
+
+        /// <summary>Copies up to <c>xyz.Length / 3</c> clump centres within <paramref name="radius"/>
+        /// of (px, pz) as x, height, z triples. Returns how many were written.</summary>
+        public int CopyNear(float px, float pz, float radius, float[] xyz)
+        {
+            if (!Ready || xyz == null) return 0;
+            float radiusSq = radius * radius;
+            int cx = (int)Math.Floor(px / cellSize), cz = (int)Math.Floor(pz / cellSize);
+            int reach = (int)Math.Ceiling(radius / cellSize), written = 0, max = xyz.Length / 3;
+            for (int x = cx - reach; x <= cx + reach; x++)
+            for (int z = cz - reach; z <= cz + reach; z++)
+            {
+                if (!occupied.TryGetValue(((long)x << 32) ^ (uint)z, out CellSpan span)) continue;
+                for (int i = span.Offset, end = span.Offset + span.Count; i < end; i++)
+                {
+                    float dx = points[i].x - px, dz = points[i].y - pz;
+                    if (dx * dx + dz * dz > radiusSq) continue;
+                    if (written >= max) return written;
+                    xyz[written * 3] = points[i].x; xyz[written * 3 + 1] = heights[i]; xyz[written * 3 + 2] = points[i].y;
+                    written++;
+                }
+            }
+            return written;
+        }
 
 #if !NET8_0_OR_GREATER
         public bool Contains(GlobalPosition position) => Contains(position.x, position.z);

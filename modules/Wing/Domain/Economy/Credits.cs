@@ -13,14 +13,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A price: nothing is FREE.</summary>
         public static string Price(float millions) => millions <= 0f ? "FREE" : Text(millions);
 
-        /// <summary>The FUNDS tile's value: at most seven characters, no unit.</summary>
-        public static string Short(float millions)
-        {
-            if (Math.Abs(millions) < 1_000_000f) return Number(millions);
-            float m = millions / 1_000_000f;
-            return (Math.Abs(m) < 10f ? m.ToString("0.#", CultureInfo.InvariantCulture) : m.ToString("0", CultureInfo.InvariantCulture)) + "M";
-        }
-
         private static string Number(float v) =>
             Math.Abs(v) < 100f && Math.Abs(v - (float)Math.Round(v)) > 0.001f
                 ? v.ToString("0.#", CultureInfo.InvariantCulture)

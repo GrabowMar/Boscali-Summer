@@ -159,10 +159,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             {
                 w.DronesStriking = drones.Striking; w.DronesCanStrike = drones.CanStrike; w.Drones = drones.Ready;
                 for (int i = 0; i < drones.Linkable; i++) { w.DroneNames.Add(drones.Name(i)); w.DroneStates.Add(drones.State(i)); }
-                w.DroneLinked = drones.LinkedIndex; w.DroneHand = drones.HandFlying; w.DroneFeed = drones.FeedShown;
+                w.DroneLinked = drones.LinkedIndex; w.DroneOrdered = drones.Ordered; w.DroneFeed = drones.FeedShown; w.DroneRamMode = drones.RamMode;
             }
             ChaffDispenser chaff = ChaffDispenser.Instance;
-            if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; w.ChaffLinked = chaff.Linked; }
+            if (chaff != null && chaff.Fitted) { w.HasChaff = true; w.Chaff = chaff.Ammo; w.ChaffMax = chaff.MaxAmmo; }
         }
 
         private static string StationName(object station)
@@ -186,6 +186,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.CameraFollowing = cams != null && cams.followingUnit == a;
             w.Camera = cams == null ? ViewKind.Other : InCockpit() ? ViewKind.Cockpit : InOrbit() ? ViewKind.Orbit : ViewKind.Other;
             w.HasCockpitPoint = a.cockpitViewPoint != null;
+            w.CinematicCamera = Patches.CinematicViewPatch.Setting?.Value ?? true;
             w.MapAvailable = !DynamicMap.mapMaximized && SceneSingleton<DynamicMap>.i != null;
             IMissileView missiles = Service<IMissileView>();
             if (missiles == null) return;
@@ -242,11 +243,11 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "flight/eject": return With(a => a.StartEjectionSequence());
                 case "view/cam": return With(a => SwitchCamera(a, cockpit: InOrbit()));
                 case "view/map": return OpenMap;
+                case "view/cinematic": return () => { var s = Patches.CinematicViewPatch.Setting; if (s != null) s.Value = !s.Value; };
                 case "defence/flares": return With(a => { ChaffDispenser.Instance?.Deselect(); a.countermeasureManager.PopFlares(); });
                 case "defence/cm": return With(a => a.countermeasureManager.NextCountermeasure());
                 case "defence/radar": return With(a => a.CmdToggleRadar());
                 case "defence/chaff": return () => ChaffDispenser.Instance?.Pop();
-                case "defence/chafflink": return () => { ChaffDispenser chaff = ChaffDispenser.Instance; if (chaff != null) chaff.Linked = !chaff.Linked; };
                 case "weapons/bay": return With(ToggleBayDoors);
                 case "weapons/cargo/next": return With(NextCargo);
                 case "weapons/cargo/setzone": return SetCargoZone;

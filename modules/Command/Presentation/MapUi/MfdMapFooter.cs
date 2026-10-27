@@ -266,7 +266,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             airbase = null;
             instruments = null;
 
-            if (footer != null) Object.Destroy(footer.gameObject);
+            if (footer != null)
+            {
+                // Destroy lands at frame end: a same-frame re-open must not find this one by name and
+                // adopt the game's own readouts into it, or they die with it (VirtualMFD.Update NRE spam).
+                footer.gameObject.SetActive(false);
+                footer.name = FooterName + ".Retired";
+                Object.Destroy(footer.gameObject);
+            }
             footer = null;
             chrome = null;
             instrumentsSlot = null;

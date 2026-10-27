@@ -16,6 +16,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private Vector3 leftAxis;
         private Vector3 rightAxis;
         private float swing;
+        private float sign = 1f; // MANTA: -1, its panels fold about forward the other way round (down and under)
+        private const float MantaFold = 180f;
 
         public static void Attach(Missile missile)
         {
@@ -42,6 +44,19 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             animation.rightAxis = right.parent.InverseTransformDirection(missile.transform.up);
             // The MALD-X FBX holds the flight pose. ORCA and REMORA hold the stowed pose (MECHANICS.md part contract), so
             // their deployed rotation is the rest pose swung open by the model's fold angle: Orca.py 90, Remora.py STOW_DEG 68.
+            if (missile.definition.jsonKey == VanguardKeys.Manta && Runtime.StoreArt.Prefab(Runtime.StoreArt.Manta) != null)
+            {
+                // XQ-90 MANTA (baked model, deployed rest pose): the outer panels unfold from 180 deg down-and-under about their
+                // crank hinge (the airframe's forward axis), away from the carrier's wing. Port turns +, starboard - about forward.
+                animation.leftAxis = left.parent.InverseTransformDirection(missile.transform.forward);
+                animation.rightAxis = right.parent.InverseTransformDirection(missile.transform.forward);
+                animation.swing = MantaFold;
+                animation.sign = -1f;
+                animation.leftDeployed = left.localRotation;
+                animation.rightDeployed = right.localRotation;
+                animation.Apply();
+                return;
+            }
             animation.swing = role == VanguardRole.Drone ? 68f : 90f;
             bool stowedRest = role != VanguardRole.Decoy;
             animation.leftDeployed = stowedRest ? Quaternion.AngleAxis(animation.swing, animation.leftAxis) * left.localRotation : left.localRotation;
@@ -64,9 +79,21 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float deployment = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(DeployStart, DeployEnd, missile.timeSinceSpawn));
             // Port (-X) and starboard (+X) fold aft around Unity up; source Blender Z rotations reverse handedness.
             float fold = swing * (1f - deployment);
-            left.localRotation = Quaternion.AngleAxis(-fold, leftAxis) * leftDeployed;
-            right.localRotation = Quaternion.AngleAxis(fold, rightAxis) * rightDeployed;
+            left.localRotation = Quaternion.AngleAxis(-fold * sign, leftAxis) * leftDeployed;
+            right.localRotation = Quaternion.AngleAxis(fold * sign, rightAxis) * rightDeployed;
             if (deployment >= 1f) enabled = false;
+        }
+
+        /// <summary>The MANTA's carriage fold: both outer panels (WingL/WingR of the baked model under <paramref name="model"/>)
+        /// turned <paramref name="degrees"/> down about <paramref name="frame"/>'s forward axis, from the model's deployed rest pose.</summary>
+        public static void FoldManta(Transform model, Transform frame, float degrees)
+        {
+            foreach (Transform joint in model.GetComponentsInChildren<Transform>(true))
+            {
+                if (joint.name != "WingL" && joint.name != "WingR") continue;
+                Vector3 axis = joint.parent.InverseTransformDirection(frame.forward);
+                joint.localRotation = Quaternion.AngleAxis(joint.name == "WingL" ? degrees : -degrees, axis) * joint.localRotation;
+            }
         }
     }
 }

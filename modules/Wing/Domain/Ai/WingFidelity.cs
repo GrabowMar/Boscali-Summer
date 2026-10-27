@@ -24,9 +24,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             WingFrameGate.Reset();
         }
 
-        /// <summary>Whether the complete Smart behaviour set is enabled.</summary>
-        public static bool Full => !performance;
-
         /// <summary>Multiplier for mode-scaled periodic and UI intervals.</summary>
         public static float IntervalScale => performance ? 2.5f : 1f;
 

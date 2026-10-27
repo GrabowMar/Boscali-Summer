@@ -20,16 +20,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         private static readonly List<Entry> Entries = new List<Entry>();
-        private static readonly Dictionary<(Unit, VanguardRole), int> Counts = new Dictionary<(Unit, VanguardRole), int>();
+        private static readonly Dictionary<(Unit, string), int> Counts = new Dictionary<(Unit, string), int>(); // per owner and jsonKey: MANTA counts apart from REMORA
 
         public static void Track(Missile missile)
         {
             VanguardRole role = VanguardKeys.RoleOf(missile.definition.jsonKey);
             if (!VanguardKeys.IsSteerable(role)) return;
-            var key = (missile.owner, role);
+            var key = (missile.owner, missile.definition.jsonKey);
             Counts.TryGetValue(key, out int n);
             Counts[key] = ++n;
-            Entries.Add(new Entry { Missile = missile, Role = role, Callsign = DroneLink.Callsign(role, n), SeenAt = Time.time });
+            Entries.Add(new Entry { Missile = missile, Role = role, Callsign = DroneLink.Callsign(key.Item2, role, n), SeenAt = Time.time });
         }
 
         /// <summary>The live drones of <paramref name="owner"/>, in launch order. Dead ones leave the roster here.</summary>

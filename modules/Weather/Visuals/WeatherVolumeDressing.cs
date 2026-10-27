@@ -511,7 +511,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 for (int i = 0; i < pixels.Length; i++)
                 {
                     int n = i * 4;
-                    pixels[i] = new Color32(ready[n], ready[n + 1], ready[n + 2], 255);
+                    pixels[i] = new Color32(ready[n], ready[n + 1], ready[n + 2], ready[n + 3]);
                 }
                 noise = new Texture3D(NoiseSize, NoiseSize, NoiseSize, TextureFormat.RGBA32, true)
                 {

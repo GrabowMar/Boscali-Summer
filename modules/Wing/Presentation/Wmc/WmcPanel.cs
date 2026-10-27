@@ -63,11 +63,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 || (shell.CurrentPage == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubOptions));
         /// <summary>BEHAVIOUR › PLAN is showing: its map tools stay armed only here.</summary>
         public bool PlanShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubPlan;
-        public int Page => shell != null ? shell.CurrentPage : -1;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
-        public WmcTactical Tactical => tactical;
-        public WmcForm Form => tactical?.Form;
         public WmcPlan Plan => plan;
         public WmcLoadout Loadout => loadout;
         public WmcWing WingPage => wingPage;
@@ -422,8 +419,26 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }
             }
             shownPage = page;
+            string[] guide = GuideFor(p);
+            if (!ReferenceEquals(guide, shownGuide)) { shell.Orders(page, guide); shownGuide = guide; }
             bool fresh = WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f;
             WriteStatus(p?.Alert, context.Map.Prompt(context.ScopeLabel), fresh ? WingToast.Last : p?.Hint ?? "");
+        }
+
+        private string[] shownGuide;
+
+        /// <summary>The bay cover's how-to lines for the sub-page on screen (<see cref="GuideWords"/>).</summary>
+        private static string[] GuideFor(IWmcPage p)
+        {
+            switch (p)
+            {
+                case WmcTactical t: return t.Sub == WmcTactical.SubFormation ? GuideWords.Formation : t.Sub == WmcTactical.SubRoute ? GuideWords.Route : GuideWords.Orders;
+                case WmcPlan b: return b.Sub == WmcPlan.SubSortie ? GuideWords.Sortie : GuideWords.Stances;
+                case WmcSupply _: return GuideWords.Supply;
+                case WmcLoadout _: return GuideWords.Loadout;
+                case WmcWing w: return w.Sub == WmcWing.SubStudio ? GuideWords.Studio : w.Sub == WmcWing.SubAircraft ? GuideWords.Aircraft : GuideWords.Roster;
+                default: return null;
+            }
         }
 
         /// <summary>Title and chips, each rebuilt only when its inputs change (no strings per refresh in steady state).</summary>

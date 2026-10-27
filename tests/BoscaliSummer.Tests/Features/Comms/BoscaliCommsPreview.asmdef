@@ -1,5 +1,0 @@
-{
-  "name": "BoscaliCommsPreview",
-  "references": ["Unity.TextMeshPro", "Unity.ugui"],
-  "includePlatforms": ["Editor"]
-}

@@ -50,10 +50,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return StoreVerdict.Ok;
         }
 
-        /// <summary>Listed in the store popup at all (the game's own menu hides these).</summary>
-        public static bool Offered(StoreVerdict v) =>
-            v != StoreVerdict.Disabled && v != StoreVerdict.EventOnly && v != StoreVerdict.Missing && v != StoreVerdict.NotOnStation;
-
         /// <summary>May be fitted on a template.</summary>
         public static bool Pickable(StoreVerdict v) =>
             v == StoreVerdict.Ok || v == StoreVerdict.NuclearNotYet || v == StoreVerdict.NuclearRank;

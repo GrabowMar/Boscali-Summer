@@ -124,6 +124,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             state["oceanWaveHeight"] = WaveHeight;
             state["oceanShips"] = calmCount;
             state["sprayParticles"] = spray.Particles;
+            state["wakeParticles"] = spray.WakeParticles;
             state["sprayWashes"] = spray.WashCount;
         }
 
@@ -139,7 +140,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
             float dt = Time.deltaTime;
             renderTime = (renderTime + dt) % 1000f; // render-only
-            spray.Tick(camera, Datum.LocalSeaY, settings.SeaSprayEnabled.Value, dt);
+            spray.Tick(camera, Datum.LocalSeaY, WaveHeight, settings.SeaSprayEnabled.Value, dt);
             if (!settings.OceanWavesEnabled.Value || !Attach(level))
             {
                 Release();

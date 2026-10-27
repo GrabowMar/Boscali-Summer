@@ -6,10 +6,11 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The theater front as one vector line: an anti-aliased stroke per ordered trace,
-    /// sampled in map pixels so it never magnifies the overlay texture into blocks.
-    /// Strong opposing ground contact adds an amber halo; the line stays pale. Contested ground
-    /// still reads from the hatched squares beneath the line.
+    /// The theater front as one vector line, drawn the way HOI4 draws a front: a dark casing with
+    /// our blue on our side and their red on theirs, and teeth along it pointing into enemy ground
+    /// (amber where the fighting is hot). Which side is ours is voted per trace from the sector
+    /// field; a trace with no clear side keeps the plain pale line. Sampled in map pixels so it
+    /// never magnifies the overlay texture into blocks.
     ///
     /// <para>Rebuilds on the sector-grid cadence, bounded by <see cref="MaximumSamples"/> and
     /// a hard vertex ceiling, hottest trace first.</para>
@@ -24,11 +25,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float StationStep = 7f;
         private const float HalfWidth = 1f;
         private const int TickEvery = 12;
+        private const int VoteSegments = 8;
+        private const float StripeOffset = 1.7f, StripeHalf = 1.3f, ToothHalf = 4.5f, ToothReach = 8f;
 
         private static readonly Color32 Casing = new Color32(4, 10, 14, 205);
         private static readonly Color32 CoolGlow = new Color32(70, 190, 220, 80);
         private static readonly Color32 HotGlow = new Color32(255, 168, 72, 130);
         private static readonly Color32 TickInk = new Color32(150, 220, 235, 190);
+        private static readonly Color32 OwnStripe = Alpha(TacticalSectorGrid.FriendlyTint, 235);
+        private static readonly Color32 TheirStripe = Alpha(TacticalSectorGrid.HostileTint, 235);
+        private static readonly Color32 HotTooth = new Color32(255, 176, 64, 245);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
         internal static readonly Color32 Ink = new Color32(228, 241, 245, 245);
@@ -41,6 +47,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly int[] bounds = new int[MaximumTraces + 1];
         private readonly Vector2[] projected = new Vector2[FrontlineTraceLimits.MaximumPoints];
         private readonly Vector2[] stations = new Vector2[MaximumSamples];
+        private readonly Vector2[] shifted = new Vector2[MaximumSamples];
+        // +1: our ground lies left of the trace's direction, -1: right, 0: no clear side.
+        private readonly int[] ourSide = new int[MaximumTraces];
 
         private TacticalSectorGrid grid;
         private ulong drawnFrontlineHash;
@@ -94,11 +103,42 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // Project once per source point; both length measurement and sampling reuse it.
             for (int i = 0; i < starts[traceCount]; i++)
                 projected[i] = ToPixels(points[i], rect, worldSizeX, worldSizeZ, scale);
+            for (int i = 0; i < traceCount; i++) ourSide[i] = VoteSide(starts[i], lengths[i]);
 
             RankTraces(traceCount);
             int stationCount = Sample(traceCount);
             Paint(vh, traceCount, stationCount, 1f / scale);
         }
+
+        /// <summary>
+        /// Which side of a trace is ours, voted in world space across a few of its segments by the
+        /// cells a cell and a bit to either side. World and map share handedness, so a world left
+        /// is a map left.
+        /// </summary>
+        private int VoteSide(int start, int count)
+        {
+            if (count < 2) return 0;
+            float reach = Mathf.Max(250f, grid.CellSize * 1.2f);
+            int vote = 0, stride = Mathf.Max(1, (count - 1) / VoteSegments);
+            for (int p = start; p + 1 < start + count; p += stride)
+            {
+                float dx = points[p + 1].X - points[p].X, dz = points[p + 1].Z - points[p].Z, len = Mathf.Sqrt(dx * dx + dz * dz);
+                if (len < 1f) continue;
+                float mx = (points[p].X + points[p + 1].X) * .5f, mz = (points[p].Z + points[p + 1].Z) * .5f;
+                float lx = -dz / len * reach, lz = dx / len * reach;
+                vote += Side(mx + lx, mz + lz) - Side(mx - lx, mz - lz);
+            }
+            return vote > 0 ? 1 : vote < 0 ? -1 : 0;
+        }
+
+        private int Side(float x, float z)
+        {
+            if (!grid.WorldToCell(x, z, out int col, out int row)) return 0;
+            SectorControl s = grid.GetSectorControl(col, row);
+            return s == SectorControl.Friendly ? 1 : s == SectorControl.Hostile ? -1 : 0;
+        }
+
+        private static Color32 Alpha(Color32 c, byte a) { c.a = a; return c; }
 
         /// <summary>Hottest trace first: a bounded station budget keeps the fighting.</summary>
         private void RankTraces(int traceCount)
@@ -208,9 +248,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Soft glow, dark casing, then the crisp core, each one continuous feathered ribbon:
-        /// the front stays legible over terrain, over the forward-band tint and over the
-        /// trench trace beneath it, with no stair-stepped edge at any zoom.
+        /// Soft glow, dark casing, then either the HOI4 front (our stripe, their stripe, teeth into
+        /// their ground) or, with no clear side, the crisp pale core with cross ticks. Every stroke is
+        /// a continuous feathered ribbon, legible over terrain, the forward-band tint and the trench
+        /// trace beneath it, with no stair-stepped edge at any zoom.
         /// </summary>
         private void Paint(VertexHelper vh, int traceCount, int stationCount, float toLocal)
         {
@@ -220,21 +261,63 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 int count = end - start;
                 if (count < 2) continue;
                 int ticks = (count - 2) / TickEvery + 1;
-                if (vh.currentVertCount + count * MapStroke.RibbonVertices * 3 +
+                if (vh.currentVertCount + count * MapStroke.RibbonVertices * 4 +
                     ticks * MapStroke.SegmentVertices > MaximumVertices) return;
 
                 bool hot = pressures[order[t]] >= .35f;
+                int side = ourSide[order[t]];
                 MapStroke.Ribbon(vh, stations, start, end, toLocal, .5f, hot ? 13f : 9f, hot ? HotGlow : CoolGlow);
-                MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth + 1.5f, 1.6f, Casing);
-                for (int i = start; i + 1 < end; i += TickEvery)
+                if (side == 0)
                 {
-                    Vector2 along = (stations[i + 1] - stations[i]).normalized;
-                    Vector2 reach = new Vector2(-along.y, along.x) * 3.4f;
-                    MapStroke.Segment(vh, (stations[i] - reach) * toLocal, (stations[i] + reach) * toLocal,
-                        .5f * toLocal, toLocal, TickInk);
+                    MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth + 1.5f, 1.6f, Casing);
+                    for (int i = start; i + 1 < end; i += TickEvery)
+                    {
+                        Vector2 along = (stations[i + 1] - stations[i]).normalized;
+                        Vector2 reach = new Vector2(-along.y, along.x) * 3.4f;
+                        MapStroke.Segment(vh, (stations[i] - reach) * toLocal, (stations[i] + reach) * toLocal,
+                            .5f * toLocal, toLocal, TickInk);
+                    }
+                    MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth, 1f, Ink);
+                    continue;
                 }
-                MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth, 1f, Ink);
+
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, StripeOffset + StripeHalf + 1f, 1.6f, Casing);
+                Shift(start, end, side * StripeOffset);
+                MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, OwnStripe);
+                Shift(start, end, -side * StripeOffset);
+                MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, TheirStripe);
+                // Teeth: small triangles standing on their stripe and pointing into their ground.
+                Color32 tooth = hot ? HotTooth : OwnStripe;
+                for (int i = start + TickEvery / 2; i + 1 < end; i += TickEvery)
+                {
+                    Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
+                    Vector2 into = new Vector2(along.y, -along.x) * side;   // right of travel when ours is left
+                    Vector2 foot = stations[i] + into * StripeOffset;
+                    Triangle(vh, (foot - along * ToothHalf) * toLocal, (foot + along * ToothHalf) * toLocal,
+                        (foot + into * ToothReach) * toLocal, tooth);
+                }
             }
+        }
+
+        /// <summary>The stations moved sideways by a fixed pixel distance (left of travel for a positive one).</summary>
+        private void Shift(int start, int end, float by)
+        {
+            for (int i = start; i < end; i++)
+            {
+                Vector2 along = (stations[Mathf.Min(i + 1, end - 1)] - stations[Mathf.Max(i - 1, start)]).normalized;
+                shifted[i] = stations[i] + new Vector2(-along.y, along.x) * by;
+            }
+        }
+
+        private static void Triangle(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Color32 ink)
+        {
+            int first = vh.currentVertCount;
+            UIVertex vert = UIVertex.simpleVert;
+            vert.color = ink;
+            vert.position = a; vh.AddVert(vert);
+            vert.position = b; vh.AddVert(vert);
+            vert.position = c; vh.AddVert(vert);
+            vh.AddTriangle(first, first + 1, first + 2);
         }
 
         private static Vector2 ToPixels(FrontlineTracePoint point, Rect rect, float worldSizeX, float worldSizeZ, float scale)

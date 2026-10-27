@@ -1,0 +1,10 @@
+Spooktober sounds. All six are ElevenLabs sound-effects generations (eleven_text_to_sound_v2, one take each) made for this
+mod on 2026-10-27, flow 4yFHQoPjzlv2whFvxtBs, converted to mono 16-bit 22050 Hz WAV (peak -1 dBFS, tail trimmed, 30 ms
+fade). Embedded as BoscaliSummer.Sfx.<name>.wav and read through Core/Fx/SfxClips; played by Runtime/SpookAudio.cs.
+
+spook-stamp.wav    A heavy rubber stamp thumped onto a paper file on a wooden desk. SUMMON / BANISH on the incident files.
+spook-file.wav     A cardboard case-file folder flipped open, papers rustling. The SPOOKTOBER tab opened.
+spook-whisper.wav  A burst of radio static with a ghostly whisper inside. The page's haunting moments.
+spook-wake.wav     A sonar ping answered by two enormous heartbeats under the sea. The KAIJU summoned.
+spook-ace.wav      A ghostly jet engine wailing through radio interference. The FALLEN ACE summoned.
+spook-gate.wav     An infernal portal tearing open: demonic roar over fire and cracking earth. HELL'S ARMY gate opens.

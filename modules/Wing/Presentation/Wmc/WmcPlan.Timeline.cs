@@ -68,7 +68,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int shown = 0;
             for (int l = 0; l < WingPlan.Lanes; l++)
                 if (plan.Steps[l].Count > 0) shown++;
-            lanesShown = shown;
             RebuildEvents(c, plan, r, live);
             DrawTimeline(plan, r, w, live, now);
             RefreshPlanParts(c, plan, plans, w, running, editable, shown);

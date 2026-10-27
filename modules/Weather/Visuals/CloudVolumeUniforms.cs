@@ -261,11 +261,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
-            // 64 near steps: temporal accumulation averages the per-frame dither, which
-            // also supersamples the step quantization over frames, so 64 accumulated steps
-            // resolve as well as 80 static ones did (see the bench PNGs).
-            material.SetFloat(StepsId, frame.LowDetail ? 56f : 64f);
-            material.SetFloat(FarStepsId, frame.LowDetail ? 14f : 20f);
+            // 2026-10-26 (user: put more resources into clouds): 96 near steps (the shader's cap) and 32 far. The dither is frozen per
+            // texel since 2026-10-14, so accumulation no longer supersamples the steps, and the noise footprint follows the step length:
+            // shorter steps are directly sharper cloud.
+            material.SetFloat(StepsId, frame.LowDetail ? 72f : 96f);
+            material.SetFloat(FarStepsId, frame.LowDetail ? 20f : 32f);
         }
 
         internal static void ApplySpans(Material material, float mapHalf, float farHalf)

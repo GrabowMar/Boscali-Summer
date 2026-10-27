@@ -3,6 +3,7 @@ using BepInEx;
 using BepInEx.Configuration;
 
 using BoscaliSummer.Core.Chatter;
+using BoscaliSummer.Core.Config;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Configuration

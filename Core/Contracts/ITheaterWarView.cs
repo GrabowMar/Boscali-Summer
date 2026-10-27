@@ -25,6 +25,12 @@ namespace BoscaliSummer.Core.Contracts
         StaffFault = 12, OperationLive = 13, TacticsOff = 14, RtsOwnsOrders = 15, NoTerritoryField = 16,
     }
     internal enum TheaterViewState : byte { Live = 0, WaitingForHost = 1, HostLacksModule = 2, StaffOff = 3, NoFaction = 4, Stale = 5 }
+    /// <summary>Bounds of a pilot-drawn offensive, shared by the map tool and the host's check: arrow length, and how far from a front the press may land.</summary>
+    internal static class TheaterDrawLimits
+    {
+        public const float MinimumMetres = 1500f, MaximumMetres = 30000f, SnapMetres = 8000f;
+    }
+
     internal enum TheaterCommandCode : byte
     {
         None = 0, Accepted = 1, StaleChoice = 2, Locked = 3, RateLimited = 4, Invalid = 5, NoOperation = 6,
@@ -245,6 +251,7 @@ namespace BoscaliSummer.Core.Contracts
         void Refresh();
         bool RequestPick(int proposalId, int revision);      // set or redirect the main effort
         bool RequestCancel(int operationId, int revision);   // CALL OFF; vetoes the front for 180 s
+        bool RequestDraw(float startX, float startZ, float fixX, float fixZ);   // a pilot-drawn offensive: press on a front, release on the objective (global metres)
         bool RequestPosture(TheaterWarPosture posture);
     }
 }

@@ -270,7 +270,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // The card's header names what the pod looks at (the camera mode only with no target).
                 cameraCode = targetReadout.Read(ownAircraft, out Unit seen, out range, out closure) && seen != null ? targetReadout.NameOf(seen) : mode;
             }
-            if (ownAircraft != null) TargetCamLook.SetOverlay(ownAircraft.targetCam, cameraTexture == null);
+            // hudAircraft, not ownAircraft: the latter is null in the cockpit, which left the overlay off after any trip outside.
+            if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null);
 
             // The feed column holds the bottom-right corner in every view (NAV DATA is gone, 2026-10-21).
             cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost);

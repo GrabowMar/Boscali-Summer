@@ -31,8 +31,8 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             label = AvText.Make(root, "Task identity", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
             label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(.5f, .5f);
             label.rectTransform.pivot = new Vector2(0f, 1f);
-            label.rectTransform.sizeDelta = new Vector2(220f, 56f);
-            label.fontSize = 13f;
+            label.rectTransform.sizeDelta = new Vector2(200f, 28f);
+            label.fontSize = 11f;
             label.enableWordWrapping = false;
             label.overflowMode = TextOverflowModes.Ellipsis;
             label.richText = false;
@@ -57,24 +57,25 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             labelId = next.Id; title = next.Title; phase = next.PhaseTitle;
             offered = next.IsOffered; lastKnown = next.LastKnown; returning = next.Returning; labelTint = tint; labelLift = lift;
             areaId = -1;
-            label.color = tint;
-            string text = "#" + next.Id + " / " + (next.IsOffered ? "OFFER" : "ACCEPTED") +
-                (next.LastKnown ? " / LAST KNOWN" : "") + "\n" + next.Title + "\n" +
-                (next.IsOffered ? "ACCEPT IN MIS" : next.Returning ? "RETURN TO BASE" : next.PhaseTitle);
+            // Offers read quieter: dim tint, faded ink, number only. The bracket says "offer", and the title is on the STR
+            // sortie tag and the MIS board; printing it here too doubled every offer on the map.
+            label.color = next.IsOffered ? tint.WithAlpha(.7f) : tint;
+            string text = next.IsOffered ? "#" + next.Id : "#" + next.Id + " " + next.Title + "\n" +
+                (next.LastKnown ? "LAST KNOWN" : next.Returning ? "RTB" : next.PhaseTitle);
             if (label.text != text) label.text = text;
-            label.rectTransform.anchoredPosition = new Vector2(18f, 20f + lift);
+            label.rectTransform.anchoredPosition = new Vector2(12f, 11f + lift);
             var b = symbol.Buffer; b.Clear();
-            var ink = new Rgba(tint.r, tint.g, tint.b, .95f);
-            if (next.IsOffered) AvStrokes.Bracket(b, -7f, -7f, 14f, 14f, 4f, 1.4f, ink);
+            var ink = new Rgba(tint.r, tint.g, tint.b, next.IsOffered ? .6f : .9f);
+            if (next.IsOffered) AvStrokes.Bracket(b, -5f, -5f, 10f, 10f, 3f, 1f, ink);
             else
             {
-                AvStrokes.Line(b, -8, 0, 0, 8, 1.5f, ink, 1f);
-                AvStrokes.Line(b, 0, 8, 8, 0, 1.5f, ink, 1f);
-                AvStrokes.Line(b, 8, 0, 0, -8, 1.5f, ink, 1f);
-                AvStrokes.Line(b, 0, -8, -8, 0, 1.5f, ink, 1f);
+                AvStrokes.Line(b, -6, 0, 0, 6, 1.2f, ink, 1f);
+                AvStrokes.Line(b, 0, 6, 6, 0, 1.2f, ink, 1f);
+                AvStrokes.Line(b, 6, 0, 0, -6, 1.2f, ink, 1f);
+                AvStrokes.Line(b, 0, -6, -6, 0, 1.2f, ink, 1f);
             }
-            AvStrokes.Line(b, 8, 8, 14, 20+lift, 1f, ink, 1f);
-            AvStrokes.Line(b, 14, 20+lift, 74, 20+lift, 1f, ink, 1f);
+            AvStrokes.Line(b, 5, 5, 10, 11+lift, 1f, ink, 1f);
+            AvStrokes.Line(b, 10, 11+lift, 30, 11+lift, 1f, ink, 1f);
             symbol.Commit();
         }
 
@@ -88,7 +89,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             var b = area.Buffer; b.Clear();
             if (!(next.Radius > 0f)) { area.Commit(); return; }
             Color tint = label.color;
-            var ink = new Rgba(tint.r, tint.g, tint.b, .5f);
+            var ink = new Rgba(tint.r, tint.g, tint.b, next.IsOffered ? .3f : .5f);
             Vector2 previous = default;
             bool hadPrevious = false;
             // One ground circle at 128 stations; relief must never use a screen-space circle.

@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private NetRow[] playerRows;
         private AvControl[] playerMutes;
         private readonly ulong[] playerIds = new ulong[PlayerRows];
+        private readonly List<KeyValuePair<ulong, string>> seenStations = new List<KeyValuePair<ulong, string>>(PlayerRows);
 
         private void ResetLog()
         {
@@ -30,6 +31,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             rosterEmpty = null;
             playerRows = null;
             playerMutes = null;
+            seenStations.Clear();
             for (int i = 0; i < playerIds.Length; i++) playerIds[i] = 0;
         }
 
@@ -75,15 +77,16 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             CommsClientState state = comms.State;
 
             // ---- stations: alphabetical, so a row never jumps out from under the pointer.
-            var seen = new List<KeyValuePair<ulong, string>>(state.Seen);
-            seen.Sort((a, b) => string.CompareOrdinal(a.Value, b.Value));
+            seenStations.Clear();
+            foreach (KeyValuePair<ulong, string> station in state.Seen) seenStations.Add(station);
+            seenStations.Sort((a, b) => string.CompareOrdinal(a.Value, b.Value));
             int players = 0;
-            for (int i = 0; i < seen.Count && players < PlayerRows; i++)
+            for (int i = 0; i < seenStations.Count && players < PlayerRows; i++)
             {
-                if (seen[i].Key == comms.LocalId) continue;
-                bool muted = state.IsMuted(seen[i].Key);
-                playerIds[players] = seen[i].Key;
-                playerRows[players].Set("", "", seen[i].Value + (muted ? " · MUTED" : ""), "", muted ? AvState.Inert : AvState.Info);
+                if (seenStations[i].Key == comms.LocalId) continue;
+                bool muted = state.IsMuted(seenStations[i].Key);
+                playerIds[players] = seenStations[i].Key;
+                playerRows[players].Set("", "", seenStations[i].Value + (muted ? " · MUTED" : ""), "", muted ? AvState.Inert : AvState.Info);
                 playerMutes[players].Label = muted ? "UNMUTE" : "MUTE";
                 playerMutes[players].Help = muted
                     ? "Unmute: show this player's marks and calls again."

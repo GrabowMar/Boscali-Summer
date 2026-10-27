@@ -111,6 +111,15 @@ namespace BoscaliSummer.Fire
         private readonly Dictionary<long, int> activeForestCells = new Dictionary<long, int>(FireAndDestructionSettings.MaximumFireSites);
         private readonly Dictionary<long, float> forestCooldowns = new Dictionary<long, float>(256);
         private const int MaximumForestHistory = 4096;
+        // Burnt-out cells drop exactly the tree clumps whose centres lie inside them. Each
+        // queued AddBlast makes vanilla re-bake terrain height and grass, so clears are
+        // flushed together once a second and land in one DetailRenderer pass.
+        private const int MaximumPendingTreeClears = 256;
+        private const float TreeClumpClearRadius = 4f;
+        private readonly List<GlobalPosition> pendingTreeClears = new List<GlobalPosition>(64);
+        private readonly float[] clumpBuffer = new float[3 * 48];
+        private float nextTreeClearFlush;
+        private readonly FireVisualPool.Visual[] litVisuals = new FireVisualPool.Visual[3];
 
         private static FireAndDestructionSettings Fire => Plugin.Settings.FireAndDestruction;
         private static DiagnosticSettings Diagnostics => Plugin.Settings.Diagnostics;
@@ -145,6 +154,8 @@ namespace BoscaliSummer.Fire
             forestCooldowns.Clear();
             activeForestCells.Clear();
             spreadCursor = 0; topologyDirty = false;
+            pendingTreeClears.Clear();
+            System.Array.Clear(litVisuals, 0, litVisuals.Length);
             for (int i = 0; i < fires.Count; i++)
             {
                 visualPool.Release(fires[i].Visual);
@@ -278,6 +289,10 @@ namespace BoscaliSummer.Fire
                     burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
             }
             if (burnMarks) FlushBurnMarks();
+            if (pendingTreeClears.Count > 0 && Time.unscaledTime >= nextTreeClearFlush) FlushTreeClears();
+            // Per-frame flicker for the three lit sites; the 4 Hz tick alone stepped visibly.
+            for (int i = 0; i < litVisuals.Length; i++)
+                if (litVisuals[i] != null && litVisuals[i].Active && !litVisuals[i].Sleeping) litVisuals[i].SetLight(true);
 
             int budget = 8;
             while (budget-- > 0 && impacts.Count > 0) ProcessImpact(impacts.Dequeue());
@@ -302,7 +317,7 @@ namespace BoscaliSummer.Fire
             // is a separate, deliberately small AddBlast, so a campfire no longer flattens a
             // 90 m stand around every stamp.
             BlastManager blast = SceneSingleton<BlastManager>.i;
-            if (GameManager.IsHeadless || blast == null || blast.Texture == null) return false;
+            if (GameManager.IsHeadless || blast == null || blast.Texture == null || scorch.MarkRadius <= 0f) return false;
             float radius = Mathf.Max(scorch.MarkRadius, blast.worldSizeToResolution * 0.5f);
             if (burnMarkCommands == null)
                 burnMarkCommands = new CommandBuffer { name = "BoscaliSummer.BurnMark" };
@@ -311,6 +326,38 @@ namespace BoscaliSummer.Fire
                 blast.AddBlast(scorch.Position, scorch.TreeClearBlastRadius);
             return true;
         }
+
+        /// <summary>Queues the clumps whose centres fall inside a burnt-out forest cell.</summary>
+        private void QueueCellTreeClear(FireSite site)
+        {
+            if (GameManager.IsHeadless || site.Cell == null) return;
+            long key = site.Cell.Key;
+            int n = forestIndex.CopyNear(site.Position.x, site.Position.z, FireFrontCell.Spacing * 1.5f, clumpBuffer);
+            for (int i = 0; i < n && pendingTreeClears.Count < MaximumPendingTreeClears; i++)
+            {
+                float x = clumpBuffer[i * 3], y = clumpBuffer[i * 3 + 1], z = clumpBuffer[i * 3 + 2];
+                if (FireFrontCell.Locate(x, z) == key) pendingTreeClears.Add(new GlobalPosition(x, y, z));
+            }
+            if (pendingTreeClears.Count > 0 && nextTreeClearFlush < Time.unscaledTime)
+                nextTreeClearFlush = Time.unscaledTime + 1f;
+        }
+
+        private void FlushTreeClears()
+        {
+            BlastManager blast = SceneSingleton<BlastManager>.i;
+            // AddBlast doubles the radius and ClearTrees halves it: the clump goes, its neighbours stay.
+            if (blast != null)
+            {
+                for (int i = 0; i < pendingTreeClears.Count; i++) blast.AddBlast(pendingTreeClears[i], TreeClumpClearRadius);
+                ClearedClumps += pendingTreeClears.Count;
+            }
+            pendingTreeClears.Clear();
+        }
+
+        // Sim hook reads (ForestFireAutomation).
+        internal ForestIndex Forest => forestIndex;
+        internal int ClearedClumps { get; private set; }
+        internal int ActiveForestSites { get { int n = 0; for (int i = 0; i < fires.Count; i++) if (fires[i].Forest) n++; return n; } }
 
         private void FlushBurnMarks()
         {
@@ -653,7 +700,7 @@ namespace BoscaliSummer.Fire
                 ? NetworkSceneSingleton<LevelInfo>.i.GetWind()
                 : Vector3.zero;
             Vector3 camPos = camera != null ? camera.transform.position : Vector3.zero;
-            int nearestA = -1, nearestB = -1, nearestC = -1;
+            FireVisualPool.Visual nearestA = null, nearestB = null, nearestC = null;
             float distA = float.MaxValue, distB = float.MaxValue, distC = float.MaxValue;
             int smokeAcquireBudget = 1;
 
@@ -666,6 +713,7 @@ namespace BoscaliSummer.Fire
                 if (now >= site.Expires)
                 {
                     DemolishBurnedBuilding(site);
+                    if (site.Forest) QueueCellTreeClear(site);
                     visualPool.Release(site.Visual);
                     fuelDepotSmokePool.Release(site.BuildingSmoke);
                     fires.RemoveAt(i);
@@ -686,6 +734,8 @@ namespace BoscaliSummer.Fire
                 {
                     site.Visual?.SetPosition(site.Position);
                     site.Visual?.SetClusterScale(site.ClusterScale);
+                    if (site.Visual != null)
+                        site.Visual.LodScale = Mathf.Lerp(1f, 0.35f, Mathf.InverseLerp(1500f, 6000f, Mathf.Sqrt(distToCamSq)));
                     site.Visual?.SetPhase(
                         Mathf.Max(0f, now - site.Born),
                         Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
@@ -737,18 +787,23 @@ namespace BoscaliSummer.Fire
                 {
                     distC = distB; nearestC = nearestB;
                     distB = distA; nearestB = nearestA;
-                    distA = d; nearestA = i;
+                    distA = d; nearestA = site.Visual;
                 }
                 else if (d < distB)
                 {
                     distC = distB; nearestC = nearestB;
-                    distB = d; nearestB = i;
+                    distB = d; nearestB = site.Visual;
                 }
-                else if (d < distC) { distC = d; nearestC = i; }
+                else if (d < distC) { distC = d; nearestC = site.Visual; }
             }
 
+            // Held as visuals, not indices: the loop above removes expired sites as it walks down.
+            litVisuals[0] = nearestA; litVisuals[1] = nearestB; litVisuals[2] = nearestC;
             for (int i = 0; i < fires.Count; i++)
-                fires[i].Visual?.SetLight(i == nearestA || i == nearestB || i == nearestC);
+            {
+                FireVisualPool.Visual visual = fires[i].Visual;
+                visual?.SetLight(visual == litVisuals[0] || visual == litVisuals[1] || visual == litVisuals[2]);
+            }
             // Round-robin keeps newly added/high-index sites from monopolising the probe
             // budget. Only sites present at tick start may spread in this tick.
             int count = fires.Count;
@@ -924,14 +979,10 @@ namespace BoscaliSummer.Fire
         private void QueueForestScorch(FireSite site)
         {
             if (scorches.Count >= MaximumScorchQueue || site.Cell == null) return;
-            // One shared-edge polygon, one small tree-clear and one coarse native ash stamp.
-            // No lobes on ignition/merge/burnout and no repeated persistent decals.
-            scorches.Enqueue(new ScorchMark
-            {
-                Position = site.Position, Cell = site.Cell,
-                MarkRadius = FireScorchPolicy.BurnMarkRadius(1f),
-                TreeClearBlastRadius = FireScorchPolicy.TreeClearBlastRadius(1f)
-            });
+            // Only the shared-edge ash polygon. The native blast map resolves 160 m per texel,
+            // so its ash bed blackened every tree in a ~500 m circle round a 28 m cell; trees
+            // in the cell itself are cleared at burnout (QueueCellTreeClear).
+            scorches.Enqueue(new ScorchMark { Position = site.Position, Cell = site.Cell });
         }
 
         private void FindBuildings(

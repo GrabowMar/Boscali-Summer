@@ -388,8 +388,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (mfd == null || dock == null) return;
 
+            dockBudget = DockPerPass;
             DockOwned(MapUiAccess.GetLeftScreens(mfd), left: true);
             DockOwned(MapUiAccess.GetRightScreens(mfd), left: false);
+        }
+
+        // Re-parenting a screen is a few ms of canvas work; all ~16 in the open frame was a ~60 ms
+        // hitch. A shown screen docks at once, hidden ones a couple per pass (Reconcile runs at
+        // 10 Hz), and any screen shown before its turn docks itself through DockOnShow.
+        private const int DockPerPass = 2;
+        private static int dockBudget;
+
+        /// <summary>Dock a map-MFD screen that is being shown before its deferred turn came.</summary>
+        public static void DockOnShow(MFDScreen screen)
+        {
+            if (screen == null || dock == null || IsDocked(screen)) return;
+            VirtualMFD mfd = MapMfdLookup.Resolve(SceneSingleton<DynamicMap>.i?.maximizedMapCanvas);
+            if (mfd == null) return;
+            if (MapUiAccess.GetLeftScreens(mfd)?.Contains(screen) == true) Dock(screen, left: true);
+            else if (MapUiAccess.GetRightScreens(mfd)?.Contains(screen) == true) Dock(screen, left: false);
         }
 
         /// <summary>
@@ -410,6 +427,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 MFDScreen screen = screens[i];
                 if (screen == null) continue;
+                if (!screen.isActive && !IsDocked(screen) && dockBudget-- <= 0) continue;
 
                 Dock(screen, left);
             }

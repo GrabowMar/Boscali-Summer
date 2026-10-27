@@ -19,15 +19,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// slightly flattened oval in kilometres), a burn is the dashed path to a ghost footprint, the selected bird's fuel-cost rings are the real burn cost
     /// (1.5 + 36 per theatre width, in percent) and a perk's aim point reads which birds cover it. The column carries the flight director (MET, the call,
     /// the GO / NO-GO poll), the hostile tally, the inspector with RELOCATE and the uplink sites. Under it, one row of panes: the live sensor picture under
-    /// a camera burn-in, the track file with the SELECT, MARK, TRANSMIT chain, and the station log with a loop roll call.
+    /// a camera burn-in (ENLARGE gives it the whole room, with its own MARK and TRANSMIT), and the track file with the SELECT, MARK, TRANSMIT chain.
     /// Mission-control flavour (MET, lamps, loop tags, burn-in lines, the radar sweep angle, the station-keeping boxes) is derived on the spot from fields the
     /// room already has: no new data, no new wire.
     /// </summary>
     internal sealed class OrbitRoom : IFrontRoom
     {
-        private const float TopH = 502f, Gap = 8f, MapW = 880f, PX = 886f, PW = 278f;
+        private const float TopH = 502f, Gap = 8f, PW = 278f, ColumnW = PW + 12f; // the console column keeps its width; the map takes the rest of the hero
+        private float mapW = 880f, colPx = 886f;
         private const float BarH = 100f, DragSlop = 6f, LegendX = 14f;
-        private const float CamW = 470f, TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f;
+        private const float TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f;
         // The console column (box pixels): MET plate, three poll rows, the hostile tally, the inspector, the uplink sites.
         private const float FdY = 28f, FdH = 40f, RowsY = 72f, RowH = 48f, RowStep = 50f, HostY = 226f, HostH = 30f, InspY = 262f, SiteHeadY = 366f, SiteY0 = 384f;
         private const float SiteH = 30f, ChipH = 20f;
@@ -61,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly SiteCard[] siteCards = new SiteCard[2];
         private readonly SiteChip[] siteChips = new SiteChip[2];
         private TMP_Text fdLabel, fdMet, fdCap, fdCall, hostA, hostB, siteHeadOwn, siteHeadFoe;
-        private Lamp callLamp, linkLamp, fuelLamp;
+        private Lamp callLamp;
         private string callWord = "";
 
         // The selected bird's inspector. Selecting is local; RELOCATE enters a local mode, a click on the map proposes the new parked point,
@@ -80,25 +81,33 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int pressZoom;
 
         // Sensor.
-        private FrontBox sensor, trackBox, logBox;
-        private AvControl optical, radar, zoom;
+        // Sensor: the fields below belong to the camera pane on screen (Use swaps them between the docked and the enlarged one).
+        private FrontBox sensor, trackBox;
+        private AvControl optical, radar, zoom, sizeBtn;
         private OpsFeedPicture picture;
         private TMP_Text sensorNote;
-        private FrontVector standby, burn, logG;
+        private FrontVector standby, burn;
         private TMP_Text burnTl, burnTl2, burnTr, burnBr;
         private float picW, picH;
         private bool standbyDrawn;
+        private CamPane docked, enlarged, shown;
 
-        // Station log.
-        private readonly TMP_Text[] logStamp = new TMP_Text[SpaceFeedView.MaxLog], logText = new TMP_Text[SpaceFeedView.MaxLog];
-        private readonly TMP_Text[] rollTag = new TMP_Text[4], rollName = new TMP_Text[4], rollWord = new TMP_Text[4];
-        private TMP_Text rollHead;
-        private readonly Lamp[] roll = new Lamp[4];
+        /// <summary>One camera pane (docked under the map, or enlarged over it): its own box, toolbar, picture and burn-in layers.</summary>
+        private sealed class CamPane
+        {
+            public FrontBox Box;
+            public AvControl Optical, Radar, Zoom, Size, Mark, Send;
+            public OpsFeedPicture Picture;
+            public TMP_Text Note, Tl, Tl2, Tr, Br;
+            public FrontVector Standby, Burn;
+            public float W, H;
+            public bool StandbyDrawn;
+        }
 
         // Track file.
         private readonly TrackRow[] rows = new TrackRow[TrackRows];
         private AvControl prev, next, mark, send;
-        private TMP_Text briefA, briefB;
+        private TMP_Text briefA, briefB, trackEmpty;
         private readonly TMP_Text[] chainText = new TMP_Text[3];
         private FrontVector chain;
         private float chainInner;
@@ -135,11 +144,41 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Build(RectTransform hero, float w, float h)
         {
+            mapW = w - ColumnW; colPx = mapW + 6f;
             BuildSituation(hero, w);
-            float by = TopH + Gap, bh = h - by, lw = w - CamW - TrackW - 2f * Gap;
-            BuildSensor(hero, 0f, by, CamW, bh);
-            BuildTracks(hero, CamW + Gap, by, TrackW, bh);
-            BuildLog(hero, CamW + TrackW + 2f * Gap, by, lw, bh);
+            float by = TopH + Gap, bh = h - by, cw = w - TrackW - Gap;
+            docked = BuildSensor(hero, 0f, by, cw, bh, false);
+            BuildTracks(hero, cw + Gap, by, TrackW, bh);
+            enlarged = BuildSensor(hero, 0f, 0f, w, h, true); // the whole room: the map and the track file hide while it is up (brackets on the picture select tracks)
+            Use(docked);
+        }
+
+        /// <summary>Puts <paramref name="pane"/> on screen and points the sensor fields at it.</summary>
+        private void Use(CamPane pane)
+        {
+            if (shown != null) shown.StandbyDrawn = standbyDrawn;
+            shown = pane;
+            bool dock = pane == docked;
+            situation.Rect.gameObject.SetActive(dock);
+            trackBox.Rect.gameObject.SetActive(dock);
+            docked.Box.Rect.gameObject.SetActive(dock);
+            enlarged.Box.Rect.gameObject.SetActive(!dock);
+            pane.Box.Tagged("INCO"); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
+            sensor = pane.Box; optical = pane.Optical; radar = pane.Radar; zoom = pane.Zoom; sizeBtn = pane.Size; picture = pane.Picture;
+            sensorNote = pane.Note; burnTl = pane.Tl; burnTl2 = pane.Tl2; burnTr = pane.Tr; burnBr = pane.Br; standby = pane.Standby; burn = pane.Burn;
+            picW = pane.W; picH = pane.H; standbyDrawn = pane.StandbyDrawn;
+        }
+
+        /// <summary>True while the camera has the whole room (the map takes no input then).</summary>
+        internal bool Enlarged => shown == enlarged;
+
+        /// <summary>ENLARGE / SHRINK: the camera grows over the map or docks back under it. A relocation in progress is dropped first.</summary>
+        internal void ToggleCamera()
+        {
+            actions.Touch();
+            if (shown != enlarged && relocating) Cancel();
+            Use(shown == enlarged ? docked : enlarged);
+            if (last != null) PaintSensor(last);
         }
 
         /// <summary>Offline render seam: the room as if the pilot had selected a bird and begun a relocation to (u, v); a negative u proposes nothing yet.</summary>
@@ -164,9 +203,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             situation = new FrontBox(hero, skin, "Orbit", 0f, 0f, heroW, TopH, "ORBITAL SITUATION · GEOSTATIONARY STATIONS", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
             RectTransform body = situation.Rect;
             // The plate fills the box body left of the console column (which therefore never covers a footprint) and clips its own vector layer.
-            plate = new FrontMapPlate(body, skin, MapW, TopH, GridCols, GridRows);
+            plate = new FrontMapPlate(body, skin, mapW, TopH, GridCols, GridRows);
             side = FrontVector.Add(body, "Cards");
-            AvLay.Place(side.rectTransform, 0f, 0f, MapW, TopH);
+            AvLay.Place(side.rectTransform, 0f, 0f, mapW, TopH);
             colG = FrontVector.Add(body, "Column");
             AvLay.Place(colG.rectTransform, 0f, 0f, heroW, TopH);
             FrontLabels fx = plate.Labels;
@@ -213,22 +252,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             fx.Fixed(legendRect[0]);
 
             // ---- The console column ----
-            fdLabel = FrontKit.Mono(body, "FdLabel", PX + 10f, FdY + 13f, 34f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
+            fdLabel = FrontKit.Mono(body, "FdLabel", colPx + 10f, FdY + 13f, 34f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             fdLabel.text = "MET";
-            fdMet = FrontKit.Mono(body, "FdMet", PX + 40f, FdY + 4f, 128f, 32f, 24f, TextAlignmentOptions.MidlineLeft, true);
-            fdCap = FrontKit.Mono(body, "FdCap", PX + 176f, FdY + 1f, 92f, 13f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
+            fdMet = FrontKit.Mono(body, "FdMet", colPx + 40f, FdY + 4f, 128f, 32f, 24f, TextAlignmentOptions.MidlineLeft, true);
+            fdCap = FrontKit.Mono(body, "FdCap", colPx + 176f, FdY + 1f, 92f, 13f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
             fdCap.text = "FLIGHT";
-            fdCall = FrontKit.Mono(body, "FdCall", PX + 176f, FdY + 14f, 92f, 22f, 11.5f, TextAlignmentOptions.Midline, true);
+            fdCall = FrontKit.Mono(body, "FdCall", colPx + 176f, FdY + 14f, 92f, 22f, 11.5f, TextAlignmentOptions.Midline, true);
             for (int i = 0; i < 3; i++)
             {
                 int kind = (int)Kinds[i];
-                ownCards[i] = new PollRow(body, skin, PX, RowsY + i * RowStep, PW, () => Select(kind));
+                ownCards[i] = new PollRow(body, skin, colPx, RowsY + i * RowStep, PW, () => Select(kind));
             }
-            hostA = FrontKit.Mono(body, "HostA", PX + 10f, HostY + 2f, PW - 20f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
-            hostB = FrontKit.Mono(body, "HostB", PX + 10f, HostY + 15f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
+            hostA = FrontKit.Mono(body, "HostA", colPx + 10f, HostY + 2f, PW - 20f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
+            hostB = FrontKit.Mono(body, "HostB", colPx + 10f, HostY + 15f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
 
             // The inspector.
-            float ix = PX, iy = InspY;
+            float ix = colPx, iy = InspY;
             selHead = FrontKit.Mono(body, "SelHead", ix + 10f, iy + 3f, 170f, 16f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
             selState = FrontKit.Mono(body, "SelState", ix + PW - 110f, iy + 3f, 100f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
             selLine = FrontKit.Mono(body, "SelLine", ix + 10f, iy + 21f, PW - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
@@ -246,10 +285,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             SetBar(false, false);
 
             // The uplink sites: own ones as two-line cards, the revealed hostile ones as one-line chips.
-            siteHeadOwn = FrontKit.Mono(body, "SiteHeadOwn", PX + 4f, SiteHeadY, 112f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            siteHeadFoe = FrontKit.Mono(body, "SiteHeadFoe", PX + PW - 4f - 154f, SiteHeadY, 154f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            for (int i = 0; i < siteCards.Length; i++) siteCards[i] = new SiteCard(body, skin, PX, SiteY0 + i * 32f, PW, ShowSite);
-            for (int i = 0; i < siteChips.Length; i++) siteChips[i] = new SiteChip(body, skin, PX, SiteY0 + 64f + i * 22f, PW, ShowSite);
+            siteHeadOwn = FrontKit.Mono(body, "SiteHeadOwn", colPx + 4f, SiteHeadY, 112f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            siteHeadFoe = FrontKit.Mono(body, "SiteHeadFoe", colPx + PW - 4f - 154f, SiteHeadY, 154f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+            for (int i = 0; i < siteCards.Length; i++) siteCards[i] = new SiteCard(body, skin, colPx, SiteY0 + i * 32f, PW, ShowSite);
+            for (int i = 0; i < siteChips.Length; i++) siteChips[i] = new SiteChip(body, skin, colPx, SiteY0 + 64f + i * 22f, PW, ShowSite);
             skin.Add(() =>
             {
                 selLine.color = RoomInk.Engrave; selFuelLabel.color = Mc.Steel; selHint.color = Mc.Steel; hostB.color = Mc.Steel;
@@ -303,6 +342,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public bool CancelMode()
         {
+            if (Enlarged) { ToggleCamera(); return true; } // Esc docks an enlarged camera before it closes the window
             if (!relocating) return false;
             Cancel();
             return true;
@@ -349,14 +389,26 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // ---- Sensor, track file and station log ---------------------------------------------------------------------
 
-        private void BuildSensor(RectTransform hero, float x, float y, float w, float h)
+        private CamPane BuildSensor(RectTransform hero, float x, float y, float w, float h, bool big)
         {
-            sensor = new FrontBox(hero, skin, "Sensor", x, y, w, h, "SATELLITE CAMERA", AvIcon.Camera, FrontLook.Console).Tagged("INCO");
+            sensor = new FrontBox(hero, skin, big ? "SensorBig" : "Sensor", x, y, w, h, "SATELLITE CAMERA", AvIcon.Camera, FrontLook.Console).Tagged("INCO");
             RectTransform b = sensor.Rect;
+            sizeBtn = Tool(b, big ? "SHRINK" : "ENLARGE", w - 118f, 28f, 110f, ToggleCamera,
+                big ? "Dock the camera back under the map (Esc does the same)." : "Give the camera the whole room. Click a bracket to select a track, then MARK and TRANSMIT. SHRINK or Esc docks it again.");
+            sizeBtn.SetStyle(AvButtonStyle.Primary);
+            AvControl markBig = null, sendBig = null;
+            if (big)
+            {
+                markBig = Tool(b, "MARK", 326f, 28f, 130f, () => Do(() => Feed.Confirm()), "Mark the selected track so it shows on every pilot's map.");
+                sendBig = Tool(b, "TRANSMIT", 462f, 28f, 170f, () => Do(() => Feed.Send()), "Post the marked tracks as TASKED targets for any pilot.");
+                markBig.SetStyle(AvButtonStyle.Primary);
+                sendBig.SetStyle(AvButtonStyle.Primary);
+            }
+            float noteX = big ? 640f : 326f;
             optical = Tool(b, "OPTICAL", 8f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Optical)), "Show the OPTICAL satellite's camera picture. Cloud softens it, night refuses it.");
             radar = Tool(b, "RADAR", 108f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Radar)), "Show the RADAR satellite's SAR picture from the last scan.");
             zoom = Tool(b, "ZOOM", 208f, 28f, 112f, () => Do(() => Feed.CycleZoom()), "Cycle the picture zoom: WIDE, MID, CLOSE. CLOSE centres on the selected track.");
-            sensorNote = FrontKit.Mono(b, "Note", 326f, 28f, w - 334f, 26f, 10.5f, TextAlignmentOptions.MidlineRight);
+            sensorNote = FrontKit.Mono(b, "Note", noteX, 28f, w - noteX - 8f - 122f, 26f, 10.5f, TextAlignmentOptions.MidlineRight);
             picture = new OpsFeedPicture(b, id => Do(() => Feed.SelectEntry(id)));
             picture.Place(new AvSlot(PicX, PicY, w - 16f, h - 68f));
             picW = w - 16f; picH = h - 68f;
@@ -370,7 +422,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             burnTl2 = FrontKit.Mono(b, "BurnTl2", 0f, 0f, 200f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
             burnTr = FrontKit.Mono(b, "BurnTr", 0f, 0f, 40f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             burnBr = FrontKit.Mono(b, "BurnBr", 0f, 0f, 200f, 16f, 10f, TextAlignmentOptions.MidlineRight);
-            skin.Add(() => { sensorNote.color = Mc.Steel; burnTl.color = RoomInk.Engrave; burnTl2.color = Mc.Steel; burnBr.color = RoomInk.Engrave; });
+            TMP_Text note = sensorNote, tl = burnTl, tl2 = burnTl2, br = burnBr;
+            skin.Add(() => { note.color = Mc.Steel; tl.color = RoomInk.Engrave; tl2.color = Mc.Steel; br.color = RoomInk.Engrave; });
+            return new CamPane
+            {
+                Box = sensor, Optical = optical, Radar = radar, Zoom = zoom, Size = sizeBtn, Mark = markBig, Send = sendBig, Picture = picture, Note = sensorNote,
+                Tl = burnTl, Tl2 = burnTl2, Tr = burnTr, Br = burnBr, Standby = standby, Burn = burn, W = picW, H = picH
+            };
         }
 
         private AvControl Tool(RectTransform p, string label, float x, float y, float w, Action click, string help)
@@ -409,37 +467,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 chainText[i] = FrontKit.Mono(b, "Chain" + i, cx + 8f, ChainY, chainInner * ChainShare[i] - 10f, 18f, 10f, TextAlignmentOptions.MidlineLeft, true);
                 cx += chainInner * ChainShare[i] + 8f;
             }
+            // An empty file says why in full under its one worded row (the slots below it are not drawn).
+            trackEmpty = OpsParts.Wrapped(b, "TrackEmpty", 12f, 72f, w - 24f, 120f, 11f);
+            trackEmpty.gameObject.SetActive(false);
             briefA = FrontKit.Mono(b, "BriefA", 10f, ChainY + 22f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             briefB = FrontKit.Mono(b, "BriefB", 10f, ChainY + 38f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             skin.Add(() => { briefA.color = RoomInk.Engrave; briefB.color = Mc.Steel; });
-        }
-
-        /// <summary>The station log in its own pane: amber stamps, loop tags, engraved text, a tone rail per entry, and under it the loop roll call (one lamp per console).</summary>
-        private void BuildLog(RectTransform hero, float x, float y, float w, float h)
-        {
-            logBox = new FrontBox(hero, skin, "Log", x, y, w, h, "STATION LOG", AvIcon.Radio, FrontLook.Console).Tagged("CAPCOM");
-            RectTransform b = logBox.Rect;
-            logG = FrontVector.Add(b, "Ticks");
-            AvLay.Place(logG.rectTransform, 0f, 0f, w, h);
-            for (int i = 0; i < logStamp.Length; i++)
-            {
-                logStamp[i] = FrontKit.Mono(b, "LogStamp" + i, 14f, 30f + i * 36f, w - 28f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
-                logText[i] = FrontKit.Mono(b, "LogText" + i, 14f, 44f + i * 36f, w - 28f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            }
-            rollHead = FrontKit.Mono(b, "RollHead", 14f, 216f, 200f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            rollHead.text = "LOOP ROLL CALL";
-            string[] tag = { "FDO", "INCO", "SURV", "PROP" }, name = { "FLIGHT DYNAMICS", "UPLINK COMMS", "TRACK FILE", "STATION FUEL" };
-            for (int i = 0; i < 4; i++)
-            {
-                float ry = 236f + i * 28f;
-                rollTag[i] = FrontKit.Mono(b, "RollTag" + i, 14f, ry, 52f, 20f, 10.5f, TextAlignmentOptions.Midline, true, 0.5f);
-                rollTag[i].text = tag[i];
-                rollName[i] = FrontKit.Mono(b, "RollName" + i, 76f, ry, w - 76f - 100f, 20f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                rollName[i].text = name[i];
-                rollWord[i] = FrontKit.Mono(b, "RollWord" + i, w - 14f - 78f, ry, 78f, 20f, 10.5f, TextAlignmentOptions.Midline, true);
-            }
-            logBox.SetMeta("FORM FD-14 · LOOP A", Mc.Steel);
-            skin.Add(() => { rollHead.color = RoomInk.Engrave; for (int i = 0; i < 4; i++) { rollTag[i].color = Mc.PlateInk; rollName[i].color = Mc.Steel; } });
         }
 
         // ---- Paint ---------------------------------------------------------------------------------------------------
@@ -448,7 +481,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             PaintSituation(v);
             PaintColumn(v);
-            PaintLog(v);
             PaintSensor(v);
             PaintTracks(v.Feed);
         }
@@ -994,6 +1026,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;
+            if (Enlarged) { pressed = false; return false; } // the camera covers the map: no pan, zoom or placement under it
             bool changed = plate.Tick(mouse);
             if (!relocating || last == null) { pressed = false; return changed; }
             if (FrontPointer.Down(0))
@@ -1027,14 +1060,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             PaintCards(v);
             FrontVector c = colG;
             c.Clear();
-            c.Line(new Vector2(MapW + 2f, 26f), new Vector2(MapW + 2f, TopH - 4f), 1f, RoomInk.Bezel.WithAlpha(0.7f));
+            c.Line(new Vector2(mapW + 2f, 26f), new Vector2(mapW + 2f, TopH - 4f), 1f, RoomInk.Bezel.WithAlpha(0.7f));
 
             // MET and the flight director's call.
-            Slab(c, PX, FdY, PW, FdH, RoomInk.Telemetry);
-            c.Line(new Vector2(PX + 170f, FdY + 6f), new Vector2(PX + 170f, FdY + FdH - 6f), 1f, RoomInk.Bezel.WithAlpha(0.8f));
+            Slab(c, colPx, FdY, PW, FdH, RoomInk.Telemetry);
+            c.Line(new Vector2(colPx + 170f, FdY + 6f), new Vector2(colPx + 170f, FdY + FdH - 6f), 1f, RoomInk.Bezel.WithAlpha(0.8f));
             FrontKit.Set(fdMet, Met(v.Now), RoomInk.Telemetry);
-            c.Rect(PX + 176f, FdY + 14f, 92f, 22f, LampInk(callLamp));
-            c.Rect(PX + 176f, FdY + 14f, 92f, 1f, Color.white.WithAlpha(0.28f));
+            c.Rect(colPx + 176f, FdY + 14f, 92f, 22f, LampInk(callLamp));
+            c.Rect(colPx + 176f, FdY + 14f, 92f, 1f, Color.white.WithAlpha(0.28f));
             FrontKit.Set(fdCall, callWord, callLamp == Lamp.Off ? Mc.Steel : Mc.PlateInk);
 
             // The hostile tally.
@@ -1048,14 +1081,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (b.Alive && b.Overhead) foeOver++;
                 if (nf++ < 3) fuels += (fuels.Length > 0 ? " / " : "") + (b.Alive ? Mathf.RoundToInt(b.Fuel).ToString(CultureInfo.InvariantCulture) : "--");
             }
-            Slab(c, PX, HostY, PW, HostH, AvInk.Hostile);
+            Slab(c, colPx, HostY, PW, HostH, AvInk.Hostile);
             FrontKit.Set(hostA, "HOSTILE · " + foeSeen + "/3 SEEN · " + foeOver + " OVER FOCUS", foeSeen > 0 ? AvInk.Hostile : Mc.Steel);
             FrontKit.Set(hostB, foeSeen > 0 ? "FUEL " + fuels + " % · WATCHING THE THEATRE" : "NONE TRACKED YET", Mc.Steel);
 
             // The inspector.
             bool bar = selKind >= 0 && TryBird(selKind, out OrbitTrackView rb);
             SetBar(bar, bar && relocating);
-            Slab(c, PX, InspY, PW, BarH, RoomInk.Telemetry);
+            Slab(c, colPx, InspY, PW, BarH, RoomInk.Telemetry);
             if (bar)
             {
                 TryBird(selKind, out OrbitTrackView ib);
@@ -1170,8 +1203,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (ownUp < 3 && worst < Lamp.Hold) worst = Lamp.Hold; // a constellation short of a bird is never ALL GO
             callLamp = present == 0 ? Lamp.Off : worst == Lamp.NoGo ? Lamp.NoGo : worst == Lamp.Hold ? Lamp.Hold : Lamp.Go;
             callWord = present == 0 ? "NO BIRDS" : callLamp == Lamp.NoGo ? "NO-GO" : callLamp == Lamp.Hold ? "HOLD" : "ALL GO";
-            linkLamp = sitesOwn == 0 ? Lamp.Off : linkLive ? Lamp.Go : Lamp.NoGo;
-            fuelLamp = ownUp == 0 ? Lamp.Off : minFuel > 50f ? Lamp.Go : minFuel > 20f ? Lamp.Hold : Lamp.NoGo;
         }
 
         /// <summary>Cosmetic flavour: which console would call the line on the voice loop, read off its wording.</summary>
@@ -1181,51 +1212,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (text.Contains("BURN") || text.Contains("FUEL") || text.Contains("SLOT")) return "FDO ";
             if (text.Contains("MARK") || text.Contains("TRANSMIT") || text.Contains("TRACK")) return "SURV";
             return "INCO";
-        }
-
-        /// <summary>
-        /// The station log: the newest real events as two-line entries, stamped with the mission clock they happened at (amber), the console that would call
-        /// them, the words engraved, a rail in the entry's tone; under them the loop roll call, one lamp per console (flavour derived from the flight call,
-        /// the uplink sites, the track file and the tanks).
-        /// </summary>
-        private void PaintLog(FrontRoomView v)
-        {
-            SpaceFeedView f = v.Feed;
-            FrontVector c = logG;
-            c.Clear();
-            float w = logBox.Width;
-            for (int i = 0; i < logStamp.Length; i++)
-            {
-                float y = 30f + i * 36f;
-                if (i < f.Log.Count)
-                {
-                    FeedLogLine l = f.Log[i];
-                    FrontKit.Set(logStamp[i], C2Kit.Tint(l.Stamp, RoomInk.Telemetry) + "  " + C2Kit.Tint(Loop(l.Text), Mc.Steel), RoomInk.Engrave);
-                    FrontKit.Set(logText[i], C2Words.Fit(l.Text, 52), RoomInk.Engrave);
-                    c.Rect(5f, y + 1f, 3f, 28f, FrontKit.Tone(l.Tone));
-                }
-                else
-                {
-                    FrontKit.Set(logStamp[i], "", Mc.Steel);
-                    FrontKit.Set(logText[i], i == 0 ? "NO EVENTS SINCE THE LINK CAME UP" : "", Mc.Steel);
-                    if (i > 0) c.Rect(14f, y + 29f, w - 28f, 1f, RoomInk.Bezel.WithAlpha(0.35f));   // a blank entry of the log book, ruled
-                }
-            }
-            c.Rect(14f, 232f, w - 28f, 1f, RoomInk.Bezel.WithAlpha(0.7f));
-            bool tracks = false;
-            for (int i = 0; i < f.Tiles.Length; i++) if (f.Tiles[i].Present) tracks = true;
-            roll[0] = callLamp; roll[1] = linkLamp; roll[2] = tracks && string.IsNullOrEmpty(f.NoContacts) ? Lamp.Go : Lamp.Hold; roll[3] = fuelLamp;
-            string[] go = { "GO", "GO", "TRACKS", "GO" }, hold = { "HOLD", "HOLD", "NONE", "LOW" }, nogo = { "NO-GO", "LINK DOWN", "NO-GO", "EMPTY" };
-            for (int i = 0; i < 4; i++)
-            {
-                float ry = 236f + i * 28f;
-                c.Rect(14f, ry, 52f, 20f, RoomInk.Telemetry);
-                c.Rect(w - 14f - 78f, ry, 78f, 20f, LampInk(roll[i]));
-                if (roll[i] != Lamp.Off) c.Rect(w - 14f - 78f, ry, 78f, 1f, Color.white.WithAlpha(0.28f));
-                string word = roll[i] == Lamp.Off ? "--" : roll[i] == Lamp.Go ? go[i] : roll[i] == Lamp.Hold ? hold[i] : nogo[i];
-                FrontKit.Set(rollWord[i], word, roll[i] == Lamp.Off ? Mc.Steel : Mc.PlateInk);
-            }
-            c.Flush();
         }
 
         private void PaintSensor(FrontRoomView v)
@@ -1242,6 +1228,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             string age = none ? "NO PICTURE" : f.ImageAge < 0f ? "LOOK TIME UNKNOWN" : (f.Source == BirdKind.Radar ? "SCAN " : "LOOK ") + C2Words.Clock(f.ImageAge) + " AGO" + (f.ImageStale ? " · STALE" : "");
             FrontKit.Set(sensorNote, age, f.ImageStale ? FrontKit.Tone(AvState.Caution) : Mc.Steel);
             picture.Paint(f);
+            if (shown != null && shown.Mark != null)
+            {
+                OpsKit.Label(shown.Mark, f.ConfirmFull ? "MARKS FULL" : f.SelectedId > 0 ? "MARK " + C2Orbit.TrackId(f.SelectedId) : "MARK");
+                OpsKit.Enable(shown.Mark, f.CanConfirm);
+                OpsKit.Label(shown.Send, C2Orbit.TransmitLabel(f.SendCount));
+                OpsKit.Enable(shown.Send, f.CanSend);
+            }
             DrawStandby(none);
             PaintBurn(v, none);
         }
@@ -1384,14 +1377,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FeedTileView t = i < f.Tiles.Length ? f.Tiles[i] : default;
                 if (none || !t.Present)
                 {
-                    // One worded row says why the file is empty; the rest stay ruled blank lines of the log book, not the same sentence five times.
-                    rows[i].Ghost(none && i == 0 ? "NO TRACKS YET" : "", none && i == 0 ? f.NoContacts : "");
+                    // One worded row says why the file is empty and what to do; the slots under it are simply not drawn.
+                    if (none && i == 0) rows[i].Ghost("NO TRACKS YET", "");
+                    else rows[i].Hide();
                     continue;
                 }
                 rowIds[i] = t.Id;
                 rows[i].Paint(t);
                 shown++;
             }
+            if (trackEmpty.gameObject.activeSelf != none) trackEmpty.gameObject.SetActive(none);
+            if (none) FrontKit.Set(trackEmpty, f.NoContacts.StartsWith("NO CONTACTS — ", StringComparison.Ordinal) ? f.NoContacts.Substring(14) : f.NoContacts, Mc.Steel);
             trackBox.SetMeta(none ? "NO TRACKS" : C2Orbit.PageMeta(f.Page, f.Pages) + " · " + shown + " ON PAGE", AvInk.Dim);
             OpsKit.Enable(prev, !none && f.Page > 0);
             OpsKit.Enable(next, !none && f.Page + 1 < f.Pages);
@@ -1675,6 +1671,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             private Color ClassTone() => klass == ProbableClass.Hostile ? AvInk.State(AvState.Danger) : klass == ProbableClass.Friendly ? AvInk.State(AvState.Ready)
                 : klass == ProbableClass.Neutral ? AvInk.State(AvState.Info) : AvInk.State(AvState.Caution);
+
+            public void Hide() { if (root.gameObject.activeSelf) root.gameObject.SetActive(false); }
 
             public void Ghost(string name, string note)
             {

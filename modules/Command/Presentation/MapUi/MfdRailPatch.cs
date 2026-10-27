@@ -599,7 +599,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             containers.Clear();
             for (int i = 0; i < buttons.Count; i++) buttons[i].Restore();
             buttons.Clear();
-            MfdRail.Reset();
+            MfdRail.Park();
 
             if (!applied)
             {
@@ -613,7 +613,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
             MfdNewsTicker.Restore();
-            MfdLogPanel.Restore();
+            MfdLogPanel.Park();
             MfdMapFooter.Restore();
             MfdMapDeck.Restore();
             MfdScreenFinish.Restore();

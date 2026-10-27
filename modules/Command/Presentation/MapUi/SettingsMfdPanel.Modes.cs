@@ -22,9 +22,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private AvConsole BuildConsole(RectTransform body, float height, bool server)
         {
             string[] names = server ? ServerPageNames : ClientPageNames;
-            // Optional: another module may append to the PILOT pages (its own tab lives on MISC). No provider = SET unchanged.
-            ISetExtras extras = null;
-            if (!server) ModuleServices.TryGet(out extras);
             AvConsole c = AvConsole.Build(body, "SET", names[0], names.Length, AvTokens.PanelWidth, height);
             c.PageChanged += index => c.SetTitle(names[index]);
 
@@ -74,8 +71,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildCockpitPage(c.Page(CCockpit), CCockpit);
                 BuildImmersionPage(c.Page(CImmersion), CImmersion);
                 BuildPerformancePage(c.Page(CPerf), CPerf);
-                if (extras != null)
-                    for (int page = 0; page < names.Length; page++) extras.BuildPilotPage(page, c.Page(page), c);
             }
 
             ApplyOrders(c, server);

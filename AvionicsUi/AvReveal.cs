@@ -113,6 +113,7 @@ namespace NOAvionics
 
         private void Update()
         {
+            if (Snap) { Finish(); return; }
             bool anyActive = false;
 
             for (int i = 0; i < slots.Length; i++)
@@ -126,7 +127,7 @@ namespace NOAvionics
                     continue;
                 }
 
-                slots[i].Elapsed += Time.unscaledDeltaTime;
+                slots[i].Elapsed += Time.unscaledDeltaTime * AvFxPacking.AnimationSpeed;
                 float t = slots[i].Duration <= 0f ? 1f : Mathf.Clamp01(slots[i].Elapsed / slots[i].Duration);
                 float eased = 1f - (1f - t) * (1f - t);
 

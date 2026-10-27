@@ -175,16 +175,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        /// <summary>The funding split after moving this front's share by <paramref name="delta"/> points: the other fronts keep their proportions. The preview the rail shows and the request the controller sends.</summary>
-        public static void Redistribute(int[] shares, int front, int delta, int[] into)
-        {
-            int target = Mathf.Clamp(shares[front] + delta, 0, 100), others = 0;
-            for (int i = 0; i < shares.Length; i++) if (i != front) others += shares[i];
-            int rest = 100 - target;
-            for (int i = 0; i < shares.Length; i++)
-                into[i] = i == front ? target : others > 0 ? Mathf.RoundToInt(shares[i] / (float)others * rest) : rest / (shares.Length - 1);
-        }
-
         /// <summary>Why a perk is not usable right now, read from what the rail already holds ("" when it is): the readiness rung, the satellite it needs, then the allocation price.</summary>
         private static string PerkReason(SupportActionId id, int rung, FrontRow row, int price, in FrontInputs c)
         {
@@ -1077,7 +1067,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else if (curLocked) { r.IssueNote = "BLOCKED · " + call + " IS COMMANDED BY " + cur.Controller; r.IssueTone = AvState.Caution; }
             else if (!ready) { r.IssueNote = "BLOCKED · " + call + " IS " + SofWords.State(cur.State); r.IssueTone = AvState.Caution; }
             else if (lowAmmo) { r.IssueNote = "BLOCKED · " + call + " NEEDS " + (int)SofDesk.AmmoPerMission + " % AMMO"; r.IssueTone = AvState.Caution; }
-            else if (draft == MissionKind.None) { r.IssueNote = "NEXT · PICK A MISSION"; r.IssueTone = AvState.Info; }
+            else if (draft == MissionKind.None) { r.IssueNote = "NEXT · CLICK A MISSION TO SEND IT"; r.IssueTone = AvState.Info; }
             else if (!draftAimed) { r.IssueNote = "NEXT · PICK " + (draft == MissionKind.Recon ? "A TARGET OR MAP POINT" : NeedWord(draft)); r.IssueTone = AvState.Info; }
             else if (!dm.Allowed) { r.IssueNote = "BLOCKED · " + SofWords.Kind(draft) + " NEEDS " + NeedWord(draft); r.IssueTone = AvState.Caution; }
             else { r.IssueNote = "READY · ISSUE SENDS ONCE"; r.IssueTone = AvState.Ready; }

@@ -15,9 +15,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The next place, wrapping both ways (−1 with nobody free).</summary>
         public static int Step(int i, int n, int dir) => n <= 0 ? -1 : ((i + dir) % n + n) % n;
 
-        /// <summary>The step header's chip.</summary>
-        public static string State(int free) => free > 0 ? N(free) + " FREE" : "NEW PILOT";
-
         /// <summary>"HATCH · O. Bae": the callsign (≤ 14), then as much of the name as fits the line.</summary>
         public static string NameLine(string callsign, string name)
         {

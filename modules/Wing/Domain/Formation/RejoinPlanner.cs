@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// (at least <see cref="LaneStep"/>), so members on adjacent lanes cross without tripping the bias.</summary>
         public float LaneStepM = LaneStep;
 
-        public bool FallingBehind => behind;
-
         public RejoinOutput Step(in AircraftState s, in SlotTarget slot, in LeaderEstimate leader, int lane,
             float spacing, float availableSpeed, bool staggerClear, float dt, float stack = 0f)
         {

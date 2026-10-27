@@ -40,8 +40,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             route = new WmcRoute(controls);
         }
 
-        public WmcForm Form => form;
-
         public int Sub => sub;
 
         public string Hint => last != null && last.Count == 0 && !last.Client

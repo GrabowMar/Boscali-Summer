@@ -9,6 +9,8 @@ namespace BoscaliSummer.Core.Ui
         public const float Left = 16f, Width = 560f, Inset = 12f, HeaderSize = 12f, BodySize = 15f;
         public const float ShadowAlpha = 0.06f;
         public static float LogBottom, CommsBottom;
+        /// <summary>The game's own feed box is on screen (the mod's log is not standing in, e.g. in free camera): its bottom edge in screen pixels from the top, else 0.</summary>
+        public static float NativeFeedBottomPx;
         public static TMP_FontAsset Font;
         public static Material FontMaterial;
 

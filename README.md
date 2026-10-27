@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.8-alpha"><img src="https://img.shields.io/badge/release-0.2.8_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.8 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.9-alpha"><img src="https://img.shields.io/badge/release-0.2.9_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.9 alpha"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8fb4b8?style=flat-square&labelColor=0b1b23" alt="GPL-3.0 license"></a>
@@ -34,9 +34,9 @@
 
 Nuclear Option hands you a jet and a war. **Boscali Summer builds everything around the canopy glass**: a wing that flies on your orders, a front line that grinds through towns and leaves them burning, satellites, hackers and special forces on call, storm fronts rolling in off the coast, and a radio full of people having a worse day than you.
 
-Start with **Boscali Summer** in the mission picker's **Boscali Summer** group: a scripted mission on the game's own Escalation. A cutscene, a side to choose, an opening flown under orders, then the whole war. It is one text file, and you can write your own: see [mission scripts](docs/SCENARIOS.md).
+Start with **Boscali Summer** in the mission picker's **Boscali Summer** group: a scripted mission on the game's own Escalation. A cutscene, a side to choose, an opening flown under orders, then the whole war. It is one text file, and you can write your own.
 
-Every mission runs the whole mod. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own pick. It can remember the answer for that mission or stop asking. See [mission systems](docs/MISSION_COMPATIBILITY.md).
+Every mission runs the whole mod. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own pick. It can remember the answer for that mission or stop asking.
 
 <table align="center">
 <tr>
@@ -312,7 +312,7 @@ Not on the route: VR, missile physics or mid-mission saves. The game's developer
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.8.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.8-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.9.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.9-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -439,22 +439,9 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 ```
 
 - `-p:PublicRelease=true` makes a player build with developer cheats, sim hooks and debug tools left out; leave it out for a development build.
-- The plugin targets `netstandard2.1`. Tests target `net8.0` and are console runners, not `dotnet test` projects (that command runs nothing): after the build, run `dotnet tests/BoscaliSummer.Tests/bin/Release/net8.0/BoscaliSummer.Tests.dll`.
+- The plugin targets `netstandard2.1`.
 - To bump the version, change `<Version>` in `BoscaliSummer.csproj` **and** `PluginVersion` in `Core/Plugin.cs`. The build fails if they differ.
 - A green build doesn't mean the game is happy. Test in game, and in multiplayer if you touched anything networked.
-
-For Unity asset work through Claude, Codex or OpenCode, nomodkit reads [tools/unity-mcp.json](tools/unity-mcp.json). With `boscalisummer` registered in nomodkit, preview the setup, apply it, then open the editor:
-
-```powershell
-nomod unity mcp setup --mod boscalisummer
-nomod unity mcp setup --mod boscalisummer --confirm
-nomod unity mcp launch --mod boscalisummer --confirm
-nomod unity mcp status --mod boscalisummer --json
-```
-
-Setup maintains an ignored Unity **2022.3.62f3** workspace at `.nomodkit/unity-mcp`, with MCP for Unity **10.3.0**, URP **14.0.12**, and staged copies of the repository's weather, avionics, pilot, fire, night-vision and emblem asset sources. Locally available Vanguard and airborne models are optional. Only supported asset types are staged; mod/game C# and asset build scripts stay outside the editor project. Keep the editor open while clients use `http://127.0.0.1:8080/mcp`.
-
-Edit staged assets for previews, then deliberately copy desired changes back to their source paths. Rerun setup after source changes to sync the copies; it refuses to overwrite modified staged assets. The existing `tools/Compile-*Assets.ps1` scripts remain the build paths for shipped bundles, and Unity previews do not replace the existing offline or in-game checks.
 
 <details>
 <summary><b>Where things are</b></summary>
@@ -466,10 +453,8 @@ Edit staged assets for previews, then deliberately copy desired changes back to 
 | `modules/` | One folder per feature module, such as `Wing`, `Support`, `Hud`, `Weather` and `FireAndDestruction` |
 | `AvionicsUi/` | The cockpit and console UI toolkit, including its `.avss` display themes |
 | `assets/` | Bundled mission and equipment assets |
-| `tests/` | Unit tests and in-game test tooling |
-| `tools/` | Asset build scripts and capture tooling |
 
-Inside a module, `Domain/` holds game-independent logic (which is what the unit tests cover), alongside `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` for Harmony patches.
+Inside a module, `Domain/` holds game-independent logic, alongside `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` for Harmony patches.
 
 </details>
 
@@ -488,5 +473,5 @@ Inside a module, `Domain/` holds game-independent logic (which is what the unit 
 
 <p align="center">
   <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">GNU GPL v3</a> (versions up to 0.2.5 were MIT)</sub><br>
-  <sub>An unofficial fan mod. Not affiliated with or endorsed by Shockfront Studios. Nuclear Option and its assets belong to their respective owners.</sub>
+  <sub>This project is an unofficial community modification and is not affiliated with, sponsored by, or endorsed by Shockfront Studios Pty Ltd. Original Nuclear Option assets, vehicle designs, audio, and code are Copyright (c) 2026 Shockfront Studios Pty Ltd. All rights reserved. Nuclear Option and Shockfront Studios are trademarks or registered trademarks of Shockfront Studios Pty Ltd. Original mod content and all other trademarks belong to their respective owners.</sub>
 </p>

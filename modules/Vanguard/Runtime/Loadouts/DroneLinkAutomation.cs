@@ -15,7 +15,7 @@ namespace BoscaliSummer.Vanguard
     /// the UAV MFD and the UAV terminal make, then reading back both ends:
     ///   do=status (default)  count, linked, local mode, host mode of the linked drone (SteerOrders), hands (host HAND orders of this launcher),
     ///                        headingGap (linked drone vs the pilot, degrees), courseGap (vs its HAND course), feed, terminal, mfd
-    ///   do=link index | next | prev | hand | nose | turn deg | steer x y | auto | feed | look | zoom | terminal | close | mfd | unmap
+    ///   do=link index | next | prev | send (where I look) | target | nose | steer x y | ground x y | auto | feed | look | zoom | terminal | close | mfd | unmap
     ///   do=wpt  east, north (metres from the linked drone): WPT for it there
     /// </summary>
     public static partial class VanguardAutomation
@@ -29,10 +29,11 @@ namespace BoscaliSummer.Vanguard
                 case "link": link.Link((int)Number(args, "index", 0f)); break;
                 case "next": link.Cycle(1); break;
                 case "prev": link.Cycle(-1); break;
-                case "hand": link.ToggleHand(); break;
+                case "send": link.SendToLook(); break;
+                case "target": link.SendToTarget(); break;
                 case "nose": link.MatchNose(); break;
-                case "turn": link.Turn(Number(args, "deg", 45f)); break;
                 case "steer": link.SteerAt(new Vector2(Number(args, "x", 0.5f), Number(args, "y", 0.5f))); break;
+                case "ground": link.SteerGround(new Vector2(Number(args, "x", 0.5f), Number(args, "y", 0.3f))); break;
                 case "auto": link.Release(); break;
                 case "feed": link.ToggleFeed(); break;
                 case "look": link.ToggleLook(); break;

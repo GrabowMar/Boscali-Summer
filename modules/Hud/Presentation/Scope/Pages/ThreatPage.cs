@@ -43,8 +43,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] spokeSegs = new float[4 * 8];
         private int spokeSegCount;
         /// <summary>The leader each radar's tag asks for (from its spoke's rim point to its box), kept until every label of the scope is down: a leader is drawn only if it crosses none (<see cref="Leaders"/>).</summary>
-        private struct Leader { public float X0, Y0, X1, Y1, Alpha; public int Own; public bool Moved; public ScopeTone Tone; }
+        private struct Leader { public float X0, Y0, X1, Y1, Alpha, Fade; public int Own, TopLen, SubLen; public bool Moved, Full, Lock; public ScopeTone Tone; }
         private readonly Leader[] leaders = new Leader[8];
+        /// <summary>Each radar tag's words (two lines of <see cref="TagStride"/> per tag), kept from placing to drawing.</summary>
+        private readonly char[] tagText = new char[8 * 2 * TagStride];
+        private readonly float[] anchorXY = new float[2 * 8];
+        private readonly int[] ownIdx = new int[8];
+        private readonly bool[] drawLeader = new bool[8];
         private int leaderCount;
         private int cueBaseFor = -1;
 
@@ -184,7 +189,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else if (recentDefeat) { key = 1; text = "DEFEATED"; }
             else if (cue == ThreatCue.Lock) { key = 2; text = "LOCK"; tone = Red; flash = true; }
-            else { key = 3; text = "SPIKE"; tone = Amber; }
+            else
+            {
+                // the call box already says SPIKE: the header counts the radars painting us instead of saying it twice
+                key = 3000 + d.EmitterCount;
+                text = key == headlineKey ? headlineText : ScopeStr.Cat("", d.EmitterCount, " RDR").ToString();
+                tone = Amber;
+            }
             if (key != headlineKey) { headlineKey = key; headlineText = text; }
             headlineTone = tone;
             headlineFlash = flash;
@@ -220,7 +231,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             int best = -1;
             for (int i = 0; i < d.EmitterCount; i++)
-                if (best < 0 || (d.Emitters[i].Lock && !d.Emitters[best].Lock) || (d.Emitters[i].Lock == d.Emitters[best].Lock && d.Emitters[i].RangeM < d.Emitters[best].RangeM)) best = i;
+                if (best < 0 || ThreatMath.Outranks(d.Emitters[i], d.Emitters[best])) best = i;
             return best;
         }
 
@@ -278,11 +289,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < d.EmitterCount && spokeSegCount + 4 <= spokeSegs.Length; i++, spokeSegCount += 4)
             {
                 At(d.Emitters[i].BearingDeg, R, out spokeSegs[spokeSegCount], out spokeSegs[spokeSegCount + 1]);
-                At(d.Emitters[i].BearingDeg, R * 0.56f, out spokeSegs[spokeSegCount + 2], out spokeSegs[spokeSegCount + 3]);
+                At(d.Emitters[i].BearingDeg, R * ThreatMath.SpokeIn(d.Emitters[i].RangeM), out spokeSegs[spokeSegCount + 2], out spokeSegs[spokeSegCount + 3]);
             }
             Wedge(g);
             Rings(g);
-            for (int i = 0; i < d.EmitterCount; i++) Spoke(g, d.Emitters[i]);
+            // the radars that matter most place their full tags first, so the one-line tags of the rest take what room is left
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0; i < d.EmitterCount; i++)
+                {
+                    bool full = ThreatMath.Rank(d.Emitters, d.EmitterCount, i) < ThreatMath.FullTags;
+                    if (full == (pass == 0)) Spoke(g, d.Emitters[i], full);
+                }
             BeamArrow(g);
             // the nearest missile last, so it is on top
             for (int pass = 0; pass < 2; pass++)
@@ -358,45 +375,101 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Tri(nx, ny, 0f, 4f, Ink);
         }
 
-        /// <summary>A radar painting us: a spoke in from the rim (solid and red for a lock, dashed and amber for a search), a tag with its name and range outside the rim.</summary>
-        private void Spoke(ScopeCanvas g, in ThreatEmitter e)
+        /// <summary>
+        /// A radar painting us: a spoke in from the rim, the deeper the nearer it is (solid and red for a lock, dashed and amber for a search), a tag with its name and range outside the rim. Only the
+        /// <see cref="ThreatMath.FullTags"/> that matter most get the boxed two-line tag; the rest are dimmer, with one unboxed line ("HLT 36KM").
+        /// </summary>
+        private void Spoke(ScopeCanvas g, in ThreatEmitter e, bool full)
         {
             bool lockOn = e.Lock;
             ScopeTone tone = lockOn ? Red : Amber;
-            float a = ScopeCanvas.Seg(e.AgeS, 0f, 0.3f), b = e.BearingDeg;
+            // a one-line tag's spoke steps back (0.6); its words do not drop below 0.9 on their own plate, which is what keeps them readable over a bright sky
+            float fade = ScopeCanvas.Seg(e.AgeS, 0f, 0.3f), a = fade * (full ? 1f : 0.6f), b = e.BearingDeg;
             At(b, R, out float x0, out float y0);
-            At(b, R * 0.56f, out float x1, out float y1);
+            At(b, R * ThreatMath.SpokeIn(e.RangeM), out float x1, out float y1);
             At(b, R + 1f, out float tx, out float ty);
             g.Line(x0, y0, x1, y1, tone, a, lockOn ? 2f : 1f, lockOn ? 0f : 5f, lockOn ? 0f : 3f, -now * 10f);
             if (lockOn) g.Line(x0, y0, x1, y1, Red, 0.35f * a);
             g.Tri(tx, ty, b + 180f, 4f, tone, true, a);
             if (lockOn && e.AgeS < 0.7f) g.Ring(tx, ty, 3f + 22f * ScopeCanvas.EaseOut(e.AgeS / 0.7f), Hi, 1f - e.AgeS / 0.7f);
-            // a two-line tag outside the rim, inside it when there is no room: the name bold (the whole words that fit TagChars: the game's run to 22 characters), the range under it; a tag whose spots all sit on others moves to a free one
-            Span<char> name = stackalloc char[ThreatMath.TagChars];
-            name = name.Slice(0, ThreatMath.TagName(Name(e), name));
-            ReadOnlySpan<char> range = ScopeStr.Distance("", e.RangeM, units, 8);
-            float w = Math.Max(ScopeCanvas.TextW(name, 12f), ScopeCanvas.TextW(range, 12f)) + 8f, h = 31f;
-            int own = keep.Count;
-            bool moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out float bx, out float by);
-            g.Fill(bx, by, w, h, Bg, a);
-            g.Box(bx, by, w, h, tone, a, 1f, tone, lockOn ? 0.25f : 0.14f);
-            g.Text(name, bx + w / 2f, by + 9f, tone, 12f, ScopeAlign.Center, true, a);
-            g.Text(range, bx + w / 2f, by + 22f, tone, 12f, ScopeAlign.Center, false, a * 0.95f);
             At(b, R + 1f, out float attx, out float atty);
-            if (leaderCount < leaders.Length && keep.Count > own)
-                leaders[leaderCount++] = new Leader { X0 = attx, Y0 = atty, X1 = Mathf.Clamp(attx, bx, bx + w), Y1 = Mathf.Clamp(atty, by, by + h), Alpha = a * 0.7f, Own = own, Moved = moved, Tone = tone };
+            int own = keep.Count, k = leaderCount;
+            if (k >= leaders.Length) return;
+            // the tag is placed now (later labels dodge it) and drawn in Leaders, after the crossing leaders have traded places
+            Span<char> top = new Span<char>(tagText, k * 2 * TagStride, TagStride), sub = new Span<char>(tagText, (k * 2 + 1) * TagStride, TagStride);
+            int topLen, subLen;
+            float w, h;
+            bool moved;
+            if (!full)
+            {
+                // one line, the call box's own form: the whole words that fit with the range whole
+                topLen = Copy(ScopeStr.Distance(Name(e), e.RangeM, units, 10, true), top);
+                subLen = 0;
+                w = (float)Math.Round(ScopeCanvas.TextW(top.Slice(0, topLen), 12f)) + 6f;
+                h = 16f;
+                moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out _, out _, atRim: false);
+            }
+            else
+            {
+                // a two-line tag outside the rim: the name bold (the whole words that fit TagChars: the game's run to 22 characters), the range under it
+                topLen = ThreatMath.TagName(Name(e), top);
+                // a lock says so in words: the open visor style draws every plate as brackets, so red against amber would be the only difference (colour alone)
+                subLen = Copy(ScopeStr.Distance(lockOn ? "LOCK" : "", e.RangeM, units, lockOn ? 12 : 8), sub);
+                w = Math.Max(ScopeCanvas.TextW(top.Slice(0, topLen), 12f), ScopeCanvas.TextW(sub.Slice(0, subLen), 12f)) + 8f;
+                h = 31f;
+                moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out _, out _);
+            }
+            if (keep.Count == own) return;      // the keep-out is full: no room to register the tag
+            leaders[leaderCount++] = new Leader { X0 = attx, Y0 = atty, Alpha = a * 0.7f, Fade = fade, Own = own, Moved = moved, Tone = tone, Full = full, Lock = lockOn, TopLen = topLen, SubLen = subLen };
+        }
+
+        private const int TagStride = 16;
+
+        private static int Copy(ReadOnlySpan<char> s, Span<char> into)
+        {
+            int n = Math.Min(s.Length, into.Length);
+            s.Slice(0, n).CopyTo(into);
+            return n;
         }
 
         /// <summary>
-        /// The radars' leaders, once every tag is down: a tag that had to move away from its spoke is tied to it only by a line that crosses no label (one drawn as its tag was placed ran through the tags placed after it:
-        /// "HLT R|ADAR" in game); a tag that stands at its spoke always has its short line.
+        /// The radars' tags and leaders, once every label is down: two leaders that cross have their tags trade places first (<see cref="KeepOut.Untangle"/>: a stack of tags ends up in the order of its spokes), then each tag is
+        /// drawn, then a tag that had to move away from its spoke is tied to it only by a line that crosses no label (one drawn as its tag was placed ran through the tags placed after it: "HLT R|ADAR" in game); a tag
+        /// that stands at its spoke always has its short line.
         /// </summary>
         private void Leaders(ScopeCanvas g)
         {
             for (int i = 0; i < leaderCount; i++)
             {
+                anchorXY[2 * i] = leaders[i].X0; anchorXY[2 * i + 1] = leaders[i].Y0; ownIdx[i] = leaders[i].Own;
+                keep.Get(leaders[i].Own, out leaders[i].X1, out leaders[i].Y1, out _, out _);      // where it was placed, to tell a traded tag below
+            }
+            keep.Untangle(anchorXY, ownIdx, leaderCount, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), CX, CY, R);
+            for (int i = 0; i < leaderCount; i++)
+            {
+                ref Leader l = ref leaders[i];
+                keep.Get(l.Own, out float bx, out float by, out float w, out float h);
+                l.Moved |= bx != l.X1 || by != l.Y1;      // a traded tag is off its own spot: its leader obeys the crossing rule too
+                l.X1 = Mathf.Clamp(l.X0, bx, bx + w);
+                l.Y1 = Mathf.Clamp(l.Y0, by, by + h);
+                ReadOnlySpan<char> top = new ReadOnlySpan<char>(tagText, i * 2 * TagStride, l.TopLen), sub = new ReadOnlySpan<char>(tagText, (i * 2 + 1) * TagStride, l.SubLen);
+                if (!l.Full)
+                {
+                    g.Fill(bx, by, w, h, Bg, 0.85f * l.Fade);
+                    g.Text(top, bx + w / 2f, by + h / 2f + 1f, l.Tone, 12f, ScopeAlign.Center, false, 0.9f * l.Fade);
+                    continue;
+                }
+                g.Fill(bx, by, w, h, Bg, l.Fade);
+                g.Box(bx, by, w, h, l.Tone, l.Fade, 1f, l.Tone, l.Lock ? 0.25f : 0.14f);
+                g.Text(top, bx + w / 2f, by + 9f, l.Tone, 12f, ScopeAlign.Center, true, l.Fade);
+                g.Text(sub, bx + w / 2f, by + 22f, l.Tone, 12f, ScopeAlign.Center, l.Lock, l.Fade * 0.95f);
+            }
+            for (int i = 0; i < leaderCount; i++) drawLeader[i] = !leaders[i].Moved || !keep.LeaderCrosses(leaders[i].X0, leaders[i].Y0, leaders[i].X1, leaders[i].Y1, leaders[i].X0, leaders[i].Y0, leaders[i].Own);
+            keep.DropCrossing(anchorXY, ownIdx, leaderCount, drawLeader);
+            for (int i = 0; i < leaderCount; i++)
+            {
                 Leader l = leaders[i];
-                if (!l.Moved || !keep.LeaderCrosses(l.X0, l.Y0, l.X1, l.Y1, l.X0, l.Y0, l.Own)) g.Line(l.X0, l.Y0, l.X1, l.Y1, l.Tone, l.Alpha);
+                if (drawLeader[i]) g.Line(l.X0, l.Y0, l.X1, l.Y1, l.Tone, l.Alpha);
             }
         }
 

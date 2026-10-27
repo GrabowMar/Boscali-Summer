@@ -169,7 +169,5 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             image.enabled = image.sprite != null;
             image.color = pilot != null ? Color.white : Color.white.WithAlpha(0.3f);
         }
-
-        public void Invalidate() => set = false;
     }
 }

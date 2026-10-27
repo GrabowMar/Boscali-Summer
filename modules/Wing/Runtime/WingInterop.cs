@@ -16,37 +16,19 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// board so theater doctrine and sortie tallies leave the player's wingmen alone.</summary>
     internal static class WingMembership
     {
-        private static readonly int[] Empty = Array.Empty<int>();
-        private static int[] ids = Empty;
-        private static int count;
-
-        internal static int Count => count;
-
-        internal static bool Contains(int persistentIdHash)
-        {
-            for (int i = 0; i < count; i++)
-                if (ids[i] == persistentIdHash) return true;
-            return false;
-        }
-
         /// <summary>Refresh the published roster from the live wing on every roster change. Also publishes it on
         /// the cross-mod PresenceBoard (<c>NO.Wing.ids.v1</c>, <c>NO.Wing.guid.v1</c>).</summary>
         internal static void Publish(List<WingMember> members)
         {
             int n = members?.Count ?? 0;
-            if (ids.Length < n) ids = new int[n];
+            var snapshot = new int[n];
             for (int i = 0; i < n; i++)
             {
                 Aircraft aircraft = members[i].Aircraft;
-                ids[i] = aircraft == null ? 0 : aircraft.persistentID.GetHashCode();
+                snapshot[i] = aircraft == null ? 0 : aircraft.persistentID.GetHashCode();
             }
-            count = n;
-            var snapshot = new int[n];
-            Array.Copy(ids, snapshot, n);
             PresenceBoard.SetString(PresenceBoard.WingGuid, WingPresence.Guid);
             PresenceBoard.SetInts(PresenceBoard.WingMemberIds, snapshot);
         }
-
-        internal static void Clear() => Publish(null);
     }
 }

@@ -73,13 +73,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return null;
         }
 
-        public void Members(int e, List<uint> into)
-        {
-            into.Clear();
-            foreach (uint id in order)
-                if (of[id] == e) into.Add(id);
-        }
-
         /// <summary>Why an order for <paramref name="scope"/> would reach nobody (null: it reaches someone); moves no one
         /// (review P2 I5).</summary>
         public string Check(in WingScope scope)

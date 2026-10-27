@@ -24,7 +24,7 @@ namespace BoscaliSummer.Vanguard
             switch (Text(args, "do") ?? "lay")
             {
                 case "lay": return LaySleeper(lead, (int)Number(args, "from", 0f));
-                case "friend": return HullNearSleeper(lead != null ? lead.NetworkHQ : null, Number(args, "offset", 600f), type, 0, "VG_OrcaFriend");
+                case "friend": return HullNearSleeper(friendHq, Number(args, "offset", 600f), type, 0, "VG_OrcaFriend");
                 case "enemy": return HullNearSleeper(enemyHq, Number(args, "offset", 900f), type, 180, "VG_OrcaEnemy");
                 default: return Failure("VanguardAutomation", "orca", "do must be lay, friend or enemy");
             }

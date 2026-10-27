@@ -3,38 +3,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Shared manoeuvre labels and entry-safety gates, independent of the engine.</summary>
     internal static class ManeuverCatalog
     {
-        /// <summary>Manoeuvres in display order.</summary>
-        public static readonly ManeuverKind[] All =
-        {
-            ManeuverKind.BreakLeft,
-            ManeuverKind.BreakRight,
-            ManeuverKind.SplitS,
-            ManeuverKind.Immelmann,
-            ManeuverKind.BarrelRoll,
-            ManeuverKind.AileronRoll,
-            ManeuverKind.Loop,
-            ManeuverKind.WingWaggle,
-            ManeuverKind.NotchThreat,
-            ManeuverKind.MaskTerrain,
-        };
-
-        public static string Label(ManeuverKind kind)
-        {
-            switch (kind)
-            {
-                case ManeuverKind.BreakLeft:   return "Break Left";
-                case ManeuverKind.BreakRight:  return "Break Right";
-                case ManeuverKind.SplitS:      return "Split-S";
-                case ManeuverKind.Immelmann:   return "Immelmann";
-                case ManeuverKind.BarrelRoll:  return "Barrel Roll";
-                case ManeuverKind.AileronRoll: return "Aileron Roll";
-                case ManeuverKind.Loop:        return "Loop";
-                case ManeuverKind.WingWaggle:  return "Wing Waggle";
-                case ManeuverKind.NotchThreat: return "Notch Threat";
-                case ManeuverKind.MaskTerrain: return "Terrain Mask";
-                default:                       return kind.ToString();
-            }
-        }
 
         /// <summary>Minimum entry altitude in metres AGL, allowing room for each manoeuvre's
         /// descent.</summary>

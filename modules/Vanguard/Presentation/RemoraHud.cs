@@ -42,21 +42,24 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Drop();
                 return;
             }
-            int ready = 0, capacity = 0, flares = 0;
+            int ready = 0, capacity = 0, flares = 0, mantas = 0, remoras = 0;
             RemoraPhase worst = RemoraPhase.Escort;
             foreach (RemoraView view in RemoraBoard.Views.Values)
             {
                 if (view.Launcher != me.persistentID.Id) continue;
-                int left = RemoraArcher.Left(view.Fired);
+                int left = RemoraBoard.Left(view);
                 ready += left;
-                capacity += RemoraArcher.Rounds;
+                capacity += RemoraBoard.Capacity(view.Drone);
+                if (RemoraBoard.IsManta(view.Drone)) mantas++; else remoras++;
                 flares += view.Flares;
                 if (view.Phase > worst) worst = view.Phase;
                 if (seen.TryGetValue(view.Drone, out RemoraView before))
                 {
-                    if (view.Fired != before.Fired) board.Notice(Channel, HudTone.Info, "ARCHER AWAY", left + " LEFT ON THIS DRONE");
+                    bool big = RemoraBoard.IsManta(view.Drone);
+                    if (view.Jams < before.Jams) board.Notice(Channel, HudTone.Caution, "REMORA ECM BURST", view.Jams + " LEFT ON THIS DRONE");
+                    if (view.Fired != before.Fired) board.Notice(Channel, HudTone.Info, big ? "MANTA ROUND AWAY" : "ARCHER AWAY", left + " LEFT ON THIS DRONE");
                     if (view.Phase == RemoraPhase.Ram && before.Phase != RemoraPhase.Ram)
-                        board.Notice(Channel, HudTone.Warning, "REMORA GUIDED BOMB — INBOUND");
+                        board.Notice(Channel, HudTone.Warning, big ? "MANTA GUIDED BOMB — INBOUND" : "REMORA RAMMING — INBOUND");
                 }
                 seen[view.Drone] = view;
             }
@@ -67,10 +70,13 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             line ??= VanguardHudFeeds.Acquire(board, Owner, Channel, "archer");
             HudTone tone = worst == RemoraPhase.Ram ? HudTone.Warning : worst == RemoraPhase.Engage ? HudTone.Caution : HudTone.Info;
-            string detail = worst == RemoraPhase.Ram ? "GUIDED BOMB — WARHEAD ARMED"
-                : worst == RemoraPhase.Engage ? "CLOSING TO 12 KM"
-                : ready > 0 ? "AIR HUNTS - GROUND BOMBS - FLARES " + flares : "DESIGNATE TO RAM";
-            line?.Set(tone, RemoraArcher.Status(ready, capacity, worst), detail, ready / (float)capacity);
+            // REMORA hunts the air, MANTA strikes the ground (2026-10-27).
+            string detail = worst == RemoraPhase.Ram ? "WARHEAD ARMED — RAMMING"
+                : worst == RemoraPhase.Engage ? (mantas > 0 && remoras == 0 ? "AGM STRIKE" : "AIR HUNT")
+                : ready > 0 ? (mantas == 0 ? "HUNTING AIR" : remoras == 0 ? "STRIKING GROUND" : "AIR + GROUND") + " - FLARES " + flares : "DESIGNATE TO RAM";
+            // Only MANTAs airborne: their own words; any REMORA among them keeps the shared ARCHER line.
+            string status = remoras == 0 ? MantaRules.Status(ready, capacity, worst) : RemoraArcher.Status(ready, capacity, worst);
+            line?.Set(tone, status, detail, ready / (float)capacity);
         }
 
         // Board entries outlive their drone; any peer drops ids that no longer resolve to a live missile.

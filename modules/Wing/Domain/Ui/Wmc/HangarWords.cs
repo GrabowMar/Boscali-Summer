@@ -14,9 +14,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Value(int held, int capacity, bool offline) => offline ? WmcText.Unknown : N(held) + "/" + N(capacity);
 
-        public static float Level(int held, int capacity) =>
-            capacity <= 0 || held <= 0 ? 0f : held >= capacity ? 1f : (float)held / capacity;
-
         public static bool Full(int held, int capacity) => held >= capacity;
 
         public static string ReturnLabel(bool asking) => asking ? "RETURN?" : "RETURN";

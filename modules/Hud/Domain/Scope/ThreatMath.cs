@@ -117,6 +117,31 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The detail of a radar's ticker notice ("RANGE 36KM"): the ticker pages a notice's text, then its detail, each alone on its line, so a bare "36KM" said nothing in game (the second page of "SPIKE - HYPERION CLASS CARRIER").</summary>
         public static string RangeDetail(float metres, NOAvionics.AvUnits units) => ScopeStr.Distance("RANGE", metres, units, 16).ToString();
 
+        /// <summary>How many radars get the full two-line tag (name, range); the rest get one dim line of ten characters (six boxed tags walled the scope in game: a 71 km fighter weighed as much as a 14 km SAM).</summary>
+        public const int FullTags = 3;
+
+        /// <summary>A radar at this range or nearer has the deepest spoke, one at <see cref="SpokeFarM"/> or beyond a stub at the rim.</summary>
+        public const float SpokeNearM = 5000f, SpokeFarM = 60000f;
+
+        /// <summary>Where a radar's spoke ends, as a fraction of the scope's radius: 0.4 for a near radar, 0.86 for a far one (an RWR's "closer is deeper"); an unknown range is far.</summary>
+        public static float SpokeIn(float rangeM)
+        {
+            float u = float.IsNaN(rangeM) ? 1f : Math.Min(1f, Math.Max(0f, (rangeM - SpokeNearM) / (SpokeFarM - SpokeNearM)));
+            return 0.4f + 0.46f * u;
+        }
+
+        /// <summary>Whether radar <paramref name="a"/> matters more than <paramref name="b"/>: a lock before a search, then the nearer.</summary>
+        public static bool Outranks(in ThreatEmitter a, in ThreatEmitter b) => a.Lock != b.Lock ? a.Lock : a.RangeM < b.RangeM;
+
+        /// <summary>Radar <paramref name="i"/>'s place among the first <paramref name="count"/> (0 = matters most; a tie goes to the lower index).</summary>
+        public static int Rank(ThreatEmitter[] emitters, int count, int i)
+        {
+            int rank = 0;
+            for (int j = 0; j < count; j++)
+                if (j != i && (Outranks(emitters[j], emitters[i]) || (j < i && !Outranks(emitters[i], emitters[j])))) rank++;
+            return rank;
+        }
+
         /// <summary>The widest a radar's tag on the scope is, in characters: the game's names run to 22 ("HYPERION CLASS CARRIER" in game) and three tags that wide cannot share the plot.</summary>
         public const int TagChars = 12;
 

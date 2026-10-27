@@ -41,33 +41,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal static class DetailLines
     {
         public const int MaxStores = 6;
-
-        public static void Build(in MemberDetail d, List<string> into)
-        {
-            into.Clear();
-            string bingo = WingHudText.BingoTime(d.BingoSeconds);
-            into.Add("FUEL " + WmcText.Percent(d.Fuel) + (bingo.Length > 0 ? "  " + bingo : "") +
-                     "   AMMO " + WmcText.Percent(d.Ammo) + "   DMG " + WmcText.Percent(d.Damage));
-            into.Add("RADAR " + (d.Radar < 0 ? WmcText.Unknown : d.Radar > 0 ? "ON" : "OFF") +
-                     "   TGT " + (string.IsNullOrEmpty(d.Target) ? WmcText.Unknown : d.Target));
-            var sb = new StringBuilder();
-            int n = d.Stores == null ? 0 : System.Math.Min(System.Math.Min(d.StoreCount, d.Stores.Length), MaxStores);
-            for (int i = 0; i < n; i++)
-            {
-                if (sb.Length > 0) sb.Append("   ");
-                sb.Append(d.Stores[i].Name).Append(' ')
-                  .Append(d.Stores[i].Ammo.ToString(CultureInfo.InvariantCulture)).Append('/')
-                  .Append(d.Stores[i].Full.ToString(CultureInfo.InvariantCulture));
-            }
-            into.Add(sb.Length > 0 ? sb.ToString() : "STORES " + WmcText.Unknown);
-            sb.Clear();
-            foreach (string part in new[] { d.Callsign, d.Rank, d.Perks })
-            {
-                if (string.IsNullOrEmpty(part)) continue;
-                if (sb.Length > 0) sb.Append(" · ");
-                sb.Append(part);
-            }
-            into.Add(sb.Length > 0 ? sb.ToString() : "PILOT " + WmcText.Unknown);
-        }
     }
 }

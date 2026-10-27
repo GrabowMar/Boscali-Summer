@@ -123,6 +123,27 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal int Rekeys, EffortSwaps;
         }
 
+        /// <summary>
+        /// Sim read: the groups assigned to operation opId, how many carry (x, z) as their fix, and their mean centroid and mean staged-target distance
+        /// to it (-1 with no group). Reads only.
+        /// </summary>
+        internal void EffortDistances(FactionHQ hq, int opId, float x, float z, out int count, out int onFix, out float meanCentroid, out float meanTarget)
+        {
+            count = onFix = 0;
+            float c = 0f, t = 0f;
+            for (int i = 0; i < groups.Count; i++)
+            {
+                Group g = groups[i];
+                if (g == null || g.HQ != hq || !g.OnEffort || g.OpId != opId || g.Members.Count == 0) continue;
+                count++;
+                if (Mathf.Abs(g.FixX - x) < 1f && Mathf.Abs(g.FixZ - z) < 1f) onFix++;
+                c += BoscaliSummer.Core.Math.Scalar.Distance2D(g.CentroidX, g.CentroidZ, x, z);
+                t += BoscaliSummer.Core.Math.Scalar.Distance2D(g.TargetX, g.TargetZ, x, z);
+            }
+            meanCentroid = count > 0 ? c / count : -1f;
+            meanTarget = count > 0 ? t / count : -1f;
+        }
+
         private readonly Dictionary<GroundVehicle, Member> members = new Dictionary<GroundVehicle, Member>(MaximumMembers);
         private readonly List<Group> groups = new List<Group>(MaximumGroups);
         private readonly Dictionary<FactionHQ, FactionState> factions = new Dictionary<FactionHQ, FactionState>(MaximumFactions);

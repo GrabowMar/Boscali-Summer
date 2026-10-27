@@ -146,6 +146,20 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private readonly int[] pocketStack;
         private readonly int[] pocketRegion;
 
+        // Neighbour rule scratch: last pass's hold and this pass's target, plus which cells
+        // carry no presence, claim or anchor of their own and so take their neighbours' lead.
+        private readonly float[] previousHold;
+        private readonly float[] passStartHold;
+        private readonly float[] cellTarget;
+        private readonly bool[] cellFree;
+        private readonly bool[] cellClaimed;
+
+        // Open water (1): it keeps its hold so the field stays continuous across a strait,
+        // but it takes no tint and carries no front. Empty until the map's land mask is known.
+        private readonly byte[] sea;
+        private bool hasSea;
+        private ulong seaHash;
+
         // Quadtree clusters are only needed when the large map draws its tint.
         private readonly byte[] cellKeys;
         private SectorClusterTree.Cluster[] displayClusters;
@@ -230,6 +244,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
             cellKeys = new byte[total];
             pocketStack = new int[total];
             pocketRegion = new int[total];
+            previousHold = new float[total];
+            passStartHold = new float[total];
+            cellTarget = new float[total];
+            cellFree = new bool[total];
+            cellClaimed = new bool[total];
+            sea = new byte[total];
             UpdateLayout(cellSize);
             NeutralSectorCount = TotalSectors;
         }
@@ -249,7 +269,42 @@ namespace BoscaliSummer.Modules.Command.Runtime
             ResolutionX = Math.Max(1, (int)Math.Ceiling((WorldSizeX * 0.5f - OriginX) / cell));
             ResolutionY = Math.Max(1, (int)Math.Ceiling((WorldSizeY * 0.5f - OriginZ) / cell));
             displayClusters = new SectorClusterTree.Cluster[TotalSectors];
+            Array.Clear(sea, 0, sea.Length);
+            hasSea = false;
+            seaHash = 0UL;
         }
+
+        /// <summary>
+        /// Marks open water from the map's land test (global metres). A cell is sea only when its
+        /// centre and four inner points are all water, so a coast keeps its tint. A test that
+        /// finds no land, or no sea, leaves the grid as it was: nothing to mask.
+        /// </summary>
+        internal void SetSeaMask(Func<float, float, bool> isLand)
+        {
+            if (isLand == null) return;
+            int cells = TotalSectors, seaCells = 0;
+            float inset = CellSize * 0.35f;
+            ulong hash = 1469598103934665603UL;
+            for (int r = 0; r < ResolutionY; r++)
+            for (int c = 0; c < ResolutionX; c++)
+            {
+                CellToCenter(c, r, out float x, out float z);
+                bool land = isLand(x, z) || isLand(x - inset, z - inset) || isLand(x + inset, z - inset) ||
+                    isLand(x - inset, z + inset) || isLand(x + inset, z + inset);
+                int index = r * ResolutionX + c;
+                sea[index] = land ? (byte)0 : (byte)1;
+                if (!land) { seaCells++; hash = HashStep(hash, (uint)index); }
+            }
+            hasSea = seaCells > 0 && seaCells < cells;
+            if (!hasSea) Array.Clear(sea, 0, cells);
+            seaHash = hasSea ? hash : 0UL;
+            displayDirty = true;
+        }
+
+        internal bool HasSeaMask => hasSea;
+
+        public bool IsSea(int col, int row)
+            => hasSea && col >= 0 && col < ResolutionX && row >= 0 && row < ResolutionY && sea[row * ResolutionX + col] != 0;
 
         private long CellCount(float cell)
             => (long)Math.Ceiling(WorldSizeX / cell) * (long)Math.Ceiling(WorldSizeY / cell);
@@ -364,6 +419,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Array.Copy(other.tracePoints, tracePoints, other.tracePointCount);
             Array.Copy(other.traceLengths, traceLengths, other.traceCount);
             Array.Copy(other.tracePressure, tracePressure, other.traceCount);
+            CopySeaFrom(other);
             nodes.Clear();
             nodes.AddRange(other.nodes);
             hasEvaluated = other.hasEvaluated;
@@ -409,9 +465,18 @@ namespace BoscaliSummer.Modules.Command.Runtime
             Array.Copy(other.sectorStates, sectorStates, cells);
             Array.Copy(other.holdStrength, holdStrength, cells);
             Array.Copy(other.frontBand, frontBand, cells);
+            CopySeaFrom(other);
             // The front band is the display state the bake needs; the cluster tree stays untouched.
             displayHash = other.displayHash;
             displayDirty = false;
+        }
+
+        private void CopySeaFrom(TacticalSectorGrid other)
+        {
+            if (seaHash == other.seaHash && hasSea == other.hasSea) return;
+            Array.Copy(other.sea, sea, TotalSectors);
+            hasSea = other.hasSea;
+            seaHash = other.seaHash;
         }
 
         public bool WorldToCell(float worldX, float worldZ, out int col, out int row)
@@ -644,6 +709,64 @@ namespace BoscaliSummer.Modules.Command.Runtime
             // exponential response: stable while the pocket fills in, gone when relief arrives.
             BuildPocketClaims(cellCount);
 
+            // Own targets first: strategic lean, troop pressure, encirclement claims.
+            for (int index = 0; index < cellCount; index++)
+            {
+                float friendly = friendlyForce[index], hostile = hostileForce[index];
+                float total = friendly + hostile;
+                float pressure = (friendly - hostile) / Math.Max(3f, total);
+                float target = Math.Clamp(strategicField[index] + 2f * pressure, -1f, 1f);
+                byte claim = pocketClaim[index];
+                bool claimed = claim != 0 && nodeAnchors[index] == 0 &&
+                    (claim == 1 ? hostile <= PresenceThreshold : friendly <= PresenceThreshold);
+                if (claimed) target = claim == 1 ? 1f : -1f;
+                cellTarget[index] = target;
+                cellClaimed[index] = claimed;
+                cellFree[index] = !claimed && nodeAnchors[index] == 0 && total <= PresenceThreshold;
+            }
+
+            // The automaton step. Ground nobody stands on leans toward its eight neighbours, so
+            // fronts are carried by contact and spread outward, one-cell wedges and trails fill in,
+            // and straight airbase bisectors round off. The coupling is under one, so the field
+            // settles to one answer instead of growing blobs. A free cell its neighbours mostly
+            // oppose falls at capture speed: a pocket or a tendril closes quickly, a held line does not.
+            Array.Copy(holdStrength, passStartHold, cellCount);
+            if (!hasEvaluated)
+            {
+                // First look: settle the neighbour rule now rather than over minutes of recovery.
+                Array.Copy(cellTarget, holdStrength, cellCount);
+                for (int sweep = 0; sweep < NeighbourSettleSweeps; sweep++)
+                {
+                    Array.Copy(holdStrength, previousHold, cellCount);
+                    for (int index = 0; index < cellCount; index++)
+                        if (cellFree[index]) holdStrength[index] = Coupled(index, out _);
+                }
+            }
+            else
+            {
+                // Fixed sub-steps: neighbours trade hold every step, so equal elapsed time gives
+                // equal control whether the field is read at 2 Hz or every few seconds.
+                int steps = Math.Clamp((int)Math.Ceiling(elapsed / FieldStepSeconds - 1e-4f), 1, MaximumFieldSteps);
+                float step = elapsed / steps;
+                for (int s = 0; s < steps; s++)
+                {
+                    Array.Copy(holdStrength, previousHold, cellCount);
+                    for (int index = 0; index < cellCount; index++)
+                    {
+                        float target = cellTarget[index], response;
+                        if (cellFree[index])
+                        {
+                            target = Coupled(index, out bool surrounded);
+                            response = ControlFieldCore.Response(step, surrounded ? 1f : 0f);
+                        }
+                        // An encircled pocket is cut off: it falls at capture speed, not over the slow recovery.
+                        else response = ControlFieldCore.Response(step, cellClaimed[index] ? 1f : friendlyForce[index] + hostileForce[index]);
+                        float was = previousHold[index];
+                        holdStrength[index] = nodeAnchors[index] != 0 ? AnchorHold(index) : was + (target - was) * response;
+                    }
+                }
+            }
+
             bool changed = false;
             for (int r = 0; r < ResolutionY; r++)
             {
@@ -651,21 +774,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 {
                     int index = r * ResolutionX + c;
                     float friendly = friendlyForce[index], hostile = hostileForce[index];
-                    float total = friendly + hostile;
-                    float pressure = (friendly - hostile) / Math.Max(3f, total);
-                    float target = Math.Clamp(strategicField[index] + 2f * pressure, -1f, 1f);
-                    byte claim = pocketClaim[index];
-                    if (claim != 0 && nodeAnchors[index] == 0 &&
-                        (claim == 1 ? hostile <= PresenceThreshold : friendly <= PresenceThreshold))
-                        target = claim == 1 ? 1f : -1f;
-                    float response = ControlFieldCore.Response(elapsed, total);
-                    float previousHold = holdStrength[index];
-                    holdStrength[index] = hasEvaluated ? previousHold + (target - previousHold) * response : target;
+                    float target = cellTarget[index];
+                    float before = passStartHold[index];
 
                     // Actual vanilla airbase ownership anchors its cell; neither this overlay
                     // nor an encirclement claim flips a base without a real capture.
-                    if (nodeAnchors[index] != 0)
-                        holdStrength[index] = nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
+                    if (nodeAnchors[index] != 0) holdStrength[index] = AnchorHold(index);
                     float hold = holdStrength[index];
                     SectorControl previousState = sectorStates[index];
                     SectorControl state = (SectorControl)ControlFieldCore.Classify(hold, friendly, hostile, nodeAnchors[index] == 3);
@@ -679,7 +793,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     // Only a real change bumps the grid version: a repainted but identical
                     // front must not trigger a texture upload. The hold epsilon catches
                     // contested stripe widths, which read the control value directly.
-                    if (sectorStates[index] != previousState || Math.Abs(hold - previousHold) > 0.01f)
+                    if (sectorStates[index] != previousState || Math.Abs(hold - before) > 0.01f)
                         changed = true;
                 }
             }
@@ -706,6 +820,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
             int segmentCount = SectorContour.Extract(holdStrength, friendlyForce, hostileForce,
                 ResolutionX, ResolutionY, CellSize, OriginX, OriginZ, frontSegments);
+            if (hasSea) segmentCount = DropSeaSegments(segmentCount);
             FrontlineSegmentCount = segmentCount;
             tracesReady = false;
             float frontLength = 0f;
@@ -713,6 +828,63 @@ namespace BoscaliSummer.Modules.Command.Runtime
             FrontlineLengthMetres = frontLength;
             FrontlineHash = HashFrontline(frontSegments, segmentCount);
             if (changed) GridVersion++;
+        }
+
+        /// <summary>Share of a free cell's target its eight neighbours decide.</summary>
+        internal const float NeighbourCoupling = 0.4f;
+        /// <summary>Opposing neighbours (of eight) that make a free cell fall at capture speed.</summary>
+        internal const int SurroundedNeighbours = 5;
+        private const int NeighbourSettleSweeps = 12;
+        private const float FieldStepSeconds = 0.5f;
+        private const int MaximumFieldSteps = 12;
+
+        private float AnchorHold(int index)
+            => nodeAnchors[index] == 1 ? 1f : nodeAnchors[index] == 2 ? -1f : 0f;
+
+        /// <summary>
+        /// A free cell's target under the neighbour rule, from last pass's hold. The map edge
+        /// is not a neighbour: an edge cell averages the ones it has.
+        /// </summary>
+        private float Coupled(int index, out bool surrounded)
+        {
+            surrounded = false;
+            // Ground no side reaches stays nobody's: neighbours sharpen a claim, they never make one.
+            if (cellTarget[index] == 0f) return 0f;
+            int r = index / ResolutionX, c = index - r * ResolutionX;
+            float own = previousHold[index], sum = 0f;
+            int count = 0, opposing = 0;
+            for (int dr = -1; dr <= 1; dr++)
+            {
+                int rr = r + dr;
+                if (rr < 0 || rr >= ResolutionY) continue;
+                for (int dc = -1; dc <= 1; dc++)
+                {
+                    int cc = c + dc;
+                    if ((dr == 0 && dc == 0) || cc < 0 || cc >= ResolutionX) continue;
+                    float h = previousHold[rr * ResolutionX + cc];
+                    sum += h;
+                    count++;
+                    if (own > ControlFieldCore.HoldEpsilon ? h < -ControlFieldCore.HoldEpsilon
+                        : own < -ControlFieldCore.HoldEpsilon && h > ControlFieldCore.HoldEpsilon) opposing++;
+                }
+            }
+            surrounded = opposing >= SurroundedNeighbours;
+            float mean = count > 0 ? sum / count : 0f;
+            return Math.Clamp(cellTarget[index] + (mean - cellTarget[index]) * NeighbourCoupling, -1f, 1f);
+        }
+
+        /// <summary>Keeps only front stretches on land: a front at sea is two coasts looking at each other.</summary>
+        private int DropSeaSegments(int count)
+        {
+            int kept = 0;
+            for (int i = 0; i < count; i++)
+            {
+                SectorFrontSegment s = frontSegments[i];
+                WorldToCell((s.AX + s.BX) * 0.5f, (s.AZ + s.BZ) * 0.5f, out int c, out int r);
+                if (sea[r * ResolutionX + c] != 0) continue;
+                frontSegments[kept++] = s;
+            }
+            return kept;
         }
 
         private static ulong HashFrontline(SectorFrontSegment[] segments, int count)
@@ -947,7 +1119,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// </summary>
         private ulong HashDisplay(SectorClusterTree.Cluster[] quads, int count)
         {
-            ulong hash = 1469598103934665603UL;
+            ulong hash = 1469598103934665603UL ^ seaHash;
             hash = HashStep(hash, (uint)count);
             for (int q = 0; q < count; q++)
             {
@@ -1269,14 +1441,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     int i01 = r1 * ResolutionX + c0, i11 = r1 * ResolutionX + c1;
                     SectorControl s00 = sectorStates[i00], s10 = sectorStates[i10];
                     SectorControl s01 = sectorStates[i01], s11 = sectorStates[i11];
-                    if (s00 == SectorControl.Neutral && s10 == SectorControl.Neutral &&
-                        s01 == SectorControl.Neutral && s11 == SectorControl.Neutral)
+                    float w00 = BandWeight(i00), w10 = BandWeight(i10), w01 = BandWeight(i01), w11 = BandWeight(i11);
+                    if ((s00 == SectorControl.Neutral && s10 == SectorControl.Neutral &&
+                         s01 == SectorControl.Neutral && s11 == SectorControl.Neutral) ||
+                        (w00 == 0f && w10 == 0f && w01 == 0f && w11 == 0f))
                     {
                         AddRun(pixelBuffer, texWidth, ref runFrom, ref runTo, ref runColor, yMin, yMax, xMin, xMax + 1, clear);
                         continue;
                     }
 
-                    float w00 = BandWeight(i00), w10 = BandWeight(i10), w01 = BandWeight(i01), w11 = BandWeight(i11);
                     if (s00 != SectorControl.Contested && s00 == s10 && s00 == s01 && s00 == s11 &&
                         w00 == w10 && w00 == w01 && w00 == w11)
                     {
@@ -1492,6 +1665,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Full at the front, quiet in the rear, nothing on unheld ground.</summary>
         private float BandWeight(int index)
         {
+            if (hasSea && sea[index] != 0) return 0f;
             byte band = frontBand[index];
             // Unheld ground is bare unless ComputeFrontBand marked it a closed-in gap (band + 1).
             if (sectorStates[index] == SectorControl.Neutral)

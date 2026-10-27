@@ -40,8 +40,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return WmcText.Cut(s, NameChars);
         }
 
-        public static string Fuel(int percent) => "FUEL " + N(percent) + "%";
-
         public static string BaseChip(int on, int total) =>
             total <= 0 ? "NO FIELD" : on <= 0 ? "ALL OFF" : on == 1 ? "1 BASE ON" : N(on) + " BASES ON";
 

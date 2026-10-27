@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public bool Complete => feedBox != null && mapPlate != null;
 
         /// <summary>The feed's box exists: its plate has a group of ours.</summary>
-        public bool HasFeed => feedBox != null && plate != null;
+        public bool HasFeed => feedBox != null && (plate != null || boxPlate != null);
 
         /// <summary>The kill feed's box is up now: the game shows it while there is a line or the chat is open.</summary>
         public bool FeedUp => HasFeed && darkener.gameObject.activeInHierarchy;
@@ -60,6 +60,20 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public bool MapUp => mapPlate != null && mapPlate.gameObject.activeInHierarchy;
 
         public RectTransform FeedBox => feedBox;
+
+        /// <summary>The feed box's bottom edge in screen pixels from the top of the screen while it is up, else 0 (its own canvas: it stays up in free camera, where the HUD canvas is off).</summary>
+        public float FeedBottomPx()
+        {
+            if (!FeedUp) return 0f;
+            Canvas canvas = feedBox.GetComponentInParent<Canvas>();
+            Camera cam = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.rootCanvas.worldCamera : null;
+            feedBox.GetWorldCorners(worldCorners);
+            float low = float.PositiveInfinity;
+            for (int i = 0; i < 4; i++) low = Mathf.Min(low, RectTransformUtility.WorldToScreenPoint(cam, worldCorners[i]).y);
+            return Mathf.Max(0f, Screen.height - low);
+        }
+
+        private readonly Vector3[] worldCorners = new Vector3[4];
         public RectTransform MapPlate => mapPlate;
 
         /// <summary>
@@ -77,6 +91,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (background != null)
                 foreach (Image image in background.GetComponentsInChildren<Image>(true))
                     if (image.name == "Darkener") { dark = image; break; }
+            if (dark == null && background != null) dark = background.GetComponent<Image>();      // the game's 2026-10-27 update dropped Darkener: the plate is the box's own Image (MessageUI.backgroundImage)
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             ChatBox input = NativeRefs.Get(ChatRef, ui);
             Adopt(dark, map != null && map.mapBackground != null ? map.mapBackground.rectTransform : null, map != null && map.mapImage != null ? map.mapImage.transform : null,
@@ -90,12 +105,18 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// </summary>
         public void Adopt(Image darkener, RectTransform mapPlate, Transform mapImage = null, TMP_Text[] feedTexts = null, GameObject chat = null)
         {
-            if (!(darkener != null && darkener == this.darkener && plate != null))
+            if (!(darkener != null && darkener == this.darkener && (plate != null || boxPlate == darkener)))
             {
                 Dispose();
                 this.darkener = darkener;
-                feedBox = darkener != null ? darkener.rectTransform.parent as RectTransform : null;
-                if (feedBox != null)
+                if (darkener != null && darkener.name != "Darkener")
+                {
+                    feedBox = darkener.rectTransform;      // the box's own plate: no group (it would hide the texts, its children), its renderer alpha alone hides it
+                    boxPlate = darkener;
+                }
+                else
+                    feedBox = darkener != null ? darkener.rectTransform.parent as RectTransform : null;
+                if (feedBox != null && boxPlate == null)
                 {
                     plate = darkener.gameObject.AddComponent<CanvasGroup>();      // null if Unity would not take a second group: the feed stays as the game made it
                     if (plate == null) feedBox = null;
@@ -167,9 +188,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// <summary>Hide the feed's plate (the board's shade stands in for it) or show it. Idempotent; meant to run every frame.</summary>
         public void HidePlate(bool hide)
         {
-            if (plate == null) return;
+            if (plate == null && boxPlate == null) return;
             float alpha = hide ? 0f : 1f;
-            if (plate.alpha != alpha) plate.alpha = alpha;
+            if (plate != null && plate.alpha != alpha) plate.alpha = alpha;
             if (boxPlate != null && boxPlate.canvasRenderer.GetAlpha() != alpha) boxPlate.canvasRenderer.SetAlpha(alpha);      // every frame, not once: the game switches the box off and on as lines come and go
         }
 

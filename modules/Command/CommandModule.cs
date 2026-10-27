@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Command
         public void Install(ModuleContext context)
         {
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
+            AvUiSound.Recorded = name => BoscaliSummer.Core.Fx.SfxClips.Get(name);
             context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);

@@ -17,7 +17,9 @@ namespace BoscaliSummer.Modules.Autopilot
             typeof(RadialMenuLifecyclePatches),
             typeof(ChaffNextPatch),
             typeof(ChaffTriggerPatch),
-            typeof(ChaffActivePatch)
+            typeof(ChaffActivePatch),
+            typeof(FlareLookPatch),
+            typeof(CinematicViewPatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -33,6 +35,7 @@ namespace BoscaliSummer.Modules.Autopilot
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddSceneService<LandingLight>(51);
             context.AddSceneService<ChaffDispenser>(51).Configure(settings);
+            CinematicViewPatch.Setting = settings.CinematicCamera;
             CockpitStateProbe.Initialise();
             context.Logger.LogInfo("Autopilot land=local ownship native-autopilot takeover; interaction menu on " + (settings.OnRadialBinding.Value ? "the Radial Menu binding" : "its own key only") + ", extra key=" + settings.AceRadialKey.Value);
         }

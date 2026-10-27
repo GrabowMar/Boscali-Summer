@@ -56,6 +56,16 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Readout(manager);
         }
 
+        /// <summary>Temporary A/B toggle for dark nights (<c>enabled</c>, or null to follow the setting); does not write configuration.</summary>
+        public static Dictionary<string, object> SetDarkNights(Dictionary<string, object> args)
+        {
+            WeatherManager manager = Find();
+            if (manager == null) return Fail("SetDarkNights", "no weather manager in this scene");
+            manager.SetCaptureDarkNights(Arg(args, "enabled") as bool?);
+            manager.LogAutomation("SetDarkNights: " + (Arg(args, "enabled") ?? "setting"));
+            return Readout(manager);
+        }
+
         /// <summary>Snap the weather to <c>conditions</c> (default 0.92), <c>cloudHeight</c> metres (default 4500)
         /// and optional forced <c>rain</c>. Without rain, the model controls precipitation.
         /// Optionally follows the scenario unit named by <c>follow</c>.</summary>

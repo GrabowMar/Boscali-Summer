@@ -463,8 +463,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             private readonly List<FormationDefinition> inFamily = new List<FormationDefinition>(MaxShapes);
             private string family, picked, current;
 
-            public AvWindow Window => window;
-
             public bool Visible => window.Visible;
 
             public ShapeWindow(Transform root, WmcControls controls, System.Action<string> applied)

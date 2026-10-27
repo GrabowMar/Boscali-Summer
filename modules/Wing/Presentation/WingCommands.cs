@@ -61,9 +61,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public static void Rtb(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Rtb, scope));
 
-        /// <summary>The whole wing home to refuel and rearm, then back out.</summary>
-        public static void Refit() => Refit(default);
-
         public static void Refit(WingScope scope) => WingOrders.Run(WingOrder.Of(OrderKind.Refit, scope));
 
 

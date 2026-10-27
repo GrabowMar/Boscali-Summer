@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using BepInEx.Bootstrap;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
@@ -16,7 +17,10 @@ namespace BoscaliSummer.Modules.Vanguard
         private static readonly ModuleMetadata Module = new ModuleMetadata("vanguard", "Vanguard weapons");
 
         public ModuleMetadata Metadata => Module;
-        public Type[] PatchTypes => new[]
+        public Type[] PatchTypes => CorePatchTypes.Concat(TorchBoost.PatchTypes).Concat(SunspearPod.PatchTypes)
+            .Concat(StormcellPod.PatchTypes).Concat(WatchtowerPod.PatchTypes).Concat(MantaStore.PatchTypes).ToArray();
+
+        private static readonly Type[] CorePatchTypes =
         {
             typeof(Patches.VanguardArticulationPatch),
             typeof(Patches.MaldjShadowPatch),
@@ -41,13 +45,22 @@ namespace BoscaliSummer.Modules.Vanguard
             typeof(Patches.AlexLaunchPatch),
             typeof(Patches.AlexDeflectArhPatch),
             typeof(Patches.AlexDeflectSarhPatch),
-            typeof(Patches.AlexSuppressPatch)
+            typeof(Patches.AlexSuppressPatch),
+            typeof(Patches.HiddenPodRegisterPatch),
+            typeof(Patches.AiLoadoutFilterPatch)
         };
 
         public static bool Available => Chainloader.PluginInfos.ContainsKey(BlueprinterGuid);
 
         public void Install(ModuleContext context)
         {
+            // Runtime stores. Registration order is the network index order on every peer: append, never reorder.
+            TorchBoost.Register(context);      // SRB-2 TORCH strap-on boost rockets
+            SunspearPod.Register(context);     // HEL-60 SUNSPEAR laser pod
+            StormcellPod.Register(context);    // PCU-9 STORMCELL capacitor pod
+            WatchtowerPod.Register(context);   // ASQ-X WATCHTOWER recon pod
+            MantaStore.Register(context);      // XQ-90 MANTA heavy escort drone (needs the bundle's REMORA, so it runs last)
+            context.AddSceneService<RuntimeStoreService>(55);
             context.AddSceneService<VanguardPricing>(60);
             context.AddSceneService<Presentation.VanguardHudFeeds>(60);
             context.AddSceneService<AegisService>(60);

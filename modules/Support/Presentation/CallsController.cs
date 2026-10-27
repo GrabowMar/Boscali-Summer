@@ -146,7 +146,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     else arm.Clear(); // the pick is spent, so the arm is too; Check already worded why
                 });
                 armHasPick = mapOk;
-                Say("ARMED · " + Label(id) + (mapOk ? " · PRESS AGAIN OR RIGHT-CLICK MAP" : " · PRESS AGAIN TO FIRE (MAP BUSY)"), AvUiCue.Engage);
+                Say("ARMED · " + Label(id) + (mapOk ? " · FIRE, OR RIGHT-CLICK THE MAP" : " · FIRE TO SEND (MAP BUSY)"), AvUiCue.Engage);
                 return;
             }
             if (TryPod(out GlobalPosition pod)) { Fire(id, pod, now); return; }
@@ -242,7 +242,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 steering = false;
                 manager.Disarm(); // one armed intent at a time: a STANDARD arm gives way
                 Say("ARMED · TASKED " + (post.Points != null ? post.Points.Length : 0) + " TARGET" +
-                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " ALLOC" : "FREE") + " · PRESS AGAIN", AvUiCue.Engage);
+                    (post.Points != null && post.Points.Length == 1 ? "" : "S") + " · " + (post.Price > 0 ? post.Price + " ALLOC" : "FREE") + " · FIRE TO LAUNCH", AvUiCue.Engage);
                 return;
             }
             // No aim is sent: the host claims the post's own stored ground point and prices it itself.

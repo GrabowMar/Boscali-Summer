@@ -38,8 +38,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Paint();
         }
 
-        public string Word => word;
-
         public void Place(float x, float y, float w, float h)
         {
             AvLay.Place(root, x, y, w, h);

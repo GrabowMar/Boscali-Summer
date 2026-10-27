@@ -16,7 +16,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     /// (<see cref="WindowInput"/>: the pilot keeps flying on stick and keyboard, the mouse drives the window). Assets on the link on the
     /// left (click = link), the linked drone's live feed as the hero with its asset card under it, the TACTICAL PLOT on the right
     /// (north up round your aircraft: click a marker to link it, click open ground to send the linked drone there) over the link log,
-    /// and the action bar (PREV, NEXT, TAKE CONTROL, BACK ON TASK, SENSOR, ZOOM, HUD FEED). Every press goes to <see cref="DroneLinkService"/>.
+    /// and the action bar (PREV, NEXT, SEND TO TARGET, BACK ON TASK, SENSOR, ZOOM, HUD FEED). On the feed: left-click turns the drone that way,
+    /// right-click on the ground sends it there, the wheel trims height. Every press goes to <see cref="DroneLinkService"/>.
     /// </summary>
     internal sealed class DroneTerminalWindow : MonoBehaviour
     {
@@ -32,7 +33,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private TMP_Text stripLeft, stripRight, assetsHead, budget, net, cardHead, orders, plotHead, plotHint, logHead, log;
         private readonly TMP_Text[] keys = new TMP_Text[13], values = new TMP_Text[13];
         private float listY, leftBottom;
-        private AvControl prev, next, hand, auto, look, zoom, hud;
+        private AvControl prev, next, toTarget, auto, look, zoom, hud;
         private RectTransform plot;
         private AvVector plotInk;
         private readonly TMP_Text[] markerLabels = new TMP_Text[Markers];
@@ -101,7 +102,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             float feedH = Mathf.Round(HeroW * 9f / 16f);
             feed = new DroneFeedView(r, "Feed", 15f);
             feed.Place(new AvSlot(hx, top, HeroW, feedH));
-            // Click-to-steer: click the picture and the drone turns there (above or below the cross climbs or dives); the wheel trims height.
+            // Click-to-steer: left-click turns the drone there (above or below the cross climbs or dives), right-click on the ground sends it
+            // there to circle, the wheel trims height.
             Image pad = AvLay.Solid(feed.Rect, "SteerPad", Color.clear);
             AvLay.Fill(pad.rectTransform);
             pad.raycastTarget = true;
@@ -156,10 +158,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
             // Action bar.
             float by = H - FooterH - BarH - 2f, bw = (W - 2f * Pad - 6f * 8f) / 7f;
-            prev = Button(r, 0, by, bw, "PREV", AvIcon.ChevronLeft, () => link.Cycle(-1), "Link the previous drone. While you hand-fly, the stick goes with the link.");
-            next = Button(r, 1, by, bw, "NEXT", AvIcon.ChevronRight, () => link.Cycle(1), "Link the next drone. While you hand-fly, the stick goes with the link.");
-            hand = Button(r, 2, by, bw, "TAKE CONTROL", AvIcon.Drone, link.ToggleHand, "Hand-fly the linked drone: it holds its course and height until you click the feed to steer it (the wheel trims height). Your own aircraft stays on your stick.");
-            auto = Button(r, 3, by, bw, "BACK ON TASK", AvIcon.Refresh, link.Release, "Clear the hand control or waypoint: the drone goes back to its own job.");
+            prev = Button(r, 0, by, bw, "PREV", AvIcon.ChevronLeft, () => link.Cycle(-1), "Link the previous drone. Every drone keeps flying its last order.");
+            next = Button(r, 1, by, bw, "NEXT", AvIcon.ChevronRight, () => link.Cycle(1), "Link the next drone. Every drone keeps flying its last order.");
+            toTarget = Button(r, 2, by, bw, "SEND TO TARGET", AvIcon.Focus2, link.SendToTarget, "Send the linked drone to your selected target: it flies there and circles it.");
+            auto = Button(r, 3, by, bw, "BACK ON TASK", AvIcon.Refresh, link.Release, "Clear the drone's order: it goes back to its own job.");
             look = Button(r, 4, by, bw, "SENSOR", AvIcon.Eye, link.ToggleLook, "Switch the sensor between the daylight camera (EO) and white-hot infrared (IR).");
             zoom = Button(r, 5, by, bw, "ZOOM", AvIcon.Focus2, link.CycleZoom, "Step the camera zoom: 1X, 3X, 7X.");
             hud = Button(r, 6, by, bw, "HUD FEED", AvIcon.Camera, link.ToggleFeed, "Show the linked drone's feed card on your HUD in flight (it is always on while you hand-fly).");
@@ -272,9 +274,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             AvText.Set(budget, Budget());
             AvText.Set(net, NetLines());
             Card(v);
-            hand.Label = v != null && v.Mode == DroneMode.Hand ? "RELEASE CONTROL" : "TAKE CONTROL";
-            hand.Latched = v != null && v.Mode == DroneMode.Hand;
-            hand.Interactable = link.Count > 0;
+            toTarget.Interactable = link.Count > 0 && link.CanStrike;
             auto.Interactable = v != null && v.Mode != DroneMode.Auto;
             prev.Interactable = next.Interactable = link.Count > 1;
             look.Label = "SENSOR · " + link.LookWord;
@@ -311,7 +311,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             int hands = 0, wpts = 0;
             for (int i = 0; i < link.Count; i++) { if (link[i].Mode == DroneMode.Hand) hands++; else if (link[i].Mode == DroneMode.Waypoint) wpts++; }
             return "ON TASK " + (link.Count - hands - wpts) + " · HAND " + hands + " · WPT " + wpts +
-                "\nOne drone at a time can be hand-flown; NEXT and PREV hand the stick over. Past " + AvNum.Fixed(DroneLink.MaxRangeM / 1000f, 0) +
+                "\nOrders stay with their drone: link another and the last one keeps flying its order. Past " + AvNum.Fixed(DroneLink.MaxRangeM / 1000f, 0) +
                 " KM the link drops and the drone goes back to its job.";
         }
 
@@ -343,10 +343,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             values[2].color = AvInk.State(v.Mode == DroneMode.Hand ? AvState.Caution : v.Mode == DroneMode.Waypoint ? AvState.Info : AvState.Ready);
             values[3].color = AvInk.State(v.Quality <= 0f ? AvState.Danger : v.Quality < 0.5f ? AvState.Caution : AvState.Ready);
             AvText.Set(orders, v.Mode == DroneMode.Hand
-                ? "HAND CONTROL: CLICK THE FEED to steer (the drone turns to where you click; above or below the cross climbs or dives), MOUSE WHEEL trims height. It holds that course until you change it; its systems hold until you release it."
+                ? "HAND: it holds the course and height you gave it. LEFT-CLICK THE FEED to turn it there (above or below the cross climbs or dives), WHEEL trims height, RIGHT-CLICK the ground to send it there. BACK ON TASK resumes its own job."
                 : v.Mode == DroneMode.Waypoint
-                    ? "WAYPOINT: the drone flies to the plot point and circles it at " + AvNum.Fixed(DroneLink.OrbitRadiusM / 1000f, 1) + " KM. BACK ON TASK resumes its own job."
-                    : "ON TASK: the drone flies its own job. Click the feed to take it by hand and steer it there, or click the plot to send it to a point.");
+                    ? "WAYPOINT: it flies to the point and circles it at " + AvNum.Fixed(DroneLink.OrbitRadiusM / 1000f, 1) + " KM. RIGHT-CLICK the feed or click the plot to move the point, LEFT-CLICK the feed to fly it by hand. BACK ON TASK resumes its own job."
+                    : "ON TASK: it flies its own job. RIGHT-CLICK the ground in the feed (or click the plot) to send it there, LEFT-CLICK the feed to turn it that way by hand.");
         }
 
         // ---- tactical plot -----------------------------------------------------------------------------------------------
@@ -456,13 +456,16 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Paint();
         }
 
+        // Left = turn that way (HAND), right = go to the ground there (WPT).
         private void FeedClick(PointerEventData e)
         {
-            if (e.button != PointerEventData.InputButton.Left) return;
+            if (e.button == PointerEventData.InputButton.Middle) return;
             RectTransform rt = feed.Rect;
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(rt, e.position, null, out Vector2 local)) return;
             Rect box = rt.rect;
-            link.SteerAt(new Vector2((local.x - box.xMin) / box.width, (local.y - box.yMin) / box.height));
+            var at = new Vector2((local.x - box.xMin) / box.width, (local.y - box.yMin) / box.height);
+            if (e.button == PointerEventData.InputButton.Left) link.SteerAt(at);
+            else if (!link.SteerGround(at)) AvUiSound.Play(AvUiCue.Caution); // open sky: nothing to fly to
             Paint();
         }
 

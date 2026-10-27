@@ -27,33 +27,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     (float)(time * vy),
                     (float)(time * (vz * sinc - vx * cosc)));
         }
-
-        // Cubic Hermite capture follows current velocity at departure and future slot velocity at
-        // arrival. Bound tangents by gap to prevent loops.
-        public static (float x, float z) Capture(
-            float targetX, float targetZ, float ownVx, float ownVz,
-            float slotVx, float slotVz, float seconds, float previewSeconds)
-        {
-            double time = Math.Max(0.001f, seconds);
-            double t = Math.Max(0d, Math.Min(1d, previewSeconds / time));
-            double distance = Math.Sqrt((double)targetX * targetX + (double)targetZ * targetZ);
-            double ownScale = Math.Min(time, distance / Math.Max(1d,
-                Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz)));
-            double slotScale = Math.Min(time, distance / Math.Max(1d,
-                Math.Sqrt((double)slotVx * slotVx + (double)slotVz * slotVz)));
-            // Fade tangents outside the forward cone so rearward rendezvous can enter the heading
-            // limiter instead of keeping preview ahead indefinitely.
-            double alignment = ((double)targetX * ownVx + (double)targetZ * ownVz) /
-                Math.Max(1d, distance * Math.Sqrt((double)ownVx * ownVx + (double)ownVz * ownVz));
-            double tangentBlend = Math.Max(0d, Math.Min(1d, alignment * 4d));
-            tangentBlend *= tangentBlend * (3d - 2d * tangentBlend);
-            ownScale *= tangentBlend;
-            slotScale *= tangentBlend;
-            double h10 = t * (1d - t) * (1d - t);
-            double h01 = t * t * (3d - 2d * t);
-            double h11 = t * t * (t - 1d);
-            return ((float)(h10 * ownVx * ownScale + h01 * targetX + h11 * slotVx * slotScale),
-                    (float)(h10 * ownVz * ownScale + h01 * targetZ + h11 * slotVz * slotScale));
-        }
     }
 }

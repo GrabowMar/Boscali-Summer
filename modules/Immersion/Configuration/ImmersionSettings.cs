@@ -19,6 +19,8 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> AirframeAudioEnabled { get; }
         public ConfigEntry<bool> SurfaceImmersionEnabled { get; }
         public ConfigEntry<bool> WindAudioEnabled { get; }
+        public ConfigEntry<bool> SoftTonesEnabled { get; }
+        public ConfigEntry<bool> VoiceWarningsEnabled { get; }
         public ConfigEntry<bool> MachBuffetEnabled { get; }
         public ConfigEntry<bool> PilotBreathingEnabled { get; }
         public ConfigEntry<bool> HelmetVisorEnabled { get; }
@@ -28,6 +30,11 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> PilotControlMotionEnabled { get; }
         public ConfigEntry<bool> PilotReflectionEnabled { get; }
         public ConfigEntry<int> KneeboardCard { get; }
+        public ConfigEntry<bool> NearMissCrackEnabled { get; }
+        public ConfigEntry<bool> CockpitMuffleEnabled { get; }
+        public ConfigEntry<bool> ContrailsEnabled { get; }
+        public ConfigEntry<bool> DustWakeEnabled { get; }
+        public ConfigEntry<bool> ParkedAircraftEnabled { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -68,6 +75,11 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
             WindAudioEnabled = config.Bind(section, "WindAudioEnabled", true,
                 "Cockpit view: procedural canopy wind rush and aerodynamic slipstream audio.");
 
+            SoftTonesEnabled = config.Bind(section, "SoftTonesEnabled", true,
+                "Reworked cockpit cues: modern missile lock / track / launch alarms and stall horn, a soft bell and tick for radar warnings, and rounder, quieter interface clicks and RPM/VRS warnings.");
+            VoiceWarningsEnabled = config.Bind(section, "VoiceWarningsEnabled", true,
+                "Voice warnings for your own aircraft in every view: PULL UP (with a GPWS whoop) and TERRAIN near the ground, OVER G, BINGO FUEL.");
+
             MachBuffetEnabled = config.Bind(section, "MachBuffetEnabled", true,
                 "Cockpit view: transonic Mach aerodynamic buffeting vibrations (Mach 0.86 - 1.12) and sound barrier crossing bump.");
 
@@ -89,6 +101,16 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Faint pilot and helmet reflection on verified windscreen glass. Pilot-only 128/256 pixel capture capped at 10 Hz; works independently of body visibility.");
             KneeboardCard = config.Bind(section, "KneeboardCard", 0,
                 "Cockpit kneeboard card: 0 writes the mission card, 1 and up pick a picture card. Choose it in SQD > STUDIO.");
+            NearMissCrackEnabled = config.Bind(section, "NearMissCrackEnabled", true,
+                "Supersonic rounds passing within 40 m of the camera snap with a sharp crack; heavy cannon rounds also jolt the view.");
+            CockpitMuffleEnabled = config.Bind(section, "CockpitMuffleEnabled", true,
+                "Cockpit view: outside explosions are heard through the canopy, with their top end cut.");
+            ContrailsEnabled = config.Bind(section, "ContrailsEnabled", true,
+                "Jet engines leave long white contrails above about 7.5 km, spreading and drifting with the wind.");
+            DustWakeEnabled = config.Bind(section, "DustWakeEnabled", true,
+                "Aircraft flying fast and very low over land kick up a dust wake behind them (Weather's sea spray covers water).");
+            ParkedAircraftEnabled = config.Bind(section, "ParkedAircraftEnabled", true,
+                "Parked AI aircraft switch their navigation lights off and leave the cockpit empty until they start up.");
         }
     }
 }

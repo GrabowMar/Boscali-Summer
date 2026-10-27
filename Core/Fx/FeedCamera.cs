@@ -41,6 +41,9 @@ namespace BoscaliSummer.Core.Fx
         // because the world is lit in HDR and a fixed LDR feed clips every cloud deck and sky to white.
         private static readonly System.Reflection.FieldInfo GameExposure = AccessTools.Field(typeof(ExposureController), "colorAdjustments");
         private ColorAdjustments ours;
+        private Bloom glow;
+
+        private static float Threshold(FeedLook look) => look == FeedLook.WhiteHot ? 1.1f : 0.95f;
 
         // Every look is HDR + ACES now: the LDR seeker clipped a bright cloud deck to a white sheet (in game 2026-10-20).
         private bool Hdr => true;
@@ -83,7 +86,13 @@ namespace BoscaliSummer.Core.Fx
             cam.fieldOfView = FieldOfView;
             if (now < nextFrame) return true;
             nextFrame = now + 1f / Mathf.Max(1f, Fps);
-            if (Hdr && ours != null) ours.postExposure.value = Exposure() + (look == FeedLook.WhiteHot ? -1.0f : -0.2f);
+            if (Hdr && ours != null)
+            {
+                float exposure = Exposure() + (look == FeedLook.WhiteHot ? -1.0f : -0.2f);
+                ours.postExposure.value = exposure;
+                // URP tests the bloom threshold on the raw HDR frame, before exposure: in daylight (about -4 EV) the whole picture passed it and the feed went milky.
+                if (glow != null) glow.threshold.value = Threshold(look) * Mathf.Pow(2f, -exposure);
+            }
             cam.enabled = true;
             enabledFrame = Time.frameCount;
             return true;
@@ -149,10 +158,13 @@ namespace BoscaliSummer.Core.Fx
             {
                 data.antialiasing = AntialiasingMode.None;
                 data.renderShadows = false;
+                // The weather's cloud pass marches up to this lens's own depth (ZTest Always); without it the march ran through the ground and an overcast filled the feed white.
+                data.requiresDepthTexture = true;
                 // Our own volume stack, set by hand and never updated from the scene's volumes: the world's grade stays off this feed and this one off the world.
                 stack = VolumeManager.instance.CreateStack();
                 Grade(stack, look);
                 ours = stack.GetComponent<ColorAdjustments>();
+                glow = stack.GetComponent<Bloom>();
                 cam.SetVolumeFrameworkUpdateMode(VolumeFrameworkUpdateMode.ViaScripting);      // before the stack: switching the mode builds the camera a stack of its own
                 data.volumeStack = stack;
                 data.renderPostProcessing = true;
@@ -165,22 +177,22 @@ namespace BoscaliSummer.Core.Fx
             bool mono = look != FeedLook.Eo;
             ColorAdjustments color = s.GetComponent<ColorAdjustments>();
             color.saturation.value = mono ? -100f : -35f;
-            color.contrast.value = look == FeedLook.Seeker ? 25f : look == FeedLook.WhiteHot ? 18f : 12f;
+            color.contrast.value = look == FeedLook.Seeker ? 15f : look == FeedLook.WhiteHot ? 18f : 12f;
             color.postExposure.value = look == FeedLook.Seeker ? -0.2f : look == FeedLook.WhiteHot ? 0.15f : 0f;
             s.GetComponent<Tonemapping>().mode.value = TonemappingMode.ACES;
             Bloom bloom = s.GetComponent<Bloom>();
-            bloom.threshold.value = look == FeedLook.WhiteHot ? 1.1f : 0.95f;
-            bloom.intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.15f;
+            bloom.threshold.value = Threshold(look);
+            bloom.intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.1f;
             bloom.scatter.value = 0.6f;
             FilmGrain grain = s.GetComponent<FilmGrain>();
             grain.type.value = FilmGrainLookup.Custom;      // built-in lookups are stripped from the game (NRE in SetupGrain)
             grain.texture.value = Noise();
-            grain.intensity.value = look == FeedLook.Eo ? 0.3f : look == FeedLook.WhiteHot ? 0.45f : 0.5f;
+            grain.intensity.value = look == FeedLook.Eo ? 0.3f : look == FeedLook.WhiteHot ? 0.45f : 0.3f;
             grain.response.value = 0.4f;
             Vignette rim = s.GetComponent<Vignette>();
-            rim.intensity.value = look == FeedLook.Eo ? 0.28f : 0.38f;
+            rim.intensity.value = look == FeedLook.Eo ? 0.28f : look == FeedLook.WhiteHot ? 0.38f : 0.25f;
             rim.smoothness.value = 0.4f;
-            s.GetComponent<ChromaticAberration>().intensity.value = look == FeedLook.Eo ? 0.15f : 0.25f;
+            s.GetComponent<ChromaticAberration>().intensity.value = look == FeedLook.WhiteHot ? 0.25f : 0.1f;
         }
 
         /// <summary>Drops the camera and its picture (scene reset, feed off). Idempotent.</summary>
@@ -197,6 +209,7 @@ namespace BoscaliSummer.Core.Fx
             // VolumeManager.Update resets the cached stack's grade before reuse. Object.Destroy above is deferred.
             stack = null;
             ours = null;
+            glow = null;
             if (picture != null)
             {
                 FxRtPool.Disown(picture);

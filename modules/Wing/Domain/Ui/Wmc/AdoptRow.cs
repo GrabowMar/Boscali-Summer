@@ -11,8 +11,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static bool Visible(int n, bool client) => n > 0 && !client;
 
-        public static string Label(int n, float price, bool asking) => "ADOPT " + N(n) + " · " + Credits.Price(price) + (asking ? "?" : "");
-
         public static string Ask(int n, float price) => "Adopt " + N(n) + " aircraft for " + Credits.Price(price) + "? Press ADOPT again";
 
         /// <summary>What the selection holds beyond those that can join, and the first reason why not.</summary>

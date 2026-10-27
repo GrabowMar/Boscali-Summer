@@ -38,7 +38,7 @@ namespace NOAvionics
         private void PowerOn()
         {
             if (shaderMode && effects && life > 0f && !AvFxDriver.ReducedMotion && Application.isPlaying)
-                Shader.SetGlobalFloat(BootId, Time.unscaledTime);
+                Shader.SetGlobalFloat(BootId, AvFxDriver.Now);
         }
 
         private void OnEnable() => PowerOn();

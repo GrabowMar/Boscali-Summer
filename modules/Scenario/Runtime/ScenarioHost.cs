@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Reflection;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Contracts;
@@ -13,6 +14,7 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Scenario.Configuration;
 using BoscaliSummer.Modules.Scenario.Presentation;
+using HarmonyLib;
 using NOAvionics;
 using NuclearOption.SavedMission;
 using UnityEngine;
@@ -25,7 +27,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
     /// client), watches what the local pilot is doing (joined a side, has an aircraft, took off, landed), and plays the matching beats on the stage view. Local
     /// presentation only: the world a script changes is written into the mission itself by <see cref="MissionPatcher"/> and run by the game.
     /// </summary>
-    internal sealed class ScenarioHost : MonoBehaviour, ISceneService, IScenarioStage
+    internal sealed class ScenarioHost : MonoBehaviour, ISceneService, IScenarioStage, IScenarioWorld
     {
         private const float StartDelaySeconds = 1.5f, SettleSeconds = 2f;
         private const int MaxEarlyEvents = 256;
@@ -159,6 +161,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             }
             runner.TextSpeed = settings.TextSpeed.Value;
             runner.Tick(now - startedAt);
+            if (ace != null) view.AceHealth(Health(ace));
             // gamemusic off: the game's tracks stay silent the whole mission, whatever it starts playing.
             if (!script.GameMusic) QuietGameMusic();
             if (music == null || musicClip == null) return;
@@ -193,7 +196,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             collecting = false;
             if (script == null) { early.Clear(); return; }
             ScenarioDef running = script;
-            runner = new ScenarioRunner(running, this, flag => library.Progress.Has(running.Saga, flag));
+            runner = new ScenarioRunner(running, this, flag => library.Progress.Has(running.Saga, flag)) { World = this };
             foreach (KeyValuePair<TriggerKind, string> heard in early) runner.Raise(heard.Key, heard.Value);
             // A session that never loaded through the mission-preparation seam still needs the events.
             Listen();
@@ -240,6 +243,11 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             runner = null;
             script = null;
             bound = null;
+            named.Clear();
+            seen.Clear();
+            fullHealth.Clear();
+            ace = null;
+            flown = null;
             camera = null;
             if (view != null) Destroy(view.gameObject);
             view = null;
@@ -483,6 +491,13 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 changedAt = now;
             }
             hadAircraft = flying;
+            // Shot down: the aircraft the pilot was flying is wrecked (a landed aircraft that is put away is not).
+            if (flying) flown = own;
+            else if (flown != null)
+            {
+                if (flown.disabled) runner.Raise(TriggerKind.Down);
+                flown = null;
+            }
             if (!flying) return;
             // Wheels have to stay off (or on) the ground for a moment: a bounce is not a take-off.
             if (own.IsLanded() == !airborne) { changedAt = now; return; }
@@ -795,6 +810,90 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (script == null || !library.Progress.MarkDone(script.Id)) return;
             library.SaveProgress();
             log?.LogInfo("[Scenario] '" + script.Id + "' finished.");
+        }
+
+        public void Objectives(ActionKind verb, string[] names)
+        {
+            // The objectives are the host's; the game sends their changes to everybody.
+            if (!GameAccess.IsServer() || MissionManager.Runner == null || MissionManager.Objectives == null) return;
+            foreach (string name in names)
+            {
+                Objective found = null;
+                foreach (Objective objective in MissionManager.Objectives.AllObjectives)
+                    if (objective?.SavedObjective?.UniqueName == name) found = objective;
+                if (found == null) { log?.LogWarning("[Scenario] the mission has no objective '" + name + "'."); continue; }
+                if (verb == ActionKind.Complete) MissionManager.Runner.CompleteObjective(found);
+                else if (verb == ActionKind.Cancel) MissionManager.Runner.StopObjective(found);
+                else if (StartObjective != null) StartObjective.Invoke(MissionManager.Runner, new object[] { found, true });
+                else log?.LogWarning("[Scenario] MissionRunner.StartObjective is gone: 'start' does nothing.");
+            }
+        }
+
+        // Internal in the game; the same call a StartObjective outcome makes.
+        private static readonly MethodInfo StartObjective = AccessTools.Method(typeof(MissionRunner), "StartObjective");
+
+        public void Countdown(string label, float seconds) => view.Countdown(label, Time.time + seconds);
+
+        private string ace;
+
+        public void Ace(string unit, string callsign, string line)
+        {
+            ace = unit;
+            view.Ace(unit == null ? null : callsign, line);
+        }
+
+        // ------------------------------------------------------------------ IScenarioWorld
+
+        private readonly Dictionary<string, Unit> named = new Dictionary<string, Unit>(StringComparer.Ordinal);
+        private readonly HashSet<string> seen = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, float> fullHealth = new Dictionary<string, float>(StringComparer.Ordinal);
+        private Aircraft flown;
+
+        /// <summary>The unit a script names: its mission name, or its network name for one the game made.</summary>
+        private Unit Named(string name)
+        {
+            if (named.TryGetValue(name, out Unit unit) && unit != null) return unit;
+            // ponytail: a scan of every unit for each watched name, twice a second; index units by name if a script watches dozens.
+            foreach (Unit candidate in UnitRegistry.allUnits)
+                if (candidate != null && (candidate.UniqueName == name || candidate.NetworkUniqueName == name))
+                {
+                    named[name] = candidate;
+                    seen.Add(name);
+                    return candidate;
+                }
+            return null;
+        }
+
+        public bool Destroyed(string name)
+        {
+            Unit unit = Named(name);
+            // Gone from the world after it was seen in it: destroyed and cleared away.
+            return unit != null ? unit.disabled : seen.Contains(name);
+        }
+
+        public float Health(string name)
+        {
+            Unit unit = Named(name);
+            if (unit == null) return seen.Contains(name) ? 0f : -1f;
+            if (unit.disabled) return 0f;
+            float hp = 0f;
+            List<UnitPart> parts = unit.partLookup;
+            if (parts != null)
+                foreach (UnitPart part in parts)
+                    if (part != null && !part.IsDetached()) hp += Mathf.Max(0f, part.hitPoints);
+            // Health is a share of what the unit had when the script first looked at it.
+            if (!fullHealth.TryGetValue(name, out float full) || full <= 0f) fullHealth[name] = full = hp;
+            return full > 0f ? Mathf.Clamp01(hp / full) : 1f;
+        }
+
+        public float Height => GameManager.GetLocalAircraft(out Aircraft own) && own != null && !own.disabled ? own.radarAlt : float.NaN;
+
+        public bool Near(float x, float z, float range)
+        {
+            if (!GameManager.GetLocalAircraft(out Aircraft own) || own == null || own.disabled) return false;
+            GlobalPosition at = own.GlobalPosition();
+            float dx = at.x - x, dz = at.z - z;
+            return dx * dx + dz * dz <= range * range;
         }
 
         // ------------------------------------------------------------------ helpers

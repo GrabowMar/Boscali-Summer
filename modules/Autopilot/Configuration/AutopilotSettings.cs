@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
         public ConfigEntry<float> GlideslopeDegrees { get; }
         public ConfigEntry<UnityEngine.KeyCode> AceRadialKey { get; }
         public ConfigEntry<bool> OnRadialBinding { get; }
-        public ConfigEntry<bool> ChaffOnCountermeasureKey { get; }
         public ConfigEntry<UnityEngine.KeyCode> ChaffKey { get; }
+        public ConfigEntry<bool> CinematicCamera { get; }
 
         public AutopilotSettings(ConfigFile config)
         {
@@ -36,13 +36,11 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
             AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
                 "Keyboard key that opens the interaction menu at once (default C; None closes this way in). " +
                 "Tap it to keep the menu open for clicks, or hold it, point at a row and release.");
-            ChaffOnCountermeasureKey = config.Bind("Autopilot", "ChaffOnCountermeasureKey", true,
-                "Your aircraft carries a chaff dispenser (single player and hosting). Chaff is one more stop of the game's Next Countermeasure key, " +
-                "and while it is selected the countermeasure button dispenses it. On: with flares or the jammer selected, holding the countermeasure button " +
-                "also dispenses chaff while a radar-guided missile is inbound. Off: chaff only when selected, from the interaction menu (DEFENCE > POP CHAFF) or on ChaffKey. " +
-                "Chaff dazzles a radar seeker most when you fly across its line of sight, and does nothing head-on.");
             ChaffKey = config.Bind("Autopilot", "ChaffKey", UnityEngine.KeyCode.None,
                 "Keyboard key that pops one chaff salvo (default None: use the countermeasure button or the interaction menu).");
+            CinematicCamera = config.Bind("Autopilot", "CinematicCamera", true,
+                "On (default): Switch View goes cockpit, external, cinematic. Off: the cinematic camera is skipped and external goes straight back to the cockpit. " +
+                "Also switched from the interaction menu (VIEW > CINEMATIC CAMERA).");
         }
 
         public float Slope => IlsGuidance.ClampSlope(GlideslopeDegrees.Value);

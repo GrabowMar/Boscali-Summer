@@ -82,7 +82,7 @@ namespace BoscaliSummer.Kaiju
             var result = new Dictionary<string, object> { ["ok"] = true, ["step"] = action, ["message"] = message, ["exists"] = body != null };
             if (body == null) return result;
             int alive = 0, spawned = 0;
-            float worstPose = 0f;
+            float worstPose = 0f, worstTrack = 0f;
             for (int i = 0; i < body.Nodes.Length; i++)
             {
                 if (body.Nodes[i] == null) continue;
@@ -91,8 +91,13 @@ namespace BoscaliSummer.Kaiju
                 {
                     alive++;
                     worstPose = Mathf.Max(worstPose, Vector3.Distance(body.Nodes[i].transform.position, body.SpotWorld(i)));
+                    // What the other sides believe (HUD markers, locks) against where the spot is now.
+                    foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
+                        if (hq != null && hq != body.Nodes[i].NetworkHQ && hq.TryGetKnownPosition(body.Nodes[i], out GlobalPosition known))
+                            worstTrack = Mathf.Max(worstTrack, FastMath.Distance(known, body.Nodes[i].GlobalPosition()));
                 }
             }
+            result["trackGap"] = worstTrack;
             Vector3 p = body.Position.AsVector3();
             result["action"] = body.Action.ToString();
             result["dying"] = body.Action == KaijuAction.Death ? 1 : 0;

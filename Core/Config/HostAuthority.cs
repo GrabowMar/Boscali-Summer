@@ -21,6 +21,11 @@ namespace BoscaliSummer.Core.Config
             s.Comms.PingSeconds, s.Comms.StickerSeconds, s.Comms.DrawingSeconds,
             s.Comms.AllowAllChannel, s.Comms.AllowDrawing,
 
+            s.CombatAdjust.LinkDiscipline, s.CombatAdjust.LinkChance, s.CombatAdjust.LinkCloseRangeKm,
+            s.CombatAdjust.TrackFog, s.CombatAdjust.FogScale, s.CombatAdjust.TrackExpirySeconds,
+            s.CombatAdjust.MissileFailChance, s.CombatAdjust.CountermeasureScale,
+            s.CombatAdjust.ArmourSmoke, s.CombatAdjust.ShipDecoys, s.CombatAdjust.SamEmcon,
+
             s.DynamicOperations.RewardMultiplier,
 
             s.Events.RotationGapMinSeconds, s.Events.RotationGapMaxSeconds,

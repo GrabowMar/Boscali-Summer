@@ -22,8 +22,6 @@ namespace BoscaliSummer.Modules.UrbanCombat
             typeof(ShellDamagePatch),
             typeof(StrongpointDamagePatch),
             typeof(ShellShockwavePatch),
-            typeof(PartShockwavePatch),
-            typeof(NestDamageRedirectPatch),
             typeof(StrongpointClientGuardPatch),
             typeof(DestroyCommandGuardPatch),
             typeof(ShellDestructPatch)

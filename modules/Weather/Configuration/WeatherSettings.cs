@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> CinematicCloudsEnabled { get; }
         public ConfigEntry<bool> SunShaftsEnabled { get; }
         public ConfigEntry<bool> SkyPhenomenaEnabled { get; }
+        public ConfigEntry<bool> DarkNightsEnabled { get; }
         public ConfigEntry<bool> OceanWavesEnabled { get; }
         public ConfigEntry<bool> SeaSprayEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
@@ -105,6 +106,11 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             SkyPhenomenaEnabled = config.Bind(section, "SkyPhenomenaEnabled", true,
                 "Aurora curtains on clear nights, and red sprites and blue jets above distant night storms. " +
                 "Two small particle systems, built only at night; applies now.");
+
+            DarkNightsEnabled = config.Bind(section, "DarkNightsEnabled", true,
+                "Darker nights: ambient light, haze and the sky dome dim to about a third under a new moon " +
+                "(two fifths under a full one) and turn moonlit blue-grey, so stars and lights stand out. " +
+                "Rides on RainAtmosphereEnabled; client-local; applies now.");
 
             OceanWavesEnabled = config.Bind(section, "OceanWavesEnabled", true,
                 "Waves on the game's sea that follow the wind and build under storms: swell, whitecaps, gale streaks and surf. " +

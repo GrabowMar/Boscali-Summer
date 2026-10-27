@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Runtime
@@ -20,6 +21,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             internal float Updated = -1;
             internal ulong Snapshot;
             internal bool Evaluated;
+            internal bool SeaMasked;
             internal readonly List<Observation> Observations = new List<Observation>(4096);
         }
 
@@ -99,8 +101,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
             // evaluation — 16k-cell smoothing, pocket sweeps, contour, cluster tree and
             // the texture bake — is skipped. Quantizing to the grid cell is deliberate:
             // a vehicle shifting inside its kilometre square cannot change the front.
+            // Open water takes no tint and no front once the map's baked land mask loads; until then
+            // (or on a map without one) the whole theatre counts as ground. No job is in flight here.
+            if (!field.SeaMasked && MfdTerrainRelief.TryGetHeightField(out TerrainHeightField terrain))
+            {
+                field.SeaMasked = true;
+                field.Back.SetSeaMask(terrain.IsLand);
+                field.Grid.SetSeaMask(terrain.IsLand);
+            }
             compatibility.ReconcileMissionNodes(field.Grid, hq);
-            ulong snapshot = field.Grid.ComputeNodeHash();
+            ulong snapshot = field.Grid.ComputeNodeHash() ^ (field.SeaMasked ? 0x5EAUL : 0UL);
             field.Observations.Clear();
             ScanShared(now);
             int hqId = hq.GetInstanceID();

@@ -31,34 +31,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        /// <summary>What the step covers from (<paramref name="fromX"/>, <paramref name="fromZ"/>): points, distance and time at
-        /// <paramref name="speed"/>, an area's radius, targets, altitude when set.</summary>
-        public static string Detail(PlanStep p, float fromX, float fromZ, float speed)
-        {
-            switch (p.Kind)
-            {
-                case PlanKind.Attack: return Targets(p);
-                case PlanKind.Cap:
-                case PlanKind.Sweep: return Join(Radius(p), Alt(p));
-                case PlanKind.Rtb:
-                case PlanKind.Refit:
-                case PlanKind.FormUp: return "";
-            }
-            float m = 0f, x = fromX, z = fromZ;
-            if (p.Points != null)
-                foreach (Waypoint w in p.Points)
-                {
-                    float dx = w.X - x, dz = w.Z - z;
-                    m += (float)Math.Sqrt(dx * dx + dz * dz);
-                    x = w.X;
-                    z = w.Z;
-                }
-            string km = (m / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " KM";
-            string eta = speed > 1f ? WmcText.Clock(m / speed) : "";
-            string points = p.Kind == PlanKind.Route ? (p.Points?.Length ?? 0).ToString(CultureInfo.InvariantCulture) + " PTS" : "";
-            return Join(Join(Join(points, km), eta), Alt(p));
-        }
-
         /// <summary>WAIT before EXECUTE; then RUN, DONE, HELD, BLOCKED, SKIP, NEXT for the step after the one running.</summary>
         public static string State(PlanRunner r, int lane, int step)
         {
@@ -99,32 +71,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 default: return "PLAN " + tool.ToString().ToUpperInvariant() + " · " + lane + " · RIGHT-CLICK THE MAP";
             }
         }
-
-        private static string Short(PlanStep p)
-        {
-            switch (p.Kind)
-            {
-                case PlanKind.Route: return Join((p.Points?.Length ?? 0).ToString(CultureInfo.InvariantCulture) + " PTS", Alt(p));
-                case PlanKind.Cap:
-                case PlanKind.Sweep: return Join(Radius(p), Alt(p));
-                case PlanKind.Attack: return Targets(p);
-                default: return Alt(p);
-            }
-        }
-
-        private static string Targets(PlanStep p) => (p.Targets?.Length ?? 0).ToString(CultureInfo.InvariantCulture) + " TGT";
-
-        private static string Radius(PlanStep p) =>
-            "R " + ((p.Radius > 0f ? p.Radius : p.Kind == PlanKind.Cap ? AreaGuard.CapRadius : AreaGuard.SweepRadius) / 1000f)
-            .ToString("0.#", CultureInfo.InvariantCulture) + " KM";
-
-        private static string Alt(PlanStep p)
-        {
-            float a = p.Points != null && p.Points.Length > 0 ? p.Points[0].Altitude : float.NaN;
-            return float.IsNaN(a) ? "" : a.ToString("N0", CultureInfo.InvariantCulture) + " M";
-        }
-
-        private static string Join(string a, string b) =>
-            string.IsNullOrEmpty(a) ? b ?? "" : string.IsNullOrEmpty(b) ? a : a + " · " + b;
     }
 }

@@ -37,10 +37,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int FrontSetDirective(Front front, FrontDirective directive) =>
             FrontRules.IsValid(front, directive) ? SendSpace(SpaceCommandKind.FrontDirective, Pack(front, (int)directive), null) : 0;
 
-        /// <summary>Set the faction-wide funding weights for SPACE, CYBER and SOF (any member; a 60 s lock follows).</summary>
-        internal int FrontSetPriority(int spaceWeight, int cyberWeight, int sofWeight) =>
-            spaceWeight < 0 || cyberWeight < 0 || sofWeight < 0 || spaceWeight + cyberWeight + sofWeight <= 0 ? 0 : SendSpace(SpaceCommandKind.FrontPriority, 0, new[] { spaceWeight, cyberWeight, sofWeight });
-
         /// <summary>Pin a front's focus to a map point.</summary>
         internal int FrontSetFocus(Front front, float x, float z) =>
             SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 0), SofCodes.PackPoint(x, z) });

@@ -124,13 +124,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool HasChaff;
         public int Chaff, ChaffMax;
         /// <summary>The countermeasure button also dispenses chaff while a radar missile is inbound.</summary>
-        public bool ChaffLinked;
         public bool HasDrones, DronesStriking, DronesCanStrike;
-        /// <summary>Drone link (WEAPONS > DRONE LINK): the linkable drones flying (not AEGIS/ORCA/ALE-X) as callsigns and state lines in
-        /// launch order, the linked one (-1 none), whether it is hand-flown, whether the HUD feed card is on.</summary>
+        /// <summary>Drone link (WEAPONS > DRONES): the linkable drones flying (not AEGIS/ORCA/ALE-X) as callsigns and state lines in
+        /// launch order, the linked one (-1 none), whether it flies an order (HAND or WPT), whether the HUD feed card is on.</summary>
         public List<string> DroneNames = new List<string>(), DroneStates = new List<string>();
         public int DroneLinked = -1;
-        public bool DroneHand, DroneFeed;
+        public bool DroneOrdered, DroneFeed, DroneRamMode;
         /// <summary>REMORA drones flying now.</summary>
         public int Drones;
 
@@ -138,6 +137,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool CameraFollowing = true;
         public ViewKind Camera = ViewKind.Cockpit;
         public bool HasCockpitPoint = true;
+        /// <summary>Switch View passes through the game's cinematic camera after external.</summary>
+        public bool CinematicCamera = true;
         public bool MapAvailable = true;
         public bool MissileViewAvailable;
         public bool MissileViewActive;

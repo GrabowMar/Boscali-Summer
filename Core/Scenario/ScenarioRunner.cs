@@ -44,6 +44,31 @@ namespace BoscaliSummer.Core.Scenario
 
         /// <summary>The mission's story is told: the campaign's next chapter opens.</summary>
         void Finish();
+
+        /// <summary>Host only: starts, completes or cancels the game's own objectives by name; the game sends the change to every player.</summary>
+        void Objectives(ActionKind verb, string[] names);
+
+        /// <summary>A countdown on screen with its label, <paramref name="seconds"/> from now; a null label takes it down.</summary>
+        void Countdown(string label, float seconds);
+
+        /// <summary>A named enemy's health bar on screen, the unit followed by its mission name; a null unit takes it down.</summary>
+        void Ace(string unit, string callsign, string line);
+    }
+
+    /// <summary>What a running script can ask about the world. Read a few times a second, never written.</summary>
+    internal interface IScenarioWorld
+    {
+        /// <summary>The unit of that mission name was in the world and is now destroyed.</summary>
+        bool Destroyed(string unit);
+
+        /// <summary>A unit's health share, 0 to 1, or a negative number when it is not in the world.</summary>
+        float Health(string unit);
+
+        /// <summary>The pilot's height above the ground in metres, or NaN when they are not flying.</summary>
+        float Height { get; }
+
+        /// <summary>The pilot is flying within <paramref name="range"/> metres (across the ground) of the point.</summary>
+        bool Near(float x, float z, float range);
     }
 
     /// <summary>
@@ -53,7 +78,7 @@ namespace BoscaliSummer.Core.Scenario
     internal sealed class ScenarioRunner
     {
         public const int MaxQueued = 16;
-        public const float LineGapSeconds = 0.4f;
+        public const float LineGapSeconds = 0.4f, WatchSeconds = 0.5f;
 
         private readonly ScenarioDef def;
         private readonly IScenarioStage stage;
@@ -65,7 +90,16 @@ namespace BoscaliSummer.Core.Scenario
         private readonly List<ScenarioCut> cuts = new List<ScenarioCut>();
         private ScenarioBeat current;
         private int step;
-        private float now, busyUntil;
+        private float now, busyUntil, nextWatch, countdownEnds = -1f;
+        private string countdownFlag;
+        // Watched beats whose condition held at the last look: they fire again only after it has let go.
+        private readonly HashSet<ScenarioBeat> holding = new HashSet<ScenarioBeat>();
+
+        /// <summary>Where watched triggers (destroyed, damaged, near, below, above) are read; null leaves them silent.</summary>
+        public IScenarioWorld World;
+
+        /// <summary>The dice <c>random</c> rolls.</summary>
+        public Random Dice = new Random();
 
         /// <summary>Flags the script set in this mission.</summary>
         public readonly HashSet<string> Flags = new HashSet<string>(StringComparer.Ordinal);
@@ -105,6 +139,22 @@ namespace BoscaliSummer.Core.Scenario
             now = seconds;
             foreach (ScenarioBeat beat in def.Beats)
                 if (beat.Trigger == TriggerKind.Time && now >= beat.Seconds) Fire(beat);
+            if (World != null && now >= nextWatch)
+            {
+                nextWatch = now + WatchSeconds;
+                foreach (ScenarioBeat beat in def.Beats)
+                {
+                    if (beat.Trigger < TriggerKind.Destroyed || beat.Trigger > TriggerKind.Above) continue;
+                    if (!Holds(beat)) holding.Remove(beat);
+                    else if (holding.Add(beat)) Fire(beat);
+                }
+            }
+            if (countdownEnds >= 0f && now >= countdownEnds)
+            {
+                countdownEnds = -1f;
+                stage.Countdown(null, 0f);
+                if (countdownFlag != null && Flags.Add(countdownFlag)) Raise(TriggerKind.Flag, countdownFlag);
+            }
             // A beat may set a flag while this runs; the list is read by index so that event is seen too.
             for (int i = 0; i < raised.Count; i++)
             {
@@ -145,6 +195,21 @@ namespace BoscaliSummer.Core.Scenario
             if (ReferenceEquals(current, beat) || queue.Contains(beat) || queue.Count >= MaxQueued) return;
             fired.Add(beat.Id);
             queue.Add(beat);
+        }
+
+        private bool Holds(ScenarioBeat beat)
+        {
+            switch (beat.Trigger)
+            {
+                case TriggerKind.Destroyed: return World.Destroyed(beat.Arg);
+                case TriggerKind.Damaged:
+                    float health = World.Health(beat.Arg);
+                    return health >= 0f && health <= beat.Seconds;
+                case TriggerKind.Near: return World.Near(beat.X, beat.Z, beat.Range);
+                // NaN (not flying) is neither below nor above.
+                case TriggerKind.Below: return World.Height < beat.Seconds;
+                default: return World.Height > beat.Seconds;
+            }
         }
 
         private bool Has(string flag) => Flags.Contains(flag) || remembered != null && remembered(flag);
@@ -217,6 +282,24 @@ namespace BoscaliSummer.Core.Scenario
                 case ActionKind.Remember:
                     Flags.Add(action.Name);
                     stage.Remember(action.Name);
+                    break;
+                case ActionKind.Start:
+                case ActionKind.Complete:
+                case ActionKind.Cancel:
+                    stage.Objectives(action.Kind, action.Names);
+                    break;
+                case ActionKind.Countdown:
+                    // No label: 'countdown stop'.
+                    countdownEnds = action.Text == null ? -1f : now + action.Seconds;
+                    countdownFlag = action.Name;
+                    stage.Countdown(action.Text, action.Seconds);
+                    break;
+                case ActionKind.Ace:
+                    stage.Ace(action.Name, action.Title, action.Text);
+                    break;
+                case ActionKind.Random:
+                    string picked = action.Names[Dice.Next(action.Names.Length)];
+                    if (Flags.Add(picked)) Raise(TriggerKind.Flag, picked);
                     break;
                 case ActionKind.Finish:
                     if (Finished) break;

@@ -59,15 +59,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
         }
 
-        /// <summary>Clear the station cache after an aircraft or loadout change.</summary>
-        public void Reset()
-        {
-            index = -1;
-            resolved = false;
-            errorReported = false;
-            nextPulse = 0f;
-        }
-
         /// <summary>Retry missing managers and refresh indices periodically because rearming sorts
         /// stations by name.</summary>
         private void Resolve(Aircraft aircraft)

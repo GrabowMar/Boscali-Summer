@@ -49,9 +49,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private bool dirty, shown;
         private static Sprite disc, ring;
 
-        public int LegCount => legs.Count;
-        public int RingCount => rings.Count;
-
         public static Color ElementColor(int e) => Elements[e >= 0 && e < Elements.Length ? e : 0];
 
         /// <summary>The map moved or zoomed (DynamicMap.onMapChanged); scales are checked on the next tick.</summary>

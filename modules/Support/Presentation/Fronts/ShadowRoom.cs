@@ -14,16 +14,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// The SOF front's room (R5), laid out as an operations board of paper. Top: the presence / infiltration map as an acetate overlay (grease-pencil
     /// routes, china-marker target circles, hatched exposure areas, push-pin camps; own camps, the operation footprint, held buildings, revealed targets
     /// and enemy teams). Bottom, left to right: the TEAM ROSTER (a personnel jacket per raised team with a folder tab, ID photo, bars and a rubber
-    /// state stamp, one line per empty slot, the worst warning as an alert slip, the events kept across refreshes typed on teleprinter paper), the TARGET
+    /// state stamp, one line per empty slot, the worst warning as an alert slip; no signal log), the TARGET
     /// LIST (an index card per mirrored target, whatever the map clusters, and the picked target's package) and the TASKING ORDER (a fragmentary-order
     /// form: SITUATION = aim, MISSION = the five rows, EXECUTION = team and estimate, SERVICE SUPPORT = cost and ammo, COMMAND AND SIGNAL = authority and
-    /// ISSUE, then movement with EXFIL apart). Paints from <see cref="ShadowRoomView"/> only; picking a mission only drafts, ISSUE sends once.
+    /// ISSUE, then movement with EXFIL apart). The map carries only the QRF note. Paints from <see cref="ShadowRoomView"/> only; a ready mission sends on its press.
     /// Everything drawn in paper, stamps, pins and pencil is cosmetic flavour of existing fields: it adds no reading and no input.
     /// </summary>
     internal sealed class ShadowRoom : IFrontRoom
     {
         private const float TopH = 480f, Gap = 8f, ColW = 270f, RosterW = 390f, ListW = 352f;
-        private const int Cols = 12, Rows = 8, MaxTeams = 4, MaxTargets = SofWire.MaxTargets, MaxCamps = 3, MaxHeld = 4, MaxEnemies = 4, Missions = 5, LogLines = ShadowRoomView.MaxHistory;
+        private const int Cols = 12, Rows = 8, MaxTeams = 4, MaxTargets = SofWire.MaxTargets, MaxCamps = 3, MaxHeld = 4, MaxEnemies = 4, Missions = 5;
         private static readonly string[] OrderWord = { "PUSH", "HOLD", "EXFIL", "LIFT" };
         private static readonly string[] OrderHelp =
         {
@@ -33,22 +33,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             "Lift: call a helicopter to pick the team up where it stands.",
         };
 
-        // Fixed standing orders, worded from the rule constants so they cannot drift from the host.
         private static readonly IFormatProvider Inv = CultureInfo.InvariantCulture;
-        private static readonly string[] Sop =
-        {
-            "SOP 1 · FOOT " + (SofRules.SpeedMetresPerSecond * 3.6f).ToString("0", Inv) + " KM/H · PUSH " + SofRules.PushSpeedFactor.ToString("0.#", Inv) + "x FASTER, " + SofRules.PushExposureFactor.ToString("0.#", Inv) + "x AS VISIBLE",
-            "SOP 2 · ENEMY WITHIN " + (SofRules.ExposureRadius / 1000f).ToString("0.#", Inv) + " KM RAISES EXPOSURE · " + SofRules.PinExposure.ToString("0", Inv) + " % = PINNED",
-            "SOP 3 · EACH MISSION SPENDS " + SofDesk.AmmoPerMission.ToString("0", Inv) + " % AMMO · CAMPS REFILL IT",
-        };
-
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
         private float heroW, colX;
         private FrontMapPlate plate;
 
         private FrontBox situation, roster, targets, composer;
-        private FrontVector side, listG, rosterG, formG;
+        private FrontVector side, listG, formG;
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] teamLabels = new TMP_Text[MaxTeams], targetLabels = new TMP_Text[MaxTargets], campLabels = new TMP_Text[MaxCamps],
             heldLabels = new TMP_Text[MaxHeld], enemyMarks = new TMP_Text[MaxEnemies];
@@ -57,16 +49,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly int[] hitSlots = new int[MaxTeams], hitTargets = new int[MaxTargets];
         private readonly Image[] targetHits = new Image[MaxTargets];
 
-        private TMP_Text opHead, opName, opNote, teamHead, teamCount, teamNote, heldHead, revHead, tapHead, tapLine, keyHead;
-        private readonly TMP_Text[] heldName = new TMP_Text[MaxHeld], heldTime = new TMP_Text[MaxHeld], revKey = new TMP_Text[5], revVal = new TMP_Text[5], keyText = new TMP_Text[6];
 
         // Roster.
-        private const float StripY = 28f, CardsTop = 62f, OrdersH = 14f + 3f * 15f, LineH = 15f;
+        private const float StripY = 28f, CardsTop = 62f;
         private Image warnRail, warnPlate;
-        private TMP_Text warnText, logHead, orderHead;
+        private TMP_Text warnText;
         private AvControl warnButton;
         private readonly Card[] cards = new Card[MaxTeams];
-        private readonly TMP_Text[] logLine = new TMP_Text[LogLines], orderLine = new TMP_Text[Sop.Length];
 
         // Target list.
         private const float RowH = 26f, ListTop = 28f, FileMin = 87f, FileTabH = 15f;
@@ -122,12 +111,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.SelectTarget(id);
         }
 
-        /// <summary>Drafts (or un-drafts) a mission for the picked team. Nothing is sent; the controller repaints with the new quote.</summary>
+        /// <summary>
+        /// A mission button: with a ready team and a fitting target (or RECON point) it sends the order at once, one press one order. Otherwise it drafts
+        /// (or un-drafts) the mission so the form names what is missing; picking that, then the mission again (or ISSUE), sends it.
+        /// </summary>
         private void Draft(int slot)
         {
             if (lastView == null || selectedSlot < 0) return;
-            lastView.DraftMission = lastView.DraftMission == missionKind[slot] ? MissionKind.None : missionKind[slot];
+            MissionKind kind = missionKind[slot];
             lastView.Reason = "";
+            if (slot < lastView.Missions.Count && lastView.Missions[slot].Allowed)
+            {
+                lastView.DraftMission = kind; // the controller clears the draft once the order is on its way, and keeps it on a refusal
+                actions.TeamMission(selectedSlot, (int)kind, MissionAim(kind));
+                return;
+            }
+            lastView.DraftMission = lastView.DraftMission == kind ? MissionKind.None : kind;
             actions.SelectTeam(selectedSlot);
         }
 
@@ -438,10 +437,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return t;
         }
 
-        private const float KeyX = 14f, KeyY = 395f;
-        private static readonly Rect HeldCard = new Rect(8f, 29f, 282f, 168f), KeyCard = new Rect(8f, 392f, 410f, 58f);
-        private Rect OpCard => new Rect(colX - 6f, 29f, ColW + 12f, 162f);
-        private Rect QrfCard => new Rect(colX - 6f, 197f, ColW + 12f, 40f);
+        private Rect QrfCard => new Rect(colX - 6f, 29f, ColW + 12f, 40f);
         private const float SweepW = 92f;
         private AvControl sweep;
         private TMP_Text qrfLine;
@@ -453,10 +449,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             plate = new FrontMapPlate(b, skin, heroW, TopH, Cols, Rows);
             side = FrontVector.Add(b, "Side");   // overlay notes on the map
             AvLay.Place(side.rectTransform, 0f, 0f, heroW, TopH);
-            plate.Labels.Fixed(HeldCard);
-            plate.Labels.Fixed(KeyCard);
-            plate.Labels.Fixed(OpCard);
-            plate.Labels.Fixed(QrfCard);
+            plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings, the FOB and teams are labelled where they stand
             airbases = new FrontMap.AirbaseLayer(b);
             fobLabel = FrontKit.Mono(b, "FobLabel", 0f, 0f, 190f, 14f, 10.5f, TextAlignmentOptions.TopLeft);
             for (int i = 0; i < MaxTeams; i++) teamLabels[i] = Pool(b, "TeamLabel" + i, 170f, 28f);
@@ -470,8 +463,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 enemyMarks[i].gameObject.SetActive(false);
             }
             fobLabel.gameObject.SetActive(false);
-            qrfLine = FrontKit.Mono(b, "QrfLine", colX, 204f, ColW - SweepW - 6f, 26f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            sweep = Button(b, "SWEEP", colX + ColW - SweepW, 204f, SweepW, 26f, AvButtonStyle.Danger, () => Do(() => actions.Sweep()),
+            qrfLine = FrontKit.Mono(b, "QrfLine", colX, 36f, ColW - SweepW - 6f, 26f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            sweep = Button(b, "SWEEP", colX + ColW - SweepW, 36f, SweepW, 26f, AvButtonStyle.Danger, () => Do(() => actions.Sweep()),
                 "Send a QRF after every hostile team detected near our sites: it reaches them " + (int)SofRules.SweepSeconds + " s after the press, costs " + SofRules.SweepCost +
                 " AP and hunts them for " + (int)SofRules.HuntSeconds + " s (their exposure climbs), then " + (int)SofRules.SweepCooldownSeconds + " s to refit.");
             sweep.Interactable = false;
@@ -494,44 +487,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 targetHits[i] = hit;
             }
 
-            opHead = Head(b, "OpHead", colX, 34f, "OPERATION FOOTPRINT");
-            opName = FrontKit.Mono(b, "OpName", colX, 52f, ColW, 18f, 12f, TextAlignmentOptions.MidlineLeft, true);
-            opNote = FrontKit.Mono(b, "OpNote", colX, 70f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            teamHead = Head(b, "TeamHead", colX, 96f, "TEAMS IN THE FIELD");
-            teamCount = FrontKit.Mono(b, "TeamCount", colX, 112f, 120f, 36f, 24f, TextAlignmentOptions.MidlineLeft, true);
-            teamNote = FrontKit.Mono(b, "TeamNote", colX + 110f, 114f, ColW - 110f, 30f, 10.5f, TextAlignmentOptions.MidlineRight);
-            tapHead = Head(b, "TapHead", colX, 152f, "SIGNAL TAP");
-            tapLine = FrontKit.Mono(b, "TapLine", colX, 170f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            heldHead = Head(b, "HeldHead", 16f, 34f, "HELD BUILDINGS");
-            for (int i = 0; i < MaxHeld; i++)
-            {
-                heldName[i] = FrontKit.Mono(b, "HeldName" + i, 16f, 52f + i * 16f, 170f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                heldTime[i] = FrontKit.Mono(b, "HeldTime" + i, 186f, 52f + i * 16f, 96f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            }
-            revHead = Head(b, "RevHead", 16f, 124f, "REVEALED");
-            string[] rk = { "GROUND", "ANCHORS", "BUILDINGS", "RELAYS", "ENEMY TEAMS" };
-            for (int i = 0; i < 5; i++)
-            {
-                revKey[i] = FrontKit.Mono(b, "RevKey" + i, 16f + (i % 2) * 135f, 142f + (i / 2) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
-                revKey[i].text = rk[i];
-                revVal[i] = FrontKit.Mono(b, "RevVal" + i, 16f + (i % 2) * 135f + 80f, 142f + (i / 2) * 16f, 45f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            }
-            keyHead = Head(b, "KeyHead", KeyX + 4f, KeyY, "KEY");
-            string[] words = { "TEAM", "ROUTE", "EXPOSURE", "CAMP", "TARGET", "ENEMY TEAM" };
-            for (int i = 0; i < 6; i++)
-            {
-                keyText[i] = FrontKit.Mono(b, "Key" + i, KeyX + 26f + (i % 3) * 130f, KeyY + 18f + (i / 3) * 17f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
-                keyText[i].text = words[i];
-            }
-            skin.Add(() =>
-            {
-                // The footprint and held notes are paper pinned to the map; the key stays a dark acetate sticker.
-                opHead.color = Paper.PenDim; teamHead.color = Paper.PenDim; heldHead.color = Paper.PenDim; revHead.color = Paper.PenDim; tapHead.color = Paper.PenDim;
-                keyHead.color = AvInk.Dim;
-                foreach (TMP_Text t in revKey) t.color = Paper.PenDim;
-                foreach (TMP_Text t in keyText) t.color = AvInk.Dim;
-                foreach (TMP_Text t in enemyMarks) t.color = AvInk.State(AvState.Danger);
-            });
+            skin.Add(() => { foreach (TMP_Text t in enemyMarks) t.color = AvInk.State(AvState.Danger); });
         }
 
         private static TMP_Text Pool(RectTransform b, string name, float w, float h)
@@ -554,33 +510,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             warnPlate = FrontKit.Solid(b, "WarnPlate", w - 129f, StripY + 1f, 114f, 26f, Paper.Hole);   // a dark plate under the button: the kit's translucent tints would wash out on a card
             warnButton = Button(b, "SELECT TEAM", w - 128f, StripY + 2f, 112f, 24f, AvButtonStyle.Default, () => Do(() => { if (lastView != null && lastView.WarnSlot >= 0) PickTeam(lastView.WarnSlot); }),
                 "Select the team the warning names. This sends no order.");
-            rosterG = FrontVector.Add(b, "LogPaper");   // under the log lines, over nothing else
-            AvLay.Place(rosterG.rectTransform, 0f, 0f, w, h);
             for (int i = 0; i < MaxTeams; i++)
             {
                 int slot = i;
                 cards[i] = new Card(b, skin, slot, 8f, w - 16f, () => Do(() => PickTeam(slot)));
             }
-            logHead = FrontKit.Mono(b, "LogHead", 22f, 0f, w - 44f, 14f, 10f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            logHead.text = "SIGNAL LOG · TELEPRINTER 07";
-            for (int i = 0; i < LogLines; i++)
-            {
-                logLine[i] = FrontKit.Mono(b, "Log" + i, 24f, 0f, w - 48f, LineH, 10.5f, TextAlignmentOptions.MidlineLeft);
-                logLine[i].gameObject.SetActive(false);
-            }
-            logHead.gameObject.SetActive(false);
-            orderHead = Head(b, "OrderHead", 18f, h - 6f - OrdersH, "STANDING ORDERS");
-            AvLay.Place(orderHead.rectTransform, 18f, h - 6f - OrdersH, ColW, 14f);
-            for (int i = 0; i < orderLine.Length; i++)
-            {
-                orderLine[i] = FrontKit.Mono(b, "Sop" + i, 18f, h - 6f - OrdersH + 15f + i * LineH, w - 36f, LineH, 10f, TextAlignmentOptions.MidlineLeft);
-                orderLine[i].text = Sop[i];
-            }
-            skin.Add(() =>
-            {
-                logHead.color = Paper.PenDim; orderHead.color = Paper.PenDim;
-                foreach (TMP_Text t in orderLine) t.color = Paper.PenDim;
-            });
         }
 
         private void PaintRoster(ShadowRoomView s)
@@ -603,58 +537,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 warnButton.Interactable = !already;
             }
 
-            // Free slots are one line each, or unfilled jackets when that still leaves the log its lines and the orders their foot.
+            // Free slots are one line each, or unfilled jackets when they all fit.
             int vacant = 0;
             for (int i = 0; i < s.Teams.Count && i < MaxTeams; i++) if (!s.Teams[i].Present) vacant++;
             float compact = CardsTop + up * (Card.FullH + 4f) + vacant * (Card.EmptyH + 3f);
-            bool vacantCards = vacant > 0 && compact + vacant * (Card.FullH + 4f - Card.EmptyH - 3f) <= roster.Height - 6f - OrdersH - 4f - LineH * (1 + Math.Min(s.History.Count, LogLines));
+            bool vacantCards = vacant > 0 && compact + vacant * (Card.FullH + 4f - Card.EmptyH - 3f) <= roster.Height - 6f;
             float y = CardsTop;
             for (int i = 0; i < MaxTeams; i++) y = i < s.Teams.Count ? cards[i].Paint(s.Teams[i], y, vacantCards) : cards[i].Hide(y);
 
-            // The events the host reported (newest first) take what the cards leave, ahead of the fixed standing orders at the foot.
-            float foot = roster.Height - 6f, ordTop = foot - OrdersH, logTop = y + 4f + LineH;
-            bool quiet = s.History.Count == 0;
-            int want = quiet ? 1 : Math.Min(s.History.Count, LogLines), fitWith = (int)((ordTop - 9f - logTop) / LineH);
-            bool orders = y + 6f <= ordTop - 5f && fitWith >= want;
-            int n = Math.Min(want, Math.Max(0, orders ? fitWith : (int)((foot - logTop) / LineH)));
-            logHead.gameObject.SetActive(n > 0);
-            AvLay.Place(logHead.rectTransform, 22f, y + 3f, roster.Width - 44f, 14f);
-
-            // Teleprinter paper: a strip with tractor holes down both edges and a perforation under the head.
-            FrontVector g = rosterG;
-            g.Clear();
-            if (n > 0)
-            {
-                float top = y + 1f, bottom = logTop + n * LineH + 2f, pw = roster.Width - 16f;
-                g.Rect(11f, top + 2f, pw, bottom - top, Paper.Shadow);
-                g.Rect(8f, top, pw, bottom - top, Paper.Card);
-                g.Frame(8f, top, pw, bottom - top, 1f, Paper.CardEdge);
-                for (float hy = top + 7f; hy < bottom - 3f; hy += 11f) { Hand.Hole(g, 14f, hy, 2.2f); Hand.Hole(g, roster.Width - 14f, hy, 2.2f); }
-                g.Dashed(new Vector2(20f, y + 18f), new Vector2(roster.Width - 20f, y + 18f), 1f, Paper.CardEdge, 3f, 3f);
-            }
-            if (orders)
-            {
-                // The standing orders: a laminated card at the foot, pinned.
-                float ptop = ordTop - 5f, ph = OrdersH + 9f, pw = roster.Width - 16f;
-                g.Rect(11f, ptop + 2f, pw, ph, Paper.Shadow);
-                g.Rect(8f, ptop, pw, ph, Paper.Card);
-                g.Frame(8f, ptop, pw, ph, 1f, Paper.CardEdge);
-                Hand.Pin(g, new Vector2(roster.Width - 20f, ptop + 9f), 3.8f, Paper.Grease);
-            }
-            g.Flush();
-            for (int i = 0; i < LogLines; i++)
-            {
-                bool on = i < n;
-                if (logLine[i].gameObject.activeSelf != on) logLine[i].gameObject.SetActive(on);
-                if (!on) continue;
-                AvLay.Place(logLine[i].rectTransform, 24f, y + 4f + LineH + i * LineH, roster.Width - 48f, LineH);
-                if (quiet) { FrontKit.Set(logLine[i], C2Kit.Tint("#--", Paper.PenDim) + " " + C2Kit.Tint("NO TRAFFIC · THE LINE IS QUIET", Paper.PenDim), Paper.Pen); continue; }
-                FrontLogLine l = s.History[s.History.Count - 1 - i];
-                // Typed: the serial number in faded ribbon, the line in the ribbon of its tone.
-                FrontKit.Set(logLine[i], C2Kit.Tint(l.Stamp, Paper.PenDim) + " " + C2Kit.Tint(C2Kit.FitTo(logLine[i], l.Text, roster.Width - 48f - 34f), Paper.Of(l.Tone)), Paper.Pen);
-            }
-            orderHead.gameObject.SetActive(orders);
-            foreach (TMP_Text t in orderLine) t.gameObject.SetActive(orders);
         }
 
         // ---- Target list -------------------------------------------------------------------------------------------------
@@ -794,8 +684,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Hand.Pin(g, new Vector2((targets.Width - sw) * 0.5f + 10f, mid - 15f), 3.6f, Paper.Grease);
                 bool teamUp = false;
                 for (int i = 0; i < s.Teams.Count; i++) teamUp |= s.Teams[i].Present;
-                FrontKit.Set(listHint, C2Kit.FitTo(listHint, !s.Active ? "WAITING FOR THE HOST" : teamUp ? ReconHint : "TRAIN A TEAM, THEN RECON GROUND", targets.Width - 28f),
-                    s.Active ? FrontKit.Tone(AvState.Info) : AvInk.Dim);
+                string hint = s.Active ? (teamUp ? ReconHint : "TRAIN A TEAM, THEN RECON GROUND")
+                    : s.Meta == "NO CAMP STANDING" ? "NO CAMP YET · QUEUE A CAMP IN PROGRAMMES (RIGHT)" : "WAITING FOR THE HOST";
+                FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, targets.Width - 28f), s.Active || hint.StartsWith("NO CAMP", StringComparison.Ordinal) ? FrontKit.Tone(AvState.Info) : AvInk.Dim);
             }
 
             PaintFile(g, s);
@@ -897,7 +788,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             authRight = FrontKit.Mono(b, "AuthRight", w - 14f - 100f, 288f, 100f, 14f, 10f, TextAlignmentOptions.MidlineRight);
             issue = Button(b, "ISSUE ORDER", FormL, 303f, tw - 6f, 28f, AvButtonStyle.Primary,
                 () => Do(() => { if (lastView != null && lastView.CanIssue) actions.TeamMission(selectedSlot, (int)lastView.DraftMission, MissionAim(lastView.DraftMission)); }),
-                "Sends the drafted mission once. Picking a mission or a target only drafts it.");
+                "Sends the drafted mission once. A mission button whose team and target are ready sends straight away.");
             issueNote = FrontKit.Mono(b, "IssueNote", FormL, 333f, tw - 6f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             // Movement: the toggles and the lift on the left, EXFIL apart on the right, on the dark board under the sheet.
             float[] ox = { 8f, 96f, 284f, 184f };
@@ -1009,7 +900,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // A staple in the corner, and dark plates under the switches: the kit's translucent tints would wash out on paper.
             g.Line(new Vector2(SheetX + 3f, SheetY + 6f), new Vector2(SheetX + 12f, SheetY + 3f), 2.6f, RoomInk.Rgba(0f, 0f, 0f, 0.35f));
             g.Line(new Vector2(SheetX + 3f, SheetY + 5f), new Vector2(SheetX + 12f, SheetY + 2f), 2.2f, Paper.Steel);
-            for (int i = 0; i < Missions; i++) g.Rect(FormL - 0.5f, 104.5f + i * 24f, 99f, 23f, Paper.Hole);
+            int shown = lastView != null ? Mathf.Min(Missions, lastView.Missions.Count) : 0; // a plate only under a mission button that is there: no empty black slots before the host speaks
+            for (int i = 0; i < shown; i++) g.Rect(FormL - 0.5f, 104.5f + i * 24f, 99f, 23f, Paper.Hole);
             g.Rect(FormL - 1f, 302f, w - FormL - 8f - 4f, 30f, Paper.Hole);
             g.Rect(FormL - 4f, 57f, w - FormL * 2f + 6f, 1.6f, Paper.Pen.WithAlpha(0.85f));
             g.Rect(FormL - 4f, 59.6f, w - FormL * 2f + 6f, 0.8f, Paper.Pen.WithAlpha(0.6f));
@@ -1362,50 +1254,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void PaintSide(FrontVector g, ShadowRoomView s, int up)
         {
-            Note(g, OpCard);
-            Note(g, HeldCard);
             Note(g, QrfCard);
-            FrontKit.Set(qrfLine, C2Kit.FitTo(qrfLine, s.QrfLine, ColW - SweepW - 6f), s.QrfTone == AvState.Danger ? Paper.Red : Paper.PenDim);
+            FrontKit.Set(qrfLine, C2Kit.FitTo(qrfLine, string.IsNullOrEmpty(s.QrfLine) ? (s.Active ? "NO HOSTILES NEAR US" : "NO QRF · NO CAMP") : s.QrfLine, ColW - SweepW - 6f), s.QrfTone == AvState.Danger ? Paper.Red : Paper.PenDim);
             sweep.Label = s.SweepLabel;
             sweep.Interactable = s.CanSweep;
-            FrontMapPlate.Card(g, KeyCard.x, KeyCard.y, KeyCard.width, KeyCard.height);
-            FrontKit.Set(opName, s.HasFob ? s.FobName : "NO OPERATION FOOTPRINT", s.HasFob ? Paper.Olive : Paper.PenDim);
-            FrontKit.Set(opNote, C2Kit.FitTo(opNote, s.FobNote, ColW), Paper.PenDim);
-            FrontKit.Set(teamCount, up + " / " + s.TeamCap, up > 0 ? Paper.Olive : Paper.PenDim);
-            int worst = 0;
-            for (int i = 0; i < s.Teams.Count; i++) if (s.Teams[i].Present) worst = Math.Max(worst, s.Teams[i].Exposure);
-            FrontKit.Set(teamNote, up == 0 ? "NONE OUT" : "WORST EXPOSURE " + worst + " %", up == 0 ? Paper.PenDim : Paper.ExposureText(worst));
-            for (int i = 0; i < MaxHeld; i++)
-            {
-                bool on = i < s.Held.Count;
-                FrontKit.Set(heldName[i], on ? C2Kit.FitTo(heldName[i], s.Held[i].Name, 166f) : (i == 0 ? "NONE HELD" : ""), on ? Paper.Pen : Paper.PenDim);
-                FrontKit.Set(heldTime[i], on ? FrontKit.Clock(s.Held[i].SecondsLeft) : "", Paper.Amber);
-            }
-            int[] kinds = new int[4];
-            for (int i = 0; i < s.Targets.Count; i++) kinds[(int)s.Targets[i].Kind]++;
-            for (int i = 0; i < 4; i++) FrontKit.Set(revVal[i], kinds[i].ToString(), kinds[i] > 0 ? Paper.Pen : Paper.PenDim);
-            FrontKit.Set(revVal[4], s.Enemies.Count.ToString(), s.Enemies.Count > 0 ? Paper.Red : Paper.PenDim);
-            FrontKit.Set(tapLine, C2Kit.FitTo(tapLine, s.TapLine, ColW), Paper.PenDim);
-
-            // The key shows the map's own marks: infantry box, pencil route, hatched exposure, push-pin, double-ringed target, enemy diamond.
-            Color[] ink = { Own, Own, AvInk.State(AvState.Caution), Own, AvInk.Hostile, AvInk.Hostile };
-            for (int i = 0; i < 6; i++)
-            {
-                Vector2 p = new Vector2(KeyX + 12f + (i % 3) * 130f, KeyY + 26f + (i / 3) * 17f);
-                switch (i)
-                {
-                    case 0: g.Frame(p.x - 8f, p.y - 5f, 16f, 10f, 1.6f, ink[i]); g.Line(p + new Vector2(-4f, -3f), p + new Vector2(4f, 3f), 1.2f, ink[i]); g.Line(p + new Vector2(-4f, 3f), p + new Vector2(4f, -3f), 1.2f, ink[i]); break;
-                    case 1:
-                        Hand.Stroke(g, p + new Vector2(-9f, 1f), p + new Vector2(8f, -1f), 2.2f, Paper.Grease, 5, 1.6f);
-                        g.Line(p + new Vector2(8f, -1f), p + new Vector2(2f, -5f), 1.8f, Paper.Grease); g.Line(p + new Vector2(8f, -1f), p + new Vector2(2f, 3f), 1.8f, Paper.Grease); break;
-                    case 2: Hand.Hatch(g, p, 7f, 3.2f, 1f, ink[i].WithAlpha(0.7f)); g.Ring(p, 7f, 1.4f, ink[i], 18); break;
-                    case 3: Hand.Pin(g, p, 5.2f, ink[i]); break;
-                    case 4:
-                        Hand.Circle(g, p, 7.5f, 1.5f, Paper.Grease, 1); Hand.Circle(g, p, 5f, 1.2f, Paper.Grease, 3);
-                        TargetGlyph(g, TargetKind.Building, p, 2.6f, ink[i]); break;
-                    default: g.Polyline(new[] { p + new Vector2(0f, -7f), p + new Vector2(7f, 0f), p + new Vector2(0f, 7f), p + new Vector2(-7f, 0f) }, 1.4f, ink[i], true); break;
-                }
-            }
         }
 
         private static void TargetGlyph(FrontVector g, TargetKind kind, Vector2 p, float r, Color k)

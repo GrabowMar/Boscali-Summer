@@ -22,6 +22,7 @@ namespace BoscaliSummer.Vanguard
         private static Unit groundTarget;
         private static Unit testShip;
         private static FactionHQ enemyHq;
+        private static FactionHQ friendHq;
         private static int launchCount;
         private static Aircraft trackedLead;
         private static int threatsGone;
@@ -35,6 +36,7 @@ namespace BoscaliSummer.Vanguard
             Aircraft lead = Has(args, "seated") && GameManager.GetLocalAircraft(out Aircraft seat) && seat != null ? seat : FindAircraft(Text(args, "faction") ?? "Boscali");
             Aircraft bandit = FindAircraft(Text(args, "enemy") ?? "Primeva");
             if (bandit != null && bandit.NetworkHQ != null) enemyHq = bandit.NetworkHQ; // REMORA STRIKE may kill the bandit before batch-2 steps; a dropped link must not erase it either
+            if (lead != null && lead.NetworkHQ != null) friendHq = lead.NetworkHQ; // likewise for a lead the test's own targets shoot down
             if (lead != null && lead != trackedLead)
             {
                 trackedLead = lead;
@@ -72,7 +74,10 @@ namespace BoscaliSummer.Vanguard
                 case "threat": return Threat(bandit, lead, Number(args, "range", 5000f), Text(args, "seeker") ?? "ARH", Number(args, "climb", 200f));
                 case "strike":
                     if (lead != null && lead.radar != null) lead.radar.activated = true; // ARCHER fires only on a faction track
-                    Modules.Vanguard.Runtime.DroneOrders.Order(lead, Text(args, "at") == "ground" ? groundTarget : bandit);
+                    Modules.Vanguard.Runtime.DroneOrders.Order(lead, Text(args, "at") == "ground" ? groundTarget : Text(args, "at") == "ship" ? testShip : (Unit)bandit);
+                    return Status(lead);
+                case "rammode":
+                    Modules.Vanguard.Runtime.DroneOrders.SetRamMode(lead, Number(args, "on", 1f) > 0f);
                     return Status(lead);
                 case "equip": return Equip(Text(args, "tanker") ?? "Tarantula", Has(args, "norx"), Text(args, "rxType") ?? "FS-20");
                 case "skyview": return SkyView(Text(args, "angle") ?? "side");
@@ -89,6 +94,8 @@ namespace BoscaliSummer.Vanguard
                 case "kestrel": return Kestrel(args, lead);
                 case "hamilcar": return Hamilcar(args, lead);
                 case "link": return LinkStep(args, lead);
+                case "mantafit": return MantaFit(lead);
+                case "stores": return StoresStep(args, lead, bandit);
                 case "showcase": return Showcase(lead);
                 case "view": return View(Text(args, "angle") ?? "front");
                 default: return Failure("VanguardAutomation", "Step", "unknown action");
@@ -462,7 +469,9 @@ namespace BoscaliSummer.Vanguard
             Transform t = lead.transform;
             // Stagger launches sideways: back-to-back spawns at one point collide once they turn tangible (1.5 s).
             Vector3 slot = t.right * (((launchCount++ % 3) - 1) * 20f);
-            Missile missile = NetworkSceneSingleton<Spawner>.i.SpawnMissile(def, t.position - t.up * 3f + t.forward * 10f + slot,
+            // The 10 m MANTA starts well clear of the lead's wings.
+            Vector3 clear = key == VanguardKeys.Manta ? -t.up * 10f - t.forward * 30f : -t.up * 3f + t.forward * 10f;
+            Missile missile = NetworkSceneSingleton<Spawner>.i.SpawnMissile(def, t.position + clear + slot,
                 t.rotation, lead.rb.velocity, target, lead);
             Launched[key] = missile;
             Unit aimed = target;
@@ -546,6 +555,40 @@ namespace BoscaliSummer.Vanguard
                 Deaths["threat_time"] = Time.timeSinceLevelLoad;
             };
             return Status(lead);
+        }
+
+        // MANTA loadout rule: with a MANTA on the lead's first two-station pair, the partner station is blocked and no other station is.
+        private static Dictionary<string, object> MantaFit(Aircraft lead)
+        {
+            WeaponMount manta = Modules.Vanguard.Runtime.RuntimeStores.Mount(VanguardKeys.MantaMount);
+            if (lead == null || manta == null || lead.weaponManager == null) return Failure("VanguardAutomation", "mantafit", "no lead or no MANTA mount yet");
+            Modules.Vanguard.Runtime.MantaPartners.Resolve();
+            string key = lead.definition.jsonKey;
+            HardpointSet[] prefab = lead.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true).hardpointSets;
+            HardpointSet[] live = lead.weaponManager.hardpointSets;
+            var state = new Dictionary<string, object> { ["ok"] = true, ["aircraft"] = key, ["sets"] = prefab.Length };
+            int options = 0, leadSet = -1;
+            for (int i = 0; i < prefab.Length; i++)
+                if (prefab[i].weaponOptions.Contains(manta)) { options++; if (leadSet < 0 && Modules.Vanguard.Runtime.MantaPartners.PartnerOf(key, i) >= 0) leadSet = i; }
+            state["mantaSets"] = options;
+            state["mantaLead"] = leadSet;
+            if (leadSet < 0) return state;
+            int partner = Modules.Vanguard.Runtime.MantaPartners.PartnerOf(key, leadSet);
+            state["mantaPartner"] = partner;
+            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>(new WeaponMount[prefab.Length]) };
+            loadout.weapons[leadSet] = manta;
+            int othersBlocked = 0, liveBlocked = 0;
+            for (int i = 0; i < prefab.Length; i++)
+            {
+                bool blocked = prefab[i].BlockedByOtherHardpoint(loadout);
+                if (i == partner) state["mantaPartnerBlocked"] = blocked ? 1 : 0;
+                else if (blocked) othersBlocked++;
+                if (i < live.Length && i == partner && live[i].BlockedByOtherHardpoint(loadout)) liveBlocked++;
+            }
+            state["mantaOthersBlocked"] = othersBlocked;
+            state["mantaLiveBlocked"] = liveBlocked;
+            state["mantaPartnerOptionLeft"] = prefab[partner].weaponOptions.Contains(manta) ? 1 : 0;
+            return state;
         }
 
         private static Dictionary<string, object> Status(Aircraft lead)

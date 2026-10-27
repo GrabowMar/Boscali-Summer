@@ -91,8 +91,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
     /// <summary>
     /// One front on the OPS page, always in the same field order: domain and room name with the codename and a status stamp, the current blocker,
-    /// readiness and superiority, your support, the programme (FUNDING and BUILDING are different phases), the queue, the directive and the
-    /// latest event as history with its age. A tier drops the secondary lines on a short panel; OPEN is always there. Absolute layout, no policy.
+    /// readiness and superiority, your support, the programme (FUNDING and BUILDING are different phases), the queue and the directive
+    /// (no event history: OPS shows state, not logs). A tier drops the secondary lines on a short panel; OPEN is always there. Absolute layout, no policy.
     /// </summary>
     internal sealed class FrontCardPart : AvPart
     {
@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return words;
         }
 
-        public static float HeightOf(CardTier tier) => tier == CardTier.Full ? 168f : tier == CardTier.Mid ? 111f : 90f;
+        public static float HeightOf(CardTier tier) => tier == CardTier.Full ? 150f : tier == CardTier.Mid ? 111f : 90f;
 
         private readonly FrontSkin skin = new FrontSkin();
         private readonly bool mid, full;
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly AvFrame back;
         private readonly Image rail;
         private readonly TMP_Text icon, name, codename, stampIcon, blocker, readiness, supLabel, supWord, supValue, support, funds;
-        private readonly TMP_Text buildName, buildNote, queueLabel, queueCount, queueLine, dirLabel, dirValue, eventAge, eventLine;
+        private readonly TMP_Text buildName, buildNote, queueLabel, queueCount, queueLine, dirLabel, dirValue;
         private readonly OpsTag stamp, phase;
         private readonly Image supWell, supFill, supNeedle;
         private readonly Image[] pips, queuePips;
@@ -181,8 +181,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 dirLabel = FrontKit.Mono(Rect, "DirLabel", PadX, 127f, 72f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
                 dirLabel.text = "DIRECTIVE";
                 dirValue = FrontKit.Mono(Rect, "DirValue", 86f, 127f, 360f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
-                eventAge = FrontKit.Mono(Rect, "EventAge", PadX, 145f, 64f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                eventLine = FrontKit.Mono(Rect, "EventLine", 80f, 145f, 366f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             }
             skin.Add(StyleStatic);
             LayoutFor(width);
@@ -223,7 +221,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 OpsParts.PlacePips(queuePips, 58f, 112f, 10f, 10f, 13f);
                 AvLay.Place(queueLine.rectTransform, 146f, 109f, w - 158f, 16f);
                 AvLay.Place(dirValue.rectTransform, 86f, 127f, w - 98f, 16f);
-                AvLay.Place(eventLine.rectTransform, 80f, 145f, w - 92f, 16f);
             }
             if (painted) Paint(shown); // the superiority bar depends on the width
         }
@@ -283,7 +280,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FrontKit.Set(support, c.Known
                 ? "YOUR SUPPORT " + c.Available + " AVAILABLE" + (c.ArmedPerks > 0 ? " · " + c.ArmedPerks + " ARMED" : "") + (c.PendingPerks > 0 ? " · " + c.PendingPerks + " PENDING" : "")
                 : "YOUR SUPPORT —", AvInk.Ink);
-            FrontKit.Set(funds, c.Known ? c.Budget + " FUNDS · SHARE " + c.FundingPct + "%" : "", AvInk.Dim);
+            FrontKit.Set(funds, c.Known ? c.Budget + " FUNDS" : "", AvInk.Dim);
 
             if (mid)
             {
@@ -300,16 +297,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 OpsParts.Fill(queuePips, c.Known ? c.QueueCount : 0, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
                 FrontKit.Set(queueLine, !string.IsNullOrEmpty(c.Queue) ? "NEXT " + c.Queue : "", AvInk.Dim);
                 FrontKit.Set(dirValue, c.Known ? c.Directive : "—", AvInk.Ink);
-                bool has = !string.IsNullOrEmpty(c.Event);
-                FrontKit.Set(eventAge, has ? c.EventAge : "", AvInk.Dim);
-                FrontKit.Set(eventLine, has ? FrontKit.Fit(eventLine, c.Event, 10.5f) : c.Known ? "NO EVENTS LOGGED YET" : "", AvInk.Dim); // steps to 10 px before it is cut; the rail's log has it whole
             }
         }
     }
 
     /// <summary>
     /// One perk of the PERKS tab as a call card: brevity code, name, rung pips, price in AP and the state words. There is no button in it:
-    /// clicking the card inspects the perk in the pinned strip and arms nothing, spends nothing.
+    /// clicking the card arms the perk (the pinned strip then offers FIRE); arming spends nothing and a second click never fires.
     /// </summary>
     internal sealed class PerkRowPart : AvPart
     {
@@ -343,7 +337,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvHit hit = AvHit.On(back);
             hit.Hover = h => { hover = h; Look(); };
             hit.Click = e => { if (e.button == PointerEventData.InputButton.Left && has) inspect?.Invoke(shown.Id); };
-            AvHelpTip.Attach(back.gameObject, "Inspect this perk: its effect, price and gate show in the strip above. Nothing is armed or spent.");
+            AvHelpTip.Attach(back.gameObject, "Arm this perk: the strip above shows its effect and price and offers FIRE. Nothing is spent until FIRE.");
             Layout(width);
             Restyle();
         }
@@ -424,7 +418,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvHit hit = AvHit.On(back);
             hit.Hover = h => { hover = h; Look(); };
             hit.Click = e => { if (e.button == PointerEventData.InputButton.Left && has) inspect?.Invoke(shown.PostId); };
-            AvHelpTip.Attach(back.gameObject, "Inspect this package: its targets, price and expiry show in the strip above. Nothing is armed or claimed.");
+            AvHelpTip.Attach(back.gameObject, "Arm this package: the strip above shows its targets, price and expiry and offers FIRE. Nothing is claimed until FIRE.");
             Layout(width);
             Restyle();
         }

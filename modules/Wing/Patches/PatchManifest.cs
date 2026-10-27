@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Patches
             "DynamicMap.MapControls",
             "UnitMapIcon.ClickIcon",
             "MapIcon.UpdateColor",
-            "UnitMapIcon.UnitMapIcon_UpdateColor",
+            "UnitMapIcon.UpdateColor",
             "UnitMapIcon.SetIcon",
             "UnitMapIcon.UpdateIcon",
             "DynamicMap.ShouldShowAirbase",

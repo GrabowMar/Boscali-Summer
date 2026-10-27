@@ -36,6 +36,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         private readonly HashSet<Renderer> seen = new HashSet<Renderer>();
         private QoLSettings settings;
         private NvgPass pass;
+        private readonly NvgOverlay overlay = new NvgOverlay();
         private Material phosphorMaterial, heatMaterial;
         private NvgGain gain;
         private Volume volume;
@@ -74,12 +75,14 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         public void ResetForScene()
         {
             Release();
+            overlay.Release();
             renderers.Clear();
         }
 
         private void OnDestroy()
         {
             Release();
+            overlay.Release();
             pass?.Dispose();
             pass = null;
             if (phosphorMaterial != null) Destroy(phosphorMaterial);
@@ -91,7 +94,11 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         private void Update()
         {
             NvgLook look = settings != null ? settings.NightVisionLook.Value : NvgLook.Vanilla;
-            if (look == NvgLook.Vanilla || !GameAccess.TryGetNightVisionState(out _, out bool active) || !active ||
+            bool goggles = GameAccess.TryGetNightVisionState(out _, out bool on) && on;
+            // The flip-down, the blink and the scintillation run whatever the tube does; the Vanilla look still touches nothing.
+            if (look != NvgLook.Vanilla) overlay.Tick(goggles, transform);
+            else overlay.Release();
+            if (look == NvgLook.Vanilla || !goggles ||
                 !GameAccess.TryGetNightVisionRig(out Volume rig, out float min, out float max))
             {
                 Release();

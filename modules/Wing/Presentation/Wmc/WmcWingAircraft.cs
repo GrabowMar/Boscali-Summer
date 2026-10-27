@@ -220,8 +220,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        public new int Shown => shown;
-
         public void Show(in MemberDetail d)
         {
             int n = d.Stores == null ? 0 : Math.Min(Math.Min(d.StoreCount, d.Stores.Length), Rows);

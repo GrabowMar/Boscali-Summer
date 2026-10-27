@@ -107,6 +107,7 @@ namespace BoscaliSummer.Core.Scenario
                     case "cut": case "card": case "say": case "hint": case "wait":
                     case "flag": case "unflag": case "remember": case "finish":
                     case "dip": case "sky": case "clock": case "music": case "enlist": case "choose": case "seat":
+                    case "start": case "complete": case "cancel": case "countdown": case "ace": case "random":
                         if (beat == null) error = "'" + keyword + "' belongs under a 'beat'";
                         else error = ReadAction(keyword, row, beat);
                         break;
@@ -438,9 +439,29 @@ namespace BoscaliSummer.Core.Scenario
                 case "started": beat.Trigger = TriggerKind.Started; beat.Arg = row.Next(); break;
                 case "done": beat.Trigger = TriggerKind.Done; beat.Arg = row.Next(); break;
                 case "flag": beat.Trigger = TriggerKind.Flag; beat.Arg = row.Next(); break;
-                default: return "unknown trigger '" + trigger + "': start, join, spawn, airborne, landed, time, started, done or flag";
+                case "destroyed": beat.Trigger = TriggerKind.Destroyed; beat.Arg = row.Next(); break;
+                case "damaged":
+                    beat.Trigger = TriggerKind.Damaged;
+                    beat.Arg = row.Next();
+                    string share = row.Next() ?? "";
+                    if (!Float(share.TrimEnd('%'), out beat.Seconds) || beat.Seconds <= 0f || beat.Seconds >= 100f) return "damaged needs a unit and the health left, 1 to 99 (percent)";
+                    beat.Seconds /= 100f;
+                    break;
+                case "near":
+                    beat.Trigger = TriggerKind.Near;
+                    if (!row.Number(out beat.X) || !row.Number(out beat.Z)) return "near needs <x> <z>";
+                    if (!row.Opt("range", ref beat.Range) || beat.Range <= 0f) return "range is metres, more than 0";
+                    break;
+                case "below":
+                case "above":
+                    beat.Trigger = trigger == "below" ? TriggerKind.Below : TriggerKind.Above;
+                    if (!row.Number(out beat.Seconds) || beat.Seconds < 0f) return trigger + " needs metres above the ground";
+                    break;
+                case "down": beat.Trigger = TriggerKind.Down; break;
+                default: return "unknown trigger '" + trigger + "': start, join, spawn, airborne, landed, time, started, done, flag, destroyed, damaged, near, below, above or down";
             }
-            if ((beat.Trigger == TriggerKind.Started || beat.Trigger == TriggerKind.Done || beat.Trigger == TriggerKind.Flag) && string.IsNullOrEmpty(beat.Arg))
+            if ((beat.Trigger == TriggerKind.Started || beat.Trigger == TriggerKind.Done || beat.Trigger == TriggerKind.Flag ||
+                beat.Trigger == TriggerKind.Destroyed || beat.Trigger == TriggerKind.Damaged) && string.IsNullOrEmpty(beat.Arg))
                 return trigger + " needs a name";
             beat.Repeat = row.Word("repeat");
             string side = row.Opt("side");
@@ -546,6 +567,36 @@ namespace BoscaliSummer.Core.Scenario
                     if (!row.Opt("volume", ref action.Seconds) || action.Seconds < 0f || action.Seconds > 1f) return "volume is 0 to 1";
                     // loop: the track starts again until 'music stop', for a cutscene longer than it.
                     if (row.Word("loop")) action.Text = "loop";
+                    break;
+                case "start":
+                case "complete":
+                case "cancel":
+                    action.Kind = keyword == "start" ? ActionKind.Start : keyword == "complete" ? ActionKind.Complete : ActionKind.Cancel;
+                    action.Names = row.Rest();
+                    if (action.Names.Length == 0) return keyword + " needs objective names";
+                    break;
+                case "countdown":
+                    action.Kind = ActionKind.Countdown;
+                    if (row.Word("stop")) break;
+                    if (!row.Number(out action.Seconds) || action.Seconds < 1f || action.Seconds > 7200f) return "countdown needs seconds (1 to 7200) and a \"LABEL\", or 'stop'";
+                    if (!row.Quoted(out action.Text) || action.Text.Length == 0 || action.Text.Length > 40) return "countdown needs a \"LABEL\", up to 40 characters";
+                    action.Name = row.Opt("flag");
+                    if (action.Name != null && !ScenarioDef.IsId(action.Name)) return "flag is a flag name (lower-case letters, digits, '-')";
+                    break;
+                case "ace":
+                    action.Kind = ActionKind.Ace;
+                    if (row.Word("off")) break;
+                    action.Name = row.Next();
+                    if (string.IsNullOrEmpty(action.Name) || !row.Quoted(out action.Title) || action.Title.Length == 0 || action.Title.Length > 40)
+                        return "ace needs a unit and its \"CALLSIGN\" (up to 40 characters), or 'off'";
+                    if (row.Quoted(out action.Text) && action.Text.Length > 80) return "an ace's line is up to 80 characters";
+                    break;
+                case "random":
+                    action.Kind = ActionKind.Random;
+                    action.Names = row.Rest();
+                    if (action.Names.Length < 2) return "random needs two flag names or more";
+                    foreach (string flag in action.Names)
+                        if (!ScenarioDef.IsId(flag)) return "random needs flag names (lower-case letters, digits, '-')";
                     break;
                 case "clock":
                     action.Kind = ActionKind.Clock;

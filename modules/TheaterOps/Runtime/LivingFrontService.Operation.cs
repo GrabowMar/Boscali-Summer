@@ -67,19 +67,21 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         /// The one command entry, for the host's own pilot and for a client's intent alike. Guarded: a throw answers Invalid and propagates nothing, and a host
         /// whose staff is faulting or whose mission is over refuses with NotAllowed.
         /// </summary>
-        internal IntentReply ApplyIntent(FactionHQ hq, byte kind, int id, int revision, byte posture, in IntentActor actor)
+        internal IntentReply ApplyIntent(FactionHQ hq, byte kind, int id, int revision, byte posture, in IntentActor actor,
+                                         float sx = 0f, float sz = 0f, float ox = 0f, float oz = 0f)
         {
             if (!Authoritative || MissionOver || hq?.faction == null || !wars.TryGetValue(hq.faction.factionName, out FactionWar war) ||
                 war.HQ == null || !war.Faults.Healthy) return new IntentReply(TheaterCommandCode.NotAllowed);
             float now = Time.timeSinceLevelLoad;
             IntentActor who = actor;
             var reply = new IntentReply(TheaterCommandCode.Invalid);
-            if (!Guard.Run(war.Faults, now, () => reply = Apply(war, kind, id, revision, posture, who, now), LogFault, "command"))
+            if (!Guard.Run(war.Faults, now, () => reply = Apply(war, kind, id, revision, posture, who, now, sx, sz, ox, oz), LogFault, "command"))
                 reply = new IntentReply(TheaterCommandCode.Invalid);
             return reply;
         }
 
-        private IntentReply Apply(FactionWar war, byte kind, int id, int revision, byte posture, in IntentActor actor, float now)
+        private IntentReply Apply(FactionWar war, byte kind, int id, int revision, byte posture, in IntentActor actor, float now,
+                                  float sx, float sz, float ox, float oz)
         {
             IntentReply reply;
             switch (kind)
@@ -87,6 +89,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 case 0: reply = PickCard(war, id, revision, actor, false, false, now); break;
                 case 1: reply = CallOff(war, id, revision, actor, now); break;
                 case 2: reply = SetPosture(war, posture, now); break;
+                case 3: reply = DrawOperation(war, sx, sz, ox, oz, actor, now); break;
                 default: return new IntentReply(TheaterCommandCode.Invalid);
             }
             if (reply.Code == TheaterCommandCode.Accepted) Publish(war, now);
@@ -148,6 +151,61 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             return new IntentReply(TheaterCommandCode.Accepted, "", byStaff ? 0f : LivingWarRules.PickLockSeconds);
         }
 
+        /// <summary>
+        /// A pilot's own offensive, drawn on the map: the live front nearest the press (within 8 km) carries it, its origin is the press and its fix is
+        /// pinned on the release instead of following the front. The ground's slots ride the front toward that fix, and the hold there decides SECURED.
+        /// The same 120 s lock as a pick; a live operation is redirected.
+        /// </summary>
+        private IntentReply DrawOperation(FactionWar war, float sx, float sz, float ox, float oz, in IntentActor actor, float now)
+        {
+            if (!DrawnPlan.Valid(sx, sz, ox, oz)) return new IntentReply(TheaterCommandCode.Invalid, "DRAW 1.5 TO 30 KM");
+            Operation live = war.Active;
+            if (live != null)
+            {
+                TheaterCommandCode? locked = PickLock.Check(live.PickedByStaff, now, live.LockUntil, live.PickedById, actor.Id, out float left);
+                if (locked.HasValue) return new IntentReply(locked.Value, live.PickedBy, Mathf.Min(left, LivingWarRules.PickLockSeconds));
+            }
+            Collect(war, now);
+            int at = -1;
+            float best = DrawnPlan.SnapMetres * DrawnPlan.SnapMetres;
+            for (int i = 0; i < war.Reads.Count; i++)
+            {
+                if (!war.Reads[i].Live) continue;
+                float d = Scalar.Distance2DSquared(sx, sz, war.Reads[i].X, war.Reads[i].Z);
+                if (d < best) { best = d; at = i; }
+            }
+            if (at < 0) return new IntentReply(TheaterCommandCode.StaleChoice, "START ON A FRONT");
+            WarFrontRead read = war.Reads[at];
+            float hold = 0f;
+            bool hasHold = territory != null && territory.TryGetHoldStrength(war.HQ.GetInstanceID(), ox, oz, out hold);
+            TheaterOpKind kind = DrawnPlan.KindAt(hasHold, hold);
+
+            if (live != null)
+            {
+                EndOperation(war, TheaterOutcome.Redirected, TheaterWhy.None, now, "");
+                war.Redirects++;
+            }
+            TheaterCarrier carrier = CarrierOf(read);
+            string placeId = null;
+            for (int i = 0; i < war.Candidates.Count; i++) if (war.Candidates[i].Key == read.Key) placeId = war.Candidates[i].PlaceId;
+            war.Active = new Operation
+            {
+                Id = war.NextId++, Revision = ++war.Revision, Key = read.Key, Name = read.Name, PlaceId = placeId, Kind = kind, Source = read.Source,
+                Carrier = carrier, CarrierBased = carrier == TheaterCarrier.Ground, InitialGround = read.ReachFriendlyGround, Drawn = true,
+                X = ox, Z = oz, OriginX = sx, OriginZ = sz, Started = now, InitialHold = hold, HoldNow = hold, HasHold = hasHold,
+                PhaseSince = now, PickedById = actor.Id, PickedBy = actor.Callsign, LockUntil = now + LivingWarRules.PickLockSeconds,
+            };
+            war.DeadlineArmed = false;
+            war.PilotPicks++;
+            priority?.SetDirectedFix(war.HQ, read.Key, read.Name, ox, oz);
+            DirectNaval(war);
+            string line = "DRAWN " + TheaterWords.Kind(kind) + " " + read.Name;
+            war.Log.Add(line);
+            Plugin.Logger?.LogInfo("Living Front " + war.HQ.faction.factionName + " " + line + " (" + actor.Callsign + ")");
+            Maintain(war, now);
+            return new IntentReply(TheaterCommandCode.Accepted, "", LivingWarRules.PickLockSeconds);
+        }
+
         private IntentReply CallOff(FactionWar war, int id, int revision, in IntentActor actor, float now)
         {
             Operation op = war.Active;
@@ -197,7 +255,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             for (int i = 0; i < war.Reads.Count; i++)
                 if (war.Reads[i].Key == op.Key) { read = war.Reads[i]; found = true; break; }
             bool live = found && read.Live;
-            if (live && Scalar.Distance2DSquared(op.X, op.Z, read.X, read.Z) >= LivingWarRules.FollowStep * LivingWarRules.FollowStep)
+            if (live && !op.Drawn && Scalar.Distance2DSquared(op.X, op.Z, read.X, read.Z) >= LivingWarRules.FollowStep * LivingWarRules.FollowStep)
             {
                 op.X = read.X; op.Z = read.Z;
                 priority?.SetDirectedFix(war.HQ, op.Key, op.Name, op.X, op.Z);

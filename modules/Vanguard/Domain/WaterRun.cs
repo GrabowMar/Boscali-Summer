@@ -7,13 +7,17 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     {
         public const float Speed = 90f;
         public const float Accel = 30f;          // m/s^2 from a standstill (a woken sleeper) up to Speed
-        public const float Depth = -6f;
+        // Below the ocean underlay, which OceanDressing sinks up to 12.5 m in a gale: shallower runs show through the sea and break the troughs.
+        public const float Depth = -14f;
         public const float EntryRange = 5000f;   // glide to the water this far out, clear of the ship's point defence
         public const float StopLeadRange = 300f; // the last stretch runs straight at the hull: hard turns can beat it
         public const float LostLimit = 3f;       // seconds without a track before the snake starts
         public const float SearchTime = 10f;     // snake duration before the torpedo gives up (re-sleeps or scuttles)
         public const float SnakeAmplitude = 30f;
         public const float SnakePeriod = 4f;
+
+        /// <summary>Run depth over this seabed: Depth in open water, 3 m off the bottom in the shallows (a seabed hit detonates it).</summary>
+        public static float RunDepth(float seabedY) => Mathf.Min(-2f, Mathf.Max(Depth, seabedY + 3f));
 
         public static float VerticalAccel(float globalY, float vy, float depth = Depth) => (depth - globalY) * 4f - vy * 3f;
 

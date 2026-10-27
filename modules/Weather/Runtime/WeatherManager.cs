@@ -34,6 +34,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private bool? captureRainVisuals;
         private bool RainVisualsEnabled => captureRainVisuals ?? (settings != null && settings.RainVisualsEnabled.Value);
         internal void SetCaptureRainVisuals(bool? enabled) => captureRainVisuals = enabled;
+        private bool? captureDarkNights;
+        private bool DarkNightsEnabled => captureDarkNights ?? (settings == null || settings.DarkNightsEnabled.Value);
+        internal void SetCaptureDarkNights(bool? enabled) => captureDarkNights = enabled;
         private WeatherNet network;
         private ManualLogSource logger;
 
@@ -746,7 +749,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             // Haze first: everything below reads the fog colour it produces.
             if (hazeEnabled)
                 atmosphere.Apply(RainVisualsEnabled
-                    ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null);
+                    ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null,
+                    LevelInfo.i != null && LevelInfo.i.moon != null ? LevelInfo.i.moon.intensity : 0f,
+                    DarkNightsEnabled);
             else atmosphere.Restore();
             UpdateLighting();
 
@@ -892,6 +897,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "atmosphere", atmosphere.Applied ? 1 : 0 },
                 { "fogMultiplier", atmosphere.LastFogMultiplier },
                 { "fogDensity", RenderSettings.fogDensity },
+                { "darkNights", DarkNightsEnabled ? 1 : 0 },
+                { "nightLight", atmosphere.LastNightLight },
+                { "moonIntensity", LevelInfo.i != null && LevelInfo.i.moon != null ? LevelInfo.i.moon.intensity : 0f },
+                { "ambientIntensity", RenderSettings.ambientIntensity },
+                { "ambientSkyR", RenderSettings.ambientSkyColor.r },
+                { "ambientSkyG", RenderSettings.ambientSkyColor.g },
+                { "ambientSkyB", RenderSettings.ambientSkyColor.b },
                 { "cinematicClouds", clouds.Applied || (flightClouds != null && flightClouds.Active) ? 1 : 0 },
                 { "flightClouds", flightClouds != null && flightClouds.Active ? 1 : 0 },
                 { "nativeCloudsHidden", clouds.NativeHidden ? 1 : 0 },

@@ -90,7 +90,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 return Say("Placement stopped.");
             }
             if (ItemCount == 0) return Say("Nothing to place in this list.");
-            return Arm("PLACE", "PLACING " + ItemName(Item) + ": click the map, drag to face. Esc stops.", true, (at, heading) => PlaceAt(at, heading));
+            return Arm("PLACE", "PLACING " + ItemName(Item) + ": click the map, drag to face. Esc or right click stops.", true, (at, heading) => PlaceAt(at, heading));
         }
 
         /// <summary>Spawns the current selection (COUNT times, or one kit) at a map point facing <paramref name="heading"/>.</summary>

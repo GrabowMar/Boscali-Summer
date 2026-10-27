@@ -70,14 +70,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (map == null || !DynamicMap.mapMaximized || map.mapBackground == null) return false;
             if (Input.GetMouseButtonDown(1)) return true;
+            // STR's DRAW owns the left button: the native sheet must not pan under the arrow being drawn.
+            if (StrMapOverlay.DrawArmed && !MapUiPointer.OverControls() &&
+                (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0))) return true;
             if (boxPress && (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))) return true;
             return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && BoxDrag() &&
                 !BoxBlocked() && !MapUiPointer.OverControls() &&
                 map.TryGetCursorCoordinates(out _);
         }
 
-        internal static bool BlockIconClick() => DynamicMap.mapMaximized &&
-            ((boxPress && (boxDragged ||
+        internal static bool BlockIconClick() => DynamicMap.mapMaximized && (StrMapOverlay.DrawArmed ||
+            (boxPress && (boxDragged ||
                 ((Vector2)Input.mousePosition - boxStart).sqrMagnitude >= DragSlop * DragSlop)) ||
              boxReleaseFrame == Time.frameCount);
 

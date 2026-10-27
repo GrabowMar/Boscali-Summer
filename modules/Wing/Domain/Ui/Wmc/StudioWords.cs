@@ -10,7 +10,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// toasts and the empty and client states. Never "…", "†", U+25xx shapes or arrows.</summary>
     internal static class StudioWords
     {
-        public const string Title = "PILOTS";
         public const string IdentityTitle = "IDENTITY", BioTitle = "BIO";
         public const string NotSaved = "NOT SAVED · SAVE keeps this pilot for every mission";
         public const string ClientRecord = "THE HOST KEEPS THIS MISSION'S ROSTER · your saved pilots are this machine's";
