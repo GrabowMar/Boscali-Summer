@@ -49,8 +49,7 @@ namespace BoscaliSummer.Core.Ui
             ("vanguard", "VANGUARD", "Extra weapons and gliders", "Extra weapons, drones and gliders: decoys, lasers, recon pods and drone wingmen.", AvIcon.Rocket),
             ("weather", "WEATHER", "Dynamic weather and clouds", "Living weather: fronts drift across the map with rain, storms, cloud layers and fog.", AvIcon.CloudRain),
             ("events", "EVENTS", "World events, modifiers", "World events that shake up the mission with temporary modifiers, such as a supply crisis.", AvIcon.Bolt),
-            ("kaiju", "KAIJU", "Mountain-sized boss", "A mountain-sized creature roams the map as a boss with its own hardpoints and a weak spot.", AvIcon.Hostile),
-            ("spooktober", "SPOOKTOBER", "Seasonal hauntings", "The seasonal event: a menu of haunted bosses on MISC.", AvIcon.Skull),
+            ("spooktober", "SPOOKTOBER", "Seasonal hauntings", "The seasonal event: a menu of haunted bosses on MISC, the mountain-sized kaiju among them.", AvIcon.Skull),
             ("ares", "ARES", "Game master tools", "Host-only game master console: spawn units, call strikes, set weather and time. Developer access only.", AvIcon.Crown),
             ("hud", "HUD", "TAC BOARD, helmet display", "The TAC BOARD and helmet display every other screen draws on.", AvIcon.Crosshair),
             ("session", "SESSION", "Multiplayer handshake", "The multiplayer handshake that keeps host and clients on the same settings.", AvIcon.Link),
@@ -68,7 +67,7 @@ namespace BoscaliSummer.Core.Ui
             ("PILOT CAREER", AvIcon.Star, new[] { "progression", "squad", "dynamic-operations", "player-spawn-priority" }),
             ("BATTLESPACE", AvIcon.Swords, new[] { "urban-combat", "trenches", "fire-and-destruction", "combat", "air-survival", "vanguard" }),
             ("SKY AND WORLD", AvIcon.Cloud, new[] { "weather", "events" }),
-            ("SPECIALS", AvIcon.Burst, new[] { "kaiju", "spooktober", "ares", "cinematography" }),
+            ("SPECIALS", AvIcon.Burst, new[] { "spooktober", "ares", "cinematography" }),
             ("CORE", AvIcon.ShieldLock, new[] { "hud", "session", "scenario", "pmc", "performance" })
         };
 
