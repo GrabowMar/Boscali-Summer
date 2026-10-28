@@ -39,14 +39,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct BoardOptions
     {
         public const float ScaleMin = 0.6f, ScaleMax = 1.4f;
-        public const float OffsetXMax = 1200f, OffsetYMax = 600f;
-        public const float OpacityMin = 0.25f;
-        public const float HoldMin = 2f, HoldMax = 30f;
 
         /// <summary>Master switch. Off hides the board and gives back the native weapon, countermeasure and power panels.</summary>
         public bool Enabled;
         public BoardLayout Layout;
-        public float Scale, OffsetX, OffsetY, Opacity, Shade;
+        public float Scale, Shade;
         public BoardDeclutter Declutter;
         public BoardScopeMode ScopeMode;
         /// <summary>Page slots: a 2 x 2 grid at most (<see cref="ScopeLayout.Columns"/>).</summary>
@@ -56,20 +53,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public BoardPage Page1, Page2, Page3, Page4;
         public bool ShowStores;
         public bool PageMissileCam;
-        public float ThreatHoldSeconds;
         public bool ShowLamps, ShowGauges, ShowTicker, ShowSystems;
         public bool Sway, Corners;
+        /// <summary>The centre combat layer (2026-10-28): the WARNING banner, the THREAT RING round the reticle and the shot callouts. Independent of <see cref="Enabled"/>.</summary>
+        public bool CentreAlerts;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
         {
-            Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, OffsetX = 0f, OffsetY = 0f, Opacity = 1f, Shade = 0.45f,
+            Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, Shade = 0.45f,
             Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Manual,
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
             PageMissileCam = true,
-            ThreatHoldSeconds = 6f,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true,
+            Sway = true, Corners = true, CentreAlerts = true,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>
@@ -77,11 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             BoardOptions d = Default;
             Scale = Fit(Scale, ScaleMin, ScaleMax, d.Scale);
-            OffsetX = Fit(OffsetX, 0f, OffsetXMax, d.OffsetX);
-            OffsetY = Fit(OffsetY, 0f, OffsetYMax, d.OffsetY);
-            Opacity = Fit(Opacity, OpacityMin, 1f, d.Opacity);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
-            ThreatHoldSeconds = Fit(ThreatHoldSeconds, HoldMin, HoldMax, d.ThreatHoldSeconds);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
             if ((uint)ScopeMode > (uint)BoardScopeMode.Off) ScopeMode = d.ScopeMode;

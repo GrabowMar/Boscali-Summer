@@ -20,7 +20,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly NativeScreenCorners screenCorners = new NativeScreenCorners();
         private RectTransform cornerShade, cornerFurniture, cornerSurface;
-        private Image leftShadow;
+        private Image leftShadow, mapShadow;
+        /// <summary>The minimised map's rectangle as last laid out, in design units from the canvas's top-left (<see cref="mapBoxed"/>: one was found).</summary>
+        private BoardRect mapBox;
+        private bool mapBoxed;
         private AvVector cornerVector;
         private ScopeText cornerText;
         private ScopeCanvas cornerCanvas;
@@ -77,6 +80,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             CueFrame(tick);
             PaintLeftShadow();
+            PaintMapBackdrop(mapUp);
             // The game's plate and text are hidden only while our own log is up in the HUD: a hidden HUD canvas takes it with it and gives them back.
             bool hide = feedLive && logRoot != null && logRoot.gameObject.activeInHierarchy;
             screenCorners.HidePlate(hide);
@@ -89,6 +93,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             screenCorners.HidePlate(false);
             screenCorners.HideText(false);
+            screenCorners.HideMapPlate(false);
             LeftHudStack.NativeFeedBottomPx = screenCorners.FeedBottomPx();      // the game's feed is the one on screen: the radio column goes under it
             if (cornerShade != null) Show(cornerShade, false);
             if (cornerFurniture != null) Show(cornerFurniture, false);
@@ -105,6 +110,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cornerShade.SetAsFirstSibling();
             leftShadow = ShadeChild<Image>(cornerShade, "LeftStackShadow");
             HudSprites.Slice(leftShadow, HudSprites.Feather);
+            mapShadow = ShadeChild<Image>(cornerShade, "MapBackdrop");
+            HudSprites.Slice(mapShadow, HudSprites.Feather);
             cornerFurniture = CornerRoot("BoscaliCornerFurniture");
             cornerSurface = Pinned(cornerFurniture, "Corners", false);
             cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads);
@@ -169,6 +176,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float k = 1f / baseUnit, canvasW = canvasRect.rect.width, canvasH = canvasRect.rect.height, l = 0f, t = 0f, r = 0f, b = 0f, ml = 0f, mt = 0f, mr = 0f, mb = 0f;
             bool feed = feedUp && CanvasBox(screenCorners.FeedBox, out l, out t, out r, out b);
             bool map = mapUp && CanvasBox(screenCorners.MapPlate, out ml, out mt, out mr, out mb);
+            mapBoxed = map;
+            mapBox = map ? new BoardRect(ml * k, mt * k, (mr - ml) * k, (mb - mt) * k) : default;
             mapFurniture = map ? CornerLayout.Map(ml, mt, mr, mb, canvasH, k) : default;
             mapNorth = map ? CornerLayout.North(mapFurniture, screenCorners.MapTurnDeg) : default;
 
@@ -206,10 +215,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 top = Mathf.Min(top, LeftHudStack.CueTop(canvasRect.rect.height / baseUnit));
                 bottom = Mathf.Max(bottom, cueBottom); lit = Mathf.Max(lit, cueLit);
             }
-            float alpha = LeftHudStack.ShadowAlpha * Mathf.Clamp01(Options.Shade) * Mathf.Clamp01(Options.Opacity) * lit;
+            float alpha = HudSprites.Backdrop * lit;      // the one backdrop (HudSprites.Backdrop), as behind the board, the map and the centre alerts
             if (bottom <= 0f || alpha <= 0.001f)
             {
-                if (cornerShade != null) Show(cornerShade, false);
+                if (leftShadow != null) Show(leftShadow, false);
                 return;
             }
             if (!EnsureCornerTree()) return;
@@ -218,6 +227,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 LeftHudStack.Width + feather * 2f, bottom - top + feather * 2f), baseUnit);
             leftShadow.color = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, alpha);
             Show(leftShadow, true);
+            Show(cornerShade, true);
+        }
+
+        /// <summary>
+        /// The TAC MAP stands on the HUD's one backdrop (2026-10-28, user: "unify backgrounds"): the game's grey plate behind the minimised map is hidden while the restyle draws the map
+        /// (<see cref="NativeScreenCorners.HideMapPlate"/>, fail open) and a feathered patch of <see cref="HudSprites.Backdrop"/> stands behind the map instead, as behind the board and the left column.
+        /// </summary>
+        private void PaintMapBackdrop(bool mapUp)
+        {
+            // While the holo map is up it owns the plate (HoloMap.Ui hides it itself): this restyle touches it neither way.
+            if (HudMapState.HoloActive)
+            {
+                if (mapShadow != null) Show(mapShadow, false);
+                return;
+            }
+            bool on = mapUp && mapBoxed;
+            screenCorners.HideMapPlate(on);
+            if (!on || HudSprites.Backdrop <= 0.001f || !EnsureCornerTree())
+            {
+                if (mapShadow != null) Show(mapShadow, false);
+                return;
+            }
+            const float feather = 24f;
+            PlaceBoxAt(mapShadow.rectTransform, new BoardRect(mapBox.X - feather, mapBox.Y - feather, mapBox.W + feather * 2f, mapBox.H + feather * 2f), baseUnit);
+            if (mapShadow.color != HudSprites.BackdropColor) mapShadow.color = HudSprites.BackdropColor;
+            Show(mapShadow, true);
             Show(cornerShade, true);
         }
 

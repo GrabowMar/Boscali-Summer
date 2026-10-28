@@ -147,7 +147,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float top = LeftHudStack.CueTop(canvasH * k);
             bool furniture = Options.Declutter == BoardDeclutter.Full;
             Show(cueRoot, true);
-            if (cueGroup.alpha != Options.Opacity) cueGroup.alpha = Options.Opacity;
             PlaceOnGrid(cueSurface, 0f, 0f, Whole(canvasW), Whole(canvasH));
             ScopeCanvas g = cueCanvas;
             g.Furniture = furniture;

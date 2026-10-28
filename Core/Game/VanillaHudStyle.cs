@@ -52,6 +52,20 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The vanilla objective label size, live from the player's options.</summary>
         internal static float OverlayTextSize => PlayerSettings.overlayTextSize;
 
+        private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
+        private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
+
+        /// <summary>The native HUD's label face (the weapon panel's name text), which the board, the third-person cluster and the top-centre lane all write in. False before the HUD exists.</summary>
+        internal static bool TryHudFont(out TMP_FontAsset font, out Material material)
+        {
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            WeaponStatus status = hud != null ? WeaponStatusField?.GetValue(hud) as WeaponStatus : null;
+            TextMeshProUGUI label = status != null ? NameTextField?.GetValue(status) as TextMeshProUGUI : null;
+            font = label != null ? label.font : null;
+            material = label != null ? label.fontSharedMaterial : null;
+            return font != null;
+        }
+
         /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
         internal static Palette Colours
         {

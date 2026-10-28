@@ -39,5 +39,8 @@ namespace BoscaliSummer.Core.Contracts
         int GetBonusPoints(ulong playerId);
         int GetPilotGeneration(ulong playerId);
         int GetScoreOrigin(ulong playerId);
+
+        /// <summary>The ace hunting the local pilot (the first aircraft of its wing still flying) and its callsign: host and solo only, a client has no position for it.</summary>
+        bool TryAce(out Aircraft ace, out string callsign);
     }
 }

@@ -16,6 +16,14 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The visor look's shade colour, rgb(2, 12, 8): what a soft patch behind symbology is tinted (the TAC BOARD's sun band and clouds are the same colour); its alpha is the caller's.</summary>
         public static readonly Color ShadeTint = new Color(2f / 255f, 12f / 255f, 8f / 255f, 1f);
 
+        /// <summary>
+        /// The one backdrop every mod HUD block stands on (2026-10-28: the board's clouds, the left column, the TAC MAP, the wing strip, the top-centre lane): a <see cref="Feather"/> patch of
+        /// <see cref="ShadeTint"/> at this alpha, the TAC BOARD's cloud core times the pilot's SHADE (0: no backdrops anywhere). Written by the Hud module every board tick; 0.27 is the default's.
+        /// </summary>
+        public static float Backdrop = 0.27f;
+
+        public static Color BackdropColor => new Color(ShadeTint.r, ShadeTint.g, ShadeTint.b, Backdrop);
+
         /// <summary>Texels of the soft edge of a <see cref="Feather"/> (and so canvas units, drawn 9-sliced at multiplier 1).</summary>
         public const int FeatherEdge = 40;
 

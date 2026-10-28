@@ -14,9 +14,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<BoardLayout> Layout { get; }
         public ConfigEntry<float> Scale { get; }
-        public ConfigEntry<float> OffsetX { get; }
-        public ConfigEntry<float> OffsetY { get; }
-        public ConfigEntry<float> Opacity { get; }
         public ConfigEntry<float> Shade { get; }
         public ConfigEntry<BoardDeclutter> Declutter { get; }
         public ConfigEntry<BoardScopeMode> ScopeMode { get; }
@@ -27,13 +24,13 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<BoardPage> Page4 { get; }
         public ConfigEntry<bool> ShowStores { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
-        public ConfigEntry<float> ThreatHoldSeconds { get; }
         public ConfigEntry<bool> ShowLamps { get; }
         public ConfigEntry<bool> ShowGauges { get; }
         public ConfigEntry<bool> ShowTicker { get; }
         public ConfigEntry<bool> ShowSystems { get; }
         public ConfigEntry<bool> Sway { get; }
         public ConfigEntry<bool> Corners { get; }
+        public ConfigEntry<bool> CentreAlerts { get; }
 
         public HudSettings(ConfigFile config)
         {
@@ -59,20 +56,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 smallerBoard.Value = 1;
             }
 
-            OffsetX = config.Bind(section, "OffsetX", d.OffsetX,
-                new ConfigDescription("How far the board is moved left from the right screen edge, in units (a unit is a 1080p pixel, scaled by the screen's height)." + live,
-                    new AcceptableValueRange<float>(0f, BoardOptions.OffsetXMax)));
-
-            OffsetY = config.Bind(section, "OffsetY", d.OffsetY,
-                new ConfigDescription("How far the board is moved down from the top screen edge, in units (a unit is a 1080p pixel, scaled by the screen's height)." + live,
-                    new AcceptableValueRange<float>(0f, BoardOptions.OffsetYMax)));
-
-            Opacity = config.Bind(section, "Opacity", d.Opacity,
-                new ConfigDescription("Ink opacity of the whole board, from faint (0.25) to solid (1)." + live,
-                    new AcceptableValueRange<float>(BoardOptions.OpacityMin, 1f)));
-
             Shade = config.Bind(section, "Shade", d.Shade,
-                new ConfigDescription("Strength of the dark band behind the symbology; 0 draws no band (and a restyled kill feed has no dark box then either)." + live,
+                new ConfigDescription("Strength of the one soft backdrop behind every HUD block of the mod (the board, the left column, the TAC MAP, the wing strip, the centre alerts); 0 draws none." + live,
                     new AcceptableValueRange<float>(0f, 1f)));
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
@@ -94,10 +79,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             PageMissileCam = config.Bind(section, "PageMissileCam", d.PageMissileCam,
                 "Show the missile camera card (the newest own missile in the air) beside the board." + live);
 
-            ThreatHoldSeconds = config.Bind(section, "ThreatHoldSeconds", d.ThreatHoldSeconds,
-                new ConfigDescription("How many seconds the radar-warning page keeps a contact after its last warning." + live,
-                    new AcceptableValueRange<float>(BoardOptions.HoldMin, BoardOptions.HoldMax)));
-
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
@@ -112,6 +93,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
 
             Corners = config.Bind(section, "Corners", d.Corners,
                 "Restyle the kill feed and the map frame in the board's look: the feed becomes the mod's own event log (DL EVT LOG), drawn while you are not typing in the chat; off leaves the game's own feed and map as they are. It stays when the board is switched off." + live);
+
+            CentreAlerts = config.Bind(section, "CentreAlerts", d.CentreAlerts,
+                "Combat alerts at the centre of the screen: a WARNING banner at the top centre (MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL), chevrons round the reticle pointing at every missile inbound, and HIT / DESTROYED / MISSED callouts under it. It stays when the board is switched off." + live);
 
             // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
             BoardOptions saved = d;
@@ -128,9 +112,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Enabled = Enabled.Value;
             into.Layout = Layout.Value;
             into.Scale = Scale.Value;
-            into.OffsetX = OffsetX.Value;
-            into.OffsetY = OffsetY.Value;
-            into.Opacity = Opacity.Value;
             into.Shade = Shade.Value;
             into.Declutter = Declutter.Value;
             into.ScopeMode = ScopeMode.Value;
@@ -141,13 +122,13 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Page4 = Page4.Value;
             into.ShowStores = ShowStores.Value;
             into.PageMissileCam = PageMissileCam.Value;
-            into.ThreatHoldSeconds = ThreatHoldSeconds.Value;
             into.ShowLamps = ShowLamps.Value;
             into.ShowGauges = ShowGauges.Value;
             into.ShowTicker = ShowTicker.Value;
             into.ShowSystems = ShowSystems.Value;
             into.Sway = Sway.Value;
             into.Corners = Corners.Value;
+            into.CentreAlerts = CentreAlerts.Value;
             into.Sanitize();
         }
 
@@ -155,9 +136,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Enabled { get => Enabled.Value; set => Enabled.Value = value; }
         BoardLayout ITacBoardSettings.Layout { get => Layout.Value; set => Layout.Value = value; }
         float ITacBoardSettings.Scale { get => Scale.Value; set => Scale.Value = value; }
-        float ITacBoardSettings.OffsetX { get => OffsetX.Value; set => OffsetX.Value = value; }
-        float ITacBoardSettings.OffsetY { get => OffsetY.Value; set => OffsetY.Value = value; }
-        float ITacBoardSettings.Opacity { get => Opacity.Value; set => Opacity.Value = value; }
         float ITacBoardSettings.Shade { get => Shade.Value; set => Shade.Value = value; }
         BoardDeclutter ITacBoardSettings.Declutter { get => Declutter.Value; set => Declutter.Value = value; }
         BoardScopeMode ITacBoardSettings.ScopeMode { get => ScopeMode.Value; set => ScopeMode.Value = value; }
@@ -168,22 +146,22 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         BoardPage ITacBoardSettings.Page4 { get => Page4.Value; set => Page4.Value = value; }
         bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
-        float ITacBoardSettings.ThreatHoldSeconds { get => ThreatHoldSeconds.Value; set => ThreatHoldSeconds.Value = value; }
         bool ITacBoardSettings.ShowLamps { get => ShowLamps.Value; set => ShowLamps.Value = value; }
         bool ITacBoardSettings.ShowGauges { get => ShowGauges.Value; set => ShowGauges.Value = value; }
         bool ITacBoardSettings.ShowTicker { get => ShowTicker.Value; set => ShowTicker.Value = value; }
         bool ITacBoardSettings.ShowSystems { get => ShowSystems.Value; set => ShowSystems.Value = value; }
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
+        bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
         void ITacBoardSettings.ResetToDefaults()
         {
             ConfigEntryBase[] all =
             {
-                Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
+                Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
-                ThreatHoldSeconds, ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

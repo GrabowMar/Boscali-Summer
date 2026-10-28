@@ -188,6 +188,29 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return result;
         }
 
+        /// <summary>
+        /// The centre combat layer as it stands (tests/ingame/ace-alerts.json): whether it is up, the banner's word and detail, how many marks the THREAT RING draws, the shot callout and
+        /// whether the game's own missile list is hidden behind it. <c>callout</c> (hit, destroyed, missed, decoyed) first pushes that call, <c>sub</c> its line, for a capture of the look.
+        /// </summary>
+        public static Dictionary<string, object> Alerts(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            string call = Text(args, "callout");
+            if (!string.IsNullOrEmpty(call))
+            {
+                if (!Enum.TryParse(call, true, out CalloutKind kind) || kind == CalloutKind.None) return Failure("HudAutomation", "Alerts", "no callout called '" + call + "'");
+                BoscaliSummer.Modules.Hud.Patches.CueFeed.Callouts.Push(kind, Text(args, "sub"), Time.unscaledTime);
+            }
+            CombatAlerts alerts = HudBoard.Instance != null ? HudBoard.Instance.Alerts : null;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.BannerWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
+                { "ring", alerts?.RingMarks ?? 0 }, { "callout", alerts?.CalloutText ?? "" }, { "native_list_hidden", alerts != null && alerts.NativeListHidden },
+            };
+            Debug.Log("[HudAutomation] Alerts: " + Describe(result));
+            return result;
+        }
+
         /// <summary>Fire one own missile station at the nearest enemy aircraft (blind if none).</summary>
         public static Dictionary<string, object> Fire(Dictionary<string, object> args)
         {

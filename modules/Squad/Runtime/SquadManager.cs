@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         /// The ace leading the hunt on the local pilot, for the TAC BOARD's ACE HUNT needle: the first aircraft of the wing still flying and its callsign. The hunts live on the host, so
         /// this answers on the host and in solo only; a client has no position to point at.
         /// </summary>
-        internal bool TryAce(out Aircraft ace, out string callsign)
+        public bool TryAce(out Aircraft ace, out string callsign)
         {
             ace = null;
             callsign = null;

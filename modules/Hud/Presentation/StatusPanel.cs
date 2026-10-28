@@ -254,7 +254,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void PlaceBoard(in BoardGeometry geo, float holdHeight, out float fromTop)
         {
-            ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, Options.OffsetX, Options.OffsetY, geo.Width, holdHeight, out float fromRight, out fromTop);
+            ScopeLayout.Anchor(screenW, screenH, baseUnit, unit, 0f, 0f, geo.Width, holdHeight, out float fromRight, out fromTop);
             boxFromRight = fromRight;
             cornerX = screenRight - fromRight;
             cornerY = screenTop - fromTop;

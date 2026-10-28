@@ -206,10 +206,44 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
         }
 
+        private Image mapPanel;
+        private float mapPanelAlpha = 1f;
+        private bool mapHidden;
+
+        /// <summary>
+        /// Hide or give back the game's grey plate behind the minimised map (the Image on <c>DynamicMap.hudMapAnchor</c>'s parent, <c>HMDCenter/LowerLeftPanel</c>, sprite <c>mapPanel</c>) while the
+        /// restyled map stands on the HUD's one backdrop instead (2026-10-28). Its renderer's alpha only, as HoloMap hides the same plate: never <c>SetActive</c> (its children are the map), never a group
+        /// on it. Told every frame (fail open: back the same frame the restyle is not drawing).
+        /// </summary>
+        public void HideMapPlate(bool hide)
+        {
+            if (!hide)
+            {
+                // Only what we hid is given back, once: a plate someone else (the holo map) hides is theirs.
+                if (!mapHidden || mapPanel == null) return;
+                mapHidden = false;
+                mapPanel.canvasRenderer.SetAlpha(mapPanelAlpha);
+                return;
+            }
+            if (mapPanel == null)
+            {
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                Transform panel = map != null && map.hudMapAnchor != null ? map.hudMapAnchor.parent : null;
+                mapPanel = panel != null ? panel.GetComponent<Image>() : null;
+                if (mapPanel == null) return;
+                float found = mapPanel.canvasRenderer.GetAlpha();
+                mapPanelAlpha = found > 0.01f ? found : 1f;      // the holo map may have it hidden right now: never adopt its 0 as the game's own
+            }
+            if (mapPanel.canvasRenderer.GetAlpha() != 0f) mapPanel.canvasRenderer.SetAlpha(0f);
+            mapHidden = true;
+        }
+
         /// <summary>Give the plate and the text back and let go of everything.</summary>
         public void Dispose()
         {
             ReleaseTexts();
+            HideMapPlate(false);
+            mapPanel = null;
             if (plate != null) { plate.alpha = 1f; Object.Destroy(plate); }
             if (boxPlate != null) boxPlate.canvasRenderer.SetAlpha(1f);
             plate = null;

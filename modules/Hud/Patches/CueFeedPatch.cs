@@ -15,6 +15,9 @@ namespace BoscaliSummer.Modules.Hud.Patches
     {
         public static readonly CueLog Log = new CueLog();
 
+        /// <summary>The centre layer's shot callout (HIT / DESTROYED / MISSED): the kill credit below calls DESTROYED, the board's shot ledger the rest.</summary>
+        public static readonly ShotCallouts Callouts = new ShotCallouts();
+
         /// <summary>The sources whose cues are being drawn right now (bit <see cref="CueSource"/>): written every frame by the board's corners, read by <see cref="TakeNotice"/>.</summary>
         public static int Charge;
 
@@ -136,9 +139,15 @@ namespace BoscaliSummer.Modules.Hud.Patches
             if (text != null && text.enabled && !string.IsNullOrEmpty(text.text)) CueFeed.Capture(CueSource.Score, text.text, CueSeverity.Normal, 5f);
         }
 
-        private static void Postfix(KillDisplay __instance)
+        private static void Postfix(KillDisplay __instance, PersistentUnit killedUnit, FactionHQ.RewardType actionType)
         {
-            try { Keep(__instance); }
+            try
+            {
+                Keep(__instance);
+                // A kill credited to us is the centre callout's DESTROYED (the game's own line above stays the CUE stack's score cue).
+                if (actionType == FactionHQ.RewardType.Kill && killedUnit != null)
+                    CueFeed.Callouts.Push(CalloutKind.Destroyed, string.IsNullOrEmpty(killedUnit.unitName) ? null : killedUnit.unitName.ToUpperInvariant(), Time.unscaledTime);
+            }
             catch (Exception e) { PatchGuard.Report("Hud.CueFeed.Score", e); }
         }
     }

@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public const int Count = 3;
         public const float LockHold = 2f, LockFlash = 1f, SpikeHold = 1.5f;
+        /// <summary>How long the THREAT page keeps a radar after its newest warning (it was the RWR HOLD option, 2..30, default 6, until the 2026-10-28 settings trim): longer than a radar's ping period, so a sweeping radar does not flicker.</summary>
+        public const float ContactHoldS = 6f;
 
         public static void Fill(in ThreatPicture t, Lamp[] lamps)
         {

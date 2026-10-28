@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- **Centre combat alerts**: urgent warnings now show where the pilot is looking, not only in the TAC BOARD corner.
+  - **WARNING banner** at the top centre: MISSILE, PULL UP, FIRE, ENGINE OUT (red) and LOCKED, BINGO FUEL (amber), with a
+    detail line that says what to do ("2 INBOUND · ARH · 4.2KM · 6S · BEAM + CHAFF", "T9K41 BOLTSTRIKE · 18KM",
+    "RTB · K92 HIGHWAY STRIP · 22KM"). A warning stays up for as long as its cause does; a caution shows for four seconds
+    and then leaves it to the board's lamps. The banner never flashes faster than 3 Hz.
+  - **Threat ring**: double chevrons on an ellipse round the reticle point at every missile inbound, labelled with its
+    number and seconds to impact. A radar locking you gets an amber diamond. It works in the cockpit and the outside
+    view, and missiles already on screen inside the ring are left to the game's own marker.
+  - **Shot callouts** under the reticle: HIT, DESTROYED (with the unit's name, and a count for kills in a row),
+    MISSED and DECOYED, from the shot tracker and the game's kill credit.
+  - **Said once**: while the banner is on, the game's own "Missile [ARH] 4.9km" list above the map and the TAC BOARD
+    ticker's MISSILE INBOUND / LOCK lines are left out (the THREAT page, lamps and SPIKE lines stay).
+  - **Visual cues**: every alert and call carries an icon from the mod's icon set beside its word (missile, terrain,
+    fire, engine, lock, runway; target, burst, ring, broken link). A timed alert burns a fuse along the banner's foot
+    (10 s to impact or to the ground), and a red glow rises on the screen edge a missile comes from as it closes.
+  - PULL UP outranks MISSILE, and a second warning up at the same time leads the detail line ("+FIRE · ..."), so no
+    warning is ever off the centre. With REDUCED MOTION on (Avionics) nothing blinks, marches, pops or types on.
+  - One switch, `TacBoard > CentreAlerts` (on by default; also on SET > TAC BOARD PARTS); it works with the board
+    switched off too.
+- **One background**: the board, the left column (event log, comms, cues), the TAC MAP (the game's grey plate is gone),
+  the wing strip and the centre alerts all stand on the same soft backdrop, set by one option: SHADE, now called
+  BACKGROUNDS on the SET page (0 % draws none anywhere).
+- **Fewer HUD settings**: `Opacity`, `OffsetX`, `OffsetY` and `ThreatHoldSeconds` are gone (the board sits in the
+  corner at full ink; the radar-warning page keeps a contact 6 s), and so are their SET rows.
+- **Ace warning remade**: the ace hunt shares the top-centre lane with the banner: three fixed rows on the reticle's
+  axis, one look (the HUD's own font and colours, the same brackets, chevrons and timing), so nothing ever moves over
+  anything else. A hunt opens with a short card ("ENEMY ACE", the tier, portrait, callsign typed on, wing and abilities),
+  then a one-line strip ("ACE HUNT · FLINT  3/3 UP") for the rest of the hunt. The ace's own aircraft gets a marker: a
+  diamond with its callsign and range, or a chevron at the screen edge pointing the way (host and solo; clients have no
+  position for the ace).
+
 ## 0.2.11 — stabilisation
 
 Feature freeze: this round fixes, trims and tests what exists, and adds nothing new.
