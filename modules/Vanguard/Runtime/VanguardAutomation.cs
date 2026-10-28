@@ -188,19 +188,15 @@ namespace BoscaliSummer.Vanguard
                 if (a.definition.unitName.IndexOf(tankerType, StringComparison.OrdinalIgnoreCase) >= 0) tanker = a;
                 else if (!noReceiver && a.definition.unitName.IndexOf(receiverType, StringComparison.OrdinalIgnoreCase) >= 0) receiver = a;
             }
-            WeaponMount kit = null;
-            foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
-                if (w != null && w.jsonKey == VanguardKeys.SkywellMount) kit = w;
+            WeaponMount kit = MountOf(VanguardKeys.SkywellMount);
             if (tanker == null || kit == null) return Failure("VanguardAutomation", "equip", "need the tanker type and the kit"); // an FS-20 is optional: a seated player is armed with pitarm (and equip says norx)
-            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
             // Rear cargo bay (nearest the ramp) if the airframe has one, else the first cargo / mission bay.
             HardpointSet[] sets = tanker.weaponManager.hardpointSets;
             int bay = Array.FindIndex(sets, h => h.name.IndexOf("Rear", StringComparison.OrdinalIgnoreCase) >= 0);
             if (bay < 0) bay = Array.FindIndex(sets, h => h.name.IndexOf("Cargo", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                          h.name.IndexOf("Mission Bay", StringComparison.OrdinalIgnoreCase) >= 0);
             if (bay < 0) bay = 0;
-            for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == bay ? kit : null);
-            tanker.Networkloadout = loadout;
+            CarryAlone(tanker, bay, kit);
             NuclearOption.SavedMission.Loadout armed = receiver != null ? ArmedLoadout(receiver) : null;
             if (armed != null) receiver.Networkloadout = armed;
             return new Dictionary<string, object> { ["ok"] = true, ["tankerType"] = tanker.definition.unitName, ["bay"] = sets[bay].name,
@@ -307,6 +303,15 @@ namespace BoscaliSummer.Vanguard
 
         private static float FlatDist(GlobalPosition a, GlobalPosition b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
+        /// <summary>The static (terrain, building) height under a map point; 0 when the cast finds nothing.</summary>
+        private static float GroundY(GlobalPosition point)
+        {
+            Vector3 local = point.ToLocalPosition();
+            return Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 9000f, local.z), Vector3.down, out RaycastHit hit, 12000f,
+                (int)PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
+                ? hit.point.ToGlobalPosition().AsVector3().y : 0f;
+        }
+
         private static Dictionary<string, object> LandingZoneStep(Dictionary<string, object> args, Aircraft lead)
         {
             string op0 = Text(args, "do") ?? "set";
@@ -331,11 +336,7 @@ namespace BoscaliSummer.Vanguard
                     if (groundTarget == null) return Failure("VanguardAutomation", "lz", "no ground target yet");
                     GlobalPosition tp = groundTarget.GlobalPosition();
                     var np = new GlobalPosition(tp.x + Number(args, "dx", 400f), 0f, tp.z + Number(args, "dz", 0f));
-                    Vector3 nlocal = np.ToLocalPosition();
-                    float ny = Physics.Raycast(new Vector3(nlocal.x, Datum.LocalSeaY + 9000f, nlocal.z), Vector3.down, out RaycastHit nhit, 12000f,
-                        (int)PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
-                        ? nhit.point.ToGlobalPosition().AsVector3().y : 0f;
-                    LandingZones.Order(lead, new GlobalPosition(np.x, ny, np.z));
+                    LandingZones.Order(lead, new GlobalPosition(np.x, GroundY(np), np.z));
                     lastZone = np;
                     lastZoneSet = true;
                     break;
@@ -347,11 +348,7 @@ namespace BoscaliSummer.Vanguard
                         point = new GlobalPosition(at.x + Number(args, "dx", 0f), 0f, at.z + Number(args, "dz", 0f));
                     }
                     else point = new GlobalPosition(Number(args, "x", 0f), 0f, Number(args, "z", 0f));
-                    Vector3 local = point.ToLocalPosition();
-                    float y = Physics.Raycast(new Vector3(local.x, Datum.LocalSeaY + 9000f, local.z), Vector3.down, out RaycastHit hit, 12000f,
-                        (int)PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)
-                        ? hit.point.ToGlobalPosition().AsVector3().y : 0f;
-                    LandingZones.Order(lead, new GlobalPosition(point.x, y, point.z));
+                    LandingZones.Order(lead, new GlobalPosition(point.x, GroundY(point), point.z));
                     lastZone = point;
                     lastZoneSet = true;
                     break;
@@ -452,6 +449,23 @@ namespace BoscaliSummer.Vanguard
             if (Launched.TryGetValue(key, out Missile drone) && drone != null) result["payout_" + key] = Pay(drone);
             if (bandit != null) result["payout_fighter"] = Pay(bandit);
             return result;
+        }
+
+        /// <summary>The Encyclopedia mount with this jsonKey (the last one, as the fit loops took it), or null.</summary>
+        private static WeaponMount MountOf(string jsonKey)
+        {
+            WeaponMount found = null;
+            foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
+                if (w != null && w.jsonKey == jsonKey) found = w;
+            return found;
+        }
+
+        /// <summary>The lead carries <paramref name="mount"/> alone, on hardpoint set <paramref name="set"/>; the stations rebuild over the next seconds.</summary>
+        private static void CarryAlone(Aircraft lead, int set, WeaponMount mount)
+        {
+            var weapons = new List<WeaponMount>(new WeaponMount[lead.weaponManager.hardpointSets.Length]);
+            weapons[set] = mount;
+            lead.Networkloadout = new NuclearOption.SavedMission.Loadout { weapons = weapons };
         }
 
         private static MissileDefinition Find(Func<MissileDefinition, bool> match)

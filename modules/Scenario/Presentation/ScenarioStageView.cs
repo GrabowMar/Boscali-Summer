@@ -444,17 +444,6 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             fx = CutFx.None;
         }
 
-        internal void Clear()
-        {
-            cut = cardInCut = false;
-            fx = CutFx.None;
-            feedOn = true;
-            HideBoards();
-            cutChanged = captionShown = captionFrom = flash = snap = -100f;
-            cardUntil = lineUntil = hintUntil = -1f;
-            Paint();
-        }
-
         private Polaroid Make()
         {
             var photo = new Polaroid();

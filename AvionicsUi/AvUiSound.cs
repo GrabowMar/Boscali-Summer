@@ -1,6 +1,4 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace NOAvionics
 {
@@ -37,9 +35,6 @@ namespace NOAvionics
             source.pitch = pitches[(int)cue];
             source.PlayOneShot(clips[(int)cue], gains[(int)cue] * Mathf.Clamp01(Volume));
         }
-
-        /// <summary>Compatibility for feature-owned controls.</summary>
-        public static void Tick(float volume = .4f) => Play(AvUiCue.Press);
 
         public static void Reset()
         {
@@ -105,26 +100,6 @@ namespace NOAvionics
             }
             clip.SetData(data, 0);
             return clip;
-        }
-    }
-
-    /// <summary>Feedback for native bezel buttons borrowed by the map rail.</summary>
-    public sealed class AvClickSound : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler
-    {
-        private Button button;
-
-        private void Awake() => button = GetComponent<Button>();
-
-        public void OnPointerEnter(PointerEventData eventData)
-        {
-            if (button == null || button.interactable) AvUiSound.Play(AvUiCue.Hover);
-        }
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (eventData.button != PointerEventData.InputButton.Left ||
-                (button != null && !button.interactable)) return;
-            AvUiSound.Play(AvUiCue.Navigate);
         }
     }
 }

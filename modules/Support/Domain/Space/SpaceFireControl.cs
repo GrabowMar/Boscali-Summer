@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float angleSample, float radiusSample, out SpaceImpact impact)
         {
             impact = default;
-            if (!Coordinate(x) || !Coordinate(z) || !float.IsFinite(angleSample) || !float.IsFinite(radiusSample)) return false;
+            if (!SpaceRules.Coordinate(x) || !SpaceRules.Coordinate(z) || !float.IsFinite(angleSample) || !float.IsFinite(radiusSample)) return false;
             double angle = UnitSample(angleSample) * 2d * Math.PI;
             double sample = UnitSample(radiusSample);
             double maximum = sarOnly ? SarRadius : OpticalRadius;
@@ -72,7 +72,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return dx * dx + dz * dz;
         }
 
-        private static float UnitSample(float value) => Math.Max(0, Math.Min(LargestUnitSample, value));
-        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= 10000000f;
+        private static float UnitSample(float value) => Math.Clamp(value, 0, LargestUnitSample);
     }
 }

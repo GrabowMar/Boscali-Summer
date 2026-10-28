@@ -181,13 +181,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (last != null) PaintSensor(last);
         }
 
-        /// <summary>Offline render seam: the room as if the pilot had selected a bird and begun a relocation to (u, v); a negative u proposes nothing yet.</summary>
-        internal void Preview(int birdKind, bool relocate, float u, float v)
-        {
-            selKind = birdKind; relocating = relocate && birdKind >= 0; hasPending = relocating && u >= 0f; pending = new Vector2(u, v);
-            Repaint();
-        }
-
         // ---- Situation -----------------------------------------------------------------------------------------------
 
         /// <summary>A console panel: navy plate, steel-blue bezel line, a 3 px rail in the panel's own hue.</summary>
@@ -866,7 +859,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The site's name without its family word (UPLINK ALPHA reads ALPHA, HOSTILE UPL-05 reads UPL-05): the map only needs the short tag.</summary>
         private static string ShortSite(string name)
         {
-            name = name ?? "";
+            name ??= "";
             if (name.StartsWith("UPLINK ", StringComparison.Ordinal)) return name.Substring(7);
             if (name.StartsWith("HOSTILE ", StringComparison.Ordinal)) return name.Substring(8);
             return name;
@@ -1203,15 +1196,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (ownUp < 3 && worst < Lamp.Hold) worst = Lamp.Hold; // a constellation short of a bird is never ALL GO
             callLamp = present == 0 ? Lamp.Off : worst == Lamp.NoGo ? Lamp.NoGo : worst == Lamp.Hold ? Lamp.Hold : Lamp.Go;
             callWord = present == 0 ? "NO BIRDS" : callLamp == Lamp.NoGo ? "NO-GO" : callLamp == Lamp.Hold ? "HOLD" : "ALL GO";
-        }
-
-        /// <summary>Cosmetic flavour: which console would call the line on the voice loop, read off its wording.</summary>
-        private static string Loop(string text)
-        {
-            text = text ?? "";
-            if (text.Contains("BURN") || text.Contains("FUEL") || text.Contains("SLOT")) return "FDO ";
-            if (text.Contains("MARK") || text.Contains("TRANSMIT") || text.Contains("TRACK")) return "SURV";
-            return "INCO";
         }
 
         private void PaintSensor(FrontRoomView v)

@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             Camera camera, bool reducedFlashes, bool audioEnabled, bool cockpit)
         {
             if (Application.isBatchMode || field == null || !field.IsBuilt || camera == null) { Reset(); return; }
-            Vector3 observerGlobal = new Vector3((float)observer.x, (float)observer.y, (float)observer.z);
+            Vector3 observerGlobal = new Vector3(observer.x, observer.y, observer.z);
             bool discontinuity = key == null || !field.Key.SameTape(key) || previousTime < 0f ||
                 missionTime < previousTime || missionTime - previousTime > 2.5f;
             if (discontinuity)

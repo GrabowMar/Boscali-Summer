@@ -13,7 +13,6 @@ namespace BoscaliSummer.Core.Contracts
 
     internal interface IObservationSource
     {
-        string Status { get; }
         bool CanCapture { get; }
         bool Capture();
         bool TryGet(out ObservationPoint point);

@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public GeoBird(float fromU, float fromV, float toU, float toV, float departAt, float fuel)
         {
-            FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Max(0f, Math.Min(100f, fuel));
+            FromU = fromU; FromV = fromV; ToU = toU; ToV = toV; DepartAt = departAt; Fuel = Math.Clamp(fuel, 0f, 100f);
         }
 
         /// <summary>
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public bool Moving(float now) => Length > 0f && now - DepartAt < Duration;
         public float Eta(float now) => Moving(now) ? Math.Max(0f, Duration - (now - DepartAt)) : 0f;
         /// <summary>Progress of the burn, 0..1 (1 once parked).</summary>
-        public float Progress(float now) => Length <= 0f ? 1f : Math.Max(0f, Math.Min(1f, (now - DepartAt) / Duration));
+        public float Progress(float now) => Length <= 0f ? 1f : Math.Clamp((now - DepartAt) / Duration, 0f, 1f);
 
         public float U(float now) => FromU + (ToU - FromU) * Progress(now);
         public float V(float now) => FromV + (ToV - FromV) * Progress(now);
@@ -52,7 +52,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The fuel that the burn under way cost (shown while it runs).</summary>
         public float BurnCost => Cost(Length);
 
-        public bool CanBurn(float now, float u, float v) => !Moving(now) && Fuel >= Cost(Distance(U(now), V(now), Clamp(u), Clamp(v))) && Cost(Distance(U(now), V(now), Clamp(u), Clamp(v))) > 0f;
+        public bool CanBurn(float now, float u, float v)
+        {
+            if (Moving(now)) return false;
+            float cost = Cost(Distance(U(now), V(now), Clamp(u), Clamp(v)));
+            return Fuel >= cost && cost > 0f;
+        }
 
         /// <summary>Starts a burn to (u,v) and returns the new state; the same state back when it is refused (already moving, no move, not enough fuel).</summary>
         public GeoBird Relocate(float now, float u, float v)
@@ -66,6 +71,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The footprint covers (u,v): the gate for a perk or a reveal that needs a satellite over the target.</summary>
         public bool Covers(float now, float u, float v, float radius) => Distance(U(now), V(now), u, v) <= radius;
 
-        private static float Clamp(float x) => x < 0.02f ? 0.02f : x > 0.98f ? 0.98f : x;
+        private static float Clamp(float x) => Scalar.Clamp(x, 0.02f, 0.98f);
     }
 }

@@ -31,11 +31,6 @@ namespace NOAvionics
 
         public float Right => X + Width;
 
-        public AvRect Inset(float left, float top, float right, float bottom) =>
-            new AvRect(X + left, Y - top,
-                       Math.Max(0f, Width - left - right),
-                       Math.Max(0f, Height - top - bottom));
-
         public override string ToString() =>
             "(" + X.ToString("0.##") + ", " + Y.ToString("0.##") + ", " +
             Width.ToString("0.##") + " x " + Height.ToString("0.##") + ")";

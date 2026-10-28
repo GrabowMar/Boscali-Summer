@@ -31,8 +31,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         /// <summary>Perk POWER from the mirrored superiority; 1 until the first snapshot.</summary>
         public float Power(Front front) => Known ? FrontSuperiority.Power(State.Fronts[(int)front].Superiority) : 1f;
-
-        /// <summary>The front's superiority as the host last told it (0 until the first snapshot).</summary>
-        public int Superiority(Front front) => Known ? State.Fronts[(int)front].Superiority : 0;
     }
 }

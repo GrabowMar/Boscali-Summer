@@ -194,10 +194,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public int HostileSectorCount { get; private set; }
         public int ContestedSectorCount { get; private set; }
         public int NeutralSectorCount { get; private set; }
-        public int ActiveClashesCount => ContestedSectorCount;
-
-        /// <summary>Uniform blocks the last evaluation clustered the cells into.</summary>
-        public int ClusterCount { get { EnsureDisplay(); return displayQuadCount; } }
 
         /// <summary>
         /// Cell edges where friendly control meets hostile or contested control — the
@@ -211,11 +207,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         /// <summary>Total length of the contour, in meters. The honest version of the segment count.</summary>
         public float FrontlineLengthMetres { get; private set; }
-        public int TotalNodesCount => nodes.Count;
         public int TotalSectors => ResolutionX * ResolutionY;
-        public float TerritoryControlRatio => (FriendlySectorCount + HostileSectorCount > 0)
-            ? (float)FriendlySectorCount / (FriendlySectorCount + HostileSectorCount)
-            : float.NaN;
 
         public TacticalSectorGrid(float cellSize = DefaultCellSize, float worldSize = 100000f)
             : this(cellSize, worldSize, worldSize)
@@ -301,38 +293,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             displayDirty = true;
         }
 
-        internal bool HasSeaMask => hasSea;
-
-        public bool IsSea(int col, int row)
-            => hasSea && col >= 0 && col < ResolutionX && row >= 0 && row < ResolutionY && sea[row * ResolutionX + col] != 0;
-
         private long CellCount(float cell)
             => (long)Math.Ceiling(WorldSizeX / cell) * (long)Math.Ceiling(WorldSizeY / cell);
-
-        public void SetWorldSize(float worldSize)
-        {
-            SetWorldSize(worldSize, worldSize);
-        }
-
-        public void SetWorldSize(float worldSizeX, float worldSizeY)
-        {
-            bool changed = false;
-            if (ValidWorldSize(worldSizeX) && Math.Abs(WorldSizeX - worldSizeX) > 0.01f)
-            {
-                WorldSizeX = worldSizeX;
-                changed = true;
-            }
-            if (ValidWorldSize(worldSizeY) && Math.Abs(WorldSizeY - worldSizeY) > 0.01f)
-            {
-                WorldSizeY = worldSizeY;
-                changed = true;
-            }
-            if (changed)
-            {
-                UpdateLayout(CellSize);
-                ResetAll();
-            }
-        }
 
         private static bool ValidWorldSize(float value) => float.IsFinite(value) && value > 1000f && value <= 10000000f;
 
@@ -364,29 +326,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 hash = (hash ^ (byte)node.Faction) * 1099511628211UL;
             }
             return hash ^ (uint)nodes.Count;
-        }
-
-        /// <summary>
-        /// Fully resets persistent sector hold strengths and states (e.g. on new mission load).
-        /// </summary>
-        public void ResetAll()
-        {
-            Clear();
-            Array.Clear(holdStrength, 0, holdStrength.Length);
-            Array.Clear(sectorStates, 0, sectorStates.Length);
-            FriendlySectorCount = 0;
-            HostileSectorCount = 0;
-            ContestedSectorCount = 0;
-            NeutralSectorCount = TotalSectors;
-            hasEvaluated = false;
-            FrontlineSegmentCount = 0;
-            FrontlineLengthMetres = 0f;
-            strategicDirty = true;
-            displayQuadCount = 0;
-            DisplayHash = 0UL;
-            displayDirty = true;
-            FrontlineHash = 0UL;
-            GridVersion++;
         }
 
         /// <summary>Finishes the lazy display clusters and front traces, so the first reader pays nothing.</summary>
@@ -672,12 +611,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     force[index] = Math.Min(1000f, force[index] + weight * falloff);
                 }
             }
-        }
-
-        public void AddAirbasePresence(float worldX, float worldZ, bool isHostile, float influenceRadius = 25000f)
-        {
-            SectorControl faction = isHostile ? SectorControl.Hostile : SectorControl.Friendly;
-            RegisterNode(nodes.Count + 1, "Airbase_" + (nodes.Count + 1), worldX, worldZ, faction, influenceRadius, true);
         }
 
         public IReadOnlyList<TacticalNode> GetNodes() => nodes;
@@ -1213,22 +1146,19 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
             int mark = written;
             tracePoints[written++] = new FrontlineTracePoint(first.AX, first.AZ);
-            float atX = first.AX, atZ = first.AZ;
-            while (written < tracePoints.Length && FindUnusedEndpoint(atX, atZ, out int next, out int end))
-            {
-                traceUsed[next] = true;
-                SectorFrontSegment segment = frontSegments[next];
-                if (segment.Pressure > peak) peak = segment.Pressure;
-                metres += segment.HalfLength * 2f;
-                atX = end == 0 ? segment.BX : segment.AX;
-                atZ = end == 0 ? segment.BZ : segment.AZ;
-                tracePoints[written++] = new FrontlineTracePoint(atX, atZ);
-            }
+            WalkFrom(first.AX, first.AZ, ref written, ref peak, ref metres);
             ReversePoints(mark, written - mark);
 
             tracePoints[written++] = new FrontlineTracePoint(first.BX, first.BZ);
-            atX = first.BX;
-            atZ = first.BZ;
+            WalkFrom(first.BX, first.BZ, ref written, ref peak, ref metres);
+            // A pocket ring walks back to its own start, so the first point repeats last;
+            // consumers read that as a closed trace.
+            return written - mark;
+        }
+
+        /// <summary>Follows unused segments from an endpoint, appending each far end as a trace point.</summary>
+        private void WalkFrom(float atX, float atZ, ref int written, ref float peak, ref float metres)
+        {
             while (written < tracePoints.Length && FindUnusedEndpoint(atX, atZ, out int next, out int end))
             {
                 traceUsed[next] = true;
@@ -1239,9 +1169,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 atZ = end == 0 ? segment.BZ : segment.AZ;
                 tracePoints[written++] = new FrontlineTracePoint(atX, atZ);
             }
-            // A pocket ring walks back to its own start, so the first point repeats last;
-            // consumers read that as a closed trace.
-            return written - mark;
         }
 
         private void ReversePoints(int start, int count)
@@ -1388,7 +1315,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     float tx = Math.Clamp(cellX - 0.5f - qc, 0f, 1f);
                     columns[x].Tx = tx;
                     columns[x].Sx = tx * tx * (3f - 2f * tx);
-                    columns[x].Cell = Math.Clamp((int)cellX, 0, ResolutionX - 1);
                 }
             }
             for (int qr = -1; qr < ResolutionY; qr++)
@@ -1403,7 +1329,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     float ty = Math.Clamp(cellY - 0.5f - qr, 0f, 1f);
                     rows[y].Ty = ty;
                     rows[y].Sy = ty * ty * (3f - 2f * ty);
-                    rows[y].Cell = Math.Clamp((int)cellY, 0, ResolutionY - 1);
                 }
             }
 
@@ -1504,7 +1429,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         float ty = rows[y].Ty, sy = rows[y].Sy;
                         float gx = (hx0 + hx1 * ty) / pxPerCellX;
                         float gx2 = gx * gx;
-                        int cellRow = rows[y].Cell;
                         int rowOffset = y * texWidth;
                         int phase = (xMin + y) % period;
                         for (int x = xMin; x <= xMax; x++, phase = phase + 1 == period ? 0 : phase + 1)
@@ -1619,14 +1543,12 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private struct BakeColumn
         {
             public float Tx, Sx;
-            public int Cell;
             public float OLow, ODelta, WLow, WDelta, HLow, HDelta, KLow, KDelta, Gy2;
         }
 
         private struct BakeRow
         {
             public float Ty, Sy;
-            public int Cell;
         }
 
         /// <summary>Per-bake working tables, kept between bakes so a re-bake allocates nothing.</summary>

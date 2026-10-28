@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// The live operation, the expanded lane of the board: MAIN EFFORT slab, route strip, the tug-of-war lane, groups and their separate honest counts,
     /// the tied sorties as tickets, and the priced reinforcement wave. At most three tickets keep ACCEPT and the wave strip above the 596 px bay's fold.
     /// </summary>
-    internal sealed class StrHeroLane : StrPart
+    internal sealed class StrHeroLane : StrLaidPart
     {
         private const float Pad = 10f, LockW = 138f, PressureW = 150f, PercentW = 62f;
 
@@ -118,15 +118,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             StrViewModel vm = Vm;
             if (vm == null || !vm.Effort.Live) return 0f;
@@ -320,7 +312,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>One sortie tied to the operation: family chip, title and who flies it, the data line, ACCEPT, the wing button, LOCATE ON MAP, and the one line under it when the main verb is refused or the wing is out.</summary>
-    internal sealed class StrSortieTicket : StrPart
+    internal sealed class StrSortieTicket : StrLaidPart
     {
         private const float Pad = 5f, AcceptW = 66f, WingW = 78f, ButtonGap = 4f;
 
@@ -394,15 +386,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             float bx = width - Pad - AcceptW - ButtonGap - WingW, leftW = bx - Pad - 10f;
             bool hasNote = note.gameObject.activeSelf && note.text.Length > 0;
@@ -448,7 +432,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// The reinforcement wave with its price up front (R4): earned pips, state and whether the pool covers it on the first line; group, cost and the pool before
     /// and after (or the held reason) on the second. A skipped wave is a persistent state on this strip, not a toast. The last purchase rides on its hover help.
     /// </summary>
-    internal sealed class StrWaveStrip : StrPart
+    internal sealed class StrWaveStrip : StrLaidPart
     {
         private const float Pad = 8f, PipW = 12f, PipH = 6f;
 
@@ -490,15 +474,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             float inner = width - 2f * Pad;
             bool present = Vm != null && Vm.Wave.Present;

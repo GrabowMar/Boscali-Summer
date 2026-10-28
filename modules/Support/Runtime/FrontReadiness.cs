@@ -4,7 +4,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// What a front's build-up lets pilots do. A perk of rung n needs <see cref="Readiness"/> >= n; <see cref="Power"/> scales a perk's radius, duration, strikes, damage and odds
-    /// (1 = the table value) and shortens its cooldown above 1. S1 replaces <see cref="DefaultFrontReadiness"/> with the live front state.
+    /// (1 = the table value) and shortens its cooldown above 1. The live front state replaces <see cref="DefaultFrontReadiness"/> once the fronts are attached.
     /// </summary>
     internal interface IFrontReadiness
     {
@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         FrontSides Facts(FactionHQ hq);
     }
 
-    /// <summary>S0 stand-in: every front is fully built and neutral.</summary>
+    /// <summary>The stand-in until the fronts attach: every front is fully built and neutral.</summary>
     internal sealed class DefaultFrontReadiness : IFrontReadiness
     {
         public int Readiness(FactionHQ hq, Front front) => 5;

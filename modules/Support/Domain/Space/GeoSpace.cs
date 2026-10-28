@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -14,12 +15,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float DirectorGap = 180f;
         private const int Grid = 16383;
 
-        public static float U(float x, float width) => Clamp01(x / Math.Max(1000f, width) + 0.5f);
-        public static float V(float z, float height) => Clamp01(0.5f - z / Math.Max(1000f, height));
-        private static float Clamp01(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
+        public static float U(float x, float width) => Scalar.Clamp01(x / Math.Max(1000f, width) + 0.5f);
+        public static float V(float z, float height) => Scalar.Clamp01(0.5f - z / Math.Max(1000f, height));
 
         /// <summary>Wire form of a map point: two 14-bit cells in one non-negative int.</summary>
-        public static int Pack(float u, float v) => (int)Math.Round(Clamp01(u) * Grid) | ((int)Math.Round(Clamp01(v) * Grid) << 14);
+        public static int Pack(float u, float v) => (int)Math.Round(Scalar.Clamp01(u) * Grid) | ((int)Math.Round(Scalar.Clamp01(v) * Grid) << 14);
 
         public static bool TryUnpack(int packed, out float u, out float v)
         {
@@ -68,8 +68,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float[] side = { -0.08f, 0.08f, 0f };
             for (int i = 0; i < 3; i++)
             {
-                u[i] = Math.Max(0.05f, Math.Min(0.95f, ownU + du * share[i] + pu * side[i]));
-                v[i] = Math.Max(0.05f, Math.Min(0.95f, ownV + dv * share[i] + pv * side[i]));
+                u[i] = Math.Clamp(ownU + du * share[i] + pu * side[i], 0.05f, 0.95f);
+                v[i] = Math.Clamp(ownV + dv * share[i] + pv * side[i], 0.05f, 0.95f);
             }
         }
     }

@@ -483,7 +483,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             // The node may have left the list (a lingering fog entry); a held node stays listed, so a miss means it is gone.
             if (!TryNode(nodeId, out CyberNode node)) return new CyberResult(CyberOutcome.NoTarget);
             bool exploit = CyberRules.Exploit(node.Kind);
-            float effort = Math.Max(1, Math.Min(TaskedBoard.MaxMarks, mine.Hops));
+            float effort = Math.Clamp(mine.Hops, 1, TaskedBoard.MaxMarks);
             CyberOutcome posted = ports.PostPackage(op, node, def, exploit, effort);
             if (posted != CyberOutcome.None) return new CyberResult(posted, nodeId);
             Network.ReleaseNode(op, nodeId, IntrusionEnd.Burned);

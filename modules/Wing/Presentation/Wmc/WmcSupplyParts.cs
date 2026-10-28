@@ -22,8 +22,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcPilotCard(RectTransform parent, Action<int> step)
         {
             Rect = AvLay.Child(parent, "PilotCard");
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect);
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             Portrait = WmcPortrait.Build(Rect, new Rect(8f, -3f, 30f, 34f));
             nameText = WmcSheet.Text(Rect, "Name", AvTextRole.Label);
@@ -74,8 +73,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state));
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            WmcDraw.PaintRow(frame, r);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
             nameText.color = AvInk.Ink;
             infoText.color = AvInk.Dim;
@@ -104,8 +102,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcDispatchCard(RectTransform parent, string requisitionLabel, Action requisition)
         {
             Rect = AvLay.Child(parent, "DispatchCard");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(6f));
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             chip = new AvChip(Rect);
             title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
@@ -184,8 +181,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card " + AvStates.Class(state));
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card " + AvStates.Class(state), AvTheme.SurfaceInert);
             rail.color = WmcState.Color(AvStates.Class(state));
             title.color = AvInk.Ink;
             line.color = AvInk.Dim;
@@ -213,15 +209,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcBuildCard(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "BuildCard");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(6f));
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             icon = AvLay.Solid(Rect, "Icon", Color.white);
             icon.preserveAspect = true;
             icon.enabled = false;
             chip = new AvChip(Rect);
-            title = AvText.Make(Rect, "Title", AvTextRole.Label);
-            AvText.Fit(title, false);
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
             chain = AvText.Make(Rect, "Chain", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             track = AvLay.Solid(Rect, "TapeTrack", Color.clear);
             fill = AvLay.Solid(Rect, "TapeFill", Color.clear);
@@ -276,8 +270,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card " + AvStates.Class(state));
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card " + AvStates.Class(state), AvTheme.SurfaceInert);
             rail.color = WmcState.Color(railState);
             title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             chain.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);

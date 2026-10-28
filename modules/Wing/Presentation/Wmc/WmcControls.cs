@@ -20,8 +20,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private readonly Dictionary<string, Entry> map = new Dictionary<string, Entry>(256);
 
-        public int Count => map.Count;
-
         /// <summary>A kit v2 button answers <paramref name="id"/>.</summary>
         public void Add(string id, AvControl control) => Set(id, control != null ? control.transform : null);
 

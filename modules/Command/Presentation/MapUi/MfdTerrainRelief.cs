@@ -276,16 +276,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if ((ready || unavailable) && (!ReferenceEquals(owner, map) || !ReferenceEquals(sprite, shown))) Reset();
         }
 
-        /// <summary>Instant turn and tilt about the view centre; buttons ease through the navigator.</summary>
-        internal static void Rotate(float yawDelta, float pitchDelta)
-        {
-            rig.Unproject(.5f, .5f, 0f, out float x, out float z);
-            rig.OrbitAbout(yawDelta, pitchDelta, x, 0f, z);
-            nextRender = 0f;
-        }
-
-        internal static void ResetOrbit() => Rotate(-rig.Yaw, ReliefRig.DefaultPitch - rig.Pitch);
-
         /// <summary>Camera from the rig: fixed orbit radius around the focus, rig's ortho size.</summary>
         private static void PlaceCamera()
         {
@@ -307,8 +297,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Rect bounds = viewport.rect;
             if (bounds.width <= 0f || bounds.height <= 0f) return false;
             Canvas canvas = ViewportCanvas(viewport);
-            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera uiCamera = MapUiPointer.UiCamera(canvas);
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport, screen,
                     uiCamera, out Vector2 local)) return false;
             vx = (local.x - bounds.xMin) / bounds.width;
@@ -601,13 +590,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         ushort version = input.ReadUInt16(), side = input.ReadUInt16();
                         float width = input.ReadSingle(), height = input.ReadSingle();
                         if (magic != 0x50414D42 || (version != 1 && version != 2) || side != Samples ||
-                            float.IsNaN(width) || float.IsInfinity(width) ||
-                            float.IsNaN(height) || float.IsInfinity(height) ||
+                            !float.IsFinite(width) ||
+                            !float.IsFinite(height) ||
                             Mathf.Abs(width - source.MapSize.x) > 1f ||
                             Mathf.Abs(height - source.MapSize.y) > 1f)
                             return Unavailable("Terrain asset map size differs; using the native map.");
                         seaLevel = version == 2 ? input.ReadSingle() : SeaLevel;
-                        if (float.IsNaN(seaLevel) || float.IsInfinity(seaLevel) ||
+                        if (!float.IsFinite(seaLevel) ||
                             stream.Length != (version == 2 ? 20 : 16) + Samples * Samples * 2)
                             return Unavailable("Terrain asset header invalid; using the native map.");
                         heights = new float[Samples * Samples];
@@ -962,7 +951,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var vertices = new List<Vector3>(18 * 2 * (Samples - 1));
             var indices = new List<int>(vertices.Capacity);
             var colors = new List<Color32>(vertices.Capacity);
-            Color32 tone = MinorGrid;
+            Color32 tone;
             for (int grid = -4; grid <= 4; grid++)
             {
                 int fixedSample = Mathf.Clamp(Samples / 2 + grid * 56, 0, Samples - 1);
@@ -1515,8 +1504,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 canvas = marker.GetComponentInParent<Canvas>();
                 markerCanvases[marker] = canvas;
             }
-            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera uiCamera = MapUiPointer.UiCamera(canvas);
             Vector2 point = RectTransformUtility.WorldToScreenPoint(uiCamera, marker.transform.position);
             Rect area = new Rect(point.x + 12f, point.y - 42f, 112f, 50f);
             bool hovered = ((Vector2)Input.mousePosition - point).sqrMagnitude < 24f * 24f;
@@ -1580,37 +1568,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!IsDrawing || map != owner) return false;
             if (!ViewportPoint(Input.mousePosition, out float u, out float v) ||
                 !TryGround(u, v, out Vector3 point)) return false;
-            position = new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
-                point.z / ModelSpanZ * source.MapSize.y);
-            return true;
-        }
-
-        internal static bool TryUnproject(Vector2 local, Rect rect, out GlobalPosition position)
-        {
-            position = default;
-            if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
-            RectTransform viewport = owner.mapBackground.rectTransform;
-            Rect bounds = viewport.rect;
-            if (bounds.width <= 0f || bounds.height <= 0f) return false;
-            Vector3 uiWorld = owner.mapImage.transform.TransformPoint(local);
-            Vector3 viewportLocal = viewport.InverseTransformPoint(uiWorld);
-            float u = (viewportLocal.x - bounds.xMin) / bounds.width;
-            float v = (viewportLocal.y - bounds.yMin) / bounds.height;
-            if (u < 0f || u > 1f || v < 0f || v > 1f) return false;
-            Ray ray = camera.ViewportPointToRay(new Vector3(u, v, 0f));
-            bool found = false;
-            float nearest = float.MaxValue;
-            Vector3 hitPoint = default;
-            foreach (MeshCollider collider in colliders)
-            {
-                if (collider == null || !collider.Raycast(ray, out RaycastHit hit, camera.farClipPlane) ||
-                    hit.distance >= nearest || !InsideSheet(hit.point)) continue;
-                nearest = hit.distance;
-                hitPoint = hit.point;
-                found = true;
-            }
-            if (!found) return false;
-            Vector3 point = hitPoint - sceneRoot.transform.position;
             position = new GlobalPosition(point.x / ModelSpanX * source.MapSize.x, 0f,
                 point.z / ModelSpanZ * source.MapSize.y);
             return true;
@@ -1720,8 +1677,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             hoveredStackCount = 0;
             RectTransform viewport = owner.mapBackground.rectTransform;
             Canvas canvas = ViewportCanvas(viewport);
-            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera uiCamera = MapUiPointer.UiCamera(canvas);
             float pixels = viewport.rect.height * Mathf.Max(.01f, Mathf.Abs(viewport.lossyScale.y));
             float metresPerPixel = 2f * camera.orthographicSize / Mathf.Max(1f, pixels) *
                 source.MapSize.x / ModelSpanX;
@@ -1824,8 +1780,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (clusteredCount <= 0 || owner?.mapBackground == null) return;
             RectTransform viewport = owner.mapBackground.rectTransform;
             Canvas canvas = ViewportCanvas(viewport);
-            Camera uiCamera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera uiCamera = MapUiPointer.UiCamera(canvas);
             Vector2 mouse = Input.mousePosition;
             for (int i = 0; i < clusteredCount; i++)
             {
@@ -2098,16 +2053,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapX = at.x;
             mapY = at.y;
             return true;
-        }
-
-        public bool TryScale(float worldX, float worldZ, float metres, out float mapUnits)
-        {
-            mapUnits = 0f;
-            if (!(metres > 0f) || !TryProject(worldX, worldZ, out float x0, out float y0) ||
-                !TryProject(worldX + metres, worldZ, out float x1, out float y1) ||
-                !TryProject(worldX, worldZ + metres, out float x2, out float y2)) return false;
-            return BoscaliSummer.Core.Math.MapScale.Mean(Mathf.Sqrt((x1 - x0) * (x1 - x0) + (y1 - y0) * (y1 - y0)),
-                Mathf.Sqrt((x2 - x0) * (x2 - x0) + (y2 - y0) * (y2 - y0)), out mapUnits);
         }
     }
 

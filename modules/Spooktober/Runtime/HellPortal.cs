@@ -12,7 +12,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
     /// </summary>
     internal sealed class HellPortal
     {
-        private static readonly int StrengthId = Shader.PropertyToID("_Strength");
         private static readonly List<HellPortal> Open = new List<HellPortal>();
 
         public readonly GameObject Root;
@@ -97,12 +96,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             var portal = new HellPortal(worldPos, facing, radius);
             Open.Add(portal);
             return portal;
-        }
-
-        /// <summary>0-1: the vortex opening or closing (the embers keep going until <see cref="Close"/>).</summary>
-        public void SetStrength(float strength)
-        {
-            if (material != null) material.SetFloat(StrengthId, Mathf.Clamp01(strength));
         }
 
         public void Close()

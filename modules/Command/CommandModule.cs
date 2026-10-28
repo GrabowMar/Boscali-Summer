@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Command
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);
             context.AddService<ITerritoryIngress>(territory);
             manager.Configure(moraleNet, territory);
-            overlay.Configure(context.Settings.Command, compat, territory);
+            overlay.Configure(context.Settings.Command, territory);
             threats.Configure(context.Settings.Command);
         }
     }

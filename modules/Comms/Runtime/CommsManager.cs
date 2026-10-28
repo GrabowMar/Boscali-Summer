@@ -23,12 +23,9 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         Arrow,
         Circle,
         Box,
-        Sticker,
         Label,
         Eraser,
         Measure,
-        HuntHide,
-        HuntGuess,
     }
 
     /// <summary>
@@ -302,7 +299,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         {
             if (outbox.Count == 0) return;
             bool hasLocal = CommsIdentity.TryLocal(out Player local);
-            ulong localId = hasLocal ? CommsIdentity.Id(local) : 0UL;
+            ulong localId = hasLocal ? PlayerIdentity.Of(local) : 0UL;
             int faction = hasLocal ? CommsIdentity.Faction(local) : 0;
             float now = Time.unscaledTime;
             for (int i = 0; i < outbox.Count; i++)
@@ -318,7 +315,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
         private static CommsSender Sender(Player player, bool moderator) => new CommsSender
         {
-            Id = CommsIdentity.Id(player),
+            Id = PlayerIdentity.Of(player),
             Name = CommsIdentity.Name(player),
             Faction = CommsIdentity.Faction(player),
             Moderator = moderator,
@@ -331,7 +328,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             DrawingSeconds = settings.DrawingSeconds.Value,
             AllowAllChannel = settings.AllowAllChannel.Value,
             AllowDrawing = settings.AllowDrawing.Value,
-            AllowGames = false,
         };
 
         /// <summary>
@@ -360,7 +356,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             }
 
             if (!CommsIdentity.TryLocal(out Player local)) return;
-            client.LocalId = CommsIdentity.Id(local);
+            client.LocalId = PlayerIdentity.Of(local);
             LocalFaction = CommsIdentity.Faction(local);
             if (LocalFaction != lastFaction)
             {
@@ -423,7 +419,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             if (sound && settings.PingSound.Value && now >= nextSound)
             {
                 nextSound = now + SoundGapSeconds;
-                AvUiSound.Tick(0.55f);
+                AvUiSound.Play(AvUiCue.Press);
             }
         }
 
@@ -686,9 +682,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
         public void SetTool(CommsTool tool)
         {
-            if (tool == CommsTool.Sticker || tool == CommsTool.HuntHide || tool == CommsTool.HuntGuess)
-                tool = CommsTool.None;
-
             if (tool == CommsTool.None)
             {
                 Tool = CommsTool.None;

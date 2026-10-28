@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 
 using BoscaliSummer.Core.Util;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>A sortie for the DEBRIEF (spec WMC rebuild §PLAN LOG and DEBRIEF), folded from the wing's events as they come — the ring
@@ -93,8 +93,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (Ejected > 0) lines.Add(N(Ejected) + (Ejected == 1 ? " PILOT EJECTED" : " PILOTS EJECTED"));
             return lines;
         }
-
-        private static string N(int n) => n.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>The last <see cref="Max"/> debriefs, newest first, as <c>debrief.user.json</c>.</summary>

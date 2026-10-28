@@ -116,12 +116,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 nextPrune = now + PruneInterval;
                 Prune();
             }
-            if (now < nextRegistration) return;
-            nextRegistration = now + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
-            ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
-            ClientHandlers.Swap(network?.Client?.MessageHandler);
-            throttle.Prune(now);
+            if (NetFeed.Poll(ServerHandlers, ClientHandlers, ref nextRegistration)) throttle.Prune(now);
         }
 
         // A client misses a Gone message on a bad link; a view whose decoy no longer exists is dead.
@@ -135,9 +130,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private static void Broadcast(AlexView view)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(new AlexState
+            NetFeed.Broadcast(new AlexState
             {
                 Protocol = ProtocolVersion,
                 Decoy = view.Decoy,
@@ -150,7 +143,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 Line = view.Line,
                 Target = view.Target,
                 FreeLeft = view.FreeLeft,
-            }, authenticatedOnly: true, excludeLocalPlayer: true);
+            });
         }
 
         private void ReceiveIntent(INetworkPlayer sender, AlexIntent message)

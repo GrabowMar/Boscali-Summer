@@ -124,12 +124,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        /// <summary>
-        /// Rank in the rail's display order. The caller sorts stably, so codes this table
-        /// does not know share the last group and keep the order the game gave them.
-        /// </summary>
-        public static int OrderRank(string label) => For(label).Rank;
-
         /// <summary>The label a group of keys sits under.</summary>
         public static string GroupName(MfdRailGroup group)
         {

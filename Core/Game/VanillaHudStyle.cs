@@ -24,19 +24,10 @@ namespace BoscaliSummer.Core.Game
         private const float RetrySeconds = 2f;
 
         private static FieldInfo overlayPrefabField;
-        private static FieldInfo markerPrefabField;
         private static FieldInfo overlayInfoField;
-        private static FieldInfo destroySpriteField;
-        private static FieldInfo waypointSpriteField;
-        private static FieldInfo captureSpriteField;
-        private static FieldInfo reconSpriteField;
         private static CockpitStyle cockpit;
-        private static MapStyle map;
         private static bool cockpitReady;
-        private static bool mapReady;
         private static float nextAttempt;
-        private static float mapNextAttempt;
-        private static float mapRetry = RetrySeconds / 2f;
         private static bool reflectionTried;
 
         internal struct CockpitStyle
@@ -45,22 +36,6 @@ namespace BoscaliSummer.Core.Game
             public Material FontMaterial;
 
             /// <summary>Vanilla's label is font size 32 scaled 0.5, i.e. 16 px on screen.</summary>
-            public float LabelScale;
-        }
-
-        internal struct MapStyle
-        {
-            public Sprite WaypointIcon;
-            public Sprite DestroyIcon;
-            public Sprite ReconIcon;
-            public Sprite CaptureIcon;
-            public Font LabelFont;
-            public Material LabelMaterial;
-            public float LabelSize;
-            public Color LabelColour;
-            public Sprite Ring;
-
-            /// <summary>Vanilla's map label is 24 px scaled 0.5, i.e. 12 px on screen.</summary>
             public float LabelScale;
         }
 
@@ -112,12 +87,7 @@ namespace BoscaliSummer.Core.Game
             try
             {
                 overlayPrefabField = AccessTools.Field(typeof(ObjectiveOverlayManager), "overlayPrefab");
-                markerPrefabField = AccessTools.Field(typeof(ObjectiveMarkerManager), "markerPrefab");
                 overlayInfoField = AccessTools.Field(typeof(ObjectiveOverlay), "objectiveInfo");
-                destroySpriteField = AccessTools.Field(typeof(ObjectiveMarker), "destroyObjective");
-                waypointSpriteField = AccessTools.Field(typeof(ObjectiveMarker), "waypointObjective");
-                captureSpriteField = AccessTools.Field(typeof(ObjectiveMarker), "captureObjective");
-                reconSpriteField = AccessTools.Field(typeof(ObjectiveMarker), "reconObjective");
             }
             catch (Exception e)
             {
@@ -128,12 +98,8 @@ namespace BoscaliSummer.Core.Game
         public static void Invalidate()
         {
             cockpitReady = false;
-            mapReady = false;
             cockpit = default;
-            map = default;
             nextAttempt = 0f;
-            mapNextAttempt = 0f;
-            mapRetry = RetrySeconds / 2f;
         }
 
         internal static bool TryCockpit(out CockpitStyle style)
@@ -143,21 +109,14 @@ namespace BoscaliSummer.Core.Game
             return cockpitReady;
         }
 
-        internal static bool TryMap(out MapStyle style)
-        {
-            Resolve();
-            style = map;
-            return mapReady;
-        }
-
         /// <summary>
-        /// Resolve once per scene, but keep retrying while something is missing: the marker
-        /// managers only exist in flight and the map one only once the map has been opened, so
-        /// a first attempt that lands too early must not disable the style for the whole scene.
+        /// Resolve once per scene, but keep retrying while something is missing: the
+        /// overlay manager only exists in flight, so a first attempt that lands too early must not
+        /// disable the style for the whole scene.
         /// </summary>
         private static void Resolve()
         {
-            if (cockpitReady && mapReady) return;
+            if (cockpitReady) return;
             EnsureReflection();
             float now = Time.unscaledTime;
             if (now >= nextAttempt)
@@ -165,22 +124,13 @@ namespace BoscaliSummer.Core.Game
                 nextAttempt = now + RetrySeconds;
                 if (!cockpitReady) cockpitReady = TryReadCockpit(out cockpit);
             }
-            // The map manager only exists once the map has been opened, so back the retry off (2 s doubling to 30 s).
-            if (!mapReady && now >= mapNextAttempt)
-            {
-                mapReady = TryReadMap(out map);
-                mapRetry = Mathf.Min(mapRetry * 2f, 30f);
-                mapNextAttempt = now + mapRetry;
-            }
         }
 
         private static void EnsureReflection()
         {
             if (reflectionTried) return;
             reflectionTried = true;
-            if (overlayPrefabField != null && markerPrefabField != null && overlayInfoField != null &&
-                destroySpriteField != null && waypointSpriteField != null && captureSpriteField != null &&
-                reconSpriteField != null)
+            if (overlayPrefabField != null && overlayInfoField != null)
                 return;
             Initialise();
         }
@@ -217,53 +167,6 @@ namespace BoscaliSummer.Core.Game
                 return false;
             }
         }
-
-        private static bool TryReadMap(out MapStyle style)
-        {
-            style = default;
-            try
-            {
-                ObjectiveMarkerManager manager = UnityEngine.Object.FindObjectOfType<ObjectiveMarkerManager>();
-                ObjectiveMarker prefab = manager != null && markerPrefabField != null
-                    ? markerPrefabField.GetValue(manager) as ObjectiveMarker
-                    : null;
-                if (prefab == null) return false;
-
-                Text label = prefab.GetComponentInChildren<Text>(true);
-                style = new MapStyle
-                {
-                    WaypointIcon = Sprite(waypointSpriteField, prefab),
-                    DestroyIcon = Sprite(destroySpriteField, prefab),
-                    ReconIcon = Sprite(reconSpriteField, prefab),
-                    CaptureIcon = Sprite(captureSpriteField, prefab),
-                    LabelFont = label != null ? label.font : null,
-                    LabelMaterial = label != null ? label.material : null,
-                    LabelSize = label != null ? label.fontSize : 24f,
-                    LabelColour = label != null ? label.color : Color.white,
-                    LabelScale = label != null ? Scale(label.rectTransform, 0.5f) : 0.5f,
-                    Ring = ExclusionRing()
-                };
-                return style.WaypointIcon != null && style.DestroyIcon != null &&
-                       style.ReconIcon != null && style.CaptureIcon != null;
-            }
-            catch (Exception e)
-            {
-                Plugin.Logger?.LogWarning("Map marker style unavailable: " + e.Message);
-                return false;
-            }
-        }
-
-        /// <summary>The vanilla map radius ring: the exclusion-zone display's own sprite.</summary>
-        private static Sprite ExclusionRing()
-        {
-            GameAssets assets = GameAssets.i;
-            if (assets == null || assets.exclusionZoneDisplay == null) return null;
-            Image ring = assets.exclusionZoneDisplay.GetComponentInChildren<Image>(true);
-            return ring != null ? ring.sprite : null;
-        }
-
-        private static Sprite Sprite(FieldInfo field, ObjectiveMarker prefab) =>
-            field != null ? field.GetValue(prefab) as Sprite : null;
 
         private static T Typed<T>(Component prefab, FieldInfo field) where T : Component =>
             field != null ? field.GetValue(prefab) as T : null;

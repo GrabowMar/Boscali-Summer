@@ -176,17 +176,13 @@ namespace BoscaliSummer.Vanguard
             public static Dictionary<string, object> Fit(Aircraft lead)
             {
                 if (lead == null) return Failure("VanguardAutomation", "kestrel", "no friendly aircraft");
-                WeaponMount mount = null;
-                foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
-                    if (w != null && w.jsonKey == VanguardKeys.KestrelMount) mount = w;
+                WeaponMount mount = MountOf(VanguardKeys.KestrelMount);
                 if (mount == null) return Failure("VanguardAutomation", "kestrel", VanguardKeys.KestrelMount + " is not in the Encyclopedia");
-                AdoptPrefabOptions(lead);
+                RuntimeStores.Adopt(lead);
                 HardpointSet[] sets = lead.weaponManager.hardpointSets;
                 int set = Array.FindIndex(sets, s => s.weaponOptions.Contains(mount));
                 if (set < 0) return Failure("VanguardAutomation", "kestrel", "no hardpoint set on " + lead.definition.unitName + " offers the sled mount");
-                var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
-                for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == set ? mount : null);
-                lead.Networkloadout = loadout;
+                CarryAlone(lead, set, mount);
                 return new Dictionary<string, object> { ["ok"] = true, ["set"] = set, ["setName"] = sets[set].name };
             }
 

@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             BuildPlaces(war);
             if (scanned) scanned = false;   // the review's contacts were gathered ahead, in slices
             else ScanContacts(war, now);
-            activeObjectives = MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) ? active : null;
+            activeObjectives = GameAccess.TryGetActiveObjectives(hq, out List<Objective> active) ? active : null;
             int traces = territory != null
                 ? Mathf.Clamp(territory.CopyFrontlineTraces(hq.GetInstanceID(), tracePoints, traceLengths, tracePressure), 0, FrontlineTraceLimits.MaximumTraces) : 0;
 

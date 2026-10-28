@@ -44,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private float execAt;
 
         public PlanRunner(WingPlan plan) => this.plan = plan;
-
-        public WingPlan Plan => plan;
         public bool Running { get; private set; }
 
         /// <summary>Executed, and every lane is through its steps.</summary>

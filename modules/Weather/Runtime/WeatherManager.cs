@@ -196,8 +196,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         internal bool InCloudAt(GlobalPosition at)
         {
             if (flightClouds != null && flightClouds.Active)
-                return flightClouds.InCloud((float)at.x, (float)at.y, (float)at.z);
-            return ((IWeatherView)this).TrySample((float)at.x, (float)at.z, out WeatherViewSample sky) &&
+                return flightClouds.InCloud(at.x, at.y, at.z);
+            return ((IWeatherView)this).TrySample(at.x, at.z, out WeatherViewSample sky) &&
                 sky.Cover >= 0.3f && at.y >= sky.CloudBase && at.y <= sky.CloudTop;
         }
 
@@ -353,7 +353,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void TryCapture(LevelInfo level)
         {
             if (GameManager.gameState == GameState.Encyclopedia) return;
-            if (level.LoadedMapSettings == null || !TryMissionTime(out float missionTime) ||
+            if (level.LoadedMapSettings == null || !MissionTimeSource.TryNow(out float missionTime) ||
                 (GameAccess.IsServer() && !MissionManager.IsRunning))
             {
                 if (captureWaitSince < 0f) captureWaitSince = Time.unscaledTime;
@@ -506,7 +506,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             // Never build the field on a local clock while the mission clock is still loading:
             // the whole sky would jump when the real clock appears a moment later.
-            if (!TryMissionTime(out float missionTime)) return;
+            if (!MissionTimeSource.TryNow(out float missionTime)) return;
             RekeyAfterClockReset(missionTime);
             UpdateField(missionTime);
             lastTapeTime = missionTime;
@@ -538,7 +538,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
         private void LateUpdate()
         {
-            bool hasMissionClock = TryMissionTime(out float weatherTime);
+            bool hasMissionClock = MissionTimeSource.TryNow(out float weatherTime);
             bool liveWeather = !Application.isBatchMode && LevelInfo.i != null && settings != null &&
                 settings.Enabled.Value && hasMissionClock;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
@@ -558,7 +558,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 }
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
-            if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission, Time.deltaTime); }
+            if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission); }
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
@@ -566,7 +566,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value;
             if (wantClouds)
             {
-                if (flightClouds == null) flightClouds = new WeatherVolumeDressing(logger);
+                flightClouds ??= new WeatherVolumeDressing(logger);
                 Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
                 flightClouds.Update(LevelInfo.i, Field, worldCamera,
                     weatherTime, settings.CloudHalfResolution.Value,
@@ -644,10 +644,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             bool isCockpit = cameras.currentState == cameras.cockpitState;
             GlobalPosition cloudPosition = currentCam.transform.GlobalPosition();
             viewDensity = flightClouds != null && flightClouds.Active
-                ? flightClouds.DensityAt((float)cloudPosition.x, (float)cloudPosition.y, (float)cloudPosition.z)
+                ? flightClouds.DensityAt(cloudPosition.x, cloudPosition.y, cloudPosition.z)
                 : clouds.InCloud(LevelInfo.i) ? 0.5f : 0f;
             viewTransmission = flightClouds != null && flightClouds.Active
-                ? flightClouds.TransmissionAt((float)cloudPosition.x, (float)cloudPosition.y, (float)cloudPosition.z)
+                ? flightClouds.TransmissionAt(cloudPosition.x, cloudPosition.y, cloudPosition.z)
                 : Mathf.Clamp01(1f - LevelInfo.i.GetCloudOcclusion(currentCam.transform.position));
             WeatherPoint airPoint = localWeather;
             if (Field == null)
@@ -661,14 +661,14 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 airPoint.Dewpoint = 6f;
             }
             // Under a deck the air goes dim and grey; above it, the light is back.
-            float shadeTarget = Field != null ? OvercastLook.Shade(localWeather.SkyCover, (float)cloudPosition.y, localWeather.NativeDeckTop) : 0f;
+            float shadeTarget = Field != null ? OvercastLook.Shade(localWeather.SkyCover, cloudPosition.y, localWeather.NativeDeckTop) : 0f;
             cloudShade = Mathf.MoveTowards(cloudShade, shadeTarget, Time.deltaTime * 0.1f);
             bool underwaterView = currentCam.transform.position.y < Datum.LocalSeaY;
             bool hazeEnabled = settings == null || settings.RainAtmosphereEnabled.Value;
             FlightWeatherAirMass airMass = FlightWeatherAirMass.Evaluate(airPoint,
-                (float)cloudPosition.y, viewDensity, forcedRainIntensity);
-            viewTemperature = airPoint.Temperature - Mathf.Max(0f, (float)cloudPosition.y) * 0.0065f;
-            viewDewpoint = Mathf.Min(viewTemperature, airPoint.Dewpoint - Mathf.Max(0f, (float)cloudPosition.y) * 0.002f);
+                cloudPosition.y, viewDensity, forcedRainIntensity);
+            viewTemperature = airPoint.Temperature - Mathf.Max(0f, cloudPosition.y) * 0.0065f;
+            viewDewpoint = Mathf.Min(viewTemperature, airPoint.Dewpoint - Mathf.Max(0f, cloudPosition.y) * 0.002f);
             rainIntensity = airMass.Rain;
             rainIntensity = Mathf.Clamp01(rainIntensity * RainVisualMath.GustFactor(missionTime, missionSeed));
             float incomingRain = rainIntensity;
@@ -873,7 +873,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 { "conditions", currentConditions },
                 { "cloudHeight", currentCloudHeight },
-                { "forcedRain", forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1f },
+                { "forcedRain", forcedRainIntensity ?? -1f },
                 { "rainExposure", rainExposure },
                 { "heightAboveGround", heightAboveGround },
                 { "rainSystems", rainRoot != null ? 1 : 0 },
@@ -886,7 +886,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "lightNow", lightLevel },
                 { "ambientNow", LevelInfo.i != null ? LevelInfo.i.GetAmbientLight() : -1f },
                 { "sunNow", LevelInfo.i != null && LevelInfo.i.sun != null ? LevelInfo.i.sun.intensity : -1f },
-                { "missionNow", TryMissionTime(out float mtForReadout) ? mtForReadout : -1f },
+                { "missionNow", MissionTimeSource.TryNow(out float mtForReadout) ? mtForReadout : -1f },
                 { "todNow", LevelInfo.i != null ? LevelInfo.i.timeOfDay : -1f },
                 { "canopySurfaces", canopySurfaces != null ? canopySurfaces.Count : 0 },
                 { "canopyWetness", canopyWetness },
@@ -1192,7 +1192,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 TargetWindZ = targetWind.z,
                 TargetTurbulence = targetTurbulence,
                 MissionTimeSeconds = (uint)Mathf.Max(0f, missionTime),
-                ForcedRain = forcedRainIntensity.HasValue ? forcedRainIntensity.Value : -1.0f,
+                ForcedRain = forcedRainIntensity ?? -1.0f,
                 FieldManual = isManualOverride,
             };
             WeatherSyncKey.Write(ref message, WeatherKeyWire.FromKey(fieldKey));
@@ -1204,7 +1204,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (GameAccess.IsServer()) return;
             syncSeen++;
             WeatherKey key = WeatherKeyWire.ToKey(WeatherSyncKey.Read(message), WarnOnce);
-            bool haveClock = TryMissionTime(out float localTime);
+            bool haveClock = MissionTimeSource.TryNow(out float localTime);
             switch (SyncGate.Decide(false, baselineCaptured, key.Dynamic, haveClock, localTime, message.MissionTimeSeconds))
             {
                 case SyncDecision.Buffer:
@@ -1282,7 +1282,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             Aircraft aircraft = cameras != null ? cameras.followingUnit as Aircraft : null;
             if (aircraft == null && !(GameManager.GetLocalAircraft(out aircraft) && aircraft != null)) return fieldPosition;
             GlobalPosition at = aircraft.transform.GlobalPosition();
-            return new Vector2((float)at.x, (float)at.z);
+            return new Vector2(at.x, at.z);
         }
 
         private void ApplySmoothModulation(LevelInfo level)
@@ -1357,7 +1357,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 (traced == null ? -1 : (int)SkyMath.ClassOf(traced.RowAt(0f, 0f)));
             if (signature == traceSignature && traceState != null && Time.unscaledTime < nextTraceSummary) return;
             traceSignature = signature;
-            TryMissionTime(out float missionTime);
+            MissionTimeSource.TryNow(out float missionTime);
             string renderer = flightClouds == null ? "off" :
                 flightClouds.Active ? "volume" : "native (" + (flightClouds.HideReason ?? "?") + ")";
             WeatherField live = Field;
@@ -1386,13 +1386,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 " route " + (rainSound.IsRouted ? 1 : 0) + " clips " + (rainSound.ClipsReady ? 1 : 0)));
         }
 
-        // The gated mission clock (spec 9.5): false until a manager exists and, in multiplayer, the shared start
-        // is set. The only time input of the weather field.
-        private static bool TryMissionTime(out float time) => MissionTimeSource.TryNow(out time);
-
         private bool RequireClock(string what, out float time)
         {
-            if (TryMissionTime(out time)) return true;
+            if (MissionTimeSource.TryNow(out time)) return true;
             logger?.LogWarning("[Weather] " + what + " refused: no valid mission clock yet.");
             return false;
         }
@@ -1400,7 +1396,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// <summary>Host: resend the key now, for a peer that just joined.</summary>
         internal void ResendSync()
         {
-            if (!GameAccess.IsServer() || fieldKey == null || !TryMissionTime(out float missionTime)) return;
+            if (!GameAccess.IsServer() || fieldKey == null || !MissionTimeSource.TryNow(out float missionTime)) return;
             BroadcastSync(missionTime);
         }
 
@@ -1416,7 +1412,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 return cachedForecast;
             }
 
-            if (!TryMissionTime(out float missionTime)) return cachedForecast ?? Array.Empty<ForecastStep>();
+            if (!MissionTimeSource.TryNow(out float missionTime)) return cachedForecast ?? Array.Empty<ForecastStep>();
             lastForecastSampleTime = now;
             int[] offsets = WeatherForecast.DefaultOffsetsMinutes;
             if (cachedForecast == null || cachedForecast.Length != offsets.Length) cachedForecast = new ForecastStep[offsets.Length];
@@ -1574,7 +1570,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// </summary>
         internal bool PinSky(byte sky)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return false;
             if (sky != WeatherKey.None && sky >= SkyLibrary.Count) return false;
             if (sky == WeatherKey.None) { ResumeChanging(); return true; }
             isManualOverride = true;
@@ -1594,7 +1590,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
         internal void SetForcedSets(byte sets)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
             fieldKey = fieldKey.WithSets(sets);
             RekeyAndSync(now);
         }
@@ -1605,7 +1601,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// the camera, along its level heading (0 puts them right here).</summary>
         internal void PlaceAhead(float ahead)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
             Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
             if (camera == null) return;
             GlobalPosition here = camera.transform.GlobalPosition();
@@ -1613,13 +1609,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             forward.y = 0f;
             if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
             forward.Normalize();
-            fieldKey = fieldKey.WithAnchor((float)here.x + forward.x * ahead, (float)here.z + forward.z * ahead);
+            fieldKey = fieldKey.WithAnchor(here.x + forward.x * ahead, here.z + forward.z * ahead);
             RekeyAndSync(now);
         }
 
         internal void ClearPlacement()
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
             fieldKey = fieldKey.WithoutAnchor();
             RekeyAndSync(now);
         }
@@ -1627,7 +1623,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// <summary>One click: a held state with its set-pieces and placement, sent as one key.</summary>
         internal bool ApplyScenario(WeatherScenario scenario)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return false;
             consoleAuto = scenario == WeatherScenario.ResetAll;
             isManualOverride = !consoleAuto;
             forcedRainIntensity = null;
@@ -1637,7 +1633,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (camera != null)
             {
                 GlobalPosition here = camera.transform.GlobalPosition();
-                x = (float)here.x; z = (float)here.z;
+                x = here.x; z = here.z;
                 forward = camera.transform.forward;
             }
             // A scenario is a new tape (a pin or a story): place it like a capture (slice 4a: the held cases of Solve).
@@ -1651,7 +1647,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// <summary>New sites for the clouds and set-piece storms, same weather.</summary>
         internal void RerollLayout()
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return;
+            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
             fieldKey = TapeCuts.Reroll(fieldKey, now);
             RekeyAndSync(now);
             NotifyPlayer("NEW CLOUD LAYOUT", forcedRainIntensity);

@@ -48,9 +48,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             gaugeKey = int.MinValue;
         }
 
-        private static Aircraft Resolve(uint id) =>
-            id != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit u) ? u as Aircraft : null;
-
         private bool Read(out DockScope d)
         {
             d = default;
@@ -60,18 +57,18 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Aircraft tanker = null;
             bool serving = false, served = false;
             foreach (SkywellView v in SkywellBoard.Views.Values)
-                if (v.Receiver == id) { view = v; tanker = Resolve(v.Tanker); serving = true; break; }
+                if (v.Receiver == id) { view = v; tanker = SkywellBoard.Resolve(v.Tanker); serving = true; break; }
             if (!serving)
                 foreach (SkywellView v in SkywellBoard.Views.Values)
                     if (v.Released == id && v.ReleaseKind == PitRelease.Served && v.StateAge < 8f)
-                    { view = v; tanker = Resolve(v.Tanker); served = true; break; }
+                    { view = v; tanker = SkywellBoard.Resolve(v.Tanker); served = true; break; }
             if (tanker == null)
             {
                 float best = CueRange;
                 foreach (SkywellView v in SkywellBoard.Views.Values)
                 {
                     if (!v.Active || v.Receiver != 0) continue;
-                    Aircraft t = Resolve(v.Tanker);
+                    Aircraft t = SkywellBoard.Resolve(v.Tanker);
                     if (t == null || t.disabled || t == me || t.NetworkHQ != me.NetworkHQ) continue;
                     float distance = Vector3.Distance(me.transform.position, SkywellBoard.Anchor(t));
                     if (distance < best) { best = distance; tanker = t; view = v; }

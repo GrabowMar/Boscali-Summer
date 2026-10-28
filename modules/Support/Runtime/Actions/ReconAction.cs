@@ -30,8 +30,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         /// <summary>Radial speed above which a SAR target smears rather than focuses, m/s.</summary>
         public const float StationaryThreshold = 4f; // the SAR smear speed; informational only since RECON PASS reveals movers too
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             try

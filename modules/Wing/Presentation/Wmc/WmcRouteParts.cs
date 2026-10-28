@@ -48,14 +48,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             card.Bracket = 8f;
             AvLay.Fill(card.rectTransform);
             vector = AvVector.Create(Rect, "Route", 400);
-            caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft);
-            AvText.Fit(caption, false);
-            empty = AvText.Make(Rect, "Empty", AvTextRole.Label, "", TextAlignmentOptions.Center);
-            AvText.Fit(empty, false);
+            caption = WmcSheet.Text(Rect, "Caption", AvTextRole.Micro, TextAlignmentOptions.TopLeft);
+            empty = WmcSheet.Text(Rect, "Empty", AvTextRole.Label, TextAlignmentOptions.Center);
             for (int i = 0; i < numbers.Length; i++)
             {
-                numbers[i] = AvText.Make(Rect, "No" + i, AvTextRole.Micro, (i + 1).ToString(), TextAlignmentOptions.TopLeft);
-                AvText.Fit(numbers[i], false);
+                numbers[i] = WmcSheet.Text(Rect, "No" + i, AvTextRole.Micro, TextAlignmentOptions.TopLeft, (i + 1).ToString());
                 numbers[i].gameObject.SetActive(false);
             }
             Restyle();
@@ -174,10 +171,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            card.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            card.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-            card.SetVerticesDirty();
+            WmcDraw.PaintCard(card, "card", AvTheme.Surface, true);
             caption.color = empty.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             if (data != null) Draw();
         }
@@ -211,8 +205,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string[] words = { "#", "BRG", "DIST", "ALT", "SPD", "AT POINT", "ETA" };
             for (int i = 0; i < heads.Length; i++)
             {
-                heads[i] = AvText.Make(Rect, "Head" + i, AvTextRole.Micro, words[i], TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(heads[i], false);
+                heads[i] = WmcSheet.Text(Rect, "Head" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, words[i]);
             }
             for (int i = 0; i < rows.Length; i++)
             {
@@ -239,12 +232,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public Transform RowTarget(int i) => rows[i].Frame.transform;
 
-        private TMP_Text T(string name, AvTextRole role, TextAlignmentOptions align)
-        {
-            TMP_Text t = AvText.Make(Rect, name, role, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private TMP_Text T(string name, AvTextRole role, TextAlignmentOptions align) => WmcSheet.Text(Rect, name, role, align);
 
         private static void SetShown(Row r, bool on)
         {

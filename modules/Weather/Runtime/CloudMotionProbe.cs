@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             if (cam != null)
             {
-                if (origin == null) origin = (float)PanField.GetValue(cam.orbitState);
+                origin ??= (float)PanField.GetValue(cam.orbitState);
                 PanField.SetValue(cam.orbitState, origin.Value);
             }
             string aa = "none";

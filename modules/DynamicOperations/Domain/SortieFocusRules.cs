@@ -1,3 +1,4 @@
+using System;
 using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
@@ -12,7 +13,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
 
         /// <summary>NaN or not above 0 gives DefaultRadius; otherwise clamped to 3000..15000.</summary>
         internal static float ClampRadius(float radius) =>
-            !(radius > 0f) ? DefaultRadius : radius < MinimumRadius ? MinimumRadius : radius > MaximumRadius ? MaximumRadius : radius;
+            !(radius > 0f) ? DefaultRadius : Math.Clamp(radius, MinimumRadius, MaximumRadius);
 
         /// <summary>The kind map of annex 03 section 5. Rappel, Rooftop, role None and anything the table does not list are never allowed.</summary>
         internal static bool Allows(FocusRole role, OperationKind kind)
@@ -45,9 +46,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
                     return false;
             }
         }
-
-        /// <summary>True for Defend and Patrol: the only kinds the wing's on-station status may advance (ruling D6).</summary>
-        internal static bool WingMayCount(OperationKind kind) => kind == OperationKind.Defend || kind == OperationKind.Patrol;
 
         /// <summary>Status sentence for a focus with no tied card on the board; at most 128 characters, says what to do.</summary>
         internal static string ThinBoardStatus(string place)

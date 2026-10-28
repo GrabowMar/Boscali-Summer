@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public SnapshotMember[] Rows;
         public int Count;
 
-        public static LogFilter None => new LogFilter { Element = -1 };
-
         public bool Any => Element >= 0 || ById;
 
         public bool Match(in WingEvent e)
@@ -124,10 +122,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (n > 0) k += n * 131L + (long)(radio.TimeAt(n - 1) * 10f) * 7L + (radio.TextAt(n - 1)?.Length ?? 0);
             return k;
         }
-
-        /// <summary>Newest first, at most <paramref name="max"/> rows; on a tie the event goes first. Returns the count.</summary>
-        public static int Fill(WingEventRing events, ChatterLog radio, List<LogRow> into, int max = MaxRows) =>
-            Fill(events, radio, into, max, LogFilter.None);
 
         public static int Fill(WingEventRing events, ChatterLog radio, List<LogRow> into, int max, in LogFilter filter)
         {

@@ -22,8 +22,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] cmUntil = new float[HudCm.MaxStations];
         /// <summary>The capacitor's last read, and the last shot it fell by: how much, when, and the share it fell from (the just-spent cells).</summary>
         private float capLast, capLastAt, shotKj, shotAt = float.NegativeInfinity, shotFrom;
-        /// <summary>The cost word (the energy weapon's first word) of the station it was made for.</summary>
-        private string costFor, costWord;
         // Set by Paint for the block painters.
         private bool stack;
         private int declutter;
@@ -44,9 +42,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public bool HasCm => live && StoresMath.HasExp(d);
 
         public bool HasCap => live && StoresMath.HasPwr(d);
-
-        /// <summary>PWR BUS has its cost row: an energy weapon is fitted and the game says what its shot costs.</summary>
-        public bool HasCost => live && StoresMath.CostKj(d) > 0f;
 
         /// <summary>The 10 Hz read: the feed, the THREAT page's countermeasure call (which dispenser pulses DISPENSE), the rounds that just left a dispenser and the capacitor's last shot.</summary>
         public void Poll(float time, byte call)

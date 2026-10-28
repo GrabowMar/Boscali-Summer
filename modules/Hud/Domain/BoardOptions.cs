@@ -42,7 +42,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float OffsetXMax = 1200f, OffsetYMax = 600f;
         public const float OpacityMin = 0.25f;
         public const float HoldMin = 2f, HoldMax = 30f;
-        public const float DwellMax = 15f;
 
         /// <summary>Master switch. Off hides the board and gives back the native weapon, countermeasure and power panels.</summary>
         public bool Enabled;
@@ -56,8 +55,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The slot choices. Never <see cref="BoardPage.Systems"/>: SYSTEMS is the board's own always-on block, not a page choice (<see cref="Sanitize"/>).</summary>
         public BoardPage Page1, Page2, Page3, Page4;
         public bool ShowStores;
-        public bool PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo;
-        public float ThreatHoldSeconds, PageMinSeconds;
+        public bool PageMissileCam;
+        public float ThreatHoldSeconds;
         public bool ShowLamps, ShowGauges, ShowTicker, ShowSystems;
         public bool Sway, Corners;
 
@@ -67,8 +66,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, OffsetX = 0f, OffsetY = 0f, Opacity = 1f, Shade = 0.45f,
             Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Manual,
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
-            PageThreat = true, PageShot = true, PageMissileCam = true, PageApproach = true, PageWing = true, PageStrike = true, PageDock = true, PageObjective = true, PageSystems = true, PageCargo = true,
-            ThreatHoldSeconds = 6f, PageMinSeconds = 3f,
+            PageMissileCam = true,
+            ThreatHoldSeconds = 6f,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
             Sway = true, Corners = true,
         };
@@ -83,7 +82,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Opacity = Fit(Opacity, OpacityMin, 1f, d.Opacity);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
             ThreatHoldSeconds = Fit(ThreatHoldSeconds, HoldMin, HoldMax, d.ThreatHoldSeconds);
-            PageMinSeconds = Fit(PageMinSeconds, 0f, DwellMax, d.PageMinSeconds);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
             if ((uint)ScopeMode > (uint)BoardScopeMode.Off) ScopeMode = d.ScopeMode;

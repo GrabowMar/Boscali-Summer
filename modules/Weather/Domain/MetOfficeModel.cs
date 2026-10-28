@@ -53,8 +53,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>A coloured span of the strip, in minutes from now (negative = behind the camera).</summary>
     internal struct MetBlock { public float FromMin, ToMin; public WeatherRegimeType Class; public string Label; }
 
-    /// <summary>A tick on the strip: a front (kind) or a step of the sky (kind Occluded is never used for steps; <see cref="Step"/> marks them).</summary>
-    internal struct MetMark { public float AtMin; public MetFrontKind Kind; public bool Step; public string Label; }
+    /// <summary>A tick on the strip: a front (kind).</summary>
+    internal struct MetMark { public float AtMin; public MetFrontKind Kind; public string Label; }
 
     /// <summary>
     /// Everything the Met Office window shows, as plain values, refilled in place at 4 Hz (no allocation per refresh). The window and the
@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         private static float Fin(float v) => Scalar.IsFinite(v) ? v : 0f;
-        private static float Unit(float v) => Scalar.IsFinite(v) ? (v < 0f ? 0f : v > 1f ? 1f : v) : 0f;
+        private static float Unit(float v) => Scalar.IsFinite(v) ? Scalar.Clamp01(v) : 0f;
 
         /// <summary>
         /// Makes every number the chart, the barb or a text draws finite: NaN and infinity become 0, covers and strengths are clamped to 0-1, a non-finite rain override is dropped.

@@ -8,6 +8,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>The local player's wing (M1: one wing per host, up to <see cref="WingConfig.MaxWingmen"/>
@@ -428,7 +429,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// field to takeoffs for as long as it lived).</summary>
         public WingMember Recruit(Aircraft a)
         {
-            Pilot p = a != null && a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+            Pilot p = AircraftReadout.PrimaryPilot(a);
             if (NativeLandingBridge.Landing(p))
             {
                 NativeLandingBridge.Deregister(NativeLandingBridge.Field(p), a);
@@ -1151,7 +1152,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (!lg.enabled) gearsOff++;
             }
             Rigidbody rb = a.rb;
-            Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+            Pilot p = AircraftReadout.PrimaryPilot(a);
             ControlInputs i = a.GetInputs();
             return $"engines {n} power {thrust:0} of {max:0} rpm {rpm:0.00}; body kinematic {(rb != null && rb.isKinematic)} sleeping {(rb != null && rb.IsSleeping())} " +
                    $"v {(rb != null ? rb.velocity.magnitude : -1f):0.00} m/s mass {(rb != null ? rb.mass : -1f):0}; state {(p != null ? p.GetCurrentState() : "none")}; " +

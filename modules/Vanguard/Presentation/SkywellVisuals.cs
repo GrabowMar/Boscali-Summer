@@ -131,9 +131,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Steered.Clear();
         }
 
-        private static Aircraft Resolve(uint id) =>
-            id != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit u) ? u as Aircraft : null;
-
         /// <summary>How far this tanker's tender still has to go to its pose (m); 99 when it has no rig yet. The receiver's HUD counts this down.</summary>
         internal static float TenderGap(uint tanker) =>
             Instance != null && Instance.rigs.TryGetValue(tanker, out Rig rig) ? rig.Gap : 99f;
@@ -157,7 +154,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             foreach (SkywellView v in SkywellBoard.Views.Values)
             {
                 if (!v.Active) continue;
-                Aircraft tanker = Resolve(v.Tanker);
+                Aircraft tanker = SkywellBoard.Resolve(v.Tanker);
                 if (tanker == null || tanker.disabled || !tanker.LocalSim) continue;
                 foreach (CargoRamp ramp in tanker.GetComponentsInChildren<CargoRamp>())
                     if (RampPartField?.GetValue(ramp) is Component part && part != null)
@@ -181,7 +178,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 {
                     if (!v.Active) continue;
                     if (unbuilt.TryGetValue(v.Tanker, out float retry) && Time.time < retry) continue;
-                    rig = Build(Resolve(v.Tanker));
+                    rig = Build(SkywellBoard.Resolve(v.Tanker));
                     if (rig == null)
                     {
                         unbuilt[v.Tanker] = Time.time + 5f;
@@ -407,7 +404,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
             // ---- what the server is serving, and what the tender is positioned for. It moves on to the next job's pose only once the arm
             // and boom are stowed (or at once on a hot break, or when its receiver is gone): never dragged across a wing.
-            Aircraft served = SkywellTender.Serving(state) ? Resolve(v.Receiver) : null;
+            Aircraft served = SkywellTender.Serving(state) ? SkywellBoard.Resolve(v.Receiver) : null;
             bool serving = served != null && !served.disabled && !hot &&
                            (served.transform.position - SkywellBoard.Anchor(tanker)).sqrMagnitude < Leash * Leash;
             bool jobKnown = serving && v.Job != PitJobKind.None;

@@ -223,8 +223,13 @@ namespace BoscaliSummer.Modules.Support.Networking
                 Z = target.z
             };
 
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (GameAccess.IsServer())
             {
+                if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null)
+                {
+                    manager.ReportOffline(); // as RequestSpace: the host's own pipe would carry a request nobody can judge
+                    return;
+                }
                 SupportResult result = manager.Evaluate(local, message);
                 manager.ReceiveResult(Reply(message, result, manager.ServerCooldownFor(local, action), local));
                 return;
@@ -244,7 +249,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         {
             var action = (SupportActionId)request.Action;
             var target = new GlobalPosition(request.X, request.Y, request.Z);
-            float radius = manager.GetEffectRadius(action, player != null ? player.HQ : null);
+            float radius = manager.GetEffectRadius(action);
             if (action == SupportActionId.Fortify && result == SupportResult.Accepted)
             {
                 var zone = SupportTargeting.NearestOwnedAirbase(player, target.ToLocalPosition(), out _);
@@ -270,7 +275,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             };
         }
 
-        private static float ClampTti(float tti) => tti < 0f ? 0f : tti > 60f ? 60f : tti;
+        private static float ClampTti(float tti) => Math.Clamp(tti, 0f, 60f);
 
         private void ReceiveRequest(INetworkPlayer sender, SupportRequestMessage request)
         {
@@ -295,8 +300,10 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// </summary>
         internal bool RequestSpace(SpaceCommand command)
         {
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (GameAccess.IsServer())
             {
+                // No own player yet (scene load): the pipe would hand the host a command nobody can judge, possibly before its handler is registered.
+                if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null) return false;
                 manager.SpaceNet?.Receive(local, command);
                 return true;
             }
@@ -313,8 +320,9 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// </summary>
         internal bool RequestWaypoint(int requestId, GlobalPosition leg, bool clear)
         {
-            if (GameAccess.IsServer() && GameManager.GetLocalPlayer<Player>(out Player local) && local != null)
+            if (GameAccess.IsServer())
             {
+                if (!GameManager.GetLocalPlayer<Player>(out Player local) || local == null) return false; // as RequestSpace
                 manager.ApplyWaypoint(local, requestId, leg, clear);
                 return true;
             }

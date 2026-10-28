@@ -41,9 +41,8 @@ namespace NOAvionics
             base.Place(s);
             AvLay.Place(Key.rectTransform, 0f, 0f, s.W * 0.6f, Head);
             AvLay.Place(Value.rectTransform, s.W * 0.6f, 0f, s.W * 0.4f, Head);
-            float gh = Mathf.Max(graphicH, s.H - Head - 3f);   // a growing part hands its extra height to the graphic
-            AvLay.Place((RectTransform)Graphic.transform, 0f, Head + 3f, s.W, gh);
-            OnGraphicHeight(gh);
+            // a growing part hands its extra height to the graphic
+            AvLay.Place((RectTransform)Graphic.transform, 0f, Head + 3f, s.W, Mathf.Max(graphicH, s.H - Head - 3f));
         }
 
         protected void SetText(string v, AvState st)
@@ -63,8 +62,6 @@ namespace NOAvionics
             Paint();
             Graphic.SetVerticesDirty();
         }
-
-        protected virtual void OnGraphicHeight(float h) { }
 
         protected abstract void Paint();
     }

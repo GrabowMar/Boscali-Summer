@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -255,7 +256,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static int Limit(in ShopWing w) => (int)Math.Ceiling(w.FactionAiLimit);
 
         private static string Cap(in ShopWing w) => N(w.FactionAi) + "/" + N(Limit(w));
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

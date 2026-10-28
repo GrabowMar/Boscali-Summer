@@ -188,15 +188,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public float VolumeLevel => Volume;
 
         public float Elapsed => receiver.Elapsed;
-        public float Duration => receiver.Duration;
         public float Progress => receiver.Progress;
 
-        public string CurrentChannelName => huntTrack != null ? "HUNT" : ChannelCount == 0
-            ? "NO CHANNEL"
-            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Name;
-        public string CurrentChannelCode => huntTrack != null ? "HT" : ChannelCount == 0
-            ? "--"
-            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Code;
+        public string CurrentChannelName => huntTrack != null ? "HUNT" : CurrentChannel()?.Name ?? "NO CHANNEL";
+        public string CurrentChannelCode => huntTrack != null ? "HT" : CurrentChannel()?.Code ?? "--";
 
         public string CurrentTrackTitle
         {
@@ -478,13 +473,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public void StepDial(int direction)
         {
             if (direction == 0) return;
-            RadioDial next = settings.FineTuning.Value
-                ? RadioDialTuning.FineStep(tunedDial, direction, FineStepDivisor)
-                : RadioDialTuning.Step(tunedDial, direction);
-            SetDial(next);
+            SetDial(settings.FineTuning.Value
+                ? RadioDialTuning.FineStep(tunedDial, direction)
+                : RadioDialTuning.Step(tunedDial, direction));
         }
-
-        private int FineStepDivisor => 5;
 
         public void SeekStation(int direction)
         {
@@ -610,14 +602,14 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             status = "Scanning stations";
         }
 
-        public void ToggleShuffle()
+        public void DeckToggleShuffle()
         {
             settings.Shuffle.Value = !settings.Shuffle.Value;
             status = settings.Shuffle.Value ? "Shuffle enabled" : "Shuffle disabled";
             deckStatus = status;
         }
 
-        public void ToggleRepeat()
+        public void DeckToggleRepeat()
         {
             settings.RepeatTrack.Value = !settings.RepeatTrack.Value;
             status = settings.RepeatTrack.Value ? "Repeat enabled" : "Repeat disabled";
@@ -751,10 +743,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             else TogglePlayback();
         }
 
-        public void DeckToggleShuffle() => ToggleShuffle();
-
-        public void DeckToggleRepeat() => ToggleRepeat();
-
         private RadioTrack DeckTrackAt(int folder, int index)
         {
             if (localLibrary == null || folder < 0 || folder >= localLibrary.Channels.Length) return null;
@@ -858,9 +846,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 spectrumSignals.Add(new RadioSignal(stations[i].Dial.Kilohertz, 1f));
             if (!offStation)
             {
-                tunedDial = ChannelCount == 0
-                    ? RadioDial.Fm(88500)
-                    : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
+                tunedDial = GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
                 RememberBandPosition(tunedDial);
             }
             stationRevision++;
@@ -1161,9 +1147,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             ticker = line;
         }
 
-        private string CurrentStationId => huntTrack != null || ChannelCount == 0
-            ? string.Empty
-            : stations[Mathf.Clamp(selectedChannel, 0, ChannelCount - 1)].Id;
+        private string CurrentStationId => huntTrack != null ? string.Empty : CurrentChannel()?.Id ?? string.Empty;
 
         // -------------------------------------------------------------- propagation
 
@@ -1466,9 +1450,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             {
                 huntTrack = RadioStationTrack.Vanilla(tactical);
             }
-            tunedDial = ChannelCount == 0
-                ? RadioDial.Fm(88500)
-                : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
+            tunedDial = GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
             offStation = false;
             PlayCurrent();
         }
@@ -1479,9 +1461,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             huntTrack = null;
             selectedChannel = Mathf.Clamp(savedChannel, 0, Math.Max(0, ChannelCount - 1));
             selectedTrack = savedTrack;
-            tunedDial = ChannelCount == 0
-                ? RadioDial.Fm(88500)
-                : GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
+            tunedDial = GetChannelDial(Mathf.Clamp(selectedChannel, 0, ChannelCount - 1));
             offStation = false;
             if (!receiver.Engaged || CurrentTrack() == null)
             {

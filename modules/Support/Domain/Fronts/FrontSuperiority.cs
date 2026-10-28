@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             front == Front.Space ? s.BirdsUp * 10f + s.UplinksLive :
             front == Front.Cyber ? s.HeldEnemyNodes * 10f + s.AnchorsLive : s.TeamsAfield * 10f + s.HeldBuildings * 3f + s.CampsLive;
 
-        private static float Frac(int live, int total) =>total <= 0 ? 0f : Math.Max(0f, Math.Min(1f, (float)live / total));
+        private static float Frac(int live, int total) =>total <= 0 ? 0f : Math.Clamp((float)live / total, 0f, 1f);
 
         private static float Clamp(float v, float limit) => float.IsNaN(v) ? 0f : Math.Max(-limit, Math.Min(limit, v));
 
@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// </summary>
         public static float Power(int s)
         {
-            float v = Math.Max(-100, Math.Min(100, s));
+            float v = Math.Clamp(s, -100, 100);
             if (v <= -40f) return 0.6f + 0.2f * (v + 100f) / 60f;
             if (v <= 0f) return 0.8f + 0.2f * (v + 40f) / 40f;
             if (v <= 40f) return 1f + 0.25f * v / 40f;

@@ -23,18 +23,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const float DirectFinalRange = 2500f;
         public const float DirectFinalHeading = 25f;
 
-        public static string Word(CarrierLeg leg)
-        {
-            switch (leg)
-            {
-                case CarrierLeg.Upwind: return "UPWIND";
-                case CarrierLeg.Crosswind: return "CROSSWIND";
-                case CarrierLeg.Downwind: return "DOWNWIND";
-                case CarrierLeg.Base: return "BASE";
-                default: return "FINAL";
-            }
-        }
-
         public static CarrierLeg Next(CarrierLeg leg) =>
             leg >= CarrierLeg.Final ? CarrierLeg.Final : (CarrierLeg)((int)leg + 1);
 

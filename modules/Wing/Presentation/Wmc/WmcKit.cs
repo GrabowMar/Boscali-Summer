@@ -16,6 +16,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// flips it back once, here, instead of at every call site.</summary>
         public static void Place(RectTransform t, Rect r) => AvLay.Place(t, r.x, -r.y, r.width, r.height);
 
+        /// <summary>A frame (named "Frame") filling <paramref name="parent"/>.</summary>
+        public static AvFrame FillFrame(RectTransform parent, AvChamfer chamfer = default)
+        {
+            AvFrame f = AvFrame.Add(parent, "Frame", chamfer);
+            AvLay.Fill(f.rectTransform);
+            return f;
+        }
+
         /// <summary>A flat fill, no border.</summary>
         public static AvFrame Panel(RectTransform parent, Rect r, Color fill)
         {
@@ -36,6 +44,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             f.raycastTarget = false;
             return f;
         }
+
+        /// <summary>A card's fill and border from the fui stylesheet class <paramref name="classes"/> (<paramref name="fill"/> when the class has no
+        /// background), with its corner brackets when asked.</summary>
+        public static void PaintCard(AvFrame frame, string classes, Color fill, bool brackets = false)
+        {
+            AvStyle c = AvStyleHost.FuiStyle(classes);
+            frame.Paint(AvStyleHost.Resolve(c.Background, fill), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            if (!brackets) return;
+            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
+            frame.SetVerticesDirty();
+        }
+
+        /// <summary>A row's fill and border from its fui style: no border unless the style has one.</summary>
+        public static void PaintRow(AvFrame frame, AvStyle row) =>
+            frame.Paint(AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert), row.Border.HasValue ? AvStyleHost.Resolve(row.Border, Color.clear) : Color.clear);
 
         /// <summary>A single-line, non-wrapping label at a Rect, sized/cased by <paramref name="role"/> and coloured from
         /// the fui stylesheet class <paramref name="classes"/> (falling back to <paramref name="fallback"/>).</summary>

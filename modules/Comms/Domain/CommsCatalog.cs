@@ -38,21 +38,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         public readonly bool Ring;
     }
 
-    /// <summary>A map sticker: purely a shape and a name. Stickers are for fun first.</summary>
-    internal readonly struct StickerKind
-    {
-        public StickerKind(string name, string glyph, CommsTone tone)
-        {
-            Name = name;
-            Glyph = glyph;
-            Tone = tone;
-        }
-
-        public readonly string Name;
-        public readonly string Glyph;
-        public readonly CommsTone Tone;
-    }
-
     /// <summary>A pen colour, as bytes so the rules and the wire never touch Unity.</summary>
     internal readonly struct PenInk
     {
@@ -94,27 +79,12 @@ namespace BoscaliSummer.Modules.Comms.Domain
         public bool MarksPosition => PingAtSelf >= 0;
     }
 
-    /// <summary>A ready-made poll, so a vote mid-flight costs one click instead of typing.</summary>
-    internal readonly struct PollTemplate
-    {
-        public PollTemplate(string question, params string[] options)
-        {
-            Question = question;
-            Options = options;
-        }
-
-        public readonly string Question;
-        public readonly string[] Options;
-    }
-
     /// <summary>
     /// Every table the COMMS screen and its rules share. Indices are the wire values, so a
     /// row is only ever appended, never inserted or reordered.
     /// </summary>
     internal static class CommsCatalog
     {
-        public const int PingMark = 0;
-        public const int PingSam = 2;
         public const int PingAttack = 3;
         public const int PingRally = 5;
         public const int PingHelp = 6;
@@ -135,22 +105,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         /// <summary>Ping kinds a player picks from; HELP and SPIKE only come from their calls.</summary>
         public const int PalettePings = 6;
-
-        public static readonly StickerKind[] Stickers =
-        {
-            new StickerKind("STAR", "star", CommsTone.Fun),
-            new StickerKind("HEART", "heart", CommsTone.Fun),
-            new StickerKind("SMILE", "smile", CommsTone.Fun),
-            new StickerKind("SKULL", "skull", CommsTone.Danger),
-            new StickerKind("FIRE", "flame", CommsTone.Caution),
-            new StickerKind("CROWN", "crown", CommsTone.Fun),
-            new StickerKind("BOLT", "bolt", CommsTone.Caution),
-            new StickerKind("FLAG", "flag", CommsTone.Friendly),
-            new StickerKind("WHAT?", "question", CommsTone.Info),
-            new StickerKind("ALERT", "exclaim", CommsTone.Danger),
-            new StickerKind("EYES", "eye", CommsTone.Info),
-            new StickerKind("COFFEE", "mug", CommsTone.Fun),
-        };
 
         public static readonly PenInk[] Pens =
         {
@@ -183,41 +137,9 @@ namespace BoscaliSummer.Modules.Comms.Domain
             new BrevityCall("GG", "Good game.", CommsTone.Fun),
         };
 
-        public static readonly PollTemplate[] PollTemplates =
-        {
-            new PollTemplate("PUSH NOW?", "PUSH", "HOLD"),
-            new PollTemplate("NEXT TARGET?", "AIRBASE", "SAM SITES", "CONVOYS", "DEFEND"),
-            new PollTemplate("RTB AND REARM?", "RTB", "STAY"),
-            new PollTemplate("WHO FLIES CAP?", "ME", "NOT ME"),
-            new PollTemplate("YES OR NO?", "YES", "NO"),
-            new PollTemplate("ONE MORE ROUND?", "YES", "GG, DONE"),
-        };
-
-        /// <summary>Poll lengths a player can pick, in seconds.</summary>
-        public static readonly int[] PollDurations = { 30, 60, 120, 300 };
-
-        /// <summary>Dice by index: a coin, then the three dice everyone settles arguments with.</summary>
-        public static readonly int[] DiceSides = { 2, 6, 20, 100 };
-
-        public static readonly string[] DiceNames = { "COIN", "D6", "D20", "D100" };
-
-        public static readonly string[] Throws = { "ROCK", "PAPER", "SCISSORS" };
-
         public static bool ValidPing(int index) => index >= 0 && index < Pings.Length;
-        public static bool ValidSticker(int index) => index >= 0 && index < Stickers.Length;
         public static bool ValidPen(int index) => index >= 0 && index < Pens.Length;
         public static bool ValidWidth(int index) => index >= 0 && index < PenWidths.Length;
         public static bool ValidCall(int index) => index >= 0 && index < Calls.Length;
-        public static bool ValidThrow(int index) => index >= 0 && index < Throws.Length;
-
-        public static int PollDuration(int index) =>
-            PollDurations[index < 0 ? 0 : index >= PollDurations.Length ? PollDurations.Length - 1 : index];
-
-        /// <summary>The coin reads as words; the dice read as numbers.</summary>
-        public static string DiceFace(int sides, int value)
-        {
-            if (sides == 2) return value == 1 ? "HEADS" : "TAILS";
-            return value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        }
     }
 }

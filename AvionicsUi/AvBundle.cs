@@ -45,18 +45,7 @@ namespace NOAvionics
         {
             if (attempted) return;
             byte[] bytes = null;
-            try
-            {
-                using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(ResourceName))
-                {
-                    if (s != null && s.Length > 0 && s.Length <= MaxBytes)
-                    {
-                        bytes = new byte[s.Length];
-                        int read = 0;
-                        while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
-                    }
-                }
-            }
+            try { bytes = ReadResource(ResourceName, MaxBytes); }
             catch (Exception e) { log?.Invoke("avionics-ui.bundle unreadable: " + e.Message); }
             if (bytes == null) { attempted = true; log?.Invoke("avionics-ui.bundle not embedded; using vanilla fonts, no UI effects"); return; }
             LoadFromBytes(bytes, log);
@@ -73,18 +62,20 @@ namespace NOAvionics
         private static void LoadFx(Action<string> log)
         {
             if (fxBundle != null) return;
-            try
-            {
-                using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(FxResourceName))
-                {
-                    if (s == null || s.Length <= 0 || s.Length > 512 * 1024) return;
-                    var bytes = new byte[s.Length];
-                    int read = 0;
-                    while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
-                    LoadFxFromBytes(bytes, log);
-                }
-            }
+            try { LoadFxFromBytes(ReadResource(FxResourceName, 512 * 1024), log); }
             catch (Exception e) { log?.Invoke("avionics-fx.bundle error: " + e.Message); }
+        }
+
+        private static byte[] ReadResource(string name, int maxBytes)
+        {
+            using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(name))
+            {
+                if (s == null || s.Length <= 0 || s.Length > maxBytes) return null;
+                var bytes = new byte[s.Length];
+                int read = 0;
+                while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
+                return bytes;
+            }
         }
 
         /// <summary>Public so an offline Unity check can load the bundle file it was handed.</summary>
@@ -125,7 +116,7 @@ namespace NOAvionics
 
                 Available = Fonts.Count > 0 || Shaders.Count > 0;
                 log?.Invoke("avionics-ui.bundle loaded: " + Fonts.Count + " fonts, " + Shaders.Count + " shaders");
-                LoadIcons(sdf, log);
+                LoadIcons(log);
             }
             catch (Exception e) { Available = false; log?.Invoke("avionics-ui.bundle error: " + e.Message); }
         }
@@ -138,20 +129,10 @@ namespace NOAvionics
         /// glyph change never re-bakes them. It replaces the icon face of the main bundle under the same name;
         /// without it the older face stays in use.
         /// </summary>
-        private static void LoadIcons(Shader sdf, Action<string> log)
+        private static void LoadIcons(Action<string> log)
         {
             if (iconBundle != null) return;
-            try
-            {
-                using (Stream s = typeof(AvBundle).Assembly.GetManifestResourceStream(IconResourceName))
-                {
-                    if (s == null || s.Length <= 0 || s.Length > MaxBytes) return;
-                    var bytes = new byte[s.Length];
-                    int read = 0;
-                    while (read < bytes.Length) { int n = s.Read(bytes, read, bytes.Length - read); if (n <= 0) break; read += n; }
-                    LoadIconsFromBytes(bytes, log);
-                }
-            }
+            try { LoadIconsFromBytes(ReadResource(IconResourceName, MaxBytes), log); }
             catch (Exception e) { log?.Invoke("avionics-icons.bundle error: " + e.Message); }
         }
 
@@ -176,16 +157,5 @@ namespace NOAvionics
 
         public static Shader Shader(string name) =>
             name != null && Shaders.TryGetValue(name, out Shader s) ? s : null;
-
-        public static void ResetForTests()
-        {
-            if (bundle != null) bundle.Unload(true);
-            if (fxBundle != null) fxBundle.Unload(true);
-            fxBundle = null;
-            if (iconBundle != null) iconBundle.Unload(true);
-            iconBundle = null;
-            bundle = null; attempted = false; Available = false; noise = null;
-            Fonts.Clear(); Shaders.Clear();
-        }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -53,7 +54,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             if (t.Eta <= 0f) return 1f;
             if (t.Kind == StrikeKind.Rod) return t.Eta >= RodFall ? 0f : 1f - t.Eta / RodFall;
-            return Clamp01(1f - t.Eta / Math.Max(0.1f, t.Lead));
+            return Scalar.Clamp01(1f - t.Eta / Math.Max(0.1f, t.Lead));
         }
 
         /// <summary>The position on the track's curve: the rod accelerates down its fall (s^1.7), the others fly evenly.</summary>
@@ -64,7 +65,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         }
 
         /// <summary>The rod's warning dwell: 1 at the call, 0 at the release (the ring that counts down on the platform).</summary>
-        public static float Dwell(in StrikeTrack t) => Clamp01((t.Eta - RodFall) / Math.Max(1f, t.Lead - RodFall));
+        public static float Dwell(in StrikeTrack t) => Scalar.Clamp01((t.Eta - RodFall) / Math.Max(1f, t.Lead - RodFall));
 
         /// <summary>CRUISE: the leg now being flown (1-based) of the legs the route has (waypoints plus the last run).</summary>
         public static int Leg(in StrikeTrack t) => 1 + Math.Min(Math.Max(0, t.Legs), (int)Math.Floor(Along(t) * (t.Legs + 1)));
@@ -102,13 +103,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static ScopeTone TraceTone(float trace) => trace >= TraceWarning ? ScopeTone.Red : trace >= TraceCaution ? ScopeTone.Amber : ScopeTone.Ink;
 
         /// <summary>The SAT window's share left (the countdown ring) and whether it is about to close (the last four seconds).</summary>
-        public static float SatFill(float left, float total) => total <= 0f ? 0f : Clamp01(left / total);
+        public static float SatFill(float left, float total) => total <= 0f ? 0f : Scalar.Clamp01(left / total);
 
         public static bool SatLate(float left) => left > 0f && left < 4f;
 
         /// <summary>A bar of a tenth-of-the-whole price scale: the allocation reads against 60 (a rod costs 30 at most).</summary>
         public const float AllocFull = 60f;
-
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
     }
 }

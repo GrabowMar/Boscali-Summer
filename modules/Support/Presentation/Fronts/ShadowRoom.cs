@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] teamLabels = new TMP_Text[MaxTeams], targetLabels = new TMP_Text[MaxTargets], campLabels = new TMP_Text[MaxCamps],
             heldLabels = new TMP_Text[MaxHeld], enemyMarks = new TMP_Text[MaxEnemies];
-        private TMP_Text fobLabel;
         private readonly Image[] teamHits = new Image[MaxTeams];
         private readonly int[] hitSlots = new int[MaxTeams], hitTargets = new int[MaxTargets];
         private readonly Image[] targetHits = new Image[MaxTargets];
@@ -428,15 +427,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        // ---- Situation -----------------------------------------------------------------------------------------------
-
-        private TMP_Text Head(RectTransform b, string name, float x, float y, string text)
-        {
-            TMP_Text t = FrontKit.Mono(b, name, x, y, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            t.text = text;
-            return t;
-        }
-
         private Rect QrfCard => new Rect(colX - 6f, 29f, ColW + 12f, 40f);
         private const float SweepW = 92f;
         private AvControl sweep;
@@ -449,9 +439,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             plate = new FrontMapPlate(b, skin, heroW, TopH, Cols, Rows);
             side = FrontVector.Add(b, "Side");   // overlay notes on the map
             AvLay.Place(side.rectTransform, 0f, 0f, heroW, TopH);
-            plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings, the FOB and teams are labelled where they stand
+            plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings and teams are labelled where they stand
             airbases = new FrontMap.AirbaseLayer(b);
-            fobLabel = FrontKit.Mono(b, "FobLabel", 0f, 0f, 190f, 14f, 10.5f, TextAlignmentOptions.TopLeft);
             for (int i = 0; i < MaxTeams; i++) teamLabels[i] = Pool(b, "TeamLabel" + i, 170f, 28f);
             for (int i = 0; i < MaxTargets; i++) targetLabels[i] = Pool(b, "TargetLabel" + i, 170f, 14f);
             for (int i = 0; i < MaxCamps; i++) campLabels[i] = Pool(b, "CampLabel" + i, 170f, 28f);
@@ -462,7 +451,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 enemyMarks[i].text = "?";
                 enemyMarks[i].gameObject.SetActive(false);
             }
-            fobLabel.gameObject.SetActive(false);
             qrfLine = FrontKit.Mono(b, "QrfLine", colX, 36f, ColW - SweepW - 6f, 26f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             sweep = Button(b, "SWEEP", colX + ColW - SweepW, 36f, SweepW, 26f, AvButtonStyle.Danger, () => Do(() => actions.Sweep()),
                 "Send a QRF after every hostile team detected near our sites: it reaches them " + (int)SofRules.SweepSeconds + " s after the press, costs " + SofRules.SweepCost +
@@ -982,7 +970,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < s.Camps.Count; i++) if (Near(p, s.Camps[i].X, s.Camps[i].Y)) return false;
             for (int i = 0; i < s.Held.Count; i++) if (Near(p, s.Held[i].X, s.Held[i].Y)) return false;
             for (int i = 0; i < s.Enemies.Count; i++) if (Near(p, s.Enemies[i].X, s.Enemies[i].Y)) return false;
-            return !s.HasFob || !Near(p, s.FobX, s.FobY);
+            return true;
         }
 
         private void SetDraft(Vector2 p)
@@ -1014,7 +1002,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontMapView mv = plate.View;
             Vector2 sum = Vector2.zero;
             int na = 0;
-            if (s.HasFob) { sum += new Vector2(s.FobX, s.FobY); na++; }
             for (int i = 0; i < s.Camps.Count; i++) { sum += new Vector2(s.Camps[i].X, s.Camps[i].Y); na++; }
             for (int i = 0; i < s.Teams.Count; i++) if (s.Teams[i].Present) { sum += new Vector2(s.Teams[i].X, s.Teams[i].Y); na++; }
             if (na > 0) mv.AutoCenter(sum / na);
@@ -1024,19 +1011,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Color own = Own, amber = AvInk.State(AvState.Caution), danger = AvInk.State(AvState.Danger), key = AvInk.Key, dim = AvInk.Dim, foe = AvInk.Hostile;
             Color grease = Paper.Grease;
             FrontMap.AirbaseLayer.Glyphs(g, v.Airbases, P);
-
-            // Operation footprint: drawn round the FOB in marker pencil.
-            if (s.HasFob)
-            {
-                Vector2 f = P(s.FobX, s.FobY);
-                float r = s.FobRadius * mv.Scale;
-                g.Disc(f, r, own.WithAlpha(0.05f), 64);
-                Hand.Circle(g, f, r, 2.2f, own.WithAlpha(0.75f), 11);
-                g.Ring(f, r * 0.55f, 1f, own.WithAlpha(0.3f), 56, 1f, 1f);
-                g.Line(f + new Vector2(0f, 8f), f + new Vector2(0f, -14f), 1.6f, own);
-                g.Tri(f + new Vector2(0f, -14f), f + new Vector2(10f, -10f), f + new Vector2(0f, -6f), own);
-                labels.Take(new Rect(f.x - 12f, f.y - 16f, 24f, 26f));
-            }
 
             // Camps: push-pins.
             for (int i = 0; i < MaxCamps; i++)
@@ -1175,13 +1149,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
 
             // Labels last, once every glyph has claimed its space.
-            if (s.HasFob && plate.Shown(P(s.FobX, s.FobY), 12f))
-            {
-                fobLabel.gameObject.SetActive(true);
-                FrontKit.Set(fobLabel, s.FobName, own);
-                Tape(g, labels.Place(fobLabel, P(s.FobX, s.FobY), 12f, true), own);
-            }
-            else fobLabel.gameObject.SetActive(false);
             for (int i = 0; i < MaxTeams; i++)
             {
                 if (i >= s.Teams.Count || !s.Teams[i].Present) continue;
@@ -1231,7 +1198,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             int up = 0;
             for (int i = 0; i < s.Teams.Count; i++) if (s.Teams[i].Present) up++;
-            if (s.HasFob) plate.Dot(s.FobX, s.FobY, own);
             for (int i = 0; i < s.Camps.Count; i++) plate.Dot(s.Camps[i].X, s.Camps[i].Y, own);
             for (int i = 0; i < s.Teams.Count; i++) if (s.Teams[i].Present) plate.Dot(s.Teams[i].X, s.Teams[i].Y, Tone(s.Teams[i].Tone));
             for (int i = 0; i < s.Targets.Count; i++) plate.Dot(s.Targets[i].X, s.Targets[i].Y, foe);

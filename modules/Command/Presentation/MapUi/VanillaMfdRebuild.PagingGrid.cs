@@ -7,13 +7,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     internal static partial class VanillaMfdRebuild
     {
-        /// <summary>
-        /// A bounded, pooled toggle grid built from kit v2's <see cref="MfdIconCell"/> (outline + LED + faint
-        /// select wash + mono ON/OFF word — never the v1 solid-fill accent plate). One cell is a row: state
-        /// LED, the item's own icon when it has one, the name, an optional one-line detail and a right-aligned
-        /// ON/OFF/N-A word. Everything mutates in place, so a changing mission inventory cannot create or lay
-        /// out an unbounded widget tree. An <see cref="AvFlow"/> page adds one with <c>page.Add(grid)</c>.
-        /// </summary>
         /// <summary>Add <paramref name="grid"/> to <paramref name="flow"/> and let it request a relayout when its
         /// content height changes (a grid sizes to the rows it shows).</summary>
         private static MfdPagingGrid AddGrid(AvFlow flow, MfdPagingGrid grid)
@@ -23,6 +16,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return grid;
         }
 
+        /// <summary>
+        /// A bounded, pooled toggle grid built from kit v2's <see cref="MfdIconCell"/> (outline + LED + faint
+        /// select wash + mono ON/OFF word — never the v1 solid-fill accent plate). One cell is a row: state
+        /// LED, the item's own icon when it has one, the name, an optional one-line detail and a right-aligned
+        /// ON/OFF/N-A word. Everything mutates in place, so a changing mission inventory cannot create or lay
+        /// out an unbounded widget tree. An <see cref="AvFlow"/> page adds one with <see cref="AddGrid"/>.
+        /// </summary>
         private sealed class MfdPagingGrid : AvPart
         {
             private readonly MfdIconCell[] cells;

@@ -38,9 +38,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private PhasedGate tickGate;
         private float nextWarning;
 
-        public void Configure(SupportManager support, SpaceService spaceService, CyberService cyberService, SofService sofService, OpsService opsService)
+        public void Configure(SupportManager support, SpaceService spaceService, CyberService cyberService, SofService sofService)
         {
-            manager = support; space = spaceService; cyber = cyberService; sof = sofService; // OPS FRONTS S1b: the programmes pay for operations, so OVERLORD no longer plans or funds them (opsService stays in the signature for the module wiring)
+            manager = support; space = spaceService; cyber = cyberService; sof = sofService; // OPS FRONTS S1b: the programmes pay for operations, so OVERLORD no longer plans or funds them
         }
 
         public void ResetForScene()
@@ -53,16 +53,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void OnDestroy() => ResetForScene();
 
         // ---- Reads for the mirror and the verbs ------------------------------------------------------
-
-        /// <summary>A human of <paramref name="owner"/> did a CYBER or SOF domain verb that the desk accepted: that faction's OVERLORD yields in that domain. Host only.</summary>
-        internal void NoteHuman(FactionHQ owner, WatchDomain domain)
-        {
-            if (!GameAccess.IsServer() || owner == null) return;
-            FactionWatch run = RunFor(owner);
-            if (run == null) return;
-            float now = SupportManager.MissionNow();
-            if (domain == WatchDomain.Cyber) run.Cyber.RecordHuman(now); else if (domain == WatchDomain.Sof) run.Sof.RecordHuman(now);
-        }
 
         /// <summary>The last OVERLORD actions of the faction (newest last), for its own console. Nothing about any other faction.</summary>
         internal int CopyLog(FactionHQ owner, List<WatchLogRow> into)

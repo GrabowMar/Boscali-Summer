@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             float now = SupportManager.MissionNow();
             // Dusk and night: the hull shows as a glint that flares as the panels catch the sun; by day the plain hull is enough.
             float dusk = Mathf.Clamp01(night * 1.6f);
-            glintBlock = glintBlock ?? new MaterialPropertyBlock();
+            glintBlock ??= new MaterialPropertyBlock();
             for (int i = 0; i < birds.Length; i++)
             {
                 Vector3 offset = Track(i, now) * DisplayRange;

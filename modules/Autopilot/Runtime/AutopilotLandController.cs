@@ -243,7 +243,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private void Fail(string reason)
         {
             Report("Autopilot: " + reason);
-            ResetState();
+            ResetForScene();
         }
 
         private void Disengage(string message)
@@ -258,7 +258,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             }
             DeregisterPad(local);
             if (message != null) Report(message);
-            ResetState();
+            ResetForScene();
         }
 
         private void DeregisterPad(Aircraft local)
@@ -678,9 +678,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return false;
         }
 
-        public void ResetForScene() => ResetState();
-
-        private void ResetState()
+        public void ResetForScene()
         {
             aircraft = null;
             parameters = null;

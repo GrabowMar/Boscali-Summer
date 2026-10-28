@@ -71,9 +71,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return designated && !cueSpent ? RemoraPhase.Ram : RemoraPhase.Escort;
         }
 
-        /// <summary>a beats b: the better cue wins, the nearer one breaks a tie.</summary>
-        public static bool Outranks(AirCue a, float rangeA, AirCue b, float rangeB) => a != b ? a < b : rangeA < rangeB;
-
         /// <summary>
         /// Bomb fuse radius: tight so the blast lands on the hull, wide enough that a fast pass always has a physics tick
         /// inside it (the 2 x radius window is 1.2 steps of closing speed).
@@ -85,14 +82,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static bool HoldsForTrack(float range, float offNoseDeg, int left, bool tracked) =>
             !tracked && left > 0 && range <= FireRange && offNoseDeg <= FireCone;
 
-        public static bool CanFire(float range, float offNoseDeg, float sinceShot, int left, bool tracked) =>
-            CanFire(range, offNoseDeg, sinceShot, left, tracked, FireCone);
-
         public static bool CanFire(float range, float offNoseDeg, float sinceShot, int left, bool tracked, float coneDeg) =>
             tracked && left > 0 && range <= FireRange && offNoseDeg <= coneDeg && sinceShot >= FireInterval;
-
-        /// <summary>An inbound missile this close to the drone, with rounds left, is a defence shot.</summary>
-        public static bool CanDefend(float range, int left) => left > 0 && range <= DefendRange;
 
         /// <summary>An IR missile closing this fast, this close, with bursts left and the last burst spent.</summary>
         public static bool ShouldFlare(float range, float closing, int burstsLeft, float sincePop) =>

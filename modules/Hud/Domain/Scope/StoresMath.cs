@@ -123,15 +123,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>EXPENDABLES: the airframe has a dispenser or a jammer.</summary>
         public static bool HasExp(in StoresScope d) => d.CmCount > 0;
 
-        /// <summary>The energy weapon's shot cost PWR BUS shows (a tick on the cells, a label under them): only while a rail is fitted and the game says what a shot takes; else 0, and the block has no cost row.</summary>
-        public static float CostKj(in StoresScope d)
-        {
-            if (!d.HasCap || !(d.CapCostKj > 0f) || d.Stations == null) return 0f;
-            for (int i = 0; i < d.StationCount; i++)
-                if (d.Stations[i].Class == StoreClass.Rail) return d.CapCostKj;
-            return 0f;
-        }
-
         /// <summary>The arm word's and the arm marker's tone: ARMED and the words of a shot just gone are BRIGHT; SAFE, RELOAD and EMPTY are amber.</summary>
         public static ScopeTone ArmTone(StoreState s) => s == StoreState.Safe || s == StoreState.Reload || s == StoreState.Empty ? ScopeTone.Amber : ScopeTone.Hi;
 
@@ -175,10 +166,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The lit cells for a charge share <paramref name="frac"/> of <paramref name="cells"/>.</summary>
         public static int LitCells(float frac, int cells) => (int)Math.Floor((frac < 0f ? 0f : frac > 1f ? 1f : frac) * cells + 0.5f);
 
-        /// <summary>The x of the cost tick on a row of <paramref name="cells"/> cells: where <paramref name="costKj"/> of <paramref name="maxKj"/> falls on the row.</summary>
-        public static float CostTickX(int cells, float costKj, float maxKj) =>
-            maxKj > 0f ? (float)Math.Round(Math.Min(1f, Math.Max(0f, costKj / maxKj)) * (cells * CellPitch - (CellPitch - CellW))) : 0f;
-
         /// <summary>A charge that falls by at least this share of the full charge (and at least <see cref="ShotMinKj"/>) between two reads, and that fast (kJ per second), is a shot, not the jammer's trickle or a stalled frame.</summary>
         public const float ShotMinShare = 0.04f, ShotMinKj = 5f, ShotMinRate = 100f;
 
@@ -190,26 +177,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             drop = before - now;
             return drop >= Math.Max(ShotMinKj, maxKj * ShotMinShare) && drop >= ShotMinRate * Math.Max(seconds, 0.02f);
-        }
-
-        /// <summary>The energy weapon's name on the cost label: its first word with no digit in it ("RG-12 LANCE OVERCHARGE RAILGUN" is LANCE), else its first word, at most 10 characters.</summary>
-        public static string CostWord(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name)) return "CHG";
-            string first = null;
-            int i = 0;
-            while (i < name.Length)
-            {
-                while (i < name.Length && name[i] == ' ') i++;
-                int start = i;
-                bool digit = false;
-                while (i < name.Length && name[i] != ' ') { digit |= char.IsDigit(name[i]); i++; }
-                if (i == start) break;
-                string word = name.Substring(start, i - start);
-                if (first == null) first = word;
-                if (!digit) { first = word; break; }
-            }
-            return first.Length > 10 ? first.Substring(0, 10) : first;
         }
 
         // ---- EXPENDABLES (LAYOUT.md 3.3)

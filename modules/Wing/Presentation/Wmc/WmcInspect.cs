@@ -289,7 +289,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             WmcPanel panel = WmcPanel.Instance;
             if (pilotCallsign == null || panel == null || panel.WingPage == null) return;
-            panel.Show(WmcTabs.Squadron);
+            panel.Show(WmcTabs.Wing);
             panel.WingPage.ShowSub(WmcWing.SubRoster);
             panel.Refresh();
             panel.WingPage.Inspect(pilotCallsign);

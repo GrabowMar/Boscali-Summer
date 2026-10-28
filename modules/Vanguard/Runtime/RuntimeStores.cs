@@ -195,15 +195,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Aircraft spawned before a store existed (a sim under -autoHost) copied their prefab's sets earlier: give them the new options.</summary>
         public static void Adopt()
         {
-            foreach (Aircraft aircraft in UnityEngine.Object.FindObjectsOfType<Aircraft>())
-            {
-                WeaponManager prefab = aircraft.definition != null && aircraft.definition.unitPrefab != null
-                    ? aircraft.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true) : null;
-                HardpointSet[] sets = aircraft.weaponManager != null ? aircraft.weaponManager.hardpointSets : null;
-                for (int i = 0; prefab != null && sets != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
-                    foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
-                        if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
-            }
+            foreach (Aircraft aircraft in UnityEngine.Object.FindObjectsOfType<Aircraft>()) Adopt(aircraft);
+        }
+
+        /// <summary>One aircraft: its sets gain whatever its prefab's sets offer by now (Blueprinter adds the carrier options to the prefab once its bundles load).</summary>
+        public static void Adopt(Aircraft aircraft)
+        {
+            WeaponManager prefab = aircraft.definition != null && aircraft.definition.unitPrefab != null
+                ? aircraft.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true) : null;
+            HardpointSet[] sets = aircraft.weaponManager != null ? aircraft.weaponManager.hardpointSets : null;
+            for (int i = 0; prefab != null && sets != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
+                foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
+                    if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
         }
     }
 

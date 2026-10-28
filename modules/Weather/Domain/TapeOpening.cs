@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float v = Math.Max(1f, key.SystemSpeed);
                 TapeFront f = tape.Fronts[0];
                 bool cold = f.SMain == f.SLead;
-                float t1 = cold ? WeatherMath.Lerp(30f, 60f, u1) : WeatherMath.Lerp(15f, T1High(f.Dpre, v), u1);
+                float t1 = cold ? Scalar.Lerp(30f, 60f, u1) : Scalar.Lerp(15f, T1High(f.Dpre, v), u1);
                 float tm = cold ? t1 : t1 + f.Dpre / v / 60f;
                 float centre = tape.Frame(key.HeadingDeg, 0f).Meander(0f);
                 return new OpeningPlan(f.SLead - centre - v * 60f * t1, t1, tm, true);

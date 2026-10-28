@@ -45,17 +45,15 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                 {
                     if (source != FrontSource.Sector || !hasHold || float.IsNaN(holdNow) || float.IsNaN(initial)) return -1f;
                     float span = OutcomeRules.GainHold - initial;
-                    return span > 0.0001f ? Clamp01((holdNow - initial) / span) : -1f;
+                    return span > 0.0001f ? Math.Clamp((holdNow - initial) / span, 0f, 1f) : -1f;
                 }
                 case TheaterOpKind.Defend:
-                    return float.IsNaN(clearSeconds) || float.IsInfinity(clearSeconds) ? -1f : Clamp01(clearSeconds / OutcomeRules.ClearSeconds);
+                    return float.IsNaN(clearSeconds) || float.IsInfinity(clearSeconds) ? -1f : Math.Clamp(clearSeconds / OutcomeRules.ClearSeconds, 0f, 1f);
                 case TheaterOpKind.Recon:
                     return observed ? 1f : 0f;
                 default:
                     return -1f;
             }
         }
-
-        private static float Clamp01(float value) => Math.Max(0f, Math.Min(1f, value));
     }
 }

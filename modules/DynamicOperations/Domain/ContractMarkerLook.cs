@@ -1,16 +1,5 @@
 namespace BoscaliSummer.Modules.DynamicOperations.Domain
 {
-    /// <summary>
-    /// Which vanilla objective icon a contract borrows. The game draws four: a waypoint flag,
-    /// a destroy marker, a recon lock and a capture circle.
-    /// </summary>
-    internal enum MarkerIconKind
-    {
-        Waypoint,
-        Destroy,
-        Recon,
-        Capture
-    }
 
     /// <summary>
     /// The vanilla numbers a contract marker copies. Everything here is a constant the game
@@ -30,25 +19,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         public const float NudgeSpeedX = 1000f;
         public const float NudgeSpeedY = 300f;
         public const float NudgeDecay = 0.8f;
-
-        /// <summary>Vanilla shows a dot within this angle of the nose and a pointer beyond it.</summary>
-        public const float DotAngleDegrees = 10f;
-
-        /// <summary>Vanilla map icon pixel sizes: waypoint/destroy markers are half of recon/capture.</summary>
-        public const float IconSmallPixels = 20f;
-        public const float IconLargePixels = 40f;
-
-        /// <summary>A contract family word maps onto the vanilla icon that matches its job.</summary>
-        public static MarkerIconKind KindFor(string family) => family switch
-        {
-            "SEIZE" or "INSERT" => MarkerIconKind.Capture,
-            "RECON" => MarkerIconKind.Recon,
-            "STRIKE" or "AIR" or "EW" => MarkerIconKind.Destroy,
-            _ => MarkerIconKind.Waypoint
-        };
-
-        public static float IconSize(MarkerIconKind kind) =>
-            kind == MarkerIconKind.Recon || kind == MarkerIconKind.Capture ? IconLargePixels : IconSmallPixels;
 
         /// <summary>
         /// One frame of a marker label's offset: the accumulated push decays, and when another

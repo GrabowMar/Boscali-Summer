@@ -1,5 +1,3 @@
-// Filled by the flight controller (Task 6) and the ground writer (M3); read by the engine writer.
-#pragma warning disable CS0649
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {

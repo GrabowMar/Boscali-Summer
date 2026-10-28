@@ -7,6 +7,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Math;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>Air-starts wingmen (spec §8, M2 §7), host only. Any class but VTOL (the game gives a VTOL no AI state).
@@ -144,7 +145,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     pendingSince.Remove(a);
                     continue;
                 }
-                Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+                Pilot p = AircraftReadout.PrimaryPilot(a);
                 if (p == null || p.currentState == null)
                 {
                     // The game has not initialised it yet; give up (it keeps whatever the game does) after a timeout.
@@ -584,7 +585,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     groundPending.RemoveAt(i);
                     continue;
                 }
-                Pilot p = g.Aircraft.pilots != null && g.Aircraft.pilots.Length > 0 ? g.Aircraft.pilots[0] : null;
+                Pilot p = AircraftReadout.PrimaryPilot(g.Aircraft);
                 if (p == null || p.currentState == null)
                 {
                     if (Time.time - g.Since > AdoptTimeoutSeconds)

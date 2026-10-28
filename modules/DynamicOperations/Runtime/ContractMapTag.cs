@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         public void SetVisible(bool visible) => root.gameObject.SetActive(visible);
 
-        public void Place(float x, float y, float inverseZoom, float zoom)
+        public void Place(float x, float y, float inverseZoom)
         {
             root.anchoredPosition = new Vector2(x, y);
             root.localScale = new Vector3(inverseZoom, inverseZoom, 1f);

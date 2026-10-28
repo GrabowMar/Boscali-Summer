@@ -57,10 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public Action AllPicked, SummaryPicked, SupplyPicked;
         public Action<int> ElementPicked;
         public Action<int, bool> RowPicked;
-        /// <summary>Offline renders and tests: callsign and type of an aircraft id (null: the host's own lookup).</summary>
-        public Func<uint, string[]> PreviewIdentity;
-        /// <summary>Offline renders: an element row's task words (null: the host's planner).</summary>
-        public Func<int, string> PreviewTask;
         /// <summary>Until this unscaled time the scope's rows flash (an order went to them).</summary>
         public float FlashUntil;
 
@@ -127,12 +123,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Apply();
         }
 
-        private TMP_Text Label(string name, AvTextRole role, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
-        {
-            TMP_Text t = AvText.Make(Rect, name, role, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private TMP_Text Label(string name, AvTextRole role, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft) => WmcSheet.Text(Rect, name, role, align);
 
         private Cell MakeCell(string name, bool head, int index)
         {
@@ -476,7 +467,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string title = (string.IsNullOrEmpty(name) || name == letter ? "ELEMENT " + letter : letter + " · " + Cut(name, 9)) + " · " + AvNum.Fixed(members, 0) + " AC";
             AvText.Set(h.Num, letter);
             AvText.Set(h.Name, title);
-            string task = PreviewTask != null ? PreviewTask(e) : p == null ? (e == 0 ? "FORM · on you" : WmcText.Unknown)
+            string task = p == null ? (e == 0 ? "FORM · on you" : WmcText.Unknown)
                 : !p.Active ? (e == 0 ? "FORM · on you" : "FORM")
                 : TaskCard.Short(p.Current, p.Leg, p.Lead != null ? p.Lead.Position : Vec3.Zero, p.Lead != null ? p.Lead.Speed : 0f);
             AvText.Set(h.Task, task);
@@ -516,7 +507,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(v.Task, MemberLine.Task(m, code));
             string state = WingRows.State(m);
             v.Task.color = WmcState.Color(selected ? "live" : WmcStyle.Rail(state) == "inert" ? "info" : WmcStyle.Rail(state));
-            v.Fuel = WingRows.Bar(WingRows.Fraction(m.Fuel));
+            v.Fuel = WingRows.Fraction(m.Fuel);
             v.FuelRail = MemberLine.FuelRail(m.Flags);
             bool win = (m.Flags & (byte)SnapshotFlags.Winchester) != 0;
             AvText.Set(v.Ammo, win ? "WIN" : AvNum.Fixed(Mathf.RoundToInt(WingRows.Fraction(m.Ammo) * 100f), 0) + "%");
@@ -537,16 +528,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             callsign = WingRows.Number(m.Slot);
             type = WmcText.Unknown;
-            if (PreviewIdentity != null)
-            {
-                string[] id = PreviewIdentity(m.Id);
-                if (id != null && id.Length >= 2)
-                {
-                    callsign = id[0];
-                    type = id[1];
-                    return;
-                }
-            }
             Unit u = WmcContext.UnitOf(m.Id);
             AircraftDefinition def = u is Aircraft a ? a.definition : null;
             if (def != null && !string.IsNullOrEmpty(def.code)) type = def.code;

@@ -1,6 +1,4 @@
 using BoscaliSummer.Core.Math;
-// Filled by the engine sensor (M1c) and the FlightSim; the mod assembly only reads it until then.
-#pragma warning disable CS0649
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {

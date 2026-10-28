@@ -18,16 +18,13 @@ namespace BoscaliSummer.Modules.Radio.Domain
         public const int LineMax = 64;
         public const float MaxRangeKm = 7f;
 
-        public static string KindWord(InterceptKind kind)
+        public static string KindWord(InterceptKind kind) => kind switch
         {
-            switch (kind)
-            {
-                case InterceptKind.Cookoff: return "COOKOFF";
-                case InterceptKind.Alarm: return "ALARM";
-                case InterceptKind.Staff: return "STAFF";
-                default: return "FLASH";
-            }
-        }
+            InterceptKind.Cookoff => "COOKOFF",
+            InterceptKind.Alarm => "ALARM",
+            InterceptKind.Staff => "STAFF",
+            _ => "FLASH",
+        };
 
         public static string Line(InterceptKind kind, string distanceText)
         {

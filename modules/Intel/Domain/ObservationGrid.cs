@@ -28,8 +28,6 @@ namespace BoscaliSummer.Modules.Intel.Domain
             stamps = new Dictionary<int, float>(this.capacity);
         }
 
-        public int Count => stamps.Count;
-
         public bool Overflowed { get; private set; }
 
         public static int CellOf(float metres) => (int)MathF.Floor(metres / CellMetres);

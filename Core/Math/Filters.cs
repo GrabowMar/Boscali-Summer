@@ -27,21 +27,6 @@ namespace BoscaliSummer.Core.Math
         }
     }
 
-    /// <summary>Boolean with separate on/off thresholds so a signal near one edge cannot chatter.</summary>
-    internal struct Latch
-    {
-        public bool On;
-
-        /// <summary>Turns on at or above <paramref name="onAt"/> and off at or below
-        /// <paramref name="offAt"/>; <paramref name="onAt"/> must exceed <paramref name="offAt"/>.</summary>
-        public bool Update(float value, float onAt, float offAt)
-        {
-            if (!On && value >= onAt) On = true;
-            else if (On && value <= offAt) On = false;
-            return On;
-        }
-    }
-
     /// <summary>True once a condition has held continuously for the required time.</summary>
     internal struct Persistence
     {

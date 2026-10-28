@@ -55,9 +55,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + .5f;
-            ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+            NetFeed.Poll(ClientHandlers, ref nextRegistration);
         }
 
         /// <summary>Server: show on the host's own HUD and send to every client.</summary>
@@ -70,8 +68,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 Launcher = launcher != null ? launcher.persistentID.Id : 0u,
             };
             MaldxHud.Show(e);
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server != null && server.Active) server.SendToAll(e, authenticatedOnly: true, excludeLocalPlayer: true);
+            NetFeed.Broadcast(e);
         }
 
         private void Receive(INetworkPlayer sender, MaldxEvent e)

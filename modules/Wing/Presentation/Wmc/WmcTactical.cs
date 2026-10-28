@@ -55,13 +55,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ticker = pageTicker;
             pageIndex = index;
 
-            var specs = new AvControl.Spec[SubLabels.Length];
-            for (int i = 0; i < specs.Length; i++)
-            {
-                int k = i;
-                specs[i] = new AvControl.Spec(SubLabels[i], () => ShowSub(k), AvButtonStyle.Default, SubIcons[i]);
-            }
-            subTabs = flow.Buttons(specs).Controls;
+            subTabs = WmcSubPages.Tabs(flow, SubLabels, SubIcons, ShowSub);
             for (int i = 0; i < subTabs.Length; i++)
             {
                 subTabs[i].Help = SubHelp[i];
@@ -99,28 +93,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcNameField.BlurAny();
             if (last != null) Refresh(last);
             flow.RequestRelayout();
-        }
-
-        /// <summary>A sub-page by its label (automation; ROUTE and FORM are the old names).</summary>
-        public bool ShowSubNamed(string name)
-        {
-            if (string.Equals(name, "ROUTE", System.StringComparison.OrdinalIgnoreCase) || string.Equals(name, "AP", System.StringComparison.OrdinalIgnoreCase))
-            {
-                ShowSub(SubRoute);
-                return true;
-            }
-            if (string.Equals(name, "FORM", System.StringComparison.OrdinalIgnoreCase))
-            {
-                ShowSub(SubFormation);
-                return true;
-            }
-            for (int i = 0; i < SubLabels.Length; i++)
-                if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    ShowSub(i);
-                    return true;
-                }
-            return false;
         }
 
         public void Shown(WmcContext c)

@@ -1,9 +1,8 @@
 using NOAvionics;
-using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
-using HarmonyLib;
+using BoscaliSummer.Modules.Hud.Runtime;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -33,9 +32,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// </summary>
     internal sealed class ThirdPersonHudCluster
     {
-        private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
-        private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
-
         /// <summary>One tick of own-aircraft flight data.</summary>
         internal struct Flight
         {
@@ -126,10 +122,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             root = null;
             canvasRoot = null;
 
-            CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            if (hud == null || hud.iconLayer == null || !hud.iconLayer.gameObject.activeInHierarchy) return false;
-            Canvas hudCanvas = hud.iconLayer.GetComponentInParent<Canvas>();
-            if (hudCanvas == null) return false;
+            if (!NativeRefs.HudCanvas(out CombatHUD hud, out Canvas hudCanvas)) return false;
 
             Build(hud, hudCanvas);
             return root != null;
@@ -140,8 +133,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = hudCanvas.transform as RectTransform;
             if (canvasRoot == null) canvasRoot = hudCanvas.GetComponent<RectTransform>();
 
-            WeaponStatus weaponStatus = WeaponStatusField?.GetValue(hud) as WeaponStatus;
-            TextMeshProUGUI nameLabel = weaponStatus != null ? NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
+            WeaponStatus weaponStatus = StatusPanel.WeaponStatusField?.GetValue(hud) as WeaponStatus;
+            TextMeshProUGUI nameLabel = weaponStatus != null ? StatusPanel.NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
             font = nameLabel != null ? nameLabel.font : null;
             fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
 
@@ -542,19 +535,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float arm = i == 0 || i == 4 ? 5f : 3f;
                 AvStrokes.Line(b, r.CenterX - arm, y, r.CenterX + arm, y, 1f, dim);
             }
-        }
-
-        /// <summary>Four corner brackets round a rectangle (y up): an arm of <paramref name="arm"/> each way from every corner, nothing between them.</summary>
-        private static void CornerBrackets(AvQuadBuffer b, float l, float bt, float r, float t, float arm, float w, Rgba c)
-        {
-            AvStrokes.Line(b, l, t, l + arm, t, w, c);
-            AvStrokes.Line(b, l, t, l, t - arm, w, c);
-            AvStrokes.Line(b, r, t, r - arm, t, w, c);
-            AvStrokes.Line(b, r, t, r, t - arm, w, c);
-            AvStrokes.Line(b, l, bt, l + arm, bt, w, c);
-            AvStrokes.Line(b, l, bt, l, bt + arm, w, c);
-            AvStrokes.Line(b, r, bt, r - arm, bt, w, c);
-            AvStrokes.Line(b, r, bt, r, bt + arm, w, c);
         }
 
         private static void PositionRect(RectTransform rt, RectF rect)

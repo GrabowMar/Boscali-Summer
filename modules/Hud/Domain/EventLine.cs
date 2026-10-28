@@ -54,15 +54,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Own;
         /// <summary>Character cells the kept spans take (a swatch is one cell), without the "+" and its gap.</summary>
         public int Chars;
-
-        /// <summary>The kept words as one string (what a row reads as, without the squares), with the " +" when cut.</summary>
-        public string Plain()
-        {
-            var sb = new StringBuilder();
-            foreach (EventSpan s in Spans) sb.Append(s.Text);
-            if (Truncated) sb.Append(" +");
-            return sb.ToString();
-        }
     }
 
     /// <summary>

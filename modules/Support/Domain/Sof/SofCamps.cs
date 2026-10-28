@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         public SofCampSet(int camps)
         {
-            slots = new Slot[Math.Max(0, Math.Min(CampRules.MaxCamps, camps))];
+            slots = new Slot[Math.Clamp(camps, 0, CampRules.MaxCamps)];
             for (int i = 0; i < slots.Length; i++) slots[i] = new Slot();
         }
 
@@ -130,9 +130,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private readonly Stack<int> free = new Stack<int>();
         private int next;
 
-        /// <summary>Live ids (allocated and not released).</summary>
-        public int Count => byId.Count;
-
         private static ulong Pack(TargetKind kind, AnchorSub sub, uint key) => ((ulong)(byte)kind << 40) | ((ulong)(byte)sub << 32) | key;
 
         /// <summary>The id of (kind, sub, key) when one is allocated; 0 otherwise (never allocates).</summary>
@@ -155,14 +152,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             if (!byId.TryGetValue(id, out ulong k)) return false;
             byId.Remove(id); byKey.Remove(k); free.Push(id);
-            return true;
-        }
-
-        public bool TryKey(int id, out TargetKind kind, out AnchorSub sub, out uint key)
-        {
-            kind = default; sub = default; key = 0;
-            if (!byId.TryGetValue(id, out ulong k)) return false;
-            kind = (TargetKind)(byte)(k >> 40); sub = (AnchorSub)(byte)(k >> 32); key = (uint)k;
             return true;
         }
 

@@ -43,8 +43,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal bool Applied => applied;
 
-        internal void Apply(LevelInfo level) => Apply(level, 0f);
-
         internal void Apply(LevelInfo level, float cellCore)
         {
             if (applied && owner == level && layer != null)

@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     string cause = Refusal((FrontOutcome)(byte)row.B, f);
                     return call + Programme(id) + " FAILED · " + (cause.Length > 0 ? cause : "NOTHING TO DO") + " · FUNDS RETURNED";
                 case FrontLogCode.Directive:
-                    return FrontRules.Name(f) + " POSTURE " + FrontRules.Name((FrontDirective)Math.Max(0, Math.Min(6, (int)row.A))) +
+                    return FrontRules.Name(f) + " POSTURE " + FrontRules.Name((FrontDirective)Math.Clamp((int)row.A, 0, 6)) +
                         (string.IsNullOrEmpty(directiveBy) ? "" : " BY " + directiveBy);
                 case FrontLogCode.Priority:
                     return "FUNDING SPACE " + row.A + " · CYBER " + row.B + " · SOF " + Math.Max(0, 100 - row.A - row.B);

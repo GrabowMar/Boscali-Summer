@@ -77,7 +77,7 @@ namespace BoscaliSummer.Fire
             // Native colliders and obstacle remain untouched; unknown types retain native visuals.
             // Replay skips that prefab; only then add a renderer-only copy, without new collision.
             if (!custom && !__state.TreeRow && Time.timeSinceLevelLoad < 10f && __state.DestroyedFacade != null)
-                manager?.AttachFacade(__state.RuinPosition, __state.DestroyedFacade, __state.BuildingId, true);
+                manager?.AttachFacade(__state.RuinPosition, __state.DestroyedFacade, true);
         }
 
         private static System.Exception Finalizer(System.Exception __exception, DestructGeometry __state)

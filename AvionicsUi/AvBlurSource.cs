@@ -37,7 +37,6 @@ namespace NOAvionics
                 else if (users > 0) Hook();
             }
         }
-        public static bool Supported => grabOk && !failed;
         public static RenderTexture Texture => grabOk ? a : null;
 
         public static void Acquire()

@@ -125,39 +125,33 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public SortieTimeline(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "Sortie");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(8f));
             frame.Bracket = 8f;
             for (int i = 0; i < axis.Length; i++)
             {
                 grid[i] = SortieMark.Make(Rect, "Grid" + i);
-                axis[i] = AvText.Make(Rect, "Axis" + i, AvTextRole.Micro, "", i == 0 ? TextAlignmentOptions.MidlineLeft : i == 4 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Midline);
-                AvText.Fit(axis[i], false);
+                axis[i] = WmcSheet.Text(Rect, "Axis" + i, AvTextRole.Micro, i == 0 ? TextAlignmentOptions.MidlineLeft : i == 4 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Midline);
             }
             for (int l = 0; l < MaxLanes; l++)
             {
                 int lane = l;
                 bands[l] = SortieMark.Make(Rect, "Band" + l);
-                bandText[l] = AvText.Make(Rect, "BandText" + l, AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(bandText[l], false);
+                bandText[l] = WmcSheet.Text(Rect, "BandText" + l, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
                 laneHits[l] = SortieMark.Make(Rect, "Lane" + l);
-                letters[l] = AvText.Make(Rect, "Letter" + l, AvTextRole.Label, "", TextAlignmentOptions.Midline);
-                AvText.Fit(letters[l], false);
+                letters[l] = WmcSheet.Text(Rect, "Letter" + l, AvTextRole.Label, TextAlignmentOptions.Midline);
                 AvHit.On(laneHits[l]).Click = e => Picked?.Invoke(lane, -1);
             }
             for (int i = 0; i < MaxBars; i++)
             {
                 int at = i;
                 planMarks[i] = SortieMark.Make(Rect, "Plan" + i);
-                planText[i] = AvText.Make(Rect, "PlanText" + i, AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(planText[i], false);
+                planText[i] = WmcSheet.Text(Rect, "PlanText" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
                 realMarks[i] = SortieMark.Make(Rect, "Real" + i);
                 AvHit.On(planMarks[i]).Click = e => Picked?.Invoke(planLane[at], planStep[at]);
             }
             for (int i = 0; i < MaxEvents; i++) diamonds[i] = SortieMark.Make(Rect, "Event" + i);
             nowLine = SortieMark.Make(Rect, "Now");
-            nowLabel = AvText.Make(Rect, "NowText", AvTextRole.Micro, "NOW", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(nowLabel, false);
+            nowLabel = WmcSheet.Text(Rect, "NowText", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "NOW");
             empty = AvText.Make(Rect, "Empty", AvTextRole.ProseSmall, "No plan yet: queue orders on ORDERS (SHIFT adds a step), then EXECUTE here.", TextAlignmentOptions.TopLeft, true);
             Hide();
             Restyle();
@@ -187,10 +181,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-            frame.SetVerticesDirty();
+            WmcDraw.PaintCard(frame, "card", AvTheme.Surface, true);
             Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Color ink = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (TMP_Text t in axis) t.color = dim;

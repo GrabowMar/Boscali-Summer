@@ -5,7 +5,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// follows. Horizontal distance; no ETA below 1 m/s.</summary>
     internal static class TaskCard
     {
-
         /// <summary>The task in an element header's width (spec WMC rebuild §TACTICAL): kind, leg of a multi-point path, ETA;
         /// "ON STATION" for a held point inside the arrive radius.</summary>
         public static string Short(WingTask task, int leg, Vec3 lead, float leadSpeed)

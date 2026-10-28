@@ -547,23 +547,26 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
         private void AbortTransfer(Convoy convoy)
         {
             if (convoy == null) return;
-            AssetWatch watch = FindAsset(convoy.Owner, convoy.Slot, AssetKind.ConvoyLead);
-            if (watch != null && watch.Kind == AssetKind.ConvoyLead)
-            {
-                watch.Unwatch();
-                assets.Remove(watch);
-                assetLookup.Remove(watch.InstanceId);
-            }
-            DestroyConvoyVehicles(convoy);
-            convoys.Remove(convoy);
+            RetireConvoy(convoy);
             if (convoy.Slot.Status == CommanderStatus.InTransit) convoy.Slot.Status = CommanderStatus.Active;
         }
 
         private void FinishTransfer(Convoy convoy, bool arrived)
         {
             if (convoy == null) return;
+            RetireConvoy(convoy);
+            convoy.Slot.Status = CommanderStatus.Active;
+            if (arrived)
+                Broadcast(convoy.Owner, GlobalId(FactionIndex(convoy.Owner.Hq), convoy.Slot.Id),
+                    CommanderLogTone.Staff,
+                    convoy.Slot.Person.Name + " RETURNED TO " + Label(convoy.Owner, convoy.Slot.SiteName), MissionTime);
+        }
+
+        /// <summary>Stops watching the convoy's lead, removes its vehicles and drops it from the list.</summary>
+        private void RetireConvoy(Convoy convoy)
+        {
             AssetWatch watch = FindAsset(convoy.Owner, convoy.Slot, AssetKind.ConvoyLead);
-            if (watch != null && watch.Kind == AssetKind.ConvoyLead)
+            if (watch != null)
             {
                 watch.Unwatch();
                 assets.Remove(watch);
@@ -571,23 +574,6 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             }
             DestroyConvoyVehicles(convoy);
             convoys.Remove(convoy);
-            if (arrived)
-            {
-                convoy.Slot.Status = CommanderStatus.Active;
-                Broadcast(convoy.Owner, GlobalId(FactionIndex(convoy.Owner.Hq), convoy.Slot.Id),
-                    CommanderLogTone.Staff,
-                    convoy.Slot.Person.Name + " RETURNED TO " + Label(convoy.Owner, convoy.Slot.SiteName), MissionTime);
-            }
-            else
-            {
-                convoy.Slot.Status = CommanderStatus.Active;
-            }
-        }
-
-        private void DestroyConvoy(Convoy convoy)
-        {
-            if (convoy == null) return;
-            DestroyConvoyVehicles(convoy);
         }
 
         private void DestroyConvoyVehicles(Convoy convoy)

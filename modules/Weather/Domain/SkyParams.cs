@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.CompilerServices;
 using BoscaliSummer.Core.Math;
 
@@ -32,7 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float veil = WeatherMath.Smoothstep(0.4f, 1f, s), ripple = 0.7f * (1f - s);
             return new SkyLayer
             {
-                Base = WeatherMath.Lerp(4200f, 3300f, s), Thick = WeatherMath.Lerp(400f, 1700f, s), Cover = cover,
+                Base = Scalar.Lerp(4200f, 3300f, s), Thick = Scalar.Lerp(400f, 1700f, s), Cover = cover,
                 PeriodRung = 7f, Softness = 0.5f, Detail = 0.7f, Strength = 0.42f,
                 Cells = 0f, Ripples = (1f - veil) * ripple, Streaks = (1f - veil) * (1f - ripple), Veil = veil,
                 Curl = 0f, Aspect = 1.4f, RippleWavelength = 0.85f * Ladder.PeriodMetres(7f),
@@ -46,10 +45,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float flat = WeatherMath.Smoothstep(0.6f, 1f, v), ripple = 4f * v * (1f - v);
             return new SkyLayer
             {
-                Base = 8600f, Thick = WeatherMath.Lerp(500f, 900f, v), Cover = cover,
+                Base = 8600f, Thick = Scalar.Lerp(500f, 900f, v), Cover = cover,
                 PeriodRung = 9f, Softness = 0.5f, Detail = 0.7f, Strength = 0.12f,
                 Cells = 0f, Ripples = (1f - flat) * ripple, Streaks = (1f - flat) * (1f - ripple), Veil = flat,
-                Curl = 0f, Aspect = WeatherMath.Lerp(7f, 1f, v), RippleWavelength = 0.85f * Ladder.PeriodMetres(9f),
+                Curl = 0f, Aspect = Scalar.Lerp(7f, 1f, v), RippleWavelength = 0.85f * Ladder.PeriodMetres(9f),
             };
         }
     }
@@ -75,17 +74,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public float CumulusLevel;
         public float Convective, Severity, BaseVariation, StratRain, RainBase;
         public float WindFactor, Turbulence, Haze, Qnh, Temperature, OpacityMid, OpacityHigh;
-
-        public SkyLayer Layer(int index) => index == 0 ? Mid : High;
-
-        /// <summary>Lerp of every column. A layer that is absent on one side takes the other side's base, thickness, period rung, aspect and
-        /// ripple wavelength first, so a layer fading in never sweeps through altitudes or scales; aspect and ripple wavelength are held at
-        /// the nearer side.</summary>
-        public static SkyParams Lerp(in SkyParams a, in SkyParams b, float t)
-        {
-            LerpEnds(a, b, out SkyParams x, out SkyParams y);
-            return LerpBetween(x, y, t);
-        }
 
         /// <summary>The two ends of a lerp from <paramref name="a"/> to <paramref name="b"/> as <see cref="Lerp"/> blends them: an absent layer has taken the other side's geometry. They do not depend
         /// on t, so a caller lerping the same pair at many t (the baker, along a ramp) makes them once and calls <see cref="LerpBetween"/>.</summary>
@@ -198,20 +186,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         // Columns that are read on their own, without building a row (see Names; the lattices and the baked tape's layer scan).
         public const int PuffDepthAt = 1, StreetsAt = 9, MidBaseAt = 12, HighBaseAt = 26, CloudBaseAt = 40,
             CumulusLevelAt = 44, ConvectiveAt = 45, SeverityAt = 46;
-
-        public static readonly string[] Names =
-        {
-            "LobeRung", "PuffDepth", "BaseSharp", "BaseWobble", "Dome", "Billow",
-            "Anvil", "DeckDepth", "DeckSmooth", "Streets", "HorizonCover", "HorizonDepth",
-            "MidBase", "MidThick", "MidCover", "MidPeriodRung", "MidSoftness", "MidDetail",
-            "MidStrength", "MidCells", "MidRipples", "MidStreaks", "MidVeil", "MidCurl",
-            "MidAspect", "MidRippleWavelength", "HighBase", "HighThick", "HighCover", "HighPeriodRung",
-            "HighSoftness", "HighDetail", "HighStrength", "HighCells", "HighRipples", "HighStreaks",
-            "HighVeil", "HighCurl", "HighAspect", "HighRippleWavelength", "CloudBase", "SheetCover",
-            "CumulusCover", "CapacityCover", "CumulusLevel", "Convective", "Severity", "BaseVariation",
-            "StratRain", "RainBase", "WindFactor", "Turbulence", "Haze", "Qnh",
-            "Temperature", "OpacityMid", "OpacityHigh",
-        };
 
         /// <summary>Shader texture row of each column, or -1 for CPU-only columns (spec 7.2: rows 0-2 low genus, 3-6 mid, 7-10 high).</summary>
         public static readonly sbyte[] GpuRow =

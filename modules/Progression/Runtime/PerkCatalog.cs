@@ -83,9 +83,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         /// <summary>Tolls a career may hold. One per lane, so this is also the lane cap.</summary>
         public const int AuthorisationLimit = 2;
 
-        /// <summary>The perk mask is a uint, so the catalogue cannot exceed 32 entries.</summary>
-        public const int MaximumPerks = 32;
-
         /// <summary>
         /// Ordered so that <c>All[i].Id == i</c>, each lane occupies a contiguous id block
         /// starting at its grade 1, and grades run 1..<see cref="MaximumDepth"/> without
@@ -163,10 +160,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         /// </summary>
         public static byte PrerequisiteOf(byte id) =>
             IsDefined(id) && All[id].Grade > 1 ? (byte)(id - 1) : PerkView.NoPrerequisite;
-
-        /// <summary>Short display code: PAS for a passive grade, else the tool's code.</summary>
-        public static string CodeOf(PerkDefinition definition) =>
-            definition.Capability == null ? "PAS" : CapabilityCode(definition.Capability);
 
         public static string CapabilityCode(string capability)
         {

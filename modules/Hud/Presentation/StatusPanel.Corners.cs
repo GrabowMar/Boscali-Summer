@@ -46,13 +46,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             screenCorners.Find();
         }
 
-        /// <summary>The native pieces the corners are made from are parameters, so an offline render can stand in for them: the feed's plate (its parent is the feed's box), the minimised map's plate, the map picture the game turns by the heading, the feed's text objects and the chat input's object.</summary>
-        private void AdoptCorners(Image feedPlate, RectTransform mapPlate, Transform mapImage, TMP_Text[] feedTexts, GameObject chat)
-        {
-            findTries = int.MaxValue;
-            screenCorners.Adopt(feedPlate, mapPlate, mapImage, feedTexts, chat);
-        }
-
         /// <summary>
         /// Every frame (<paramref name="tick"/> false: the board's <see cref="TickNatives"/>) and at the end of every present (<paramref name="tick"/> true): lay the corners out again if a native rectangle moved, grew or
         /// came and went, always on a tick; stand them down, and give the feed's plate back, whenever the option is off or the board is stale (its update stopped) or gated; the board's own master switch does not stand them down. Fail open: the plate comes back the very frame the board's shade is not standing in for it.

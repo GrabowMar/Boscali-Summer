@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private AvConsole console;
         private AvMetric[] metrics;
 
-        private readonly List<IStrBound> parts = new List<IStrBound>(32);
+        private readonly List<StrPart> parts = new List<StrPart>(32);
         private StrViewModel boundModel;
         private int boundRevision = -1;
         private float nextLog;
@@ -113,17 +113,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
             if (console != null) console.SetPage(Mathf.Clamp(page, 0, PageCount - 1));
             boundRevision = -1;
-        }
-
-        /// <summary>Harness seam: builds the console into <paramref name="root"/> at <paramref name="height"/>, bound to <paramref name="strHub"/>; no installer, no reflection.</summary>
-        internal static StrMfdPanel BuildForTest(RectTransform root, float height, IStrHub strHub)
-        {
-            var go = new GameObject("StrMfdPanel");
-            go.transform.SetParent(root, false);
-            StrMfdPanel panel = go.AddComponent<StrMfdPanel>();
-            panel.hub = strHub;
-            panel.BuildScreen(root, height);
-            return panel;
         }
 
         private void Update()

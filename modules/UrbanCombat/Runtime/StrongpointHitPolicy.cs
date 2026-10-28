@@ -1,3 +1,5 @@
+using System;
+
 namespace BoscaliSummer.Garrisons
 {
     /// <summary>
@@ -72,15 +74,15 @@ namespace BoscaliSummer.Garrisons
         }
 
         internal static float Fraction(float damage, float structure) =>
-            structure <= 0f ? 1f : Clamp01(damage / structure);
+            structure <= 0f ? 1f : Math.Clamp(damage / structure, 0f, 1f);
 
         /// <summary>Shell HP the server asserts for a worn fraction of the occupy-time HP.</summary>
         internal static float SteppedHitPoints(float fraction, float maxHp = BaseHitPoints) =>
-            Max(0f, maxHp * (1f - Clamp01(fraction)));
+            Math.Max(0f, maxHp * (1f - Math.Clamp(fraction, 0f, 1f)));
 
         /// <summary>Dugout-carrier HP that replicates the fraction to every peer.</summary>
         internal static float CarrierHitPoints(float fraction) =>
-            Max(CarrierFloor, BaseHitPoints * (1f - Clamp01(fraction)));
+            Math.Max(CarrierFloor, BaseHitPoints * (1f - Math.Clamp(fraction, 0f, 1f)));
 
         /// <summary>
         /// Dugout-carrier HP back to a 0-3 stage every peer derives identically. Partial
@@ -88,8 +90,5 @@ namespace BoscaliSummer.Garrisons
         /// </summary>
         internal static int DugoutStage(float hitPoints) =>
             hitPoints > 75f ? 0 : hitPoints > 50f ? 1 : hitPoints > 25f ? 2 : 3;
-
-        private static float Max(float a, float b) => a > b ? a : b;
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
     }
 }

@@ -44,7 +44,7 @@ namespace BoscaliSummer.Vanguard
         private static Missile FindManta()
         {
             foreach (Missile m in UnityEngine.Object.FindObjectsOfType<Missile>())
-                if (!m.disabled && m.definition != null && m.definition.jsonKey == VanguardKeys.Manta) return m;
+                if (!m.disabled && RemoraBoard.IsManta(m)) return m;
             return null;
         }
 

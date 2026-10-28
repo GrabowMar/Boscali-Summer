@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (who != null && !who(m)) continue;
                 if (m.Profile.Class == AirframeClass.FixedWing || (cargoOnly && CargoStation(m.Aircraft) == null)) continue;
                 rotary++;
-                if (m.Released || !m.Alive || m.Engaged || m.Recovery != null || m.OnGround || m.Settle != null) continue;
+                if (!m.Sendable || m.Engaged) continue;
                 WingFrame f = FrameOf(m);
                 if (f == null || m.Brain.Slot < 0 || m.Brain.Slot >= f.Count) continue;
                 free++;
@@ -160,8 +160,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             best = float.MaxValue;
             foreach (WingMember m in Members)
             {
-                if (m.Profile.Class == AirframeClass.FixedWing || m.Released || !m.Alive || m.Engaged || m.Recovery != null ||
-                    m.OnGround || m.Settle != null || m.Aircraft.definition == null || m.Aircraft.definition.captureCapacity <= 0 ||
+                if (m.Profile.Class == AirframeClass.FixedWing || !m.Sendable || m.Engaged || m.Aircraft.definition == null || m.Aircraft.definition.captureCapacity <= 0 ||
                     m.Aircraft.GetFuelLevel() <= RescueMinFuel) continue;
                 float d = (m.Last.Pos - at).SqrLength;
                 if (d >= best) continue;

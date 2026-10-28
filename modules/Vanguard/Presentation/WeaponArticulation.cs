@@ -96,4 +96,34 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
         }
     }
+
+    /// <summary>
+    /// One hinged part of a baked model (HAMILCAR, KESTREL). Only localRotation is ever written, about a missile axis taken into
+    /// the joint's parent frame at rest: the FBX joints carry their own baked axes and a 100x scale, and neither may change.
+    /// </summary>
+    internal struct RigJoint
+    {
+        public Transform Part;
+        private Quaternion rest;
+        private Vector3 axis;
+        private float shown;
+
+        public static RigJoint Find(Transform[] parts, string name, Vector3 worldAxis, ref string missing)
+        {
+            foreach (Transform part in parts)
+                if (part.name == name && part.parent != null)
+                    return new RigJoint { Part = part, rest = part.localRotation, axis = part.parent.InverseTransformDirection(worldAxis) };
+            missing = missing == null ? name : missing + ", " + name;
+            return default;
+        }
+
+        public void Turn(float degrees)
+        {
+            if (degrees == shown || Part == null) return;
+            shown = degrees;
+            Part.localRotation = Quaternion.AngleAxis(degrees, axis) * rest;
+        }
+
+        public float Off(float degrees) => Part == null ? 0f : Quaternion.Angle(Part.localRotation, Quaternion.AngleAxis(degrees, axis) * rest);
+    }
 }

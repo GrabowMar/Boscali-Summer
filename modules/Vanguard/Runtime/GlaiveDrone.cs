@@ -3,7 +3,6 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Networking;
 using BoscaliSummer.Modules.Vanguard.Presentation;
-using HarmonyLib;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
@@ -42,12 +41,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public int RoundsLeft => GlaiveProfile.Rounds-(int)shots;
         public GlobalPosition Centre => centre;
         public float BankAngle => bank;
-
-        private static class Effects
-        {
-            internal static readonly System.Action<Gun> Sound=AccessTools.MethodDelegate<System.Action<Gun>>(AccessTools.Method(typeof(Gun),"ShotSound"));
-            internal static readonly AccessTools.FieldRef<Gun,ParticleSystem[]> Flashes=AccessTools.FieldRefAccess<Gun,ParticleSystem[]>("muzzleParticles");
-        }
 
         public static GlaiveDrone Attach(Missile missile)
         {
@@ -95,7 +88,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (drone.wingR != null) drone.wingRRest=drone.wingR.localRotation;
             drone.Wings();
             gun.AttachToUnit(missile); gun.ForceServerAuthority=true;
-            drone.flashes=Effects.Flashes(gun);
+            drone.flashes=SentinelDrone.Shot.Flashes(gun);
             if (drone.flashes != null) foreach (var flash in drone.flashes)
                 if (flash != null) flash.transform.localScale*=.35f;
             Active.Add(drone);
@@ -280,7 +273,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Fire(Unit at)
         {
-            Effects.Sound(gun);
+            SentinelDrone.Shot.Sound(gun);
             if (flashes != null) foreach (var flash in flashes) if (flash != null)
             {
                 flash.transform.SetPositionAndRotation(muzzle.position,muzzle.rotation);
@@ -293,7 +286,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 new Color(1f,.6f,.25f),0f,at);
         }
 
-        private void Publish() => GlaiveNet.Broadcast(new GlaiveState
+        private void Publish() => NetFeed.Broadcast(new GlaiveState
         { Protocol=GlaiveNet.ProtocolVersion,MissileId=missile.persistentID.Id,Phase=(byte)Phase,Yaw=yawAngle,Pitch=pitchAngle,Shots=shots,Slide=Slide });
 
         public void Receive(GlaiveState state)

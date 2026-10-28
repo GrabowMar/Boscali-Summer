@@ -1,5 +1,5 @@
-using System.Globalization;
 using System.Text;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -173,7 +173,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static string Recruited(string callsign, string name) => "Recruited " + callsign + (string.IsNullOrEmpty(name) ? "" : " (" + name + ")");
 
         private static string Cap(string s) => WmcText.Cut(s, SlotChars);
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

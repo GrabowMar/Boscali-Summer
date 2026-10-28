@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -311,7 +312,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (d.Total <= 0f || d.Left <= 0f) return;
             string clock = OpsScopeWords.Clock(d.Left);
             bool wide = clock.Length > 4;        // 10:00 and up: the 12 px bold clock is wider than the 34 px inside the ring
-            float r = wide ? 22f : 19f, cx = RX + (wide ? 26f : 23f), cy = 55f, frac = ScopeCanvas.Clamp01(d.Left / d.Total), lx = RX + (wide ? 56f : 52f);
+            float r = wide ? 22f : 19f, cx = RX + (wide ? 26f : 23f), cy = 55f, frac = Scalar.Clamp01(d.Left / d.Total), lx = RX + (wide ? 56f : 52f);
             bool low = ObjectiveMath.DeadlineLow(d.Left);
             g.Ring(cx, cy, r, Faint, 1f, 4f);
             if (frac > 0.003f) g.Arc(cx, cy, r, 0f, 360f * frac - 0.01f, low ? Amber : Ink, 1f, 4f);
@@ -432,7 +433,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool pending = ph.Status == ObjectivePhaseStatus.Pending, done = ph.Status == ObjectivePhaseStatus.Done, current = !pending && !done;
                 ScopeTone tone = pending ? Dim : done ? Ink : Hi;
                 bool warn = current && ObjectiveMath.Warns(line);
-                Pennant(g, x, w, tone, pending, done, current ? ScopeCanvas.Clamp01(ph.Progress) : 0f);
+                Pennant(g, x, w, tone, pending, done, current ? Scalar.Clamp01(ph.Progress) : 0f);
                 if (done) g.Check(x + 15f, 13f, 9f, Ink, 1f, 2f); else g.Diamond(x + 15f, 13f, 4f, tone, current);
                 g.Text(ph.Title, x + 28f, 14f, tone, 12f, ScopeAlign.Left, !pending);
                 string detail = done ? "DONE" : warn ? StripWord(line) : current && ph.Progress > 0f ? ScopeStr.Pct((int)Math.Round(ph.Progress * 100f)) : current ? "NOW" : null;

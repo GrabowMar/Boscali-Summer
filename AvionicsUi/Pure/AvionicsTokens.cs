@@ -23,13 +23,6 @@ namespace NOAvionics
 
         public Rgba WithAlpha(float a) => new Rgba(R, G, B, a);
 
-        /// <summary>Composite this colour, at its own alpha, over an opaque background.</summary>
-        public Rgba Over(Rgba background) =>
-            new Rgba(R * A + background.R * (1f - A),
-                     G * A + background.G * (1f - A),
-                     B * A + background.B * (1f - A),
-                     1f);
-
         /// <summary>WCAG relative luminance, treating channels as sRGB.</summary>
         public float RelativeLuminance =>
             0.2126f * Linear(R) + 0.7152f * Linear(G) + 0.0722f * Linear(B);
@@ -38,8 +31,8 @@ namespace NOAvionics
             c <= 0.03928f ? c / 12.92f : (float)Math.Pow((c + 0.055f) / 1.055f, 2.4);
 
         /// <summary>
-        /// WCAG contrast between two opaque colours. Composite translucent colours with
-        /// <see cref="Over"/> first.
+        /// WCAG contrast between two opaque colours. Composite translucent colours over
+        /// their background first.
         /// </summary>
         public static float Contrast(Rgba a, Rgba b)
         {
@@ -48,8 +41,6 @@ namespace NOAvionics
             if (la < lb) { float t = la; la = lb; lb = t; }
             return (la + 0.05f) / (lb + 0.05f);
         }
-
-        public static Rgba White => new Rgba(1f, 1f, 1f);
     }
 
     /// <summary>How a control is weighted against the others around it.</summary>
@@ -89,8 +80,6 @@ namespace NOAvionics
         public static readonly Rgba Hairline = new Rgba(0.212f, 0.376f, 0.427f, 0.750f);
         public static readonly Rgba Frame = new Rgba(0.353f, 0.620f, 0.686f, 0.900f);
         public static readonly Rgba PanelEdge = new Rgba(0.260f, 0.490f, 0.550f, 0.900f);
-        public static readonly Rgba PanelShadow = new Rgba(0.005f, 0.008f, 0.014f, 1f);
-        public static readonly Rgba HudPanel = new Rgba(0.015f, 0.025f, 0.038f, 0.850f);
 
         // ----------------------------------------------------------------------- text
         public static readonly Rgba TextPrimary = new Rgba(0.929f, 0.973f, 0.980f, 1f);
@@ -99,21 +88,10 @@ namespace NOAvionics
         // quieter role comes from weight, framing and control state rather than low opacity.
         public static readonly Rgba TextMuted = new Rgba(0.467f, 0.588f, 0.631f, 1f);
         public static readonly Rgba TextInk = new Rgba(0.004f, 0.047f, 0.024f, 1f); // #010C06 optical dark ink for solid active button plates
-
-        // ---------------------------------------------------------------- status rails
-        public static readonly Rgba RailReady = new Rgba(0.420f, 0.830f, 0.620f, 1f);
-        public static readonly Rgba RailCaution = new Rgba(1.000f, 0.760f, 0.320f, 1f);
-        public static readonly Rgba RailDanger = new Rgba(1.000f, 0.380f, 0.400f, 1f);
         public static readonly Rgba RailInfo = new Rgba(0.500f, 0.760f, 0.850f, 1f);
         public static readonly Rgba RailInert = new Rgba(0.239f, 0.337f, 0.376f, 0.650f);
-        public static Rgba Dim => TextDim;
-        public static Rgba Disabled => TextMuted;
         public const float Space2 = 8f;
-
-        public const float Pad = 14f;
-        public const float Gap = 8f;
         public const float RowHeight = 30f;
-        public const float RowPitch = 32f;
 
         // ----------------------------------------------------------------- typography
         public const float FontTitle = 16f;

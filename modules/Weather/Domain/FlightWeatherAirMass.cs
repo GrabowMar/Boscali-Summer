@@ -20,12 +20,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         internal static FlightWeatherAirMass Evaluate(WeatherPoint point, float altitude,
-            bool insideCloud, float? forcedRain)
-        {
-            return Evaluate(point, altitude, insideCloud ? 0.5f : 0f, forcedRain);
-        }
-
-        internal static FlightWeatherAirMass Evaluate(WeatherPoint point, float altitude,
             float cloudDensity, float? forcedRain)
         {
             float precipitation = forcedRain.HasValue

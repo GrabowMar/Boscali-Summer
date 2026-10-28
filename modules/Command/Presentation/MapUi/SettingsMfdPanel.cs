@@ -210,13 +210,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             logger?.LogInfo("SET MFD installed on " + (left ? "left" : "right") + " bezel slot " + (slot + 1) + ".");
         }
 
-        private static void ApplyTabHelp(AvTabBar bar, params string[] hints)
-        {
-            AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
-            for (int i = 0; i < tabs.Length && i < hints.Length; i++)
-                if (hints[i] != null) tabs[i].Help = hints[i];
-        }
-
         private void RefreshChrome(AvConsole c, ModeSwitch mode, bool server)
         {
             AvUiSound.Volume = settings.UiSoundVolume.Value;

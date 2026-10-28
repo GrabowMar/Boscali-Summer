@@ -27,12 +27,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>True on the update JOKER is first reached (not when the fuel went straight past it to BINGO).</summary>
         public bool JokerNow { get; private set; }
 
-        /// <summary>The last fuel level fed in (0..1), NaN before the first update.</summary>
-        public float Level => lastFuel;
-
-        /// <summary>Fraction of the tanks burned per second, low-passed; NaN until a rate has been learned.</summary>
-        public float RatePerSecond => rate;
-
         /// <summary>Seconds until the tanks are dry at the learned rate; +infinity before a rate is learned or when none is burning.</summary>
         public float EnduranceSeconds => float.IsNaN(rate) || rate <= 0f || float.IsNaN(lastFuel) ? float.PositiveInfinity : lastFuel / rate;
 
@@ -41,9 +35,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>Whether <see cref="Need"/> has been computed (a field is known and a burn rate learned).</summary>
         public bool HasNeed { get; private set; }
-
-        /// <summary>Seconds until BINGO at the learned rate (+infinity when unknown).</summary>
-        public float SecondsToBingo => float.IsNaN(rate) || rate <= 0f ? float.PositiveInfinity : (lastFuel - need) / rate;
 
         /// <summary>
         /// Feed one reading. <paramref name="distanceToField"/> is metres to the nearest friendly field (NaN: none known),
@@ -122,37 +113,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>The words of the fuel row, pure.</summary>
     internal static class FuelText
     {
-        private static readonly char[] Scratch = new char[48];
-
-        /// <summary>"42MIN", "1H05", "&lt;1MIN"; "--" when the endurance is unknown or past 100 h (a parked aircraft decays its rate to nothing).</summary>
-        public static string Endurance(float seconds)
-        {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f || seconds >= 360000f) return "--";
-            int minutes = (int)(seconds / 60f);
-            if (minutes < 1) return "<1MIN";
-            if (minutes < 100) return minutes + "MIN";
-            return (minutes / 60) + "H" + (minutes % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-        }
-
-        /// <summary>"38% END 42MIN": the level and what it buys.</summary>
-        public static string Level(float level, float enduranceSeconds) =>
-            AvNum.PercentWhole(level) + " END " + Endurance(enduranceSeconds);
-
-        /// <summary>"RTB HIGHWAYSTRIP2 23KM"; "RTB --" when no field is known.</summary>
-        public static string Home(string field, float distanceM, AvUnits units)
-        {
-            if (string.IsNullOrEmpty(field) || float.IsNaN(distanceM)) return "RTB --";
-            string name = field.Trim().ToUpperInvariant();
-            if (name.Length > 16) name = name.Substring(0, 15) + "…";
-            char[] b = Scratch;
-            int len = AvNumFormat.Append(b, 0, "RTB ");
-            len = AvNumFormat.Append(b, len, name);
-            len = AvNumFormat.Append(b, len, " ");
-            len = AvUnitTable.DistanceReading(b, len, distanceM, units);
-            return new string(b, 0, len).ToUpperInvariant();
-        }
-
-        public static string State(bool bingo, bool joker) => bingo ? "BINGO" : joker ? "JOKER" : "";
 
         /// <summary>The word on the third-person fuel scale: BINGO or JOKER as the board says it, LOW when the tank is, else FUEL.</summary>
         public static string Legend(bool bingo, bool joker, HudTone tone) =>

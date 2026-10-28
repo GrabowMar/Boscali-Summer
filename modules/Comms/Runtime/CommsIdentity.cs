@@ -24,8 +24,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private static PropertyInfo nameProperty;
         private static FieldInfo nameField;
 
-        public static ulong Id(Player player) => PlayerIdentity.Of(player);
-
         /// <summary>The side as the faction-name hash the rest of Boscali uses; 0 while unassigned.</summary>
         public static int Faction(Player player)
         {
@@ -73,7 +71,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             if (id == PlayerIdentity.None || UnitRegistry.playerLookup == null) return false;
             foreach (Player player in UnitRegistry.playerLookup.Values)
             {
-                if (player == null || Id(player) != id) continue;
+                if (player == null || PlayerIdentity.Of(player) != id) continue;
                 aircraft = player.Aircraft;
                 return aircraft != null && !aircraft.disabled;
             }

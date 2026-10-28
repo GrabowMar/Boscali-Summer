@@ -40,12 +40,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             return false;
         }
 
-        internal void Reset()
-        {
-            count = 0;
-            live = 0;
-        }
-
         private void Close(int operationId, float now)
         {
             if (count == Capacity)

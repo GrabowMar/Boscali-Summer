@@ -16,9 +16,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal SofMirror SofMirror => sofMirror;
 
         /// <summary>The SOF page (or an armed AIM: TEAM call) is on screen: while it is, the feed asks the host for a state.</summary>
-        internal MirrorFeed<SofStateData> SofFeed => sofFeed ?? (sofFeed = new MirrorFeed<SofStateData>(sofMirror, SpaceCommandKind.SofSync));
+        internal MirrorFeed<SofStateData> SofFeed => sofFeed ??= new MirrorFeed<SofStateData>(sofMirror, SpaceCommandKind.SofSync);
 
-        /// <summary>PUSH, HOLD, EXFIL, LIFT or CANCEL for one team.</summary>
         /// <summary>SWEEP: send the QRF against every hostile team detected near our sites. Carries nothing.</summary>
         internal int SofSweep() => SendSpace(SpaceCommandKind.SofSweep, 0, null);
 

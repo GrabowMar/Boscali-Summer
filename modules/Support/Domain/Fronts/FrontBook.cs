@@ -93,10 +93,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public void AddReadiness(Front f, int delta)
         {
             FrontSide s = sides[(int)f];
-            s.Readiness = Math.Max(1, Math.Min(FrontRules.MaxReadiness, s.Readiness + delta));
+            s.Readiness = Math.Clamp(s.Readiness + delta, 1, FrontRules.MaxReadiness);
         }
 
-        public void SetSuperiority(Front f, int value) => sides[(int)f].Superiority = Math.Max(-100, Math.Min(100, value));
+        public void SetSuperiority(Front f, int value) => sides[(int)f].Superiority = Math.Clamp(value, -100, 100);
 
         // ---- Funding --------------------------------------------------------------------------
 
@@ -198,7 +198,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// Pays the heads, starts funded builds, completes finished ones. Each completion is returned for the host to turn into its world effect, and the host answers each with
         /// <see cref="Settle"/>; the DONE line waits for that answer (READINESS has no adapter, so its line is written here).
         /// </summary>
-        public List<FrontEvent> Tick(float now, in FrontWorld world)
+        public List<FrontEvent> Tick(float now)
         {
             var events = new List<FrontEvent>();
             Advance(now);
@@ -313,7 +313,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         private static void AddLog(FrontSide s, FrontLogCode code, int a, int b, float now)
         {
             if (s.Log.Count >= FrontRules.LogCapacity) s.Log.RemoveAt(0);
-            s.Log.Add(new FrontLogRow { Code = (byte)code, A = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, a)), B = (short)Math.Max(short.MinValue, Math.Min(short.MaxValue, b)), Time = now });
+            s.Log.Add(new FrontLogRow { Code = (byte)code, A = (short)Math.Clamp(a, short.MinValue, short.MaxValue), B = (short)Math.Clamp(b, short.MinValue, short.MaxValue), Time = now });
         }
 
         /// <summary>The faction-only mirror of the book at <paramref name="now"/>.</summary>
@@ -326,7 +326,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 FrontRow r = d.Fronts[i];
                 bool locked = s.DirectiveLockUntil > now;
                 r.Readiness = (byte)s.Readiness; r.Superiority = (sbyte)s.Superiority;
-                r.Budget = (ushort)Math.Max(0, Math.Min(ushort.MaxValue, Math.Round(s.Budget)));
+                r.Budget = (ushort)Math.Clamp(Math.Round(s.Budget), 0, ushort.MaxValue);
                 r.Directive = s.Directive; r.PriorityPct = (byte)Math.Round(s.PriorityWeight * 100f);
                 r.HasFocus = s.HasFocus; r.FocusX = s.FocusX; r.FocusZ = s.FocusZ;
                 r.DirectiveLockUntil = locked ? s.DirectiveLockUntil : 0f; r.DirectiveBy = locked ? s.DirectiveByName : "";
@@ -334,8 +334,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     r.Queue.Add(new FrontQueueRow
                     {
                         // 100 means paid in full (the build is, or is about to be, running): a bar 99.6 % funded must not round up into BUILDING, or the card claims a build the host has not started.
-                        Id = e.Id, Percent = (byte)(e.Started || e.Remaining <= 0.0001f ? 100 : Math.Max(0, Math.Min(99, Math.Floor(e.Funded / e.Cost * 100f)))),
-                        BuildLeft = (ushort)Math.Max(0, Math.Min(ushort.MaxValue, Math.Round(e.Started ? e.BuildEnd - now : e.Build)))
+                        Id = e.Id, Percent = (byte)(e.Started || e.Remaining <= 0.0001f ? 100 : Math.Clamp(Math.Floor(e.Funded / e.Cost * 100f), 0, 99)),
+                        BuildLeft = (ushort)Math.Clamp(Math.Round(e.Started ? e.BuildEnd - now : e.Build), 0, ushort.MaxValue)
                     });
                 r.Log.AddRange(s.Log);
             }

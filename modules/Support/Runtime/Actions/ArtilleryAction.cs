@@ -18,8 +18,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     {
         private const float DwellCheckSeconds = .5f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         /// <summary>Everything one launch needs, copied out of the context so a delayed launch can outlive the call.</summary>
         internal sealed class Shot
         {

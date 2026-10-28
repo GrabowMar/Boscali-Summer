@@ -1,4 +1,5 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
@@ -12,7 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public static void Glyph(ScopeCanvas g, in GaugeSpec s, float cx, float cy, float r, float alpha = 1f)
         {
             ScopeTone tone = s.Tone == Dim ? Ink : s.Tone, fig = tone == Amber || tone == Red ? tone : Hi;
-            float v = ScopeCanvas.Clamp01(s.Value);
+            float v = Scalar.Clamp01(s.Value);
             switch (s.Kind)
             {
                 case GaugeKind.Arc:

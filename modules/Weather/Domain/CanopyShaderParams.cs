@@ -9,13 +9,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class CanopyShaderParams
     {
-        /// <summary>Glass-UV scroll rate per second; frozen when dry.</summary>
-        public static float FlowPhaseRate(float intensity, float speedNorm)
-        {
-            float i = Scalar.Clamp01(intensity);
-            if (i <= 0.001f) return 0f;
-            return 0.15f + i * (0.5f + 2.0f * Scalar.Clamp01(speedNorm));
-        }
 
         public static float Wetness(float current, float rain, float speedNorm, float dt)
         {

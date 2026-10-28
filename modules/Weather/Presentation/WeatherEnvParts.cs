@@ -436,7 +436,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     {
         public float Elevation, Azimuth, TimeOfDay, Sunrise, Sunset;
         public bool PolarDay, PolarNight;
-        public string State = "", Light = "", Event = "";
+        public string Light = "", Event = "";
         public AvState LightState = AvState.Info;
     }
 
@@ -728,18 +728,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
 
         /// <summary>Which cells a regime lights.</summary>
-        public static int LitFor(WeatherRegimeType regime)
+        public static int LitFor(WeatherRegimeType regime) => regime switch
         {
-            switch (regime)
-            {
-                case WeatherRegimeType.Clear: return Sun;
-                case WeatherRegimeType.Fair:
-                case WeatherRegimeType.Scattered: return Sun | Cloud;
-                case WeatherRegimeType.RainSquall: return Cloud | Rain;
-                case WeatherRegimeType.Storm: return Rain | Storm;
-                default: return Cloud;
-            }
-        }
+            WeatherRegimeType.Clear => Sun,
+            WeatherRegimeType.Fair or WeatherRegimeType.Scattered => Sun | Cloud,
+            WeatherRegimeType.RainSquall => Cloud | Rain,
+            WeatherRegimeType.Storm => Rain | Storm,
+            _ => Cloud,
+        };
 
         public void Set(int litMask, AvState s)
         {

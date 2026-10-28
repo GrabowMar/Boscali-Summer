@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Net;
 using BoscaliSummer.Modules.TheaterOps.Configuration;
 using BoscaliSummer.Modules.TheaterOps.Domain;
 
@@ -54,7 +55,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 log.Add(credited ? WaveText.Counted(b.Ledger.Credits, outcome.Title, outcome.Pilot) : WaveText.BankFull(outcome.Title));
             }
             else if (tied) log.Add(WaveText.NoCredit);
-            b.Last = new TheaterOutcomeView(++b.Seq, Clip(outcome.Title, 40), Clip(outcome.Pilot, 32), outcome.X, outcome.Z, counted, outcome.ByWing, b.Ledger.Credits);
+            b.Last = new TheaterOutcomeView(++b.Seq, NetText.Clip(outcome.Title, 40), NetText.Clip(outcome.Pilot, 32), outcome.X, outcome.Z, counted, outcome.ByWing, b.Ledger.Credits);
             // The third credit buys in the same frame, so the wave leaves with the sortie that earned it.
             if (counted) TryBuy(hq, b, log, now);
             return true;
@@ -101,8 +102,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             b.LastViewCost = q.Cost;
             WaveState state = q.Block == WaveBlock.SwitchedOff || q.Block == WaveBlock.NoSorties || q.Block == WaveBlock.MissionForbids ? WaveState.Off
                 : human && b.Ledger.Owed && q.Block != WaveBlock.None ? WaveState.Blocked : WaveState.Earning;
-            float ago = b.LastBoughtAt < 0f ? -1f : Math.Min(86400f, Math.Max(0f, now - b.LastBoughtAt));
-            return new TheaterWaveView(state, q.Block, b.Ledger.Credits, WaveLedger.CreditsPerWave, Clip(q.Name, 32), q.Cost, q.Pool, q.CooldownSeconds,
+            float ago = b.LastBoughtAt < 0f ? -1f : Math.Clamp(now - b.LastBoughtAt, 0f, 86400f);
+            return new TheaterWaveView(state, q.Block, b.Ledger.Credits, WaveLedger.CreditsPerWave, NetText.Clip(q.Name, 32), q.Cost, q.Pool, q.CooldownSeconds,
                 Math.Min(10000, b.Ledger.Bought + b.Extra), ago, q.DepotKnown, q.DepotX, q.DepotZ);
         }
 
@@ -163,7 +164,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 Mark(b, "B");
                 b.LastBoughtAt = now;
                 b.HeldBlock = WaveBlock.None;
-                log.Add(WaveText.Bought(quote.Name, quote.Cost, (int)Math.Min(1000000f, Math.Max(0f, (float)Math.Floor(hq.factionFunds)))));
+                log.Add(WaveText.Bought(quote.Name, quote.Cost, (int)Math.Clamp((float)Math.Floor(hq.factionFunds), 0f, 1000000f)));
                 return true;
             }
             WaveBlock held = quote.Block == WaveBlock.None ? WaveBlock.NoGroup : quote.Block;
@@ -197,8 +198,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             books.Add(id, b);
             return b;
         }
-
-        private static string Clip(string text, int maximum) =>
-            string.IsNullOrEmpty(text) ? string.Empty : text.Length > maximum ? text.Substring(0, maximum) : text;
     }
 }

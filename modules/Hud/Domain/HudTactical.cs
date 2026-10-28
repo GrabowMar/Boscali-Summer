@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class HudThreats
     {
         public const int Count = 3;
-        public const float LockHold = 2f, LockFlash = 1f, SpikeHold = 1.5f, Level = 10f;
+        public const float LockHold = 2f, LockFlash = 1f, SpikeHold = 1.5f;
 
         public static void Fill(in ThreatPicture t, Lamp[] lamps)
         {
@@ -45,9 +45,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// between pings. The lamps keep their own shorter holds (<see cref="LockHold"/>, <see cref="SpikeHold"/>); the option's range (BoardOptions.HoldMin) never goes under them.
         /// </summary>
         public static bool Retained(float now, float lockAt, float spikeAt, float hold) => now - Math.Max(lockAt, spikeAt) < hold;
-
-        /// <summary>HI / LO / "" for a threat elevation in degrees.</summary>
-        public static string HighLow(float elevationDeg) => elevationDeg > Level ? "HI" : elevationDeg < -Level ? "LO" : "";
 
         /// <summary>Bearing (deg, + right, ±180) and elevation (deg) of a point given in the aircraft's own frame
         /// (x right, y up, z forward).</summary>
@@ -105,7 +102,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public int Version { get; private set; }
 
         public ShotState State(int i) => states[i];
-        public bool IsBomb(int i) => bombs[i];
         public int Id(int i) => ids[i];
         public string Name(int i) => names[i];
 
@@ -205,15 +201,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal static class LampTest
     {
-        public const float Step = 0.1f, Hold = 1.2f, Online = 2.6f;
+        public const float Step = 0.1f, Hold = 1.2f;
 
         /// <summary>True while the test owns the lamps.</summary>
         public static bool Running(float t) => t >= 0f && t < Hold;
 
         /// <summary>Whether lamp <paramref name="index"/> is lit <paramref name="t"/> s into the test.</summary>
         public static bool Lit(int index, float t) => Running(t) && t > Step * index;
-
-        public static string Caption(float t) => t < 0f || t >= Online ? null : Running(t) ? "LAMP TEST" : "SYSTEMS ONLINE";
     }
 
     /// <summary>Bank and sideslip for the third-person bank &amp; slip indicator (after NO_Tactitools), pure.</summary>

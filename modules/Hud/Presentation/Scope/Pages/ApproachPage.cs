@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -48,8 +49,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override ScopePage Id => ScopePage.Approach;
 
         public override string Title => "APPROACH";
-
-        public override char Code => 'A';
 
         public override string IdleWord => "NO APPROACH";
 
@@ -183,7 +182,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (key != gaugeKey || units != gaugeUnits) { gaugeKey = key; gaugeUnits = units; sinkText = ScopeStr.Cat("", AvUnitTable.Climb(-d.SinkMps, units), units == AvUnits.Imperial ? 0 : 1, units == AvUnits.Imperial ? " FPM" : " M/S").ToString(); }
                 into[n++] = new GaugeSpec
                 {
-                    Id = "sink", Label = "SINK RATE", Kind = GaugeKind.Bar, Value = ApproachMath.Clamp(d.SinkMps / 10f, 0f, 1f), Text = sinkText, Sub = units == AvUnits.Imperial ? "MAX 1575" : "MAX 8",
+                    Id = "sink", Label = "SINK RATE", Kind = GaugeKind.Bar, Value = Scalar.Clamp(d.SinkMps / 10f, 0f, 1f), Text = sinkText, Sub = units == AvUnits.Imperial ? "MAX 1575" : "MAX 8",
                     Tone = d.SinkMps > ApproachMath.SinkCautionMps ? Amber : Ink, Ticks = SinkTick, TickCount = 1, TickTone = d.SinkMps > 7f ? Amber : Dim,
                 };
             }
@@ -304,11 +303,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     if (depth <= 60f) continue;
                     if (!cam.Point(-Gw, yk + Gh, zk, out float ax, out float ay) || !cam.Point(Gw, yk - Gh, zk, out float bx, out float by)) continue;
                     float half = (bx - ax) / 2f;
-                    float fade = ApproachMath.Clamp(1f - (half - 58f) / 80f, 0f, 1f) * (0.45f + 0.55f * ApproachMath.Clamp(1f - depth / 5200f, 0f, 1f));
+                    float fade = Scalar.Clamp(1f - (half - 58f) / 80f, 0f, 1f) * (0.45f + 0.55f * Scalar.Clamp(1f - depth / 5200f, 0f, 1f));
                     if (fade <= 0.03f) continue;
                     ax = Mathf.Round(ax); ay = Mathf.Round(ay); bx = Mathf.Round(bx); by = Mathf.Round(by);
                     Line(g, ax, ay, bx, ay, Ink, fade * 0.45f); Line(g, bx, ay, bx, by, Ink, fade * 0.45f); Line(g, bx, by, ax, by, Ink, fade * 0.45f); Line(g, ax, by, ax, ay, Ink, fade * 0.45f);
-                    float len = ApproachMath.Clamp(half * 0.35f, 3f, 10f);
+                    float len = Scalar.Clamp(half * 0.35f, 3f, 10f);
                     Bracket(g, ax, ay, 1f, 1f, len, fade); Bracket(g, bx, ay, -1f, 1f, len, fade); Bracket(g, ax, by, 1f, -1f, len, fade); Bracket(g, bx, by, -1f, -1f, len, fade);
                 }
             }
@@ -316,7 +315,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The aim point (diamond) and cross needles, until the flare takes the ILS away.
             if (glide && cam.Point(0f, 0f, aim, out float pax, out float pay))
             {
-                float dx = ApproachMath.Clamp(pax, VpX0 + 16f, VpX1 - 16f), dy = ApproachMath.Clamp(pay, VpY0 + 14f, vpY1 - 14f);
+                float dx = Scalar.Clamp(pax, VpX0 + 16f, VpX1 - 16f), dy = Scalar.Clamp(pay, VpY0 + 14f, vpY1 - 14f);
                 bool off = dx != pax || dy != pay, caution = CautionGs || CautionLoc;
                 ScopeTone tone = caution ? Amber : Ink;
                 bool onPath = Math.Abs(dx - CenterX) < 9f && Math.Abs(dy - cy) < 7f;
@@ -359,7 +358,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Rollout(ScopeCanvas g, float t)
         {
             float length = d.RunwayLength > 0f ? d.RunwayLength : 1800f, x = CenterX, top = VpY0 + 14f, bot = vpY1 - 12f, ppm = (bot - top) / length, hw = 17f;
-            float along = ApproachMath.Clamp(d.AlongM, 0f, length);
+            float along = Scalar.Clamp(d.AlongM, 0f, length);
             float stop = ApproachMath.StopM(along, d.GroundMps, length), remain = ApproachMath.RemainM(along, length), margin = Math.Max(0f, length - stop);
             float y0 = bot, yEnd = bot - length * ppm, yAlong = bot - along * ppm, yStop = bot - stop * ppm;
 
@@ -382,10 +381,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // Readouts either side of the strip.
             string u = units == AvUnits.Imperial ? "FT" : "M";
             g.Text("REMAIN", VpX0 + 8f, VpY0 + 16f, Dim);
-            float rw = g.Text(ScopeStr.Cat("", Round10(AvUnitTable.Altitude(remain, units)), null), VpX0 + 8f, VpY0 + 36f, Hi, 22f, ScopeAlign.Left, true);
+            float rw = g.Text(ScopeStr.Cat("", ApproachMath.Round10(AvUnitTable.Altitude(remain, units)), null), VpX0 + 8f, VpY0 + 36f, Hi, 22f, ScopeAlign.Left, true);
             g.Text(u, VpX0 + 11f + rw, VpY0 + 38f, Dim);
             g.Text("MARGIN", VpX1 - 8f, vpY1 - 38f, Dim, 12f, ScopeAlign.Right);
-            g.Text(ScopeStr.Cat("", Round10(AvUnitTable.Altitude(margin, units)), null), VpX1 - 26f, vpY1 - 20f, margin < 250f ? Amber : Hi, 16f, ScopeAlign.Right, true);
+            g.Text(ScopeStr.Cat("", ApproachMath.Round10(AvUnitTable.Altitude(margin, units)), null), VpX1 - 26f, vpY1 - 20f, margin < 250f ? Amber : Hi, 16f, ScopeAlign.Right, true);
             g.Text(u, VpX1 - 8f, vpY1 - 19f, Dim, 12f, ScopeAlign.Right);
 
             float k = ScopeCanvas.Seg(t, rolloutAt, rolloutAt + 0.9f);
@@ -395,8 +394,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Stamp("TOUCHDOWN", x, VpY0 + 20f, Hi, 14f, 0f, 1f - 0.6f * k);
             }
         }
-
-        private static int Round10(float v) => ApproachMath.Round10(v);
 
         // ---------------------------------------------------------------- a vertical lander over its pad
 
@@ -410,7 +407,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Ring(cx, cy, r * 0.5f, Faint, 1f, 1f, Ink, 0f, 3f, 3f);
             g.Line(cx, cy - r, cx, cy + r, Faint, 1f, 1f, 2f, 4f);
             g.Line(cx - r, cy, cx + r, cy, Faint, 1f, 1f, 2f, 4f);
-            g.Text(ScopeStr.Cat("", Round10(AvUnitTable.Altitude(range, units)), units == AvUnits.Imperial ? " FT" : " M"), cx + 4f, cy + r - 8f, Dim, 12f, ScopeAlign.Left, false, 0.8f);
+            g.Text(ScopeStr.Cat("", ApproachMath.Round10(AvUnitTable.Altitude(range, units)), units == AvUnits.Imperial ? " FT" : " M"), cx + 4f, cy + r - 8f, Dim, 12f, ScopeAlign.Left, false, 0.8f);
             float px = cx + d.PadX * s, py = cy - d.PadY * s;
             float pd = (float)Math.Sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
             if (pd > r - 6f) { px = cx + (px - cx) * (r - 6f) / pd; py = cy + (py - cy) * (r - 6f) / pd; }
@@ -555,7 +552,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float tx = Mathf.Round(x + 2f + (w - 4f) * k / 8f), inset = k == 4 ? 0f : 3f;
                 g.Line(tx, y + inset, tx, y + 10f - inset, Dim);
             }
-            g.Fill(Mathf.Round(x + 2f + (w - 4f) * ApproachMath.Clamp(frac, 0f, 1f)) - 1f, y - 3f, 2f, 16f, tone);
+            g.Fill(Mathf.Round(x + 2f + (w - 4f) * Scalar.Clamp(frac, 0f, 1f)) - 1f, y - 3f, 2f, 16f, tone);
         }
 
         private static void Chip(ScopeCanvas g, float x, float y, string label, bool ok, bool flash, float t)

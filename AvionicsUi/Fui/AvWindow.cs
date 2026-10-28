@@ -59,7 +59,7 @@ namespace NOAvionics
             Root.SetParent(uiRoot, false);
             var canvas = go.AddComponent<Canvas>();
             canvas.overrideSorting = true; canvas.sortingOrder = order;
-            if (host != null) go.AddComponent<HostReaper>().Host = host;
+            if (host != null) go.AddComponent<Reaper>().Target = host;
             canvas.additionalShaderChannels |= AdditionalCanvasShaderChannels.TexCoord1 | AdditionalCanvasShaderChannels.TexCoord2;
             go.AddComponent<GraphicRaycaster>();
             Root.anchorMin = Root.anchorMax = Root.pivot = new Vector2(0.5f, 0.5f);
@@ -76,7 +76,7 @@ namespace NOAvionics
                 if (AvBundle.Noise != null) m.SetTexture("_NoiseTex", AvBundle.Noise);
                 m.SetFloat("_Frost", 1f); m.SetFloat("_Reflection", 0.4f);
                 frost.material = m;
-                go.AddComponent<FrostReaper>().Material = m;
+                go.AddComponent<Reaper>().Target = m;
             }
             else frost.enabled = false;
 
@@ -105,7 +105,7 @@ namespace NOAvionics
             Footer.Place(new AvSlot(0f, h - footerH, w, footerH));
             Ticker.Add(-1, AvTickRate.Fast, UpdateBlur);
             Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
-            Ticker.Register(new Hook(this));
+            Ticker.Register(new AvRestyleHook(Restyle));
             Restyle();
             go.SetActive(false);
         }
@@ -163,32 +163,17 @@ namespace NOAvionics
             titleText.color = AvStyleHost.Resolve(t.Color, AvTheme.TextPrimary);
         }
 
-        private sealed class Hook : AvPart
-        {
-            private readonly AvWindow w;
-            public Hook(AvWindow window) { w = window; }
-            public override void Restyle() => w.Restyle();
-            public override void Place(AvSlot slot) { }
-        }
-
         private sealed class DragHandle : MonoBehaviour, IDragHandler
         {
             public RectTransform Target;
             public void OnDrag(PointerEventData e) { Target.anchoredPosition += e.delta / (Target.lossyScale.x > 0f ? Target.lossyScale.x : 1f); AvLay.ClampIntoCanvas(Target); }
         }
 
-        /// <summary>Destroys a window-owned host canvas together with the window.</summary>
-        private sealed class HostReaper : MonoBehaviour
+        /// <summary>Destroys a window-owned object (the host canvas, the frost material) together with the window.</summary>
+        private sealed class Reaper : MonoBehaviour
         {
-            public GameObject Host;
-            private void OnDestroy() { if (Host != null) Destroy(Host); }
-        }
-
-        /// <summary>Destroys the window-owned frost material together with the window.</summary>
-        private sealed class FrostReaper : MonoBehaviour
-        {
-            public Material Material;
-            private void OnDestroy() { if (Material != null) Destroy(Material); }
+            public UnityEngine.Object Target;
+            private void OnDestroy() { if (Target != null) Destroy(Target); }
         }
     }
 }

@@ -23,12 +23,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WmcQueueLane(RectTransform parent, Action toggle, Action run, Action clear)
         {
             Rect = AvLay.Child(parent, "QueueLane");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(6f));
-            AvLay.Fill(frame.rectTransform);
-            title = AvText.Make(Rect, "Title", AvTextRole.Micro, "QUEUE", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(title, false);
-            hint = AvText.Make(Rect, "Hint", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(hint, false);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(6f));
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "QUEUE");
+            hint = WmcSheet.Text(Rect, "Hint", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
             Toggle = AvControl.Make(Rect, new AvControl.Spec("ADD", toggle, AvButtonStyle.Quiet));
             Run = AvControl.Make(Rect, new AvControl.Spec("RUN", run, AvButtonStyle.Quiet));
             Clear = AvControl.Make(Rect, new AvControl.Spec("CLEAR", clear, AvButtonStyle.Quiet));
@@ -82,8 +79,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("row");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "row", AvTheme.SurfaceInert);
             title.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             hint.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             foreach (TMP_Text t in lines) t.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);

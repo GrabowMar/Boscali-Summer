@@ -7,7 +7,6 @@ namespace NOAvionics
     {
         public readonly float X, Y, W, H;
         public AvSlot(float x, float y, float w, float h) { X = x; Y = y; W = w; H = h; }
-        public float Bottom => Y + H;
     }
 
     /// <summary>Kit v2 grid (spec §5.3). The gutter is always reserved: scroll bars live in it, text never does.</summary>
@@ -54,18 +53,6 @@ namespace NOAvionics
             Advance(s.H);
             return s;
         }
-
-        public AvSlot[] TakeColumns(int columns, float height)
-        {
-            columns = Math.Max(1, columns);
-            float w = ColumnWidth(Inner, columns, gap);
-            var slots = new AvSlot[columns];
-            for (int i = 0; i < columns; i++) slots[i] = new AvSlot(pad + i * (w + gap), Y, w, Math.Max(0f, height));
-            Advance(Math.Max(0f, height));
-            return slots;
-        }
-
-        public void Space(float h) { Y += Math.Max(0f, h); }
 
         public void Reset() { Y = pad; any = false; }
 

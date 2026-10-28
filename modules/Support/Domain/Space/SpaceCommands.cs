@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private struct Bucket { public float Tokens, At; }
         private readonly Dictionary<ulong, Bucket> buckets = new Dictionary<ulong, Bucket>();
 
-        public int Count => buckets.Count;
-
         public bool Admit(ulong player, float wall)
         {
             if (player == 0 || !SpaceRules.MissionTime(wall)) return false;
@@ -189,8 +187,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         public const int Capacity = 64;
         private readonly Queue<SpaceReply> queue = new Queue<SpaceReply>(Capacity);
-
-        public int Count => queue.Count;
         public bool Enqueue(in SpaceReply reply)
         {
             if (queue.Count >= Capacity) return false;

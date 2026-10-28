@@ -29,8 +29,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "CARGO";
 
-        public override char Code => 'C';
-
         public override string IdleWord => "NO CARGO";
 
         public override string IdleHint => "NO TROOPS, CARGO OR GLIDERS ABOARD";

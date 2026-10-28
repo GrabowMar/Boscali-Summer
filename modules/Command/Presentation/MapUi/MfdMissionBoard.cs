@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Metres to a short mono readout. An unknown range is a dash, never a confident zero.</summary>
         public static string Distance(float meters)
         {
-            if (float.IsNaN(meters) || float.IsInfinity(meters) || meters < 0f) return "—";
+            if (!float.IsFinite(meters) || meters < 0f) return "—";
             if (meters < 1000f) return AvNum.Fixed(Math.Round(meters / 10f) * 10f, 0) + " M";
             return AvNum.Fixed(meters / 1000f, meters < 100000f ? 1 : 0) + " KM";
         }

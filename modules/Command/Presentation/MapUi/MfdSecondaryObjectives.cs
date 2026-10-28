@@ -29,18 +29,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public const int FilterActive = 1;
         public const int FilterResults = 2;
 
-        /// <summary>Every dossier occupies one 198 px slot so a page never straddles the pager.</summary>
-        public const float RowPitch = 198f;
-        public const float MinCardHeight = 190f;
-        public const float MaxCardHeight = 220f;
-        /// <summary>One page never grows past the host board's own three-card limit.</summary>
-        public const int MaxCards = 3;
-        /// <summary>The cockpit marker's urgency gate; both surfaces read the same clock as amber.</summary>
-        public const float UrgentSeconds = 120f;
-
-        /// <summary>Header, filters, summary line and pager measured above and below the grid.</summary>
-        private const float BoardChromeHeight = 140f;
-
         public static string PlainObjective(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "OBJECTIVE";
@@ -87,37 +75,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return sb.ToString();
         }
 
-        public static int PageCount(int count, int perPage) => count <= 0 ? 1 : 1 + (count - 1) / Math.Max(1, perPage);
-
-        public static int ClampPage(int page, int count, int perPage) => Math.Max(0, Math.Min(page, PageCount(count, perPage) - 1));
-
         public static string TimeLabel(bool complete, float secondsRemaining)
         {
             if (complete) return "COMPLETE";
-            if (float.IsNaN(secondsRemaining) || float.IsInfinity(secondsRemaining)) return "TIME UNKNOWN";
+            if (!float.IsFinite(secondsRemaining)) return "TIME UNKNOWN";
             if (secondsRemaining <= 0f) return "ENDED";
             int seconds = (int)Math.Ceiling(Math.Min(86400f, secondsRemaining));
             return "LEFT " + (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
-        }
-
-        /// <summary>How many dossiers the body height can hold without clipping the pager.</summary>
-        public static int RowsFor(float bodyHeight)
-        {
-            float available = Math.Max(0f, bodyHeight - BoardChromeHeight);
-            return Math.Max(1, Math.Min(MaxCards, (int)((available + AvTokens.Gap) / RowPitch)));
-        }
-
-        /// <summary>
-        /// Dossier height for that row count; taller panels grow the card, never the row count.
-        /// A multi-row card is capped at its own pitch, or its background paints over the
-        /// action row of the dossier above it.
-        /// </summary>
-        public static float CardHeightFor(float bodyHeight, int rows)
-        {
-            if (rows < 1) rows = 1;
-            float available = Math.Max(MinCardHeight, bodyHeight - BoardChromeHeight);
-            float height = Math.Max(MinCardHeight, Math.Min(MaxCardHeight, available - (rows - 1) * RowPitch));
-            return rows >= 2 ? Math.Min(height, RowPitch) : height;
         }
 
         /// <summary>
@@ -150,7 +114,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static float Remaining(SecondaryObjectiveView objective)
         {
             float seconds = objective.SecondsRemaining;
-            return float.IsNaN(seconds) || float.IsInfinity(seconds) ? float.MaxValue : seconds;
+            return !float.IsFinite(seconds) ? float.MaxValue : seconds;
         }
 
         /// <summary>The cockpit marker's title line, shared by the HUD, the map tag and this board.</summary>
@@ -165,7 +129,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (objective == null) return "LINK LOST";
             if (objective.IsComplete) return "PAID";
-            if (float.IsNaN(objective.SecondsRemaining) || float.IsInfinity(objective.SecondsRemaining)) return "TIME UNKNOWN";
+            if (!float.IsFinite(objective.SecondsRemaining)) return "TIME UNKNOWN";
             if (objective.SecondsRemaining > 0f)
                 return objective.IsOffered
                     ? TimeLabel(false, objective.SecondsRemaining).Replace("LEFT", "OFFER")
@@ -176,25 +140,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>An offer is acceptable only while the host's clock is finite and still running.</summary>
         public static bool OfferLive(SecondaryObjectiveView objective) =>
             objective != null && objective.IsOffered &&
-            !float.IsNaN(objective.SecondsRemaining) && !float.IsInfinity(objective.SecondsRemaining) &&
+            float.IsFinite(objective.SecondsRemaining) &&
             objective.SecondsRemaining > 0f;
 
         /// <summary>The accept action is live only when the offer is and the faction has room.</summary>
         public static bool CanAccept(SecondaryObjectiveView objective, bool hasCapacity) =>
             hasCapacity && OfferLive(objective);
-
-        /// <summary>The action row reads exactly one state: accept, ceiling, lapsed, tracked or lost.</summary>
-        public static string AcceptLabel(SecondaryObjectiveView objective, bool hasCapacity)
-        {
-            if (objective != null && objective.IsOffered)
-            {
-                if (!OfferLive(objective)) return "OFFER ENDED";
-                return hasCapacity ? "ACCEPT CONTRACT" : "ACTIVE LIMIT REACHED";
-            }
-            if (objective != null && objective.IsActive)
-                return objective.HasMarker ? "TRACKED ON MAP" : "CONTACT LOST";
-            return "CONTRACT ENDED";
-        }
 
         /// <summary>Pay is only reported as collected when the host reported completion.</summary>
         public static string PayoutLabel(SecondaryObjectiveView objective)

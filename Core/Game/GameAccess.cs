@@ -30,7 +30,6 @@ namespace BoscaliSummer.Core.Game
         private static AccessTools.FieldRef<NightVision, UnityEngine.Rendering.Volume> nvVolumeRef;
         private static AccessTools.FieldRef<NightVision, float> nvGainMinRef, nvGainMaxRef;
         private static AccessTools.FieldRef<Unit, List<IRSource>> irSourcesRef;
-        private static AccessTools.FieldRef<RadialMenuMain, RadialMenuAction[]> radialActionsRef;
 
         public static bool MapBuildingHitPointsAvailable { get; private set; }
         public static bool MapBuildingSetBuildingsAvailable { get; private set; }
@@ -187,7 +186,7 @@ namespace BoscaliSummer.Core.Game
             // one resolver, before any feature installs.
             try
             {
-                radialActionsRef = FieldRef<RadialMenuMain, RadialMenuAction[]>("actionsMain");
+                FieldRef<RadialMenuMain, RadialMenuAction[]>("actionsMain");
                 RadialAvailable = true;
                 RadialUnavailableReason = null;
             }
@@ -266,8 +265,6 @@ namespace BoscaliSummer.Core.Game
         {
             if (aiHeloCurrentTargetRef != null && modes != null) aiHeloCurrentTargetRef(modes) = target;
         }
-
-        public static RadialMenuAction[] GetRadialActions(RadialMenuMain menu) => radialActionsRef == null || menu == null ? null : radialActionsRef(menu);
 
         /// <summary>
         /// The prefab-assigned first-person cockpit renderers (toggled by
@@ -356,6 +353,17 @@ namespace BoscaliSummer.Core.Game
             foreach (FactionHQ candidate in FactionRegistry.GetAllHQs())
                 if (candidate?.faction != null && string.Equals(candidate.faction.factionName, name, StringComparison.OrdinalIgnoreCase)) { hq = candidate; return true; }
             return false;
+        }
+
+        /// <summary>
+        /// The faction's active mission objectives. The native call logs "Mission Runner was null" on every ask while no
+        /// mission runs (sim boot, editor), so polls go through here and simply read false then.
+        /// </summary>
+        public static bool TryGetActiveObjectives(FactionHQ hq, out List<NuclearOption.SavedMission.Objective> objectives)
+        {
+            objectives = null;
+            return hq != null && MissionManager.Runner != null &&
+                MissionPosition.TryGetActiveObjectives(hq, out objectives) && objectives != null;
         }
 
         private static AccessTools.FieldRef<TInstance, TField> FieldRef<TInstance, TField>(string name)

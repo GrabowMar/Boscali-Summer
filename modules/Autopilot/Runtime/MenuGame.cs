@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         }
 
         /// <summary>Drops cached references to the old scene's aircraft.</summary>
-        public static void Reset() => ResetAircraftCache();
+        public static void Reset() { flareOwner = null; flareEjectors = null; }
 
         private static MenuWorld ReadWorld()
         {

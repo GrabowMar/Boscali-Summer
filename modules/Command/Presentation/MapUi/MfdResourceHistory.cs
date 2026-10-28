@@ -44,6 +44,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return true;
         }
 
+        /// <summary>
+        /// Copies the newest unbroken run of finite samples of one series into <paramref name="into"/> and returns its length.
+        /// A missing observation ends a run, so a trace never bridges a gap; <paramref name="runStart"/> is the index of the run's first sample.
+        /// </summary>
+        internal int FiniteRun(int series, float[] into, out int runStart, out float lo, out float hi)
+        {
+            int run = 0;
+            runStart = 0;
+            lo = hi = 0f;
+            for (int i = 0; i < Count; i++)
+            {
+                float v = Value(series, i);
+                if (!float.IsFinite(v)) { run = 0; runStart = i + 1; continue; }
+                if (run == 0) lo = hi = v;
+                else if (v < lo) lo = v;
+                else if (v > hi) hi = v;
+                into[run++] = v;
+            }
+            return run;
+        }
+
         internal void Clear() { start = 0; Count = 0; }
     }
 }

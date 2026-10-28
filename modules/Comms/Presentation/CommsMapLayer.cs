@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
     /// front-line layers beside them.
     ///
     /// <para>Two meshes: <see cref="CommsInkGraphic"/> holds what rarely changes (drawings,
-    /// stickers, labels, hunt reveals) and rebuilds on a board revision or a zoom step;
+    /// labels) and rebuilds on a board revision or a zoom step;
     /// <see cref="CommsPulseGraphic"/> holds what moves (fresh pings breathing, the stroke
     /// under the pen, the ruler) and rebuilds every frame only while something is moving.
     /// Neither takes raycasts: the map's own icons stay clickable through the ink.</para>
@@ -196,7 +196,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         // ---- Tags --------------------------------------------------------------------------
 
-        /// <summary>Names under pings, the words of text labels, the ruler and the hunt reveal.</summary>
+        /// <summary>Names under pings, the words of text labels, and the ruler.</summary>
         private void LayoutTags(CommsClientState state, float factor, float zoom)
         {
             usedTags = 0;
@@ -229,30 +229,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     string text = code + " · " + who + (enemy ? " (OTHER SIDE)" : "");
                     Color32 colour = enemy ? CommsMesh.Tone(CommsTone.Caution) : CommsMesh.Tone(CommsCatalog.Pings[item.Style].Tone);
                     Tag(at, inverse, text, CommsMesh.Fade(colour, fade), new Vector2(0f, -22f), 11f, bold: false);
-                }
-            }
-
-            IReadOnlyList<HuntView> hunts = state.Hunts;
-            for (int i = 0; i < hunts.Count && usedTags < MaxTags; i++)
-            {
-                HuntView hunt = hunts[i];
-                if (hunt.Revealed)
-                {
-                    Tag(CommsProjection.At(hunt.HiddenX, hunt.HiddenZ, factor), inverse,
-                        "HIDDEN BY " + hunt.AuthorName, CommsMesh.Tone(CommsTone.Fun), new Vector2(0f, 22f), 12f, bold: true);
-                    for (int g = 0; g < hunt.Placings.Count && usedTags < MaxTags; g++)
-                    {
-                        HuntPlacingView placing = hunt.Placings[g];
-                        Tag(CommsProjection.At(placing.X, placing.Z, factor), inverse,
-                            "#" + (g + 1) + " " + placing.Name + " · " + CommsText.Distance(placing.Metres, VanillaHudStyle.Metric),
-                            g == 0 ? CommsMesh.Tone(CommsTone.Fun) : CommsMesh.Tone(CommsTone.Info), new Vector2(0f, -16f), 11f, bold: g == 0);
-                    }
-                }
-                else if (hunt.HasLocalGuess)
-                {
-                    Tag(CommsProjection.At(hunt.LocalGuessX, hunt.LocalGuessZ, factor), inverse,
-                        hunt.Author == self ? "YOUR HIDDEN TARGET" : "YOUR GUESS", CommsMesh.Tone(CommsTone.Fun),
-                        new Vector2(0f, -16f), 11f, bold: false);
                 }
             }
 
@@ -460,7 +436,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
     }
 
     /// <summary>
-    /// The settled ink: strokes, stickers, text-label anchors and hunt reveals. Rebuilt on a
+    /// The settled ink: strokes and text-label anchors. Rebuilt on a
     /// board or panel revision and on zoom steps, never per frame.
     /// </summary>
     internal sealed class CommsInkGraphic : MaskableGraphic
@@ -498,20 +474,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 CommsMesh.Glyph(vh, "lz", zone, 11f * px, 1.35f * px, friendly, under: true);
             }
 
-            // Stickers and labels first, then strokes newest first, all out of one vertex
-            // budget: a heavy doodler can only lose their own oldest lines, never anyone's
-            // stickers.
+            // Label anchors first, then strokes newest first, all out of one vertex budget: a
+            // heavy doodler can only lose their own oldest lines, never anyone's labels.
             for (int i = items.Count - 1; i >= 0 && vh.currentVertCount < MaxVertices; i--)
             {
                 CommsItem item = items[i];
                 if (state.IsMuted(item.Author)) continue;
                 Vector2 at = CommsProjection.At(item.X, item.Z, factor);
-                if (item.Kind == CommsItemKind.Sticker && CommsCatalog.ValidSticker(item.Style))
-                {
-                    StickerKind sticker = CommsCatalog.Stickers[item.Style];
-                    CommsMesh.Glyph(vh, sticker.Glyph, at, 13f * px, 1.35f * px, CommsMesh.Tone(sticker.Tone), under: true);
-                }
-                else if (item.Kind == CommsItemKind.Label)
+                if (item.Kind == CommsItemKind.Label)
                 {
                     CommsMesh.Disc(vh, at, 3.2f * px, CommsMesh.Under);
                     CommsMesh.Disc(vh, at, 2.1f * px, CommsMesh.Tone(CommsTone.Info));
@@ -527,23 +497,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 Stroke(vh, item.Points, factor, half, CommsMesh.Ink(item.Style, 235));
             }
 
-            IReadOnlyList<HuntView> hunts = state.Hunts;
-            for (int i = 0; i < hunts.Count && vh.currentVertCount < MaxVertices; i++)
-            {
-                HuntView hunt = hunts[i];
-                if (!hunt.Revealed) continue;
-                Vector2 hidden = CommsProjection.At(hunt.HiddenX, hunt.HiddenZ, factor);
-                Color32 fun = CommsMesh.Tone(CommsTone.Fun);
-                for (int g = 0; g < hunt.Placings.Count; g++)
-                {
-                    HuntPlacingView placing = hunt.Placings[g];
-                    Vector2 guess = CommsProjection.At(placing.X, placing.Z, factor);
-                    Color32 tone = g == 0 ? fun : CommsMesh.Tone(CommsTone.Info, 200);
-                    CommsMesh.Dashed(vh, guess, hidden, 0.8f * px, 6f * px, 4f * px, CommsMesh.Fade(tone, 0.7f));
-                    CommsMesh.Glyph(vh, "guess", guess, 7f * px, 1.1f * px, tone, under: true);
-                }
-                CommsMesh.Glyph(vh, "hunt", hidden, 14f * px, 1.4f * px, fun, under: true);
-            }
         }
 
         private static void Stroke(VertexHelper vh, int[] points, float factor, float halfWidth, Color32 ink)
@@ -565,8 +518,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
     /// <summary>
     /// What moves: pings breathing for their first seconds and fading at the end, the stroke
-    /// or shape under the pen, the ruler, a highlighted log position and this player's own
-    /// hunt mark. Rebuilt each frame only while one of those is on the map.
+    /// or shape under the pen, the ruler and a highlighted log position. Rebuilt each frame
+    /// only while one of those is on the map.
     /// </summary>
     internal sealed class CommsPulseGraphic : MaskableGraphic
     {
@@ -591,18 +544,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         {
             if (manager == null) return false;
             bool active = manager.PreviewActive || manager.HasMeasure || manager.HighlightUntil > now ||
-                          AnimatingPing(now) || AnyLocalHunt();
+                          AnimatingPing(now);
             bool rebuild = active || drewLastFrame;
             drewLastFrame = active;
             return rebuild;
-        }
-
-        private bool AnyLocalHunt()
-        {
-            IReadOnlyList<HuntView> hunts = manager.State.Hunts;
-            for (int i = 0; i < hunts.Count; i++)
-                if (!hunts[i].Revealed && hunts[i].HasLocalGuess) return true;
-            return false;
         }
 
         private bool AnimatingPing(float now)
@@ -650,17 +595,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 }
                 if (kind.Ring) CommsMesh.Ring(vh, at, 22f * px, 0.9f * px, CommsMesh.Fade(tone, 0.55f), 28);
                 CommsMesh.Glyph(vh, kind.Glyph, at, 11f * px, 1.35f * px, tone, under: true);
-            }
-
-            IReadOnlyList<HuntView> hunts = state.Hunts;
-            for (int i = 0; i < hunts.Count; i++)
-            {
-                HuntView hunt = hunts[i];
-                if (hunt.Revealed || !hunt.HasLocalGuess) continue;
-                Vector2 at = CommsProjection.At(hunt.LocalGuessX, hunt.LocalGuessZ, factor);
-                float breathe = 0.65f + 0.35f * Mathf.Sin(now * 4f);
-                CommsMesh.Glyph(vh, hunt.Author == manager.LocalId ? "hunt" : "guess", at, 10f * px, 1.2f * px,
-                    CommsMesh.Fade(CommsMesh.Tone(CommsTone.Fun), breathe), under: true);
             }
 
             if (manager.PreviewActive) Preview(vh, factor, px);

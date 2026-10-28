@@ -11,16 +11,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
     {
         private const float WindowMin = 93f, ReachMetres = 260000f;
 
-        public static MetFrontKind KindOf(MarkerKind kind)
+        public static MetFrontKind KindOf(MarkerKind kind) => kind switch
         {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return MetFrontKind.Warm;
-                case MarkerKind.Squall: return MetFrontKind.Squall;
-                case MarkerKind.Occluded: return MetFrontKind.Occluded;
-                default: return MetFrontKind.Cold;
-            }
-        }
+            MarkerKind.Warm => MetFrontKind.Warm,
+            MarkerKind.Squall => MetFrontKind.Squall,
+            MarkerKind.Occluded => MetFrontKind.Occluded,
+            _ => MetFrontKind.Cold,
+        };
 
         /// <summary>The line of one marker as a polyline in km (map frame: x east, z north, origin = theater centre): the points with s(x, z) = s_k, so every point has signed distance 0.</summary>
         public static void Line(TapeMarker marker, TapeFrame frame, MetFront into)
@@ -98,9 +95,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             m.StripNote = next == under ? "END OF TAPE" : !moving ? "HELD" : "NEXT " + tape.Segments[next].Label + " IN " + (int)Math.Max(0f, eta) + "'";
         }
 
-        private static string Short(MarkerKind kind)
-        {
-            switch (kind) { case MarkerKind.Warm: return "WARM"; case MarkerKind.Squall: return "SQUALL"; case MarkerKind.Occluded: return "OCCL"; default: return "COLD"; }
-        }
+        private static string Short(MarkerKind kind) =>
+            kind switch { MarkerKind.Warm => "WARM", MarkerKind.Squall => "SQUALL", MarkerKind.Occluded => "OCCL", _ => "COLD" };
     }
 }

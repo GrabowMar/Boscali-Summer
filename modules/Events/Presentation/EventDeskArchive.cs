@@ -43,7 +43,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private bool pictures;
 
         internal bool IsOpen => open;
-        internal AvWindow Window => window;
 
         /// <summary>The canvas-unit size of the screen the window is scaled to (1920x1080 reference, Expand).</summary>
         internal static Vector2 ScreenUnits()

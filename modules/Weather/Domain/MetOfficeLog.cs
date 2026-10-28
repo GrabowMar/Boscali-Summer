@@ -7,8 +7,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private readonly string[] lines = new string[Capacity];
         private int count;
 
-        public int Count => count;
-
         /// <summary>0 is the newest line.</summary>
         public string this[int newestFirst] => newestFirst >= 0 && newestFirst < count ? lines[newestFirst] : "";
 
@@ -19,14 +17,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (count < Capacity) count++;
         }
 
-        public void Clear() { count = 0; }
-
-        public string Joined()
-        {
-            if (count == 0) return "";
-            var text = new System.Text.StringBuilder(96);
-            for (int i = 0; i < count; i++) { if (i > 0) text.Append('\n'); text.Append(lines[i]); }
-            return text.ToString();
-        }
+        public string Joined() => string.Join("\n", lines, 0, count);
     }
 }

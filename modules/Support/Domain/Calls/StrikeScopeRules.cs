@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
                     int best = -1;
                     for (int i = 0; i < count; i++)
                     {
-                        if (inFlight[i] != (pass == 0) || Contains(into, n, i)) continue;
+                        if (inFlight[i] != (pass == 0) || Array.IndexOf(into, i, 0, n) >= 0) continue;
                         if (best < 0 || ids[i] > ids[best]) best = i;
                     }
                     if (best < 0) break;
@@ -77,12 +77,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             for (int a = 1; a < n; a++)
                 for (int b = a; b > 0 && ids[into[b]] < ids[into[b - 1]]; b--) { int t = into[b]; into[b] = into[b - 1]; into[b - 1] = t; }
             return n;
-        }
-
-        private static bool Contains(int[] list, int n, int value)
-        {
-            for (int i = 0; i < n; i++) if (list[i] == value) return true;
-            return false;
         }
 
         // ------------------------------------------------------------------------------------------------ perks
@@ -96,7 +90,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             {
                 int best = -1;
                 for (int i = 0; i < count; i++)
-                    if (state[i] == PerkPhase.Cooling && !Contains(into, n, i) && (best < 0 || cooldown[i] < cooldown[best])) best = i;
+                    if (state[i] == PerkPhase.Cooling && Array.IndexOf(into, i, 0, n) < 0 && (best < 0 || cooldown[i] < cooldown[best])) best = i;
                 if (best < 0) break;
                 into[n++] = best;
             }
@@ -129,7 +123,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         // ------------------------------------------------------------------------------------------------ CYBER and SOF
 
         /// <summary>The trace burn in percent per second: a hop adds its own rate, every held node adds the held rate (<see cref="CyberRules"/>).</summary>
-        public static float TraceRate(bool hopping, int held) => (hopping ? CyberRules.HopTraceRate(NodeKind.Radar) : 0f) + CyberRules.HeldTraceRate * Math.Max(0, held);
+        public static float TraceRate(bool hopping, int held) => (hopping ? CyberRules.HopTraceRate : 0f) + CyberRules.HeldTraceRate * Math.Max(0, held);
 
         /// <summary>A window of at least this many seconds between two snapshots is long enough to tell the real trace rate from the rules' (the trace is a whole percent on the wire).</summary>
         public const float TraceWindow = 3f;
@@ -139,7 +133,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         {
             if (seconds <= 0f || ruleRate <= 0f) return previous;
             float f = Math.Max(0f, gained) / (ruleRate * seconds);
-            return f < 0.25f ? 0.25f : f > 3f ? 3f : f;
+            return Math.Clamp(f, 0.25f, 3f);
         }
 
         /// <summary>The trace a snapshot of <paramref name="trace"/> percent has reached <paramref name="age"/> seconds later at <paramref name="rate"/> percent per second.</summary>

@@ -49,8 +49,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private int count, serial;
         private float missSince = float.NaN;
 
-        public int Count => count;
-
         /// <summary>The <paramref name="i"/>th oldest row.</summary>
         public EventRow this[int i] => ring[i];
 
@@ -65,7 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public EventRow Add(EventLine line, string raw, string stamp, float arrival, float removeAt)
         {
             Tick(arrival);
-            if (float.IsNaN(removeAt) || float.IsInfinity(removeAt) || removeAt <= arrival || removeAt > arrival + 3600f) removeAt = arrival + FallbackSeconds;
+            if (!float.IsFinite(removeAt) || removeAt <= arrival || removeAt > arrival + 3600f) removeAt = arrival + FallbackSeconds;
             if (count == Capacity)
             {
                 Array.Copy(ring, 1, ring, 0, Capacity - 1);
@@ -136,7 +134,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The mission clock as "mm:ss" (minutes not capped), "--:--" when it is not a time.</summary>
         public static string Stamp(float seconds)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) return "--:--";
+            if (!float.IsFinite(seconds) || seconds < 0f) return "--:--";
             long s = (long)Math.Floor(seconds);
             long m = s / 60;
             return (m < 10 ? "0" : "") + m + ":" + (s % 60 < 10 ? "0" : "") + s % 60;

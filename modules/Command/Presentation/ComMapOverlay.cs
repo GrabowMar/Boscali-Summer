@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private FrontlineGraphic frontlineGraphic;
         private Texture2D overlayTexture;
         private TacticalSectorGrid sectorGrid;
-        private MissionMapCompatibilityEngine compatibilityEngine;
         private TerritoryControlView territory;
 
         private float nextGridUpdate;
@@ -80,8 +79,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         public bool FrontLineVisible => ControlFieldVisible && settings != null && settings.FrontlineTrace.Value;
 
-        public bool TerrainImageVisible => settings == null || settings.MapTerrainImage.Value;
-
         public void SetControlFieldVisible(bool visible)
         {
             if (settings == null || settings.FrontlinesOverlay.Value == visible) return;
@@ -96,17 +93,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             SyncSettings();
         }
 
-        public void SetTerrainImageVisible(bool visible)
-        {
-            if (settings == null || settings.MapTerrainImage.Value == visible) return;
-            settings.MapTerrainImage.Value = visible;
-            MfdMapDeck.ApplyAppearance(settings);
-        }
-
-        public void Configure(CommandSettings config, MissionMapCompatibilityEngine compat, TerritoryControlView control)
+        public void Configure(CommandSettings config, TerritoryControlView control)
         {
             settings = config;
-            compatibilityEngine = compat;
             territory = control;
 
             float cell = settings.GridCellSizeMetres.Value;
@@ -331,9 +320,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             RectTransform mapImageRect = dynamicMap.mapImage.GetComponent<RectTransform>();
             if (mapImageRect == null) return;
 
-            Vector2 mapSize = (compatibilityEngine != null)
-                ? compatibilityEngine.ResolveTheaterDimensions(dynamicMap)
-                : TheaterFrame.Resolve(dynamicMap);
+            Vector2 mapSize = TheaterFrame.Resolve(dynamicMap);
             overlayObj = new GameObject("ComSectorGridOverlay", typeof(RectTransform), typeof(RawImage));
             overlayObj.transform.SetParent(dynamicMap.mapImage.transform, false);
 
@@ -398,9 +385,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             try
             {
-                FactionHQ localHq = (compatibilityEngine != null)
-                    ? compatibilityEngine.ResolvePlayerHq(dynamicMap)
-                    : dynamicMap.HQ;
+                FactionHQ localHq = dynamicMap.HQ;   // the local player's own side only: a spectator never borrows another faction's intelligence
                 if (localHq != gridHq)
                 {
                     gridHq = localHq;

@@ -17,14 +17,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private const string StartName = "Mission Start";
         private static readonly string[] UnitLists = { "aircraft", "vehicles", "ships", "buildings", "scenery", "containers", "missiles", "pilots" };
 
-        /// <summary>Reads <paramref name="scriptText"/> and builds: the one call a tool or the patch probe needs.</summary>
-        internal static string Apply(string baseJson, string source, string scriptText, List<string> errors)
-        {
-            ScenarioDef script = ScenarioParser.Parse(source, scriptText);
-            errors.AddRange(script.Errors);
-            return Apply(baseJson, script, errors);
-        }
-
         /// <summary>The scripted mission's JSON. Problems go to <paramref name="errors"/>; throws when <paramref name="baseJson"/> is not a mission at all.</summary>
         internal static string Apply(string baseJson, ScenarioDef script, List<string> errors)
         {
@@ -45,7 +37,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 foreach (JToken token in factions)
                     if (token is JObject faction)
                         foreach (ScenarioSide locked in script.Locked)
-                            if ((string)faction["factionName"] == Faction(locked)) faction["preventJoin"] = true;
+                            if ((string)faction["factionName"] == SideNames.Of(locked)) faction["preventJoin"] = true;
 
             var build = new Build(root, script, errors);
             // PMC and Pirates are no factions of the base game: a script that uses one brings it, modelled on the mission's first faction but with nothing
@@ -78,8 +70,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             settings["description"] = about + "\n\n" + ScenarioDef.Marker(script.Id);
             return root.ToString(Formatting.None);
         }
-
-        private static string Faction(ScenarioSide side) => SideNames.Of(side);
 
         private sealed class Build
         {
@@ -257,7 +247,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                     copy = (JObject)like.DeepClone();
                 }
                 copy["UniqueName"] = unit.Name;
-                if (unit.Side != ScenarioSide.Any) copy["faction"] = Faction(unit.Side);
+                if (unit.Side != ScenarioSide.Any) copy["faction"] = SideNames.Of(unit.Side);
                 copy["globalPosition"] = new JObject { ["x"] = unit.X, ["y"] = unit.Y, ["z"] = unit.Z };
                 // Compass heading to a rotation about the vertical axis.
                 double half = unit.Heading * Math.PI / 360.0;
@@ -287,7 +277,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 {
                     ["Type"] = Type(objective.Kind),
                     ["UniqueName"] = objective.Id,
-                    ["Faction"] = Faction(objective.Side),
+                    ["Faction"] = SideNames.Of(objective.Side),
                     ["DisplayName"] = objective.Display ?? objective.Id,
                     ["Hidden"] = objective.Display == null,
                     ["Outcomes"] = new JArray()

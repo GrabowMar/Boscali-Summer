@@ -220,7 +220,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             }
             if (message.Link > 0)
             {
-                if (message.Link > (byte)DroneMode.Waypoint + 1 || !Finite(message.X) || !Finite(message.Y) || !Finite(message.Z)) return;
+                if (message.Link > (byte)DroneMode.Waypoint + 1 || !float.IsFinite(message.X) || !float.IsFinite(message.Y) || !float.IsFinite(message.Z)) return;
                 if (!UnitRegistry.TryGetUnit(new PersistentID { Id = message.DroneId }, out Unit unit) || !(unit is Missile drone) ||
                     !Linkable(aircraft, drone)) return;
                 SteerOrders.Set(drone, (DroneMode)(message.Link - 1), new GlobalPosition(message.X, message.Y, message.Z));
@@ -234,8 +234,36 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             DroneOrders.Order(aircraft, target);
         }
 
-        private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
-
         private void OnDestroy() => ServerHandlers.Release();
+    }
+
+    /// <summary>What every Vanguard net service repeats: the 2 Hz handler poll and the host-to-clients send.</summary>
+    internal static class NetFeed
+    {
+        /// <summary>Client side: at most every half second, moves the registrations onto the live connection (or off a dead one).</summary>
+        internal static void Poll(HandlerSlot slot, ref float next)
+        {
+            if (Time.unscaledTime < next) return;
+            next = Time.unscaledTime + 0.5f;
+            slot.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+        }
+
+        /// <summary>Both sides (a service that also takes client intents): same cadence; true on the frames it ran, so the caller can prune its throttle then.</summary>
+        internal static bool Poll(HandlerSlot server, HandlerSlot client, ref float next)
+        {
+            if (Time.unscaledTime < next) return false;
+            next = Time.unscaledTime + 0.5f;
+            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            server.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
+            client.Swap(network?.Client?.MessageHandler);
+            return true;
+        }
+
+        /// <summary>Host to every authenticated client but its own peer (the host shows its own side directly).</summary>
+        internal static void Broadcast<T>(T message)
+        {
+            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            if (server != null && server.Active) server.SendToAll(message, authenticatedOnly: true, excludeLocalPlayer: true);
+        }
     }
 }

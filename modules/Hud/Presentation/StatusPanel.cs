@@ -25,8 +25,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const int ShellQuads = 1800, PageQuads = 6000, OverlayQuads = 1200, FrameQuads = 300, StoresQuads = 3200;
 
         private static readonly FieldInfo TopRightPanelField = AccessTools.Field(typeof(CombatHUD), "topRightPanel");
-        private static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
-        private static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
+        internal static readonly FieldInfo WeaponStatusField = AccessTools.Field(typeof(CombatHUD), "weaponStatus");
+        internal static readonly FieldInfo NameTextField = AccessTools.Field(typeof(WeaponStatus), "nameText");
         private static readonly FieldInfo SafetyField = AccessTools.Field(typeof(WeaponStatus), "safetyImage");
 
         private RectTransform dock;
@@ -76,10 +76,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             root = null;
             dock = null;
 
-            CombatHUD hud = SceneSingleton<CombatHUD>.i;
-            if (hud == null || hud.iconLayer == null || !hud.iconLayer.gameObject.activeInHierarchy) return false;
-            Canvas hudCanvas = hud.iconLayer.GetComponentInParent<Canvas>();
-            if (hudCanvas == null) return false;
+            if (!NativeRefs.HudCanvas(out CombatHUD hud, out Canvas hudCanvas)) return false;
 
             GameObject panelObject = TopRightPanelField?.GetValue(hud) as GameObject;
             RectTransform panelRect = panelObject != null ? panelObject.transform as RectTransform : null;

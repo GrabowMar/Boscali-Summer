@@ -36,11 +36,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The countdown clock of every SPACE-family console line: whole seconds rounded up as <c>m:ss</c>; a bad or negative value reads 0:00.</summary>
         public static string Clock(float seconds)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f) seconds = 0f;
+            if (!float.IsFinite(seconds) || seconds < 0f) seconds = 0f;
             int s = (int)System.Math.Ceiling(seconds);
             return (s / 60).ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + (s % 60).ToString("00", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         internal static bool MissionTime(float value) => float.IsFinite(value) && value >= 0f;
+
+        /// <summary>A world coordinate any SPACE message may carry: finite and within 10 000 km.</summary>
+        internal static bool Coordinate(float value) => float.IsFinite(value) && System.Math.Abs(value) <= 10000000f;
     }
 }

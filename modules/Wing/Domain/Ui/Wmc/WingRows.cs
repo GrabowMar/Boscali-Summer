@@ -26,10 +26,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
+        /// <summary>A snapshot fraction byte (0..255) as 0..1.</summary>
         public static float Fraction(byte b) => b / 255f;
-
-        /// <summary>A fill fraction: NaN (nobody) → 0, clamped to 0–1 (review M7b-1 I1).</summary>
-        public static float Bar(float fraction) => float.IsNaN(fraction) ? 0f : fraction < 0f ? 0f : fraction > 1f ? 1f : fraction;
 
         /// <summary>The row of the aircraft with persistent id <paramref name="id"/>, or -1 (0 is no aircraft). Slots
         /// renumber when a member leaves; the id does not (review M7b-1 I2).</summary>

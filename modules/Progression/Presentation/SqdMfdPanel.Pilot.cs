@@ -200,7 +200,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             private readonly AvPortrait portrait, emblem;
             private readonly TMP_Text profileTag, callsignText, nameLine, rankCaption, rankNumber, rankTitle,
                 generationText, statusText, squadronText;
-            private TMP_Text statusIcon;
+            private readonly TMP_Text statusIcon;
             private readonly AvChip stateChip;
             private AvState status = AvState.Info;
             private AvIcon statusGlyph = AvIcon.None;
@@ -328,12 +328,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card raised");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised),
-                    AvStyleHost.Resolve(c.Border, AvTheme.Frame));
+                frame.PaintCard("card raised", AvTheme.SurfaceRaised, AvTheme.Frame);
                 frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-                AvStyle inert = AvStyleHost.FuiStyle("card inert");
-                rankFrame.Paint(AvStyleHost.Resolve(inert.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(inert.Border, AvTheme.Hairline));
+                rankFrame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
                 strip.color = AvTheme.Hairline;
                 profileTag.color = AvInk.Muted;
                 callsignText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);

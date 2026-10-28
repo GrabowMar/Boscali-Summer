@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using System.Text;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -135,7 +136,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (sb.Length > 0) sb.Append(" · ");
             sb.Append(part);
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

@@ -23,9 +23,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private float drawSX, drawSZ, drawEX, drawEZ, drawNoteUntil = -1f, drawFactor;
         private IMapProjection drawProjection;
 
-        /// <summary>The last answer or prompt of the tool, for the harness and the sim read-back.</summary>
-        internal string DrawNote => chrome != null ? chrome.Note : "";
-
         /// <summary>The plate's DRAW button: arms the tool, or cancels it when armed.</summary>
         internal StrAct ToggleDraw()
         {
@@ -63,14 +60,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (act.Sent) CancelDraw(act.Text);
             else DrawSay(act.Text + (DrawArmed ? " \u00b7 TRY AGAIN" : ""), DrawArmed ? float.PositiveInfinity : DrawNoteSeconds);
             return act;
-        }
-
-        /// <summary>Test seam: holds a draft arrow as if the mouse were dragging it (DRAW must be armed).</summary>
-        internal void HoldDraftForTest(float sx, float sz, float ex, float ez)
-        {
-            if (!DrawArmed) return;
-            drawHeld = true;
-            drawSX = sx; drawSZ = sz; drawEX = ex; drawEZ = ez;
         }
 
         private void TickDraw(DynamicMap map, float now)

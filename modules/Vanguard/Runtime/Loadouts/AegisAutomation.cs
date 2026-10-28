@@ -68,10 +68,8 @@ namespace BoscaliSummer.Vanguard
 
         private static WeaponStation FitAegis(Aircraft lead)
         {
-            WeaponMount pod = null;
-            foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
-                if (w != null && w.jsonKey == AegisMount) pod = w;
-            AdoptPrefabOptions(lead);
+            WeaponMount pod = MountOf(AegisMount);
+            RuntimeStores.Adopt(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int set = pod == null ? -1 : Array.FindIndex(sets, h => h.weaponOptions.Contains(pod));
             if (set < 0) return null;

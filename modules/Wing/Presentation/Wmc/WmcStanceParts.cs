@@ -83,12 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public void SetHelp(int i, string tip) => AvHelpTip.Attach(slots[i].Frame.gameObject, tip);
 
-        private TMP_Text Text(string name, AvTextRole role, TextAlignmentOptions align)
-        {
-            TMP_Text t = AvText.Make(Rect, name, role, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private TMP_Text Text(string name, AvTextRole role, TextAlignmentOptions align) => WmcSheet.Text(Rect, name, role, align);
 
         // The second row is one line tall while all three of its slots are empty: the order keys below sit 18 px higher.
         private bool SlimRow => !book && !slots[3].Filled && !slots[4].Filled && !slots[5].Filled;
@@ -196,8 +191,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             Rect = AvLay.Child(parent, "Tune " + labelText);
             name = labelText;
-            label = AvText.Make(Rect, "Label", AvTextRole.Micro, labelText, TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(label, false);
+            label = WmcSheet.Text(Rect, "Label", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, labelText);
             options = new AvControl[choices.Length];
             for (int i = 0; i < choices.Length; i++)
             {
@@ -257,12 +251,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             folded = relayout;
             Rect = AvLay.Child(parent, "TuneBox");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
-            AvLay.Fill(frame.rectTransform);
-            title = AvText.Make(Rect, "Title", AvTextRole.Micro, "FINE-TUNE", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(title, false);
-            status = AvText.Make(Rect, "Status", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(status, false);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(8f));
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "FINE-TUNE");
+            status = WmcSheet.Text(Rect, "Status", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
             Reset = AvControl.Make(Rect, new AvControl.Spec("RESET", reset, AvButtonStyle.Quiet));
             Save = AvControl.Make(Rect, new AvControl.Spec("SAVE AS…", save, AvButtonStyle.Quiet));
             Edit = AvControl.Make(Rect, new AvControl.Spec("EDIT ›", edit, AvButtonStyle.Quiet));

@@ -60,8 +60,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "WING";
 
-        public override char Code => 'W';
-
         public override string IdleWord => "NO WING";
 
         public override string IdleHint => "NO WINGMEN FLYING WITH YOU";

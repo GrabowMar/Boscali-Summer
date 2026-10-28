@@ -113,7 +113,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         };
 
         // A scenario check compares numbers and the sim writes NaN as null: an unknown ratio is -1.
-        private static float Finite(float value) => float.IsNaN(value) || float.IsInfinity(value) ? -1f : value;
+        private static float Finite(float value) => !float.IsFinite(value) ? -1f : value;
     }
 #endif
 }

@@ -1,11 +1,7 @@
-using System.Collections.Generic;
-using System.Globalization;
 using System.Text;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    // Filled by the engine's gather (WmcDetail) and by the tests.
-#pragma warning disable CS0649
     internal struct StoreLine
     {
         public string Name;
@@ -34,7 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public PartDot[] Parts;
         public int PartCount, PartsLost, PartsHit;
     }
-#pragma warning restore CS0649
 
     /// <summary>The deep card's four lines: fuel and bingo, ammo, damage; radar and target; stores; pilot. Unknowns are a
     /// dash, never a made-up zero.</summary>

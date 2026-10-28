@@ -3,7 +3,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 using NOAvionics;
-using UnityEngine;
 
 namespace BoscaliSummer.Modules.Wing.Presentation
 {

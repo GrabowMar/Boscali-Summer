@@ -26,11 +26,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>The scene's overlay, for the automation hooks and the harness.</summary>
         internal static StrMapOverlay Active { get; private set; }
 
-        /// <summary>Test seam: the harness supplies its own hub (the real one needs a live scene).</summary>
-        internal IStrHub HubOverride;
-        internal IStrHub Hub => HubOverride ?? (IStrHub)StrViewHub.Active;
-        /// <summary>Test seam: the harness supplies where offensives jump off (the real finder reads the live sector field).</summary>
-        internal StrStartFinder StartOverride;
+        internal IStrHub Hub => StrViewHub.Active;
 
         internal StrOverlayPlan Plan { get; } = new StrOverlayPlan();
         internal StrCardPlan CardPlan { get; } = new StrCardPlan();
@@ -114,7 +110,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>One frame of the overlay. Cheap when nothing changed: it compares the model's revision, the layers and the map's pose and builds only on a difference.</summary>
         internal void Tick(float now)
         {
-            if (HubOverride == null && !MissionProfile.AllowsModule("strategic-command")) { Hide(); return; }
+            if (!MissionProfile.AllowsModule("strategic-command")) { Hide(); return; }
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             IStrHub hub = Hub;
             if (hub == null || map == null || map.mapImage == null || map.mapBackground == null || !DynamicMap.mapMaximized) { Hide(); return; }
@@ -132,9 +128,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (planChanged)
             {
                 planModel = vm; planRevision = vm.Revision; planLayers = layers; planSelected = vm.SelectedId; planHover = vm.HoverId;
-                startGrid = HubOverride == null ? OwnGrid(map) : null;
-                garrisonCount = HubOverride == null ? OwnGround(map) : 0;
-                StrOverlayPlan.Build(Plan, vm, layers, StartOverride ?? (startGrid != null || garrisonCount > 0 ? startFinder ?? (startFinder = FindStart) : null));
+                startGrid = OwnGrid(map);
+                garrisonCount = OwnGround(map);
+                StrOverlayPlan.Build(Plan, vm, layers, startGrid != null || garrisonCount > 0 ? startFinder ?? (startFinder = FindStart) : null);
                 StrCardPlan.Build(CardPlan, vm, worldOn ? vm.SelectedId : StrItemId.None);
                 cardDirty = true;
                 chrome.BindPlate(vm, in ui);
@@ -381,7 +377,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private bool Project(IMapProjection projection, float factor, float wx, float wz, out float x, out float y)
         {
-            x = y = 0f;
             if (projection != null) return projection.TryProject(wx, wz, out x, out y);
             x = wx * factor; y = wz * factor;
             return true;
@@ -571,16 +566,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             Canvas canvas = map.mapImage.GetComponentInParent<Canvas>();
             if (canvas != null) canvas = canvas.rootCanvas;   // a nested canvas has no render mode of its own
-            return canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            return MapUiPointer.UiCamera(canvas);
         }
 
-        private Rect ScreenRect(RectTransform rect, Camera camera)
+        private static readonly Vector3[] screenCorners = new Vector3[4];
+
+        internal static Rect ScreenRect(RectTransform rect, Camera camera)
         {
-            rect.GetWorldCorners(corners);
-            Vector2 min = RectTransformUtility.WorldToScreenPoint(camera, corners[0]), max = min;
+            rect.GetWorldCorners(screenCorners);
+            Vector2 min = RectTransformUtility.WorldToScreenPoint(camera, screenCorners[0]), max = min;
             for (int i = 1; i < 4; i++)
             {
-                Vector2 at = RectTransformUtility.WorldToScreenPoint(camera, corners[i]);
+                Vector2 at = RectTransformUtility.WorldToScreenPoint(camera, screenCorners[i]);
                 min = Vector2.Min(min, at); max = Vector2.Max(max, at);
             }
             return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
@@ -597,9 +594,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return n;
         }
 
-        /// <summary>The tag shown for an item, or null.</summary>
-        internal StrMapTag Tag(StrItemId id) => TagFor(id);
-
         /// <summary>Screen position of a tag's centre, for Probe and the harness. False when the item has no tag on screen.</summary>
         internal bool TryGetTagScreenPoint(StrItemId id, out Vector2 screenPoint)
         {
@@ -610,14 +604,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             screenPoint = RectTransformUtility.WorldToScreenPoint(CameraOf(map), tag.Root.position);
             return true;
         }
-
-        /// <summary>The ink mesh's own quads, for the harness gate: the whole buffer, its capacity and whether it overflowed.</summary>
-        internal AvQuadBuffer InkBuffer => ink != null ? ink.Buffer : null;
-        internal AvQuadBuffer PulseBuffer => pulse != null ? pulse.Buffer : null;
-        internal bool WarnedShape => warnedShape;
         internal StrMapCard CardView => card;
-        internal StrMapChrome ChromeView => chrome;
-        internal int ActiveTags => tags.FindAll(t => t != null && t.gameObject.activeInHierarchy).Count;
-        internal System.Collections.Generic.IReadOnlyList<StrMapTag> TagPool => tags;
     }
 }

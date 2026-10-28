@@ -55,9 +55,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         private static StrAct Pick(StrViewModel vm, StrItemId id)
         {
             if (vm.Mode != StrBoardMode.Operation && vm.Mode != StrBoardMode.Proposals) return NoBoard(vm);
-            if (vm.Stale) return WarStale(vm);
-            if (vm.WarPending) return Pending();
-            if (!vm.CanCommand) return NotTakingOrders();
+            StrAct war = WarGate(vm);
+            if (!war.Allowed) return war;
             if (Locked(vm.Effort, out StrAct locked)) return locked;
             return Proposal(vm, id) != null ? Allowed : Gone();
         }
@@ -70,9 +69,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             if (vm == null) return new StrAct(StrWhy.NoBoard, "NO BOARD YET");
             if (vm.Mode != StrBoardMode.Operation && vm.Mode != StrBoardMode.Proposals && vm.Mode != StrBoardMode.NoOpening) return NoBoard(vm);
-            if (vm.Stale) return WarStale(vm);
-            if (vm.WarPending) return Pending();
-            if (!vm.CanCommand) return NotTakingOrders();
+            StrAct war = WarGate(vm);
+            if (!war.Allowed) return war;
             return Locked(vm.Effort, out StrAct locked) ? locked : Allowed;
         }
 
@@ -88,18 +86,15 @@ namespace BoscaliSummer.Modules.Command.Domain
         private static StrAct Replan(StrViewModel vm)
         {
             if (vm.Mode != StrBoardMode.Operation || !vm.Effort.Live) return new StrAct(StrWhy.NoOperation, "NO OPERATION TO CALL OFF" + StrWords.Dot + "PICK A PROPOSAL FIRST");
-            if (vm.Stale) return WarStale(vm);
-            if (vm.WarPending) return Pending();
-            return vm.CanCommand ? Allowed : NotTakingOrders();
+            return WarGate(vm);
         }
 
         private static StrAct Posture(StrViewModel vm, int arg)
         {
             if (vm.Mode != StrBoardMode.Operation && vm.Mode != StrBoardMode.Proposals &&
                 vm.Mode != StrBoardMode.Assessing && vm.Mode != StrBoardMode.NoOpening) return NoBoard(vm);
-            if (vm.Stale) return WarStale(vm);
-            if (vm.WarPending) return Pending();
-            if (!vm.CanCommand) return NotTakingOrders();
+            StrAct war = WarGate(vm);
+            if (!war.Allowed) return war;
             if (arg == (int)vm.Posture) return new StrAct(StrWhy.SamePosture, "THE STAFF IS ALREADY " + PostureName(vm.Posture));
             return Allowed;
         }
@@ -176,6 +171,10 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         private static StrAct SortiesStale() => new StrAct(StrWhy.Stale, "SORTIE LIST NOT CURRENT" + StrWords.Dot + "WAIT FOR THE HOST TO REFRESH");
 
+        /// <summary>The war must be current, not waiting on the host and taking orders: the first reason it is not, else allowed.</summary>
+        private static StrAct WarGate(StrViewModel vm) =>
+            vm.Stale ? WarStale(vm) : vm.WarPending ? Pending() : vm.CanCommand ? Allowed : NotTakingOrders();
+
         private static StrAct Pending() => new StrAct(StrWhy.Pending, "ORDER SENT" + StrWords.Dot + "WAITING FOR THE HOST TO ANSWER");
 
         private static StrAct NotTakingOrders() => new StrAct(StrWhy.NoBoard, "THE STAFF IS NOT TAKING ORDERS RIGHT NOW");
@@ -215,7 +214,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 }
                 case StrActionKind.Replan:
                 {
-                    if (float.IsNaN(nowUnscaled) || float.IsInfinity(nowUnscaled)) return Declined();
+                    if (!float.IsFinite(nowUnscaled)) return Declined();
                     if (!(nowUnscaled < ui.ReplanArmedUntil))
                     {
                         ui.ReplanArmedUntil = nowUnscaled + ReplanWindowSeconds;

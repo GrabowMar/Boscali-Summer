@@ -26,7 +26,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private float height = 260f, width, placedHeight;
         private Sprite chart;
         private float worldX, worldZ, selfX = float.NaN, selfZ = float.NaN, heading;
-        private bool offlineChart;
         private float cropMinX, cropMinZ, cropWidth, cropHeight;
 
         internal bool ChartAvailable { get; private set; }
@@ -73,24 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             entry = objective;
             fresh = hostFresh;
-            if (!offlineChart) ReadNativeChart();
-            Redraw();
-        }
-
-        /// <summary>
-        /// Offline capture seam: native chart inputs only. Production contact permissions,
-        /// finite-coordinate checks and host freshness still decide what the plot can show.
-        /// </summary>
-        internal void SetOfflineChart(Sprite sprite, float worldSizeX, float worldSizeZ,
-            float ownshipX, float ownshipZ, float headingDegrees)
-        {
-            offlineChart = true;
-            chart = sprite;
-            worldX = worldSizeX;
-            worldZ = worldSizeZ;
-            selfX = ownshipX;
-            selfZ = ownshipZ;
-            heading = float.IsFinite(headingDegrees) ? headingDegrees : 0f;
+            ReadNativeChart();
             Redraw();
         }
 

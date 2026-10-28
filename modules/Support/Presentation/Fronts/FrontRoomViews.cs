@@ -164,9 +164,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string QrfLine = "", SweepLabel = "SWEEP";
         public AvState QrfTone = AvState.Inert;
         public bool CanSweep;
-        public bool HasFob;
-        public float FobX, FobY, FobRadius;
-        public string FobName = "", FobNote = "";
         public int TeamCap;
         public string TapLine = "";
         public int SelectedSlot = -1;

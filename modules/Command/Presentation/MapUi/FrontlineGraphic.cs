@@ -160,7 +160,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         /// <summary>
         /// Walks every selected trace in map-pixel space, placing a station every
-        /// <paramref name="density"/> pixels travelled.
+        /// <see cref="StationStep"/> pixels travelled (more on a long front, to stay inside the station budget).
         /// </summary>
         private int Sample(int traceCount)
         {

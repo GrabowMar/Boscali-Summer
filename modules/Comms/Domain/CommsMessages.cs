@@ -134,9 +134,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
     /// <summary>Flag bits carried in <see cref="CommsEnvelope.Flags"/>.</summary>
     internal static class CommsFlags
     {
-        public const byte Closed = 1;
-        public const byte Lapsed = 2;
-        public const byte Revealed = 4;
         public const byte Self = 8;
 
         /// <summary>On a reset: a snapshot follows, so forget polls and games as well as the map.</summary>
@@ -232,7 +229,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         public float DrawingSeconds;
         public bool AllowAllChannel;
         public bool AllowDrawing;
-        public bool AllowGames;
 
         public static CommsRules Default => new CommsRules
         {
@@ -241,7 +237,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             DrawingSeconds = 1200f,
             AllowAllChannel = true,
             AllowDrawing = true,
-            AllowGames = true,
         };
 
         public float LifetimeOf(CommsItemKind kind)

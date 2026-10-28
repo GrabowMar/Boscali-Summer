@@ -219,7 +219,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             TacticalSectorGrid grid = ReadFaction(factionId);
             if (grid == null || !grid.WorldToCell(x, z, out int c, out int r)) return false;
             hold = grid.GetSectorHoldStrength(c, r);
-            return !float.IsNaN(hold) && !float.IsInfinity(hold);
+            return float.IsFinite(hold);
         }
 
         public void ResetForScene()

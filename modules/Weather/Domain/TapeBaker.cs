@@ -94,15 +94,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return j;
         }
 
-        /// <summary>The exact keyframe function at s: what the baked array must stay within 0.005 of at every ramp (spec 5.2).</summary>
-        public static SkyParams Exact(WeatherTape tape, float s)
-        {
-            TapeKeyframe[] k = tape.Keyframes;
-            int ramp = RampAt(k, s);
-            if (ramp < 0) return k[PlateauAt(k, s)].Sky;
-            return SkyParams.Lerp(k[ramp - 1].Sky, k[ramp].Sky, WeatherMath.Smoothstep(k[ramp].RampStart, k[ramp].RampEnd, s));
-        }
-
         /// <summary>H = length-weighted median low CloudBase over the keyframes that have a low layer + 0.4 * the median low depth (DeckTop - CloudBase).</summary>
         public static float DeckAltitude(TapeKeyframe[] k)
         {

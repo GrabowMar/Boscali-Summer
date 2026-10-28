@@ -223,7 +223,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (f.Owner == null) continue;
                 f.Book.AutoQueueRebuilds(f.World, now);
                 if (manager.HumanCount(f.Owner) == 0) AiQueue(f, now);
-                foreach (FrontEvent e in f.Book.Tick(now, f.World)) Apply(f, e, now);
+                foreach (FrontEvent e in f.Book.Tick(now)) Apply(f, e, now);
             }
             Superiority(now);
         }

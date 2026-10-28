@@ -39,7 +39,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public Ports(OpsService service, FactionOps faction) { this.service = service; this.faction = faction; }
             public float Now => SupportManager.MissionNow();
             public int Humans => service.manager != null ? service.manager.HumanCount(faction.Owner) : 1;
-            public int Owner => faction.Key;
             public OpOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.OpsSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.OpsRefund(faction.Owner, op, cr);
             public bool AnchorUp(OpKind kind, bool executing) => service.AnchorUp(faction, kind, executing);

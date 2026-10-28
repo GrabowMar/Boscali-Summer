@@ -32,19 +32,5 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         public static HeatBand BandOf(float heat) =>
             heat < WarmAt ? HeatBand.Cool : heat < HotAt ? HeatBand.Warm : heat < DerateStart ? HeatBand.Hot : heat < DerateEnd ? HeatBand.Derated : HeatBand.Fault;
-
-        /// <summary>Heat before each of <paramref name="shots"/> shots fired at a fixed interval, derating each one.</summary>
-        public static float[] Simulate(int shots, float requested01, float intervalSeconds, float tasMps)
-        {
-            var before = new float[shots];
-            float heat = 0f;
-            for (int i = 0; i < shots; i++)
-            {
-                before[i] = heat;
-                heat += ShotHeat(requested01 * Derate(heat));
-                heat = Step(heat, tasMps, intervalSeconds);
-            }
-            return before;
-        }
     }
 }

@@ -31,8 +31,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             inner = AvFrame.Add(root, "Inner", default(AvChamfer));
             inner.Fill = false;
             AvLay.Fill(inner.rectTransform, 3f);
-            text = AvText.Make(root, "Word", AvTextRole.Label, "", TextAlignmentOptions.Center);
-            AvText.Fit(text, false);
+            text = WmcSheet.Text(root, "Word", AvTextRole.Label, TextAlignmentOptions.Center);
             AvLay.Fill(text.rectTransform, 4f);
             root.localRotation = Quaternion.Euler(0f, 0f, degrees);
             Paint();
@@ -85,8 +84,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Rect = AvLay.Child(parent, "SquadronHead");
             art = AvVector.Create(Rect, "Insignia", 48);
             mark = new WingInsigniaImage(Rect);
-            title = AvText.Make(Rect, "Title", AvTextRole.Head, SquadronWords.SquadronTitle);
-            AvText.Fit(title, false);
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Head, text: SquadronWords.SquadronTitle);
             counts = AvText.Make(Rect, "Counts", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
             Restyle();
@@ -163,32 +161,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingFileTop(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "FileTop");
-            tab = AvText.Make(Rect, "Tab", AvTextRole.Micro);
-            AvText.Fit(tab, false);
+            tab = WmcSheet.Text(Rect, "Tab", AvTextRole.Micro);
             portraitBox = AvFrame.Add(Rect, "PortraitBox", default(AvChamfer));
             portrait = AvLay.Solid(Rect, "Portrait", Color.white);
             portrait.preserveAspect = true;
             art = AvVector.Create(Rect, "Art", 160);
-            callsign = AvText.Make(Rect, "Callsign", AvTextRole.Head);
-            AvText.Fit(callsign, false);
-            name = AvText.Make(Rect, "Name", AvTextRole.ProseSmall);
-            AvText.Fit(name, false);
-            rankLine = AvText.Make(Rect, "RankLine", AvTextRole.ProseSmall);
-            AvText.Fit(rankLine, false);
+            callsign = WmcSheet.Text(Rect, "Callsign", AvTextRole.Head);
+            name = WmcSheet.Text(Rect, "Name", AvTextRole.ProseSmall);
+            rankLine = WmcSheet.Text(Rect, "RankLine", AvTextRole.ProseSmall);
             track = AvLay.Solid(Rect, "XpTrack", Color.clear);
             fill = AvLay.Solid(Rect, "XpFill", Color.clear);
             for (int i = 0; i < ticks.Length; i++) ticks[i] = AvLay.Solid(Rect, "Tick" + i, Color.clear);
             for (int i = 0; i < letters.Length; i++)
             {
-                letters[i] = AvText.Make(Rect, "Rank" + i, AvTextRole.Micro, LadderLetters[i], TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(letters[i], false);
+                letters[i] = WmcSheet.Text(Rect, "Rank" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, LadderLetters[i]);
             }
-            stats = AvText.Make(Rect, "Stats", AvTextRole.DataSmall);
-            AvText.Fit(stats, false);
-            radio = AvText.Make(Rect, "Radio", AvTextRole.ProseSmall);
-            AvText.Fit(radio, false);
-            ribbonCaption = AvText.Make(Rect, "RibbonCaption", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(ribbonCaption, false);
+            stats = WmcSheet.Text(Rect, "Stats", AvTextRole.DataSmall);
+            radio = WmcSheet.Text(Rect, "Radio", AvTextRole.ProseSmall);
+            ribbonCaption = WmcSheet.Text(Rect, "RibbonCaption", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             ribbonHit = AvLay.Solid(Rect, "RibbonHit", Color.clear);
             ribbonHit.raycastTarget = true;
             AvHelpTip.Attach(ribbonHit.gameObject, "");

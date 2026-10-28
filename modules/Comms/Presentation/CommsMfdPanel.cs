@@ -238,11 +238,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             part?.SetShown(visible);
         }
 
-        private static void Show(Component component, bool visible)
-        {
-            if (component != null && component.gameObject.activeSelf != visible) component.gameObject.SetActive(visible);
-        }
-
         private static string Ago(float seconds)
         {
             int total = Mathf.Max(0, Mathf.FloorToInt(seconds));

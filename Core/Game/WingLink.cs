@@ -48,10 +48,6 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailSquad(error); return false; }
         }
 
-        /// <summary>Borrowed Wing-owned portrait. Do not destroy the sprite or texture.</summary>
-        public static Sprite PilotPortrait(string name, string callsign) =>
-            PersonnelPortrait(name, callsign, PortraitRole.Pilot);
-
         /// <summary>Borrowed Wing-owned portrait with role-specific clothing and equipment.</summary>
         public static Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1)
         {

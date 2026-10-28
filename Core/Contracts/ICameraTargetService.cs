@@ -9,7 +9,6 @@ namespace BoscaliSummer.Core.Contracts
     {
         bool Available { get; }
         bool HasMark { get; }
-        string Status { get; }
         bool CanCapture { get; }
         bool CanCallAtMark { get; }
         string ArmedActionName { get; }

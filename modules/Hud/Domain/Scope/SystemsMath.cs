@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool EnduranceMinutes(float seconds, out int minutes)
         {
             minutes = 0;
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds < 0f || seconds >= 360000f) return false;
+            if (!float.IsFinite(seconds) || seconds < 0f || seconds >= 360000f) return false;
             minutes = (int)(seconds / 60f);
             return true;
         }
@@ -86,9 +86,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool SameDamage(in DamageState a, in DamageState b) =>
             a.Flags == b.Flags && a.Engines == b.Engines && a.EnginesOut == b.EnginesOut && Percent(a.DetachedRatio) == Percent(b.DetachedRatio) &&
             a.EngineSlots == b.EngineSlots && a.EngineOut == b.EngineOut && a.Leak == b.Leak && a.Fire == b.Fire && a.WingLoss == b.WingLoss;
-
-        /// <summary>The page has something to show beyond cruise: a fuel mark, a leak, a fire, a dead engine or lost structure (the pip on the other pages).</summary>
-        public static bool Abnormal(in DamageState d, in FuelState f) => Headline(d, f) != SystemsHeadline.Nominal;
 
         /// <summary>Which side of the airframe a part sits on: its lateral offset (metres, + = right) against a dead band for the centreline.</summary>
         public static byte SideOf(float lateralM, float centreBand) =>

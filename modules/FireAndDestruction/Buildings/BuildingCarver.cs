@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -933,7 +934,7 @@ namespace BoscaliSummer.Fire
                 float n = CarveField.Noise(new Vector3(x * 0.12f, seed, z * 0.12f)), m = CarveField.Noise(new Vector3(x * 0.35f, z * 0.35f, seed));
                 float fine = CarveField.Noise(new Vector3(x * 1.1f, seed * 1.7f, z * 1.1f));
                 // Several heaps, not a plateau: low-frequency peaks, broken surface, ragged spill edge.
-                float h = height * Smooth(1.35f, 0.45f, s + 0.22f * n + 0.08f * m) * Mathf.Max(0.15f, 0.6f + 0.45f * n + 0.25f * m) + 0.18f * fine;
+                float h = height * Scalar.SmoothStep(1.35f, 0.45f, s + 0.22f * n + 0.08f * m) * Mathf.Max(0.15f, 0.6f + 0.45f * n + 0.25f * m) + 0.18f * fine;
                 float ground = GroundAt(owner, centre + yaw * new Vector3(x, 0f, z)) - centre.y;
                 return ground + h - 0.35f;
             }
@@ -997,9 +998,6 @@ namespace BoscaliSummer.Fire
             owner.Mound = root; owner.MoundMesh = mesh; owner.MoundDrawn = renderer;
             root.transform.localScale = new Vector3(1f, 0.04f, 1f);
         }
-
-        private static float Smooth(float edge0, float edge1, float x)
-        { float t = Mathf.Clamp01((x - edge0) / (edge1 - edge0)); return t * t * (3f - 2f * t); }
 
         private static void Block(List<Vector3> vertices, List<Vector2> uv, List<int> triangles, Vector3 at, Quaternion spin, Vector3 extents, Vector2 offset, System.Random random)
         {

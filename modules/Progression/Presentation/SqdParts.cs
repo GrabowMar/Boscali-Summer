@@ -320,8 +320,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card inert");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            frame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
             icon.color = AvInk.Muted;
             title.color = AvInk.Ink;
             hint.color = AvInk.Dim;
@@ -355,8 +354,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int i = 0; i < Columns - 1; i++) dividers.Add(AvLay.Solid(Rect, "Divider", Color.clear));
             Restyle();
         }
-
-        public int Count => keys.Count;
 
         public int Add(string label)
         {
@@ -400,8 +397,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card inert");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            frame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
             foreach (Image divider in dividers) divider.color = AvTheme.Hairline;
             foreach (Image rule in rules) rule.color = AvTheme.Hairline;
             for (int i = 0; i < keys.Count; i++)
@@ -427,7 +423,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private readonly TMP_Text title, sub, value, valueSub;
         private readonly SqdBar meter;
         private AvState state = AvState.Inert;
-        private bool hover, armed, interactable = true, hasMeter;
+        private bool hover, hasMeter;
 
         public SqdRosterRow(RectTransform parent, bool withThumb = false, Action onClick = null)
         {
@@ -453,8 +449,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         /// <summary>Hover help shown in the console footer.</summary>
         public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
-
-        public bool Armed { get => armed; set { if (armed == value) return; armed = value; Restyle(); } }
 
         public void SetThumb(Sprite sprite) => thumb?.Set(sprite);
 
@@ -517,7 +511,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         public override void Restyle()
         {
-            string st = !interactable ? "disabled" : armed ? "armed" : hover ? "hover" : null;
+            string st = hover ? "hover" : null;
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), st);
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);

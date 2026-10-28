@@ -161,7 +161,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (deadline <= 0) return 0;
             if (deadline == SpaceWire.RadarUnavailable) return deadline;
             double shifted = (double)deadline + (float.IsFinite(offset) ? Math.Round(offset) : 0d);
-            return (int)Math.Max(1d, Math.Min(SpaceWire.MaxDeadline, shifted));
+            return (int)Math.Clamp(shifted, 1d, SpaceWire.MaxDeadline);
         }
 
         /// <summary>CR short for a price is a quantity; the cooldown and wallet-freeze seconds are sent as a mission-time deadline.</summary>
@@ -328,10 +328,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private int generation;
 
         public SpaceSubscriptions(byte protocol) { this.protocol = protocol; }
-
-        public int Count => subs.Count;
-        /// <summary>Last generation handed out. Never decreases, not even across a scene reset.</summary>
-        public int Generation => generation;
         /// <summary>The host's scene epoch, set by the owner before every poll; it is stamped on every message and a member's first message after it moves is a fresh full one.</summary>
         public ushort Epoch { get; set; } = 1;
 

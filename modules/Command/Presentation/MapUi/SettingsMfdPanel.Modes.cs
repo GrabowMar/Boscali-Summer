@@ -1,8 +1,6 @@
-using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using NOAvionics;
 using System;
-using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 
@@ -37,7 +35,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (server)
             {
-                ApplyTabHelp(c.Tabs(
+                TabHelp.Apply(c.Tabs(
                         (AvIcon.Flag, "WORLD"),
                         (AvIcon.Shield, "FORCES"),
                         (AvIcon.CloudRain, "EFFECTS"),
@@ -59,7 +57,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     (AvIcon.Eye, "COCKPIT"),
                     (AvIcon.WaveSine, "IMMERSION"),
                     (AvIcon.Gauge, "PERF"));
-                ApplyTabHelp(tabs,
+                TabHelp.Apply(tabs,
                     "Glass, surface texture, tint, motion and interface audio, with a live preview of the finish.",
                     "Map layout, terrain, backdrop imagery and the news ticker, with a layout schematic.",
                     "TAC BOARD HUD: layout, size, position, pages and blocks. Also the visor terrain ghost and the radial target presets.",

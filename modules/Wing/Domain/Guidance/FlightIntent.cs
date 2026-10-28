@@ -1,7 +1,4 @@
 using BoscaliSummer.Core.Math;
-// Data contracts between behaviours, guidance, constraints and control. Some fields are filled only by
-// behaviours (M1b), the engine (M1c) or the FlightSim, so the mod assembly may not assign them yet.
-#pragma warning disable CS0649
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {

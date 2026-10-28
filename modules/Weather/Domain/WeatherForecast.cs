@@ -91,17 +91,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Conditions index where precipitation begins (heavy overcast).</summary>
         public const float RainThreshold = 0.60f;
 
-
-        /// <summary>
-        /// Effective rain intensity: an explicit forced value wins, otherwise conditions
-        /// ramp from dry at <see cref="RainThreshold"/> to full storm at 0.95.
-        /// </summary>
-        public static float ResolveRainIntensity(float conditions, float? forcedRain)
-        {
-            if (forcedRain.HasValue) return Math.Max(0f, Math.Min(1f, forcedRain.Value));
-            return RainIntensityFromConditions(conditions);
-        }
-
         public static float RainIntensityFromConditions(float conditions)
         {
             if (conditions < RainThreshold) return 0f;

@@ -299,10 +299,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             return point;
         }
 
-        internal static bool TryFindGrip(Transform lever, Transform hand, Transform shoulder, bool rightHand,
-            out Vector3 localGrip, out Quaternion localRotation, out float wristDistance)
-            => TryFindGrip(lever, hand, shoulder, rightHand, rightHand, out localGrip, out localRotation, out wristDistance);
-
         internal static bool TryFindGrip(Transform lever, Transform hand, Transform shoulder, bool rightHand, bool joystick,
             out Vector3 localGrip, out Quaternion localRotation, out float wristDistance)
         {
@@ -397,8 +393,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
         }
 
-        internal void Pose(float pitch, float roll, float yaw, float throttleInput, Vector3 forceG, float chestLift01,
-            Quaternion lookLocal, float dt, bool motion, bool comfort)
+        internal void Pose(float yaw, Vector3 forceG, float chestLift01, Quaternion lookLocal, float dt, bool motion, bool comfort)
         {
             if (!Valid || frame == null) return;
             float blend = PilotPoseMath.Smoothing(dt, 10f);

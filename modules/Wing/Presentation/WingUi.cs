@@ -11,21 +11,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// y growing down as a negative anchored y, as every WC builder.</summary>
     internal static class WingUi
     {
-        public const float RowHeight = AvTokens.RowHeight;
-
         /// <summary>The game HUD's own font when a HUD panel has found one; null keeps the kit's face.</summary>
         public static TMP_FontAsset Font { get; set; }
 
-        public static Color Green => AvTheme.Accent;
-        public static Color Grey => Color.grey;
-        public static Color Friendly => AvTheme.Friendly;
-        public static Color Warning => AvTheme.Warning;
-        public static Color Alert => AvTheme.Alert;
-        public static Color Dim => AvTheme.Dim;
-        public static Color FrameColor => AvTheme.Frame;
         public static Color TextPrimary => AvTheme.Unity(AvTokens.TextPrimary);
-
-        public static void Stretch(RectTransform target) => AvLay.Fill(target);
 
         /// <summary>The panel's ground: the kit's dark fill and edge behind everything, taking clicks.</summary>
         public static AvFrame Backdrop(RectTransform panel)
@@ -68,8 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcDraw.Place(img.rectTransform, rect);
             return img;
         }
-
-        public static AvFrame Outline(RectTransform parent, Rect rect, Color color) => WmcDraw.Outline(parent, rect, color);
 
         /// <summary>A transparent click target over <paramref name="rect"/>.</summary>
         public static Image HitButton(RectTransform parent, Rect rect, Action onClick)

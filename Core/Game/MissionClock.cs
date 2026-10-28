@@ -13,8 +13,6 @@ namespace BoscaliSummer.Core.Game
         private float last, frameBase;
         private int frame = -1;
 
-        public float Last => last;
-
         public float Read(float raw, bool valid, int frameIndex)
         {
             if (frame != frameIndex) { frame = frameIndex; frameBase = last; }

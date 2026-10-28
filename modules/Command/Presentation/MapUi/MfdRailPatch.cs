@@ -152,12 +152,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static bool applied;
         private static Vector2 appliedCanvasSize;
         private static float currentPanelWidth = AvTokens.PanelWidth;
-
-        /// <summary>
-        /// The UI area the applied layout was resolved against, exposed so
-        /// <see cref="MapUiManager"/> can re-apply when the live canvas size diverges.
-        /// </summary>
-        public static Vector2 AppliedCanvasSize => appliedCanvasSize;
         internal static bool IsApplied => applied;
 
         public static void Reconcile()

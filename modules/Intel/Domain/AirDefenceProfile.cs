@@ -69,9 +69,6 @@ namespace BoscaliSummer.Modules.Intel.Domain
             AntiRadiation = antiRadiation;
         }
 
-        /// <summary>A radar with no ring of its own: SEAD value only.</summary>
-        public bool IsSensor => !HasBand && RadarEmitter;
-
         public bool IsAirDefence => HasBand || RadarEmitter;
 
         public static AirDefenceProfile Build(StationSample[] stations, int count, bool radarEmitter)

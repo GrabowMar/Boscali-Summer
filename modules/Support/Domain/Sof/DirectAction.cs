@@ -13,11 +13,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public const float Reach = 2000f, BaseSeconds = 45f;
 
         /// <summary>45 s at power 1, 30 s at 1.5, 75 s at 0.6.</summary>
-        public static float Seconds(float power) => BaseSeconds / Sane(power);
+        public static float Seconds(float power) => BaseSeconds / PerkPower.Sane(power);
 
         /// <summary>The roll, as the whole percent the desk keeps on the team.</summary>
         public static int OddsPercent(float power, int teamsAfield) =>
-            (int)Math.Round(PerkPower.ClampOdds(0.55f * Sane(power) + 0.05f * Math.Max(0, teamsAfield)) * 100f, MidpointRounding.AwayFromZero);
+            (int)Math.Round(PerkPower.ClampOdds(0.55f * PerkPower.Sane(power) + 0.05f * Math.Max(0, teamsAfield)) * 100f, MidpointRounding.AwayFromZero);
 
         /// <summary>The revealed target nearest the aim that <paramref name="highValue"/> accepts and lies within <see cref="Reach"/> of it. False when there is none.</summary>
         public static bool TryNearest(IReadOnlyList<SofTarget> revealed, Func<SofTarget, bool> highValue, float x, float z, out SofTarget best)
@@ -36,7 +36,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             }
             return found;
         }
-
-        private static float Sane(float power) => float.IsNaN(power) || float.IsInfinity(power) || power <= 0f ? 1f : Math.Max(0.6f, Math.Min(1.5f, power));
     }
 }

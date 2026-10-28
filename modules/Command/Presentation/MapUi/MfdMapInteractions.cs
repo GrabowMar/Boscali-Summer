@@ -63,8 +63,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             HideMenu();
         }
 
-        internal static bool ClickedThisFrame => iconClickFrame == Time.frameCount;
-
         /// <summary>Suppress the native immediate RMB waypoint and the native Ctrl-drag pan.</summary>
         internal static bool BlockNativeControls(DynamicMap map)
         {
@@ -203,10 +201,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             if (Input.GetMouseButtonUp(0) && !boxPress)
             {
-                GlobalPosition point = default;
                 bool open = leftPress && !BoxBlocked() && !ReliefNavigator.BlockContextClick() &&
                     ((Vector2)Input.mousePosition - leftStart).sqrMagnitude < DragSlop * DragSlop &&
-                    !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
+                    !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out _);
                 leftPress = false;
                 // Decide later: the UI may deliver this release's icon click after this tick, and
                 // clearing now would empty the selection just before that click adds to it.
@@ -243,12 +240,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
-                if (!(map.mapIcons[i] is UnitMapIcon icon) || icon.unit == null ||
-                    icon.unit == localAircraft || icon.unit.disabled ||
-                    !icon.gameObject.activeInHierarchy || icon.iconImage == null ||
-                    !icon.iconImage.gameObject.activeInHierarchy ||
-                    (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
-                    Excluded(icon.unit)) continue;
+                if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
                 if (!MapClickRules.BoxTakes(Plugin.Settings?.Command?.MapBoxSide?.Value ?? MapBoxSide.All, icon.unit.NetworkHQ != null, icon.unit.NetworkHQ == map.HQ)) continue;
                 Vector2 screen = IconScreen(icon);
                 if (!region.Contains(screen) ||
@@ -544,13 +536,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
-                if (!(map.mapIcons[i] is UnitMapIcon icon) || icon.unit == null ||
-                    icon.unit == localAircraft || icon.unit.disabled ||
+                if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon) ||
                     icon.unit.definition != exemplar.definition ||
-                    icon.unit.NetworkHQ != exemplar.NetworkHQ || !icon.gameObject.activeInHierarchy ||
-                    icon.iconImage == null || !icon.iconImage.gameObject.activeInHierarchy ||
-                    (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
-                    Excluded(icon.unit)) continue;
+                    icon.unit.NetworkHQ != exemplar.NetworkHQ) continue;
                 if (!MapUiPointer.Contains(map.mapBackground.rectTransform, IconScreen(icon))) continue;
                 if (candidates.Count < MaximumSelected) candidates.Add(icon.unit);
             }
@@ -567,12 +555,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
-                if (!(map.mapIcons[i] is UnitMapIcon icon) || icon.unit == null ||
-                    icon.unit == localAircraft ||
-                    icon.unit.disabled || icon.iconImage == null ||
-                    !icon.gameObject.activeInHierarchy || !icon.iconImage.gameObject.activeInHierarchy ||
-                    (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
-                    Excluded(icon.unit)) continue;
+                if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
                 if ((IconScreen(icon) - screen).sqrMagnitude <= 28f * 28f) count++;
             }
             return count;
@@ -587,11 +570,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
                 for (int i = 0; i < limit && candidates.Count < MaximumSelected; i++)
                 {
-                    if (!(map.mapIcons[i] is UnitMapIcon icon) || icon.unit == null ||
-                        icon.unit == localAircraft || icon.unit.disabled || icon.iconImage == null ||
-                        !icon.gameObject.activeInHierarchy || !icon.iconImage.gameObject.activeInHierarchy ||
-                        (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
-                        Excluded(icon.unit)) continue;
+                    if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
                     if ((IconScreen(icon) - screen).sqrMagnitude <= 28f * 28f)
                         candidates.Add(icon.unit);
                 }
@@ -631,12 +610,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
-                if (!(map.mapIcons[i] is UnitMapIcon icon) || icon.unit == null ||
-                    icon.unit == localAircraft || icon.unit.disabled ||
-                    !icon.gameObject.activeInHierarchy || icon.iconImage == null ||
-                    !icon.iconImage.gameObject.activeInHierarchy ||
-                    (!icon.iconImage.enabled && !MfdTerrainRelief.ClusterHidden(icon.iconImage)) ||
-                    Excluded(icon.unit)) continue;
+                if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
                 float distance = (IconScreen(icon) - screen).sqrMagnitude;
                 if (distance >= best) continue;
                 best = distance;
@@ -645,11 +619,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return nearest;
         }
 
+        /// <summary>A contact the pointer may act on: a live unit other than the player's aircraft whose icon is drawn (or hidden only by a stack) and not filtered out of the target list.</summary>
+        private static bool Pickable(MapIcon mapIcon, Aircraft localAircraft, out UnitMapIcon icon)
+        {
+            icon = mapIcon as UnitMapIcon;
+            return icon != null && icon.unit != null && icon.unit != localAircraft && !icon.unit.disabled &&
+                   icon.iconImage != null && icon.gameObject.activeInHierarchy && icon.iconImage.gameObject.activeInHierarchy &&
+                   (icon.iconImage.enabled || MfdTerrainRelief.ClusterHidden(icon.iconImage)) && !Excluded(icon.unit);
+        }
+
         private static Vector2 IconScreen(MapIcon icon)
         {
             Canvas canvas = icon.GetComponentInParent<Canvas>();
-            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera camera = MapUiPointer.UiCamera(canvas);
             return RectTransformUtility.WorldToScreenPoint(camera, icon.iconImage.transform.position);
         }
 
@@ -685,8 +667,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static bool ToCanvas(RectTransform parent, Vector2 screen, out Vector2 point)
         {
             Canvas canvas = parent.GetComponentInParent<Canvas>();
-            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera : null;
+            Camera camera = MapUiPointer.UiCamera(canvas);
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(parent, screen,
                     camera, out Vector2 local))
             {
@@ -762,9 +743,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ClearSelection(map);
             Echo("SELECTION CLEARED");
         }
-        private static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
+        internal static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
-        private static bool ShiftHeld() => Input.GetKey(KeyCode.LeftShift) ||
+        internal static bool ShiftHeld() => Input.GetKey(KeyCode.LeftShift) ||
             Input.GetKey(KeyCode.RightShift);
         private static bool BoxBlocked() => MapPicker.IsBusy ||
             (ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection);
@@ -773,7 +754,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             feedback = value;
             feedbackUntil = Time.unscaledTime + 2f;
         }
-        private static bool Typing()
+        internal static bool Typing()
         {
             GameObject selected = EventSystem.current?.currentSelectedGameObject;
             return selected != null && selected.GetComponent<TMP_InputField>() != null;

@@ -60,8 +60,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "SYSTEMS";
 
-        public override char Code => 'Y';
-
         public override bool Ready => ready;
 
         public override bool Fast => fast;

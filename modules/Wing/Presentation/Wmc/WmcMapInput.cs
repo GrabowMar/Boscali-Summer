@@ -25,10 +25,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int selected;
 
         public MapMode Mode { get; private set; }
-        /// <summary>The PLAN tool armed (spec bezel v2 §6): its right-clicks go to <see cref="PlanClick"/>, not to an order.</summary>
+        /// <summary>The PLAN tool armed (spec bezel v2 §6): its right-clicks place no order.</summary>
         public PlanTool Tool { get; private set; }
-        /// <summary>PLAN's editor takes a tool's click: the point, the unit under it, shift, and the radius a drag set (0: none).</summary>
-        public Action<WmcContext, GlobalPosition, Unit, bool, float> PlanClick;
         /// <summary>The lane a tool adds to, in words (the cue and the status line).</summary>
         public string ToolLane = "A";
 
@@ -186,11 +184,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <paramref name="radius"/> is a CAP or SWEEP's (0: the tool's or the order's default).</summary>
         public void Place(WmcContext c, GlobalPosition point, Unit unit, bool shift, float radius = 0f)
         {
-            if (Tool != PlanTool.Off)
-            {
-                PlanClick?.Invoke(c, point, unit, shift, radius);
-                return;
-            }
+            if (Tool != PlanTool.Off) return;
             MapPointer pointer = unit == null || unit.disabled ? MapPointer.Empty
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
             MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);

@@ -33,7 +33,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         internal static string HoldProbe = "none";
 
         /// <summary>Sim only: the seated local jet flies itself into this tanker's zone (SkywellHold) instead of waiting for a pilot.</summary>
+#pragma warning disable CS0649 // set only by the dev-build test seam
         internal static Aircraft SimHoldTanker;
+#pragma warning restore CS0649
 
         private static bool steering; // Steer is running its own FilterInputs
 

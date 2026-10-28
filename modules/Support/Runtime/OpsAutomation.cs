@@ -317,7 +317,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         private static Dictionary<string, object> Readout(SupportManager m)
         {
-            m = m ?? SupportManager.Active;
+            m ??= SupportManager.Active;
             CallsPanel panel = Find<CallsPanel>();
             CallsController calls = Find<CallsController>();
             var r = new Dictionary<string, object> { { "ok", true }, { "manager", m != null }, { "panel", panel != null }, { "controller", calls != null } };

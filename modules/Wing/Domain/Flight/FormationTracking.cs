@@ -1,16 +1,15 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>Engine-free continuous formation target motion.</summary>
     internal static class FormationTracking
     {
-
         // Integrate constant-rate turn velocity instead of rotating velocity times duration, which
         // doubles shallow-turn lateral lead. Bound sweep to avoid predicted loops.
         public static float Sweep(float turnRate, float seconds) =>
-            Math.Max(-(float)Math.PI / 2f, Math.Min((float)Math.PI / 2f,
-                turnRate * Math.Max(0f, seconds)));
+            Scalar.Clamp(turnRate * Math.Max(0f, seconds), -(float)Math.PI / 2f, (float)Math.PI / 2f);
 
         public static (float x, float y, float z) Arc(
             float vx, float vy, float vz, float turnRate, float seconds)

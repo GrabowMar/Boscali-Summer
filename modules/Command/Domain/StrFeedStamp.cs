@@ -75,12 +75,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         private static int Mix(int h, int v) { unchecked { return (h * 31) ^ v; } }
 
         // Funds and cooldowns as the board prints them: whole numbers, so a fraction that shows nowhere builds nothing.
-        private static int Whole(float v) => float.IsNaN(v) || float.IsInfinity(v) ? int.MinValue : (int)Math.Ceiling(Math.Max(-2e9f, Math.Min(2e9f, v)));
+        private static int Whole(float v) => !float.IsFinite(v) ? int.MinValue : (int)Math.Ceiling(Math.Max(-2e9f, Math.Min(2e9f, v)));
 
         private static int Id(object o) => o == null ? 0 : RuntimeHelpers.GetHashCode(o);
 
         private static int Cell(float metres) =>
-            float.IsNaN(metres) || float.IsInfinity(metres) ? int.MinValue : (int)Math.Floor(Math.Max(-2e9f, Math.Min(2e9f, metres)) / OwnCellMetres);
+            !float.IsFinite(metres) ? int.MinValue : (int)Math.Floor(Math.Max(-2e9f, Math.Min(2e9f, metres)) / OwnCellMetres);
 
         private static int Post(in StrPostIn p)
         {

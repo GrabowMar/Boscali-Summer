@@ -186,7 +186,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             MapOptions options = SceneSingleton<MapOptions>.i;
             float size = options != null ? options.iconSize : .8f;
-            if (float.IsNaN(size) || float.IsInfinity(size) || size <= 0f) return 1f;
+            if (!float.IsFinite(size) || size <= 0f) return 1f;
             return Mathf.Clamp(size / .8f, .75f, 1.3f);
         }
 

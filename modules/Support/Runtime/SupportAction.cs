@@ -102,7 +102,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SpaceActionTransaction spaceTask = null, TaskedLaunchJob tasked = null, float power = 1f, bool markSnapped = false, bool markSar = false)
         {
             MarkSnapped = markSnapped; MarkSar = markSar;
-            Power = float.IsNaN(power) || float.IsInfinity(power) || power <= 0f ? 1f : power;
+            Power = FrontRules.Sane(power);
             Player = player;
             Owner = player == null ? null : player.HQ;
             Target = target;
@@ -122,12 +122,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// </summary>
     internal interface ISupportAction
     {
-        /// <summary>
-        /// Availability flag: 1 when this action is usable on this map, 0 when it is not (the manager reports
-        /// CapabilityUnavailable). The price is CallSheet x CallPricing, never this value.
-        /// </summary>
-        float BaseCost(in SupportContext context);
-
         SupportResult Execute(in SupportContext context);
     }
 

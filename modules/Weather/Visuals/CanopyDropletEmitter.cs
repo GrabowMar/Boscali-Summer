@@ -78,9 +78,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             emission.rateOverTime = 0f;
         }
 
-        /// <summary>True while the system is alive; the owner may tear down once false.</summary>
-        public bool IsEmitting => ps != null && ps.IsAlive();
-
         public void UpdateDrops(CanopySurface surface, float rainIntensity)
         {
             if (ps == null) return;

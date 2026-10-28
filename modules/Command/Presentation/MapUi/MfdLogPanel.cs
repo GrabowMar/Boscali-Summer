@@ -149,7 +149,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (dock != null && panel.GetSiblingIndex() > dock.GetSiblingIndex())
                 panel.SetSiblingIndex(dock.GetSiblingIndex());
 
-            if (!Approximately(builtSize, panel.sizeDelta) || builtMerged != merged || body == null)
+            if (!MfdLayout.Near(builtSize, panel.sizeDelta) || builtMerged != merged || body == null)
                 Rebuild(panel.sizeDelta, merged);
 
             HideOriginals();
@@ -623,8 +623,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (stickToTop && scroll != null && scroll.verticalNormalizedPosition >= 0.999f)
                 scroll.verticalNormalizedPosition = 1f;
         }
-
-        private static bool Approximately(Vector2 a, Vector2 b) =>
-            Mathf.Abs(a.x - b.x) < 0.5f && Mathf.Abs(a.y - b.y) < 0.5f;
     }
 }

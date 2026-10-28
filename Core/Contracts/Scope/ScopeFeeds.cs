@@ -24,7 +24,7 @@ namespace BoscaliSummer.Core.Contracts
     /// </list>
     /// One provider per struct: a second <see cref="Register{T}"/> replaces the first. A page that needs data from two
     /// modules reads two structs. Main thread only. A client that has no mirror of the data registers no provider (the
-    /// element hides on clients); say which in the owning module's AGENTS.md. Offline fixtures call <see cref="Publish{T}"/>.
+    /// element hides on clients); say which in the owning module's AGENTS.md. Offline fixtures call <see cref="Register{T}"/>.
     /// </summary>
     internal static class ScopeFeeds
     {
@@ -57,9 +57,6 @@ namespace BoscaliSummer.Core.Contracts
             if (provider != null && Slot<T>.Provider == provider) Slot<T>.Provider = null;
         }
 
-        /// <summary>Is anyone providing <typeparamref name="T"/> (not whether it has anything live right now).</summary>
-        public static bool Has<T>() where T : struct => Slot<T>.Provider != null;
-
         /// <summary>The feed's current reading; false (and a default struct) when nothing is registered or live.</summary>
         public static bool TryRead<T>(out T data) where T : struct
         {
@@ -71,15 +68,6 @@ namespace BoscaliSummer.Core.Contracts
             }
             data = default;
             return false;
-        }
-
-        /// <summary>A constant feed: <typeparamref name="T"/> always reads <paramref name="data"/> (offline fixtures and tests).</summary>
-        public static void Publish<T>(T data) where T : struct => Register<T>((out T d) => { d = data; return true; });
-
-        /// <summary>Withdraw every feed (scene teardown, tests).</summary>
-        public static void Clear()
-        {
-            foreach (Action reset in Resets) reset();
         }
     }
 }

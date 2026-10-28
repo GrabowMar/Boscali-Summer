@@ -46,8 +46,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "OBJECTIVE";
 
-        public override char Code => 'O';
-
         public override string IdleWord => "NO OBJECTIVE";
 
         public override string IdleHint => "NO CONTRACT SELECTED FOR THE HUD";

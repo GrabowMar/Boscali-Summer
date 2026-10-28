@@ -109,8 +109,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public SetRingRow(RectTransform parent) { Rect = AvLay.Child(parent, "RingRow"); }
 
-        public int Count => cells.Count;
-
         public T Add<T>(T part) where T : AvPart
         {
             part.Parent = this;

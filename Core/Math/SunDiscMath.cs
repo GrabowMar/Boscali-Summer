@@ -27,13 +27,6 @@ namespace BoscaliSummer.Core.Math
             b = (float)System.Math.Exp(-0.28 * mass);
         }
 
-        /// <summary>Perceived brightness (0-1) of the disc through the air.</summary>
-        public static float Brightness(float elevationDeg, float altitudeM)
-        {
-            Transmission(elevationDeg, altitudeM, out float r, out float g, out float b);
-            return 0.2126f * r + 0.7152f * g + 0.0722f * b;
-        }
-
         /// <summary>
         /// 1 with the whole disc above the horizon, 0 once it has set. The game world is flat, so the sea horizon
         /// sits at 0 degrees from any altitude.

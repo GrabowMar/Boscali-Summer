@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -62,7 +62,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (codes[i] == code) n++;
             return n;
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

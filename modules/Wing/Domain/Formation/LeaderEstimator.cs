@@ -3,8 +3,6 @@ using System;
 using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-// Filled by the engine's leader sensor (M1c) and the FlightSim; the mod assembly only reads it until then.
-#pragma warning disable CS0649
     /// <summary>What the wing forms on: the player, another aircraft, or a unit on the ground or at sea (escort).</summary>
     internal enum AnchorKind : byte { Player, Aircraft, Ground }
 
@@ -25,7 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A helicopter leader flies at any speed, hovering included.</summary>
         public bool CanHover;
     }
-#pragma warning restore CS0649
 
     /// <summary>The wing's smoothed, one-tick-projected view of its leader, shared by every member.</summary>
     internal struct LeaderEstimate

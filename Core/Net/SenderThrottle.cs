@@ -13,8 +13,6 @@ namespace BoscaliSummer.Core.Net
 
         internal SenderThrottle(int capacity = 64) { this.capacity = capacity; next = new Dictionary<ulong, float>(16); }
 
-        internal int Count => next.Count;
-
         internal void Clear() => next.Clear();
 
         /// <summary>

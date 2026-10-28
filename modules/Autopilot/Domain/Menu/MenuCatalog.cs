@@ -10,12 +10,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// COCKPIT the radio and the cabin, VIEW what you look through, DEFENCE staying alive, TARGETS the selection), verb-first labels that state the outcome of a press (LOWER GEAR flips to RAISE GEAR),
     /// NOUN: VALUE state lines, hybrid availability (a category that has nothing dims in place with a reason; inside a
     /// category a row that cannot exist right now is absent, one that is only blocked for a moment stays dimmed with
-    /// its reason) and a ring badge per category. <paramref name="bind"/> attaches the game call to each runnable row.
+    /// its reason) and a ring badge per category. <c>Build</c>'s bind callback attaches the game call to each runnable row.
     /// Copy rules: UPPER CASE, label at most 22 characters, state at most 30, description at most 48 and never a middle dot.
     /// </summary>
     internal static class MenuCatalog
     {
-        public const int MaxLabel = 22, MaxState = 30, MaxDesc = 48;
+        public const int MaxLabel = 22, MaxState = 30;
         /// <summary>The steps of the two TAC BOARD cycle rows, in the order of the <c>BoardDeclutter</c> and <c>BoardLayout</c> contract enums (a press moves to the next, wrapping).</summary>
         public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardLayouts = { "WIDE", "STACK" };
         /// <summary>Cycle rows over a 0..1 or size option: the names a press steps through and the value each one sets.</summary>
@@ -436,7 +436,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             {
                 // one row for the exterior lights, so the list stays short and EJECT stays in sight
                 string[] modes = { "OFF", "ON", "AUTO" };
-                int mode = Math.Max(0, Math.Min(2, w.LandingLight));
+                int mode = Math.Clamp(w.LandingLight, 0, 2);
                 var kids = new List<MenuRow>(2);
                 if (w.HasNav)
                     kids.Add(MenuRow.Toggle("flight/lights/nav", "nav-lights", w.NavOn,
@@ -740,7 +740,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     F("DISABLE NIGHT VISION", "NIGHT VISION: ON", "RETURN TO NORMAL VISION", "NIGHT VISION OFF"))));
             if (w.HasNvg && w.NvgOn && w.HasNvgGain)
                 c.Rows.Add(b.Reg(MenuRow.Cycle("view/nvg-gain", "night-vision", "SET NVG GAIN", "NVG GAIN: ",
-                    new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Max(0, Math.Min(3, w.NvgGain)), "NVG GAIN: ")));
+                    new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Clamp(w.NvgGain, 0, 3), "NVG GAIN: ")));
             if (w.TerrainAvailable)
             {
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/holo", "map", w.HoloMap,

@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW",
         };
 
-        public static float WindFrom(float downwindHeading) => WeatherMath.WrapHeading(downwindHeading + 180f);
-
         public static string Cardinal(float bearing)
         {
             int index = (int)Math.Round(WeatherMath.WrapHeading(bearing) / 22.5f) % 16;
@@ -48,16 +46,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return FlightCategory.Vfr;
         }
 
-        public static string CategoryName(FlightCategory category)
+        public static string CategoryName(FlightCategory category) => category switch
         {
-            switch (category)
-            {
-                case FlightCategory.Mvfr: return "MVFR";
-                case FlightCategory.Ifr: return "IFR";
-                case FlightCategory.Lifr: return "LIFR";
-                default: return "VFR";
-            }
-        }
+            FlightCategory.Mvfr => "MVFR",
+            FlightCategory.Ifr => "IFR",
+            FlightCategory.Lifr => "LIFR",
+            _ => "VFR",
+        };
 
     }
 }

@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class TapeBounds
     {
-        public const float NearHalfWidth = 130000f, FarHalfWidth = 254000f;
+        public const float FarHalfWidth = 254000f;
         /// <summary>What a Cumulonimbus (anvil) row may add above its deck: the old map ceiling is 16 km, so a tower is bounded by it.</summary>
         public const float TowerAllowance = 9000f;
         /// <summary>WeatherField lowers a base by up to 300 m under rain (smoothstep 0 to 15 mm/h), and a base never goes below 250 m; a non-anvil tower reaches CloudShape.TowerCap = 1.15 times the layer depth.</summary>

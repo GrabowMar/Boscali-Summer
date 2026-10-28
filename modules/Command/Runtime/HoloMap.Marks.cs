@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
             DrawPlayer(b, ink, bright, w, u, sea);
             DrawTarget(b, bright, w, u, sea, !mini);
-            DrawBases(b, ink, w, u, mini);
+            DrawBases(b, ink, w, u);
             marks.Commit();
 
             // The game's own grid reference, dim at the MINI's lower right (the BIG one leaves it out).
@@ -249,7 +249,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
 
         /// <summary>The airbases in the scan that are in the frame (the BIG picture names up to six, the MINI the nearest one in view), each a diamond on a short leader with its name kept inside the frame.</summary>
-        private void DrawBases(AvQuadBuffer b, Rgba ink, float w, float u, bool mini)
+        private void DrawBases(AvQuadBuffer b, Rgba ink, float w, float u)
         {
             basesDrawn = 0;
             float limit = reach * reach;

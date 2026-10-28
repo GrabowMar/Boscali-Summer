@@ -40,32 +40,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingAircraftCard(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "AircraftCard");
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
-            title = AvText.Make(Rect, "Title", AvTextRole.Label);
-            AvText.Fit(title, false);
-            sub = AvText.Make(Rect, "Sub", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
-            AvText.Fit(sub, false);
+            frame = WmcDraw.FillFrame(Rect);
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
+            sub = WmcSheet.Text(Rect, "Sub", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
             map = AvVector.Create(Rect, "DamageMap", 400);
-            mapNote = AvText.Make(Rect, "MapNote", AvTextRole.Micro, "", TextAlignmentOptions.Center);
-            AvText.Fit(mapNote, false);
+            mapNote = WmcSheet.Text(Rect, "MapNote", AvTextRole.Micro, TextAlignmentOptions.Center);
             for (int i = 0; i < 3; i++)
             {
-                gaugeKey[i] = AvText.Make(Rect, "GaugeKey" + i, AvTextRole.Micro, GaugeKeys[i]);
-                AvText.Fit(gaugeKey[i], false);
-                gaugeValue[i] = AvText.Make(Rect, "GaugeValue" + i, AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-                AvText.Fit(gaugeValue[i], false);
+                gaugeKey[i] = WmcSheet.Text(Rect, "GaugeKey" + i, AvTextRole.Micro, text: GaugeKeys[i]);
+                gaugeValue[i] = WmcSheet.Text(Rect, "GaugeValue" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 track[i] = AvLay.Solid(Rect, "Track" + i, Color.clear);
                 fill[i] = AvLay.Solid(Rect, "Fill" + i, Color.clear);
-                gaugeSub[i] = AvText.Make(Rect, "GaugeSub" + i, AvTextRole.Micro);
-                AvText.Fit(gaugeSub[i], false);
+                gaugeSub[i] = WmcSheet.Text(Rect, "GaugeSub" + i, AvTextRole.Micro);
             }
             for (int i = 0; i < 4; i++)
             {
-                valueKey[i] = AvText.Make(Rect, "ValueKey" + i, AvTextRole.Micro, ValueKeys[i]);
-                AvText.Fit(valueKey[i], false);
-                value[i] = AvText.Make(Rect, "Value" + i, AvTextRole.DataSmall);
-                AvText.Fit(value[i], false);
+                valueKey[i] = WmcSheet.Text(Rect, "ValueKey" + i, AvTextRole.Micro, text: ValueKeys[i]);
+                value[i] = WmcSheet.Text(Rect, "Value" + i, AvTextRole.DataSmall);
             }
             Restyle();
         }
@@ -168,8 +159,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card", AvTheme.Surface);
             title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             sub.color = AvInk.Dim;
             mapNote.color = AvInk.Dim;
@@ -209,12 +199,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < Rows; i++)
             {
                 swatch[i] = AvLay.Solid(Rect, "Swatch" + i, Color.clear);
-                station[i] = AvText.Make(Rect, "St" + i, AvTextRole.Micro);
-                AvText.Fit(station[i], false);
-                store[i] = AvText.Make(Rect, "Store" + i, AvTextRole.Label);
-                AvText.Fit(store[i], false);
-                count[i] = AvText.Make(Rect, "Count" + i, AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-                AvText.Fit(count[i], false);
+                station[i] = WmcSheet.Text(Rect, "St" + i, AvTextRole.Micro);
+                store[i] = WmcSheet.Text(Rect, "Store" + i, AvTextRole.Label);
+                count[i] = WmcSheet.Text(Rect, "Count" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
             }
             none = AvText.Make(Rect, "None", AvTextRole.ProseSmall, "NO STORES");
             Restyle();
@@ -309,14 +296,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingPilotLine(RectTransform parent, Action open)
         {
             Rect = AvLay.Child(parent, "PilotLine");
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect);
             portrait = AvLay.Solid(Rect, "Portrait", Color.white);
             portrait.preserveAspect = true;
-            callsign = AvText.Make(Rect, "Callsign", AvTextRole.Label);
-            AvText.Fit(callsign, false);
-            sub = AvText.Make(Rect, "Sub", AvTextRole.Micro);
-            AvText.Fit(sub, false);
+            callsign = WmcSheet.Text(Rect, "Callsign", AvTextRole.Label);
+            sub = WmcSheet.Text(Rect, "Sub", AvTextRole.Micro);
             Dossier = AvControl.Make(Rect, new AvControl.Spec("DOSSIER", open, AvButtonStyle.Quiet, AvIcon.ChevronRight, true));
             Restyle();
         }
@@ -351,8 +335,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card", AvTheme.Surface);
             callsign.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             sub.color = AvInk.Dim;
             Dossier.Restyle();

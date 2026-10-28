@@ -31,15 +31,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (info.Avail == MetAvail.Motion5) return new MetState(false, "ARRIVES WITH TAPE MOTION (S5)");
             if (!m.Host) return new MetState(false, Client);
             if (!m.Captured) return new MetState(false, Waiting);
-            switch (id)
+            return id switch
             {
-                case MetControl.PaceDown: return m.Pace <= TapePace.MinPace ? new MetState(false, "SLOWEST PACE") : MetState.On;
-                case MetControl.PaceUp: return m.Pace >= TapePace.MaxPace ? new MetState(false, "FASTEST PACE") : MetState.On;
-                case MetControl.AnchorHere:
-                case MetControl.AnchorAhead: return m.HasCamera ? MetState.On : new MetState(false, NoCamera);
-                case MetControl.AnchorDefault: return m.HasAnchor ? MetState.On : new MetState(false, NoAnchor);
-                default: return MetState.On;
-            }
+                MetControl.PaceDown => m.Pace <= TapePace.MinPace ? new MetState(false, "SLOWEST PACE") : MetState.On,
+                MetControl.PaceUp => m.Pace >= TapePace.MaxPace ? new MetState(false, "FASTEST PACE") : MetState.On,
+                MetControl.AnchorHere or MetControl.AnchorAhead => m.HasCamera ? MetState.On : new MetState(false, NoCamera),
+                MetControl.AnchorDefault => m.HasAnchor ? MetState.On : new MetState(false, NoAnchor),
+                _ => MetState.On,
+            };
         }
 
         /// <summary>The footer line for a control: its help while enabled, its name and reason while not.</summary>

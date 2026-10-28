@@ -16,6 +16,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return string.Format(CultureInfo.InvariantCulture, "{0}:{1:00}", s / 60, s % 60);
         }
 
+        /// <summary>A whole number, invariant culture.</summary>
+        public static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
+
         public static string Km(float metres) =>
             (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km";
 

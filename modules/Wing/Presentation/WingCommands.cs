@@ -165,8 +165,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The second pair of the shape attacks; the first stays with you (spec M5 §10.2).
             var pair = new List<uint>();
             foreach (WingMember m in w.Members)
-                if (!m.Released && m.Alive && !m.OnGround && m.Recovery == null && m.Settle == null && w.PairOf(m) == 1 &&
-                    (object)m.Aircraft != null) pair.Add(m.Aircraft.persistentID.Id);
+                if (m.Sendable && w.PairOf(m) == 1 && (object)m.Aircraft != null) pair.Add(m.Aircraft.persistentID.Id);
             if (pair.Count == 0)
             {
                 WingToast.Show("Buddy attack: no second element");

@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         private const float Slack = 0.001f;
 
         public static bool CanAfford(float balance, float cost) =>
-            !float.IsNaN(balance) && !float.IsInfinity(balance) && !float.IsNaN(cost) && !float.IsInfinity(cost) && cost >= 0f && balance + Slack >= cost;
+            float.IsFinite(balance) && float.IsFinite(cost) && cost >= 0f && balance + Slack >= cost;
 
         public static float AfterSpend(float balance, float cost) => Math.Max(0f, balance - cost);
 

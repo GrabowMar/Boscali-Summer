@@ -28,7 +28,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             while (entries.Count > MaximumEntries) entries.RemoveAt(entries.Count - 1);
             return true;
         }
-
-        public void Clear() => entries.Clear();
     }
 }

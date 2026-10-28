@@ -1,4 +1,3 @@
-using BoscaliSummer.Modules.Hud.Domain;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Runtime

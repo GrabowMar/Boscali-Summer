@@ -5,22 +5,13 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
-    /// Read-only adapter for theater dimensions, actual base ownership and objective
-    /// ground observations from the synced world state. Neutral missions remain neutral
+    /// Read-only adapter for actual base ownership and objective ground observations from
+    /// the synced world state; its scene reset also drops the cached theater frame. Neutral missions remain neutral
     /// until there is evidence of combat.
     /// </summary>
     internal sealed class MissionMapCompatibilityEngine : MonoBehaviour, ISceneService
     {
         public void ResetForScene() => TheaterFrame.Invalidate();
-
-        /// <summary>The world span every theater overlay draws against.</summary>
-        public Vector2 ResolveTheaterDimensions(DynamicMap dynamicMap) => TheaterFrame.Resolve(dynamicMap);
-
-        /// <summary>Never borrow an arbitrary faction's intelligence for a spectator.</summary>
-        public FactionHQ ResolvePlayerHq(DynamicMap dynamicMap)
-        {
-            return dynamicMap != null ? dynamicMap.HQ : null;
-        }
 
         /// <summary>Uses the registered, fixed airbase catalogue, including neutral bases.</summary>
         public void ReconcileMissionNodes(TacticalSectorGrid grid, FactionHQ playerHq)

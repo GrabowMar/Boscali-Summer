@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
@@ -222,12 +223,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             y0 = Wrap(y0, period);
             z0 = Wrap(z0, period);
 
-            float c00 = Lerp(Hash01(x0, y0, z0, seed), Hash01(x1, y0, z0, seed), fx);
-            float c10 = Lerp(Hash01(x0, y1, z0, seed), Hash01(x1, y1, z0, seed), fx);
-            float c01 = Lerp(Hash01(x0, y0, z1, seed), Hash01(x1, y0, z1, seed), fx);
-            float c11 = Lerp(Hash01(x0, y1, z1, seed), Hash01(x1, y1, z1, seed), fx);
+            float c00 = Scalar.Lerp(Hash01(x0, y0, z0, seed), Hash01(x1, y0, z0, seed), fx);
+            float c10 = Scalar.Lerp(Hash01(x0, y1, z0, seed), Hash01(x1, y1, z0, seed), fx);
+            float c01 = Scalar.Lerp(Hash01(x0, y0, z1, seed), Hash01(x1, y0, z1, seed), fx);
+            float c11 = Scalar.Lerp(Hash01(x0, y1, z1, seed), Hash01(x1, y1, z1, seed), fx);
 
-            return Lerp(Lerp(c00, c10, fy), Lerp(c01, c11, fy), fz);
+            return Scalar.Lerp(Scalar.Lerp(c00, c10, fy), Scalar.Lerp(c01, c11, fy), fz);
         }
 
         private static void Normalise(float[] data)
@@ -254,11 +255,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static float Smooth(float t)
         {
             return t * t * (3f - 2f * t);
-        }
-
-        private static float Lerp(float a, float b, float t)
-        {
-            return a + (b - a) * t;
         }
 
         private static int Wrap(int v, int period)

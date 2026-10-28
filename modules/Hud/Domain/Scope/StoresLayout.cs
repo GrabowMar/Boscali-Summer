@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         // ---- PWR BUS (LAYOUT.md 3.2)
         public const float PwrNumeralY = 28f, PwrNumeralSize = 24f, PwrUnitY = 32f, PwrUnitGap = 4f, PwrRateY = 28f;
-        public const float CellsTop = 44f, TickTop = 41f, TickBottom = 57f, JamMarkY = 59f, CostY = 66f;
+        public const float CellsTop = 44f, TickBottom = 57f, JamMarkY = 59f;
 
         /// <summary>
         /// The jammer marker's y: +59 under a block that has room for it (one with its cost row, 72 high, or any in STACK, where nothing sits below). WIDE's block without a cost row ends at 54, and +59 stands in the gap under it against the

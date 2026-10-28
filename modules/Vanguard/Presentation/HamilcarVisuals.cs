@@ -27,40 +27,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static readonly string[] AxleNames = { "axle1", "axle2", "axle3" };
         private static bool warned; // one rig warning a session, not one a glider
 
-        // One hinged part. Only localRotation is ever written, about a missile axis taken into the joint's parent frame at
-        // rest: the FBX joints carry their own baked axes and a 100x scale, and neither may change.
-        private struct Joint
-        {
-            public Transform Part;
-            private Quaternion rest;
-            private Vector3 axis;
-            private float shown;
-
-            public static Joint Find(Transform[] parts, string name, Vector3 worldAxis, ref string missing)
-            {
-                foreach (Transform part in parts)
-                    if (part.name == name)
-                        return new Joint { Part = part, rest = part.localRotation, axis = part.parent.InverseTransformDirection(worldAxis) };
-                missing = missing == null ? name : missing + ", " + name;
-                return default;
-            }
-
-            public void Turn(float degrees)
-            {
-                if (degrees == shown || Part == null) return;
-                shown = degrees;
-                Part.localRotation = Quaternion.AngleAxis(degrees, axis) * rest;
-            }
-        }
-
         private Missile missile;
         private VanguardFlight flight;
         private Transform body, visual, payload;
         private Vector3 visualRest, payloadRest;
         private Quaternion payloadRestRot;
-        private Joint outerL, outerR, visor, ramp, prop;
+        private RigJoint outerL, outerR, visor, ramp, prop;
         private float propAngle;
-        private readonly Joint[] axles = new Joint[AxleNames.Length];
+        private readonly RigJoint[] axles = new RigJoint[AxleNames.Length];
         // Outer axles ahead of and behind the Hexhound's origin, measured off the rig; one without axles follows the track as a point.
         private float axleFront = 0.01f, axleRear = -0.01f;
         private float rolled, rollGround;
@@ -105,11 +79,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (visual != null) visualRest = visual.localPosition;
             Transform[] parts = visual != null ? visual.GetComponentsInChildren<Transform>(true) : new Transform[0];
             // Model +X is the glider's right, +Y its forward, +Z its up. The stow axes are kept in that Unity frame already.
-            outerL = Joint.Find(parts, "WingOuterL", body.TransformDirection(HamilcarProfile.OuterAxisL), ref missing);
-            outerR = Joint.Find(parts, "WingOuterR", body.TransformDirection(HamilcarProfile.OuterAxisR), ref missing);
-            visor = Joint.Find(parts, "Visor", body.right, ref missing);
-            ramp = Joint.Find(parts, "Ramp", body.right, ref missing);
-            prop = Joint.Find(parts, "Prop", body.forward, ref missing);
+            outerL = RigJoint.Find(parts, "WingOuterL", body.TransformDirection(HamilcarProfile.OuterAxisL), ref missing);
+            outerR = RigJoint.Find(parts, "WingOuterR", body.TransformDirection(HamilcarProfile.OuterAxisR), ref missing);
+            visor = RigJoint.Find(parts, "Visor", body.right, ref missing);
+            ramp = RigJoint.Find(parts, "Ramp", body.right, ref missing);
+            prop = RigJoint.Find(parts, "Prop", body.forward, ref missing);
 
             payload = body.Find("Payload");
             parts = payload != null ? payload.GetComponentsInChildren<Transform>(true) : new Transform[0];
@@ -121,7 +95,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             else missing = missing == null ? "Payload" : missing + ", Payload";
             for (int i = 0; i < axles.Length; i++)
             {
-                axles[i] = Joint.Find(parts, AxleNames[i], body.right, ref missing);
+                axles[i] = RigJoint.Find(parts, AxleNames[i], body.right, ref missing);
                 if (axles[i].Part == null) continue;
                 float along = payload.InverseTransformPoint(axles[i].Part.position).z;
                 axleFront = Mathf.Max(axleFront, along);

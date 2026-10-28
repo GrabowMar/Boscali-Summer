@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Line()?.Set(HudTone.Info, (v.Flags & PitFlags.ZoneLost) != 0 ? "SKYWELL  ZONE LOST" : v.State == TenderState.Return ? "SKYWELL  TENDER RETURNING" : "SKYWELL  DEPLOYED  ·  AWAITING RECEIVER", stock, 0f);
             else if (v.State == TenderState.Service)
             {
-                Aircraft receiver = Resolve(v.Receiver);
+                Aircraft receiver = SkywellBoard.Resolve(v.Receiver);
                 string who = receiver != null ? receiver.unitName : "RECEIVER";
                 Line()?.Set(HudTone.Caution, "SKYWELL  SERVING  " + who,
                     $"JOB {v.JobIndex + 1}/{v.JobCount}  ·  {(v.Job == PitJobKind.Fuel ? "FUEL" : "STN " + (v.JobStation + 1))}  ·  {stock}",
@@ -166,7 +166,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private bool Served(Aircraft me, SkywellView v)
         {
-            Aircraft tanker = Resolve(v.Tanker);
+            Aircraft tanker = SkywellBoard.Resolve(v.Tanker);
             if (tanker == null) return false;
             float gap = SkywellVisuals.TenderGap(v.Tanker);
             if (serving != v.Tanker)
@@ -213,7 +213,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             foreach (SkywellView v in SkywellBoard.Views.Values)
             {
                 if (!v.Active) continue;
-                Aircraft tanker = Resolve(v.Tanker);
+                Aircraft tanker = SkywellBoard.Resolve(v.Tanker);
                 if (tanker == null || tanker.disabled || tanker == me || tanker.NetworkHQ != me.NetworkHQ) continue;
                 float d = Vector3.Distance(me.transform.position, SkywellBoard.Anchor(tanker));
                 if (d >= CueRange) continue;
@@ -246,8 +246,5 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
 
         private void Notice(string text, HudTone tone) => board?.Notice(Channel, tone, text);
-
-        private static Aircraft Resolve(uint id) =>
-            id != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit u) ? u as Aircraft : null;
     }
 }

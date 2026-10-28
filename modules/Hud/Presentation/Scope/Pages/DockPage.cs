@@ -62,8 +62,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "DOCK";
 
-        public override char Code => 'D';
-
         public override string IdleWord => "NO TANKER";
 
         public override string IdleHint => "NO SKYWELL TANKER TO DOCK WITH";
@@ -177,12 +175,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live || !d.HasStock) return 0;
-            int key = (int)(d.StockFuelKg / 10f) * 1000 + (d.ServiceZone ? d.StockRounds : (int)(d.StockMunKg / 10f));
+            int key = (int)(d.StockFuelKg / 10f) * 1000 + (d.ServiceZone ? d.StockRounds : 0);
             if (key != gaugeKey || units != gaugeUnits)
             {
                 gaugeKey = key; gaugeUnits = units;
                 skyText = Mass(d.StockFuelKg);
-                skySub = d.ServiceZone ? "RDS " + d.StockRounds + "/6" : "MUN " + Mass(d.StockMunKg);
+                skySub = d.ServiceZone ? "RDS " + d.StockRounds + "/6" : "MUN " + Mass(0f);
             }
             into[0] = new GaugeSpec { Id = "sky", Label = "SKYWELL", Kind = GaugeKind.Bar, Value = d.StockFuelMaxKg > 0f ? d.StockFuelKg / d.StockFuelMaxKg : 0f, Text = skyText, Sub = skySub, Tone = Ink };
             return 1;
@@ -442,7 +440,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 else g.Text(d.Docked ? "DOCKING" : "BRAKE TO DOCK", cx, py + 46f, Dim, 12f, ScopeAlign.Center);
                 if (DockMath.Inside(err, cone)) { g.Check(X0 + 18f, py + 62f, 9f, Ink, 1f, 1.5f); g.Text("ALIGNED", X0 + 30f, py + 62f, Ink); }
                 else { g.Cross(X0 + 18f, py + 62f, 8f, Amber, 1f, 1.5f); g.Text("OFF LINE", X0 + 30f, py + 62f, Amber, 12f, ScopeAlign.Left, true); }
-                g.Text(d.ServiceZone ? d.ZoneReady ? "IN ZONE" : "ZONE LOST" : d.Brake ? "BRK ON" : "BRK OFF", X0 + W - 8f, py + 62f, d.ServiceZone ? d.ZoneReady ? Hi : Amber : d.Brake ? Hi : Amber, 12f, ScopeAlign.Right, true);
+                g.Text(d.ServiceZone ? d.ZoneReady ? "IN ZONE" : "ZONE LOST" : "BRK OFF", X0 + W - 8f, py + 62f, d.ServiceZone && d.ZoneReady ? Hi : Amber, 12f, ScopeAlign.Right, true);
             }
             else if (phase == 3)
             {

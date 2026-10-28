@@ -129,45 +129,4 @@ namespace BoscaliSummer.Modules.Support.Visuals
             glow = smoke = lightning = null;
         }
     }
-
-    /// <summary>Feeds the strike's smoke stem for a few seconds, then blooms the cap at the top of it. Lives on the impact object, which owns the particle systems.</summary>
-    internal sealed class ImpactPlume : MonoBehaviour
-    {
-        private ParticleSystem stem, cap;
-        private float born, nextStem;
-        private bool bloomed;
-
-        public void Begin(ParticleSystem stemLayer, ParticleSystem capLayer) { stem = stemLayer; cap = capLayer; born = Time.time; }
-
-        private void Update()
-        {
-            float age = Time.time - born;
-            if (age < 7f && age >= nextStem)
-            {
-                nextStem = age + 0.07f;
-                for (int i = 0; i < 2; i++)
-                    stem.Emit(new ParticleSystem.EmitParams
-                    {
-                        position = UnityEngine.Random.insideUnitSphere * 18f + Vector3.up * 10f,
-                        velocity = new Vector3(UnityEngine.Random.Range(-5f, 5f), UnityEngine.Random.Range(55f, 85f) * (1f - age / 12f), UnityEngine.Random.Range(-5f, 5f)),
-                        rotation = UnityEngine.Random.Range(0f, 360f)
-                    }, 1);
-            }
-            if (!bloomed && age >= 5f)
-            {
-                bloomed = true;
-                for (int i = 0; i < 90; i++)
-                {
-                    float a = i * Mathf.PI * 2f / 90f;
-                    var dir = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
-                    cap.Emit(new ParticleSystem.EmitParams
-                    {
-                        position = Vector3.up * UnityEngine.Random.Range(420f, 560f) + dir * UnityEngine.Random.Range(10f, 40f),
-                        velocity = dir * UnityEngine.Random.Range(14f, 30f) + Vector3.up * UnityEngine.Random.Range(-2f, 8f),
-                        rotation = UnityEngine.Random.Range(0f, 360f)
-                    }, 1);
-                }
-            }
-        }
-    }
 }

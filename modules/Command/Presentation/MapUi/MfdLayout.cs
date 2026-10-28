@@ -41,6 +41,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         public const float TopReserve = 26f;
 
+        /// <summary>The same size to float precision (a layout that has not changed).</summary>
+        public static bool Same(Vector2 a, Vector2 b) =>
+            Mathf.Approximately(a.x, b.x) && Mathf.Approximately(a.y, b.y);
+
+        /// <summary>The same size to within half a pixel (a canvas that has not really resized).</summary>
+        public static bool Near(Vector2 a, Vector2 b) =>
+            Mathf.Abs(a.x - b.x) < 0.5f && Mathf.Abs(a.y - b.y) < 0.5f;
+
         /// <summary>The three columns, resolved against a canvas of this size.</summary>
         internal struct Columns
         {

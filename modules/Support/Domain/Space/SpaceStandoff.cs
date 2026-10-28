@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public const float ReferenceDiagonal = 150000f, BaseMeters = 1500f, MinimumMeters = 800f, MaximumMeters = 3000f;
 
         public static float Scale(float mapDiagonal) =>
-            !float.IsFinite(mapDiagonal) || mapDiagonal <= 0f ? 1f : Math.Max(.4f, Math.Min(2.5f, mapDiagonal / ReferenceDiagonal));
+            !float.IsFinite(mapDiagonal) || mapDiagonal <= 0f ? 1f : Math.Clamp(mapDiagonal / ReferenceDiagonal, .4f, 2.5f);
 
         public static float Radius(float mapDiagonal) =>
             Math.Max(MinimumMeters, Math.Min(MaximumMeters, BaseMeters * Scale(mapDiagonal)));

@@ -103,12 +103,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        private TMP_Text Word(string name, TextAlignmentOptions align)
-        {
-            TMP_Text t = AvText.Make(Rect, name, AvTextRole.Micro, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private TMP_Text Word(string name, TextAlignmentOptions align) => WmcSheet.Text(Rect, name, AvTextRole.Micro, align);
 
         // No shape to draw (a client, or no wing yet): a one-line card, not a 248 px blank.
         private bool Blank => data == null || data.Shape == null;
@@ -249,10 +244,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            card.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            card.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-            card.SetVerticesDirty();
+            WmcDraw.PaintCard(card, "card", AvTheme.Surface, true);
             Color dim = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             caption.color = scaleWord.color = empty.color = dim;
             if (data != null) Draw();
@@ -297,12 +289,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        private TMP_Text T(string name, AvTextRole role, TextAlignmentOptions align)
-        {
-            TMP_Text t = AvText.Make(Rect, name, role, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private TMP_Text T(string name, AvTextRole role, TextAlignmentOptions align) => WmcSheet.Text(Rect, name, role, align);
 
         private static void SetShown(Row r, bool on)
         {
@@ -429,8 +416,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 int k = i;
                 cells[i] = AvControl.Make(Rect, new AvControl.Spec("", () => press(k)()));
                 glyphs[i] = AvVector.Create(cells[i].Rect, "Glyph", 24);
-                names[i] = AvText.Make(cells[i].Rect, "Name", AvTextRole.Micro, "", TextAlignmentOptions.Bottom);
-                AvText.Fit(names[i], false);
+                names[i] = WmcSheet.Text(cells[i].Rect, "Name", AvTextRole.Micro, TextAlignmentOptions.Bottom);
                 cells[i].gameObject.SetActive(false);
             }
             Restyle();
@@ -532,11 +518,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < ticks.Length; i++)
             {
                 ticks[i] = AvLay.Solid(Rect, "Tick" + i, Color.clear);
-                words[i] = AvText.Make(Rect, "Word" + i, AvTextRole.Micro, "", TextAlignmentOptions.Top);
-                AvText.Fit(words[i], false);
+                words[i] = WmcSheet.Text(Rect, "Word" + i, AvTextRole.Micro, TextAlignmentOptions.Top);
             }
-            value = AvText.Make(Rect, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.Center);
-            AvText.Fit(value, false);
+            value = WmcSheet.Text(Rect, "Value", AvTextRole.DataStrong, TextAlignmentOptions.Center);
             Restyle();
         }
 

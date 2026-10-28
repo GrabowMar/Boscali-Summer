@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
 
@@ -103,7 +104,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>An outlined fill bar: <paramref name="frac"/> of its inside filled (or lit in <paramref name="segs"/> segments). Add marks with <see cref="BarTick"/>.</summary>
         public void Bar(float x, float y, float w, float h, float frac, ScopeTone tone = Ink, int segs = 0)
         {
-            frac = Clamp01(frac);
+            frac = Scalar.Clamp01(frac);
             float iw = w - 4f, ih = h - 4f;
             Box(x, y, w, h, Dim, 0.85f);
             if (segs > 0)
@@ -119,7 +120,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A threshold tick across a <see cref="Bar"/> at 0..1 <paramref name="at"/>, optionally labelled above or below.</summary>
         public void BarTick(float x, float y, float w, float h, float at, ScopeTone tone = Amber, ReadOnlySpan<char> label = default, bool up = false, ScopeAlign align = ScopeAlign.Center)
         {
-            float tx = Mathf.Round(x + 2f + (w - 4f) * Clamp01(at));
+            float tx = Mathf.Round(x + 2f + (w - 4f) * Scalar.Clamp01(at));
             Line(tx, y - 3f, tx, y + h + 3f, tone);
             if (!label.IsEmpty) Text(label, tx, up ? y - 11f : y + h + 11f, tone, 12f, align);
         }

@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// <summary>Text helpers the STR parts share (colours come from <see cref="AvInk"/>).</summary>
     internal static class StrPaint
     {
-        public static string Count(int n) => AvNum.Thousands(n);
 
         /// <summary>A fixed-role text child that never wraps and shrinks toward the floor instead of spilling.</summary>
         public static TMP_Text Fit(RectTransform parent, string name, AvTextRole role,

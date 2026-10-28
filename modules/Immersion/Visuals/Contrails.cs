@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         internal int Emitters => live.Count;
 
-        internal void Tick(Vector3 eye, bool enabled, float light, float dt)
+        internal void Tick(Vector3 eye, bool enabled, float light)
         {
             frame++;
             if (enabled)

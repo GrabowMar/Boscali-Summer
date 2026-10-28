@@ -3,22 +3,6 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Weather.Domain
 {
-    internal enum PrecipitationKind : byte
-    {
-        None = 0,
-        Drizzle = 1,
-        Light = 2,
-        Moderate = 3,
-        Heavy = 4,
-        Violent = 5,
-    }
-
-    /// <summary>A lattice feature found near a point (a cumulus group or a storm cell): where it stands in world metres and how big it is.
-    /// The bench places its cameras with it; the readouts count them.</summary>
-    internal struct FieldFeature
-    {
-        public float X, Z, Radius, Base, Top, Strength;
-    }
 
     /// <summary>The weather at one point and instant. Units: mm/h, metres, km, m/s, hPa, °C.</summary>
     internal struct WeatherPoint
@@ -210,40 +194,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (baseField == null || baseField.LayoutSeed != Key.LayoutSeed) baseField = new BaseHeightField(Key.LayoutSeed);
         }
 
-        /// <summary>
-        /// The storm cell out (strength at least <paramref name="minStrength"/>) whose centre is nearest a world point, searching
-        /// <paramref name="rings"/> lattice cells each way: the bench places its cameras with it, in place of the old fixed cell 0.
-        /// </summary>
-        public bool FindNearestCell(float x, float z, out FieldFeature feature, float minStrength = StormLattice.ActiveStrength, int rings = 6)
-        {
-            Frame.ToTape(x, z, out float qx, out float qz);
-            feature = default;
-            if (!StormLattice.FindNearest(Lattice, stormCache, qx, qz, rings, minStrength, out StormCell c)) return false;
-            Frame.FromTape(c.X, c.Z, out float cx, out float cz);
-            feature = new FieldFeature { X = cx, Z = cz, Radius = c.Radius, Base = c.Base, Top = c.Top, Strength = c.Strength };
-            return true;
-        }
-
         /// <summary>How many storm cells at or above <see cref="StormLattice.ActiveStrength"/> have their centre within a range of a world point (the activeCellCount readout).</summary>
         public int ActiveCellCount(float x, float z, float range)
         {
             Frame.ToTape(x, z, out float qx, out float qz);
             return StormLattice.CountActive(Lattice, stormCache, qx, qz, range);
-        }
-
-        /// <summary>
-        /// The cumulus group out (strength at least <paramref name="minStrength"/>) whose centre is nearest a world point, searching
-        /// <paramref name="rings"/> lattice cells each way: the bench places its cameras with it, in place of the old fixed group 0.
-        /// </summary>
-        public bool FindNearestCloud(float x, float z, out FieldFeature feature, float minStrength = CumulusLattice.ActiveStrength, int rings = 4)
-        {
-            Frame.ToTape(x, z, out float qx, out float qz);
-            feature = default;
-            if (!CumulusLattice.FindNearest(Lattice, cumulusCache, qx, qz, rings, minStrength, out CumulusGroup g)) return false;
-            Frame.FromTape(g.X, g.Z, out float gx, out float gz);
-            float baseY = Sample(gx, gz).CloudBase;
-            feature = new FieldFeature { X = gx, Z = gz, Radius = g.Radius, Base = baseY, Top = baseY + g.TopDepth, Strength = g.Strength };
-            return true;
         }
 
         /// <summary>How many cumulus groups at or above <see cref="CumulusLattice.ActiveStrength"/> have their centre within a range of a world point (the activeGroupCount readout).</summary>
@@ -378,12 +333,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             point.BaseVariation = local.BaseVariation;
             float stratiformCover = Scalar.Clamp01(1f - (1f - coverBase) * clearClusters);
             CloudGenus genus = CloudShape.Resolve(local);
-            float deck = WeatherMath.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, local.DeckDepth), genus.SheetBlend);
+            float deck = Scalar.Lerp(genus.PuffDepth, Math.Max(genus.PuffDepth, local.DeckDepth), genus.SheetBlend);
             deck = Math.Max(280f, deck);
             float crownDepth = Math.Max(towerDepth, groupCrown);
             float crown = crownDepth > 0f ? point.CloudBase + crownDepth : 0f;
             // Fair and stratocumulus stay at the genus depth. A cumulonimbus keeps the cell's full column.
-            crown = WeatherMath.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, local.DeckDepth)), crown, genus.TowerBlend);
+            crown = Scalar.Lerp(Math.Min(crown, CloudShape.TowerCap(point.CloudBase, genus, local.DeckDepth)), crown, genus.TowerBlend);
             point.LowTop = Math.Max(point.CloudBase + deck * (0.5f + 0.5f * stratiformCover), crown);
             point.CloudTop = point.LowTop;
 
@@ -418,7 +373,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             point.Temperature = local.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
             float humid = Scalar.Clamp01(point.LowCover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
-            point.Dewpoint = point.Temperature - WeatherMath.Lerp(9f, 0.5f, humid);
+            point.Dewpoint = point.Temperature - Scalar.Lerp(9f, 0.5f, humid);
             return point;
         }
 
@@ -443,32 +398,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return n > 0 ? sum / n : 0f;
         }
 
-        /// <summary>The static patch field in [0, 1] that breaks up area rain and cover.</summary>
-        public float Patch(float x, float z)
-        {
-            Frame.ToTape(x, z, out float qx, out float qz);
-            return PatchAt(qx, qz);
-        }
-
         /// <summary>The patch field lives in the tape frame (spec 3.1), so it slides with the weather.</summary>
         private float PatchAt(float qx, float qz) => WeatherMath.Fbm(Key.Seed ^ 0x5eedu, qx / PatchScale, qz / PatchScale);
-
-        public static PrecipitationKind Classify(float rain)
-        {
-            if (rain < 0.1f) return PrecipitationKind.None;
-            if (rain < 0.5f) return PrecipitationKind.Drizzle;
-            if (rain < 2.5f) return PrecipitationKind.Light;
-            if (rain < 10f) return PrecipitationKind.Moderate;
-            if (rain < 50f) return PrecipitationKind.Heavy;
-            return PrecipitationKind.Violent;
-        }
-
-        /// <summary>Radar reflectivity (dBZ) for a rain rate, Marshall–Palmer Z = 200 R^1.6.</summary>
-        public static float Reflectivity(float rain)
-        {
-            if (rain < 0.05f) return 0f;
-            return 10f * (float)Math.Log10(200.0 * Math.Pow(rain, 1.6));
-        }
     }
 
 }

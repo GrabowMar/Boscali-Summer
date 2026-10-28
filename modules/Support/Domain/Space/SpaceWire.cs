@@ -390,7 +390,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (s.NewestPost > 0)
             {
                 w.WriteByte((byte)s.NewestAction);
-                w.WriteByte((byte)((Math.Max(1, Math.Min(TaskedBoard.MaxMarks, (int)s.NewestTargets))) | (s.NewestWatchOfficer ? 8 : 0) | (s.NewestOwn ? 16 : 0)));
+                w.WriteByte((byte)((Math.Clamp((int)s.NewestTargets, 1, TaskedBoard.MaxMarks)) | (s.NewestWatchOfficer ? 8 : 0) | (s.NewestOwn ? 16 : 0)));
                 WriteText(w, s.NewestMaker, MaxMaker);
             }
             WriteVar(w, (uint)Math.Max(0, s.RadarReadyAt));
@@ -593,7 +593,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static void WriteExpiry1(ISpaceWriter w, float expires, float now)
         {
             double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 10d) : 0d;
-            w.WriteByte((byte)Math.Max(0d, Math.Min(MaxContactDeciseconds, left)));
+            w.WriteByte((byte)Math.Clamp(left, 0d, MaxContactDeciseconds));
         }
 
         private static bool ReadExpiry1(ISpaceReader r, float now, out float expires)
@@ -607,7 +607,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         internal static void WriteExpiry(ISpaceWriter w, float expires, float now)
         {
             double left = float.IsFinite(expires) && float.IsFinite(now) ? Math.Round((expires - now) * 10d) : 0d;
-            int ds = (int)Math.Max(0d, Math.Min(MaxExpiryDeciseconds, left));
+            int ds = (int)Math.Clamp(left, 0d, MaxExpiryDeciseconds);
             w.WriteByte((byte)ds); w.WriteByte((byte)(ds >> 8));
         }
 

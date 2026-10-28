@@ -14,10 +14,6 @@ namespace NOAvionics
     {
 
         public const string Wmc = "WMC";
-        public const string Ops = "OPS";
-        public const string Rad = "RAD";
-        public const string Str = "STR";
-        public const string Set = "SET";
 
         public const string PreferredLeft = "left";
         public const string PreferredRight = "right";
@@ -66,24 +62,6 @@ namespace NOAvionics
             {
                 Hashtable table = Table();
                 table.Remove(id);
-            }
-        }
-
-        public static bool IsClaimed(string id)
-        {
-            if (string.IsNullOrEmpty(id)) return false;
-            lock (LockKey)
-            {
-                return Table().ContainsKey(id);
-            }
-        }
-
-        /// <summary>Test seam. Plugins must not call this on a live game.</summary>
-        public static void Reset()
-        {
-            lock (LockKey)
-            {
-                AppDomain.CurrentDomain.SetData(DataKey, new Hashtable());
             }
         }
 

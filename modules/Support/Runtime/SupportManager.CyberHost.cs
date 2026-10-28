@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal float CyberTreasury(FactionHQ owner) => owner != null && float.IsFinite(owner.factionFunds) ? owner.factionFunds : 0f;
 
         /// <summary>Posts a BURN package on the faction's TASKED board. False when the faction has no SPACE desk or the board has no room.</summary>
-        internal CyberOutcome PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort)
+        internal CyberOutcome PostCyberPackage(FactionHQ owner, ulong op, in CyberNode node, in PackageDef def, float effort)
         {
             if (space == null || !space.TryGetDesk(owner, out TaskedDesk desk)) return CyberOutcome.NoBoard;
             // OVERLORD's package is labelled WATCH OFFICER and carries no effort: its own desk path, never a human maker id.

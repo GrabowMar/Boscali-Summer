@@ -62,13 +62,6 @@ namespace BoscaliSummer.Core.Math
             primed = true;
         }
 
-        public void Reset()
-        {
-            integral = derivative = previousDerivativeInput = 0f;
-            Output = 0f;
-            primed = false;
-        }
-
         private float TrackingTime()
         {
             float ti = Kp > 0f ? Kp / System.Math.Abs(Ki) : 1f / System.Math.Abs(Ki);

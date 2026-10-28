@@ -51,8 +51,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public static RadioModulation Modulation(RadioBand band) =>
             band == RadioBand.Fm ? RadioModulation.Fm : RadioModulation.Am;
 
-        public static bool IsFm(RadioBand band) => Modulation(band) == RadioModulation.Fm;
-
         public static string BandText(RadioBand band) => band == RadioBand.Fm
             ? "FM"
             : band == RadioBand.Air ? "VHF" : "MW";
@@ -75,8 +73,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
     /// </summary>
     internal readonly struct RadioDial : IEquatable<RadioDial>
     {
-        public const int FmMinKilohertz = RadioBands.FmMinKilohertz;
-        public const int FmMaxKilohertz = RadioBands.FmMaxKilohertz;
 
         public RadioBand Band { get; }
         public int Kilohertz { get; }
@@ -89,12 +85,9 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         public static RadioDial Fm(int kilohertz) => new RadioDial(RadioBand.Fm, kilohertz);
         public static RadioDial Mw(int kilohertz) => new RadioDial(RadioBand.Mw, kilohertz);
-        public static RadioDial Air(int kilohertz) => new RadioDial(RadioBand.Air, kilohertz);
 
         public static RadioDial At(RadioBand band, int kilohertz) =>
             new RadioDial(band, kilohertz);
-
-        public bool IsFm => RadioBands.IsFm(Band);
         public RadioModulation Modulation => RadioBands.Modulation(Band);
         public string BandText => RadioBands.BandText(Band);
         public string UnitText => RadioBands.UnitText(Band);
@@ -124,27 +117,20 @@ namespace BoscaliSummer.Modules.Radio.Runtime
     /// </summary>
     internal static class RadioDialTuning
     {
+        /// <summary>The FINE knob splits each band's channel step this many ways.</summary>
+        private const int FineDivisor = 5;
+
         public static RadioDial Step(RadioDial dial, int direction) =>
-            Step(dial, direction, 1);
+            Move(dial, direction, RadioBands.Step(dial.Band));
 
-        public static RadioDial Step(RadioDial dial, int direction, int increments)
+        /// <summary>A reduced increment for the FINE knob.</summary>
+        public static RadioDial FineStep(RadioDial dial, int direction) =>
+            Move(dial, direction, Math.Max(1, RadioBands.Step(dial.Band) / FineDivisor));
+
+        private static RadioDial Move(RadioDial dial, int direction, int step)
         {
             if (direction == 0) return dial;
-            int step = RadioBands.Step(dial.Band) * Math.Max(1, increments);
-            int min = RadioBands.Min(dial.Band);
-            int max = RadioBands.Max(dial.Band);
-            int khz = Math.Min(max, Math.Max(min, dial.Kilohertz + direction * step));
-            return RadioDial.At(dial.Band, khz);
-        }
-
-        /// <summary>A reduced increment for the FINE knob: each band keeps its own grid divisor.</summary>
-        public static RadioDial FineStep(RadioDial dial, int direction, int divisor)
-        {
-            if (direction == 0) return dial;
-            int step = Math.Max(1, RadioBands.Step(dial.Band) / Math.Max(1, divisor));
-            int min = RadioBands.Min(dial.Band);
-            int max = RadioBands.Max(dial.Band);
-            int khz = Math.Min(max, Math.Max(min, dial.Kilohertz + direction * step));
+            int khz = Math.Min(RadioBands.Max(dial.Band), Math.Max(RadioBands.Min(dial.Band), dial.Kilohertz + direction * step));
             return RadioDial.At(dial.Band, khz);
         }
 
@@ -241,7 +227,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         /// </summary>
         public static RadioDial Allocate(string name, HashSet<int> usedSlots)
         {
-            if (usedSlots == null) usedSlots = new HashSet<int>();
+            usedSlots ??= new HashSet<int>();
             int start = SlotForName(name ?? string.Empty);
             for (int probe = 0; probe < FmSlotCount; probe++)
             {

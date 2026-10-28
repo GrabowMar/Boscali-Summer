@@ -39,8 +39,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "STRIKE";
 
-        public override char Code => 'K';
-
         public override string IdleWord => "NO STRIKES";
 
         public override string IdleHint => "NO STRIKE, SAT PASS OR INTRUSION UP";

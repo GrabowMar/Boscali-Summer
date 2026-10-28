@@ -82,15 +82,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new string(buf, 0, len);
         }
 
-        /// <summary>Wrap a follow index by delta over count; -1 when there is nothing to follow.</summary>
-        public static int Cycle(int current, int delta, int count)
-        {
-            if (count <= 0) return -1;
-            int next = (current + delta) % count;
-            if (next < 0) next += count;
-            return next;
-        }
-
         private static string Clip(string value, int max)
         {
             if (string.IsNullOrEmpty(value)) return "--";

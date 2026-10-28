@@ -16,11 +16,6 @@ namespace BoscaliSummer.Modules.Session.Domain
     {
         private readonly Dictionary<string, string> originals = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        /// <summary>True while at least one setting holds a host value.</summary>
-        public bool Active => originals.Count > 0;
-
-        public int Count => originals.Count;
-
         /// <summary>Take one host value. Returns true when the local value changed.</summary>
         public bool Apply(string key, string hostValue, Func<string, string> read, Action<string, string> write)
         {

@@ -25,8 +25,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static readonly FieldInfo CmStations = AccessTools.Field(typeof(CountermeasureManager), "countermeasureStations");
         private static FieldInfo cmStationName;
 
-        private static void ResetAircraftCache() { flareOwner = null; flareEjectors = null; }
-
         private static Action Bind(MenuRow row) => BindVanilla(row) ?? BindContracts(row);
 
         // ------------------------------------------------------------------ readers

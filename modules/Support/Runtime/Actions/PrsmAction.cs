@@ -13,12 +13,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float ReleaseAltitude = 12000f;
         private const float ReleaseSpeed = 1500f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             MissileDefinition definition =
-                context.Host.Vanilla.Prsm(context.Settings.PrsmDefinitionKey.Value);
+                context.Host.Vanilla.Artillery(context.Settings.PrsmDefinitionKey.Value); // PRSM flies the rod's blind-aimpoint ballistic shell
             SupportResult gate = SupportTargeting.ReserveStrike(context, definition,
                 "[Support] PRSM is unavailable: no non-nuclear ballistic missile definition resolved.", out Vector3 ground);
             if (gate != SupportResult.Accepted) return gate;

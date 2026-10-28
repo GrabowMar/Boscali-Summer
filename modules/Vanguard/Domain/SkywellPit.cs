@@ -89,11 +89,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return a.Index.CompareTo(b.Index);
         }
 
-        /// <summary>Fills <paramref name="into"/> with the job list for this order and returns its length.</summary>
-        public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
-            int priority, int magazineRounds, float funds, bool free, List<PitJob> into) =>
-            Plan(order, fuelNeedKg, fuelFraction, fuelStockKg, stations, priority, magazineRounds, funds, free, into, out _);
-
         /// <param name="capped">True when the time / job cap dropped jobs (the pilot flies the zone again for them).</param>
         public static int Plan(PitOrder order, float fuelNeedKg, float fuelFraction, float fuelStockKg, IList<PitStation> stations,
             int priority, int magazineRounds, float funds, bool free, List<PitJob> into, out bool capped)
@@ -157,13 +152,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             capped = keep < into.Count;
             into.RemoveRange(keep, into.Count - keep);
             return into.Count;
-        }
-
-        public static float Total(IList<PitJob> jobs, int from = 0)
-        {
-            float total = 0f;
-            for (int i = from; i < jobs.Count; i++) total += jobs[i].Seconds;
-            return total;
         }
 
         /// <summary>Seconds until the missile reaches the host at its current closing speed; +inf when it is not closing fast.</summary>

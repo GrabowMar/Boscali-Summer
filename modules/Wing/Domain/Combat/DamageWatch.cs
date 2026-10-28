@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>A member's hull from its parts' hit points (spec WMC rebuild R3; the DAMAGED alert, INSPECT, later the rules):
@@ -19,7 +20,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public bool Update(float healthSum, int parts, bool detached)
         {
             if (parts > baseline) baseline = parts;
-            Hull = baseline > 0 ? System.Math.Max(0f, System.Math.Min(1f, healthSum / baseline)) : 1f;
+            Hull = baseline > 0 ? Scalar.Clamp01(healthSum / baseline) : 1f;
             if (Damaged)
             {
                 if (!detached && Hull >= ClearAt) Damaged = false;

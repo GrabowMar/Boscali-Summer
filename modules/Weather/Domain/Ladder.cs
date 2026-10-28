@@ -23,18 +23,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float NearestLobeRung(float metres) =>
             Math.Max(0f, Math.Min(LobeRungs - 1, (float)Math.Round(2.0 * Math.Log(metres / LobeBase, 2.0))));
 
-        public static float NearestPeriodRung(float metres) =>
-            Math.Max(0f, Math.Min(PeriodRungs - 1, (float)Math.Round(2.0 * Math.Log(metres / PeriodBase, 2.0))));
-
         /// <summary>A fractional rung index to its lower integer rung and the weight of the next one: w = smoothstep(0.35, 0.65, frac).</summary>
         public static void Split(float index, out float r0, out float w)
         {
             r0 = (float)Math.Floor(index);
             w = WeatherMath.Smoothstep(0.35f, 0.65f, index - r0);
         }
-
-        /// <summary>The second rung is evaluated only inside this open interval of w; outside it one rung is exact enough.</summary>
-        public static bool NeedsSecond(float w) => w > 0.02f && w < 0.98f;
 
         /// <summary>Mixes two raw noise values at w while keeping contrast: the weighted sum's deviation from its mean (0.5 for the
         /// lobe sum, 0.52 for the thin-layer patterns) is divided by sqrt((1-w)^2 + w^2), the standard deviation of a weighted sum

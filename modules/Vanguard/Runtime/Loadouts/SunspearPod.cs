@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             AiPicks = true // a vanilla laser to the AI (AIPilotCombatModes.UseEnergyWeapon)
         });
 
-        private static class Fields
+        internal static class Fields
         {
             public static readonly AccessTools.FieldRef<Laser, float> Power = AccessTools.FieldRefAccess<Laser, float>("power");
             public static readonly AccessTools.FieldRef<Laser, float> MaxAngle = AccessTools.FieldRefAccess<Laser, float>("maxAngle");
@@ -129,23 +129,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
 
         /// <summary>Bounds of the template's mesh renderers (the beam excluded) in the root's space.</summary>
-        private static bool BodyBounds(Transform root, Renderer beam, out Bounds bounds)
-        {
-            bounds = new Bounds();
-            bool any = false;
-            foreach (MeshFilter f in root.GetComponentsInChildren<MeshFilter>(true))
-            {
-                if (f.sharedMesh == null || (beam != null && f.gameObject == beam.gameObject)) continue;
-                Matrix4x4 m = root.worldToLocalMatrix * f.transform.localToWorldMatrix;
-                Bounds b = f.sharedMesh.bounds;
-                for (int i = 0; i < 8; i++)
-                {
-                    Vector3 corner = m.MultiplyPoint3x4(b.center + Vector3.Scale(b.extents, new Vector3(i & 1, (i >> 1) & 1, (i >> 2) & 1) * 2f - Vector3.one));
-                    if (any) bounds.Encapsulate(corner); else { bounds = new Bounds(corner, Vector3.zero); any = true; }
-                }
-            }
-            return any;
-        }
+        private static bool BodyBounds(Transform root, Renderer beam, out Bounds bounds) =>
+            StoreArt.Bounds(root, root, out bounds, beam == null ? null : (Func<MeshFilter, bool>)(f => f.gameObject == beam.gameObject));
 
         /// <summary>Copies a prefab's meshes and materials (nothing else: no weapons, joints or colliders) under the template root.</summary>
         private static void AddShell(Transform root, Transform source)
@@ -182,7 +167,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// <summary>Every peer, visual only: the HEL-60's turret ball looks where the beam points, and the beam keeps leaving its aperture.</summary>
     internal sealed class SunspearTurret : MonoBehaviour
     {
-        private static readonly AccessTools.FieldRef<Laser, Transform> Direction = AccessTools.FieldRefAccess<Laser, Transform>("directionTransform");
         private Transform turret, aperture, dir;
         private Quaternion rest;
 
@@ -192,7 +176,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Transform art = transform.Find("StoreArt_" + StoreArt.Sunspear);
             turret = art != null ? StoreArt.Joint(art, "Turret") : null;
             aperture = art != null ? StoreArt.Joint(art, "Aperture") : null;
-            dir = laser != null ? Direction(laser) : null;
+            dir = laser != null ? SunspearPod.Fields.Direction(laser) : null;
             if (turret == null || dir == null) { enabled = false; return; }
             rest = Quaternion.Inverse(transform.rotation) * turret.rotation; // the ball's pose in pod space, aperture to the nose
         }

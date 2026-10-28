@@ -138,8 +138,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     WingBoardMember row = members[n];
                     row.Number = m.Number;
                     row.Name = NameOf(n, m);
-                    row.Fuel = BoardRules.Fraction(s.Fuel);
-                    row.Ammo = BoardRules.Fraction(s.Ammo);
+                    row.Fuel = WingRows.Fraction(s.Fuel);
+                    row.Ammo = WingRows.Fraction(s.Ammo);
                     row.Bingo = (flags & SnapshotFlags.Bingo) != 0;
                     row.Joker = (flags & SnapshotFlags.Joker) != 0;
                     row.Damaged = (flags & SnapshotFlags.Damaged) != 0;
@@ -244,8 +244,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Relative(pos - at, fwd, right, out row.X, out row.Y);
                 row.HeadingDeg = Heading(aircraft.transform.forward.ToVec3(), fwd, right);
                 row.SlotErrM = StationMath.Error(s.Err10);
-                row.Fuel = BoardRules.Fraction(s.Fuel);
-                row.Ammo = BoardRules.Fraction(s.Ammo);
+                row.Fuel = WingRows.Fraction(s.Fuel);
+                row.Ammo = WingRows.Fraction(s.Ammo);
                 row.Bingo = (flags & SnapshotFlags.Bingo) != 0;
                 row.Joker = (flags & SnapshotFlags.Joker) != 0;
                 members[n++] = row;

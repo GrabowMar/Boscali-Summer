@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -89,7 +90,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (owned[i] == p) return true;
             return false;
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

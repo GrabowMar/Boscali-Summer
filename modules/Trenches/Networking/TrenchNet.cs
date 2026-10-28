@@ -374,7 +374,7 @@ namespace BoscaliSummer.Modules.Trenches.Networking
             Protocol = ProtocolVersion,
             LineId = line.Id,
             Stage = (byte)line.Stage,
-            Defenders = (byte)Math.Max(0, Math.Min(TrenchWire.MaximumDefenders, line.DefenderCount)),
+            Defenders = (byte)Math.Clamp(line.DefenderCount, 0, TrenchWire.MaximumDefenders),
             Suppressed = line.Suppressed,
             Overrun = line.Overrun
         };

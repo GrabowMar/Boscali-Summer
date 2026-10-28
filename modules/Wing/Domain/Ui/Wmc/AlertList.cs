@@ -21,8 +21,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public const int Max = 8;
         public const float LostSeconds = 20f;
 
-        public static int Fill(SnapshotMember[] rows, int count, Alert[] into) => Fill(rows, count, null, 0f, into);
-
         public static int Fill(SnapshotMember[] rows, int count, WingEventRing events, float now, Alert[] into)
         {
             int n = 0;

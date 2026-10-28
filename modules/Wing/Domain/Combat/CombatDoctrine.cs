@@ -96,6 +96,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public static float SaturationPenalty = 1.5f, PlayerTargetWeight = 2f, MinRange = 500f;
 
+        /// <summary>How many members one target takes: the weapon's attacks needed, rounded up, between 1 and 4.</summary>
+        public static int Capacity(float attacksNeeded) => Math.Max(1, Math.Min(4, (int)Math.Ceiling(attacksNeeded)));
+
         public static float Score(float opportunity, float threat, float range, float maxRange, int committed, bool playerTarget, int capacity)
         {
             float score = opportunity * (1f + threat) / Math.Max(range, MinRange);

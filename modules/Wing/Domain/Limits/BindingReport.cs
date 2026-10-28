@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
     }
 
-// Filled by the engine (M1c) and the FlightSim from terrain probes and pilot profiles.
-#pragma warning disable CS0649
     /// <summary>World facts the constraints need this tick, gathered by the caller.</summary>
     internal struct LimitContext
     {
@@ -59,5 +57,4 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Wing collision bias for this aircraft (m/s², world), added before any other constraint.</summary>
         public Vec3 CollisionBias;
     }
-#pragma warning restore CS0649
 }

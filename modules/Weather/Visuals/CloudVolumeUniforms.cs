@@ -274,16 +274,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetFloat(FarSpanId, farHalf * 2f);
         }
 
-        /// <summary>At render time, with the camera's final pose: the reduced-resolution march's
-        /// view (rays through the four screen corners, as texture uv: bottom-left, bottom-right,
-        /// top-left, top-right), the checkerboard texel this frame marches (xy) with the
-        /// per-frame dither offset (z), and last frame's view for reprojection.
-        /// <paramref name="globalPosition"/> is the camera in the map frame (unaffected by
-        /// floating-origin shifts). Returns false when last frame's view cannot be reused
-        /// (first frame, a cut, a zoom).</summary>
-        internal bool ApplyView(Camera camera, Vector3 globalPosition, Material material = null)
-            => ApplyView(camera, globalPosition, camera.worldToCameraMatrix, camera.projectionMatrix, material);
-
         /// <summary>World rays through the four corners of a view, one per row (bottom-left, bottom-right, top-left, top-right), each of unit length along the camera axis.</summary>
         internal static Matrix4x4 FrustumRays(Matrix4x4 inverseView, Matrix4x4 inverseProjection)
         {

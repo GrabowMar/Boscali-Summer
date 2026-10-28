@@ -18,9 +18,6 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         /// <summary>Ring vertices per cross-section. Index order is documented in BuildEdgeMesh.</summary>
         public const int ProfilePointCount = 10;
 
-        /// <summary>Cross-section strip between profile points 3 and 4 is the dry trench floor.</summary>
-        public const int FloorStrip = 3;
-
         // 0: left outer skirt tip (ground penetration)
         // 1: left berm toe
         // 2: left parados crest (rear earth mound)
@@ -34,25 +31,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
         private static readonly float[] ProfileU = { 0.00f, 0.07f, 0.21f, 0.34f, 0.41f, 0.47f, 0.63f, 0.73f, 0.94f, 1.00f };
 
         /// <summary>
-        /// Extrudes a continuous ditch along a path polyline: rear parados, dry trench
-        /// floor with a firing step, and a forward parapet over a narrow spoil berm.
-        /// When <paramref name="ground"/> is supplied, the outer berm toes and skirt tips
-        /// are lowered onto the terrain on each side, so the earthwork hugs cross-slopes
-        /// instead of bridging them. <paramref name="ringExtra"/> adds per-ring width (one
-        /// entry per path point, the last entry repeating), so fire bays can flare; null or
-        /// all zeros keeps one uniform ditch.
-        /// </summary>
-        public static Mesh BuildEdgeMesh(Vector3[] path, float width, float parapetHeight, float skirtDepth, Vector3 threatDir,
-            Func<Vector3, Vector3> ground = null, float[] ringExtra = null)
-        {
-            if (path == null || path.Length < 2) return null;
-            var job = new EdgeJob(path, width, parapetHeight, skirtDepth, threatDir, ground, ringExtra);
-            job.LayRings(int.MaxValue);
-            return job.Finish();
-        }
-
-        /// <summary>
-        /// <see cref="BuildEdgeMesh"/> in pieces: rings are laid a few at a time (a ground-conformed ring costs two
+        /// The edge mesh built in pieces: rings are laid a few at a time (a ground-conformed ring costs two
         /// terrain rays, so a long ditch in one call was a multi-millisecond frame), then <see cref="Finish"/> builds
         /// the mesh. The path needs two points at least.
         /// </summary>
@@ -151,11 +130,11 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
 
                     // Hand-dug irregularity: spoil heaps and a slightly wavy crest, plus a slow
                     // width drift so the earthwork never reads as one uniform extrusion.
-                    float spoilJitter = Noise(accumulatedLength * 0.16f, 5.3f);
-                    float crestJitter = (Noise(accumulatedLength * 0.22f, 11.7f) - 0.5f) * 0.34f +
-                        (Noise(accumulatedLength * 0.05f, 71.3f) - 0.5f) * 0.30f;
-                    float bermJitter = (Noise(accumulatedLength * 0.13f, 29.1f) - 0.5f) * 0.55f;
-                    miter *= 1f + (Noise(accumulatedLength * 0.025f, 43.9f) - 0.5f) * 0.16f;
+                    float spoilJitter = Mathf.PerlinNoise(accumulatedLength * 0.16f, 5.3f);
+                    float crestJitter = (Mathf.PerlinNoise(accumulatedLength * 0.22f, 11.7f) - 0.5f) * 0.34f +
+                        (Mathf.PerlinNoise(accumulatedLength * 0.05f, 71.3f) - 0.5f) * 0.30f;
+                    float bermJitter = (Mathf.PerlinNoise(accumulatedLength * 0.13f, 29.1f) - 0.5f) * 0.55f;
+                    miter *= 1f + (Mathf.PerlinNoise(accumulatedLength * 0.025f, 43.9f) - 0.5f) * 0.16f;
 
                     // Conform the outer sides to the terrain: a cross-slope must meet the
                     // berms, not run under or above them.
@@ -314,8 +293,8 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                     sincePost = 0f;
                     Vector3 side = Lateral(delta, Vector3.right);
                     Vector3 forward = delta.normalized * BladeWidth;
-                    Vector3 baseAt = path[i] + side * ((Noise(arc * 0.37f, 3.7f) - 0.5f) * 0.8f);
-                    Vector3 lean = forward * ((Noise(arc * 0.53f, 9.1f) - 0.5f) * 2f);
+                    Vector3 baseAt = path[i] + side * ((Mathf.PerlinNoise(arc * 0.37f, 3.7f) - 0.5f) * 0.8f);
+                    Vector3 lean = forward * ((Mathf.PerlinNoise(arc * 0.53f, 9.1f) - 0.5f) * 2f);
                     AddBlade(vertices, uvs, triangles, baseAt - side * 0.5f,
                         baseAt + side * 0.5f + Vector3.up * postHeight + lean, forward, u, arc * 0.34f, arc * 0.34f);
                     AddBlade(vertices, uvs, triangles, baseAt + side * 0.5f,
@@ -443,8 +422,6 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 triangles.Add(flip ? baseIndex + p : baseIndex + p + 1);
             }
         }
-
-        private static float Noise(float distance, float seed) => Mathf.PerlinNoise(distance, seed);
 
         private static bool NearSapHead(Vector3 point, Vector3[][] spurs)
         {

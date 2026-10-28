@@ -7,8 +7,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal struct HudMessage
     {
         public HudTone Tone;
-        /// <summary>The publishing feed's key (e.g. "fuel"), so the board can draw its symbol.</summary>
-        public string Channel;
         public string Text, Detail;
         public float Bar;
     }
@@ -45,14 +43,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public void Reset()
         { foreach (Line line in lines) line.Valid = false; lines.Clear(); ticker.Clear(); }
 
-        /// <summary>True while a held line of this channel is live: the board reads the pilot's situation from which feeds are up.</summary>
-        public bool HasLive(string channel)
-        {
-            float now = clock();
-            foreach (Line line in lines) if (line.Channel == channel && line.Live(now)) return true;
-            return false;
-        }
-
         /// <summary>The notice the ticker shows now, if any.</summary>
         public bool Ticker(out TickerLine line) => ticker.Peek(clock(), out line);
 
@@ -72,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             {
                 if (!Valid) return;
                 Message = new HudMessage { Tone = tone, Text = Clip(text, 160), Detail = Clip(detail, 240),
-                    Bar = float.IsNaN(bar) || float.IsInfinity(bar) ? 0 : Math.Max(0, Math.Min(1, bar)) };
+                    Bar = !float.IsFinite(bar) ? 0 : Math.Max(0, Math.Min(1, bar)) };
                 refreshed = clock(); released = false;
             }
             public void Release() => released = true;

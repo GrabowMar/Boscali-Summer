@@ -97,7 +97,7 @@ namespace NOAvionics
     /// <summary>Static console decoration: a ruler under the header and registration crosses at two corners. No motion.</summary>
     public sealed class AvDecorGraphic : MaskableGraphic
     {
-        public float RulerTop = 32f, Step = 6f;
+        public float RulerTop = 32f;
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {

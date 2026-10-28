@@ -9,22 +9,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class LightningMath
     {
-        /// <summary>No bolts below heavy rain.</summary>
-        public const float MinRain = 0.6f;
-
-        /// <summary>Mean seconds between strikes at MinRain..full storm.</summary>
-        public const float MaxInterval = 25f, MinInterval = 6f;
 
         public const float SoundSpeed = 343f;
-
-        /// <summary>Seconds until the next strike for a unit random and rain, or infinity.</summary>
-        public static float NextDelay(float unit, float rain)
-        {
-            float r = Scalar.Clamp01(rain);
-            if (r < MinRain) return float.PositiveInfinity;
-            float t = (r - MinRain) / (1f - MinRain);
-            return (MaxInterval + (MinInterval - MaxInterval) * t) * (0.5f + Scalar.Clamp01(unit));
-        }
 
         /// <summary>Flash brightness t seconds after the bolt: main stroke plus restrike.</summary>
         public static float FlashEnvelope(float t)

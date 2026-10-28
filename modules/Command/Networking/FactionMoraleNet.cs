@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Command.Networking
         {
             if (GameAccess.IsServer() || !MissionManager.IsRunning ||
                 message.Protocol != ProtocolVersion || message.FactionHash == 0 ||
-                float.IsNaN(message.Morale) || float.IsInfinity(message.Morale) ||
+                !float.IsFinite(message.Morale) ||
                 message.Morale < 0f || message.Morale > 100f) return;
             if (remote.Count >= MaximumFactions && !remote.ContainsKey(message.FactionHash)) return;
             remote[message.FactionHash] = message.Morale;

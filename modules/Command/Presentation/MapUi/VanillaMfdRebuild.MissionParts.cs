@@ -13,9 +13,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // text at the width it is given (one Lay() shared by Measure and Place, so they cannot disagree) and
         // calls Changed() whenever a setter can alter its height.
 
-        private static Color StyleColor(string classes, Color fallback) =>
-            AvStyleHost.FuiInk(classes, fallback);
-
         private static Color StateFill(AvState state) =>
             AvStyleHost.FuiFill("metric-fill " + AvStates.Class(state), AvTheme.Accent);
 
@@ -185,22 +182,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(card.Border, AvTheme.Frame));
                 frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.SetVerticesDirty();
-                Color keyColor = StyleColor("metric-key", AvTheme.RailInfo);
+                Color keyColor = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
                 keyIcon.color = keyColor; key.color = keyColor; fixKey.color = keyColor; situation.color = keyColor;
-                clock.color = StyleColor("readout", AvTheme.TextPrimary);
-                name.color = StyleColor("title", AvTheme.TextPrimary);
-                meta.color = StyleColor("row-sub", AvTheme.Dim);
+                clock.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
+                name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
+                meta.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 Color hairline = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
                 ruleTop.color = hairline; ruleBottom.color = hairline;
-                Color word = hasObjective ? StateFill(objState) : StyleColor("row-sub", AvTheme.Dim);
+                Color word = hasObjective ? StateFill(objState) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 objIcon.color = word; objWord.color = word;
-                objPct.color = StyleColor("row-value " + AvStates.Class(objState), AvTheme.TextPrimary);
-                objTitle.color = hasObjective ? StyleColor("row-name", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
-                fixValue.color = StyleColor("row-value info", AvTheme.TextPrimary);
+                objPct.color = AvStyleHost.FuiInk("row-value " + AvStates.Class(objState), AvTheme.TextPrimary);
+                objTitle.color = hasObjective ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+                fixValue.color = AvStyleHost.FuiInk("row-value info", AvTheme.TextPrimary);
                 bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 bar.FillColor = bar.FillEnd = StateFill(objState);
                 bar.SetVerticesDirty();
-                brief.color = hasBrief ? StyleColor("row-sub", AvTheme.Dim) : StyleColor("section-caption", AvTheme.Disabled);
+                brief.color = hasBrief ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim) : AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
             }
         }
 
@@ -258,10 +255,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame.Paint(AvStyleHost.Resolve(card.Background, AvTheme.Surface), AvStyleHost.Resolve(card.Border, AvTheme.Hairline));
                 frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 frame.SetVerticesDirty();
-                value.color = StyleColor("readout", AvTheme.TextPrimary);
-                caption.color = StyleColor("readout-unit", AvTheme.Dim);
-                sideKey.color = StyleColor("metric-key", AvTheme.RailInfo);
-                sideValue.color = StyleColor("row-value info", AvTheme.TextPrimary);
+                value.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
+                caption.color = AvStyleHost.FuiInk("readout-unit", AvTheme.Dim);
+                sideKey.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
+                sideValue.color = AvStyleHost.FuiInk("row-value info", AvTheme.TextPrimary);
                 segments.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 segments.FillColor = segments.FillEnd = StateFill(state);
                 segments.SetVerticesDirty();
@@ -445,11 +442,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     bool reached = states[i] != AvState.Inert;
                     nodes[i].Paint(reached ? StateFill(states[i]) : hairline,
                         reached ? StateFill(states[i]) : AvStyleHost.FuiBorder("frame", AvTheme.Frame));
-                    names[i].color = reached ? StyleColor("row-name", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
-                    thresholds[i].color = reached ? StyleColor("readout", AvTheme.TextPrimary) : StyleColor("row-sub", AvTheme.Dim);
+                    names[i].color = reached ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+                    thresholds[i].color = reached ? AvStyleHost.FuiInk("readout", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                     words[i].color = states[i] == AvState.Inert
-                        ? StyleColor("section-caption", AvTheme.Disabled)
-                        : StyleColor("row-value " + AvStates.Class(states[i]), AvTheme.TextPrimary);
+                        ? AvStyleHost.FuiInk("section-caption", AvTheme.Disabled)
+                        : AvStyleHost.FuiInk("row-value " + AvStates.Class(states[i]), AvTheme.TextPrimary);
                 }
             }
         }
@@ -528,10 +525,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvStyle row = AvStyleHost.FuiStyle("row " + AvStates.Class(state));
                 frame.Paint(AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert), Color.clear);
                 rail.color = StateRail(state);
-                icon.color = state == AvState.Inert ? StyleColor("row-sub", AvTheme.Dim) : StateFill(state);
-                title.color = StyleColor("row-name", AvTheme.TextPrimary);
-                sub.color = StyleColor("row-sub", AvTheme.Dim);
-                value.color = StyleColor("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
+                icon.color = state == AvState.Inert ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim) : StateFill(state);
+                title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+                sub.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+                value.color = AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
                 bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
                 bar.FillColor = bar.FillEnd = StateFill(state == AvState.Inert ? AvState.Info : state);
                 bar.SetVerticesDirty();

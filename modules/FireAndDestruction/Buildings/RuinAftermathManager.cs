@@ -45,8 +45,8 @@ namespace BoscaliSummer.Fire
         }
 
         public void ResetForScene() { Clear(); if (isActiveAndEnabled) Start(); }
-        internal void LandingDust(GlobalPosition position) => collapsePool.EmitLanding(position, Vector3.up, 3f);
-        internal void SectionDust(GlobalPosition position, float size) => collapsePool.EmitLanding(position, Vector3.up, size);
+        internal void LandingDust(GlobalPosition position) => collapsePool.EmitLanding(position, 3f);
+        internal void SectionDust(GlobalPosition position, float size) => collapsePool.EmitLanding(position, size);
 
         internal void RegisterRuin(
             GlobalPosition position, Vector2 halfExtents, float ageSeconds = 0f,
@@ -72,7 +72,7 @@ namespace BoscaliSummer.Fire
         }
 
         internal GameObject AttachFacade(
-            GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, int buildingId, bool nativeRubble = false) =>
+            GlobalPosition position, List<RuinDebrisPool.FacadePiece> pieces, bool nativeRubble = false) =>
             debrisPool.AttachShell(position, pieces, nativeRubble);
 
         /// <summary>

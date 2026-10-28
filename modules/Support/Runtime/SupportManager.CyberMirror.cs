@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal CyberMirror CyberMirror => cyberMirror;
 
         /// <summary>The NET page is the only reader of the CYBER mirror: while it is open the feed asks the host for a state.</summary>
-        internal MirrorFeed<CyberStateData> CyberFeed => cyberFeed ?? (cyberFeed = new MirrorFeed<CyberStateData>(cyberMirror, SpaceCommandKind.CyberSync));
+        internal MirrorFeed<CyberStateData> CyberFeed => cyberFeed ??= new MirrorFeed<CyberStateData>(cyberMirror, SpaceCommandKind.CyberSync);
 
         /// <summary>HOP to a visible node (starts an intrusion, or goes deeper from a node you hold). Returns the request id (0 when not sent).</summary>
         internal int CyberHop(int nodeId) => SendCyber(SpaceCommandKind.CyberHop, nodeId);

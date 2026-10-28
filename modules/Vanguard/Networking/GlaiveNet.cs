@@ -55,16 +55,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration=Time.unscaledTime+.5f;
-            ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
-        }
-
-        internal static void Broadcast(GlaiveState state)
-        {
-            NetworkServer server=NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(state, authenticatedOnly:true, excludeLocalPlayer:true);
+            NetFeed.Poll(ClientHandlers, ref nextRegistration);
         }
 
         private void Receive(INetworkPlayer sender, GlaiveState state)

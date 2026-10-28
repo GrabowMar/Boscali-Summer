@@ -27,10 +27,6 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         /// <summary>Most centre-line points an offensive takes; more are ignored.</summary>
         public const int MaxCurve = 17;
-        /// <summary>Most quads Offensive writes: a fill and two edges per body step, the head, the tail cap and four head edges.</summary>
-        public const int OffensiveQuads = 3 * (MaxCurve - 1) + 6;
-        /// <summary>Quads Chevrons writes: three chevrons of two strokes.</summary>
-        public const int ChevronQuads = 6;
 
         private static readonly float[] bodyX = new float[MaxCurve], bodyY = new float[MaxCurve], bodyS = new float[MaxCurve];
 
@@ -131,7 +127,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             float x0 = lane.X, y0 = lane.Y, x1 = x0 + lane.W, y1 = y0 + lane.H;
 
             // Not observed: no side, no notch, no trail; the hatch says "no data" without claiming a number.
-            if (float.IsNaN(lane.Value) || float.IsInfinity(lane.Value))
+            if (!float.IsFinite(lane.Value))
                 return HatchRect(b, x0, y0, lane.W, lane.H, HatchSpacing, HatchWidth, lane.Tick);
 
             float v = lane.Value < 0f ? 0f : lane.Value > 1f ? 1f : lane.Value;
@@ -291,6 +287,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             return true;
         }
 
-        private static bool Bad(float v) => float.IsNaN(v) || float.IsInfinity(v);
+        private static bool Bad(float v) => !float.IsFinite(v);
     }
 }

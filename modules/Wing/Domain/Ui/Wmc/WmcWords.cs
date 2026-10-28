@@ -1,7 +1,5 @@
 using System.Globalization;
-using System.Text;
 
-using BoscaliSummer.Modules.Wing.Networking;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>TACTICAL's short words (spec WMC rebuild §bezel shell): posture, scope, the armed-order cue and telemetry

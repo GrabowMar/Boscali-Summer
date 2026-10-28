@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Text;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Vanguard.Domain;
@@ -61,8 +60,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             view.Build(go.transform);
             return view;
         }
-
-        internal AvWindow Window => window;
 
         private void Build(Transform uiRoot)
         {
@@ -213,9 +210,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Abort();
             }
         }
-
-        /// <summary>Shows the window without touching input (the offline harness).</summary>
-        internal void ShowFrame() { window.Show(); feed.Paint(link); Paint(); }
 
         public void Close() { if (IsOpen) window.Hide(); }
 
@@ -490,7 +484,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private static float Flat(Vector3 a, Vector3 b) => new Vector2(a.x - b.x, a.z - b.z).magnitude;
 
-        private static string Deg(float deg) => AvNum.Fixed(Mathf.Repeat(deg, 360f), 0).PadLeft(3, '0') + "°";
+        private static string Deg(float deg) => DroneFeedView.Three(deg) + "°";
 
         private static string Bars(float quality)
         {

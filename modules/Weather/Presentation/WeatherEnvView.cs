@@ -423,24 +423,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private static float DensityRatio(EnvData d) => d.DensityByAlt != null && d.DensityByAlt.Length > 0 && d.DensityByAlt[0] > 0f
             ? d.AirDensity / d.DensityByAlt[0] : -1f;
 
-        internal static AvState RegimeState(WeatherRegimeType type)
+        internal static AvState RegimeState(WeatherRegimeType type) => type switch
         {
-            switch (type)
-            {
-                case WeatherRegimeType.Clear:
-                case WeatherRegimeType.Fair:
-                    return AvState.Info;
-                case WeatherRegimeType.Scattered:
-                    return AvState.Ready;
-                case WeatherRegimeType.Broken:
-                case WeatherRegimeType.Overcast:
-                case WeatherRegimeType.RainSquall:
-                    return AvState.Caution;
-                case WeatherRegimeType.Storm:
-                    return AvState.Danger;
-                default:
-                    return AvState.Info;
-            }
-        }
+            WeatherRegimeType.Scattered => AvState.Ready,
+            WeatherRegimeType.Broken or WeatherRegimeType.Overcast or WeatherRegimeType.RainSquall => AvState.Caution,
+            WeatherRegimeType.Storm => AvState.Danger,
+            _ => AvState.Info,
+        };
     }
 }

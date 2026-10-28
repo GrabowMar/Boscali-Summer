@@ -382,9 +382,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// loadouts[1] fallback and can restore removed tanks.</summary>
         private static Loadout GuardNativeFallback(AircraftDefinition definition, Loadout loadout)
         {
-            if (loadout?.weapons != null &&
-                !RecoverySettlementPolicy.NativeLoadoutReplaces(loadout.weapons.Count))
-                return loadout;
+            if (loadout?.weapons != null && loadout.weapons.Count > 0) return loadout;
             return EmptyStations(definition) ?? loadout;
         }
 

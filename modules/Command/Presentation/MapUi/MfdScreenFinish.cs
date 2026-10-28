@@ -55,8 +55,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        private static void CopyScaler(CanvasScaler source, CanvasScaler destination)
+        internal static void CopyScaler(CanvasScaler source, CanvasScaler destination)
         {
+            if (destination == null) return;
+
             if (source == null)
             {
                 destination.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;

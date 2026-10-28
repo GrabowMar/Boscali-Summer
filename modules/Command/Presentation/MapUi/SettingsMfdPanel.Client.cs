@@ -76,15 +76,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, () => preview.Refresh(settings));
         }
 
-        // Presets write the existing saved controls; manual tuning leaves no preset selected.
+        // The CLEAR / GLASS / CRT presets, one entry each. They write the existing saved controls; manual tuning leaves no preset selected.
+        private static readonly float[] FinishGlass = { 0f, .35f, .15f }, FinishScan = { 0f, 0f, .25f },
+            FinishEdge = { 0f, 0f, .15f }, FinishLife = { 0f, .6f, .35f };
+
         private void SetDisplayFinish(int index)
         {
             settings.DisplayEffects.Value = true;
             settings.DisplayAutoLight.Value = true;
-            settings.DisplayGlass.Value = index == 0 ? 0f : index == 1 ? .35f : .15f;
-            settings.DisplayScanlines.Value = index == 2 ? .25f : 0f;
-            settings.DisplayVignette.Value = index == 2 ? .15f : 0f;
-            settings.DisplayLife.Value = index == 0 ? 0f : index == 1 ? .6f : .35f;
+            settings.DisplayGlass.Value = FinishGlass[index];
+            settings.DisplayScanlines.Value = FinishScan[index];
+            settings.DisplayVignette.Value = FinishEdge[index];
+            settings.DisplayLife.Value = FinishLife[index];
         }
 
         private int DisplayFinishIndex()
@@ -92,10 +95,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!EffectsEnabled()) return -1;
             for (int i = 0; i < 3; i++)
                 if ((i == 0 || settings.DisplayAutoLight.Value) &&
-                    Mathf.Approximately(settings.DisplayGlass.Value, i == 0 ? 0f : i == 1 ? .35f : .15f) &&
-                    Mathf.Approximately(settings.DisplayScanlines.Value, i == 2 ? .25f : 0f) &&
-                    Mathf.Approximately(settings.DisplayVignette.Value, i == 2 ? .15f : 0f) &&
-                    Mathf.Approximately(settings.DisplayLife.Value, i == 0 ? 0f : i == 1 ? .6f : .35f)) return i;
+                    Mathf.Approximately(settings.DisplayGlass.Value, FinishGlass[i]) &&
+                    Mathf.Approximately(settings.DisplayScanlines.Value, FinishScan[i]) &&
+                    Mathf.Approximately(settings.DisplayVignette.Value, FinishEdge[i]) &&
+                    Mathf.Approximately(settings.DisplayLife.Value, FinishLife[i])) return i;
             return -1;
         }
 
@@ -108,7 +111,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-        private bool CustomEnabled() => ImageEnabled();
 
         private int BackgroundIndex() =>
             Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(
@@ -180,14 +182,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MfdMapDeck.CycleCustomWallpaper,
                 () => MfdMapDeck.DiscoveredWallpaperCount > 1,
                 () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", CustomEnabled,
+                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", ImageEnabled,
                 () => "Choose CUSTOM as the background. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
             string[] fits = { "COVER", "FIT", "STRETCH" };
             AvRow imageFit = Stepper(flow, page, "IMAGE FIT",
                 () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
                 d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
                 () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
-                CustomEnabled, () => "Choose CUSTOM as the background first.");
+                ImageEnabled, () => "Choose CUSTOM as the background first.");
             AvNote wallNote = new AvNote(flow.Content) { MinHeight = 18f };
             AvButtons scanRow = new AvButtons(flow.Content, new[]
             {
@@ -223,7 +225,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 scanRow.SetShown(custom);
                 if (key != shownKey) { shownKey = key; more.Reflow(); }
                 if (custom) wallNote.Set(MfdMapDeck.WallpaperStatus);
-                bool ready = CustomEnabled();
+                bool ready = ImageEnabled();
                 scan.Interactable = ready;
                 scan.Help = ready
                     ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."

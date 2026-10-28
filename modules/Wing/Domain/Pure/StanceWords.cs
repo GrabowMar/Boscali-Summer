@@ -19,8 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         };
         private static readonly string[] FallBackWords = { "never", "1.5 : 1", "2 : 1", "3 : 1" };
 
-        public static string AxisName(int axis) => axis >= 0 && axis < Names.Length ? Names[axis] : "?";
-
         /// <summary>"SILENT", "12 KM": axis <paramref name="axis"/>'s value in a chip or a row; "?" when out of range.</summary>
         public static string AxisWord(int axis, int value) =>
             axis >= 0 && axis < Short.Length && value >= 0 && value < Short[axis].Length ? Short[axis][value] : "?";

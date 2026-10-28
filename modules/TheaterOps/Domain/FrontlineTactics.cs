@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                     if (!float.IsFinite(square) || square < 1f) continue;
                     float part = ((targetX - points[i].X) * dx +
                                   (targetZ - points[i].Z) * dz) / square;
-                    part = Math.Max(0f, Math.Min(1f, part));
+                    part = Math.Clamp(part, 0f, 1f);
                     float px = points[i].X + part * dx;
                     float pz = points[i].Z + part * dz;
                     float distance = (targetX - px) * (targetX - px) +

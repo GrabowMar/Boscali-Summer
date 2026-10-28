@@ -224,11 +224,6 @@ namespace BoscaliSummer.Core.Chatter
         }
 
         /// <summary>FNV-1a, eight hex digits: the same on every machine and runtime (string.GetHashCode is not).</summary>
-        private static string Hash(string value)
-        {
-            uint h = 2166136261;
-            foreach (char c in value) { h ^= c; h *= 16777619; }
-            return h.ToString("x8");
-        }
+        private static string Hash(string value) => BoscaliSummer.Core.Math.Deterministic.HashString(value).ToString("x8");
     }
 }

@@ -417,7 +417,7 @@ namespace BoscaliSummer.Modules.Progression.Visuals
                 {
                     Renderer renderer = renderers[r];
                     Material material = renderer != null ? renderer.sharedMaterial : null;
-                    if (material == null || !material.HasProperty(LiveryId) ||
+                    if (!Wears(material) ||
                         !material.name.EndsWith("(Instance)", StringComparison.Ordinal)) continue;
                     Texture carried = material.GetTexture(LiveryId);
                     if (carried == null) continue;
@@ -453,11 +453,18 @@ namespace BoscaliSummer.Modules.Progression.Visuals
                 for (int r = 0; r < renderers.Count; r++)
                 {
                     Material material = renderers[r] != null ? renderers[r].sharedMaterial : null;
-                    if (material != null && material.HasProperty(LiveryId) && material.GetTexture(LiveryId) == from)
+                    if (Wears(material) && material.GetTexture(LiveryId) == from)
                         material.SetTexture(LiveryId, to);
                 }
             }
         }
+
+        /// <summary>
+        /// The shader itself declares <c>_Livery</c>. HasProperty is not enough: the game's SetLivery writes the
+        /// texture into every part material, so a plain URP/Lit part (Matte_black) reports it and GetTexture then errors.
+        /// </summary>
+        private static bool Wears(Material material) =>
+            material != null && material.shader != null && material.shader.FindPropertyIndex("_Livery") >= 0;
 
         // ---- The marking as a texture -----------------------------------------------------------
 

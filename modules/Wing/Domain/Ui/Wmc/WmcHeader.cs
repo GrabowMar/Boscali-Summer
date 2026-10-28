@@ -1,6 +1,5 @@
-using System.Globalization;
-
 using BoscaliSummer.Modules.Wing.Networking;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The wing's vitals for the header chips: the minimum fuel and ammo, and the first member (by slot order in the rows)
@@ -139,7 +138,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             state = "warn";
             return "THREAT " + (hostiles > 99 ? "99+" : N(hostiles)) + " AIR";
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

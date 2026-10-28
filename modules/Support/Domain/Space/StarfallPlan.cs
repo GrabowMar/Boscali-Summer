@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>3 at power 0.6, 5 at power 1.5: round(3 + 2 x clamp01((power - 0.6) / 0.9)).</summary>
         public static int Count(float power)
         {
-            if (float.IsNaN(power) || float.IsInfinity(power)) power = 1f;
-            float t = Math.Max(0f, Math.Min(1f, (power - 0.6f) / 0.9f));
+            if (!float.IsFinite(power)) power = 1f;
+            float t = Math.Clamp((power - 0.6f) / 0.9f, 0f, 1f);
             return (int)Math.Round(MinRods + (MaxRods - MinRods) * t, MidpointRounding.AwayFromZero);
         }
 
@@ -30,15 +30,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 double ax = (double)aimX - fromX, az = (double)aimZ - fromZ, len = Math.Sqrt(ax * ax + az * az);
                 if (len > 1d) { dx = ax / len; dz = az / len; }
             }
-            count = Math.Max(0, Math.Min(count, into.Length));
+            count = Math.Clamp(count, 0, into.Length);
             for (int i = 0; i < count; i++)
             {
                 double along = Spacing * (i - (count - 1) * 0.5d);
                 into[i] = new SpaceImpact((float)(aimX + dx * along), (float)(aimZ + dz * along));
             }
         }
-
-        /// <summary>Seconds after the request the i-th rod is released.</summary>
-        public static float ReleaseAt(int index) => ReleaseGap * Math.Max(0, index);
     }
 }

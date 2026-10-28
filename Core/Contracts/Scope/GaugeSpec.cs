@@ -64,9 +64,6 @@ namespace BoscaliSummer.Core.Contracts
             Providers.Add(provider);
         }
 
-        /// <summary>A constant gauge (offline fixtures and tests).</summary>
-        public static void Publish(string id, GaugeSpec spec) => Register(id, (out GaugeSpec g) => { g = spec; return true; });
-
         public static void Unregister(string id, GaugeProvider provider)
         {
             int at = Ids.IndexOf(id);
@@ -91,12 +88,6 @@ namespace BoscaliSummer.Core.Contracts
             }
             if (string.IsNullOrEmpty(spec.Id)) spec.Id = Ids[index];
             return true;
-        }
-
-        public static void Clear()
-        {
-            Ids.Clear();
-            Providers.Clear();
         }
     }
 }

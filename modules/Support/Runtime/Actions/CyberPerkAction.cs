@@ -14,8 +14,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
         public CyberPerkAction(SupportActionId package) => this.package = package;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             try

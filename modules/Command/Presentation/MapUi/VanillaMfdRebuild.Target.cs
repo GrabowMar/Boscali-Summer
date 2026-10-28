@@ -354,11 +354,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Unit unit = icon == null ? null : icon.unit;
                     if (unit == null || unit == hud.aircraft || unit.definition == null ||
                         !icon.gameObject.activeInHierarchy || selector.CheckExclusions(unit)) continue;
-                    GlobalPosition known;
-                    if (!map.HQ.TryGetKnownPosition(unit, out known)) continue;
+                    if (!map.HQ.TryGetKnownPosition(unit, out GlobalPosition known)) continue;
                     GlobalPosition own = hud.aircraft.GlobalPosition();
                     float distance = FastMath.Distance(own, known) / 1000f;
-                    if (float.IsNaN(distance) || float.IsInfinity(distance) ||
+                    if (!float.IsFinite(distance) ||
                         (settings.TargetRangeKm.Value > 0 && distance > settings.TargetRangeKm.Value)) continue;
                     if (settings.TargetWeaponOnly.Value &&
                         (station == null || station.CalcOpportunityThreat(unit.definition, hud.aircraft).opportunity <= 0f))
@@ -393,9 +392,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 CombatHUD hud = SceneSingleton<CombatHUD>.i;
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
-                GlobalPosition known;
                 if (hud == null || hud.aircraft == null || hud.aircraft.disabled || map == null || map.HQ == null ||
-                    !map.HQ.TryGetKnownPosition(unit, out known) || selector.CheckExclusions(unit)) return;
+                    !map.HQ.TryGetKnownPosition(unit, out _) || selector.CheckExclusions(unit)) return;
                 hud.SelectUnit(unit);
                 map.HighlightIcon(unit);
                 Echo(hud.GetTargetList().Contains(unit)
@@ -415,7 +413,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (map == null || map.HQ == null || hud == null || hud.aircraft == null ||
                     !map.HQ.TryGetKnownPosition(unit, out at)) return head + " · POSITION UNKNOWN";
                 float km = FastMath.Distance(hud.aircraft.GlobalPosition(), at) / 1000f;
-                return float.IsNaN(km) || float.IsInfinity(km) ? head + " · POSITION UNKNOWN" : head + " · " + AvNum.Fixed(km, 1) + " KM";
+                return !float.IsFinite(km) ? head + " · POSITION UNKNOWN" : head + " · " + AvNum.Fixed(km, 1) + " KM";
             }
 
             private void DropHeld(int index)
@@ -450,9 +448,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 for (int i = 0; i < group.Count; i++)
                 {
                     Unit unit = group[i];
-                    GlobalPosition known;
                     if (unit != null && !unit.disabled && !selector.CheckExclusions(unit) &&
-                        map.HQ.TryGetKnownPosition(unit, out known)) eligible.Add(unit);
+                        map.HQ.TryGetKnownPosition(unit, out _)) eligible.Add(unit);
                 }
                 if (eligible.Count == 0) { Echo("GROUP " + (slot + 1) + ": THE FILTER ALLOWS NONE OF ITS TARGETS"); return; }
                 selector.DeselectAll();
@@ -597,7 +594,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (sentenceStamp == activeStamp) return sentence;   // the stamp covers every switch, the laser and the HUD link
                 sentenceStamp = activeStamp;
-                int sideOpen, typeOpen, vehicleOpen;
+                int sideOpen, typeOpen;
                 string sides = OpenWords(selector.toggleFactionItems, out sideOpen, "BOTH SIDES");
                 string types = OpenWords(selector.toggleUnitTypesItems, out typeOpen, "EVERY TYPE");
                 if (sideOpen == 0 || typeOpen == 0)
@@ -606,7 +603,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 text.Append(sides).Append(" · ").Append(types);
                 if (GroundOpen())
                 {
-                    string vehicles = OpenWords(selector.toggleVehicleTypesItems, out vehicleOpen, null);
+                    string vehicles = OpenWords(selector.toggleVehicleTypesItems, out _, null);
                     if (vehicles != null) text.Append(" · VEHICLES: ").Append(vehicles);
                 }
                 if (selector.toggleLaser.status) text.Append(" · LASED ONLY");
@@ -1040,7 +1037,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     GlobalPosition own = hud.aircraft.GlobalPosition();
                     float turn = Mathf.Atan2(point.X - own.x, point.Z - own.z) * Mathf.Rad2Deg;
-                    if (!float.IsNaN(turn) && !float.IsInfinity(turn))
+                    if (float.IsFinite(turn))
                         words += " · BRG " + (((Mathf.RoundToInt(turn) % 360) + 360) % 360).ToString("000");
                 }
                 return words + " · ELEV " + AvNum.Fixed(point.Y, 0) + " M · X " + AvNum.Fixed(point.X, 0) + " Z " + AvNum.Fixed(point.Z, 0);
@@ -1105,31 +1102,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void OnlyUnitType(int index) => SetOnly(selector.toggleUnitTypesItems, index);
             private void OnlyVehicleType(int index) => SetOnly(selector.toggleVehicleTypesItems, index);
 
-            private void Toggle(List<TargetListSelector_ToggleButton> entries, int index)
+            private void Toggle(List<TargetListSelector_ToggleButton> entries, int index) => Switch(entries, index, false);
+
+            private void SetOnly(List<TargetListSelector_ToggleButton> entries, int index) => Switch(entries, index, true);
+
+            /// <summary>Flips one switch, or lights only that one.</summary>
+            private void Switch(List<TargetListSelector_ToggleButton> entries, int index, bool only)
             {
                 if (!Ready) return;
                 if (entries == null || index < 0 || index >= entries.Count || entries[index] == null) return;
                 CancelDeleteConfirm();
-                entries[index].Toggle();
+                if (only) selector.SetOnlyItem(entries[index]);
+                else entries[index].Toggle();
                 selector.NeedUpdateIcons();
                 RequestRefresh();
             }
 
-            private void SetOnly(List<TargetListSelector_ToggleButton> entries, int index)
-            {
-                if (!Ready) return;
-                if (entries == null || index < 0 || index >= entries.Count || entries[index] == null) return;
-                CancelDeleteConfirm();
-                selector.SetOnlyItem(entries[index]);
-                selector.NeedUpdateIcons();
-                RequestRefresh();
-            }
-
-            private bool Ready => selector != null && selector.toggleFollowHUD != null &&
-                                  selector.toggleLaser != null && selector.toggleFactionItems != null &&
-                                  selector.toggleUnitTypesItems != null &&
-                                  selector.toggleVehicleTypesItems != null && selector.toggleFactionItems.Count > 0 &&
-                                  selector.toggleUnitTypesItems.Count > 0 && selector.toggleVehicleTypesItems.Count > 0;
+            private bool Ready => TargetPresetRuntime.Ready(selector);
 
             private void SetFilterInput(bool enabled)
             {

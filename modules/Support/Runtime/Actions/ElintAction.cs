@@ -11,8 +11,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class ElintAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             try

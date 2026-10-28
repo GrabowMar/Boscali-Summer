@@ -9,32 +9,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     {
         public const byte MaxOutcome = (byte)OpOutcome.Offline;
 
-        /// <summary>The full name an operator reads on the box header.</summary>
-        public static string Name(OpKind kind) =>
-            kind == OpKind.Asat ? "DECRYPT SATELLITE TRACK" : kind == OpKind.ZeroDay ? "ZERO-DAY: SAM NET FAIL" : kind == OpKind.Fob ? "FORWARD OPERATING BASE" : "NO OPERATION";
-
         /// <summary>The short tag for buttons and console lines.</summary>
         public static string Short(OpKind kind) => kind == OpKind.Asat ? "ASAT" : kind == OpKind.ZeroDay ? "ZERO-DAY" : kind == OpKind.Fob ? "FOB" : "NONE";
 
         public static string Bird(int id) => id == 0 ? "OPTICAL" : id == 1 ? "RADAR" : id == 2 ? "KINETIC" : "UNKNOWN";
-
-        /// <summary>What the pick control reads: the bird, the SAM cluster number or the held building number.</summary>
-        public static string TargetWord(OpKind kind, int id) =>
-            kind == OpKind.Asat ? Bird(id) : kind == OpKind.ZeroDay ? "SAM NET " + id : kind == OpKind.Fob ? "HELD H" + id : "NONE";
-
-        /// <summary>The state word; the countdown reads <c>EXECUTE T-45</c>.</summary>
-        public static string State(OpState state, float countdownLeft)
-        {
-            switch (state)
-            {
-                case OpState.Funding: return "FUNDING";
-                case OpState.NeedsFunding: return "NEEDS FUNDING";
-                case OpState.Execute: return "EXECUTE T-" + Math.Max(0, (int)Math.Ceiling(countdownLeft));
-                case OpState.Done: return "DONE";
-                case OpState.Broken: return "BROKEN";
-                default: return "IDLE";
-            }
-        }
 
         public static string Of(OpOutcome outcome, int detail = 0)
         {
@@ -61,26 +39,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
                 default: return "NEGATIVE: OPERATIONS OFFLINE — NO CYBER OR SOF ASSETS";
             }
         }
-
-        /// <summary>One line of what the operation does and what stops it (the box hint on the tall pages).</summary>
-        public static string Hint(OpKind kind)
-        {
-            switch (kind)
-            {
-                case OpKind.Asat: return "KILLS ONE ENEMY SATELLITE · BREAKS ON DATA CENTER OR LAUNCHER LOSS";
-                case OpKind.ZeroDay: return "ONE SAM NET CANNOT LAUNCH FOR 3 MIN · HALF NEAR AN ENEMY EW TRUCK";
-                case OpKind.Fob: return "HELD BUILDING BECOMES A FOB 20 MIN: +1 TEAM, RAISE, REARM, REFUEL";
-                default: return "";
-            }
-        }
-
-        /// <summary>What an operator must do before the operation can start (no valid target in the list).</summary>
-        public static string NeedTarget(OpKind kind) =>
-            kind == OpKind.ZeroDay ? "REVEAL A SAM SITE FIRST (HOP TO IT OR SCAN IT)" : kind == OpKind.Fob ? "SEIZE A BUILDING FIRST (SOF SEIZE)" : "PICK A SATELLITE";
-
-        /// <summary>The anchor line shown while an operation is paused: what to protect or restore.</summary>
-        public static string Anchor(OpKind kind) =>
-            kind == OpKind.Fob ? "HELD BUILDING" : "DATA CENTER";
 
         /// <summary>What an enemy is told. <paramref name="name"/> is the attacking faction.</summary>
         public static string Ping(OpKind kind, OpPingPhase phase, string name, int detail = 0)

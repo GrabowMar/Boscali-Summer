@@ -11,30 +11,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         Clearing = 64, PostFrontal = 128, Build = 256, Cell = 512, Decay = 1024, Marine = 2048,
     }
 
-    internal static class RoleRules
-    {
-        /// <summary>The classes a role allows, as a bit mask over <see cref="WeatherRegimeType"/> (spec 5.1).</summary>
-        public static int AllowedClasses(Role role)
-        {
-            const int clear = 1, fair = 2, scattered = 4, broken = 8, overcast = 16, rain = 32, storm = 64;
-            switch (role)
-            {
-                case Role.Ridge: case Role.HighPress: return clear | fair;
-                case Role.PreWarm: return clear | fair | scattered | broken | overcast;
-                case Role.WarmBody: return overcast | rain | storm;
-                case Role.WarmSector: return broken | overcast | rain;
-                case Role.ColdLine: return rain | storm;
-                case Role.Clearing: return scattered | fair;
-                case Role.PostFrontal: return fair | scattered;
-                case Role.Build: return fair | scattered | broken;
-                case Role.Cell: return scattered | broken | rain | storm;
-                case Role.Decay: return scattered | broken | overcast | rain | storm;
-                case Role.Marine: return scattered | broken | overcast | rain;
-                default: return 0;
-            }
-        }
-    }
-
     /// <summary>The jitter allowance of one sky layer group (spec 4.1): the share of its own base it may move, the absolute cover it may gain or lose, and the ladder rungs it may move.</summary>
     internal readonly struct JitterRow
     {
@@ -143,15 +119,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return def;
         }
 
-        private static JitterRow DefaultJitter(LowGenus g)
+        private static JitterRow DefaultJitter(LowGenus g) => g switch
         {
-            switch (g)
-            {
-                case LowGenus.Stratocumulus: case LowGenus.ScLid: case LowGenus.Fractus: return JitterRow.Stratocumulus;
-                case LowGenus.Stratus: case LowGenus.Nimbostratus: return JitterRow.Stratus;
-                default: return JitterRow.Cumulus;
-            }
-        }
+            LowGenus.Stratocumulus or LowGenus.ScLid or LowGenus.Fractus => JitterRow.Stratocumulus,
+            LowGenus.Stratus or LowGenus.Nimbostratus => JitterRow.Stratus,
+            _ => JitterRow.Cumulus,
+        };
     }
 
     /// <summary>
@@ -165,11 +138,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private static readonly SkyDef[] Defs = BuildAll();
 
         public static SkyDef Get(int index) => Defs[index];
-        public static SkyParams Nominal(int index) => Defs[index].Nominal;
         public static WeatherRegimeType ClassOf(int index) => Defs[index].Class;
-
-        /// <summary>The seed a pinned sky is jittered with: the tape seed and the layout salt, so Re-roll gives another instance of the same sky.</summary>
-        public static uint PinSeed(WeatherKey key) => unchecked(key.Seed ^ (key.LayoutSalt * 0x9E3779B1u));
 
         private static SkyBuilder Sky(string name, WeatherRegimeType cls) => new SkyBuilder(name, cls);
 
@@ -287,16 +256,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SkyParams sky = def.Nominal;
             Jitter(def, ref sky, seed, jitterScale, 0);
             return Finish(def, sky, openingBase);
-        }
-
-        /// <summary>Every cover moved by its jitter amount in one direction (<paramref name="direction"/> +1 or -1), nothing else: the class extremes the rules test.</summary>
-        public static SkyParams Extreme(int index, int direction)
-        {
-            SkyDef def = Defs[index];
-            SkyParams sky = def.Nominal;
-            Jitter(def, ref sky, 0u, 1f, direction);
-            SkyDerived.Apply(ref sky);
-            return sky;
         }
 
         /// <summary>

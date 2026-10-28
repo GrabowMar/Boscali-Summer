@@ -65,12 +65,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         public static bool NeedsAim(SupportActionId id) => id != SupportActionId.Siphon;
 
         /// <summary>Allocation price of a rung before any scale or modifier (R1 4, R2 6, R3 10, R4 16, R5 30).</summary>
-        public static int BasePrice(int rung) => prices[Clamp(rung) - 1];
+        public static int BasePrice(int rung) => prices[Math.Clamp(rung, 1, MaxRung) - 1];
 
         /// <summary>Seconds one pilot waits before using the same perk again (R1 30, R2 45, R3 60, R4 120, R5 300).</summary>
-        public static float Cooldown(int rung) => cooldowns[Clamp(rung) - 1];
-
-        private static int Clamp(int rung) => Math.Max(1, Math.Min(MaxRung, rung));
+        public static float Cooldown(int rung) => cooldowns[Math.Clamp(rung, 1, MaxRung) - 1];
 
         public static bool TryGet(SupportActionId id, out CallRow row)
         {

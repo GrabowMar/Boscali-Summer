@@ -69,9 +69,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public static bool HoldsForTrack(float range, float offNoseDeg, int left, bool tracked) =>
             !tracked && left > 0 && range <= FireRange && offNoseDeg <= FireCone;
 
-        /// <summary>a beats b: the better cue wins, the nearer one breaks a tie.</summary>
-        public static bool Outranks(GroundCue a, float rangeA, GroundCue b, float rangeB) => a != b ? a < b : rangeA < rangeB;
-
         public static bool Seduces(string seekerType, float decoyRange, float roll) =>
             SeductionRule.IsRadarSeeker(seekerType) && decoyRange <= SeductionRange && roll < SeductionChance;
 

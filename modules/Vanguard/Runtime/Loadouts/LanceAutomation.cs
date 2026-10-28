@@ -56,26 +56,13 @@ namespace BoscaliSummer.Vanguard
             return any;
         }
 
-        // Blueprinter adds the carrier options to the aircraft PREFAB once its bundles are loaded. Under -autoHost the mission
-        // is ready first, so a sim aircraft can predate that: give its sets whatever its prefab's sets offer by now.
-        private static void AdoptPrefabOptions(Aircraft lead)
-        {
-            WeaponManager prefab = lead.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true);
-            HardpointSet[] sets = lead.weaponManager.hardpointSets;
-            for (int i = 0; prefab != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
-                foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
-                    if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
-        }
-
         // Gives the lead the pod alone on the first matching set; the station list rebuilds over the next seconds.
         private static Dictionary<string, object> LanceEquip(Aircraft lead, string pylon)
         {
             if (lead == null) return Failure("VanguardAutomation", "lance_equip", "no friendly aircraft");
-            WeaponMount mount = null;
-            foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
-                if (w != null && w.jsonKey == LanceMount) mount = w;
+            WeaponMount mount = MountOf(LanceMount);
             if (mount == null) return Failure("VanguardAutomation", "lance_equip", LanceMount + " is not in the Encyclopedia");
-            AdoptPrefabOptions(lead);
+            RuntimeStores.Adopt(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int set = -1;
             for (int i = 0; i < sets.Length && set < 0; i++)
@@ -87,9 +74,7 @@ namespace BoscaliSummer.Vanguard
                 return Failure("VanguardAutomation", "lance_equip", "no hardpoint set on " + lead.definition.unitName + " offers the pod for '" + pylon
                     + "' (sets, * = offers the pod: " + string.Join(", ", seen) + ")");
             }
-            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
-            for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == set ? mount : null);
-            lead.Networkloadout = loadout;
+            CarryAlone(lead, set, mount);
             if (lanceProbe == null) lanceProbe = new GameObject("LanceProbe", typeof(LanceProbe));
             return new Dictionary<string, object> { ["ok"] = true, ["set"] = set, ["setName"] = sets[set].name, ["mountMassKg"] = mount.mass, ["mountAmmo"] = mount.ammo };
         }

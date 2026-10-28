@@ -1,4 +1,4 @@
-using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -29,7 +29,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             WmcText.Cut(string.IsNullOrEmpty(rank) ? "ROOKIE" : rank.ToUpperInvariant(), 20) + " · XP " + N(xp);
 
         public static string Status(bool hasPilot) => hasPilot ? "READY" : "DRAFTED AT LAUNCH";
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

@@ -17,8 +17,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
         private const float Standoff = 8000f;
         private const float LateralStep = 400f;
 
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             MissileDefinition definition =

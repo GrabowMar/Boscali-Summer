@@ -149,11 +149,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             }
         }
 
-        // ---- Installation ----------------------------------------------------------------
-
-        /// <summary>The screen for the bezel button (the offline harness builds through this).</summary>
-        private MFDScreen Build(MFDScreen template, Button bezel) => installer.Build(template, bezel);
-
         private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
             // The root is clamped before the console exists. Clamping console.Root afterwards baked

@@ -29,36 +29,6 @@ namespace NOAvionics
 
         private readonly Slot[] slots = new Slot[MaxConcurrent];
 
-        /// <summary>Fades <paramref name="group"/>'s alpha to <paramref name="to"/>, easing out on unscaled time.</summary>
-        public void Fade(CanvasGroup group, float to, float seconds)
-        {
-            if (group == null) return;
-
-            if (Snap || seconds <= 0f)
-            {
-                CancelFade(group);
-                group.alpha = to;
-                return;
-            }
-
-            int index = FindFadeSlot(group);
-            if (index < 0)
-            {
-                group.alpha = to;
-                return;
-            }
-
-            slots[index].Active = true;
-            slots[index].IsPunch = false;
-            slots[index].Group = group;
-            slots[index].Target = null;
-            slots[index].From = group.alpha;
-            slots[index].To = to;
-            slots[index].Elapsed = 0f;
-            slots[index].Duration = seconds;
-            enabled = true;
-        }
-
         /// <summary>Scales <paramref name="target"/> from <paramref name="fromScale"/> to 1, easing out on unscaled time.</summary>
         public void Punch(RectTransform target, float fromScale, float seconds)
         {
@@ -148,17 +118,6 @@ namespace NOAvionics
             if (!anyActive) enabled = false;
         }
 
-        private int FindFadeSlot(CanvasGroup group)
-        {
-            int free = -1;
-            for (int i = 0; i < slots.Length; i++)
-            {
-                if (slots[i].Active && !slots[i].IsPunch && slots[i].Group == group) return i;
-                if (free < 0 && !slots[i].Active) free = i;
-            }
-            return free;
-        }
-
         private int FindPunchSlot(RectTransform target)
         {
             int free = -1;
@@ -168,12 +127,6 @@ namespace NOAvionics
                 if (free < 0 && !slots[i].Active) free = i;
             }
             return free;
-        }
-
-        private void CancelFade(CanvasGroup group)
-        {
-            for (int i = 0; i < slots.Length; i++)
-                if (slots[i].Active && !slots[i].IsPunch && slots[i].Group == group) slots[i].Active = false;
         }
 
         private void CancelPunch(RectTransform target)

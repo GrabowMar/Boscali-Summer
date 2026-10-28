@@ -47,18 +47,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (id != null) map.Remove(id);
         }
 
-        internal bool Has(string id) => id != null && map.ContainsKey(id);
-
-        internal IEnumerable<string> Ids => map.Keys;
-
         internal int Count => map.Count;
-
-        /// <summary>What the control would answer now, without pressing it: the harness reads every reason through this. An unknown id answers with its own refusal.</summary>
-        internal StrAct Gate(string id)
-        {
-            if (id == null || !map.TryGetValue(id, out Entry e)) return Unknown(id);
-            return e.Gate != null ? e.Gate() : new StrAct(StrWhy.None, "");
-        }
 
         /// <summary>Runs the gate, then the press; the same code path as a click. An unknown id is a refusal with a reason, and a refusal presses nothing.</summary>
         internal PressResult Press(string id)

@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// </summary>
     internal sealed class WatchOfficerBrain
     {
-        public const float SuspendedPollSeconds = 1f;
         private readonly List<WatchTarget> targets = new List<WatchTarget>(SpaceContacts.MaxReveals);
         private readonly List<WatchSite> sites = new List<WatchSite>(8);
         private readonly int[] marked = new int[WatchOfficerPolicy.MaxTargets];
@@ -43,8 +42,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public int Posts, Marks, Scans, Failures, Thinks;
         public WatchWhy LastWhy { get; private set; }
         public WatchPlan LastPlan { get; private set; }
-
-        public void RecordHuman(float now) => Policy.RecordHuman(now);
 
         public void Reset()
         {
@@ -59,23 +56,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!Policy.Due(now)) return WatchPlan.Idle(WatchWhy.NotDue);
             var inputs = new WatchInputs { Now = now, Humans = host.Humans };
-            WatchPlan plan;
-            if (!Policy.Idle(inputs.Humans, now))
-            {
-                // A human is working this domain: do not even gather the facts, and look again in a second.
-                plan = Policy.Think(inputs, targets, sites);
-                Policy.Defer(now, SuspendedPollSeconds);
-            }
-            else
-            {
-                targets.Clear(); sites.Clear();
-                host.Gather(now, ref inputs, targets, sites);
-                plan = Policy.Think(inputs, targets, sites);
-                Thinks++;
-                if (plan.Why != WatchWhy.NotDue && Policy.HasStranded) RetryStranded(host, now); // finish the last post first
-                else if (plan.Action == WatchAction.Post) Post(host, plan, now);
-                else if (plan.Action == WatchAction.Scan) Scan(host, plan, now);
-            }
+            targets.Clear(); sites.Clear();
+            host.Gather(now, ref inputs, targets, sites);
+            WatchPlan plan = Policy.Think(inputs, targets, sites);
+            Thinks++;
+            if (plan.Why != WatchWhy.NotDue && Policy.HasStranded) RetryStranded(host, now); // finish the last post first
+            else if (plan.Action == WatchAction.Post) Post(host, plan, now);
+            else if (plan.Action == WatchAction.Scan) Scan(host, plan, now);
             LastPlan = plan;
             LastWhy = plan.Why;
             return plan;

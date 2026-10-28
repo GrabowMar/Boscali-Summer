@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Active = this;
             link = service;
             installer.Log = log;
-            installer.Builder = BuildScreen;
+            installer.Builder = Build;
         }
 
         public void ResetForScene()
@@ -75,8 +75,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (screen != null && !screen.isActive && installer.Bezel != null) installer.Bezel.onClick.Invoke();
             nextRefresh = 0f;
         }
-
-        private RectTransform BuildScreen(RectTransform content, float height) => Build(content, height);
 
         /// <summary>The console under <paramref name="content"/>; the offline harness builds it the same way.</summary>
         internal RectTransform Build(RectTransform content, float height)

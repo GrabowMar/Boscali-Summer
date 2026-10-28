@@ -26,8 +26,6 @@ namespace BoscaliSummer.Core.Contracts
         public float RangeM, ClosureMps;
         /// <summary>The thresholds: the cue range, the capture and engage radii, the closing speed the hook-up tolerates.</summary>
         public float CueM, CaptureM, EngageM, MaxClosingMps;
-        /// <summary>The receiver's brake is applied.</summary>
-        public bool Brake;
         /// <summary>The receiver's fuel now and what it will be filled to (0..1), the kilograms that is, and its rounds aboard against a full load of the rearmable stations.</summary>
         public float Fuel, FuelTarget, FuelNeedKg;
         public int Ammo, AmmoFull;
@@ -37,8 +35,8 @@ namespace BoscaliSummer.Core.Contracts
         public bool HasMoved;
         public float MovedFuelKg;
         public int MovedRounds;
-        /// <summary>The tanker kit's remaining fuel and munitions in kilograms (<see cref="HasStock"/> false: not known).</summary>
+        /// <summary>The tanker kit's remaining fuel in kilograms (<see cref="HasStock"/> false: not known).</summary>
         public bool HasStock;
-        public float StockFuelKg, StockFuelMaxKg, StockMunKg;
+        public float StockFuelKg, StockFuelMaxKg;
     }
 }

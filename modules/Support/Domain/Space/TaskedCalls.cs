@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             for (int i = 0; i < marks.Length; i++)
             {
                 SpaceMark mark = marks[i];
-                if (mark.Id <= 0 || !Coordinate(mark.X) || !Coordinate(mark.Z) ||
+                if (mark.Id <= 0 || !SpaceRules.Coordinate(mark.X) || !SpaceRules.Coordinate(mark.Z) ||
                     !float.IsFinite(mark.ExpiresAt) || CreatedAt >= mark.ExpiresAt ||
                     (mark.Source != BirdKind.Optical && mark.Source != BirdKind.Radar)) return false;
                 for (int j = 0; j < i; j++) if (marks[j].Id == mark.Id) return false;
@@ -66,7 +66,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= 10000000f;
     }
 
     internal readonly struct TaskedPostInfo
@@ -149,7 +148,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private bool retired;
 
         public int Count { get { SyncContacts(); return calls.Count; } }
-        public int Generation { get { SyncContacts(); return retired ? 0 : sceneGeneration; } }
 
         /// <summary>Live OVERLORD posts of one domain: SPACE, CYBER and SOF each keep their own allowance, so one domain's posts never use up another's.</summary>
         public int CountWatchOfficer(float now, TaskedDomain domain)

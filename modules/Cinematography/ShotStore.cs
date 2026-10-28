@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Cinematography
 
         internal bool Load(string id, out ShotPlan plan, out string error)
         {
-            plan = null; error = null;
+            plan = null;
             if (!ShotPlan.SafeId(id)) { error = "Invalid shot ID"; return false; }
             try
             {
@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Cinematography
         { if(!ShotSequence.Validate(sequence,out error)) return false; return Write(Path.Combine(root,"Edits",sequence.id+".json"),sequence,out error); }
         internal bool LoadSequence(string id,out ShotSequence sequence,out string error)
         {
-            sequence=null;error=null;
+            sequence=null;
             if(!ShotPlan.SafeId(id)) { error="Invalid edit ID";return false; }
             try
             {
@@ -100,7 +100,6 @@ namespace BoscaliSummer.Modules.Cinematography
 
         internal bool SaveTake(TakeLog take, out string error)
         {
-            error = null;
             if (take == null || !take.IsFinished || !ShotPlan.SafeId(take.id))
             { error = "Only finished takes with valid IDs can be saved"; return false; }
             return Write(Path.Combine(root, "Takes", take.id + ".json"), take, out error);

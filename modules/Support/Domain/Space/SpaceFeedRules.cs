@@ -6,9 +6,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// <summary>Whether the optical bird can image a point under the current sky.</summary>
     internal enum OpticalVerdict : byte { Ok, NightUnavailable, SkyUnknown }
 
-    /// <summary>The loudest active cockpit warning, critical first: terrain, missile, RWR, bandit.</summary>
-    internal enum FeedThreat : byte { None, Rwr, Missile, Bandit, Terrain }
-
     /// <summary>
     /// What the local cockpit says right now, read once per poll by Support's own native probe. A ground operator has
     /// <see cref="ValidOwnship"/> false and no cockpit warnings; <see cref="ValidOperator"/> is the real local Player and faction.
@@ -90,8 +87,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static float Cover(in WeatherViewSample w)
         {
             // Rain implies cloud even where the cover sample is thin. A bad number never widens the footprint or softens it.
-            float cover = float.IsNaN(w.Cover) || float.IsInfinity(w.Cover) ? 0f : Math.Max(0f, Math.Min(1f, w.Cover));
-            float rain = float.IsNaN(w.Rain01) || float.IsInfinity(w.Rain01) ? 0f : Math.Max(0f, Math.Min(1f, w.Rain01));
+            float cover = !float.IsFinite(w.Cover) ? 0f : Math.Clamp(w.Cover, 0f, 1f);
+            float rain = !float.IsFinite(w.Rain01) ? 0f : Math.Clamp(w.Rain01, 0f, 1f);
             return Math.Max(cover, rain);
         }
 
@@ -105,7 +102,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public static float OpticalRadius(float baseRadius, in WeatherViewSample weather)
         {
-            if (float.IsNaN(baseRadius) || float.IsInfinity(baseRadius) || baseRadius <= 0f) return 0f;
+            if (!float.IsFinite(baseRadius) || baseRadius <= 0f) return 0f;
             return Math.Max(MinimumOpticalRadius, baseRadius * RadiusFactor(weather, false));
         }
 
@@ -145,16 +142,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private static bool BanditOn(in CockpitThreatSnapshot s) =>
             s.ValidOwnship && float.IsFinite(s.NearestKnownBanditMeters) && s.NearestKnownBanditMeters >= 0f && s.NearestKnownBanditMeters < BanditWarnMeters;
 
-        /// <summary>The top critical warning: terrain, then missile, then RWR, then bandit. A ground operator has none.</summary>
-        public static FeedThreat Threat(in CockpitThreatSnapshot s)
-        {
-            if (TerrainOn(s)) return FeedThreat.Terrain;
-            if (MissileOn(s)) return FeedThreat.Missile;
-            if (RwrOn(s)) return FeedThreat.Rwr;
-            if (BanditOn(s)) return FeedThreat.Bandit;
-            return FeedThreat.None;
-        }
-
         /// <summary>
         /// Every active condition as its own word in priority order, so a lower warning is never hidden behind a higher one.
         /// Empty when nothing is active.
@@ -177,8 +164,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>At most six contact targets show at once; a bounded page switch reaches the rest. Nothing scrolls.</summary>
         public const int ContactsPerPage = 6;
         public const int ZoomSteps = 3;
-
-        public static int PageCount(int contacts) => contacts <= 0 ? 1 : (contacts + ContactsPerPage - 1) / ContactsPerPage;
 
         /// <summary>Paging for a surface that shows <paramref name="perPage"/> track-file rows (the compact page shows fewer than the station).</summary>
         public static int PageCount(int contacts, int perPage) => contacts <= 0 || perPage <= 0 ? 1 : (contacts + perPage - 1) / perPage;

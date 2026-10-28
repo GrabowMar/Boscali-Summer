@@ -61,9 +61,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 w.WriteByte((byte)wave.State); w.WriteByte((byte)wave.Block);
                 w.WriteByte((byte)wave.Credits); w.WriteByte((byte)wave.CreditsPerWave);
                 w.WriteString(NetText.Clip(wave.Group, MaximumGroup));
-                w.WriteInt32(Clamp(wave.Cost, -1, 1000000)); w.WriteInt32(Clamp(wave.Pool, -1, 1000000));
-                w.WriteInt32(Clamp(wave.CooldownSeconds, -1, 1000000)); w.WriteInt32(Clamp(wave.Bought, 0, 10000));
-                w.WriteSingle(float.IsNaN(wave.LastBoughtAgo) ? -1f : Math.Max(-1f, Math.Min(86400f, wave.LastBoughtAgo)));
+                w.WriteInt32(Math.Clamp(wave.Cost, -1, 1000000)); w.WriteInt32(Math.Clamp(wave.Pool, -1, 1000000));
+                w.WriteInt32(Math.Clamp(wave.CooldownSeconds, -1, 1000000)); w.WriteInt32(Math.Clamp(wave.Bought, 0, 10000));
+                w.WriteSingle(float.IsNaN(wave.LastBoughtAgo) ? -1f : Math.Clamp(wave.LastBoughtAgo, -1f, 86400f));
                 w.WriteByte(wave.DepotKnown ? (byte)1 : (byte)0);
                 if (wave.DepotKnown) { w.WriteSingle(wave.DepotX); w.WriteSingle(wave.DepotZ); }
             }
@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             {
                 w.WriteInt32(result.OperationId); w.WriteByte((byte)result.Kind); w.WriteString(NetText.Clip(result.Name, MaximumName));
                 w.WriteByte((byte)result.Outcome); w.WriteByte((byte)result.Why); w.WriteSingle(result.AgeSeconds);
-                w.WriteInt32(result.Funds); w.WriteByte((byte)(sbyte)Clamp(result.Morale, -128, 127));
+                w.WriteInt32(result.Funds); w.WriteByte((byte)(sbyte)Math.Clamp(result.Morale, -128, 127));
             }
 
             TheaterOutcomeView outcome = b.LastOutcome;
@@ -278,8 +278,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 depotX = r.ReadSingle(); depotZ = r.ReadSingle();
                 if (!float.IsFinite(depotX) || !float.IsFinite(depotZ)) return false;
             }
-            wave = new TheaterWaveView((WaveState)state, (WaveBlock)block, credits, perWave, group, Clamp(cost, -1, 1000000), Clamp(pool, -1, 1000000),
-                Clamp(cooldown, -1, 1000000), Clamp(bought, 0, 10000), float.IsNaN(lastAgo) ? -1f : Math.Max(-1f, Math.Min(86400f, lastAgo)),
+            wave = new TheaterWaveView((WaveState)state, (WaveBlock)block, credits, perWave, group, Math.Clamp(cost, -1, 1000000), Math.Clamp(pool, -1, 1000000),
+                Math.Clamp(cooldown, -1, 1000000), Math.Clamp(bought, 0, 10000), float.IsNaN(lastAgo) ? -1f : Math.Clamp(lastAgo, -1f, 86400f),
                 depotKnown == 1, depotX, depotZ);
             return true;
         }
@@ -344,7 +344,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
         private static bool Within(float value, float low, float high) => value >= low && value <= high;   // NaN fails both
         private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= MaximumCoordinate;
         private static bool Unknown(byte value, int high) => value <= high || value == 255;
-        private static int Clamp(int value, int low, int high) => value < low ? low : value > high ? high : value;
 
         private static bool Count(NetworkReader r, int high, out short value)
         {

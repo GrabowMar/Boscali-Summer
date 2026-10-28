@@ -1,3 +1,4 @@
+using System;
 using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Fire
@@ -17,7 +18,7 @@ namespace BoscaliSummer.Fire
         /// </summary>
         internal static float DecalSize(float blastYield)
         {
-            float size = MinimumSize + Max(0f, blastYield) * 0.85f;
+            float size = MinimumSize + Math.Max(0f, blastYield) * 0.85f;
             return Scalar.Clamp(size, MinimumSize, MaximumSize);
         }
 
@@ -46,7 +47,5 @@ namespace BoscaliSummer.Fire
         internal static float JitterOffset(float size, float unitSigned) => unitSigned * size * 0.25f;
 
         private static float UnitSigned(uint hash) => Deterministic.UnitFloat(hash) * 2f - 1f;
-
-        private static float Max(float a, float b) => a > b ? a : b;
     }
 }

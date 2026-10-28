@@ -8,33 +8,8 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
     /// </summary>
     internal static class RuinDebrisMath
     {
-        internal const int Grid = 8;
-        internal const int ShardsPerPile = 6;
         internal const int MaxPiles = 6;
         internal const float Gravity = 9.8f;
-
-        internal static void Clear(float[] pile)
-        {
-            if (pile == null) return;
-            for (int i = 0; i < pile.Length; i++) pile[i] = 0f;
-        }
-
-        private static int Cell(float x, float z, float originX, float originZ, float span)
-        {
-            float u = (x - originX) / span + 0.5f;
-            float v = (z - originZ) / span + 0.5f;
-            if (u < 0f) u = 0f;
-            else if (u > 0.999f) u = 0.999f;
-            if (v < 0f) v = 0f;
-            else if (v > 0.999f) v = 0.999f;
-            int ix = (int)(u * Grid);
-            int iz = (int)(v * Grid);
-            if (ix < 0) ix = 0;
-            else if (ix >= Grid) ix = Grid - 1;
-            if (iz < 0) iz = 0;
-            else if (iz >= Grid) iz = Grid - 1;
-            return iz * Grid + ix;
-        }
 
         /// <summary>
         /// Shoves a resting shard along a flat push and holds it on a leash around its rest

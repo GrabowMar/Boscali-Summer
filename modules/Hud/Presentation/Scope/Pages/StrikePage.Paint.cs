@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -37,8 +38,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ tracks
 
-        private static float Lerp(float a, float b, float u) => a + (b - a) * u;
-
         /// <summary>A point of the track's curve at <paramref name="u"/> 0..1 (the prototype's <c>P</c>): the rod's quadratic from the satellite, the missiles' arc, the cruise's low route.</summary>
         private static void Pos(in StrikeTrack m, float y0, float th, float u, out float x, out float y)
         {
@@ -52,13 +51,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (m.Kind != StrikeKind.Cruise)
             {
-                x = Lerp(X0 + 4f, X1, u);
-                y = Lerp(gy - 4f, gy - 5f, u) - 29f * kv * 4f * u * (1f - u);
+                x = Scalar.Lerp(X0 + 4f, X1, u);
+                y = Scalar.Lerp(gy - 4f, gy - 5f, u) - 29f * kv * 4f * u * (1f - u);
                 return;
             }
             float w0 = gy - 17f * kv, w1 = gy - 19f * kv, w2 = gy - 12f * kv, w3 = gy - 5f;
-            x = Lerp(X0 + 8f, X1, u);
-            float yy = x <= 208f ? Lerp(w0, w1, (x - (X0 + 8f)) / (208f - (X0 + 8f))) : x <= 272f ? Lerp(w1, w2, (x - 208f) / 64f) : Lerp(w2, w3, (x - 272f) / (X1 - 272f));
+            x = Scalar.Lerp(X0 + 8f, X1, u);
+            float yy = x <= 208f ? Scalar.Lerp(w0, w1, (x - (X0 + 8f)) / (208f - (X0 + 8f))) : x <= 272f ? Scalar.Lerp(w1, w2, (x - 208f) / 64f) : Scalar.Lerp(w2, w3, (x - 272f) / (X1 - 272f));
             y = yy + 1.6f * Mathf.Sin(x * 0.13f) * Math.Min(1f, u * 8f);
         }
 
@@ -66,7 +65,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             for (int k = 0; k <= n; k++)
             {
-                Pos(m, y0, th, Lerp(u0, u1, (float)k / n), out float x, out float y);
+                Pos(m, y0, th, Scalar.Lerp(u0, u1, (float)k / n), out float x, out float y);
                 pts[2 * k] = x;
                 pts[2 * k + 1] = y;
             }
@@ -130,7 +129,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // ground ruler and the flight's whole curve (dashed while it is in the air)
             for (int k = 0; k <= 4; k++)
             {
-                float rx = Mathf.Round(Lerp(X0, X1, k / 4f));
+                float rx = Mathf.Round(Scalar.Lerp(X0, X1, k / 4f));
                 g.Line(rx, gy, rx, gy + 3f, Faint);
             }
             int np = Samples(m, y0, th, 44, 0f, 1f);
@@ -331,7 +330,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (i + 1 < held) g.Line(xa, ny, xb, ny, Ink);
                 else if (i + 1 == hopTo)
                 {
-                    float px = Lerp(xa, xb, prog);
+                    float px = Scalar.Lerp(xa, xb, prog);
                     g.Line(xa, ny, px, ny, Ink);
                     g.Line(px, ny, xb, ny, Dim, 1f, 1f, 3f, 3f, -t * 12f);
                     g.Ring(px, ny, 2.2f, Hi, 1f, 1f, Hi, 1f);

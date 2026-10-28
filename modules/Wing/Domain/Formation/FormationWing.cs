@@ -3,8 +3,6 @@ using System;
 using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-// Filled by the engine's wing service (M1c) and the FlightSim; the mod assembly only reads it until then.
-#pragma warning disable CS0649
     /// <summary>What one member contributes to the wing computation this tick.</summary>
     internal struct WingMemberInput
     {
@@ -32,7 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// behind it (the member behind waited out the 30 s deadlock timer on every rejoin).</summary>
         public bool Away;
     }
-#pragma warning restore CS0649
 
     /// <summary>Everything a member reads this tick, computed once per wing. Arrays are indexed by slot.</summary>
     internal sealed class WingFrame

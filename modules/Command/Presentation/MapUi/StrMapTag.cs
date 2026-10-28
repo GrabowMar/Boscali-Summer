@@ -26,7 +26,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private StrSlab box, chip;
         private TMP_Text title, sub;
         private StrLaneBar lane;
-        private readonly Vector3[] corners = new Vector3[4];
 
         internal RectTransform Root => root;
 
@@ -149,17 +148,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>The plate's rectangle in screen pixels, Y up.</summary>
-        internal Rect ScreenBounds(Camera camera)
-        {
-            root.GetWorldCorners(corners);
-            Vector2 min = RectTransformUtility.WorldToScreenPoint(camera, corners[0]), max = min;
-            for (int i = 1; i < 4; i++)
-            {
-                Vector2 at = RectTransformUtility.WorldToScreenPoint(camera, corners[i]);
-                min = Vector2.Min(min, at); max = Vector2.Max(max, at);
-            }
-            return Rect.MinMaxRect(min.x, min.y, max.x, max.y);
-        }
+        internal Rect ScreenBounds(Camera camera) => StrMapOverlay.ScreenRect(root, camera);
 
         /// <summary>Moves the tag so its plate is centred on a screen point.</summary>
         internal void PlaceAt(Vector2 screenCentre, Camera camera)

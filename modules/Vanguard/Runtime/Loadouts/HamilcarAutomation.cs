@@ -72,29 +72,14 @@ namespace BoscaliSummer.Vanguard
             public static Dictionary<string, object> Fit(Aircraft lead)
             {
                 if (lead == null) return Failure("VanguardAutomation", "hamilcar", "no friendly aircraft");
-                WeaponMount mount = null;
-                foreach (WeaponMount w in Encyclopedia.i.weaponMounts)
-                    if (w != null && w.jsonKey == HoldMount) mount = w;
+                WeaponMount mount = MountOf(HoldMount);
                 if (mount == null) return Failure("VanguardAutomation", "hamilcar", HoldMount + " is not in the Encyclopedia");
-                AdoptPrefabOptions(lead);
+                RuntimeStores.Adopt(lead);
                 HardpointSet[] sets = lead.weaponManager.hardpointSets;
                 int set = Array.FindIndex(sets, s => s.weaponOptions.Contains(mount));
                 if (set < 0) return Failure("VanguardAutomation", "hamilcar", "no hardpoint set on " + lead.definition.unitName + " offers the hold mount");
-                var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
-                for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == set ? mount : null);
-                lead.Networkloadout = loadout;
+                CarryAlone(lead, set, mount);
                 return new Dictionary<string, object> { ["ok"] = true, ["set"] = set, ["setName"] = sets[set].name };
-            }
-
-            // Blueprinter adds the carrier options to the aircraft PREFAB once its bundles are loaded. Under -autoHost the mission
-            // is ready first, so a sim aircraft can predate that: give its sets whatever its prefab's sets offer by now.
-            private static void AdoptPrefabOptions(Aircraft lead)
-            {
-                WeaponManager prefab = lead.definition.unitPrefab.GetComponentInChildren<WeaponManager>(true);
-                HardpointSet[] sets = lead.weaponManager.hardpointSets;
-                for (int i = 0; prefab != null && i < sets.Length && i < prefab.hardpointSets.Length; i++)
-                    foreach (WeaponMount option in prefab.hardpointSets[i].weaponOptions)
-                        if (!sets[i].weaponOptions.Contains(option)) sets[i].weaponOptions.Add(option);
             }
 
             // The station's own launch (MountedMissile.Fire: ramp, rail, spawn), the way Drain fires a station. fired 0 = no loaded glider station yet.

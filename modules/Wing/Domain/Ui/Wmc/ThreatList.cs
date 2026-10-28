@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -37,11 +38,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>The compass bearing (0-360, 0 north = +Z) of an offset (<paramref name="dx"/>, <paramref name="dz"/>).</summary>
-        public static float Bearing(float dx, float dz)
-        {
-            float deg = (float)(Math.Atan2(dx, dz) * 180.0 / Math.PI);
-            return deg < 0f ? deg + 360f : deg;
-        }
+        public static float Bearing(float dx, float dz) => Vec3.HeadingDeg(new Vec3(dx, 0f, dz));
 
         /// <summary>A threat heading <paramref name="headingDeg"/> is hot when it points within <see cref="HotDeg"/> of the bearing
         /// from it to us.</summary>

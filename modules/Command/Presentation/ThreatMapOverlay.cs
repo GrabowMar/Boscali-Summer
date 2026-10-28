@@ -6,7 +6,6 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
-using NuclearOption.Networking;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -47,19 +46,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private readonly Sample[] samples = new Sample[MaxEmitters];
         private bool initialized;
 
-        /// <summary>True once the map is on screen and the overlay can be drawn at all.</summary>
-        public bool Available => initialized && dynamicMap != null;
-
         /// <summary>The hovered unit's sensor reach in kilometres; 0 when nothing with a sensor is hovered.</summary>
         public float HoverSensorKm { get; private set; }
-
-        public bool Visible => settings != null && settings.ThreatHeat.Value;
-
-        public void SetVisible(bool visible)
-        {
-            if (settings == null || settings.ThreatHeat.Value == visible) return;
-            settings.ThreatHeat.Value = visible;
-        }
 
         public void Configure(CommandSettings config)
         {
@@ -107,7 +95,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (!shown) return;
 
             // The map regenerates its image on a scene change; stay on it when it does.
-            if (rootRect.parent != dynamicMap.mapImage.transform) Reparent();
+            if (rootRect.parent != dynamicMap.mapImage.transform) MapUiAccess.AttachInk(rootRect, dynamicMap);
             Refresh();
         }
 
@@ -135,26 +123,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             root = new GameObject("BoscaliHoverRanges", typeof(RectTransform), typeof(ThreatEnvelopeGraphic));
             rootRect = (RectTransform)root.transform;
-            Reparent();
+            MapUiAccess.AttachInk(rootRect, dynamicMap);
 
             graphic = root.GetComponent<ThreatEnvelopeGraphic>();
             graphic.raycastTarget = false;
 
             initialized = true;
-        }
-
-        private void Reparent()
-        {
-            rootRect.SetParent(dynamicMap.mapImage.transform, false);
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = Vector2.zero;
-            rootRect.offsetMax = Vector2.zero;
-            rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.localScale = Vector3.one;
-            rootRect.localPosition = Vector3.zero;
-            // Vector ink sits above the territory tint and below the map's native contacts.
-            rootRect.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
         }
 
         private void SetShown(bool visible)
@@ -175,7 +149,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             // The stock tooltip shows an aircraft's rings to its own side only, and none for a missile.
             FactionHQ hq = dynamicMap.HQ;
             if (unit != null && !unit.disabled && !(unit is Missile) &&
-                (!(unit is Aircraft) || hq == null || unit.NetworkHQ == hq) && TryPosition(unit, out Vector3 position))
+                (!(unit is Aircraft) || hq == null || unit.NetworkHQ == hq) && MapUiAccess.TryPosition(unit, dynamicMap.HQ, out Vector3 position))
             {
                 float sensor = SensorRange(unit), weapon = WeaponRange(unit);
                 if (sensor >= MinimumDrawableRadius || weapon >= MinimumDrawableRadius)
@@ -187,15 +161,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
             if (graphic != null)
                 graphic.SetSource(samples, used, dynamicMap, settings != null ? settings.OverlayOpacity.Value : .65f);
-        }
-
-        /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
-        private bool TryPosition(Unit unit, out Vector3 position)
-        {
-            FactionHQ hq = dynamicMap.HQ;
-            GlobalPosition? at = hq == null || unit.NetworkHQ == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
-            position = at.HasValue ? at.Value.AsVector3() : default;
-            return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
         }
 
         /// <summary>The stock tooltip's sensor figure: the longest radar range, else the longest visual range.</summary>

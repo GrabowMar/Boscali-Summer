@@ -1,36 +1,91 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
 {
+    /// <summary>What a pooled fire or smoke visual shares: the root, its particle systems, and the sleep and retire switches.</summary>
+    internal abstract class ParticleVisual
+    {
+        public GameObject Root;
+        public ParticleSystem[] Systems;
+        public float[] BaseRates;
+        public bool Active;
+        public bool Sleeping;
+        public float GrowthSeconds;
+        public float SizeScale = 1f;
+        public float LifetimeScale = 1f;
+        public CloudDeckSorting Deck;
+        public bool BehindDeck;
+
+        public virtual void SetSleeping(bool sleep)
+        {
+            if (Sleeping == sleep) return;
+            Sleeping = sleep;
+            if (sleep)
+            {
+                if (Systems != null)
+                {
+                    for (int i = 0; i < Systems.Length; i++)
+                    {
+                        if (Systems[i] != null && Systems[i].isPlaying)
+                            Systems[i].Pause(true);
+                    }
+                }
+                if (Root != null) Root.SetActive(false);
+            }
+            else
+            {
+                if (Root != null) Root.SetActive(true);
+                if (Systems != null)
+                {
+                    for (int i = 0; i < Systems.Length; i++)
+                    {
+                        if (Systems[i] != null)
+                            Systems[i].Play(true);
+                    }
+                }
+            }
+        }
+
+        public void SetPosition(GlobalPosition position)
+        {
+            if (Root != null) Root.transform.position = position.ToLocalPosition();
+        }
+
+        /// <summary>Back to the pool: every system stops and clears, the root hides.</summary>
+        public void Retire()
+        {
+            Sleeping = false;
+            Active = false;
+            if (Systems != null)
+            {
+                for (int i = 0; i < Systems.Length; i++)
+                    if (Systems[i] != null)
+                        Systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            }
+            if (Root != null) Root.SetActive(false);
+        }
+    }
+
     internal sealed class FireVisualPool
     {
-        internal sealed class Visual
+        internal sealed class Visual : ParticleVisual
         {
-            public GameObject Root;
-            public ParticleSystem[] Systems;
-            public float[] BaseRates;
             public Vector3[] BaseShapes;
             public ParticleSystem.MinMaxCurve[] BaseSizes;
             public ParticleSystem.MinMaxCurve[] BaseLifetimes;
             public Light Light;
-            public bool Active;
             public float FlameIntensity;
             public bool Forest;
             public float FootprintScale;
             public float EmissionScale;
             public float LightScale;
-            public float GrowthSeconds;
             public float FlickerSeed;
-            public float SizeScale = 1f;
-            public float LifetimeScale = 1f;
             public float ClusterScale = 1f;
-            public bool Sleeping;
             /// <summary>Emission share by camera distance: far fronts are a few pixels and need far fewer particles.</summary>
             public float LodScale = 1f;
-            public CloudDeckSorting Deck;
-            public bool BehindDeck;
             public FireFrontCell Cell;
             public Mesh FrontMesh;
             private int frontMask = -1;
@@ -95,40 +150,10 @@ namespace BoscaliSummer.Fire
             private Vector3 GroundVertex(float x, float z) => new Vector3(x,
                 groundNormal.y > 0.25f ? 0.25f - (x * groundNormal.x + z * groundNormal.z) / groundNormal.y : 0.25f, z);
 
-            public void SetSleeping(bool sleep)
+            public override void SetSleeping(bool sleep)
             {
-                if (Sleeping == sleep) return;
-                Sleeping = sleep;
-                if (sleep)
-                {
-                    SetLight(false);
-                    if (Systems != null)
-                    {
-                        for (int i = 0; i < Systems.Length; i++)
-                        {
-                            if (Systems[i] != null && Systems[i].isPlaying)
-                                Systems[i].Pause(true);
-                        }
-                    }
-                    if (Root != null) Root.SetActive(false);
-                }
-                else
-                {
-                    if (Root != null) Root.SetActive(true);
-                    if (Systems != null)
-                    {
-                        for (int i = 0; i < Systems.Length; i++)
-                        {
-                            if (Systems[i] != null)
-                                Systems[i].Play(true);
-                        }
-                    }
-                }
-            }
-
-            public void SetPosition(GlobalPosition position)
-            {
-                if (Root != null) Root.transform.position = position.ToLocalPosition();
+                if (sleep && !Sleeping) SetLight(false);
+                base.SetSleeping(sleep);
             }
 
             public void SetLight(bool enabled)
@@ -266,11 +291,7 @@ namespace BoscaliSummer.Fire
                 appliedForest = Forest; appliedSize = SizeScale; appliedLifetime = LifetimeScale;
             }
 
-            private static float Smooth01(float value)
-            {
-                value = Mathf.Clamp01(value);
-                return value * value * (3f - 2f * value);
-            }
+            private static float Smooth01(float value) => Scalar.SmoothStep(0f, 1f, value);
 
             private static int CountEdges(int value)
             {
@@ -325,15 +346,9 @@ namespace BoscaliSummer.Fire
         public void Release(Visual visual)
         {
             if (visual == null || !visual.Active) return;
-            visual.Sleeping = false;
-            visual.Active = false;
             visual.FlameIntensity = 0f;
             visual.SetLight(false);
-            if (visual.Systems != null)
-                for (int i = 0; i < visual.Systems.Length; i++)
-                    if (visual.Systems[i] != null)
-                        visual.Systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            if (visual.Root != null) visual.Root.SetActive(false);
+            visual.Retire();
         }
 
         public void Clear()

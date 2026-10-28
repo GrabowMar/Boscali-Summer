@@ -17,8 +17,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
     internal static class CommsText
     {
         public const int MaxLabel = 18;
-        public const int MaxQuestion = 40;
-        public const int MaxOption = 14;
         public const int MaxName = 20;
 
         /// <summary>Upper-cased, markup-free, whitespace-collapsed and at most <paramref name="max"/> long.</summary>
@@ -54,28 +52,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         {
             string clean = Clean(name, MaxName);
             return clean.Length > 0 ? clean : "PILOT";
-        }
-
-        /// <summary>
-        /// Split one "A, B, C" field into poll options. Empty entries and duplicates are dropped,
-        /// so "YES,,YES, NO" is a two-option poll rather than a rejected one.
-        /// </summary>
-        public static string[] SplitOptions(string text, int maxOptions)
-        {
-            if (string.IsNullOrEmpty(text) || maxOptions <= 0) return Array.Empty<string>();
-            string[] raw = text.Split(new[] { ',', ';', '/', '|' }, StringSplitOptions.RemoveEmptyEntries);
-            var result = new string[Math.Min(raw.Length, maxOptions)];
-            int count = 0;
-            for (int i = 0; i < raw.Length && count < result.Length; i++)
-            {
-                string option = Clean(raw[i], MaxOption);
-                if (option.Length == 0 || Contains(result, count, option)) continue;
-                result[count++] = option;
-            }
-            if (count == result.Length) return result;
-            var trimmed = new string[count];
-            Array.Copy(result, trimmed, count);
-            return trimmed;
         }
 
         /// <summary>Kilometres east / north of the map centre, the grid the other OPS screens print.</summary>
@@ -123,13 +99,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
         {
             if (float.IsNaN(metres) || float.IsInfinity(metres)) return "—";
             return (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture);
-        }
-
-        private static bool Contains(string[] values, int count, string value)
-        {
-            for (int i = 0; i < count; i++)
-                if (string.Equals(values[i], value, StringComparison.Ordinal)) return true;
-            return false;
         }
     }
 }

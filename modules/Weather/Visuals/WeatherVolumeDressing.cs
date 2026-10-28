@@ -180,8 +180,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             GlobalPosition global = camera.transform.GlobalPosition();
             Vector3 local = camera.transform.position;
-            Vector3 offset = new Vector3((float)global.x - local.x,
-                (float)global.y - local.y, (float)global.z - local.z);
+            Vector3 offset = new Vector3(global.x - local.x,
+                global.y - local.y, global.z - local.z);
             // The mesh only supplies a ray for each screen pixel. Keep its far faces well
             // inside the camera clip plane; the shader intersects the world-anchored volume.
             // Parent, don't chase: the camera rides the interpolated aircraft hierarchy and
@@ -262,7 +262,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (material == null || camera == null) return;
             root.transform.position = view.inverse.GetColumn(3);
             GlobalPosition global = camera.transform.GlobalPosition();
-            uniforms.ApplyView(camera, new Vector3((float)global.x, (float)global.y, (float)global.z), view, projection, material);
+            uniforms.ApplyView(camera, new Vector3(global.x, global.y, global.z), view, projection, material);
         }
 
         internal bool InCloud(float x, float y, float z) => DensityAt(x, y, z) > 0.08f;

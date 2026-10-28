@@ -60,29 +60,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private float nextSpi;
 
 #if !PUBLIC_RELEASE
-        /// <summary>Offline render seam (DroneLinkUnityCheck): a fixed roster, link, own position and picture; no game, no refresh.</summary>
-        internal void Fixture(List<DroneView> drones, int linkedIndex, Texture picture, Vector3 self, float heading)
-        {
-            views.Clear();
-            views.AddRange(drones);
-            Count = drones.Count;
-            LinkedIndex = linkedIndex;
-            linked = linkedIndex >= 0 ? drones[linkedIndex].Missile : null;
-            testFeed = picture;
-            SelfPosition = self;
-            SelfHeading = heading;
-            nextRefresh = float.MaxValue;
-            DroneView v = Linked;
-            Tracking = v != null && v.Mode == DroneMode.Auto;
-            LensWord = v == null ? "STARE" : v.Mode == DroneMode.Hand ? "FWD" : v.Mode == DroneMode.Waypoint ? "POINT" : "TRK";
-            LensElevation = v != null && v.Mode == DroneMode.Hand ? -DroneLink.ForwardDeg : -31f;
-            LensAzimuth = Tracking ? 14f : 0f;
-            HasSpi = v != null;
-            SpiSlantM = v != null && v.Mode == DroneMode.Hand ? 21400f : 6200f;
-            SpiGlobal = v != null ? v.Position + new Vector3(3100f, -v.Position.y + 140f, 4400f) : Vector3.zero;
-            Log.Clear();
-            Note("LINKED " + (linkedIndex >= 0 ? drones[linkedIndex].Callsign : "—"));
-        }
 #endif
 
         public void Configure(VanguardNet network) => net = network;
@@ -337,12 +314,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             bool steer = mode == DroneMode.Hand && v.Mode == DroneMode.Hand; // a new course for a drone already in hand
             net?.SendLink(v.Missile, mode, new GlobalPosition(point));
             Note(v.Callsign + " · " + (mode == DroneMode.Auto ? "BACK ON TASK" : mode == DroneMode.Waypoint ? "WPT SET"
-                : (steer ? "CRS " : "HAND · CRS ") + Three(point.x) + "° · ALT " + AvNum.Fixed(point.y, 0) + " M"));
+                : (steer ? "CRS " : "HAND · CRS ") + DroneFeedView.Three(point.x) + "° · ALT " + AvNum.Fixed(point.y, 0) + " M"));
             AvUiSound.Play(steer ? AvUiCue.Press : mode == DroneMode.Hand ? AvUiCue.Engage : mode == DroneMode.Auto ? AvUiCue.Release : AvUiCue.Confirm);
             Refresh();
         }
-
-        private static string Three(float deg) => AvNum.Fixed(Mathf.Repeat(deg, 360f), 0).PadLeft(3, '0');
 
         // ---- lifecycle -------------------------------------------------------------------------------------------------------
 
@@ -474,7 +449,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     v.Missile = e.Missile;
                     v.Role = e.Role;
                     v.Callsign = e.Callsign;
-                    v.Type = e.Missile.definition != null && e.Missile.definition.jsonKey == VanguardKeys.Manta ? "MANTA" : DroneLink.Type(e.Role);
+                    v.Type = RemoraBoard.IsManta(e.Missile) ? "MANTA" : DroneLink.Type(e.Role);
                     v.Job = DroneLink.Job(e.Role);
                     v.SampledAt = -1f;
                     v.SpeedMs = 0f;

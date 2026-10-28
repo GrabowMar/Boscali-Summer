@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 
 namespace BoscaliSummer.Modules.Support.Domain.Calls
 {
@@ -41,11 +42,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
 
         public static CallQuote Quote(int rung, in PriceInputs p)
         {
-            float ev = Sane(p.EventMultiplier);
+            float ev = FrontRules.Sane(p.EventMultiplier);
             float price = CallSheet.BasePrice(rung)
                 * (p.Degraded ? 1f + DegradedFactor : 1f)
                 * (p.Exploit ? 1f + ExploitFactor : 1f)
-                * ev * Sane(p.PerkMultiplier) * Sane(p.Scale);
+                * ev * FrontRules.Sane(p.PerkMultiplier) * FrontRules.Sane(p.Scale);
             int cost = Math.Max(1, (int)Math.Round(price, MidpointRounding.AwayFromZero));
 
             string reason = "";
@@ -64,8 +65,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             int percent = (int)Math.Round(size * 100f, MidpointRounding.AwayFromZero);
             reason = (modifier > 0f ? "+" : "-") + percent + " % " + label;
         }
-
-        private static float Sane(float factor) =>
-            float.IsNaN(factor) || float.IsInfinity(factor) || factor <= 0f ? 1f : factor;
     }
 }

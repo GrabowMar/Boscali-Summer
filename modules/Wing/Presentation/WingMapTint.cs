@@ -85,7 +85,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             private static IEnumerable<MethodBase> TargetMethods()
             {
                 yield return AccessTools.Method(typeof(MapIcon), nameof(MapIcon.UpdateColor));
-                yield return AccessTools.DeclaredMethod(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateColor));
+                // 0.34.3 overrides UpdateColor here; 0.34.2 repaints through UnitMapIcon_UpdateColor. A null target fails the whole
+                // Wing module (issue #30), so take whichever this build declares, looked up quietly.
+                const BindingFlags Own = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+                MethodBase repaint = typeof(UnitMapIcon).GetMethod("UpdateColor", Own, null, Type.EmptyTypes, null)
+                    ?? typeof(UnitMapIcon).GetMethod("UnitMapIcon_UpdateColor", Own, null, Type.EmptyTypes, null);
+                if (repaint != null) yield return repaint;
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.SetIcon));
                 yield return AccessTools.Method(typeof(UnitMapIcon), nameof(UnitMapIcon.UpdateIcon));
             }

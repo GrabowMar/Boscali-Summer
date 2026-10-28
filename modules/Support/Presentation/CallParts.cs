@@ -10,7 +10,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
     /// </summary>
     internal static class OpsInk
     {
-        public static Color Role(string role, Color fallback) => AvStyleHost.FuiColor(role, fallback);
 
         /// <summary>The rail colour a chip/row of this state wears (the state's own hue).</summary>
         public static Color Rail(AvState state) =>
@@ -20,8 +19,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public static Color Word(AvState state) => state == AvState.Inert
             ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary)
             : AvStyleHost.FuiInk("chip " + AvStates.Class(state), AvTheme.TextPrimary);
-
-        public static Color A(Color c, float alpha) => c.WithAlpha(alpha);
     }
 
     /// <summary>Text helpers shared by the hero parts.</summary>

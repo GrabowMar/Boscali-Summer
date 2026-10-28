@@ -150,7 +150,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (!shown[i]) continue;
                 ContractMapTag tag = tags[i];
                 tag.SetVisible(true);
-                tag.Place(positions[i].x, positions[i].y, inverse, screenScale);
+                tag.Place(positions[i].x, positions[i].y, inverse);
                 float lift = LabelLift(i, screenScale);
                 tag.Apply(cards[i], lift);
                 tag.SetRing(cards[i], map, projected ? projection : null, positions[i], screenScale);

@@ -18,9 +18,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Sentinel for <see cref="Story"/>, <see cref="SkyPin"/> and <see cref="MissionClass"/>: not authored.</summary>
         public const byte None = 255;
 
-        /// <summary>Old name of <see cref="None"/> for the timeline's opener.</summary>
-        public const byte AutoState = None;
-
         public const float DefaultSystemSpeed = 27f;
 
         /// <summary>Table sizes the wire validates against. Slices 2 and 4 assert the real tables match.</summary>

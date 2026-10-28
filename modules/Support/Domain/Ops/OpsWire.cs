@@ -89,12 +89,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             return c;
         }
 
-        public bool TryRow(OpDomain domain, out OpsRow row)
-        {
-            for (int i = 0; i < Rows.Count; i++) if (Rows[i].Domain == domain) { row = Rows[i]; return true; }
-            row = default; return false;
-        }
-
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
         public override bool SameAs(OpsStateData o)
         {
@@ -131,7 +125,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public const int GeoCount = SpaceRules.BirdCount * 2;
         private const int GeoBytes = 11;
 
-        private static int Cell(float x) => (int)Math.Round(Math.Max(0f, Math.Min(1f, x)) * 65535f);
+        private static int Cell(float x) => (int)Math.Round(Math.Clamp(x, 0f, 1f) * 65535f);
         private static void Put16(ISpaceWriter w, int v) { w.WriteByte((byte)v); w.WriteByte((byte)(v >> 8)); }
 
         /// <summary>The same wire image: positions to 1/65535, the burn start to the second, the fuel to a percent.</summary>
@@ -142,8 +136,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         private static void WriteGeo(ISpaceWriter w, in GeoBird g, float now)
         {
             Put16(w, Cell(g.FromU)); Put16(w, Cell(g.FromV)); Put16(w, Cell(g.ToU)); Put16(w, Cell(g.ToV));
-            Put16(w, g.Length > 0f ? (int)Math.Max(0d, Math.Min(ushort.MaxValue, Math.Round(now - g.DepartAt))) : 0); // seconds since the burn began
-            w.WriteByte((byte)Math.Max(0, Math.Min(100, (int)Math.Round(g.Fuel))));
+            Put16(w, g.Length > 0f ? (int)Math.Clamp(Math.Round(now - g.DepartAt), 0d, ushort.MaxValue) : 0); // seconds since the burn began
+            w.WriteByte((byte)Math.Clamp((int)Math.Round(g.Fuel), 0, 100));
         }
 
         private static bool ReadGeo(ISpaceReader r, float now, out GeoBird g)
@@ -300,13 +294,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         }
 
         private static OpsStateData Bad() => new OpsStateData();
-
-        public static int StateSize(OpsStateData s)
-        {
-            var c = new ByteCounter();
-            WriteState(c, s);
-            return c.Bytes;
-        }
     }
 
     /// <summary>The client's copy of its own faction's OPERATIONS state (see <see cref="FactionMirror{T}"/>).</summary>
@@ -375,51 +362,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             lastEvent = Math.Max(lastEvent, newestEvent);
             lastPing = Math.Max(lastPing, newestPing);
             return Admit(found.Kind != OpsNoticeKind.None, now, quiet) ? found : OpsNotice.None;
-        }
-    }
-
-    /// <summary>The words of the OPERATION box that need no engine.</summary>
-    internal static class OpsPageWords
-    {
-        /// <summary>The line under the header: what the bar is doing in one phrase.</summary>
-        public static string Line(in OpsRow r, float now)
-        {
-            if (r.Kind == OpKind.None || r.State == OpState.Idle) return "NO OPERATION RUNNING";
-            string head = OpsWords.Short(r.Kind) + " · " + OpsWords.State(r.State, r.EndsAt - now);
-            switch (r.State)
-            {
-                case OpState.Execute: return head + " · PROTECT THE " + OpsWords.Anchor(r.Kind);
-                case OpState.Done:
-                    return head + (r.EndsAt > now ? " · " + (r.Kind == OpKind.Asat ? "IN FLIGHT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAMS DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "");
-                case OpState.Broken: return head + " · BAR 50 % · FUND TO RESUME";
-                default: return head + " · " + r.Percent + " % OF " + r.Goal + " CR" + (r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");
-            }
-        }
-
-        /// <summary>The box's detail line: the bar, the viewer's own share and the work share while funding; what to protect in the countdown; what is running after it.</summary>
-        public static string Detail(in OpsRow r, float now)
-        {
-            if (r.Kind == OpKind.None || r.State == OpState.Idle) return "";
-            switch (r.State)
-            {
-                case OpState.Execute:
-                    return "PROTECT THE " + OpsWords.Anchor(r.Kind) + (r.Kind == OpKind.Asat ? " AND THE LAUNCHER" : "");
-                case OpState.Done:
-                    return r.EndsAt > now ? (r.Kind == OpKind.Asat ? "ASCENT " : r.Kind == OpKind.Fob ? "FOB UP " : "SAM NET DOWN ") + SpaceRules.Clock(r.EndsAt - now) : "EXECUTED";
-                default:
-                    return r.Percent + " % OF " + r.Goal + " CR · YOURS " + r.MyCr + " CR" + (r.WorkPercent > 0 ? " · WORK " + r.WorkPercent + " %" : "") +
-                        (r.State == OpState.Broken ? " · BROKEN, FUND TO RESUME" : r.Paused ? " · PAUSED: " + OpsWords.Anchor(r.Kind) + " DOWN" : "");
-            }
-        }
-
-        /// <summary>The satellite state line (NET page): which birds are dead and how far their rebuild has come; empty when all are up.</summary>
-        public static string Birds(OpsStateData s)
-        {
-            if (s == null || !s.Active || s.BirdsDown == 0) return "";
-            string text = "";
-            for (int i = 0; i < SpaceRules.BirdCount; i++)
-                if ((s.BirdsDown & (1 << i)) != 0) text += (text.Length > 0 ? " · " : "") + OpsWords.Bird(i) + " LOST " + s.BirdPercent[i] + " %";
-            return "SAT " + text;
         }
     }
 }

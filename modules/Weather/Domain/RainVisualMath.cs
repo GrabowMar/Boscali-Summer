@@ -14,12 +14,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float BaseEmissionFast = 12000f;
         public const float ReferenceSpeed = 250f;
 
-        public static float BelowCloudFactor(float cameraHeight, float cloudHeight)
-        {
-            float t = Scalar.Clamp01((cameraHeight - cloudHeight) / 400f);
-            return 1f - t * t * (3f - 2f * t);
-        }
-
         /// <summary>
         /// Particles per second preserving spatial density across airspeeds, scaled by
         /// user density and the current gust factor. The emitter's MaxParticles cap is
@@ -72,12 +66,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 + 0.10 * Math.Sin(missionTime * 1.9 + seed * 1.31);
             return (float)Math.Max(0.75, Math.Min(1.25, g));
         }
-
-        /// <summary>
-        /// Upper bound on alive particles for a rate/lifetime pair (Little's law).
-        /// </summary>
-        public static float AliveEstimate(float emissionRate, float lifetime) =>
-            Math.Max(0f, emissionRate) * Math.Max(0f, lifetime);
 
         /// <summary>
         /// Clamp an emission rate so the steady-state alive count fits the budget.

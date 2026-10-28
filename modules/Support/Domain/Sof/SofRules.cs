@@ -99,8 +99,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         /// <summary>Spec 2.3 odds: 70 - exposure / 2 - 10 per enemy armoured unit within 1 km + 20 helicopter + 25 EXPLOIT + 15 CYBER ring, clamped 10..95.</summary>
         public static int Odds(float exposure, int armoredNear, bool helicopter, bool exploit, bool cyberNear)
         {
-            if (float.IsNaN(exposure) || float.IsInfinity(exposure)) exposure = 100f;
-            float v = BaseOdds - Math.Max(0f, Math.Min(100f, exposure)) * 0.5f - 10f * Math.Max(0, Math.Min(20, armoredNear))
+            if (!float.IsFinite(exposure)) exposure = 100f;
+            float v = BaseOdds - Math.Clamp(exposure, 0f, 100f) * 0.5f - 10f * Math.Clamp(armoredNear, 0, 20)
                 + (helicopter ? 20f : 0f) + (exploit ? 25f : 0f) + (cyberNear ? 15f : 0f);
             return (int)Math.Max(MinOdds, Math.Min(MaxOdds, Math.Round(v)));
         }
@@ -135,7 +135,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         public static int PackPoint(float x, float z)
         {
-            int cx = (int)Math.Max(0, Math.Min(Mask, Math.Round(x / CellMetres) + Bias)), cz = (int)Math.Max(0, Math.Min(Mask, Math.Round(z / CellMetres) + Bias));
+            int cx = (int)Math.Clamp(Math.Round(x / CellMetres) + Bias, 0, Mask), cz = (int)Math.Clamp(Math.Round(z / CellMetres) + Bias, 0, Mask);
             return (cx << 15) | cz;
         }
 

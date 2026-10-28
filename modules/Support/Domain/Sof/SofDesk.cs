@@ -97,8 +97,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     {
         float Now { get; }
         int Humans { get; }
-        /// <summary>The faction key this desk acts for.</summary>
-        int Owner { get; }
         bool Fob { get; }
         SofOutcome TrySpend(ulong op, int cr, out int detail);
         void Refund(ulong op, int cr);
@@ -157,8 +155,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public float BoardX, BoardZ;
         /// <summary>Pilots who killed an enemy ground unit within 2 km of the team while it was pinned (the only ones a COVER pay can go to).</summary>
         public readonly HashSet<ulong> CoverKillers = new HashSet<ulong>();
-
-        public string Callsign => SofRules.Callsign(Slot);
     }
 
     internal struct HeldBuilding
@@ -499,7 +495,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             t.Raiser = op;
             t.Mission = MissionKind.Sabotage; t.TargetId = target.Id; t.TargetKind = target.Kind; t.TargetSub = target.Sub; t.TargetKey = target.Key; t.TargetX = target.X; t.TargetZ = target.Z;
             t.Exploit = false; t.ExemptKey = 0; t.MissionCost = 0; t.MissionPayer = op;
-            t.Raid = true; t.RaidOdds = Math.Max(1, Math.Min(100, oddsPercent)); t.Odds = t.RaidOdds;
+            t.Raid = true; t.RaidOdds = Math.Clamp(oddsPercent, 1, 100); t.Odds = t.RaidOdds;
             t.HasDest = false; t.HoldOn = false; t.PushOn = false; t.LiftWaiting = false;
             t.State = TeamState.OnSite; t.OnSiteStart = now; t.OnSiteEnd = now + Math.Max(1f, seconds);
             Queue(SofEventKind.OnSite, t);
@@ -511,7 +507,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             SofTeam t = Get(slot);
             if (t != null && HeldByOther(t, op)) return new SofResult(SofOutcome.Controlled, slot);
-            SofResult r = Run(op, slot, verb);
+            SofResult r = Run(slot, verb);
             if (r.Ok && t != null) t.Raiser = op;
             return r;
         }
@@ -519,7 +515,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         /// <summary>The team answers to someone else: OVERLORD's pool teams can be taken by any operator, an operator's team only by that operator.</summary>
         private static bool HeldByOther(SofTeam t, ulong op) => t.Raiser != op && (op == SpaceContacts.WatchOfficerId || t.Raiser != SpaceContacts.WatchOfficerId);
 
-        private SofResult Run(ulong op, int slot, TeamVerb verb)
+        private SofResult Run(int slot, TeamVerb verb)
         {
             float now = ports.Now;
             SofTeam t = Get(slot);
@@ -602,7 +598,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public void Tick()
         {
             float now = ports.Now;
-            float dt = lastTick < 0f ? 1f : Math.Max(0f, Math.Min(SofRules.MaxAdvanceSeconds, now - lastTick));
+            float dt = lastTick < 0f ? 1f : Math.Clamp(now - lastTick, 0f, SofRules.MaxAdvanceSeconds);
             lastTick = now;
             for (int i = 0; i < Teams.Length; i++) if (Teams[i].Active) Advance(Teams[i], now, dt);
             TickHeld(now);
@@ -641,7 +637,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 else if (exposers > 0 && SofRules.Distance(t.X, t.Z, t.TargetX, t.TargetZ) <= SofRules.ExposureRadius) exposers--;
             }
             if (t.HuntedUntil > now) exposers += SofRules.HuntExposers; // an enemy QRF is on the team
-            t.Exposure = Math.Max(0f, Math.Min(100f, t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt, ExposureScale)));
+            t.Exposure = Math.Clamp(t.Exposure + SofRules.ExposureDelta(exposers, scene.Stared, t.PushOn && moving, t.HoldOn, dt, ExposureScale), 0f, 100f);
             t.Odds = t.Raid ? t.RaidOdds : SofRules.Odds(t.Exposure, scene.Armored1000, t.Insert == Insertion.Helicopter, t.Exploit, ports.CyberNear(t.X, t.Z));
             if (t.State == TeamState.Pinned) { AdvancePinned(t, now); return; }
             if (t.Exposure >= SofRules.PinExposure && (moving || t.State == TeamState.OnSite))
@@ -815,21 +811,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return n;
         }
 
-        /// <summary>A pilot killed an enemy ground unit at (x, z): each pinned team within 2 km remembers it, so a COVER claim by that pilot pays when the team breaks free.</summary>
-        public int CoverKillBy(ulong pilot, float x, float z)
-        {
-            if (pilot == 0) return 0;
-            int n = 0;
-            for (int i = 0; i < Teams.Length; i++)
-            {
-                SofTeam t = Teams[i];
-                if (!t.Active || t.State != TeamState.Pinned || SofRules.Distance(t.X, t.Z, x, z) > SofRules.CoverRadius) continue;
-                if (t.CoverKillers.Count < 8) t.CoverKillers.Add(pilot);
-                n++;
-            }
-            return n;
-        }
-
         /// <summary>A pilot claimed the COVER post of a team: the lost-timer extends and the pilot is paid when the team breaks free. False when the team is not pinned.</summary>
         public bool CoverClaimed(int slot, ulong pilot)
         {
@@ -910,14 +891,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         public bool IsLasing(int slot) { SofTeam t = Get(slot); return t != null && t.LaseActive && t.State == TeamState.OnSite; }
-
-        /// <summary>The lased target point of the first team holding a laser on one (the AIM: TEAM source), if any.</summary>
-        public bool TryLase(out int slot, out float x, out float z)
-        {
-            for (int i = 0; i < Teams.Length; i++)
-                if (Teams[i].Active && Teams[i].LaseActive && Teams[i].State == TeamState.OnSite) { slot = i; x = Teams[i].TargetX; z = Teams[i].TargetZ; return true; }
-            slot = -1; x = z = 0f;
-            return false;
-        }
     }
 }

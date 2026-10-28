@@ -342,7 +342,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void BuildChrome(Vector2 size)
         {
-            if (Approximately(chromeSize, size) && chrome.childCount > 0) return;
+            if (MfdLayout.Same(chromeSize, size) && chrome.childCount > 0) return;
 
             for (int i = chrome.childCount - 1; i >= 0; i--)
                 Object.Destroy(chrome.GetChild(i).gameObject);
@@ -485,8 +485,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvLay.Fill(layer);
             return layer;
         }
-
-        private static bool Approximately(Vector2 a, Vector2 b) =>
-            Mathf.Approximately(a.x, b.x) && Mathf.Approximately(a.y, b.y);
     }
 }

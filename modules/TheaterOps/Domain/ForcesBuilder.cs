@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
                 NearestToFixMeters = float.IsFinite(r.NearestToFixMeters) && r.NearestToFixMeters >= 0f ? Math.Min(MaxDistance, r.NearestToFixMeters) : -1f,
             };
             int count = marks == null ? 0 : Math.Min(Math.Min(markCount, marks.Length), MaxMarks * 2);
-            var kept = new TheaterForceMark[Math.Max(0, Math.Min(count, MaxMarks))];
+            var kept = new TheaterForceMark[Math.Clamp(count, 0, MaxMarks)];
             int n = 0;
             for (int i = 0; i < count && n < kept.Length; i++)
             {

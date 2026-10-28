@@ -59,13 +59,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal int CueDrawn => cueCount;
         internal int CueInCharge => cueCharge;
 
-        /// <summary>The native boxes are parameters, so an offline render can stand in for them: one source's text, object and the objects to hide.</summary>
-        private void AdoptCue(CueSource source, TMP_Text text, GameObject root, params GameObject[] hide)
-        {
-            cueFinding = false;
-            cueNatives.Adopt(source, text, root, hide);
-        }
-
         /// <summary>
         /// Every frame (<paramref name="tick"/> false) and at the end of every present (true), with the corners in charge: work out which boxes the cues are standing in for (the box is held and its capture is seeing the game's
         /// messages), draw the stack again when a cue moved a step (or on a tick while one is up), and hide exactly those boxes while the stack is on the screen. Fail open: a paint that throws gives every box back this frame.

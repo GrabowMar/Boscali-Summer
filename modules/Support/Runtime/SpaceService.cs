@@ -198,13 +198,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions) if (into.Count < MaximumFactions) into.Add(pair.Key);
         }
 
-        /// <summary>A human of this faction did a SPACE domain verb (MARK, SEND, CLAIM or a bird task): OVERLORD steps back. Host only.</summary>
-        internal void NoteHumanSpaceVerb(Player player)
-        {
-            if (!GameAccess.IsServer() || player == null || player.HQ == null) return;
-            watch.RecordHumanActivity(player.HQ, PlayerIdentity.Of(player), SupportManager.MissionNow());
-        }
-
         /// <summary>
         /// The faction's ENEMY INTENT words: the name of the main effort the enemy's director has chosen, read from the host through a
         /// Core contract, or UNKNOWN. Never a coordinate or a unit. Refreshed every five wall seconds, not per viewer poll.
@@ -406,7 +399,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 {
                     TaskedCall call = posts[newest].Call;
                     into.NewestPost = call.Id; into.NewestAction = call.Action;
-                    into.NewestTargets = (byte)Math.Max(1, Math.Min(TaskedBoard.MaxMarks, call.MarkCount));
+                    into.NewestTargets = (byte)Math.Clamp(call.MarkCount, 1, TaskedBoard.MaxMarks);
                     into.NewestWatchOfficer = call.WatchOfficer;
                     into.NewestOwn = !call.WatchOfficer && call.Maker == viewerId;
                     into.NewestMaker = call.WatchOfficer || into.NewestOwn ? "" : LabelOf(faction, viewer.HQ, call.Maker);

@@ -25,9 +25,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly DustWake dust = new DustWake();
         private NearMissCrack crack;
 
-        internal NearMissCrack Crack => crack ?? (crack = new NearMissCrack(gameObject));
-        internal int ContrailEmitters => contrails.Emitters;
-        internal int DustParticles => dust.Particles;
+        internal NearMissCrack Crack => crack ??= new NearMissCrack(gameObject);
 
         public void Configure(ImmersionSettings immersionSettings)
         {
@@ -47,7 +45,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (cam == null) return;
             Vector3 eye = cam.transform.position;
             float dt = Time.deltaTime, light = Daylight();
-            contrails.Tick(eye, on && settings.ContrailsEnabled.Value, light, dt);
+            contrails.Tick(eye, on && settings.ContrailsEnabled.Value, light);
             dust.Tick(eye, on && settings.DustWakeEnabled.Value, light, dt);
         }
 

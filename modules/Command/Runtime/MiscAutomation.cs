@@ -4,7 +4,6 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
 using TMPro;
-using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
 namespace BoscaliSummer.Modules.Command.Runtime

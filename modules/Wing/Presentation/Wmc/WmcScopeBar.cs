@@ -32,12 +32,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ids = controls;
             prefix = idPrefix;
             Rect = AvLay.Child(parent, "ScopeBar");
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
-            key = AvText.Make(Rect, "Key", AvTextRole.Label, keyText, TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(key, false);
-            scopeText = AvText.Make(Rect, "Scope", AvTextRole.Label, "", TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(scopeText, false);
+            frame = WmcDraw.FillFrame(Rect);
+            key = WmcSheet.Text(Rect, "Key", AvTextRole.Label, TextAlignmentOptions.MidlineLeft, keyText);
+            scopeText = WmcSheet.Text(Rect, "Scope", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
             allChip = AvControl.Make(Rect, new AvControl.Spec("ALL", PickAll));
             allChip.Help = "Orders go to the whole wing.";
             ids.Add(prefix + "all", allChip);
@@ -112,8 +109,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int n = 0;
             for (int e = 0; e < elementChips.Length; e++)
             {
-                bool present = false;
-                for (int i = 0; i < c.Count && !present; i++) present = c.Rows[i].Element == e;
+                bool present = c.HasElement(e);
                 string name = present && c.Wing != null && !c.Client ? c.Wing.Roster.Name(e) : ElementRoster.Letter(e);
                 if (present != chipInUse[e] || !string.Equals(name, chipNames[e], System.StringComparison.Ordinal)) changed = true;
                 chipInUse[e] = present;

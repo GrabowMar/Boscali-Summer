@@ -4,15 +4,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal enum ApDisengage : byte { None, Gloc, GearLow, Slow, Throttle }
 
-// Filled by the engine's player autopilot from the player's stick and by tests.
-#pragma warning disable CS0649
     /// <summary>What the pilot is doing this tick, in Pure signs (pitch + nose up).</summary>
     internal struct PilotInputs
     {
         public float Pitch, Roll, Yaw, Throttle;
         public bool Gloc, GearDown;
     }
-#pragma warning restore CS0649
 
     /// <summary>Which axes the autopilot writes this tick. When <see cref="Recaptured"/> is set, the caller seeds
     /// the flight pipeline from the applied inputs first (bumpless).</summary>

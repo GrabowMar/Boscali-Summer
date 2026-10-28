@@ -424,7 +424,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return dropAt < 0f ? spin : spin * Mathf.Clamp01(1f - (now - dropAt) / SentinelProfile.SpinDownSeconds);
         }
 
-        private void Publish() => SentinelNet.Broadcast(new SentinelState
+        private void Publish() => NetFeed.Broadcast(new SentinelState
         {
             Protocol = SentinelNet.ProtocolVersion, MissileId = missile.persistentID.Id, Phase = (byte)Phase,
             HoverLeft = (byte)Mathf.Clamp(Mathf.CeilToInt(hoverLeft), 0, 255), Yaw = yawAngle, Pitch = pitchAngle,

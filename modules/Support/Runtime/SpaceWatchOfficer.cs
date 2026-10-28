@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
-using BoscaliSummer.Modules.Support.Runtime.Actions;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Runtime
@@ -28,14 +27,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             service = spaceService;
             manager = support;
-        }
-
-        /// <summary>A human of <paramref name="owner"/> did a SPACE domain verb; that faction's OVERLORD yields (60 s solo, 300 s with company).</summary>
-        public void RecordHumanActivity(FactionHQ owner, ulong player, float missionNow)
-        {
-            if (owner == null || player == PlayerIdentity.None) return;
-            FactionRun run = RunFor(owner);
-            run?.Brain.RecordHuman(missionNow);
         }
 
         /// <summary>One host frame. Cheap while nothing is due: each faction's policy throttles itself to one think per two mission seconds.</summary>

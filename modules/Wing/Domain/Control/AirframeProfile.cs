@@ -7,8 +7,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 {
     internal enum AirframeClass { FixedWing, Rotary, Tiltwing }
 
-// Filled by the engine from AircraftParameters and the FBW (M1c) and by tests.
-#pragma warning disable CS0649
     /// <summary>Native numbers the engine reads to derive a profile: AircraftParameters, the airframe's
     /// published stall speed and its fly-by-wire fields. Zero means unknown.</summary>
     internal struct ProfileInputs
@@ -27,7 +25,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The 1-g stall speed (m/s EAS) its wings give at its weight (<see cref="LiftStall"/>); 0 unknown.</summary>
         public float LiftStallSpeed;
     }
-#pragma warning restore CS0649
 
     /// <summary>Per-airframe constants for guidance and control. Derived from native numbers, then
     /// overridden field by field from shipped, calibrated and user JSON.</summary>
@@ -67,9 +64,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// roll rotates at (the published takeoff speed, else 1.2 × stall).</summary>
         public float SteerLockDeg = 45f, SteerRateDps = 60f, WheelbaseM = 6f, SpanM = 12f, LengthM = 15f, TakeoffSpeed = 66f;
         public static float WheelbaseMin = 2f;
-#pragma warning disable CS0649 // set only from airframes JSON through ApplyOverrides (reflection)
         
-#pragma warning restore CS0649
 
         /// <summary>Loaded minimum speed: 1 g stall speed scaled by √n with a 20% margin. A helicopter or a tiltwing can
         /// hover, so it has none and the loaded-minimum logic (leader slow, speed floors) never fires for it (a tiltwing

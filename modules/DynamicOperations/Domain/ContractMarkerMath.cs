@@ -67,9 +67,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         // default(ContractCard) never ran the constructor; build on demand there.
         public string TitleLine => titleLine ?? OperationMarkerCopy.Title(Id, Title);
 
-        /// <summary>The vanilla objective icon this contract's family borrows.</summary>
-        public MarkerIconKind Icon => ContractMarkerLook.KindFor(Family);
-
         /// <summary>Family, what the contract asks for, and the clock; distance from the viewer.</summary>
         public string Detail(float distance, bool metric) => OperationMarkerCopy.Detail(
             Family, distance, Radius, Seconds, Progress,

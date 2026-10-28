@@ -28,12 +28,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return slot;
         }
 
-        public static Vector3 World(Vector3 position, Vector3 forward, Vector3 right, Vector3 up, int slot)
-        {
-            Vector3 local = Local(slot);
-            return position + right * local.x + up * local.y + forward * local.z;
-        }
-
         public static Vector3 World(Vector3 position, Vector3 forward, Vector3 right, Vector3 up, int slot, bool big)
         {
             Vector3 local = big ? BigLocal(slot) : Local(slot);

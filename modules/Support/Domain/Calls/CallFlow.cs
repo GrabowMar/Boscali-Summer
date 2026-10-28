@@ -43,8 +43,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
     /// <summary>Own designation / targeting-pod point first, then the last map pick, then a SOF team that is lasing a target (AIM: TEAM).</summary>
     internal static class Aim
     {
-        public static AimSource Pick(bool hasPod, bool hasMap) =>
-            hasPod ? AimSource.Pod : hasMap ? AimSource.Map : AimSource.None;
 
         public static AimSource Pick(bool hasPod, bool hasMap, bool hasTeam) =>
             hasPod ? AimSource.Pod : hasMap ? AimSource.Map : hasTeam ? AimSource.Team : AimSource.None;

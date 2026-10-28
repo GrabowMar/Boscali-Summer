@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static MapNorth North(in CornerFurniture f, float turnedCcwDeg)
         {
             var n = default(MapNorth);
-            if (float.IsNaN(turnedCcwDeg) || float.IsInfinity(turnedCcwDeg) || !f.Present || !f.Both) return n;
+            if (!float.IsFinite(turnedCcwDeg) || !f.Present || !f.Both) return n;
             float a = turnedCcwDeg * (MathF.PI / 180f), dx = -MathF.Sin(a), dy = -MathF.Cos(a);      // screen y is down
             float cx = (f.X0 + f.X1) * 0.5f, cy = (f.Y0 + f.Y1) * 0.5f;
             float tx = dx > 1e-4f ? (f.X1 - cx) / dx : dx < -1e-4f ? (f.X0 - cx) / dx : float.MaxValue;

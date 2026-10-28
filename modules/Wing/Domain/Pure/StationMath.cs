@@ -43,9 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             return s.Closure;
         }
 
-        public static float EtaSeconds(float errorM, float closureMps) =>
-            !(closureMps > 0.1f) ? float.PositiveInfinity : Math.Max(0f, errorM) / closureMps;
-
         /// <summary>Slot error in 10 m steps, 0-2550 m; NaN reads 0.</summary>
         public static byte QuantiseError(float m) => float.IsNaN(m) ? (byte)0 : (byte)Math.Max(0, Math.Min(255, Math.Round(m / 10f)));
 

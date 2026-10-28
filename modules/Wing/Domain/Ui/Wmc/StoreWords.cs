@@ -1,4 +1,4 @@
-using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -78,7 +78,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 default: return "";
             }
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

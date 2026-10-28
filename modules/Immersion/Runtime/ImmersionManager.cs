@@ -86,10 +86,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             foley = null;
         }
 
-        public void DescribeFx(IDictionary<string, object> state)
-        {
-            Describe(state);
-        }
+        public void DescribeFx(IDictionary<string, object> state) => Describe(state);
 
         public Quaternion HeadOffset => composedOffset;
         internal HeadMotion Head => head;
@@ -394,10 +391,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             cameraOffset.Apply(cameras.cameraPivot, Time.unscaledTime < debugLookUntil ? composedOffset * debugLook : composedOffset);
         }
 
-        internal void RemoveCameraOffset()
-        {
-            cameraOffset.Remove();
-        }
+        internal void RemoveCameraOffset() => cameraOffset.Remove();
 
         private void EnsureFoley()
         {
@@ -426,10 +420,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             }
         }
 
-        internal static void OnGunShot(Gun gun)
-        {
-            Live?.shake.OnShot(gun);
-        }
+        internal static void OnGunShot(Gun gun) => Live?.shake.OnShot(gun);
 
         public void Describe(IDictionary<string, object> state)
         {

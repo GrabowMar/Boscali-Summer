@@ -101,7 +101,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public readonly float SofExposure, SpaceCooldown, CyberTrace;
         public CounterPressure(float sofExposure, float spaceCooldown, float cyberTrace) { SofExposure = sofExposure; SpaceCooldown = spaceCooldown; CyberTrace = cyberTrace; }
         public static readonly CounterPressure None = new CounterPressure(1f, 1f, 1f);
-        public bool Any => SofExposure > 1f || SpaceCooldown > 1f || CyberTrace > 1f;
     }
 
     internal static class FrontCounters

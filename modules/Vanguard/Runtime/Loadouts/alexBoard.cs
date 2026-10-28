@@ -81,8 +81,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static readonly AccessTools.FieldRef<Missile, Vector3> TargetVel = AccessTools.FieldRefAccess<Missile, Vector3>("targetVel");
         private static readonly Dictionary<Missile, Missile> Pulled = new Dictionary<Missile, Missile>();
 
-        public static int Count => Pulled.Count;
-
         public static void Pull(Missile threat, Missile decoy) => Pulled[threat] = decoy;
 
         public static void Release(Missile threat) => Pulled.Remove(threat);

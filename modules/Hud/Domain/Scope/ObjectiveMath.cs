@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -130,7 +131,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>The current phase's progress 0..1 (0 when there is none or it has not started).</summary>
         public static float Progress(in ObjectiveScope d) =>
-            d.Phases != null && d.Current >= 0 && d.Current < d.PhaseCount && d.Current < d.Phases.Length ? Clamp01(d.Phases[d.Current].Progress) : 0f;
+            d.Phases != null && d.Current >= 0 && d.Current < d.PhaseCount && d.Current < d.Phases.Length ? Scalar.Clamp01(d.Phases[d.Current].Progress) : 0f;
 
         /// <summary>The line is a caution: something keeps the hold from counting.</summary>
         public static bool Warns(ObjectiveLine line) => line == ObjectiveLine.TooLow || line == ObjectiveLine.NoSightline || line == ObjectiveLine.NoTrack || line == ObjectiveLine.ContactLost;
@@ -171,7 +172,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>The deadline reads as a caution under a minute.</summary>
         public static bool DeadlineLow(float left) => left > 0f && left < 60f;
-
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
     }
 }

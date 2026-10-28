@@ -24,16 +24,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         private static int cells, plane, count = -1, held;
         private static float unit;
 
-        /// <summary>How many marks the embedded art carries; zero when it is missing.</summary>
-        public static int Count
-        {
-            get
-            {
-                if (count < 0) Open();
-                return count;
-            }
-        }
-
         /// <summary>
         /// Signed distances at a point of mark <paramref name="mark"/>'s -1..1 box, negative inside:
         /// the figure, its gold areas, its red areas and its line work. Gold and red each include the lines.

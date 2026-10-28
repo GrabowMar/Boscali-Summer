@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private static readonly Comparison<TheaterFrontView> ByPressure = (a, b) =>
             a.Pressure != b.Pressure ? b.Pressure.CompareTo(a.Pressure) : string.CompareOrdinal(a.Key, b.Key);
 
-        private static byte Tally(int count) => (byte)Math.Min(254, Math.Max(0, count));
+        private static byte Tally(int count) => (byte)Math.Clamp(count, 0, 254);
 
         /// <summary>
         /// Builds the fronts the pilot sees from the reads and the trend against the last review, logs a status flip, and stamps the data's age. Reviews only: a
@@ -214,9 +214,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 return IsHost ? LocalState().Faults.Healthy : IsFresh;
             }
         }
-
-        public TheaterWarPosture Posture => LocalState()?.Posture ?? TheaterWarPosture.Steady;
-        public IReadOnlyList<TheaterFrontView> Fronts => Snapshot?.Fronts ?? Array.Empty<TheaterFrontView>();
         public IReadOnlyList<TheaterProposalView> Proposals => Snapshot?.Proposals ?? Array.Empty<TheaterProposalView>();
         public TheaterOperationView ActiveOperation => Snapshot?.Operation;
 

@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -41,8 +42,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override ScopePage Id => ScopePage.MissileCam;
 
         public override string Title => "MISSILE CAM";
-
-        public override char Code => 'M';
 
         public override string IdleWord => "NO MISSILE";
 
@@ -86,7 +85,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float UnitM => units == AvUnits.Imperial ? 1852f : 1000f;
 
         /// <summary>Whole seconds to go, rounded up; -1 when the game gives no time.</summary>
-        private static int Seconds(float s) => float.IsNaN(s) || float.IsInfinity(s) ? -1 : (int)Math.Ceiling(Math.Max(0f, s));
+        private static int Seconds(float s) => !float.IsFinite(s) ? -1 : (int)Math.Ceiling(Math.Max(0f, s));
 
         private static ScopeTone ResultTone(ShotState result) => result == ShotState.Hit ? Hi : result == ShotState.Defeated ? Amber : Dim;
 
@@ -210,11 +209,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float qx = CX + (tx - CX) * 0.08f, qy = c0 + (ty - c0) * 0.85f;
             for (int k = 0; k < 8; k++)
             {
-                float s = ScopeCanvas.Clamp01(0.1f + 0.9f * Mathf.Pow((k + ph) / 8f, 1.5f));
+                float s = Scalar.Clamp01(0.1f + 0.9f * Mathf.Pow((k + ph) / 8f, 1.5f));
                 Curve(s, qx, qy, tx, ty, out float x, out float y);
                 Curve(s + 0.03f, qx, qy, tx, ty, out float nx, out float ny);
                 float ang = Mathf.Atan2(nx - x, -(ny - y)) * 0.5f, ca = Mathf.Cos(ang), sa = Mathf.Sin(ang), a = 7f + 58f * Mathf.Pow(1f - s, 1.3f);
-                float alpha = Mathf.Clamp(1.05f - s * 0.7f, 0.2f, 0.95f) * ScopeCanvas.Clamp01(s * 6f) * (warn ? 0.75f : 1f), w = s < 0.45f ? 2f : 1f;
+                float alpha = Mathf.Clamp(1.05f - s * 0.7f, 0.2f, 0.95f) * Scalar.Clamp01(s * 6f) * (warn ? 0.75f : 1f), w = s < 0.45f ? 2f : 1f;
                 ScopeTone tone = s < 0.35f ? Hi : Ink;
                 // an open gate (-a, .55a) - (0, -.45a) - (a, .55a), turned half way toward the path
                 float px = x + a * 0.45f * sa, py = y - a * 0.45f * ca;

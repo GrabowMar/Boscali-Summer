@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// a dropout (a lobe-channel value under LobeKeepLo removes the lobe, over LobeKeepHi keeps it; LobeKeepFloor is what stays inside the hole) times an amplitude of
         /// LobeAmpLo-LobeAmpHi, times a norm that restores the mean.</summary>
         public static float LobeKeep(float lobe, float erosion)
-            => WeatherMath.Lerp(LobeKeepFloor, 1f, WeatherMath.Smoothstep(LobeKeepLo, LobeKeepHi, lobe)) * WeatherMath.Lerp(LobeAmpLo, LobeAmpHi, WeatherMath.Smoothstep(0.3f, 0.7f, erosion)) * LobeKeepNorm;
+            => Scalar.Lerp(LobeKeepFloor, 1f, WeatherMath.Smoothstep(LobeKeepLo, LobeKeepHi, lobe)) * Scalar.Lerp(LobeAmpLo, LobeAmpHi, WeatherMath.Smoothstep(0.3f, 0.7f, erosion)) * LobeKeepNorm;
         public const float PatchLo = 0.38f, PatchHi = 0.66f;
         /// <summary>1 / the mean of <see cref="PatchMask"/> over a layer: the cover inside the patches is lifted by this, so the layer's
         /// average cover stays its Cover while the lanes between patches are clear.</summary>
@@ -123,7 +123,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The trim of a layer: <see cref="CoverTrim"/>, plus up to 0.9 more for the streak share and 0.45 for the rest at low covers (a streak pattern has a shorter
         /// tail than a cell pattern, so at cover 0.03-0.08 cirrus showed 0.3-0.6 of its Cover), and none for a veil.</summary>
         public static float Trim(float cover, float streaks, float veil)
-            => WeatherMath.Lerp(CoverTrim + (StreakTrim * streaks + CellTrim * (1f - streaks - veil)) * (1f - WeatherMath.Smoothstep(0.02f, 0.3f, cover)), 1f, veil);
+            => Scalar.Lerp(CoverTrim + (StreakTrim * streaks + CellTrim * (1f - streaks - veil)) * (1f - WeatherMath.Smoothstep(0.02f, 0.3f, cover)), 1f, veil);
         /// <summary>The low-cover lift of <see cref="Trim"/> per streak share and per cell share (round 3: 0.9 and 0.45 before; the sigma constants now match the
         /// pattern, and on screen a thin layer showed about four times its cover, so the lift is cut).</summary>
         public const float StreakTrim = 1.4f, CellTrim = 1.2f;
@@ -143,23 +143,19 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float Interior(float depth) => 0.2f + 0.8f * depth;
 
         /// <summary>How strongly Detail drives the interior: the square root of Detail (cirrus Detail 0.3 now acts at 0.55), kept as is for a veil.</summary>
-        public static float DetailDrive(float detail, float veil) => WeatherMath.Lerp((float)Math.Sqrt(detail), detail, veil);
+        public static float DetailDrive(float detail, float veil) => Scalar.Lerp((float)Math.Sqrt(detail), detail, veil);
 
         /// <summary>The factor on a layer's cover from the patch mask: 1 without patchiness, mask x gain with it.</summary>
-        public static float PatchFactor(float mask, float patchiness) => WeatherMath.Lerp(1f, mask * PatchGain, patchiness);
+        public static float PatchFactor(float mask, float patchiness) => Scalar.Lerp(1f, mask * PatchGain, patchiness);
 
         /// <summary>0 where cells are large, 1 where they are small, from the size field (G of the mesoscale fetch).</summary>
         public static float SizeMask(float field) => WeatherMath.Smoothstep(SizeLo, SizeHi, field);
-
-        /// <summary>Where K*h*(1-h) reaches 1, below and above the middle: (1 -/+ sqrt(1 - 4/K)) / 2.</summary>
-        public static readonly float H1 = (float)((1.0 - Math.Sqrt(1.0 - 4.0 / K)) / 2.0);
-        public static readonly float H2 = 1f - H1;
 
         /// <summary>The low-cloud coverage remap: <paramref name="cover"/> of the sky becomes cloud, the rest stays clear.</summary>
         public static float CoverMask(float body, float cover)
         {
             float open = Scalar.Clamp01((body - (1f - cover)) / Math.Max(0.18f, cover));
-            return WeatherMath.Lerp(open, Math.Max(open, 0.55f + body * 0.45f), WeatherMath.Smoothstep(0.82f, 1f, cover));
+            return Scalar.Lerp(open, Math.Max(open, 0.55f + body * 0.45f), WeatherMath.Smoothstep(0.82f, 1f, cover));
         }
 
         /// <summary>
@@ -169,9 +165,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// </summary>
         public static float SlabCoverMask(float body, float cover, float softness)
         {
-            float edge = Math.Max(0.02f, 0.5f * cover) * WeatherMath.Lerp(0.5f, 1.5f, softness);
+            float edge = Math.Max(0.02f, 0.5f * cover) * Scalar.Lerp(0.5f, 1.5f, softness);
             float sharp = Scalar.Clamp01((body - (1f - cover)) / edge);
-            return WeatherMath.Lerp(sharp, CoverMask(body, cover), WeatherMath.Smoothstep(0.15f, 0.30f, cover));
+            return Scalar.Lerp(sharp, CoverMask(body, cover), WeatherMath.Smoothstep(0.15f, 0.30f, cover));
         }
 
         /// <summary>
@@ -193,33 +189,5 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>The altitude profile of a layer: 0 at its base and top, a plateau between.</summary>
         public static float Profile(float h) => h <= 0f || h >= 1f ? 0f : Math.Min(1f, K * h * (1f - h));
-
-        private static float Rise(float h) => K * (0.5f * h * h - h * h * h / 3f);
-
-        /// <summary>The integral of <see cref="Profile"/> from 0 to h (0.77 at h = 1, the factor the old shader baked in).</summary>
-        public static float Integral(float h)
-        {
-            h = Scalar.Clamp01(h);
-            if (h <= H1) return Rise(h);
-            if (h <= H2) return Rise(H1) + (h - H1);
-            return Rise(H1) + (H2 - H1) + (Rise(H1) - Rise(1f - h));
-        }
-
-        /// <summary>
-        /// The optical weight of one ray sample that spans altitudes [lo, hi] through a layer [baseY, topY]: the mean of the
-        /// profile over the sample, so that length x overlap x density is the sample's optical depth whatever the slant.
-        /// Under 40 m of altitude span it is the profile at the middle of the sample.
-        /// </summary>
-        public static float Overlap(float lo, float hi, float baseY, float topY)
-        {
-            if (hi < lo) { float t = lo; lo = hi; hi = t; }
-            float thick = topY - baseY;
-            if (thick <= 0f) return 0f;
-            float span = hi - lo;
-            if (span < 40f) return Profile(((lo + hi) * 0.5f - baseY) / thick);
-            float ha = Scalar.Clamp01((lo - baseY) / thick), hb = Scalar.Clamp01((hi - baseY) / thick);
-            if (hb <= ha) return 0f;
-            return thick * (Integral(hb) - Integral(ha)) / span;
-        }
     }
 }

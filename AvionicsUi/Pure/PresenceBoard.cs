@@ -63,15 +63,5 @@ namespace NOAvionics
                 if (values[i] == id) return true;
             return false;
         }
-
-        /// <summary>Test seam.</summary>
-        public static void Reset()
-        {
-            lock (LockKey)
-            {
-                AppDomain.CurrentDomain.SetData(WingMemberIds, null);
-                AppDomain.CurrentDomain.SetData(WingGuid, null);
-            }
-        }
     }
 }

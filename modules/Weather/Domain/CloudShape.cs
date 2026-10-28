@@ -66,10 +66,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             // Do not shrink lobes to zero on the way to a sheet. Fade their relief instead.
             float scale = sky.LobeRung;
             float depth = sky.PuffDepth >= 200f ? sky.PuffDepth : Math.Max(300f, sky.DeckDepth > 0f ? sky.DeckDepth : 900f);
-            float sharp = sky.BaseSharp >= 10f ? sky.BaseSharp : WeatherMath.Lerp(50f, 180f, smooth);
-            float wobble = sky.BaseWobble >= 1f ? sky.BaseWobble : WeatherMath.Lerp(140f, 40f, smooth);
-            float dome = sky.Dome > 0f ? sky.Dome : WeatherMath.Lerp(0.9f, 0.2f, smooth);
-            float billow = sky.Billow > 0f ? sky.Billow : WeatherMath.Lerp(0.8f, 0.22f, smooth);
+            float sharp = sky.BaseSharp >= 10f ? sky.BaseSharp : Scalar.Lerp(50f, 180f, smooth);
+            float wobble = sky.BaseWobble >= 1f ? sky.BaseWobble : Scalar.Lerp(140f, 40f, smooth);
+            float dome = sky.Dome > 0f ? sky.Dome : Scalar.Lerp(0.9f, 0.2f, smooth);
+            float billow = sky.Billow > 0f ? sky.Billow : Scalar.Lerp(0.8f, 0.22f, smooth);
             return new CloudGenus(scale, depth, sharp, wobble, dome, billow, sky.Anvil,
                 WeatherMath.Smoothstep(0.45f, 0.85f, smooth));
         }
@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Shallow cumulus rounds over; only a developed anvil pinches its stem.</summary>
         public static float LocalDome(float dome, float anvil)
-            => WeatherMath.Lerp(Math.Min(1f, dome), dome, WeatherMath.Smoothstep(0.18f, 0.60f, anvil));
+            => Scalar.Lerp(Math.Min(1f, dome), dome, WeatherMath.Smoothstep(0.18f, 0.60f, anvil));
 
         /// <summary>Height within one resolved body; zero for a degenerate/empty interval.</summary>
         public static float LightingHeight(float y, float bottom, float top)

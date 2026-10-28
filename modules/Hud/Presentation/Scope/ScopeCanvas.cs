@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -33,9 +34,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary><paramref name="name"/> names the surface in the buffer-overflow log (one line per surface: the shell, the page, the overlay and the frame each fill their own buffer).</summary>
         public ScopeCanvas(AvQuadBuffer quads, ScopeText words, string name = "scope") { q = quads; text = words; surface = name; }
-
-        /// <summary>The board unit: canvas pixels per design unit.</summary>
-        public float Unit => u;
 
         /// <summary>Decorative furniture (the caption shelf) is drawn: <see cref="BoardEffective.Furniture"/>, set by the board before it paints. Everything else furniture-like (brackets, ticks, markers) stays at every declutter level.</summary>
         public bool Furniture { get; set; } = true;
@@ -79,11 +77,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             dy = -Mathf.Cos(a) * r;
         }
 
-        public static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
+        public static float Seg(float t, float a, float b) => Scalar.Clamp01((t - a) / (b - a));
 
-        public static float Seg(float t, float a, float b) => Clamp01((t - a) / (b - a));
-
-        public static float EaseOut(float t) { t = 1f - Clamp01(t); return 1f - t * t * t; }
+        public static float EaseOut(float t) { t = 1f - Scalar.Clamp01(t); return 1f - t * t * t; }
 
         /// <summary>0..1 sine at <paramref name="hz"/>.</summary>
         public static float Pulse(float t, float hz) => 0.5f + 0.5f * Mathf.Sin(t * hz * 6.28318f);

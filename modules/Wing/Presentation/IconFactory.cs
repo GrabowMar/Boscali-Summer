@@ -1,7 +1,7 @@
 using System.Collections.Generic;
-using System.IO;
 using UnityEngine;
 
+using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
@@ -11,41 +11,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private static readonly Dictionary<string, Sprite> cache = new Dictionary<string, Sprite>();
         private static readonly Dictionary<int, Sprite> aircraftCache = new Dictionary<int, Sprite>();
+        private const int MaxIconSize = 256, MaxIconBytes = 1 << 20;
 
         public static Sprite Get(string key)
         {
             if (string.IsNullOrEmpty(key)) key = "root";
             if (cache.TryGetValue(key, out Sprite sprite)) return sprite;
-            using (Stream source = typeof(IconFactory).Assembly.GetManifestResourceStream("WingCommand.Icons." + key + ".png"))
+            byte[] data = EmbeddedResources.ReadAll(typeof(IconFactory).Assembly, "WingCommand.Icons." + key + ".png", MaxIconBytes);
+            if (data == null || !PngSprites.TryLoad(data, MaxIconSize, "WingIcon_" + key, out Texture2D texture, out sprite))
             {
-                if (source == null)
-                {
-                    WingLog.Logger.LogWarning("Missing wing icon: " + key);
-                    return cache[key] = key == "root" ? null : Get("root");
-                }
-                using (var bytes = new MemoryStream())
-                {
-                    source.CopyTo(bytes);
-                    var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false)
-                    {
-                        name = "WingIcon_" + key,
-                        filterMode = FilterMode.Bilinear,
-                        wrapMode = TextureWrapMode.Clamp,
-                        hideFlags = HideFlags.HideAndDontSave,
-                    };
-                    if (!ImageConversion.LoadImage(texture, bytes.ToArray(), true))
-                    {
-                        Object.Destroy(texture);
-                        WingLog.Logger.LogWarning("Invalid wing icon: " + key);
-                        return cache[key] = key == "root" ? null : Get("root");
-                    }
-                    sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height),
-                        new Vector2(0.5f, 0.5f), 100f);
-                    sprite.name = texture.name;
-                    sprite.hideFlags = HideFlags.HideAndDontSave;
-                    return cache[key] = sprite;
-                }
+                WingLog.Logger.LogWarning((data == null ? "Missing wing icon: " : "Invalid wing icon: ") + key);
+                return cache[key] = key == "root" ? null : Get("root");
             }
+            texture.hideFlags = sprite.hideFlags = HideFlags.HideAndDontSave;
+            sprite.name = texture.name;
+            return cache[key] = sprite;
         }
 
         /// <summary>Copy the airframe map silhouette, falling back to its friendly icon, and remove opaque

@@ -73,14 +73,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             floating[floatingCount] = null;
         }
 
+        /// <summary>The camera that projects screen points on this canvas (none for an overlay canvas).</summary>
+        public static Camera UiCamera(Canvas canvas) =>
+            canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+
         public static bool Contains(RectTransform rect, Vector2 screenPoint)
         {
             if (rect == null) return false;
 
             Canvas canvas = CanvasFor(rect);
-            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
-                ? canvas.worldCamera
-                : null;
+            Camera camera = UiCamera(canvas);
             return RectTransformUtility.RectangleContainsScreenPoint(rect, screenPoint, camera);
         }
 

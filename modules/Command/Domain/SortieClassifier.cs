@@ -52,31 +52,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 default: return SortieRole.Transit;
             }
         }
-
-        /// <summary>The three-letter code a row is labelled with. Kind on the code, state on the rail.</summary>
-        public static string Code(SortieRole role)
-        {
-            switch (role)
-            {
-                case SortieRole.Cap: return "CAP";
-                case SortieRole.Sead: return "SEA";
-                case SortieRole.Cas: return "CAS";
-                case SortieRole.Strike: return "STR";
-                default: return "TRN";
-            }
-        }
-
-        public static string Name(SortieRole role)
-        {
-            switch (role)
-            {
-                case SortieRole.Cap: return "COMBAT AIR PATROL";
-                case SortieRole.Sead: return "SEAD";
-                case SortieRole.Cas: return "CLOSE AIR SUPPORT";
-                case SortieRole.Strike: return "STRIKE";
-                default: return "TRANSIT";
-            }
-        }
     }
 
     /// <summary>
@@ -97,9 +72,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Aircraft the tally actually managed to look at.</summary>
         public int Observed;
 
-        /// <summary>Sorties with an assigned target; transit is airborne, not tasked.</summary>
-        public int Tasked => Cap + Sead + Cas + Strike;
-
         public void Add(SortieRole role)
         {
             Observed++;
@@ -111,23 +83,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case SortieRole.Strike: Strike++; break;
                 default: Transit++; break;
             }
-        }
-
-        public int Of(SortieRole role)
-        {
-            switch (role)
-            {
-                case SortieRole.Cap: return Cap;
-                case SortieRole.Sead: return Sead;
-                case SortieRole.Cas: return Cas;
-                case SortieRole.Strike: return Strike;
-                default: return Transit;
-            }
-        }
-
-        public void Reset()
-        {
-            Cap = Sead = Cas = Strike = Transit = Observed = 0;
         }
     }
 }

@@ -23,8 +23,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             wash = AvLay.Solid(parent, "BadgeWash", Color.clear);
             edge = AvFrame.Add(parent, "BadgeEdge", default(AvChamfer));
             edge.Fill = false;
-            text = AvText.Make(parent, "Badge", AvTextRole.Micro, "", TextAlignmentOptions.Center);
-            AvText.Fit(text, false);
+            text = WmcSheet.Text(parent, "Badge", AvTextRole.Micro, TextAlignmentOptions.Center);
             Paint();
         }
 
@@ -85,22 +84,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingPilotRow(RectTransform parent, int index, Action<int> click)
         {
             Rect = AvLay.Child(parent, "PilotRow" + index);
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect);
             AvHit hit = AvHit.On(frame);
             hit.Hover = h => { hover = h; Restyle(); };
             hit.Click = e => { if (e.button == PointerEventData.InputButton.Left) click(index); };
             AvHelpTip.Attach(frame.gameObject, SquadronWords.RowTip);
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             insignia = AvVector.Create(Rect, "Rank", 16);
-            callsign = AvText.Make(Rect, "Callsign", AvTextRole.Label);
-            AvText.Fit(callsign, false);
-            name = AvText.Make(Rect, "Name", AvTextRole.ProseSmall);
-            AvText.Fit(name, false);
-            kills = AvText.Make(Rect, "Kills", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvText.Fit(kills, false);
-            sorties = AvText.Make(Rect, "Sorties", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvText.Fit(sorties, false);
+            callsign = WmcSheet.Text(Rect, "Callsign", AvTextRole.Label);
+            name = WmcSheet.Text(Rect, "Name", AvTextRole.ProseSmall);
+            kills = WmcSheet.Text(Rect, "Kills", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
+            sorties = WmcSheet.Text(Rect, "Sorties", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
             state = new WingBadge(Rect);
             Restyle();
         }
@@ -157,8 +151,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(WmcState.Of(railClass)), selected ? "armed" : hover ? "hover" : null);
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            WmcDraw.PaintRow(frame, r);
             rail.color = WmcState.Color(railClass);
             callsign.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             name.color = AvInk.Dim;
@@ -185,8 +178,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             string[] labels = { "CALLSIGN", "NAME", "K", "SRT", "STATUS" };
             for (int i = 0; i < heads.Length; i++)
             {
-                heads[i] = AvText.Make(Rect, "Head" + labels[i], AvTextRole.Micro, labels[i], i == 2 || i == 3 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(heads[i], false);
+                heads[i] = WmcSheet.Text(Rect, "Head" + labels[i], AvTextRole.Micro, i == 2 || i == 3 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft, labels[i]);
             }
             rows = new WingPilotRow[perPage];
             for (int i = 0; i < perPage; i++)
@@ -348,17 +340,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingPerkCard(RectTransform parent, int index)
         {
             Rect = AvLay.Child(parent, "Perk" + index);
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect);
             frame.raycastTarget = true;
             AvHelpTip.Attach(frame.gameObject, "");
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             badge = AvIcons.Make(Rect, AvIcon.Lock, 14f, AvInk.Dim);
-            title = AvText.Make(Rect, "Title", AvTextRole.Label);
-            AvText.Fit(title, false);
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
             line = AvText.Make(Rect, "Line", AvTextRole.Micro, "", TextAlignmentOptions.TopLeft, true);
-            mark = AvText.Make(Rect, "Mark", AvTextRole.Micro);
-            AvText.Fit(mark, false);
+            mark = WmcSheet.Text(Rect, "Mark", AvTextRole.Micro);
             Restyle();
         }
 
@@ -405,8 +394,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Restyle()
         {
             AvStyle r = AvStyleHost.FuiStyle("row");
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            WmcDraw.PaintRow(frame, r);
             rail.color = WmcState.Color(railClass);
             badge.color = locked ? AvInk.Dim : inactive ? WmcState.Color("warn") : WmcState.Color("live");
             title.color = locked ? AvInk.Dim : AvInk.Ink;
@@ -428,16 +416,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingAssignLine(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "AssignLine");
-            frame = AvFrame.Add(Rect, "Frame", default(AvChamfer));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect);
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
             icon = AvLay.Solid(Rect, "Icon", Color.white);
             icon.preserveAspect = true;
             icon.enabled = false;
-            key = AvText.Make(Rect, "Key", AvTextRole.Micro, "ASSIGNED");
-            AvText.Fit(key, false);
-            name = AvText.Make(Rect, "Name", AvTextRole.Label);
-            AvText.Fit(name, false);
+            key = WmcSheet.Text(Rect, "Key", AvTextRole.Micro, text: "ASSIGNED");
+            name = WmcSheet.Text(Rect, "Name", AvTextRole.Label);
             slot = AvText.Make(Rect, "Slot", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
         }
@@ -481,8 +466,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card", AvTheme.Surface);
             rail.color = WmcState.Color(railClass);
             key.color = WmcState.Color("info");
             name.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);

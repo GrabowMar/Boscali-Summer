@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Comms.Domain;
 using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Net;
 using Mirage;
@@ -166,7 +167,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
                 if (outbound.Route != CommsRoute.All)
                 {
                     if (!peer.TryGetPlayer<Player>(out Player player) || player == null) continue;
-                    if (!outbound.Reaches(CommsIdentity.Id(player), CommsIdentity.Faction(player))) continue;
+                    if (!outbound.Reaches(PlayerIdentity.Of(player), CommsIdentity.Faction(player))) continue;
                 }
                 try
                 {
@@ -189,7 +190,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
                 !sender.IsAuthenticated || !sender.TryGetPlayer<Player>(out Player player) || player == null)
                 return;
 
-            ulong id = CommsIdentity.Id(player);
+            ulong id = PlayerIdentity.Of(player);
             if (!roster.ContainsKey(id) && roster.Count >= MaxRoster) return;
             roster[id] = sender;
 

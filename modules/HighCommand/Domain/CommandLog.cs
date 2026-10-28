@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.HighCommand.Domain
@@ -40,13 +39,6 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
                 int at = (head - 1 - index) % Capacity;
                 return entries[at < 0 ? at + Capacity : at];
             }
-        }
-
-        public void Clear()
-        {
-            Array.Clear(entries, 0, entries.Length);
-            head = 0;
-            count = 0;
         }
 
         public static string Bounded(string text) =>

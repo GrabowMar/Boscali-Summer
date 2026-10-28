@@ -285,9 +285,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             System.Array.Clear(ledBits, 0, ledBits.Length);
             for (int e = 0; e < ElementRoster.MaxElements; e++)
             {
-                bool present = false;
-                for (int i = 0; i < c.Count && !present; i++) present = c.Rows[i].Element == e;
-                if (!present) continue;
+                if (!c.HasElement(e)) continue;
                 int bit = 1 << e;
                 WingPlanner p = c.Wing != null && !c.Client && c.Wing.Roster.InUse(e) ? c.Wing.PlannerOf(e) : null;
                 WingTask t = p != null && p.Active ? p.Current : null;
@@ -395,9 +393,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int lanes = 0;
             for (int e = 0; e < ElementRoster.MaxElements; e++)
             {
-                bool present = false;
-                for (int i = 0; i < c.Count && !present; i++) present = c.Rows[i].Element == e;
-                if (!present) continue;
+                if (!c.HasElement(e)) continue;
                 lanes++;
                 WingPlanner p = c.Wing != null && !c.Client && c.Wing.Roster.InUse(e) ? c.Wing.PlannerOf(e) : null;
                 key = key * 31 + (p != null && p.Active ? (int)p.Current.Kind + 1 : 0) + (plan != null ? plan.Steps[e].Count * 17 : 0);
@@ -411,9 +407,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int line = 0;
             for (int e = 0; e < ElementRoster.MaxElements; e++)
             {
-                bool present = false;
-                for (int i = 0; i < c.Count && !present; i++) present = c.Rows[i].Element == e;
-                if (!present) continue;
+                if (!c.HasElement(e)) continue;
                 queue.SetLine(line++, QueueLine(c, plans, e));
             }
             for (int i = line; i < WmcQueueLane.Lines; i++) queue.SetLine(i, null);

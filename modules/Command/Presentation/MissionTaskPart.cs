@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             title = Label(Rect,"Task title",AvTextRole.Headline,true);
             identity = Label(Rect,"Lead pilot",AvTextRole.Micro,true);
             state = Label(Rect,"Host lifecycle",AvTextRole.Micro);
-            order = Card(Rect,"Current order",true);
+            order = Card(Rect,"Current order");
             number = Label(order,"Phase index",AvTextRole.Headline);
             orderHead = Label(order,"Order heading",AvTextRole.Micro);
             nextAction = Label(order,"Next action",AvTextRole.Title,true);
@@ -239,7 +239,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private static TMP_Text Label(RectTransform p,string name,AvTextRole role,bool wrap=false,TextAlignmentOptions alignment=TextAlignmentOptions.TopLeft)
         {var t=AvText.Make(p,name,role,"",alignment,wrap);t.raycastTarget=false;if(!wrap)AvText.Fit(t,false);return t;}
-        private static RectTransform Card(RectTransform parent,string name,bool active=false)
+        private static RectTransform Card(RectTransform parent,string name)
         {var b=AvLay.Child(parent,name);var f=AvFrame.Add(b,"Group frame",AvChamfer.Diagonal(8));AvLay.Fill(f.rectTransform);f.Bracket=6;f.raycastTarget=false;return b;}
         internal static string Clean(string value)=>MfdSecondaryObjectives.Humanize(MfdSecondaryObjectives.PlainObjective(value??""));
         internal static string Family(ObjectiveFamily value)=>value==ObjectiveFamily.AirCover?"AIR COVER":value==ObjectiveFamily.Unknown?"SIDE MISSION":value.ToString().ToUpperInvariant();

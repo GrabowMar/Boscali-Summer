@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
@@ -40,7 +39,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>The most cells from the centre to a side of the lattice (a lattice has at most (2 * this + 1) squared nodes: they fit 16-bit indices).</summary>
         internal const int MaxHalf = 96;
         internal const int MaxSide = 2 * MaxHalf + 1;
-        internal const int MaxNodes = MaxSide * MaxSide;
         /// <summary>The longest index sets: the lines of one direction and the triangles.</summary>
         internal const int MaxLineIndices = MaxSide * (MaxSide - 1) * 2;
         internal const int MaxTriangleIndices = (MaxSide - 1) * (MaxSide - 1) * 6;

@@ -50,14 +50,5 @@ namespace NOAvionics
             float v = value01 < 0 ? 0 : value01 > 1 ? 1 : value01;
             return Math.Min(segments, (int)Math.Floor(v * segments + 1e-4f));
         }
-
-        public static int ArcSteps(float sweepDegrees, float maxStepDegrees = 6f) =>
-            Math.Max(1, (int)Math.Ceiling(Math.Abs(sweepDegrees) / Math.Max(0.5f, maxStepDegrees)));
-
-        public static AvV2 ArcPoint(float cx, float cy, float r, float degrees)
-        {
-            double a = degrees * Math.PI / 180.0;
-            return new AvV2(cx + (float)Math.Cos(a) * r, cy + (float)Math.Sin(a) * r);
-        }
     }
 }

@@ -9,7 +9,6 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
-using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Trenches.Runtime
 {

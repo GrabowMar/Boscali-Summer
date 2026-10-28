@@ -87,11 +87,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 // A missile pre-empts a maneuver for good: it is never resumed (its end is this logged transition).
                 if (was == BehaviourId.React) Reaction.End();
                 Mind.Force(to);
-                events?.Push(new WingEvent
-                {
-                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged, From = was, To = to,
-                    Reason = LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear,
-                });
+                Transition(events, time, was, to, LastDefence.Active ? TransitionReason.MissileInbound : TransitionReason.MissileClear);
             }
 
             RefState reaction = default;
@@ -102,11 +98,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 {
                     Reaction.End();
                     Mind.Force(BehaviourId.Rejoin);
-                    events?.Push(new WingEvent
-                    {
-                        Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                        From = BehaviourId.React, To = BehaviourId.Rejoin, Reason = TransitionReason.ManeuverDone,
-                    });
+                    Transition(events, time, BehaviourId.React, BehaviourId.Rejoin, TransitionReason.ManeuverDone);
                 }
             }
 
@@ -128,11 +120,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             };
             if (Mind.Tick(mind, dt, out BehaviourId from, out TransitionReason reason))
             {
-                events?.Push(new WingEvent
-                {
-                    Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                    From = from, To = Mind.Current, Reason = reason,
-                });
+                Transition(events, time, from, Mind.Current, reason);
                 if (Mind.Current == BehaviourId.HoldOverhead) orbit.Begin(HoldCenter(leader), OrbitSpeed(p), s.Pos);
             }
 
@@ -254,11 +242,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             BehaviourId from = Mind.Current;
             if (from != BehaviourId.Defend && from != BehaviourId.React) return;
             Mind.Force(BehaviourId.Rejoin);
-            events?.Push(new WingEvent
-            {
-                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
-            });
+            Transition(events, time, from, BehaviourId.Rejoin, TransitionReason.Commanded);
         }
 
         /// <summary>A reaction maneuver ordered for this member (spec WMC rebuild R3): null when it begins, else why not
@@ -273,11 +257,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (why != null) return why;
             Reaction.Begin(o, s);
             Mind.Force(BehaviourId.React);
-            events?.Push(new WingEvent
-            {
-                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                From = from, To = BehaviourId.React, Reason = TransitionReason.Commanded,
-            });
+            Transition(events, time, from, BehaviourId.React, TransitionReason.Commanded);
             return null;
         }
 
@@ -289,12 +269,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (from == BehaviourId.Defend) return;
             Reaction.End();
             if (!Mind.Force(BehaviourId.Rejoin)) return;
-            events?.Push(new WingEvent
-            {
-                Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged,
-                From = from, To = BehaviourId.Rejoin, Reason = TransitionReason.Commanded,
-            });
+            Transition(events, time, from, BehaviourId.Rejoin, TransitionReason.Commanded);
         }
+
+        private void Transition(WingEventRing events, float time, BehaviourId from, BehaviourId to, TransitionReason reason) =>
+            events?.Push(new WingEvent { Time = time, Member = Seat, Kind = WingEventKind.BehaviourChanged, From = from, To = to, Reason = reason });
 
         private Vec3 HoldCenter(in LeaderEstimate leader) =>
             new Vec3(leader.Pos.X, leader.Pos.Y + HoldOrbit.BaseHeight + HoldOrbit.SlotHeight * (Slot + 1), leader.Pos.Z);

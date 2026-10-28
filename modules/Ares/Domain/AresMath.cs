@@ -78,7 +78,7 @@ namespace BoscaliSummer.Modules.Ares.Domain
         /// the click, each row <paramref name="spacing"/> behind the one before.</summary>
         public static void Slot(int index, int count, float spacing, out float right, out float forward)
         {
-            int perRow = Math.Min(4, Math.Max(1, count));
+            int perRow = Math.Clamp(count, 1, 4);
             int row = index / perRow, inRow = index % perRow;
             int rowCount = Math.Min(perRow, count - row * perRow);
             right = (inRow - (rowCount - 1) * 0.5f) * spacing;

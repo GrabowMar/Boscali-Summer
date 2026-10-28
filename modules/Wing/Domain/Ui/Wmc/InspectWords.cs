@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>INSPECT's words (spec bezel v2 §5 INSPECT): the aircraft's title, its pilot line, the member chips and the line a

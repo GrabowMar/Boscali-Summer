@@ -59,8 +59,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Restyle();
         }
 
-        public int Capacity => lines.Length;
-
         public void Begin() => count = 0;
 
         /// <summary>Append one entry (ignored past capacity). <paramref name="clickable"/> opens the entry's post.</summary>

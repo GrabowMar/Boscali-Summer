@@ -105,7 +105,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string OpenKeyName { get; set; } = "C";
         /// <summary>The main dock's geometry for the current category / level; valid while <see cref="Cat"/> >= 0.</summary>
         public DockLayout Dock => dock;
-        public MenuLayout Layout => layout;
         public MenuModel Model => model;
         public float Now { get; private set; }
         public bool FocusFromPointer => focusFromPointer;
@@ -393,7 +392,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>The last controller input was a hat step (the game's button mode), not a stick: the hint names the hat.</summary>
         public bool PadSteps { get; private set; }
         /// <summary>0..1: how long the stick has held on something it can enter (the aimed category, or the wheel's BACK, MORE or submenu slot); 0 when it has not.</summary>
-        public float Dwell => dwellKey < 0 || dwellKey != DwellTarget() ? 0f : Math.Max(0f, Math.Min(1f, (Now - dwellSince) / DwellSec));
+        public float Dwell => dwellKey < 0 || dwellKey != DwellTarget() ? 0f : Math.Clamp((Now - dwellSince) / DwellSec, 0f, 1f);
 
         /// <summary>What a held stick would enter right now: the category index at the ring, 100 + the slot in the wheel, or -1 (an action row only runs on release).</summary>
         private int DwellTarget()
@@ -868,7 +867,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (Hold != null)
                 {
                     float p = (t - Hold.StartedAt) / DangerSec;
-                    Hold.Progress = Math.Max(0f, Math.Min(1f, p));
+                    Hold.Progress = Math.Clamp(p, 0f, 1f);
                     if (p >= 1f) { MenuRow row = Hold.Row; Hold = null; Exec(row, ExecSource.Hold); }
                 }
                 // another category under the pointer (LATCHED, or HOLD once committed) switches after 30 ms when the pointer is not heading for the

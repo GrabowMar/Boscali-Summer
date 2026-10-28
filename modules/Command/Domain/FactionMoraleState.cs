@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         internal bool TrySet(int faction, float morale)
         {
-            if (float.IsNaN(morale) || float.IsInfinity(morale) || morale < 0f || morale > 100f)
+            if (!float.IsFinite(morale) || morale < 0f || morale > 100f)
                 return false;
             if (!TryGet(faction, out _)) return false;
             values[faction] = morale;

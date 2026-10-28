@@ -193,7 +193,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
             {
                 ShotPose pose = Plan.SamplePresentation(Plan.duration * i / 64,actorPose(),camera.mainCamera.aspect);
                 var p = new GlobalPosition(pose.Position.X, pose.Position.Y, pose.Position.Z);
-                if (!PathClear(p.ToLocalPosition())) { clearance.Reset(); Message = "CAMERA PATH BLOCKED"; return false; }
+                if (!clearance.Clear(p.ToLocalPosition())) { clearance.Reset(); Message = "CAMERA PATH BLOCKED"; return false; }
             }
             clearance.Reset();
             string takeId = "take-" + DateTime.UtcNow.ToString("yyyyMMddTHHmmssfff") + "-" + Guid.NewGuid().ToString("N").Substring(0, 8);
@@ -208,7 +208,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 { width = Screen.width, height = Screen.height,sequenceId=playingEdit?.id,clipIndex=clipIndex };
                 Elapsed = 0;missionAtStart = MissionManager.CurrentMission;
                 pauseWas = GameplayUI.AllowPauseKeybind; GameplayUI.AllowPauseKeybind = false; ownsPause = true;
-                state = new CinematicCameraState(camera, snapshot, clockSource, OnFrame, PlaybackAllowed, PathClear,
+                state = new CinematicCameraState(camera, snapshot, clockSource, OnFrame, PlaybackAllowed, clearance.Clear,
                     why => Stop("Aborted", why), OnClipComplete,actorPose);
                 overlay=CinematicOverlay.Create(transform);
                 camera.SwitchState(state);
@@ -219,8 +219,6 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
             }
             catch (Exception e) { playingEdit=null;EndClip("Faulted", "CAMERA START FAILED: " + e.GetType().Name);return false; }
         }
-
-        private bool PathClear(Vector3 position) => clearance.Clear(position);
 
         private void OnFrame(float elapsed)
         { Elapsed = elapsed;pendingSeek=null; Take.evaluatedFrames++;overlay?.Paint(Take.plan,elapsed); }

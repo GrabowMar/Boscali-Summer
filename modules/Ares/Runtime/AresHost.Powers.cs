@@ -13,7 +13,6 @@ namespace BoscaliSummer.Modules.Ares.Runtime
     internal sealed partial class AresHost
     {
         public static readonly string[] Patterns = { "SINGLE", "BARRAGE", "CRUISE" };
-        public static readonly string[] WeatherNames = { "live", "storm", "hurricane", "front", "fog", "wave" };
         public static readonly string[] OpsNames = { "ROD", "EMP", "DECOY", "SALVO" };
         private static readonly byte[] OpsIds = { 6, 7, 9, 31 }; // SupportActionId: Artillery (orbital rod), Emp, FlareMissile, Cruise
 

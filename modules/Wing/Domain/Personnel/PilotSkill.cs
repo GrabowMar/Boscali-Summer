@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -15,7 +16,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static void For(WingRank rank, IReadOnlyList<PilotPerk> perks, float rankEffect, out float precision, out float aggression)
         {
-            float steps = (int)rank * Math.Max(0f, Math.Min(2f, rankEffect));
+            float steps = (int)rank * Scalar.Clamp(rankEffect, 0f, 2f);
             bool on = rankEffect > 0f;
             precision = BasePrecision + PrecisionPerRank * steps + (on && Has(perks, PilotPerk.WingmanInstinct) ? InstinctPrecision : 0f);
             aggression = BaseAggression + AggressionPerRank * steps +

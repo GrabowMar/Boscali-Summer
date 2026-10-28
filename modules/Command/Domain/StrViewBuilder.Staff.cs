@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 string why = "";
                 if (!o.Own)
                 {
-                    bool placed = !hidden && !float.IsNaN(Fin(o.X)) && !float.IsNaN(Fin(o.Z));
+                    bool placed = !hidden && float.IsFinite(o.X) && float.IsFinite(o.Z);
                     if (!placed) why = hidden ? "SEALED: NO PLACE IS KNOWN" : "NO KNOWN PLACE ON THE MAP FOR THIS OFFICER";
                     else
                     {
@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Line(6, "CONVOYS", "AI STAFF CONVOYS" + StrWords.Dot + "NOT REPORTED TO PILOTS, ONLY THE HOST SEES IT", StrWords.Dash);
             }
 
-            private static string AgeWords(float seconds) => float.IsNaN(Fin(seconds)) || seconds < 0f ? StrWords.Dash : OldText(seconds);
+            private static string AgeWords(float seconds) => !float.IsFinite(seconds) || seconds < 0f ? StrWords.Dash : OldText(seconds);
 
             private void Line(int i, string key, string text, string value)
             {

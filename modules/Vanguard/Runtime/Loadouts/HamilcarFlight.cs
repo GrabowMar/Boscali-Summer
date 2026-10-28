@@ -369,10 +369,16 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             VanguardStats.Bump("hamilcar.unloaded");
         }
 
-        // End of the husk: the shell goes quietly (the CyberAnchorSpawner pattern). Never Detonate a landed glider.
+        // End of the husk: the shell goes quietly. Never Detonate a landed glider.
         private void HamilcarRemove()
         {
             VanguardStats.Bump("hamilcar.huskRemoved");
+            RemoveQuietly(missile);
+        }
+
+        /// <summary>The end of a drone with nothing to blow up: no warhead, no blast, no shell falling for two seconds (the CyberAnchorSpawner pattern).</summary>
+        internal static void RemoveQuietly(Missile missile)
+        {
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             GameObject shell = missile.gameObject;
             missile.Networkdisabled = true;

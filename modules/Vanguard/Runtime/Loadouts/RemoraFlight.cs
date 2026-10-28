@@ -24,8 +24,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static Action<RemoraView> Changed; // host -> RemoraNet broadcast
 
         /// <summary>The drone is an XQ-90 MANTA rather than a REMORA.</summary>
-        public static bool IsManta(uint drone) =>
-            UnitRegistry.TryGetUnit(new PersistentID { Id = drone }, out Unit unit) && unit is Missile m && m.definition != null && m.definition.jsonKey == VanguardKeys.Manta;
+        public static bool IsManta(Missile drone) => drone != null && drone.definition != null && drone.definition.jsonKey == VanguardKeys.Manta;
+
+        public static bool IsManta(uint drone) => UnitRegistry.TryGetUnit(new PersistentID { Id = drone }, out Unit unit) && unit is Missile m && IsManta(m);
 
         public static int Left(RemoraView view) => IsManta(view.Drone) ? MantaRules.Left(view.Fired) : RemoraArcher.Left(view.Fired);
 
@@ -462,18 +463,24 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             PublishArcher();
         }
 
+        // How fast <paramref name="threat"/> closes on this drone (m/s, negative = opening) and the range between them.
+        private float ClosingOn(Missile threat, out float range)
+        {
+            Vector3 to = missile.GlobalPosition() - threat.GlobalPosition();
+            range = to.magnitude;
+            if (range <= 0.01f || threat.rb == null) return 0f;
+            return Vector3.Dot(threat.rb.velocity - (missile.rb != null ? missile.rb.velocity : Vector3.zero), to / range);
+        }
+
         private bool JamThreat(Unit host, float now)
         {
             if (host == null || host.disabled) return false;
             ThreatScan.Inbound(host, inbound);
-            Vector3 selfVel = missile.rb != null ? missile.rb.velocity : Vector3.zero;
             for (int i = 0; i < inbound.Count; i++)
             {
                 Missile threat = inbound[i];
                 if (threat.NetworkHQ == missile.NetworkHQ) continue;
-                Vector3 to = missile.GlobalPosition() - threat.GlobalPosition();
-                float range = to.magnitude;
-                float closing = range > 0.01f && threat.rb != null ? Vector3.Dot(threat.rb.velocity - selfVel, to / range) : 0f;
+                float closing = ClosingOn(threat, out float range);
                 if (RemoraArcher.ShouldJam(SeductionRule.IsRadarSeeker(threat.GetSeekerType()), range, closing, jamBursts, now - lastJam)) return true;
             }
             return false;
@@ -483,15 +490,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             if (host == null || host.disabled) return false;
             ThreatScan.Inbound(host, inbound);
-            Vector3 selfVel = missile.rb != null ? missile.rb.velocity : Vector3.zero;
             for (int i = 0; i < inbound.Count; i++)
             {
                 Missile threat = inbound[i];
                 if (threat.NetworkHQ == missile.NetworkHQ || threat.GetSeekerType() != "IR") continue;
-                Vector3 to = missile.GlobalPosition() - threat.GlobalPosition();
-                float range = to.magnitude;
-                float closing = range > 0.01f && threat.rb != null
-                    ? Vector3.Dot(threat.rb.velocity - selfVel, to / range) : 0f;
+                float closing = ClosingOn(threat, out float range);
                 if (RemoraArcher.ShouldFlare(range, closing, flareBursts, RemoraArcher.FlareInterval)) return true;
             }
             return false;

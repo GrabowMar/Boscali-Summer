@@ -301,36 +301,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return null;
         }
 
-        public int IndexOf(string id)
-        {
-            for (int i = 0; i < Categories.Count; i++) if (Categories[i].Id == id) return i;
-            return -1;
-        }
-
-        public MenuRow Row(string id)
-        {
-            for (int c = 0; c < Categories.Count; c++)
-            {
-                MenuRow hit = FindIn(Categories[c].Rows, id);
-                if (hit != null) return hit;
-            }
-            return null;
-        }
-
-        private static MenuRow FindIn(List<MenuRow> rows, string id)
-        {
-            for (int i = 0; i < rows.Count; i++)
-            {
-                if (rows[i].Id == id) return rows[i];
-                if (rows[i].Children != null)
-                {
-                    MenuRow hit = FindIn(rows[i].Children, id);
-                    if (hit != null) return hit;
-                }
-            }
-            return null;
-        }
-
         /// <summary>
         /// Takes the live state of a freshly built model while keeping this model's shape: categories, rows and
         /// children keep their order and index; a row the rebuild no longer offers is kept as a dimmed

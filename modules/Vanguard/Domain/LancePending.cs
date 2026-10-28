@@ -26,26 +26,11 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         private readonly List<Entry> entries = new List<Entry>(Capacity);
 
-        public int Count => entries.Count;
-
-        public int Unused
-        {
-            get
-            {
-                int unused = 0;
-                foreach (Entry entry in entries)
-                    if (!entry.Used) unused++;
-                return unused;
-            }
-        }
-
         public void Add(float power, float now)
         {
             entries.Add(new Entry { Power = power, At = now });
             if (entries.Count > Capacity) entries.RemoveAt(0);
         }
-
-        public void Clear() => entries.Clear();
 
         /// <summary>
         /// A hit claim at <paramref name="now"/>. Matched consumes the newest unused entry and returns its power; Duplicate

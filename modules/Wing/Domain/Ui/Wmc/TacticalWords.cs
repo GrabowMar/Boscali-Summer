@@ -21,7 +21,3 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
     }
 }
-
-namespace BoscaliSummer.Modules.Wing.Domain
-{
-}

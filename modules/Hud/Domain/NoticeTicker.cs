@@ -60,16 +60,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private readonly Entry[] entries = new Entry[Capacity];
         private long seq;
 
-        public int Count
-        {
-            get
-            {
-                int n = 0;
-                for (int i = 0; i < Capacity; i++) if (entries[i].Active) n++;
-                return n;
-            }
-        }
-
         public static float Dwell(HudTone tone) =>
             tone == HudTone.Warning ? WarningSeconds : tone == HudTone.Caution ? CautionSeconds : InfoSeconds;
 
@@ -211,20 +201,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         }
 
         public static bool IsFresh(in TickerLine line) => line.Age < FreshSeconds;
-
-        /// <summary>The tag tile for a channel: short, upper case ("ace-hunt" is ACE, "contracts" is OPS).</summary>
-        public static string Tag(string channel)
-        {
-            switch (channel)
-            {
-                case "ace-hunt": return "ACE";
-                case "contracts": return "OPS";
-                case null:
-                case "": return "INFO";
-            }
-            string upper = channel.ToUpperInvariant().Replace('-', ' ');
-            return upper.Length <= 7 ? upper : upper.Substring(0, 7);
-        }
 
         private static bool Same(string a, string b) => string.Equals(a, b, StringComparison.Ordinal);
     }

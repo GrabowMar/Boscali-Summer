@@ -39,8 +39,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
 
         public CommsRules Rules = CommsRules.Default;
 
-        public CommsBoard Board => board;
-
         public void Reset()
         {
             board.Clear();

@@ -38,15 +38,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         private static readonly float[] runLengths = new float[MaximumRuns];
         private static readonly List<Vector3> anchorScratch = new List<Vector3>(64);
 
-        /// <summary>
-        /// Plans one position-length window of a trace, starting at raw trace point
-        /// <paramref name="windowStartStation"/>. False means the ground, ownership or length
-        /// refused a position; <paramref name="nextStation"/> is 0 once the trace is
-        /// exhausted, so one bad stretch never stalls the scan. A band the terrain refuses
-        /// (a beachhead) retries once deeper landward before the window is given up.
-        /// <paramref name="foliageAt"/> and <paramref name="roadDistanceAt"/> nudge the route
-        /// toward forest edges and off road surfaces; null keeps the relief-only siting.
-        /// </summary>
         /// <summary>One planning attempt that can run across frames; see <see cref="StepPlan"/>.</summary>
         internal sealed class PlanJob
         {
@@ -71,6 +62,13 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         /// attempt probes every station at every depth for ground, forest and roads, which
         /// took up to 80 ms in a single frame. Only one job may run at a time, and belt growth
         /// must wait while it does: they share this class's buffers.
+        /// The window is one position-length stretch of a trace, starting at raw trace point
+        /// <paramref name="windowStartStation"/>. A refused position (ground, ownership or length) leaves
+        /// <see cref="PlanJob.Planned"/> false; <see cref="PlanJob.NextStation"/> is 0 once the trace is
+        /// exhausted, so one bad stretch never stalls the scan. A band the terrain refuses
+        /// (a beachhead) retries once deeper landward before the window is given up.
+        /// <paramref name="foliageAt"/> and <paramref name="roadDistanceAt"/> nudge the route
+        /// toward forest edges and off road surfaces; null keeps the relief-only siting.
         /// </summary>
         public static PlanJob BeginPlanWindow(int lineId, string name, FactionHQ owner, float pressure,
             FrontlineTracePoint[] points, int pointOffset, int pointCount, int windowStartStation,
@@ -383,19 +381,7 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             => TrenchTerrain.TryGround(x, z, out Vector3 ground) ? ground.y : float.NaN;
 
         /// <summary>
-        /// Lays out the ground the next stage adds. Every stage is atomic: an invalid belt
-        /// leaves the position untouched and the stage retries on the next growth tick.
-        /// </summary>
-        public static bool TryGrowBelt(TrenchLine line, ITerritoryIngress territory,
-            float[] airfieldX = null, float[] airfieldZ = null, int airfieldCount = 0)
-        {
-            PlanJob job = BeginGrowBelt(line, territory, airfieldX, airfieldZ, airfieldCount);
-            while (job.Steps.MoveNext()) { }
-            return job.Planned;
-        }
-
-        /// <summary>
-        /// <see cref="TryGrowBelt"/> as a job for <see cref="StepPlan"/>: a belt probes the
+        /// Growing a belt as a job for <see cref="StepPlan"/>: a belt probes the
         /// ground at every station down the depth ladder, which cost up to 8 ms in one
         /// frame. <see cref="PlanJob.Planned"/> is the result. The line only changes in the
         /// job's last step, and the job shares this class's buffers with window planning.
@@ -450,7 +436,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
                         if (!redoubt.Ok) yield break;
                         line.Redoubt = redoubt.Trace;
                     }
-                    line.RedoubtAnchors = SampleAnchors(line.Redoubt, AnchorSpacing);
                     line.BeltRefusals = 0;
                     line.Stage = TrenchStage.Redoubt;
                     job.Planned = true;

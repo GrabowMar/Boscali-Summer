@@ -67,8 +67,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override string Title => "THREAT";
 
-        public override char Code => 'T';
-
         public override string IdleWord => "CLEAR";
 
         public override string IdleHint => "NO RADAR OR MISSILE WARNING";

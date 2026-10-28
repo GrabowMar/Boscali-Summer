@@ -56,7 +56,7 @@ namespace BoscaliSummer.Modules.Support
             manager.AttachSof(sofService);
             opsService.Configure(manager, space, cyberService, sofService);
             manager.AttachOps(opsService);
-            overlordService.Configure(manager, space, cyberService, sofService, opsService);
+            overlordService.Configure(manager, space, cyberService, sofService);
             manager.AttachOverlord(overlordService);
             frontService.Configure(manager, space, cyberService, sofService, opsService);
             manager.ConfigureBypass(context.Settings.Diagnostics.BypassRequirements);

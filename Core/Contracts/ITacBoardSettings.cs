@@ -44,21 +44,10 @@ namespace BoscaliSummer.Core.Contracts
         BoardPage Page4 { get; set; }
         /// <summary>The stores, countermeasure and power section. Off restores the native panels.</summary>
         bool ShowStores { get; set; }
-        // Legacy per-page switches are retained for config compatibility; manual slots do not consult them.
-        bool PageThreat { get; set; }
-        bool PageShot { get; set; }
+        /// <summary>The MISSILE CAM feed picture (the missile card); the page slots do not consult it.</summary>
         bool PageMissileCam { get; set; }
-        bool PageApproach { get; set; }
-        bool PageWing { get; set; }
-        bool PageStrike { get; set; }
-        bool PageDock { get; set; }
-        bool PageObjective { get; set; }
-        bool PageCargo { get; set; }
-        bool PageSystems { get; set; }
         /// <summary>Seconds the radar-warning page keeps a contact after its last warning, 2 to 30.</summary>
         float ThreatHoldSeconds { get; set; }
-        /// <summary>Legacy automatic-page dwell setting; manual pages ignore it.</summary>
-        float PageMinSeconds { get; set; }
         bool ShowLamps { get; set; }
         bool ShowGauges { get; set; }
         bool ShowTicker { get; set; }

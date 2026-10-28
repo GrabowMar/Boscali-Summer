@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 
 namespace BoscaliSummer.Fire
@@ -17,11 +18,8 @@ namespace BoscaliSummer.Fire
             Ruin
         }
 
-        internal sealed class Visual
+        internal sealed class Visual : ParticleVisual
         {
-            public GameObject Root;
-            public ParticleSystem[] Systems;
-            public float[] BaseRates;
             public float[] BaseVelocityXMin;
             public float[] BaseVelocityXMax;
             public float[] BaseVelocityZMin;
@@ -34,14 +32,10 @@ namespace BoscaliSummer.Fire
             public ParticleSystem.MinMaxGradient[] ActiveColors;
             public int ActiveSourceCount;
             public SmokeProfile Profile;
-            public bool Active;
             public float IntensityScale;
             public float DriftScale;
-            public float GrowthSeconds;
             public float StartLag;
             public float Buoyancy;
-            public float SizeScale = 1f;
-            public float LifetimeScale = 1f;
             public float Yaw;
             public float PulseSeed;
             public float ExternalIntensity = 1f;
@@ -64,44 +58,6 @@ namespace BoscaliSummer.Fire
                         p.y, p.z * radius.y / footprintRadius.y);
                 }
                 footprintRadius = radius;
-            }
-            public bool Sleeping;
-            public CloudDeckSorting Deck;
-            public bool BehindDeck;
-
-            public void SetSleeping(bool sleep)
-            {
-                if (Sleeping == sleep) return;
-                Sleeping = sleep;
-                if (sleep)
-                {
-                    if (Systems != null)
-                    {
-                        for (int i = 0; i < Systems.Length; i++)
-                        {
-                            if (Systems[i] != null && Systems[i].isPlaying)
-                                Systems[i].Pause(true);
-                        }
-                    }
-                    if (Root != null) Root.SetActive(false);
-                }
-                else
-                {
-                    if (Root != null) Root.SetActive(true);
-                    if (Systems != null)
-                    {
-                        for (int i = 0; i < Systems.Length; i++)
-                        {
-                            if (Systems[i] != null)
-                                Systems[i].Play(true);
-                        }
-                    }
-                }
-            }
-
-            public void SetPosition(GlobalPosition position)
-            {
-                if (Root != null) Root.transform.position = position.ToLocalPosition();
             }
 
             public void SetForestClusterScale(float scale)
@@ -217,11 +173,7 @@ namespace BoscaliSummer.Fire
                 appliedCluster = clusterT; appliedBuoyancy = Buoyancy;
             }
 
-            private static float Smooth01(float value)
-            {
-                value = Mathf.Clamp01(value);
-                return value * value * (3f - 2f * value);
-            }
+            private static float Smooth01(float value) => Scalar.SmoothStep(0f, 1f, value);
         }
 
         private sealed class Template
@@ -277,15 +229,7 @@ namespace BoscaliSummer.Fire
         public void Release(Visual visual)
         {
             if (visual == null || !visual.Active) return;
-            visual.Sleeping = false;
-            visual.Active = false;
-            if (visual.Systems != null)
-            {
-                for (int i = 0; i < visual.Systems.Length; i++)
-                    if (visual.Systems[i] != null)
-                        visual.Systems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
-            }
-            if (visual.Root != null) visual.Root.SetActive(false);
+            visual.Retire();
         }
 
         public void Clear()
@@ -477,6 +421,9 @@ namespace BoscaliSummer.Fire
             for (int i = 0; i < lights.Length; i++)
             {
                 lights[i].enabled = false;
+                // URP's light data requires the Light, so it has to go first or Unity refuses the removal.
+                if (lights[i].TryGetComponent(out UnityEngine.Rendering.Universal.UniversalAdditionalLightData urpData))
+                    UnityEngine.Object.DestroyImmediate(urpData);
                 UnityEngine.Object.Destroy(lights[i]);
             }
             Collider[] colliders = root.GetComponentsInChildren<Collider>(true);

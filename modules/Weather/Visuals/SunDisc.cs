@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>Automation: the glow written this frame.</summary>
         internal Color Shown { get; private set; }
 
-        internal void Tick(LevelInfo level, Camera view, float cloudTransmission, float dt)
+        internal void Tick(LevelInfo level, Camera view, float cloudTransmission)
         {
             GameObject disc = level != null ? level.sunObject : null;
             if (disc == null || level.sun == null || view == null) { Release(); return; }

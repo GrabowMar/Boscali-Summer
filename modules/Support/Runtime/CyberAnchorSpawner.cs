@@ -314,7 +314,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 VehicleDefinition d = UplinkSpawner.Find(keys[i]);
                 if (d == null) continue;
                 if (different == null || d != different) return d;
-                fallback = fallback ?? d;
+                fallback ??= d;
             }
             return fallback;
         }

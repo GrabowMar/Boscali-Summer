@@ -9,9 +9,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static string BackgroundName(bool image, int preset) =>
             image && preset == 3 ? "CUSTOM" : "MATTE";
 
-        public static int CycleBackground(bool grid, bool checker, bool image, int preset, int direction) =>
-            image && preset == 3 ? 0 : 1;
-
         // Inspect dimensions before Unity allocates a decoded image.
         public static bool SupportedImage(byte[] data)
         {

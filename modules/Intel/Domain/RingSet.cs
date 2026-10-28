@@ -150,22 +150,11 @@ namespace BoscaliSummer.Modules.Intel.Domain
 
         private static void Start(ref Accumulator ring, in RingInput input)
         {
-            ring.X = input.X;
-            ring.Z = input.Z;
-            ring.MaxRange = input.MaxRange;
-            ring.MinAltitude = input.MinAltitude;
-            ring.MaxAltitude = input.MaxAltitude;
-            ring.Kind = input.Kind;
-            ring.AnyTracked = false;
-            ring.AnyPreWar = false;
-            ring.AnyConfirmed = false;
-            ring.AllStale = true;
-            ring.AnyEmitting = false;
-            ring.MinAge = float.PositiveInfinity;
-            ring.Launchers = 0;
-            ring.AnchorHash = input.UnitHash;
-            ring.OwnRadarHash = 0;
-            ring.SiteHash = 0;
+            ring = new Accumulator
+            {
+                X = input.X, Z = input.Z, MaxRange = input.MaxRange, MinAltitude = input.MinAltitude, MaxAltitude = input.MaxAltitude,
+                Kind = input.Kind, AllStale = true, MinAge = float.PositiveInfinity, AnchorHash = input.UnitHash,
+            };
             Merge(ref ring, in input);
         }
 

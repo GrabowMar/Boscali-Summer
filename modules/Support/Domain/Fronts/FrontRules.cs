@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             DonateRate = 3f, MaxShare = 0.10f, ShareIntervalSeconds = 60f, LockSeconds = 60f;
         public const int AsatCyberReadiness = 3;
 
-        public static float ClampShare(float share) => float.IsNaN(share) ? DefaultShare : Math.Max(0f, Math.Min(MaxShare, share));
+        public static float ClampShare(float share) => float.IsNaN(share) ? DefaultShare : Math.Clamp(share, 0f, MaxShare);
 
         /// <summary>The table of spec 3.5. READINESS is listed at rung 1 (cost 150, 120 s); rung n costs 150*n and builds 120*n s.</summary>
         public static readonly FrontProgramme[] Programmes =
@@ -63,7 +63,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public static float BuildSeconds(ProgrammeId id, int rung) => Info(id).BuildSeconds * (id == ProgrammeId.Readiness ? Math.Max(1, rung) : 1);
 
-        private static float Sane(float scale) => float.IsFinite(scale) && scale > 0f ? scale : 1f;
+        /// <summary>A scale or factor from config or the wire: itself when finite and above 0, else 1.</summary>
+        internal static float Sane(float scale) =>float.IsFinite(scale) && scale > 0f ? scale : 1f;
 
         public static bool IsValid(Front front, FrontDirective d)
         {
@@ -85,7 +86,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>m:ss, rounded up, as the lock reason shows it.</summary>
         public static string Clock(float seconds)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds)) return "0:00";
+            if (!float.IsFinite(seconds)) return "0:00";
             int s = (int)Math.Ceiling(Math.Min(Math.Max(0f, seconds), 1e9f));
             return (s / 60) + ":" + (s % 60).ToString("00");
         }

@@ -129,7 +129,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 out float kts, out int towards, out int from);
 
             Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
-            float cameraAltitude = camera != null ? (float)camera.transform.GlobalPosition().y : 0f;
+            float cameraAltitude = camera != null ? camera.transform.GlobalPosition().y : 0f;
             bool hasViewAir = weather.TryGet(out var viewAir);
             SolarData solar = weather.GetSolarData();
             LunarData lunar = weather.GetLunarData();

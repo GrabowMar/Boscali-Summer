@@ -9,11 +9,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// </summary>
     internal static class WeatherMath
     {
-        public const float Deg2Rad = (float)(Math.PI / 180.0);
-        public const float Rad2Deg = (float)(180.0 / Math.PI);
-
-        public static float Lerp(float a, float b, float t) => a + (b - a) * t;
-
         /// <summary>Hermite smoothstep between two edges; the only easing the field uses.</summary>
         public static float Smoothstep(float edge0, float edge1, float x)
         {
@@ -25,23 +20,30 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float Envelope(float x, float riseStart, float riseEnd, float fallStart, float fallEnd)
             => Smoothstep(riseStart, riseEnd, x) * (1f - Smoothstep(fallStart, fallEnd, x));
 
+        /// <summary>exp(-(x / width)^2): the bell the front beads and storm cells fall off with.</summary>
+        public static float Gauss(float x, float width)
+        {
+            float u = x / width;
+            return (float)Math.Exp(-u * u);
+        }
+
         public static float Hash01(uint seed, int a, int b = 0, int c = 0)
             => Deterministic.UnitFloat(Deterministic.Hash((int)seed, a, b, c));
 
         public static float HashRange(uint seed, int a, int b, int c, float min, float max)
-            => Lerp(min, max, Hash01(seed, a, b, c));
+            => Scalar.Lerp(min, max, Hash01(seed, a, b, c));
 
         /// <summary>Downwind heading in degrees to a unit vector on the (x east, z north) plane.</summary>
         public static void HeadingToVector(float headingDeg, out float x, out float z)
         {
-            float r = headingDeg * Deg2Rad;
+            float r = headingDeg * Scalar.Deg2Rad;
             x = (float)Math.Sin(r);
             z = (float)Math.Cos(r);
         }
 
         public static float VectorToHeading(float x, float z)
         {
-            float h = (float)Math.Atan2(x, z) * Rad2Deg;
+            float h = (float)Math.Atan2(x, z) * Scalar.Rad2Deg;
             return WrapHeading(h);
         }
 
@@ -49,13 +51,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             deg %= 360f;
             return deg < 0f ? deg + 360f : deg;
-        }
-
-        /// <summary>Shortest signed angle from a to b in degrees, in (-180, 180].</summary>
-        public static float DeltaAngle(float a, float b)
-        {
-            float d = WrapHeading(b - a);
-            return d > 180f ? d - 360f : d;
         }
 
         /// <summary>
@@ -78,7 +73,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float b = Hash01(seed, ix + 1, iy, 911);
             float c = Hash01(seed, ix, iy + 1, 911);
             float d = Hash01(seed, ix + 1, iy + 1, 911);
-            return Lerp(Lerp(a, b, ux), Lerp(c, d, ux), uy);
+            return Scalar.Lerp(Scalar.Lerp(a, b, ux), Scalar.Lerp(c, d, ux), uy);
         }
 
         /// <summary>Three octaves of <see cref="ValueNoise"/>, renormalised to [0, 1].</summary>

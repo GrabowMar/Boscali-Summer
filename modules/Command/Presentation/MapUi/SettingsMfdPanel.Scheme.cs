@@ -124,8 +124,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private string customSeen;
         private int generation = -1, selected = -1;
 
-        public int Count => tiles.Length;
-
         public SetSchemeBoard(RectTransform parent, Func<int> getter, Action<int> set)
         {
             Rect = AvLay.Child(parent, "SchemeBoard");

@@ -208,7 +208,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = 0; i < items.Count; i++)
             {
                 CommsItem item = items[i];
-                if (item.Kind != CommsItemKind.Sticker && !comms.State.IsMuted(item.Author)) eligible++;
+                if (!comms.State.IsMuted(item.Author)) eligible++;
                 if (item.Author != me) continue;
                 if (item.Kind == CommsItemKind.Ping) { if (!item.IsCall) markCounts[0]++; }
                 else if (item.Kind == CommsItemKind.Stroke) markCounts[1]++;
@@ -230,7 +230,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = items.Count - 1; i >= 0 && shown < BoardRows; i--)
             {
                 CommsItem item = items[i];
-                if (item.Kind == CommsItemKind.Sticker || comms.State.IsMuted(item.Author)) continue;
+                if (comms.State.IsMuted(item.Author)) continue;
                 NetRow row = boardRows[shown];
                 string left = CommsText.Countdown(item.Expires - now);
                 row.Set(ItemTag(item), Who(item.Author, item.AuthorName), ItemWords(item), left, ItemState(item));

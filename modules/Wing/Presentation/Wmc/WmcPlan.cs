@@ -53,13 +53,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             flow = pageFlow;
             ticker = pageTicker;
-            var specs = new AvControl.Spec[SubLabels.Length];
-            for (int i = 0; i < specs.Length; i++)
-            {
-                int k = i;
-                specs[i] = new AvControl.Spec(SubLabels[i], () => ShowSub(k), AvButtonStyle.Default, SubIcons[i]);
-            }
-            subTabs = flow.Buttons(specs).Controls;
+            subTabs = WmcSubPages.Tabs(flow, SubLabels, SubIcons, ShowSub);
             for (int i = 0; i < subTabs.Length; i++)
             {
                 subTabs[i].Help = SubHelp[i];
@@ -85,26 +79,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvPopup.CloseAny();
             sortieKey = long.MinValue;
             if (last != null) Refresh(last);
-        }
-
-        /// <summary>A sub-page by its label (automation). Scenarios written for TUNING / OPTIONS open STANCES; PLAN, ELEMENTS, RECORD,
-        /// TIMELINE and LOG open SORTIE.</summary>
-        public bool ShowSubNamed(string name)
-        {
-            if (string.Equals(name, "TUNING", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "OPTIONS", System.StringComparison.OrdinalIgnoreCase)) name = "STANCES";
-            if (string.Equals(name, "PLAN", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "ELEMENTS", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "RECORD", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "TIMELINE", System.StringComparison.OrdinalIgnoreCase)
-                || string.Equals(name, "LOG", System.StringComparison.OrdinalIgnoreCase)) name = "SORTIE";
-            for (int i = 0; i < SubLabels.Length; i++)
-                if (string.Equals(SubLabels[i], name, System.StringComparison.OrdinalIgnoreCase))
-                {
-                    ShowSub(i);
-                    return true;
-                }
-            return false;
         }
 
         public void Shown(WmcContext c)

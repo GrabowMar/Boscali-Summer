@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                         if (vm.Posts[i] != null && vm.Posts[i].Id == id) { x = vm.Posts[i].X; z = vm.Posts[i].Z; break; }
                     break;
             }
-            bool known = !float.IsNaN(x) && !float.IsInfinity(x) && !float.IsNaN(z) && !float.IsInfinity(z);
+            bool known = float.IsFinite(x) && float.IsFinite(z);
             if (!known) x = z = float.NaN;
             return known;
         }

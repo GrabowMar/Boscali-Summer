@@ -14,39 +14,17 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float BodyHeight => BodyBottom - BodyTop;
 
         // Fixed heights of the parts. Kit parts keep their kit height (AvSection 23, AvSegmented / AvControl row 28).
-        public const float Section = 23f, Row = 28f, CardChrome = 30f;
-        public const float FrontsCard = 71f, IdentityCard = 78f;   // identity: chrome 30 + three 16 px lines
-        public const float SkyCard = 150f, OutlookStrip = 76f, SetCellRow = 43f, CellGap = 4f;
+        public const float Row = 28f, CardChrome = 30f;
+        public const float FrontsCard = 71f;   // identity: chrome 30 + three 16 px lines
+        public const float SkyCard = 150f, SetCellRow = 43f, CellGap = 4f;
         public const float PipsRow = 19f, StripArt = 66f, StripMeta = 15f;
         public const float ScenarioRow = 46f, StoryRow = 36f, LogLines = 4f, LogLine = 16f;   // the log is DataSmall text: 16 px a line, so the card reserves exactly that
         public const float TileArt = 66f, TileButton = 64f, InspectRow = 26f;
-
-        public static float SetGrid => 3f * SetCellRow + 2f * CellGap;
         public static float StoryBody => PipsRow + 2f + StripArt + StripMeta;
         public static float TapeCard => CardChrome + StoryBody + Gap + Row;
         public static float ScenarioCard => CardChrome + 6f * ScenarioRow + 5f * CellGap;
         public static float StoriesCard => CardChrome + (WeatherKey.StoryCount + 1) * StoryRow + WeatherKey.StoryCount * CellGap;
-        public static float LogCard => CardChrome + LogLines * LogLine;
         public static float Tile => TileArt + TileButton;
         public static float Gallery => 2f * Tile + CellGap;
-        public static float InspectCard => CardChrome + 3f * InspectRow + Gap + Row;
-
-        private static float Stack(params float[] parts)
-        {
-            float h = 0f;
-            for (int i = 0; i < parts.Length; i++) h += parts[i] + (i > 0 ? Gap : 0f);
-            return h;
-        }
-
-        /// <summary>Content height of a column (1 left, 2 centre, 3 right), gaps included.</summary>
-        public static float ColumnHeight(int column)
-        {
-            switch (column)
-            {
-                case 1: return Stack(ScenarioCard, StoriesCard);
-                case 2: return Stack(Row, Gallery, InspectCard, SkyCard);
-                default: return Stack(FrontsCard, Section, OutlookStrip, Section, SetGrid, Row, Row, IdentityCard, LogCard);
-            }
-        }
     }
 }

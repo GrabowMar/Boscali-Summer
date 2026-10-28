@@ -30,24 +30,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
         private static readonly Dictionary<PersistentID, Survivor> survivors = new Dictionary<PersistentID, Survivor>();
 
-        /// <returns>Name, callsign, background, persona (int). No roster recruitment.</returns>
-        internal static object[] CreatePilot(int seed)
-        {
-            var random = new System.Random(seed);
-            var persona = (ChatterPersona)random.Next(ChatterPersonas.Count);
-            return new object[]
-            {
-                PilotIdentity.Name(random.Next),
-                PilotIdentity.Callsign(random.Next, _ => false),
-                PilotIdentity.Background(random.Next, persona),
-                (int)persona,
-            };
-        }
-
-        /// <summary>Borrow the wing's portrait; callers must never destroy it.</summary>
-        internal static Sprite Portrait(string name, string callsign) =>
-            PersonnelPortrait(name, callsign, PortraitRole.Pilot);
-
         internal static Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1)
         {
             name = Limit(name, 64);
@@ -60,12 +42,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             portraitKeys.Add(key);
             return PilotPortrait.ForIdentity(identity, role, faction);
         }
-
-        // ---- Saved-pilot lookup --------------------------------------------------------
-        // Read-only record API behind IWingSquad (the WMC studio edits the store directly).
-        // Values stay BCL primitives in fixed positions: 0 Name, 1 Callsign, 2 DialogueTag,
-        // 3 Persona, 4 Background, 5 Xp, 6 Kills, 7 Sorties, 8 HasPortrait, 9 Body, 10 Face,
-        // 11 Hair, 12 Uniform, 13 Accessory, 14 Backdrop.
 
         /// <summary>Borrow a portrait for an explicit appearance selection. Callers must
         /// never destroy it.</summary>
@@ -81,41 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             selectionKeys.Add(key);
             return PilotPortrait.ForSelection(selection);
         }
-
-
-        /// <summary>Flat record for one custom pilot, or null when no file matches.</summary>
-        internal static object[] GetCustomPilot(string callsign)
-        {
-            CustomPilotRecord record = FindCustomPilot(callsign);
-            return record == null ? null : Export(record);
-        }
-
-        private static CustomPilotRecord FindCustomPilot(string callsign) =>
-            string.IsNullOrWhiteSpace(callsign) ? null : WingSavedPilots.Store.Find(callsign);
-
-        private static object[] Export(CustomPilotRecord record)
-        {
-            PortraitSelection selection = record.Selection;
-            return new object[]
-            {
-                record.Name ?? string.Empty,
-                record.Callsign ?? string.Empty,
-                record.DialogueTag ?? string.Empty,
-                (int)record.Persona,
-                record.Background ?? string.Empty,
-                record.Xp,
-                record.Kills,
-                record.Sorties,
-                record.HasCustomPortrait,
-                (int)selection.Body,
-                selection.Face,
-                selection.Hair,
-                selection.Uniform,
-                selection.Accessory,
-                selection.Backdrop,
-            };
-        }
-
 
         /// <summary>Spawn at a host-selected global ingress. The companion owns territory policy.</summary>
         internal static Aircraft[] SpawnWingAt(Aircraft target, FactionHQ enemyHq, int seed, int tier,
@@ -237,10 +178,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 else if (!aircraft.disabled) WakeCombat(aircraft, null);
             }
         }
-
-        /// <summary>Active ace perks: bit 0 toughness, 1 countermeasures, 2 notch expert, 3 ghost.
-        /// Reads the same authority/settings gate as the actual perk hooks.</summary>
-        internal static int AbilityMask(Aircraft aircraft) => WingSurvivalPerks.AceAbilityMask(aircraft);
 
         internal static void Chatter(string callsign, string context, string message)
         {
@@ -396,7 +333,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         private static AircraftDefinition SelectAirframe(int tier)
         {
             var catalogue = Encyclopedia.i?.aircraft;
-            string wanted = AceIngress.Airframe(tier);
+            string wanted = tier == 1 ? "T/A-30" : tier == 2 ? "CT-7" : tier == 3 ? "FS-12" : tier == 4 ? "FS-20" : tier == 5 ? "KR-67" : null;
             if (catalogue == null || wanted == null) return null;
             for (int i = 0; i < Math.Min(catalogue.Count, 128); i++)
             {

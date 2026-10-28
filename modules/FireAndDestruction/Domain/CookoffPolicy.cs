@@ -8,7 +8,6 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
     /// </summary>
     internal static class CookoffPolicy
     {
-        public const int MaxGeneration = 2;
         public const int MaxScheduled = 8;
         public const int MaxWreckNotices = 8;
         public const float MinDelay = 2f;

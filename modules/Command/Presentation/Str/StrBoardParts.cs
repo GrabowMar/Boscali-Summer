@@ -7,17 +7,11 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>Implemented by every part: copy the model, change nothing else.</summary>
-    internal interface IStrBound
-    {
-        void Bind(StrViewModel vm);
-    }
-
     /// <summary>
     /// A part that copies the model. It reads no service, clock or status string; a press goes to the hub through <see cref="Controls"/>, and
     /// a part registers the ids it shows when it binds and nothing while it is hidden.
     /// </summary>
-    internal abstract class StrPart : AvPart, IStrBound
+    internal abstract class StrPart : AvPart
     {
         protected static readonly StrAct Allowed = new StrAct(StrWhy.None, "");
 
@@ -75,6 +69,22 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
     }
 
+    /// <summary>A part with one layout pass: <see cref="Lay"/> measures when <c>place</c> is false and places its children when true, so Measure and Place cannot disagree. A hidden part measures nothing.</summary>
+    internal abstract class StrLaidPart : StrPart
+    {
+        protected StrLaidPart(RectTransform parent, string name, StrControls controls, IStrHub hub) : base(parent, name, controls, hub) { }
+
+        protected abstract float Lay(float width, bool place);
+
+        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
+
+        public override void Place(AvSlot s)
+        {
+            base.Place(s);
+            if (Shown) Lay(s.W, true);
+        }
+    }
+
     /// <summary>A kit button that shows its gate: a disabled one carries the reason as its hover help, and its id is registered with the live gate and the hub call.</summary>
     internal sealed class StrButton
     {
@@ -121,7 +131,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// The banner above the board: why there is no board or what the staff is doing, with a split-flap countdown and, for a board with no opening, the
     /// checklist. Hidden while an operation runs on a current report.
     /// </summary>
-    internal sealed class StrBannerPart : StrPart
+    internal sealed class StrBannerPart : StrLaidPart
     {
         private const float Pad = 10f, TagW = 34f, MarkW = 26f;
 
@@ -199,15 +209,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             StrBanner b = Vm != null ? Vm.Banner : null;
             if (b == null) return 0f;
@@ -361,7 +363,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>One of the staff's proposals as a ticket: plate (number, default or open, wave price), kind, place, risk, lane, aim, PICK and LOCATE.</summary>
-    internal sealed class StrProposalTicket : StrPart
+    internal sealed class StrProposalTicket : StrLaidPart
     {
         private const float Pad = 8f, PlateW = 56f, ButtonW = 88f, LaneH = 12f;
 
@@ -419,15 +421,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             float cx = Pad + PlateW + 8f, cw = width - cx - ButtonW - 2f * Pad;
             float aimH = Mathf.Max(15f, AvText.Height(aim, cw));

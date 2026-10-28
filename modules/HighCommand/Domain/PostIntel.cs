@@ -1,3 +1,5 @@
+using System;
+
 namespace BoscaliSummer.Modules.HighCommand.Domain
 {
     /// <summary>A confirmed post as one observer last saw it.</summary>
@@ -46,13 +48,10 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
             if (record.Seen <= 0f) return false;
             float age = now - record.Seen;
             // A clock that went backwards reads fresh; one that cannot be read reads as the oldest, never as fresh.
-            age = float.IsNaN(age) ? MaximumAge : age < 0f ? 0f : age > MaximumAge ? MaximumAge : age;
+            age = float.IsNaN(age) ? MaximumAge : Math.Clamp(age, 0f, MaximumAge);
             sighting = new PostSighting(age, record.X, record.Y, record.Z);
             return true;
         }
-
-        /// <summary>Seconds-clock of the last sighting, 0 when never.</summary>
-        public float LastSight(int observer, int key) => InRange(observer, key) ? records[observer * Keys + key].Seen : 0f;
 
         /// <summary>Drop every observer's record of this key: the post fell or was rebuilt, so nobody knows where it stands.</summary>
         public void Forget(int key)

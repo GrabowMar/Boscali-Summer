@@ -157,8 +157,6 @@ namespace NOAvionics
         /// <summary>Problems found while parsing, as "line N: message". Never throws.</summary>
         public List<string> Errors { get; } = new List<string>();
 
-        public bool HasErrors => Errors.Count > 0;
-
         public int RuleCount => rules.Count;
 
         /// <summary>
@@ -244,7 +242,7 @@ namespace NOAvionics
         {
             if (selector.StartsWith(":root", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (KeyValuePair<string, string> pair in SplitDeclarations(body, line))
+                foreach (KeyValuePair<string, string> pair in SplitDeclarations(body))
                     vars[pair.Key] = pair.Value;
                 return;
             }
@@ -286,7 +284,7 @@ namespace NOAvionics
             }
         }
 
-        private static IEnumerable<KeyValuePair<string, string>> SplitDeclarations(string body, int line)
+        private static IEnumerable<KeyValuePair<string, string>> SplitDeclarations(string body)
         {
             foreach (string raw in body.Split(';'))
             {
@@ -306,7 +304,7 @@ namespace NOAvionics
         {
             var style = new AvStyle();
 
-            foreach (KeyValuePair<string, string> decl in SplitDeclarations(body, line))
+            foreach (KeyValuePair<string, string> decl in SplitDeclarations(body))
             {
                 string prop = decl.Key.ToLowerInvariant();
                 string[] parts = Resolve(decl.Value).Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);

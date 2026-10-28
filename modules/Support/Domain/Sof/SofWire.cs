@@ -269,13 +269,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         private static SofStateData Bad() => new SofStateData();
-
-        public static int StateSize(SofStateData s)
-        {
-            var c = new ByteCounter();
-            WriteState(c, s);
-            return c.Bytes;
-        }
     }
 
     /// <summary>The client's copy of its own faction's SOF state (see <see cref="FactionMirror{T}"/>).</summary>
@@ -339,14 +332,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     /// <summary>The page words that need no engine.</summary>
     internal static class SofPageWords
     {
-        public static string Sub(SofStateData s)
-        {
-            if (s == null || !s.Active) return "NO CAMP STANDING";
-            int live = 0, teams = 0;
-            foreach (SofCampRow c in s.Camps) if (c.Health != AnchorHealth.Down) live++;
-            foreach (SofTeamRow t in s.Teams) if (t.State != TeamState.Lost) teams++;
-            return live + " CAMP" + (live == 1 ? "" : "S") + " · " + teams + "/" + s.TeamCap + " TEAMS · " + s.Held.Count + " HELD";
-        }
 
         /// <summary>Who commands a team, for its card: YOU, CTRL plus the operator's callsign, or AUTO while OVERLORD's pool holds it.</summary>
         public static string Control(in SofTeamRow t) => t.Mine ? "YOU" : string.IsNullOrEmpty(t.Controller) ? "AUTO" : "CTRL " + t.Controller;
@@ -369,27 +354,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofEventKind.LiftDown: return team + " LANDED";
                 case SofEventKind.Seized: return "BUILDING SEIZED · HELD 10:00";
                 default: return "HELD BUILDING LOST";
-            }
-        }
-
-        /// <summary>The 3-line teams box row: <c>A-1 · MOVING · ETA 2:14 · EXP 34 % · ODDS 62 %</c>.</summary>
-        public static string TeamLine(in SofTeamRow t, float now)
-        {
-            string head = SofRules.Callsign(t.Slot) + " · " + SofWords.State(t.State);
-            switch (t.State)
-            {
-                case TeamState.Raising: return head + " · " + SpaceRules.Clock(t.EndsAt - now);
-                case TeamState.Recovering: return head + " · " + SpaceRules.Clock(t.EndsAt - now);
-                case TeamState.Lost: return head;
-                case TeamState.Pinned: return head + " · LOST IN " + SpaceRules.Clock(t.EndsAt - now) + " · EXP " + t.Exposure + " %";
-                case TeamState.OnSite: return head + " · " + SofWords.Kind(t.Mission) + (t.Mission == MissionKind.Lase ? " · HOLDING" : " · " + SpaceRules.Clock(t.EndsAt - now)) + " · EXP " + t.Exposure + " %";
-                case TeamState.Moving:
-                case TeamState.Returning:
-                    float d = SofRules.Distance(t.X, t.Z, t.DestX, t.DestZ);
-                    float speed = SofRules.SpeedMetresPerSecond * (t.Push ? SofRules.PushSpeedFactor : 1f);
-                    return head + (t.Hold ? " · HOLD" : t.Push ? " · PUSH" : "") + (t.Carried ? " · HELO" : " · ETA " + SpaceRules.Clock(d / speed)) + " · EXP " + t.Exposure + " %";
-                default:
-                    return head + (t.Carried ? " · IN HELO" : t.LiftWaiting ? " · LIFT REQUESTED" : "") + " · AMMO " + t.Ammo + " · EXP " + t.Exposure + " %";
             }
         }
     }

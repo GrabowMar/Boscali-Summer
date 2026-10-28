@@ -104,12 +104,12 @@ namespace BoscaliSummer.Core.Ui
             steps.Add(id, direction =>
             {
                 if (!row.Interactive || values.Length == 0) return;
-                int index = IndexOf(values, entry.Value);
+                int index = Array.IndexOf(values, entry.Value);
                 entry.Value = values[(index + direction + values.Length) % values.Length];
             });
             refreshers.Add(() =>
             {
-                int index = IndexOf(values, entry.Value);
+                int index = Array.IndexOf(values, entry.Value);
                 if (index < 0) index = 0;
                 row.ValueText = names.Length > index ? names[index].ToUpperInvariant() : "";
                 Availability(row, unavailable);
@@ -147,13 +147,6 @@ namespace BoscaliSummer.Core.Ui
             string reason = unavailable != null ? unavailable() : null;
             row.Interactive = string.IsNullOrEmpty(reason);
             row.Reason = row.Interactive ? null : reason;
-        }
-
-        private static int IndexOf<T>(T[] values, T value) where T : struct, Enum
-        {
-            for (int i = 0; i < values.Length; i++)
-                if (EqualityComparer<T>.Default.Equals(values[i], value)) return i;
-            return -1;
         }
 
         private static string Default(float value) =>

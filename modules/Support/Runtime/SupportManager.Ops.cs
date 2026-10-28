@@ -65,6 +65,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ops != null ? ops.Verb(player, command) : new OpResult(OpOutcome.Unavailable);
 
         /// <summary>The NET or SOF page is on screen: while it is, the feed asks the host for a state.</summary>
-        internal MirrorFeed<OpsStateData> OpsFeed => opsFeed ?? (opsFeed = new MirrorFeed<OpsStateData>(opsMirror, SpaceCommandKind.OpSync));
+        internal MirrorFeed<OpsStateData> OpsFeed => opsFeed ??= new MirrorFeed<OpsStateData>(opsMirror, SpaceCommandKind.OpSync);
     }
 }

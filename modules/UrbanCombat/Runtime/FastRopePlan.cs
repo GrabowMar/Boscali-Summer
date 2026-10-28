@@ -57,7 +57,6 @@ namespace BoscaliSummer.Garrisons
         private readonly float reelAt, reelSeconds;
 
         public RopeMode Mode { get; }
-        public int Count => troopers.Length;
         /// <summary>When the last trooper is off the rope: the server resolves the insertion then.</summary>
         public float DescentSeconds { get; }
         public float TotalSeconds { get; }

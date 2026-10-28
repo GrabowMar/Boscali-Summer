@@ -1,9 +1,9 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
-    internal enum CuePhase : byte { Show, Hold, Fade, Gone }
 
     /// <summary>
     /// The life of one cue as a function of its age, pure (so a render at any frame rate, or at a fixed age, draws the same). SHOW (0 to 0.32 s): the two bracket halves snap in from <see cref="BracketRun"/> outside over 0.14 s, the
@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The cue's life in seconds: the game's own time, at least <see cref="CueLog.MinLife"/> so a very short line is still readable. A time that is not a number, or absurd, is five seconds.</summary>
         public static float LifeOf(float seconds)
         {
-            if (float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f) seconds = CueLog.DefaultSeconds;
+            if (!float.IsFinite(seconds) || seconds <= 0f) seconds = CueLog.DefaultSeconds;
             return Math.Min(CueLog.MaxSeconds, Math.Max(CueLog.MinLife, seconds));
         }
 
@@ -40,15 +40,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return arrival - previousArrival <= GroupSeconds && later > arrival ? later : arrival;
         }
 
-        public static CuePhase PhaseOf(float age, float life) =>
-            age >= life ? CuePhase.Gone : age >= life - FadeSeconds ? CuePhase.Fade : age < ShowSeconds ? CuePhase.Show : CuePhase.Hold;
-
-        private static float Clamp01(float v) => v < 0f ? 0f : v > 1f ? 1f : v;
-
         /// <summary>0 to 1 over the fade, 0 before it.</summary>
-        public static float FadeT(float age, float life) => Clamp01((age - (life - FadeSeconds)) / FadeSeconds);
+        public static float FadeT(float age, float life) => Scalar.Clamp01((age - (life - FadeSeconds)) / FadeSeconds);
 
-        private static float EaseOut(float t) { t = 1f - Clamp01(t); return 1f - t * t * t; }
+        private static float EaseOut(float t) { t = 1f - Scalar.Clamp01(t); return 1f - t * t * t; }
 
         /// <summary>How far outside their resting place the two bracket halves are, design units: 46 at the first instant, in at 0.14 s (ease-out); out again over the fade (ease-in).</summary>
         public static float BracketOffset(float age, float life)
@@ -155,13 +150,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class CueLayout
     {
         /// <summary>The stack's left edge, 16 in; its minimum top at 30 % of the screen's height; 40 between cues.</summary>
-        public const float Left = 16f, TopFraction = 0.30f, Pitch = 40f;
+        public const float Left = 16f, Pitch = 40f;
         /// <summary>The words start this far in from the left edge (the shelf's caption inset), the bracket halves hug the words this far outside them, an arm is 5 long.</summary>
         public const float TextInset = 12f, HugGap = 8f, Arm = 5f;
         /// <summary>Rows inside a cue's slot: the shelf's line, the message's middle, the underline, the brackets' top and bottom (with the shelf; the bare cue of Lean and Minimal sits <see cref="BareLift"/> higher). The next slot's shelf is 40 on.</summary>
         public const float ShelfRow = 4f, MessageRow = 21f, UnderlineRow = 31f, BracketTop = 12f, BracketBottom = 31f, BareLift = 8f;
-
-        public static float Top(float designHeight) => (float)Math.Round(designHeight * TopFraction);
 
         /// <summary>The shelf under the class word: 12 in, the word, 4 clear, then a short hairline and the node.</summary>
         public static float ShelfWidth(int captionChars) => (float)Math.Ceiling(TextInset + captionChars * 12f * 0.65f + 4f + 40f - 0.001f);

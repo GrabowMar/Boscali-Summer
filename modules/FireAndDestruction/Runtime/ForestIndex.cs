@@ -191,8 +191,6 @@ namespace BoscaliSummer.Fire
             return false;
         }
 
-        public bool Contains(Vector2 position) => Contains(position.x, position.y);
-
         /// <summary>Copies up to <c>xyz.Length / 3</c> clump centres within <paramref name="radius"/>
         /// of (px, pz) as x, height, z triples. Returns how many were written.</summary>
         public int CopyNear(float px, float pz, float radius, float[] xyz)

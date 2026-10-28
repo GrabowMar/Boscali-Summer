@@ -28,8 +28,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         /// <summary>Decoy offset from the pod's exit point: straight astern of the host, a little below.</summary>
         public static Vector3 Offset(Vector3 forward, Vector3 up, float line) => -forward * line - up * Drop(line);
 
-        public static Vector3 TrailPoint(Vector3 anchor, Vector3 forward, Vector3 up, float line) => anchor + Offset(forward, up, line);
-
         /// <summary>First-order follow of the wanted offset. The offset is host-relative, so host speed adds no steady lag.</summary>
         public static Vector3 Follow(Vector3 current, Vector3 wanted, float dt) =>
             Vector3.Lerp(current, wanted, 1f - Mathf.Exp(-dt / Lag));

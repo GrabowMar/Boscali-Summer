@@ -26,38 +26,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static Material beamMaterial;
         private static bool warned; // one rig warning a session, not one a glider
 
-        // One hinged part: turning is about a missile axis taken into the parent frame at rest.
-        private struct Joint
-        {
-            public Transform Part;
-            private Quaternion rest;
-            private Vector3 axis;
-            private float shown;
-
-            public static Joint Find(Transform[] parts, string name, Vector3 worldAxis, ref string missing)
-            {
-                foreach (Transform part in parts)
-                    if (part.name == name && part.parent != null)
-                        return new Joint { Part = part, rest = part.localRotation, axis = part.parent.InverseTransformDirection(worldAxis) };
-                missing = missing == null ? name : missing + ", " + name;
-                return default;
-            }
-
-            public void Turn(float degrees)
-            {
-                if (degrees == shown || Part == null) return;
-                shown = degrees;
-                Part.localRotation = Quaternion.AngleAxis(degrees, axis) * rest;
-            }
-
-            public float Off(float degrees) => Part == null ? 0f : Quaternion.Angle(Part.localRotation, Quaternion.AngleAxis(degrees, axis) * rest);
-        }
-
         private Missile missile;
         private KestrelDrone drone;
         private Transform body, tail;
         private Vector3 tailRest, tailRun;
-        private Joint wing, port, starboard, prop, turret, eye;
+        private RigJoint wing, port, starboard, prop, turret, eye;
         private LineRenderer line, dot;
         private float tailShown, propAngle, yaw, pitch;
 
@@ -93,12 +66,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             Transform visual = body.Find("VanguardVisual");
             Transform[] parts = visual != null ? visual.GetComponentsInChildren<Transform>(true) : new Transform[0];
             string missing = null;
-            wing = Joint.Find(parts, "Wing", body.up, ref missing);
-            port = Joint.Find(parts, "WingOuterL", body.up, ref missing);
-            starboard = Joint.Find(parts, "WingOuterR", body.up, ref missing);
-            prop = Joint.Find(parts, "Prop", body.forward, ref missing);
-            turret = Joint.Find(parts, "Turret", body.up, ref missing);
-            eye = Joint.Find(parts, "Eye", body.right, ref missing);
+            wing = RigJoint.Find(parts, "Wing", body.up, ref missing);
+            port = RigJoint.Find(parts, "WingOuterL", body.up, ref missing);
+            starboard = RigJoint.Find(parts, "WingOuterR", body.up, ref missing);
+            prop = RigJoint.Find(parts, "Prop", body.forward, ref missing);
+            turret = RigJoint.Find(parts, "Turret", body.up, ref missing);
+            eye = RigJoint.Find(parts, "Eye", body.right, ref missing);
             foreach (Transform part in parts)
                 if (part.name == "Tail" && part.parent != null)
                 {

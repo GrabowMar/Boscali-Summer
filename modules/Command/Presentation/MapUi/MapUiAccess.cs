@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
+using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -24,6 +25,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static List<MFDScreen> GetRightScreens(VirtualMFD mfd) => GameAccess.GetRightMfdScreens(mfd);
         public static RectTransform GetMfdTopInstruments(VirtualMFD mfd) =>
             (Speed?.GetValue(mfd) as TMP_Text)?.transform.parent as RectTransform;
+        /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
+        public static bool TryPosition(Unit unit, FactionHQ hq, out Vector3 position, FactionHQ owner = null)
+        {
+            GlobalPosition? at = hq == null || (owner ?? unit.NetworkHQ) == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
+            position = at.HasValue ? at.Value.AsVector3() : default;
+            return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
+        }
+
+        /// <summary>Stretches a vector-ink overlay over the map image: above the territory tint, below the native contacts.</summary>
+        public static void AttachInk(RectTransform rect, DynamicMap map)
+        {
+            Transform image = map.mapImage.transform;
+            rect.SetParent(image, false);
+            AvLay.Fill(rect);
+            rect.localPosition = Vector3.zero;
+            rect.SetSiblingIndex(image.childCount > 1 ? 1 : 0);
+        }
         public static GameObject GetSelectAirbasePanel(GameplayUI ui) => ui == null ? null : Airbase?.GetValue(ui) as GameObject;
         public static GameObject GetSpectatorPanel(GameplayUI ui) => ui == null ? null : Spectator?.GetValue(ui) as GameObject;
         public static TextMeshProUGUI GetMessageText(MessageUI ui) => ui == null ? null : Message?.GetValue(ui) as TextMeshProUGUI;

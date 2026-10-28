@@ -178,28 +178,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             chord0 = lo; chord1 = hi;
             ratio = thin > 0f ? (hi - lo) / thin : float.PositiveInfinity;
         }
-
-        /// <summary>
-        /// A hand-built two-keyframe tape (spec 11 item 2): sky <paramref name="a"/> downwind of
-        /// <paramref name="boundaryMetres"/>, sky <paramref name="b"/> upwind of it, blended by a smoothstep over
-        /// <paramref name="rampMetres"/>. Fixtures only: the density check and the bench use it to test spatial variation
-        /// and CPU/GPU parity before real tapes exist.
-        /// </summary>
-        public static BakedTape TwoKeyframes(in SkyParams a, in SkyParams b, float boundaryMetres, float rampMetres,
-            LowGenus genusA = LowGenus.Humilis, LowGenus genusB = LowGenus.Humilis)
-        {
-            var tape = new BakedTape(FullTexels);
-            for (int i = 0; i < FullTexels; i++)
-            {
-                float s = (i + 0.5f) * tape.TexelMetres;
-                float w = WeatherMath.Smoothstep(boundaryMetres - 0.5f * rampMetres, boundaryMetres + 0.5f * rampMetres, s);
-                SkyParams row = SkyParams.Lerp(a, b, w);
-                row.CumulusLevel = CumulusLevels.For(row.CumulusCover, row.CapacityCover);
-                tape.SetTexel(i, row, s < boundaryMetres ? genusA : genusB);
-            }
-            tape.Finish();
-            return tape;
-        }
     }
 
     /// <summary>

@@ -61,8 +61,8 @@ namespace BoscaliSummer.Modules.AirSurvival.Patches
             }
 
             if (rotary || !__result ||
-                !MissionPosition.TryGetActiveObjectives(aircraft.NetworkHQ,
-                    out List<Objective> objectives) || objectives == null)
+                !GameAccess.TryGetActiveObjectives(aircraft.NetworkHQ,
+                    out List<Objective> objectives))
                 return;
 
             float first = float.PositiveInfinity, second = float.PositiveInfinity,
@@ -104,8 +104,7 @@ namespace BoscaliSummer.Modules.AirSurvival.Patches
 
         private static bool IsHiddenOriginal(FactionHQ hq, GlobalPosition destination)
         {
-            if (!MissionPosition.TryGetActiveObjectives(hq, out List<Objective> objectives) ||
-                objectives == null) return true;
+            if (!GameAccess.TryGetActiveObjectives(hq, out List<Objective> objectives)) return true;
             if (objectives.Count > AirStationPolicy.MaximumObjectives) return true;
             for (int i = 0; i < objectives.Count && i < AirStationPolicy.MaximumObjectives; i++)
             {

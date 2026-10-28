@@ -3,8 +3,6 @@ using System;
 using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-// Filled by the engine sensor from the game's aircraft, and by tests.
-#pragma warning disable CS0649
     /// <summary>One tick of raw engine readings in Wing Command's world frame: global position (floating-origin
     /// safe) and Unity axes. AngularVelocity is the cockpit rigidbody's rate in its own local axes (rad/s, Unity
     /// signs: +x pitches the nose down, +y yaws right, +z rolls left). GroundSpeed is the game's speed relative
@@ -21,7 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A helicopter's fly-by-wire filters at any speed and height.</summary>
         public bool FbwAlwaysOn;
     }
-#pragma warning restore CS0649
 
     /// <summary>Turns raw engine readings into <see cref="AircraftState"/>:
     /// <list type="bullet">

@@ -405,9 +405,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public RectTransform Rect { get; }
         public bool Latched { get; private set; }
 
-        /// <summary>The glyph's present colour: the accent while the key's screen is open.</summary>
-        public Color GlyphColor => icon.color;
-
         public MfdRailKey(RectTransform parent, MfdRailEntry entry, int position, Button source, MFDScreen screen)
         {
             Entry = entry;

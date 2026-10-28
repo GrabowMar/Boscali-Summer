@@ -1,4 +1,5 @@
 using NOAvionics;
+using System;
 using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
@@ -528,57 +529,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Persist();
             }
 
-            private void ToggleVehicle(int index)
+            private void ToggleVehicle(int index) => ToggleType(false, index);
+            private void ToggleBuilding(int index) => ToggleType(true, index);
+
+            private List<HUDOptions_ToggleButton> TypeList(bool buildings) =>
+                buildings ? options.listBuildingTypes : options.listVehicleTypes;
+
+            private void ToggleType(bool buildings, int index)
             {
                 if (!Ready) return;
-                if (index < 0 || index >= options.listVehicleTypes.Count) return;
-                HUDOptions_ToggleButton source = options.listVehicleTypes[index];
+                List<HUDOptions_ToggleButton> list = TypeList(buildings);
+                if (index < 0 || index >= list.Count) return;
+                HUDOptions_ToggleButton source = list[index];
                 if (source == null) return;
                 source.Set(!source.status);
                 Persist();
             }
 
-            private void ToggleBuilding(int index)
-            {
-                if (!Ready) return;
-                if (index < 0 || index >= options.listBuildingTypes.Count) return;
-                HUDOptions_ToggleButton source = options.listBuildingTypes[index];
-                if (source == null) return;
-                source.Set(!source.status);
-                Persist();
-            }
+            private void SetAllVehicles(bool enabled) => SetTypes(false, i => enabled);
+            private void SetAllBuildings(bool enabled) => SetTypes(true, i => enabled);
 
-            private void SetAllVehicles(bool enabled)
-            {
-                if (!Ready) return;
-                for (int i = 0; i < options.listVehicleTypes.Count; i++)
-                    options.listVehicleTypes[i]?.Set(enabled);
-                Persist();
-            }
+            private void SetVehicleFilter(params int[] activeIndices) => SetTypes(false, new HashSet<int>(activeIndices).Contains);
+            private void SetBuildingFilter(params int[] activeIndices) => SetTypes(true, new HashSet<int>(activeIndices).Contains);
 
-            private void SetVehicleFilter(params int[] activeIndices)
+            private void SetTypes(bool buildings, Func<int, bool> on)
             {
                 if (!Ready) return;
-                HashSet<int> active = new HashSet<int>(activeIndices);
-                for (int i = 0; i < options.listVehicleTypes.Count; i++)
-                    options.listVehicleTypes[i]?.Set(active.Contains(i));
-                Persist();
-            }
-
-            private void SetAllBuildings(bool enabled)
-            {
-                if (!Ready) return;
-                for (int i = 0; i < options.listBuildingTypes.Count; i++)
-                    options.listBuildingTypes[i]?.Set(enabled);
-                Persist();
-            }
-
-            private void SetBuildingFilter(params int[] activeIndices)
-            {
-                if (!Ready) return;
-                HashSet<int> active = new HashSet<int>(activeIndices);
-                for (int i = 0; i < options.listBuildingTypes.Count; i++)
-                    options.listBuildingTypes[i]?.Set(active.Contains(i));
+                List<HUDOptions_ToggleButton> list = TypeList(buildings);
+                for (int i = 0; i < list.Count; i++)
+                    list[i]?.Set(on(i));
                 Persist();
             }
 

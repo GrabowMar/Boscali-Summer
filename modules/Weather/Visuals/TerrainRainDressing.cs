@@ -135,7 +135,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     {
                         GlobalPosition origin = s.Renderer.transform.GlobalPosition();
                         Vector3 offset = s.Renderer.bounds.center - s.Renderer.transform.position;
-                        float gx = (float)origin.x + offset.x, gz = (float)origin.z + offset.z;
+                        float gx = origin.x + offset.x, gz = origin.z + offset.z;
                         if (!s.Initialized || missionTime < s.LastTime)
                         {
                             s.Wet = 0f;

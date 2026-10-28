@@ -15,9 +15,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const float LargeScale = 40000f, SmallScale = 20000f;
         /// <summary>The field is the noise's deviation from its mean times this, clamped to +-1: value noise rarely leaves 0.3-0.7.</summary>
         public const float Gain = 2.6f;
-        /// <summary>The steepest the field can be, per metre of tape-frame distance (quintic noise slope 1.875 per cell, both octaves, the gain).
-        /// At 400 m of variation that is 0.067 m of base per metre, so the base moves at most 3 m/s at 45 m/s of tape speed.</summary>
-        public const float MaxSlope = 1.875f * (0.65f / LargeScale + 0.35f / SmallScale) * Gain;
 
         private const uint SaltMix = 0x5BE0CD19u;
 

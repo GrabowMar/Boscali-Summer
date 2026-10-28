@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
 
         /// <summary>Slot error as words: "4 m", "310 m", "1.2 km" past a kilometre.</summary>
         public static string ErrorText(float metres) => metres >= 1000f
-            ? (metres / 1000f).ToString("0.0", CultureInfo.InvariantCulture) + " km"
+            ? WmcText.Km(metres)
             : ((int)Math.Round(metres)).ToString(CultureInfo.InvariantCulture) + " m";
     }
 

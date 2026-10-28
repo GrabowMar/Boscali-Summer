@@ -194,14 +194,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return t;
         }
 
-        /// <summary>Soft card behind an overlay on the map: translucent ground, hairline frame.</summary>
-        public static void Card(FrontVector g, float x, float y, float w, float h)
-        {
-            g.Rect(x, y, w, h, AvInk.Ground.WithAlpha(0.74f));
-            g.Frame(x, y, w, h, 1f, AvInk.Hairline);
-            g.Rect(x, y, 3f, h, AvInk.Select.WithAlpha(0.8f));
-        }
-
         // ---- Paint ---------------------------------------------------------------------------------------------------
 
         /// <summary>Starts a paint: image crop, scrim, grid, vignette and the grid labels. The room draws its markers into <see cref="G"/> next.</summary>
@@ -409,9 +401,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// <summary>The theatre picture source and the pure helpers around it.</summary>
     internal static class FrontMap
     {
-        /// <summary>Offline harness fixture: used when there is no live DynamicMap sprite. Whole texture = whole theatre.</summary>
-        internal static Texture TestTexture;
-
         /// <summary>Grid naming for the plate edges: the vanilla grid live; the harness swaps in a fixture grid.</summary>
         internal static System.Func<float, float, string> GridSource = OpsKit.Grid;
 
@@ -434,9 +423,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     return true;
                 }
             }
-            catch (System.Exception) { /* no live map: fall through to the fixture */ }
-            tex = TestTexture;
-            return tex != null;
+            catch (System.Exception) { /* no live map */ }
+            tex = null;
+            return false;
         }
 
         /// <summary>

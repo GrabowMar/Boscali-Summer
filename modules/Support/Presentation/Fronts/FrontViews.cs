@@ -57,9 +57,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public IList<AirbaseFix> Airbases;
         /// <summary>The allocation price of a perk (the controller passes the manager's quote).</summary>
         public Func<SupportActionId, int> Price;
-        /// <summary>The faction's own uplink sites (OPS mirror) and the enemy ones the CYBER fog reveals (nodes of kind Uplink). Null reads the live manager's mirrors.</summary>
-        public IReadOnlyList<BoscaliSummer.Modules.Support.Domain.Ops.OpsSiteRow> Sites;
-        public IReadOnlyList<CyberNodeRow> Uplinks;
     }
 
     /// <summary>
@@ -330,9 +327,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The uplink markers: the faction's own sites (OPS mirror) with their standing and what losing each costs, then the enemy sites the CYBER fog reveals. No site, no marker: nothing is invented.</summary>
         private static void Sites(FrontRoomView v, in FrontInputs c)
         {
-            SupportManager m = c.Sites == null || c.Uplinks == null ? SupportManager.Active : null;
-            IReadOnlyList<BoscaliSummer.Modules.Support.Domain.Ops.OpsSiteRow> own = c.Sites ?? m?.OpsMirror.Sites;
-            IReadOnlyList<CyberNodeRow> foe = c.Uplinks ?? (m != null && m.CyberMirror.Known ? m.CyberMirror.State.Nodes : null);
+            SupportManager m = SupportManager.Active;
+            IReadOnlyList<BoscaliSummer.Modules.Support.Domain.Ops.OpsSiteRow> own = m?.OpsMirror.Sites;
+            IReadOnlyList<CyberNodeRow> foe = m != null && m.CyberMirror.Known ? m.CyberMirror.State.Nodes : null;
             int up = 0, n = own != null ? own.Count : 0;
             for (int i = 0; i < n; i++) if (own[i].State == BoscaliSummer.Modules.Support.Domain.Ops.SiteState.Up) up++;
             string space = c.Family == SpaceFamilyState.Dark ? "DARK" : "DEGRADED";
@@ -411,7 +408,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static string HopWords(NodeKind kind, bool starts, bool exploit, int heldNow, bool dataCenterUp, out int cost)
         {
             cost = starts ? CyberRules.StartCostOf(exploit) : 0;
-            float rate = (CyberRules.HopTraceRate(kind) + CyberRules.HeldTraceRate * heldNow) * (dataCenterUp ? CyberRules.DataCenterTraceFactor : 1f);
+            float rate = (CyberRules.HopTraceRate + CyberRules.HeldTraceRate * heldNow) * (dataCenterUp ? CyberRules.DataCenterTraceFactor : 1f);
             return (starts ? "START " + cost + " AP" : "DEEPER · FREE") + " · " + CyberRules.HopSeconds(kind, exploit).ToString("0.#", NetFmt) + " S HOP · TRACE ~+" + rate.ToString("0.#", NetFmt) + " %/S" + (exploit ? " · EXPLOIT" : "");
         }
 
@@ -593,7 +590,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 n.HopFraction = CyberNetWords.HopProgress(mine, now);
                 n.HopLeft = n.Hopping ? (int)Math.Ceiling(Math.Max(0f, mine.HopEndsAt - now)) : 0;
                 NodeKind hopKind = n.Hopping && TryNode(s, mine.HopTarget, out CyberNodeRow hopRow) ? hopRow.Kind : NodeKind.Radar;
-                float rate = ((n.Hopping ? CyberRules.HopTraceRate(hopKind) : 0f) + CyberRules.HeldTraceRate * myHeld) * (s.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f);
+                float rate = ((n.Hopping ? CyberRules.HopTraceRate : 0f) + CyberRules.HeldTraceRate * myHeld) * (s.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f);
                 n.EstTraceSeconds = rate > 0f ? (int)Math.Ceiling((CyberRules.TraceMax - mine.Trace) / rate) : -1;
                 n.Stale = (n.Hopping || myHeld > 0) && n.AgeSeconds > StaleAfterSeconds;
                 n.Session = "SESSION " + (n.Operator.Length == 0 ? "YOURS" : n.Operator) + " · " + myHeld + " HELD";
@@ -876,7 +873,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < 4; i++) { r.OrderOn[i] = false; r.OrderLatched[i] = false; }
             bool active = known && s != null && s.Active;
             r.Active = active;
-            r.HasFob = false; r.FobName = ""; r.FobNote = "";
             r.SelectedSlot = -1; r.SelectedTargetId = 0;
             r.TapLine = "NO TAP RUNNING"; r.TeamCap = active ? s.TeamCap : 0;
             r.TeamLine = ""; r.AimLine = ""; r.AimNote = ""; r.QuoteLine = ""; r.QuoteNote = ""; r.IssueLabel = "ISSUE ORDER"; r.IssueNote = ""; r.ExfilLabel = "EXFIL"; r.ExfilNote = "";

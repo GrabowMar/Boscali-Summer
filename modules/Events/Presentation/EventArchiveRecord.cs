@@ -125,8 +125,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             Restyle();
         }
 
-        public int Count => count;
-
         public void Begin(string captionText, string hintText)
         {
             count = 0;

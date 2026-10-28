@@ -218,10 +218,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         public static EmblemDesign Hostile(string identity) =>
             Roll(new Random((int)(Deterministic.HashString(identity) & 0x7FFFFFFF)), HostileField, HostileInk, HostileCharges);
 
-        public static bool IsHostileTincture(int tincture) => Array.IndexOf(HostileField, tincture) >= 0;
-
-        public static bool IsHostileCharge(int charge) => Array.IndexOf(HostileCharges, charge) >= 0;
-
         private static int[] Sequence(int count)
         {
             var all = new int[count];

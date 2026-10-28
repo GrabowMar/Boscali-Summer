@@ -36,64 +36,23 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Beyond this many metres from a line no effect is evaluated. exp(-(60/12)^2) of the widest veer is below 1e-10.</summary>
         public const float Reach = 60000f;
 
+        // The marker table (spec 5.3), one entry per MarkerKind in enum order: Warm, Cold, Squall, Occluded.
+        private static readonly float[] RainTable = { 4f, 18f, 30f, 6f }, WidthTable = { 3000f, 2400f, 3900f, 3000f },
+            GustTable = { 2f, 8f, 14f, 4f }, VeerTable = { 20f, 40f, 50f, 25f }, BiasTable = { 0f, 0.6f, 0.9f, 0.4f };
+
         /// <summary>Rain core: peak mm/h and sigma in metres (spec 5.3).</summary>
-        public static float PeakRain(MarkerKind kind)
-        {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return 4f;
-                case MarkerKind.Cold: return 18f;
-                case MarkerKind.Squall: return 30f;
-                default: return 6f;
-            }
-        }
+        public static float PeakRain(MarkerKind kind) => RainTable[(int)kind];
 
-        public static float Sigma(MarkerKind kind)
-        {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return 3000f;
-                case MarkerKind.Cold: return 2400f;
-                case MarkerKind.Squall: return 3900f;
-                default: return 3000f;
-            }
-        }
+        public static float Sigma(MarkerKind kind) => WidthTable[(int)kind];
 
-        public static float PeakGust(MarkerKind kind)
-        {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return 2f;
-                case MarkerKind.Cold: return 8f;
-                case MarkerKind.Squall: return 14f;
-                default: return 4f;
-            }
-        }
+        public static float PeakGust(MarkerKind kind) => GustTable[(int)kind];
 
-        public static float PeakVeer(MarkerKind kind)
-        {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return 20f;
-                case MarkerKind.Cold: return 40f;
-                case MarkerKind.Squall: return 50f;
-                default: return 25f;
-            }
-        }
+        public static float PeakVeer(MarkerKind kind) => VeerTable[(int)kind];
 
         public const float QnhDipHpa = 3f;
 
         /// <summary>The "Convective bias" column: how much the line raises the activation of the storm cells that already stand near it.</summary>
-        public static float ConvectiveBias(MarkerKind kind)
-        {
-            switch (kind)
-            {
-                case MarkerKind.Warm: return 0f;
-                case MarkerKind.Cold: return 0.6f;
-                case MarkerKind.Squall: return 0.9f;
-                default: return 0.4f;
-            }
-        }
+        public static float ConvectiveBias(MarkerKind kind) => BiasTable[(int)kind];
 
         /// <summary>The narrowest segment that may sit next to a marker: its core reaches 3 sigma (12 km for a warm or occluded line), and the wider
         /// ramps of a cold or squall boundary average up to 17 km with a neighbour (spec 5.3).</summary>
@@ -106,10 +65,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             var e = new LineEffect();
             float sigma = Sigma(kind);
             if (!(Math.Abs(d) < Reach)) return e;
-            e.Rain = PeakRain(kind) * Gauss(d, sigma);
-            e.Gust = PeakGust(kind) * Gauss(d, 2f * sigma);
-            e.VeerDegrees = PeakVeer(kind) * Gauss(d, 3f * sigma);
-            e.QnhDip = QnhDipHpa * Gauss(d, 15000f);
+            e.Rain = PeakRain(kind) * WeatherMath.Gauss(d, sigma);
+            e.Gust = PeakGust(kind) * WeatherMath.Gauss(d, 2f * sigma);
+            e.VeerDegrees = PeakVeer(kind) * WeatherMath.Gauss(d, 3f * sigma);
+            e.QnhDip = QnhDipHpa * WeatherMath.Gauss(d, 15000f);
             return e;
         }
 
@@ -119,12 +78,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>bias(d) = convectiveBias * shape(d), d in metres; added to a storm cell's Convective at its centre, never to a sample point.</summary>
         public static float Bias(MarkerKind kind, float dMetres) => ConvectiveBias(kind) * BeadShape(dMetres * 0.001f);
-
-        private static float Gauss(float x, float width)
-        {
-            float u = x / width;
-            return (float)Math.Exp(-u * u);
-        }
     }
 
     /// <summary>The markers of one tape, in increasing s, and the geometry that turns a tape position into a signed distance.</summary>

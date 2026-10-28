@@ -46,26 +46,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>A block's fall-off at <paramref name="u"/> = 1 - distance / fade length (0..1): the mean of u and its smoothstep, whose steepest slope is 1.25 where the smoothstep's is 1.5 (the edge reads softer).</summary>
         public static float Profile(float u) => 0.5f * u + 0.5f * u * u * (3f - 2f * u);
 
-        /// <summary>The field at box point (<paramref name="x"/>, <paramref name="y"/>), 0..1: multiply by the core alpha (<see cref="ScopeLayout.CloudAlpha"/> x the pilot's Shade) for the shade's alpha.</summary>
-        public static float At(in BoardGeometry geo, float x, float y)
-        {
-            float fade = ScopeLayout.CloudFeather * (1f + ScopeLayout.CloudWobble * 0.5f * (MathF.Sin(0.043f * x + 0.021f * y + 1.7f) + MathF.Sin(0.017f * x - 0.052f * y + 4.1f)));
-            float wx = x + ScopeLayout.CloudWarp * (MathF.Sin(0.021f * y + 0.9f) + 0.6f * MathF.Sin(0.057f * y + 2.4f)), wy = y + ScopeLayout.CloudWarp * 0.7f * MathF.Sin(0.017f * x + 1.3f);
-            float best = 0f;
-            for (int i = 0; i < BoardGeometry.BlockCount; i++)
-            {
-                BoardRect r = geo.Block(i);
-                if (!r.Present) continue;
-                float dx = Math.Max(Math.Max(r.X - wx, 0f), wx - r.Right), dy = Math.Max(Math.Max(r.Y - wy, 0f), wy - r.Bottom), d = MathF.Sqrt(dx * dx + dy * dy);
-                if (d >= fade) continue;
-                float v = Profile(1f - d / fade);
-                if (v > best) best = v;
-            }
-            if (best <= 0f) return 0f;
-            float mottle = 1f - ScopeLayout.CloudMottle * (0.5f + 0.5f * MathF.Sin(0.027f * x + 0.019f * y + 0.6f) * MathF.Sin(0.033f * y - 0.011f * x + 2.2f));
-            return best * mottle * Fall(y);
-        }
-
         /// <summary>The core's share at box y: 1 at the top, <c>1 - CloudFall</c> from <see cref="ScopeLayout.CloudFallY"/> down.</summary>
         public static float Fall(float y) => 1f - ScopeLayout.CloudFall * Math.Min(1f, Math.Max(0f, y / ScopeLayout.CloudFallY));
 

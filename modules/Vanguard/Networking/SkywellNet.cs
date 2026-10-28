@@ -168,19 +168,12 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                     Broadcast(fresh);
                 }
             }
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
-            ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
-            ClientHandlers.Swap(network?.Client?.MessageHandler);
-            throttle.Prune(Time.unscaledTime);
+            if (NetFeed.Poll(ServerHandlers, ClientHandlers, ref nextRegistration)) throttle.Prune(Time.unscaledTime);
         }
 
         private static void Broadcast(SkywellView view)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(new SkywellState
+            NetFeed.Broadcast(new SkywellState
             {
                 Protocol = ProtocolVersion,
                 Tanker = view.Tanker,
@@ -200,7 +193,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 Released = view.Released,
                 ReleaseKind = view.ReleaseKind,
                 Cooldown = view.Cooldown,
-            }, authenticatedOnly: true, excludeLocalPlayer: true);
+            });
         }
 
         private void ReceiveIntent(INetworkPlayer sender, SkywellIntent message)

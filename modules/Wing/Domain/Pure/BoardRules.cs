@@ -31,8 +31,5 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             if (accepted) return (string.IsNullOrWhiteSpace(what) ? "ORDER" : what.Trim().ToUpperInvariant()) + " - WILCO";
             return (string.IsNullOrWhiteSpace(reason) ? "REFUSED" : reason.Trim().ToUpperInvariant()) + " - UNABLE";
         }
-
-        /// <summary>A snapshot fraction byte (0..255) as 0..1.</summary>
-        public static float Fraction(byte b) => b / 255f;
     }
 }

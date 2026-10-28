@@ -37,12 +37,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             return true;
         }
 
-        public static bool ValidLinkStations(int stations) =>
-            stations >= 0 && stations <= MaximumLinkStations;
-
-        public static bool ValidSpurStations(int stations) =>
-            stations >= 0 && stations <= MaximumSpurStations;
-
         public static bool ValidDefenders(int defenders) =>
             defenders >= 0 && defenders <= MaximumDefenders;
 

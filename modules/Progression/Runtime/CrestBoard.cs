@@ -40,8 +40,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return true;
         }
 
-        public bool Remove(ulong owner) => entries.Remove(owner);
-
         public void Clear() => entries.Clear();
 
         public bool TryGet(ulong owner, out Entry entry) => entries.TryGetValue(owner, out entry);

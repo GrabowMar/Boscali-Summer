@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -196,11 +197,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The flare lasts the last five seconds to touchdown (the autopilot's own rule): its progress bar runs over them.</summary>
         public const float FlareSeconds = 5f;
 
-        public static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
+        public static float LocDots(float locDeg) => Scalar.Clamp(locDeg / LocPerDot, -2.6f, 2.6f);
 
-        public static float LocDots(float locDeg) => Clamp(locDeg / LocPerDot, -2.6f, 2.6f);
-
-        public static float GsDots(float gsDeg) => Clamp(gsDeg / GsPerDot, -2.6f, 2.6f);
+        public static float GsDots(float gsDeg) => Scalar.Clamp(gsDeg / GsPerDot, -2.6f, 2.6f);
 
         public static bool LocCaution(float locDeg) => Math.Abs(locDeg) >= CautionLocDeg;
 
@@ -211,7 +210,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool OnSpeed(float deltaMps) => Math.Abs(deltaMps) < OnSpeedMps;
 
         /// <summary>Where the SPD ruler's index mark sits, 0..1 across it: the middle at the speed the approach wants, an end at +-<see cref="SpeedBarMps"/> (20 km/h) off it.</summary>
-        public static float RulerFrac(float deltaMps) => 0.5f + 0.5f * Clamp(deltaMps / SpeedBarMps, -1f, 1f);
+        public static float RulerFrac(float deltaMps) => 0.5f + 0.5f * Scalar.Clamp(deltaMps / SpeedBarMps, -1f, 1f);
 
         /// <summary>0..1 through the current stage: distance to the field for INTERCEPT, distance to the touchdown point for GLIDE (from 6 km; over a pad the height left of a 60 m descent),
         /// touchdown time for FLARE, speed bled off against <paramref name="rolloutRef"/> for ROLLOUT.</summary>
@@ -219,10 +218,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             switch (stage)
             {
-                case ApproachStage.Intercept: return 1f - Clamp(distanceM / (pad ? 2000f : 10000f), 0f, 1f);
-                case ApproachStage.Glide: return 1f - Clamp(toTouchdownM / (pad ? 60f : 6000f), 0f, 1f);
-                case ApproachStage.Flare: return 1f - Clamp(touchdownS / FlareSeconds, 0f, 1f);
-                default: return rolloutRef > 1f ? 1f - Clamp(groundMps / rolloutRef, 0f, 1f) : 0f;
+                case ApproachStage.Intercept: return 1f - Scalar.Clamp(distanceM / (pad ? 2000f : 10000f), 0f, 1f);
+                case ApproachStage.Glide: return 1f - Scalar.Clamp(toTouchdownM / (pad ? 60f : 6000f), 0f, 1f);
+                case ApproachStage.Flare: return 1f - Scalar.Clamp(touchdownS / FlareSeconds, 0f, 1f);
+                default: return rolloutRef > 1f ? 1f - Scalar.Clamp(groundMps / rolloutRef, 0f, 1f) : 0f;
             }
         }
 
@@ -234,7 +233,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float RemainM(float alongM, float runwayLength) => Math.Max(0f, runwayLength - alongM);
 
         /// <summary>The distance ladder's marker height in kilometres, clamped a little past each end.</summary>
-        public static float LadderKm(float kmToThreshold) => Clamp(kmToThreshold, -0.45f, 5.45f);
+        public static float LadderKm(float kmToThreshold) => Scalar.Clamp(kmToThreshold, -0.45f, 5.45f);
 
         /// <summary>Round to the nearest ten (the roll-out readouts do not flicker with single metres).</summary>
         public static int Round10(float v) => (int)(Math.Round(v / 10f) * 10f);

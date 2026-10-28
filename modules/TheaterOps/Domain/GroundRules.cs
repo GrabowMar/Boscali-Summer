@@ -149,7 +149,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             float elapsed = now - approach.StartAt, gained = approach.StartDistance - distance;
             // Written as "not enough" so a NaN clock or distance reads unknown instead of casting NaN to an int.
             if (!approach.Active || !(elapsed >= 30f) || !(gained >= 50f) || !float.IsFinite(distance)) return -1;
-            return (int)Math.Max(0f, Math.Min(3600f, distance / (gained / elapsed)));
+            return (int)Math.Clamp(distance / (gained / elapsed), 0f, 3600f);
         }
     }
 

@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Patches
     /// </list>
     ///
     /// <para>Both targets take an <c>out</c> parameter, so the overloads are resolved by
-    /// <see cref="AccessTools.Method(Type, string, Type[])"/> with the byref type at runtime:
+    /// <c>AccessTools.Method</c> with the byref type at runtime:
     /// a byref type is not a legal attribute argument, and a name-only patch would be
     /// ambiguous.</para>
     /// </summary>

@@ -401,8 +401,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card raised");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
+                frame.PaintCard("card raised", AvTheme.SurfaceRaised, AvTheme.Frame);
                 frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                 name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
                 tag.color = fuelKey.color = throttleKey.color = AvInk.Muted;
@@ -461,8 +460,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card inert");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
                 state.color = AvStyleHost.FuiInk("section-caption", AvTheme.Dim);
             }
         }

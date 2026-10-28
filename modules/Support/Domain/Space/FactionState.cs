@@ -129,8 +129,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly Dictionary<ulong, Sub> subs = new Dictionary<ulong, Sub>();
         private readonly List<ulong> removed = new List<ulong>();
         private int seq;
-
-        public int Count => subs.Count;
         /// <summary>The host's scene epoch, set by the owner before every poll; a member's first state after it moves is a fresh full one stamped with it.</summary>
         public ushort Epoch { get; set; } = 1;
 

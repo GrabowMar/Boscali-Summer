@@ -26,9 +26,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The local faction's own staff log, newest first (the radio reads it).</summary>
         IReadOnlyList<CommanderLogLine> Log { get; }
 
-        /// <summary>Ask for a fresh board now (throttled to 4 s). Not needed for liveness: the manager polls itself.</summary>
-        void Refresh();
-
         /// <summary>Host only: the best confirmed standing enemy post for a STRIKE COMMAND POST sortie. False on a client, with the module off, or when none qualifies.</summary>
         bool TryPickStrikePost(FactionHQ attacker, float nearX, float nearZ, float maxMetres,
                                Predicate<int> skip, out CommandPostTarget target);

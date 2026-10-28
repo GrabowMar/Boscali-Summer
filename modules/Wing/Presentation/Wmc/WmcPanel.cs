@@ -17,8 +17,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// user cut seven tabs to five on 2026-09-28: FORM and PLAN are BEHAVIOUR's sub-pages, INSPECT is WING's) on a kit v2
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
     /// 5 Hz. The header is the wing's title, a FUNDS chip beside it, and three vitals chips (FUEL MIN · AMMO MIN · THREAT) on every
-    /// tab; there are no metric tiles. Phase B: every tab is an <see cref="IWmcPage"/> that builds into its console page's
-    /// <see cref="AvFlow"/> .
+    /// tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
+    /// <see cref="AvFlow"/>.
     /// Control ids answer through <see cref="WmcControls"/>.</summary>
     internal sealed class WmcPanel : IWingService
     {

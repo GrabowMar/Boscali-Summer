@@ -1,3 +1,5 @@
+using BoscaliSummer.Core.Math;
+
 namespace BoscaliSummer.Modules.Radio.Domain
 {
     /// <summary>
@@ -18,10 +20,6 @@ namespace BoscaliSummer.Modules.Radio.Domain
         }
 
         /// <summary>Playback progress, clamped; 0 when the source has no clock.</summary>
-        public static float Bar(float progress)
-        {
-            if (float.IsNaN(progress) || float.IsInfinity(progress)) return 0f;
-            return progress < 0f ? 0f : progress > 1f ? 1f : progress;
-        }
+        public static float Bar(float progress) => Scalar.IsFinite(progress) ? Scalar.Clamp01(progress) : 0f;
     }
 }

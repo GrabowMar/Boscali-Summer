@@ -1,4 +1,5 @@
 using BoscaliSummer.Modules.Wing.Domain;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>The native numbers an <see cref="AirframeProfile"/> is derived from, and the airframe's class from its
@@ -7,7 +8,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     {
         public static AirframeClass ClassOf(Aircraft a)
         {
-            Pilot pilot = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+            Pilot pilot = AircraftReadout.PrimaryPilot(a);
             if (pilot == null) return AirframeClass.FixedWing;
             switch (pilot.pilotType)
             {

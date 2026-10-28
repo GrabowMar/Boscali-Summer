@@ -192,7 +192,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (StandingFire.Saturated(committed, t.missileAttacks, w.WeaponInfo.CalcAttacksNeeded(u))) continue;
                     OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, t, 0f, distance, maxRange / Mathf.Max(req.maxRange, 1f));
                     if (ot.opportunity <= 0f) continue;
-                    int capacity = System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
+                    int capacity = TargetSpread.Capacity(w.WeaponInfo.CalcAttacksNeeded(u));
                     float score = mode == StandingMode.Cover
                         ? 1f / System.Math.Max(fromCover, 1f) / (1f + committed)
                         : TargetSpread.Score(ot.opportunity, ot.threat, distance, req.maxRange, committed, false, capacity);
@@ -225,7 +225,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             int fired = 0;
             foreach (WingMember m in Members)
             {
-                if (m.Released || !m.Alive || m.Engaged || m.OnGround || m.Recovery != null || m.Settle != null) continue;
+                if (!m.Sendable || m.Engaged) continue;
                 if (who != null && !who(m)) continue;
                 Aircraft a = m.Aircraft;
                 FactionHQ hq = a.NetworkHQ;

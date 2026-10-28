@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!BirdDown(bird)) return 0;
             int i = (byte)bird;
-            if (buildEndsAt[i] > 0f) return 50 + (int)Math.Max(0f, Math.Min(50f, 50f * (1f - (buildEndsAt[i] - now) / SpaceRules.BirdBuildSeconds)));
+            if (buildEndsAt[i] > 0f) return 50 + (int)Math.Clamp(50f * (1f - (buildEndsAt[i] - now) / SpaceRules.BirdBuildSeconds), 0f, 50f);
             return (int)Math.Min(49f, Math.Floor(bars[i].Fraction * 50f));
         }
 
@@ -241,10 +241,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             birds[bird] = default;
             return true;
         }
-
-        public float CooldownRemaining(BirdTask task, float now) =>
-            !SpaceRules.MissionTime(now) || !SpaceRules.TryBird(task, out _)
-                ? 0f : Math.Max(0f, cooldownUntil[(int)task] - now);
 
         /// <summary>Invalidates delayed receipts without repairing anchors or restarting all-down grace.</summary>
         public void Clear()

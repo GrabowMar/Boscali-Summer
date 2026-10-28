@@ -172,9 +172,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return console.Root;
         }
 
-        /// <summary>Builds the whole page into <paramref name="root"/> without an MFD (offline render harness).</summary>
-        internal void BuildForHarness(RectTransform root, float height) => BuildConsole(root, height);
-
         private void BuildConsole(RectTransform host, float height)
         {
             console = AvConsole.Build(host, "OPS", PageTitles[0], 3, Width, height);
@@ -325,7 +322,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         internal bool Installed => screen != null;
         internal bool ScreenActive => screen != null && screen.isActive;
         internal OpsTab Tab => tab;
-        internal AvTicker Ticker => console?.Ticker;
         internal RectTransform ConsoleRoot => ConsoleRootOrNull;
         /// <summary>The figures last painted (automation reads them back).</summary>
         internal OpsPageView View => view;
@@ -344,7 +340,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             OpsPageViews.Perks(view, tiles);
             FrontMirror fm = manager.FrontMirror;
             OpsPageViews.Cards(view, fm.State, fm.Known, now, manager.Online);
-            OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, view.Allocation, inspectedPerk);
+            OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, inspectedPerk);
             SpaceFeedMirror sm = manager.SpaceMirror;
             if (!sm.Known) inspectedPost = 0; // post ids restart with each faction's desk and each mission: a pick must not outlive the mirror it was made on and land on another faction's post
             OpsPageViews.Tasked(view, sm.State.Posts, sm.Known, now, calls.TaskedArmedId, calls.TaskedClaimPending, inspectedPost);

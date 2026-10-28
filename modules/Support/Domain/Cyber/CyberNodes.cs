@@ -106,8 +106,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private readonly Dictionary<int, (NodeKind, uint)> keys = new Dictionary<int, (NodeKind, uint)>();
         private int next;
 
-        public int Count => ids.Count;
-
         public int GetOrAdd(NodeKind kind, uint key)
         {
             if (ids.TryGetValue((kind, key), out int id)) return id;
@@ -140,14 +138,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public void Note(int id, float now)
         {
-            if (id <= 0 || float.IsNaN(now) || float.IsInfinity(now)) return;
+            if (id <= 0 || !float.IsFinite(now)) return;
             if (!seen.ContainsKey(id) && seen.Count >= Capacity) return;
             seen[id] = now;
         }
 
         public void Linger(int id, float now)
         {
-            if (id <= 0 || float.IsNaN(now) || float.IsInfinity(now)) return;
+            if (id <= 0 || !float.IsFinite(now)) return;
             if (!linger.ContainsKey(id) && linger.Count >= Capacity) return;
             linger[id] = now + AfterReleaseSeconds;
         }

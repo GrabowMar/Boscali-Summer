@@ -99,14 +99,6 @@ namespace BoscaliSummer.Modules.Intel.Runtime
             }
         }
 
-        // ---- IThreatPicture ----------------------------------------------------------------
-
-        public uint Version(int observer)
-        {
-            FactionPicture picture = Find(observer);
-            return picture != null && picture.Ready ? picture.Version : 0u;
-        }
-
         public bool IsReady(int observer)
         {
             FactionPicture picture = Find(observer);

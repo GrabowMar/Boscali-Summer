@@ -3,48 +3,6 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Modules.Comms.Domain
 {
-
-    /// <summary>One line on the leaderboard.</summary>
-    internal struct ScoreRow
-    {
-        public ulong Player;
-        public string Name;
-        public int Points;
-        public int Wins;
-    }
-
-    /// <summary>
-    /// The session's fun points. Nothing buys anything with them; they exist so a hunt or a
-    /// duel has a table to climb. Host-owned and broadcast whole, it is small by design.
-    /// </summary>
-    internal sealed class CommsScoreboard
-    {
-        public const int MaxRows = 64;
-
-        private readonly List<ScoreRow> rows = new List<ScoreRow>();
-
-        public IReadOnlyList<ScoreRow> Rows => rows;
-
-        /// <summary>Replace the table wholesale: what a peer does with the host's broadcast.</summary>
-        public void Set(IList<ScoreRow> table)
-        {
-            rows.Clear();
-            if (table != null)
-                for (int i = 0; i < table.Count && rows.Count < MaxRows; i++) rows.Add(table[i]);
-            Sort();
-        }
-
-        public void Clear() => rows.Clear();
-
-        private void Sort() => rows.Sort((a, b) =>
-        {
-            int byPoints = b.Points.CompareTo(a.Points);
-            if (byPoints != 0) return byPoints;
-            int byWins = b.Wins.CompareTo(a.Wins);
-            return byWins != 0 ? byWins : string.CompareOrdinal(a.Name, b.Name);
-        });
-    }
-
     /// <summary>
     /// A per-sender token bucket. Every post costs tokens and the bucket refills at a steady
     /// rate, so a burst of pings in a fight is fine and a macro spamming the map is not.

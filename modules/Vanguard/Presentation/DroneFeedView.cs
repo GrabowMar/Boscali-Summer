@@ -215,7 +215,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         private static string Phase(RemoraPhase phase) => phase == RemoraPhase.Engage ? "ENGAGE" : phase == RemoraPhase.Ram ? "RAM" : "ESCORT";
 
-        private static string Three(float deg) => AvNum.Fixed(Mathf.Repeat(deg, 360f), 0).PadLeft(3, '0');
+        /// <summary>A course or bearing as three digits (007, 359).</summary>
+        internal static string Three(float deg) => AvNum.Fixed(Mathf.Repeat(deg, 360f), 0).PadLeft(3, '0');
 
         private static string Signed(float deg) => (deg < -0.5f ? "-" : "+") + AvNum.Fixed(Mathf.Abs(deg), 0).PadLeft(3, '0');
 

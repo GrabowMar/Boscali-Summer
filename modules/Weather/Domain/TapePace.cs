@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static float WindFactor(float missionWind)
         {
             float wind = float.IsNaN(missionWind) ? 6f : Scalar.Clamp(missionWind, 6f, 18f);
-            return WeatherMath.Lerp(0.85f, 1.15f, (wind - 6f) / 12f);
+            return Scalar.Lerp(0.85f, 1.15f, (wind - 6f) / 12f);
         }
 
         /// <summary>System speed in m/s for a pace and the mission's wind speed.</summary>

@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bool relief = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
             bool shown = settings.MapRoads.Value && DynamicMap.mapMaximized && relief;
             SetShown(shown);
-            if (shown && rootRect.parent != dynamicMap.mapImage.transform) Reparent();
+            if (shown && rootRect.parent != dynamicMap.mapImage.transform) MapUiAccess.AttachInk(rootRect, dynamicMap);
         }
 
         private void TryInitialize()
@@ -71,23 +71,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             root = new GameObject("BoscaliRoads", typeof(RectTransform), typeof(RoadGraphic));
             rootRect = (RectTransform)root.transform;
             root.GetComponent<RoadGraphic>().raycastTarget = false;
-            Reparent();
+            MapUiAccess.AttachInk(rootRect, dynamicMap);
             root.SetActive(false);
             initialized = true;
-        }
-
-        private void Reparent()
-        {
-            rootRect.SetParent(dynamicMap.mapImage.transform, false);
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = Vector2.zero;
-            rootRect.offsetMax = Vector2.zero;
-            rootRect.pivot = new Vector2(0.5f, 0.5f);
-            rootRect.localScale = Vector3.one;
-            rootRect.localPosition = Vector3.zero;
-            // Ground ink: above the territory tint, below the native contacts.
-            rootRect.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
         }
 
         private void SetShown(bool visible)

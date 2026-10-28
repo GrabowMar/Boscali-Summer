@@ -86,14 +86,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             float remain = x.HopTarget != 0 ? Math.Max(0f, x.HopEndsAt - now) : 0f;
             float t1 = Math.Min(window, remain), t2 = Math.Max(0f, window - t1);
             int heldNow = x.HeldCount;
-            float trace = x.Trace + (CyberRules.HopTraceRate(x.HopKind) * (x.HopTarget != 0 ? 1f : 0f) + CyberRules.HeldTraceRate * heldNow) * factor * t1;
+            float trace = x.Trace + (CyberRules.HopTraceRate * (x.HopTarget != 0 ? 1f : 0f) + CyberRules.HeldTraceRate * heldNow) * factor * t1;
             trace += CyberRules.HeldTraceRate * (heldNow + (x.HopTarget != 0 ? 1 : 0)) * factor * t2;
             return trace;
         }
 
         /// <summary>The trace a new hop to <paramref name="kind"/> would leave on arrival plus one pacing window of holding it.</summary>
         public static float AfterHop(float trace, int heldNow, NodeKind kind, bool exploit, float factor, float window) =>
-            trace + (CyberRules.HopTraceRate(kind) + CyberRules.HeldTraceRate * heldNow) * factor * CyberRules.HopSeconds(kind, exploit) +
+            trace + (CyberRules.HopTraceRate + CyberRules.HeldTraceRate * heldNow) * factor * CyberRules.HopSeconds(kind, exploit) +
             CyberRules.HeldTraceRate * (heldNow + 1) * factor * window;
 
         /// <summary>SAM C2 over RADAR over UPLINK over RELAY over DATA CENTER (spec section 4).</summary>
@@ -128,12 +128,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         private CyberWatchPlan Decide(CyberDesk desk, ICyberWatchWorld world, WatchPacer pacer, bool aiFaction, float now)
         {
             pacer.SetUrgent(WatchDomain.Cyber, false); // refreshed below only while an intrusion could be traced inside one AI gap
-            CyberWatchPlan purge = PurgePlan(desk, world, now);
+            CyberWatchPlan purge = PurgePlan(desk, now);
             if (purge.Action != CyberWatchAction.None) return purge;
             if (desk.Anchors.Count(AnchorKind.EwTruck) == 0) return CyberWatchPlan.Idle(CyberWatchWhy.NoAnchors);
             Prune(now);
             int humans = world.Humans;
-            bool quiet = Idle(humans, now);
             float factor = desk.TraceFactor(now);
             // How long a trace can run before OVERLORD may act again: the think cadence, plus the pacer's wait now; a hop planned now arrives later, so it assumes the worst wait the pacer can impose (the shared 30 s of an AI faction).
             float margin = ThinkSeconds + 1f;
@@ -145,10 +144,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             if (mine != null)
             {
                 CollectHeld(desk, mine);
-                // Safety first, whatever the idle rule says: leave before the trace can fill in the time it takes OVERLORD to act again.
+                // Safety first: leave before the trace can fill in the time it takes OVERLORD to act again.
                 float projected = Projected(mine, factor, now, window);
                 if (projected >= SafeTrace) return new CyberWatchPlan(CyberWatchAction.Drop, CyberWatchWhy.None, 0, NodeKind.Radar, WatchCode.CyberDropTrace, 0, Pct(mine.Trace));
-                if (!quiet) return Yield(desk, world, mine, now);
                 if (mine.HopTarget != 0) return CyberWatchPlan.Idle(CyberWatchWhy.Holding);
                 CyberWatchPlan burn = BurnPlan(desk, world, mine, now);
                 if (burn.Action != CyberWatchAction.None) return burn;
@@ -157,7 +155,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                     return new CyberWatchPlan(CyberWatchAction.Drop, CyberWatchWhy.None, 0, NodeKind.Radar, WatchCode.CyberDropTrace, 0, Pct(mine.Trace));
                 return DeeperPlan(desk, mine, factor, planned);
             }
-            if (!quiet) return CyberWatchPlan.Idle(CyberWatchWhy.Suspended);
             if (now < restUntil) return CyberWatchPlan.Idle(CyberWatchWhy.Resting);
             return StartPlan(desk, humans, factor, planned, now);
         }
@@ -166,7 +163,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// Defence before offence: an enemy hold on our network is purged when a PURGE can run. DEFEND purges at once; otherwise OVERLORD lets the oldest hold age
         /// <see cref="PurgeAfterSeconds"/> first (the intruder's window; an operator can always purge sooner).
         /// </summary>
-        private CyberWatchPlan PurgePlan(CyberDesk desk, ICyberWatchWorld world, float now)
+        private CyberWatchPlan PurgePlan(CyberDesk desk, float now)
         {
             IReadOnlyList<CyberBreach> b = desk.Breaches;
             if (b.Count == 0 || desk.PurgeEndsAt > now || now < desk.PurgeReadyAt) return CyberWatchPlan.Idle(CyberWatchWhy.None);
@@ -175,13 +172,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; i < b.Count; i++) oldest = Math.Min(oldest, b[i].Since);
             if (!defend && now - oldest < PurgeAfterSeconds) return CyberWatchPlan.Idle(CyberWatchWhy.None);
             return new CyberWatchPlan(CyberWatchAction.Purge, CyberWatchWhy.None, 0, b[0].Kind, WatchCode.CyberPurge, b.Count, 0);
-        }
-
-        private CyberWatchPlan Yield(CyberDesk desk, ICyberWatchWorld world, CyberIntrusion mine, float now)
-        {
-            if (mine.HopTarget == 0 && world.PackageRoom && now >= burnBackoffUntil && now - lastBurnAt >= BurnSpacingSeconds && BestHeld(desk, mine, out CyberNode node))
-                return new CyberWatchPlan(CyberWatchAction.Burn, CyberWatchWhy.None, node.Id, node.Kind, WatchCode.CyberBurnYield, (int)node.Kind, 0);
-            return new CyberWatchPlan(CyberWatchAction.Drop, CyberWatchWhy.None, 0, NodeKind.Radar, WatchCode.CyberDropYield, 0, Pct(mine.Trace));
         }
 
         private CyberWatchPlan BurnPlan(CyberDesk desk, ICyberWatchWorld world, CyberIntrusion mine, float now)
@@ -270,7 +260,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         // ---- Helpers ---------------------------------------------------------------------------
 
-        private static int Pct(float trace) => (int)Math.Max(0, Math.Min(100, Math.Round(trace)));
+        private static int Pct(float trace) => (int)Math.Clamp(Math.Round(trace), 0, 100);
 
         /// <summary>Higher priority first; closer to the front next; the lower id last (a stable choice).</summary>
         private bool Better(in CyberNode a, in CyberNode b)

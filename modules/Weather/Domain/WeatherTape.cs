@@ -90,12 +90,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>True when the first story is a front (the front rule, or a pinned front-bearing story): Solve may place a front opening.</summary>
         public bool OpensWithFront { get; private set; }
         public bool HasFront => Fronts.Length > 0;
-        /// <summary>s_ev: the first front's s_lead (the ramp start of the opening run's end boundary), or NaN without a front.</summary>
-        public float SEv => Fronts.Length > 0 ? Fronts[0].SLead : float.NaN;
         public WeatherRegimeType OpeningClass { get; private set; }
 
         /// <summary>The baked array and texture source (spec 7.2), built on first use and shared by every field.</summary>
-        public BakedTape Baked { get { lock (bakeLock) return baked ?? (baked = TapeBaker.Bake(this)); } }
+        public BakedTape Baked { get { lock (bakeLock) return baked ??= TapeBaker.Bake(this); } }
 
         /// <summary>The library index (0-based) of the sky showing at position s: the plateau's keyframe, or the nearer side of a ramp.</summary>
         public int SkyIndexAt(float s)
@@ -237,7 +235,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 SegmentDef seg = def.Segments[j];
                 int row = segments.Count;
                 segments.Add(new SegmentRow { Label = seg.Label, Role = seg.Role, Story = story, FirstBlock = blocks.Count });
-                float km = WeatherMath.Lerp(seg.MinKm, seg.MaxKm, u(10 + round, j, story));
+                float km = Scalar.Lerp(seg.MinKm, seg.MaxKm, u(10 + round, j, story));
                 int n = seg.StepKm > 0f ? Math.Max(1, (int)Math.Round(km / seg.StepKm)) : 1;
                 int previous = -1;
                 for (int b = 0; b < n; b++)
@@ -261,7 +259,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                             MarkerKind kind = seg.Marker.Value == MarkerKind.Cold && seg.SquallAllowed && sky == 37 ? MarkerKind.Squall : seg.Marker.Value;
                             block.Marker = kind;
                             float roll = u(30 + round, j, story);
-                            block.MarkerStrength = roll < 0.5f ? 1f : WeatherMath.Lerp(0.7f, 1f, u(31 + round, j, story));
+                            block.MarkerStrength = roll < 0.5f ? 1f : Scalar.Lerp(0.7f, 1f, u(31 + round, j, story));
                         }
                     }
                     blocks.Add(block);

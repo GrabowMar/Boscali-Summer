@@ -114,7 +114,7 @@ namespace NOAvionics
             Ticker.Shown = Wake;
             if (Application.isPlaying && PageCount > 1) { all.Add(this); AvFxDriver.EnsureRunning(); }
             Restyle();
-            Ticker.Register(new RestyleHook(this));
+            Ticker.Register(new AvRestyleHook(Restyle));
         }
 
         public static AvConsole Build(RectTransform host, string id, string title, int pages,
@@ -353,19 +353,11 @@ namespace NOAvionics
             idText.color = AvStyleHost.Resolve(p.Color, AvTheme.TextPrimary);
             titleText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
             pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
-            serial.color = decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
+            decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
             bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
             bay.Restyle();
             scrollView.Restyle();
-        }
-
-        private sealed class RestyleHook : AvPart
-        {
-            private readonly AvConsole c;
-            public RestyleHook(AvConsole console) { c = console; }
-            public override void Restyle() => c.Restyle();
-            public override void Place(AvSlot slot) { }
         }
     }
 }

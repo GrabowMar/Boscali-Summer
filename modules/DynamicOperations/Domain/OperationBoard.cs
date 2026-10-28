@@ -152,7 +152,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         private readonly HashSet<long> issued = new HashSet<long>();
         private readonly List<long> issuedOrder = new List<long>(MaximumIssued + 1);
         private readonly List<Operation> operations = new List<Operation>(MaximumCards);
-        public IReadOnlyList<Operation> Operations => operations;
         public bool HasCapacity => operations.Count < MaximumCards;
 
         public bool WasIssued(OperationKind kind, int targetId) => issued.Contains(Key(kind, targetId));

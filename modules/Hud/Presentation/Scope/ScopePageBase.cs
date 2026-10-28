@@ -70,9 +70,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The tab's name (<c>SYSTEMS</c>).</summary>
         public abstract string Title { get; }
 
-        /// <summary>A one-letter code for the page (the header shows no pips for other live pages any more).</summary>
-        public abstract char Code { get; }
-
         /// <summary>The page has data to draw. SYSTEMS can draw nominal aircraft data even when not live; an unavailable manual page keeps its slot with a standby message.</summary>
         public virtual bool Ready => true;
 

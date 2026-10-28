@@ -37,8 +37,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float MinClosureMps = 15f;
         /// <summary>A time to impact beyond this is not shown.</summary>
         public const float MaxTtiS = 99f;
-        /// <summary>A contact is "new" (its row pulses) for this long.</summary>
-        public const float PulseS = 4f;
 
         /// <summary>Seconds until the missile arrives at the current closure; NaN when it is not closing or the data is missing.</summary>
         public static float Tti(float rangeM, float closureMps)
@@ -47,8 +45,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             float t = rangeM / closureMps;
             return t > MaxTtiS ? float.NaN : t;
         }
-
-        public static bool IsNew(in ThreatContact c) => c.AgeS < PulseS;
 
         /// <summary>Negative when <paramref name="a"/> outranks <paramref name="b"/>.</summary>
         public static int Compare(in ThreatContact a, in ThreatContact b)
@@ -80,39 +76,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             for (int i = last; i > at; i--) rows[i] = rows[i - 1];
             rows[at] = c;
             return Math.Min(rows.Length, count + 1);
-        }
-    }
-
-    /// <summary>The words of one threat row, pure.</summary>
-    internal static class ThreatText
-    {
-        // Main-thread scratch: a char[] per row per tick was needless churn.
-        private static readonly char[] Scratch = new char[64];
-
-        public static string Chip(ThreatKind kind) =>
-            kind == ThreatKind.Missile ? "MSL" : kind == ThreatKind.Lock ? "LOCK" : kind == ThreatKind.Spike ? "SPKE" : "";
-
-        /// <summary>"SARH 2.4KM TTI 7S" for a missile, "SA-19 9.4KM" for an emitter; parts the game cannot give are left out.</summary>
-        public static string Row(in ThreatContact c, AvUnits units)
-        {
-            char[] b = Scratch;
-            int len = 0;
-            string lead = c.Kind == ThreatKind.Missile ? c.Seeker : c.Name;
-            if (string.IsNullOrEmpty(lead)) lead = c.Kind == ThreatKind.Missile ? "" : "RADAR";
-            len = AvNumFormat.Append(b, len, lead.ToUpperInvariant());
-            if (!float.IsNaN(c.RangeM))
-            {
-                if (len > 0) len = AvNumFormat.Append(b, len, " ");
-                len = AvUnitTable.DistanceReading(b, len, c.RangeM, units);
-            }
-            if (!float.IsNaN(c.TtiS))
-            {
-                if (len > 0) len = AvNumFormat.Append(b, len, " ");
-                len = AvNumFormat.Append(b, len, "TTI ");
-                len = AvNumFormat.Write(b, len, Math.Max(1.0, Math.Round(c.TtiS, MidpointRounding.AwayFromZero)), 0);
-                len = AvNumFormat.Append(b, len, "S");
-            }
-            return new string(b, 0, len).ToUpperInvariant();
         }
     }
 }

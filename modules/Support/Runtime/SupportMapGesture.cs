@@ -21,9 +21,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Whether a Boscali support action is currently armed for a map click.</summary>
         public bool Armed => MapPicker.IsOwner(MapPicker.Support);
 
-        /// <summary>Status-strip prompt to show while armed.</summary>
-        public string Prompt => Armed ? MapPicker.Prompt : null;
-
         public bool TryArm(string prompt)
         {
             if (!MapPicker.TryArm(MapPicker.Support, MapPicker.GestureRight, prompt)) return false;

@@ -80,7 +80,7 @@ namespace NOAvionics
     {
         public static bool Line(AvQuadBuffer b, float ax, float ay, float bx, float by, float width, Rgba c, float feather = 0f)
         {
-            if (IsNaN(ax) || IsNaN(ay) || IsNaN(bx) || IsNaN(by)) return true;
+            if (float.IsNaN(ax) || float.IsNaN(ay) || float.IsNaN(bx) || float.IsNaN(by)) return true;
 
             float dx = bx - ax, dy = by - ay;
             float len = (float)Math.Sqrt(dx * dx + dy * dy);
@@ -101,7 +101,7 @@ namespace NOAvionics
 
         public static bool DashedLine(AvQuadBuffer b, float ax, float ay, float bx, float by, float dash, float gap, float width, Rgba c)
         {
-            if (IsNaN(ax) || IsNaN(ay) || IsNaN(bx) || IsNaN(by)) return true;
+            if (float.IsNaN(ax) || float.IsNaN(ay) || float.IsNaN(bx) || float.IsNaN(by)) return true;
             if (dash <= 0f || gap < 0f) return true;
 
             float dx = bx - ax, dy = by - ay;
@@ -136,7 +136,7 @@ namespace NOAvionics
 
         public static bool Arc(AvQuadBuffer b, float cx, float cy, float radius, float fromDeg, float toDeg, int segments, float width, Rgba c)
         {
-            if (IsNaN(cx) || IsNaN(cy) || IsNaN(radius) || IsNaN(fromDeg) || IsNaN(toDeg)) return true;
+            if (float.IsNaN(cx) || float.IsNaN(cy) || float.IsNaN(radius) || float.IsNaN(fromDeg) || float.IsNaN(toDeg)) return true;
             if (radius <= 0f) return true;
 
             int segs = segments < 1 ? 1 : segments > 256 ? 256 : segments;
@@ -184,7 +184,7 @@ namespace NOAvionics
 
         public static bool Bracket(AvQuadBuffer b, float x, float y, float w, float h, float arm, float width, Rgba c)
         {
-            if (IsNaN(x) || IsNaN(y) || IsNaN(w) || IsNaN(h)) return true;
+            if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(w) || float.IsNaN(h)) return true;
 
             float a = arm;
             float halfW = w * 0.5f, halfH = h * 0.5f;
@@ -205,7 +205,7 @@ namespace NOAvionics
 
         public static bool Chevron(AvQuadBuffer b, float cx, float cy, float size, float angleDeg, float width, Rgba c)
         {
-            if (IsNaN(cx) || IsNaN(cy) || IsNaN(size) || IsNaN(angleDeg)) return true;
+            if (float.IsNaN(cx) || float.IsNaN(cy) || float.IsNaN(size) || float.IsNaN(angleDeg)) return true;
 
             double rad = angleDeg * Math.PI / 180.0;
             float dx = (float)Math.Cos(rad), dy = (float)Math.Sin(rad);
@@ -241,7 +241,7 @@ namespace NOAvionics
 
         public static bool Fill(AvQuadBuffer b, float x, float y, float w, float h, Rgba c)
         {
-            if (IsNaN(x) || IsNaN(y) || IsNaN(w) || IsNaN(h)) return true;
+            if (float.IsNaN(x) || float.IsNaN(y) || float.IsNaN(w) || float.IsNaN(h)) return true;
             return b.Add(x, y, x + w, y, x + w, y + h, x, y + h, c, c, c, c);
         }
 
@@ -256,7 +256,5 @@ namespace NOAvionics
             b.Add(ax + nx * r0, ay + ny * r0, bx + nx * r0, by + ny * r0,
                   bx + nx * r1, by + ny * r1, ax + nx * r1, ay + ny * r1,
                   c0, c0, c1, c1);
-
-        private static bool IsNaN(float v) => float.IsNaN(v);
     }
 }

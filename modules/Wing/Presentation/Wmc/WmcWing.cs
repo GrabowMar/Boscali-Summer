@@ -71,13 +71,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow = pageFlow;
             ticker = pageTicker;
             pageIndex = index;
-            var specs = new AvControl.Spec[SubLabels.Length];
-            for (int i = 0; i < specs.Length; i++)
-            {
-                int k = i;
-                specs[i] = new AvControl.Spec(SubLabels[i], () => ShowSub(k), AvButtonStyle.Default, SubIcons[i]);
-            }
-            subTabs = flow.Buttons(specs).Controls;
+            subTabs = WmcSubPages.Tabs(flow, SubLabels, SubIcons, ShowSub);
             subTabs[SubRoster].Help = "This mission's pilots and the selected pilot's personnel file: rank, record, ribbons, perks, SAR.";
             subTabs[SubAircraft].Help = "One aircraft in depth: damage, fuel, ammo, stores, why it does what it does, and its pilot.";
             subTabs[SubStudio].Help = "The saved pilots and the pilot studio: identity, look, radio and bio.";

@@ -60,9 +60,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + .5f;
-            ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+            NetFeed.Poll(ClientHandlers, ref nextRegistration);
         }
 
         /// <summary>Server: tell the launcher's pilot (local or remote) what its ORCA just did.</summary>
@@ -75,8 +73,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 SubjectId = subject != null ? subject.persistentID.Id : 0u, Km = km,
             };
             Show(notice);
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server != null && server.Active) server.SendToAll(notice, authenticatedOnly: true, excludeLocalPlayer: true);
+            NetFeed.Broadcast(notice);
         }
 
         private void Receive(INetworkPlayer sender, OrcaNotice notice)

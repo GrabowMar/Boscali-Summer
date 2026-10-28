@@ -12,7 +12,7 @@ namespace NOAvionics
     /// <summary>
     /// Allocation-free number formatting into caller-owned char buffers. HUD readouts run every
     /// frame, so this never builds a string or touches LINQ; it only ever writes into
-    /// <paramref name="buf"/> and returns the index after the last char it wrote.
+    /// the caller's buffer and returns the index after the last char it wrote.
     /// </summary>
     public static class AvNumFormat
     {

@@ -68,9 +68,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + .5f;
-            ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+            NetFeed.Poll(ClientHandlers, ref nextRegistration);
         }
 
         /// <summary>Server: show the cue to the launcher's pilot, wherever that pilot sits. <paramref name="station"/> = the pod just fired.</summary>
@@ -78,16 +76,14 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (launcher == null) return;
             AegisHud.Cue(launcher, cue); // host's own aircraft
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(new AegisEvent
+            NetFeed.Broadcast(new AegisEvent
             {
                 Protocol = ProtocolVersion,
                 LauncherId = launcher.persistentID.Id,
                 Cue = (byte)cue,
                 Station = station != null ? station.Number : NoStation,
                 Ammo = station != null ? (byte)Mathf.Clamp(station.Ammo, 0, byte.MaxValue) : (byte)0,
-            }, authenticatedOnly: true, excludeLocalPlayer: true);
+            });
         }
 
         private void Receive(INetworkPlayer sender, AegisEvent message)

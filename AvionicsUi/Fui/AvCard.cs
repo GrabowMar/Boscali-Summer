@@ -45,8 +45,7 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle(classes);
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            frame.PaintCard(classes, AvTheme.Surface, AvTheme.Hairline);
             frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             frame.SetVerticesDirty();
             if (title != null) title.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);

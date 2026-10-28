@@ -189,15 +189,6 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             }
         }
 
-        /// <summary>Finishes a staged rebuild at once: tests and scene teardown, never the frame loop.</summary>
-        internal void CompleteBuild()
-        {
-            PumpBuildQueue(int.MaxValue);
-            stagedFirePath = null;
-            currentLod = -1;
-            UpdateLod(true);
-        }
-
         private void RunBuildStep(TrenchBuildStep step)
         {
             if (line == null || line.Curve == null || line.Curve.Length < 2) return;
@@ -331,7 +322,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             int count = DensifyDitch(curve, step);
             if (count < 2) return null;
             var path = new Vector3[count];
-            for (int i = 0; i < count; i++) path[i] = SnapRing(curve, i, count);
+            for (int i = 0; i < count; i++) path[i] = SnapRing(curve, i);
             return path;
         }
 
@@ -345,8 +336,8 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
                 curve[0].x * 0.5f + curve[0].z * 0.5f, pathX, pathZ);
         }
 
-        /// <summary>Ring <paramref name="i"/> of <paramref name="count"/> laid on the ground: one terrain ray.</summary>
-        private Vector3 SnapRing(Vector3[] curve, int i, int count)
+        /// <summary>Ring <paramref name="i"/> laid on the ground: one terrain ray.</summary>
+        private Vector3 SnapRing(Vector3[] curve, int i)
         {
             // A missed probe takes the height of the nearest curve station. Not the station at the
             // ring's share of the ring count: rings are not spread evenly over the stations, so that
@@ -391,7 +382,7 @@ namespace BoscaliSummer.Modules.Trenches.Visuals
             }
             while (job.Snapped < job.Count)
             {
-                job.Path[job.Snapped] = SnapRing(job.Curve, job.Snapped, job.Count);
+                job.Path[job.Snapped] = SnapRing(job.Curve, job.Snapped);
                 job.Snapped++;
                 if (watch.ElapsedMilliseconds >= budgetMilliseconds) return false;
             }

@@ -41,8 +41,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>One command with its bounded arguments: a task (points, loop, seconds), target units by persistent id, one
     /// number (stack metres, call count, spacing preset), one short text (shape id, doctrine line, element name), one flag
     /// (afterburner allowed).</summary>
-    // Units, Number, Text and Flag are set by the builders and a client's decoder (P2 T6, P12).
-#pragma warning disable CS0649
     internal sealed class WingOrder
     {
         // MaxText fits a custom doctrine's eight-value config text (61 characters at most, review P2 I6; the wire's
@@ -68,5 +66,4 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static WingOrder Tasked(WingTask task, WingScope scope = default) =>
             new WingOrder { Kind = OrderKind.Task, Task = task, Scope = scope };
     }
-#pragma warning restore CS0649
 }

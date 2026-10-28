@@ -103,12 +103,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
 
         private void Update()
         {
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
-            ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
-            ClientHandlers.Swap(network?.Client?.MessageHandler);
-            throttle.Prune(Time.unscaledTime);
+            if (NetFeed.Poll(ServerHandlers, ClientHandlers, ref nextRegistration)) throttle.Prune(Time.unscaledTime);
         }
 
         private void OnDestroy()
@@ -248,8 +243,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             if (fx.Kind == FxCharge) Cue(pods[0], aircraft, FromLevel(fx.Level), now);
         }
 
-        private static bool Finite(GlobalPosition p) =>
-            !float.IsNaN(p.x + p.y + p.z) && !float.IsInfinity(p.x + p.y + p.z);
+        private static bool Finite(GlobalPosition p) => float.IsFinite(p.x + p.y + p.z);
 
         // Counterplay for the victim: a hostile pod charged past 70 % within 3.5 km and pointing within 6 deg of us.
         private static void Cue(LancePod pod, Aircraft shooter, float charge, float now)

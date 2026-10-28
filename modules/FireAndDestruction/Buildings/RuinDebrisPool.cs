@@ -18,8 +18,6 @@ namespace BoscaliSummer.Fire
             public Quaternion Rotation;
             public Vector3 Scale;
             public int Layer;
-            public ShadowCastingMode Shadows;
-            public bool ReceiveShadows;
         }
         private sealed class Pile
         {
@@ -46,7 +44,7 @@ namespace BoscaliSummer.Fire
         private Material material;
         private Texture2D concrete;
         private int order;
-        internal Action<GlobalPosition, Vector3, float> Landing;
+        internal Action<GlobalPosition, float> Landing;
 
         public void Place(GlobalPosition position, Vector2 halfExtents, bool animate = false)
         {
@@ -177,7 +175,7 @@ namespace BoscaliSummer.Fire
                                 pile.Landed[i] = true;
                                 Vector3 contact = pile.Rest[i]; contact.y = pile.Ground[i];
                                 Landing?.Invoke(new GlobalPosition(pile.Position.x + contact.x, pile.Position.y + contact.y,
-                                    pile.Position.z + contact.z), Vector3.up, pile.Sections[i].localScale.x * 0.4f);
+                                    pile.Position.z + contact.z), pile.Sections[i].localScale.x * 0.4f);
                             }
                             falling |= settle < 1f;
                         }
@@ -290,7 +288,7 @@ namespace BoscaliSummer.Fire
                 Transform transform = renderer.transform;
                 pieces.Add(new FacadePiece { Mesh = filter.sharedMesh, Materials = renderer.sharedMaterials,
                     Position = transform.position, Rotation = transform.rotation, Scale = transform.lossyScale,
-                    Layer = renderer.gameObject.layer, Shadows = renderer.shadowCastingMode, ReceiveShadows = renderer.receiveShadows });
+                    Layer = renderer.gameObject.layer });
                 if (pieces.Count == 24) break;
             }
             return pieces;

@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             PlaceRoot(area);
 
             float badgeWidth = Mathf.Min(columns.Panel.width, Mathf.Max(MinimumBadgeWidth, area.width - 180f));
-            if (!Approximately(builtSize, area.size) || Mathf.Abs(builtBadgeWidth - badgeWidth) >= 0.5f || labelA == null)
+            if (!MfdLayout.Near(builtSize, area.size) || Mathf.Abs(builtBadgeWidth - badgeWidth) >= 0.5f || labelA == null)
             {
                 Rebuild(area.size, badgeWidth);
             }
@@ -397,8 +397,5 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 state.ActiveClashesCount,
                 state.ContestedAirbaseCount);
         }
-
-        private static bool Approximately(Vector2 a, Vector2 b) =>
-            Mathf.Abs(a.x - b.x) < 0.5f && Mathf.Abs(a.y - b.y) < 0.5f;
     }
 }

@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             cover = Scalar.Clamp01(cover);
             for (int i = 1; i < CoverKnots.Length; i++)
                 if (cover <= CoverKnots[i])
-                    return WeatherMath.Lerp(ConditionKnots[i - 1], ConditionKnots[i],
+                    return Scalar.Lerp(ConditionKnots[i - 1], ConditionKnots[i],
                         (cover - CoverKnots[i - 1]) / (CoverKnots[i] - CoverKnots[i - 1]));
             return ConditionKnots[ConditionKnots.Length - 1];
         }

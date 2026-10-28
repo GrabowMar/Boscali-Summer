@@ -16,16 +16,12 @@ namespace BoscaliSummer.Vanguard
         private static Dictionary<string, object> AlexFit(Aircraft lead)
         {
             if (lead == null) return Failure("VanguardAutomation", "alexfit", "no friendly aircraft");
-            WeaponMount pod = null;
-            foreach (WeaponMount mount in Encyclopedia.i.weaponMounts)
-                if (mount != null && mount.jsonKey == AlexKite.MountKey) pod = mount;
-            AdoptPrefabOptions(lead);
+            WeaponMount pod = MountOf(AlexKite.MountKey);
+            RuntimeStores.Adopt(lead);
             HardpointSet[] sets = lead.weaponManager.hardpointSets;
             int slot = pod == null ? -1 : Array.FindIndex(sets, set => set.weaponOptions.Contains(pod));
             if (slot < 0) return Failure("VanguardAutomation", "alexfit", pod == null ? "no " + AlexKite.MountKey + " mount in the Encyclopedia" : "no hardpoint set offers the pod");
-            var loadout = new NuclearOption.SavedMission.Loadout { weapons = new List<WeaponMount>() };
-            for (int i = 0; i < sets.Length; i++) loadout.weapons.Add(i == slot ? pod : null);
-            lead.Networkloadout = loadout;
+            CarryAlone(lead, slot, pod);
             Dictionary<string, object> state = Status(lead);
             state["fit_set"] = slot;
             return state;

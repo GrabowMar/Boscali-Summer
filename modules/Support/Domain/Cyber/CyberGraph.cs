@@ -10,23 +10,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public EwSource(int index, float x, float z, float reach) { Index = index; X = x; Z = z; Reach = reach; }
     }
 
-    /// <summary><see cref="From"/> is a node id (positive) or a truck, encoded as <c>-(index + 1)</c>.</summary>
-    internal readonly struct CyberEdge
-    {
-        public readonly int From, To;
-        public CyberEdge(int from, int to) { From = from; To = to; }
-        public static int Truck(int index) => -(index + 1);
-    }
-
     /// <summary>Spec §1.2 reachability: a node is reachable from an EW truck within its reach, or from a held node within 12 km.</summary>
     internal static class CyberGraph
     {
         public const float ChainReach = 12000f;
-        public const int MaxNodes = 16, MaxEdges = 64;
+        public const int MaxNodes = 16;
 
         public static bool InReach(float ax, float az, float bx, float bz, float reach)
         {
-            if (float.IsNaN(reach) || float.IsInfinity(reach) || reach <= 0f) return false;
+            if (!float.IsFinite(reach) || reach <= 0f) return false;
             double dx = (double)ax - bx, dz = (double)az - bz;
             if (double.IsNaN(dx) || double.IsNaN(dz)) return false;
             return dx * dx + dz * dz <= (double)reach * reach;
@@ -75,24 +67,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 bool kept = keep != null && keep.Contains(all[i].Id);
                 if (!kept && into.Count >= cap) continue;
                 into.Add(all[i]);
-            }
-            return into.Count;
-        }
-
-        /// <summary>Drawable edges: truck to each node in reach, held node to each node in chain reach. Bounded by <see cref="MaxEdges"/>.</summary>
-        public static int Edges(IReadOnlyList<EwSource> trucks, IReadOnlyList<CyberNode> nodes, HashSet<int> heldIds, List<CyberEdge> into)
-        {
-            into.Clear();
-            if (nodes == null) return 0;
-            for (int n = 0; n < nodes.Count; n++)
-            {
-                for (int t = 0; trucks != null && t < trucks.Count && into.Count < MaxEdges; t++)
-                    if (InReach(trucks[t].X, trucks[t].Z, nodes[n].X, nodes[n].Z, trucks[t].Reach))
-                        into.Add(new CyberEdge(CyberEdge.Truck(trucks[t].Index), nodes[n].Id));
-                if (heldIds == null) continue;
-                for (int h = 0; h < nodes.Count && into.Count < MaxEdges; h++)
-                    if (h != n && heldIds.Contains(nodes[h].Id) && InReach(nodes[h].X, nodes[h].Z, nodes[n].X, nodes[n].Z, ChainReach))
-                        into.Add(new CyberEdge(nodes[h].Id, nodes[n].Id));
             }
             return into.Count;
         }

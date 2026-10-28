@@ -128,14 +128,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private char[] Space(float designEm) =>
             ("<space=-" + (designEm * advance / DesignAdvance).ToString("0.#####", System.Globalization.CultureInfo.InvariantCulture) + "em>").ToCharArray();
 
-        /// <summary>Hide everything and drop the labels' objects (the surface is being rebuilt or destroyed).</summary>
-        public void Destroy()
-        {
-            foreach (Slot s in slots) if (s.Text != null) UnityEngine.Object.Destroy(s.Text.gameObject);
-            slots.Clear();
-            used = 0;
-        }
-
         /// <summary>Measures the font once: how far a character advances per unit of font size, and the spacing that cancels TMP's synthetic-bold widening.</summary>
         private void Measure()
         {

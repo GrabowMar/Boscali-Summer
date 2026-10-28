@@ -30,15 +30,6 @@ namespace BoscaliSummer.Fire
         /// <summary>Diameter of the visible soot decal stamped on the burnt ground.</summary>
         internal const float ScarBaseDiameter = 45f;
 
-        /// <summary>
-        /// Distance from a burn core to a lobe decal, as a fraction of the scar diameter.
-        /// The lobes must overlap the core decal: offsets were once derived from the
-        /// whole-site ash radius, so a burn site left three disconnected specks roughly
-        /// 100 m apart that read as no soot at all from the air.
-        /// </summary>
-        internal const float ScarLobeDownwind = 0.52f;
-        internal const float ScarLobeCrosswind = 0.40f;
-
         internal static float TreeClearBlastRadius(float clusterScale) =>
             TreeClearBlastBaseRadius * ClusterGrowth(clusterScale);
 

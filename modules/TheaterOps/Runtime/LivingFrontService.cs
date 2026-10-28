@@ -132,7 +132,10 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             internal TheaterWarPosture Posture = TheaterWarPosture.Steady;
             internal Operation Active;
             internal int Revision, NextId = 1, ObjectiveCursor;
-            internal float NextReview, NextHold, FirstDealAt = -1f, OfferDeadline, SensedAt = -1f, FrozenUntil, LastVetoUntil;
+            internal float NextReview, NextHold, FirstDealAt = -1f, OfferDeadline, SensedAt = -1f, LastVetoUntil;
+#pragma warning disable CS0649 // set only by the dev-build WarProof seam
+            internal float FrozenUntil;
+#pragma warning restore CS0649
             internal bool DeadlineArmed, InReview, GroundSeen, HasObjectives;
             internal RejectTally Tally;
             internal GroundReason GroundShown = GroundReason.Unknown, GroundPending = GroundReason.Unknown;

@@ -200,8 +200,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             new PackageDef(NodeKind.DataCenter, SupportActionId.CyberBlackout, "BLACKOUT", EffectKind.RadarJam, 45f, 12000f, CyberEffectBook.RadarFactor),
         };
 
-        public static IReadOnlyList<PackageDef> All => all;
-
         public static bool TryOf(NodeKind node, out PackageDef def)
         {
             for (int i = 0; i < all.Length; i++) if (all[i].Node == node) { def = all[i]; return true; }

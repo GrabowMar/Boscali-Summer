@@ -52,9 +52,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>SEND WHERE I LOOK: the linked drone (the first one when none is linked) flies to the ground the pilot's view centre is on and circles it.</summary>
         void SendToLook();
 
-        /// <summary>SEND TO TARGET: the linked drone flies to the pilot's selected target and circles it.</summary>
-        void SendToTarget();
-
         /// <summary>FLY MY HEADING: the linked drone takes the pilot's heading and height and holds them (HAND).</summary>
         void MatchNose();
 

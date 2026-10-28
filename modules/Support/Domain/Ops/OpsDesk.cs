@@ -60,8 +60,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
     {
         float Now { get; }
         int Humans { get; }
-        /// <summary>The faction key this desk acts for.</summary>
-        int Owner { get; }
         /// <summary>Takes CR out of the wallet and out of the economy (an operation is a sink). None when paid; LowCredit (detail = need), Frozen or Unavailable otherwise.</summary>
         OpOutcome TrySpend(ulong op, int cr, out int detail);
         void Refund(ulong op, int cr);

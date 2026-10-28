@@ -59,7 +59,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             public float NextGeneration;
             public OperationKind? PendingFollowOn;
             public int PendingChainDepth;
-            public bool CompletedContract;
             public OperationFocus Focus;
             public bool HasFocus => Focus.IsLive;
         }
@@ -500,9 +499,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void Pay(FactionHQ hq, FactionBoard board, Target target, Player participant)
         {
-            // Marked taken before any side effects: neither another poll nor a callback may pay twice.
             Operation op = target.Mission;
-            board.CompletedContract = true;
             MoraleAwarded?.Invoke(hq.GetInstanceID(), 3f);
             if (target.OriginalOwner != null && target.OriginalOwner != hq)
                 MoraleAwarded?.Invoke(target.OriginalOwner.GetInstanceID(), -3f);

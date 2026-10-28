@@ -39,11 +39,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         }
 
         /// <summary>What the caster asks for, in whole funds.</summary>
-        public static float Wanted(int heldEnemyNodes, float power)
-        {
-            if (float.IsNaN(power) || float.IsInfinity(power) || power <= 0f) power = 1f;
-            return (float)Math.Floor((Base + PerNode * Math.Max(0, heldEnemyNodes)) * Math.Max(0.6f, Math.Min(1.5f, power)));
-        }
+        public static float Wanted(int heldEnemyNodes, float power) =>
+            (float)Math.Floor((Base + PerNode * Math.Max(0, heldEnemyNodes)) * PerkPower.Sane(power));
 
         /// <summary>
         /// Fills <paramref name="takes"/> (same length as <paramref name="budgets"/>) with what to take from each budget, richest first, and returns the total (0 when it is under <see cref="Minimum"/>,

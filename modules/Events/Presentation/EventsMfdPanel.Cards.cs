@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 ? AvStyleHost.FuiColor("ink-dim", AvTheme.Dim)
                 : AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo);
 
-        /// <summary>Solid slab colours (same tokens as <see cref="AvSlab"/>): filled tag, dark ink.</summary>
+        /// <summary>Solid slab colours (the sheet's <c>slab</c> tokens): filled tag, dark ink.</summary>
         internal static Color SlabBack(AvState state) =>
             AvStyleHost.FuiFill("slab " + AvStates.Class(state), AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailInfo));
 
@@ -274,15 +274,15 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 if (textChanged) Changed();
             }
 
-            public override float Measure(float width) => Arrange(width, false, 0f);
+            public override float Measure(float width) => Arrange(width, false);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                Arrange(s.W, true, s.H);
+                Arrange(s.W, true);
             }
 
-            private float Arrange(float width, bool place, float slotHeight)
+            private float Arrange(float width, bool place)
             {
                 float x = 12f, w = width - 24f, y = 12f;
                 if (calm)
@@ -354,8 +354,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.PaintCard("card", AvTheme.Surface, AvTheme.Hairline);
                 Color shade = AvTheme.Surface.WithAlpha(0.94f);
                 AvSurfaceGradient.Apply(artFade, shade.WithAlpha(0f), shade);
                 artShade.color = shade;
@@ -468,8 +467,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.PaintCard("card", AvTheme.Surface, AvTheme.Hairline);
                 rail.color = AvStyleHost.FuiColor(AvStates.Class(tierState), AvTheme.RailInfo);
                 title.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
                 meta.color = TextColor(tierState);

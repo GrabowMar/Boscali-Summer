@@ -59,7 +59,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
         public Vector3[] Support { get; set; }
         public Vector3[] SupportAnchors { get; set; }
         public Vector3[] Redoubt { get; set; }
-        public Vector3[] RedoubtAnchors { get; set; }
         public Vector3[][] Links { get; set; }
         public Vector3[][] Spurs { get; set; }
 
@@ -135,7 +134,6 @@ namespace BoscaliSummer.Modules.Trenches.Runtime
             line.Spurs = spurs;
             line.Anchors = TrenchPlanner.SampleAnchors(curve, TrenchPlanner.AnchorSpacing);
             line.SupportAnchors = TrenchPlanner.SampleAnchors(support, TrenchPlanner.AnchorSpacing);
-            line.RedoubtAnchors = TrenchPlanner.SampleAnchors(redoubt, TrenchPlanner.AnchorSpacing);
             line.Validate();
             return line;
         }

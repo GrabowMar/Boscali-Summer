@@ -127,6 +127,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         private static float Finite(float value, float fallback) =>
-            float.IsNaN(value) || float.IsInfinity(value) ? fallback : value;
+            !float.IsFinite(value) ? fallback : value;
     }
 }

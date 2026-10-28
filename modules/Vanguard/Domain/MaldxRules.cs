@@ -99,8 +99,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return true;
         }
 
-        public bool IsExposed(uint site, float now) => sites.TryGetValue(site, out Site s) && s.Until > now;
-
         public int Exposed(float now)
         {
             int n = 0;

@@ -253,7 +253,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopePageBase systems = pages[(int)ScopePage.Systems];
             var blocks = new BoardBlocks
             {
-                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, PwrCost = header.HasCost, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
+                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
                 StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);

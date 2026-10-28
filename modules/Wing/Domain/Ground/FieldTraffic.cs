@@ -340,7 +340,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 Vec3 a = polyline[k - 1].Horizontal, ab = polyline[k].Horizontal - a;
                 float len2 = ab.SqrLength;
-                float t = len2 < 1e-6f ? 0f : Math.Max(0f, Math.Min(1f, Vec3.Dot(q - a, ab) / len2));
+                float t = len2 < 1e-6f ? 0f : Scalar.Clamp01(Vec3.Dot(q - a, ab) / len2);
                 if ((a + ab * t - q).Length < radius) return true;
             }
             return false;

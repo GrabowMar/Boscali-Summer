@@ -60,15 +60,6 @@ namespace NOAvionics
             return list;
         }
 
-        /// <summary>Left/bottom origin of heat-grid cell i (row-major, row 0 on top of a rectangle of height totalH).</summary>
-        public static AvV2 HeatCell(int index, int cols, float cellW, float cellH, float gap, float totalH)
-        {
-            int c = index % cols, r = index / cols;
-            return new AvV2(c * (cellW + gap), totalH - (r + 1) * cellH - r * gap);
-        }
-
-        public static int HeatRows(int count, int cols) => cols <= 0 ? 0 : (count + cols - 1) / cols;
-
         /// <summary>Stable fake hardware serial for a console id (decoration only): "SN 04A7".</summary>
         public static string Serial(string id)
         {
@@ -76,8 +67,5 @@ namespace NOAvionics
             foreach (char c in id ?? "") h = (h ^ c) * 16777619u;
             return "SN " + (h & 0xFFFFu).ToString("X4");
         }
-
-        /// <summary>Angle in degrees of dial tick i of n, starting at the top and running clockwise.</summary>
-        public static float TickDegrees(int index, int count) => count <= 0 ? 0f : 90f - 360f * index / count;
     }
 }

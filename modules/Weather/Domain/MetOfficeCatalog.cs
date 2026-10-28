@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>The fixed data of the window: controls, set-pieces and scenarios, in the order the mockup draws them.</summary>
     internal static class MetCatalog
     {
-        public const int HelpLimit = 150;
         public const char BackspaceKey = '\b';
 
         public static readonly byte[] SetBits =
@@ -76,13 +75,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public const string ClassHelp = "CLASS: shows the skies of this class in the gallery. Browsing changes nothing; PIN in the inspector is the cut.";
         public const string HeroHelp = "NOW: the sky over you, the tape's speed, the story it tells and the next front ahead. Read-outs only.";
 
-        /// <summary>Every sentence above, for the length test and the window's hover gate.</summary>
-        public static string[] AllPartHelp()
-        {
-            var all = new System.Collections.Generic.List<string>(ChipHelp) { TagHelp, IdentityHelp, LogHelp, DtgHelp, RoleHostHelp, RoleClientHelp, TileHelp, ClassHelp, HeroHelp };
-            return all.ToArray();
-        }
-
         public static readonly float?[] RainValues = { null, 0f, 0.4f, 1f };
         public static readonly string[] RainNames = { "AUTO", "DRY", "LIGHT", "HEAVY" };
 
@@ -99,23 +91,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static int ScenarioIndex(MetControl id) => id - MetControl.ScenHurricane;
         public static int SetIndex(MetControl id) => id - MetControl.SetSquall;
-
-        /// <summary>The word under a control's name and on the legend: SMOOTH, FADE 20 S, ▲ CUT, or empty.</summary>
-        public static string EffectWord(MetEffect effect)
-        {
-            switch (effect)
-            {
-                case MetEffect.Smooth: return "SMOOTH";
-                case MetEffect.Fade: return "FADE 20 S";
-                case MetEffect.Cut: return "▲ CUT";
-                default: return "";
-            }
-        }
-
-        public static string AvailTag(MetAvail avail) => avail == MetAvail.Live ? "LIVE" : "S5";
-
-        /// <summary>Key legend text for the command bar (the printable key, or BKSP).</summary>
-        public static string KeyLabel(char key) => key == BackspaceKey ? "BKSP" : key == '\0' ? "" : key.ToString().ToUpperInvariant();
 
         private static MetControlInfo[] BuildTable()
         {

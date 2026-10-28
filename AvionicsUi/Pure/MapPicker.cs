@@ -77,15 +77,6 @@ namespace NOAvionics
             }
         }
 
-        /// <summary>Test seam. Plugins must not call this on a live game.</summary>
-        public static void Reset()
-        {
-            lock (LockKey)
-            {
-                AppDomain.CurrentDomain.SetData(DataKey, null);
-            }
-        }
-
         private static string Owner()
         {
             object[] row = Row();

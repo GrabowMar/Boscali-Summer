@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -63,7 +64,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                     dx = cx - px;
                     dy = (j & 1) == 0 ? box[wedge * 4 + 1] - h - py : box[wedge * 4 + 1] + box[wedge * 4 + 3] + 22f - py;
                 }
-                float rx = (float)Math.Round(Clamp(px + dx, xMin, xMax - w)), ry = (float)Math.Round(Clamp(py + dy, yMin, yMax - h));
+                float rx = (float)Math.Round(Scalar.Clamp(px + dx, xMin, xMax - w)), ry = (float)Math.Round(Scalar.Clamp(py + dy, yMin, yMax - h));
                 float cost = i * (shot ? 0.4f : 0.5f) + (preferSide < 0 && dx > 0f ? 3f : preferSide > 0 && dx < 0f ? 3f : 0f);
                 if (!shot) cost += 0.3f * (float)Math.Sqrt((rx + w / 2f - px) * (rx + w / 2f - px) + (ry + h / 2f - py) * (ry + h / 2f - py));
                 for (int k = 0; k < count; k++) cost += Overlap(rx, ry, w, h, box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]) * (shot ? 0.35f : k == wedge ? 4f : 0.3f);
@@ -124,7 +125,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 float sx, sy, a = (i == 5 ? bearing : bearing + (i == 0 ? 0f : i == 1 ? 14f : i == 2 ? -14f : i == 3 ? 28f : -28f)) * DegToRad, sin = (float)Math.Sin(a), cos = (float)Math.Cos(a);
                 if (i < 5) { sx = cx + sin * (r + 4f + w / 2f) - w / 2f; sy = cy - cos * (r + 4f + h / 2f) - h / 2f; }
                 else { sx = cx + sin * (r - 22f) - w / 2f; sy = cy - cos * (r - 22f) - h / 2f; }
-                float rx = (float)Math.Round(Clamp(sx, xMin, xMax - w)), ry = (float)Math.Round(Clamp(sy, yMin, yMax - h));
+                float rx = (float)Math.Round(Scalar.Clamp(sx, xMin, xMax - w)), ry = (float)Math.Round(Scalar.Clamp(sy, yMin, yMax - h));
                 float cost = i * 2f + (Math.Abs(rx - sx) + Math.Abs(ry - sy)) * 2f + OverlapCost(rx, ry, w, h) * 0.5f + Inside(rx, ry, w, h, cx, cy, rim);
                 if (cost < best) { best = cost; x = rx; y = ry; }
             }
@@ -147,10 +148,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
             int cols = (int)Math.Ceiling(Math.Max(0f, xMax - w - xMin) / stepX) + 1, rows = (int)Math.Ceiling(Math.Max(0f, yMax - h - yMin) / stepY) + 1;
             for (int j = 0; j < rows; j++)
             {
-                float gy = (float)Math.Round(Clamp(yMin + j * stepY, yMin, Math.Max(yMin, yMax - h)));
+                float gy = (float)Math.Round(Scalar.Clamp(yMin + j * stepY, yMin, Math.Max(yMin, yMax - h)));
                 for (int i = 0; i < cols; i++)
                 {
-                    float gx = (float)Math.Round(Clamp(xMin + i * stepX, xMin, Math.Max(xMin, xMax - w)));
+                    float gx = (float)Math.Round(Scalar.Clamp(xMin + i * stepX, xMin, Math.Max(xMin, xMax - w)));
                     float cost = OverlapCost(gx, gy, w, h) * Dear + Hits(gx, gy, w, h, segs) * OnLine + Inside(gx, gy, w, h, rimX, rimY, rimR) + Math.Abs(gx - x) + Math.Abs(gy - y);
                     if (cost < best) { best = cost; bx = gx; by = gy; }
                 }
@@ -173,7 +174,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private static float Inside(float x, float y, float w, float h, float cx, float cy, float r)
         {
             if (r <= 0f) return 0f;
-            float nx = Clamp(cx, x, x + w) - cx, ny = Clamp(cy, y, y + h) - cy;
+            float nx = Scalar.Clamp(cx, x, x + w) - cx, ny = Scalar.Clamp(cy, y, y + h) - cy;
             return Math.Max(0f, r - RimSlack - (float)Math.Sqrt(nx * nx + ny * ny)) * InsideCost;
         }
 
@@ -280,8 +281,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Whether the leaders from (<paramref name="x1"/>, <paramref name="y1"/>) to the box at offset <paramref name="a"/> and from (<paramref name="x2"/>, <paramref name="y2"/>) to the box at <paramref name="b"/> cross.</summary>
         private bool Cross(float x1, float y1, int a, float x2, float y2, int b)
         {
-            float ex1 = Clamp(x1, box[a], box[a] + box[a + 2]), ey1 = Clamp(y1, box[a + 1], box[a + 1] + box[a + 3]);
-            float ex2 = Clamp(x2, box[b], box[b] + box[b + 2]), ey2 = Clamp(y2, box[b + 1], box[b + 1] + box[b + 3]);
+            float ex1 = Scalar.Clamp(x1, box[a], box[a] + box[a + 2]), ey1 = Scalar.Clamp(y1, box[a + 1], box[a + 1] + box[a + 3]);
+            float ex2 = Scalar.Clamp(x2, box[b], box[b] + box[b + 2]), ey2 = Scalar.Clamp(y2, box[b + 1], box[b + 1] + box[b + 3]);
             return SegmentsCross(x1, y1, ex1, ey1, x2, y2, ex2, ey2);
         }
 
@@ -301,8 +302,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 if (k != skipA && k != skipB && Overlap(x - Gap, y - Gap, w + 2f * Gap, h + 2f * Gap, box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]) > 0f) return true;
             return false;
         }
-
-        private static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
 
         public static float Overlap(float ax, float ay, float aw, float ah, float bx, float by, float bw, float bh)
         {

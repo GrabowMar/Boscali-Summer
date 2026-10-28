@@ -146,8 +146,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             MetCard log = Card(f, "HOST LOG");
             log.SetCaption("NEWEST FIRST");
             logNote = log.Add(new AvNote(log.Content, AvTextRole.DataSmall), MetOfficeLayout.LogLines * MetOfficeLayout.LogLine);
-            Tip(logNote.Rect.Find("Text").gameObject, MetCatalog.LogHelp);
-            foreach (AvNote note in new[] { identityHead, identitySub, identityNext }) Tip(note.Rect.Find("Text").gameObject, MetCatalog.IdentityHelp);
+            AvHelpTip.Attach(logNote.Rect.Find("Text").gameObject, MetCatalog.LogHelp);
+            foreach (AvNote note in new[] { identityHead, identitySub, identityNext }) AvHelpTip.Attach(note.Rect.Find("Text").gameObject, MetCatalog.IdentityHelp);
         }
 
         private void BuildTape()
@@ -231,7 +231,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
             int ahead = -1;
             for (int i = 0; i < model.MarkCount; i++)
-                if (!model.Marks[i].Step && model.Marks[i].AtMin > 0f && (ahead < 0 || model.Marks[i].AtMin < model.Marks[ahead].AtMin)) ahead = i;
+                if (model.Marks[i].AtMin > 0f && (ahead < 0 || model.Marks[i].AtMin < model.Marks[ahead].AtMin)) ahead = i;
             if (ahead < 0) hero[3].Set("", "NO FRONT AHEAD", ready ? "NOTHING ON THE TAPE WITHIN 93 MIN" : "", "", AvState.Inert);
             else
             {

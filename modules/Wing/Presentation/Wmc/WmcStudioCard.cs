@@ -36,25 +36,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public WingIdCard(RectTransform parent)
         {
             Rect = AvLay.Child(parent, "IdCard");
-            frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(8f));
-            AvLay.Fill(frame.rectTransform);
+            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(8f));
             art = AvVector.Create(Rect, "Art", 200);
             mark = new WingInsigniaImage(Rect);
-            title = AvText.Make(Rect, "Title", AvTextRole.Label, SquadronWords.SquadronTitle);
-            AvText.Fit(title, false);
-            subtitle = AvText.Make(Rect, "Subtitle", AvTextRole.Micro, "AIRCREW IDENTIFICATION · NOT TRANSFERABLE");
-            AvText.Fit(subtitle, false);
-            number = AvText.Make(Rect, "Number", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvText.Fit(number, false);
+            title = WmcSheet.Text(Rect, "Title", AvTextRole.Label, text: SquadronWords.SquadronTitle);
+            subtitle = WmcSheet.Text(Rect, "Subtitle", AvTextRole.Micro, text: "AIRCREW IDENTIFICATION · NOT TRANSFERABLE");
+            number = WmcSheet.Text(Rect, "Number", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
             portraitBox = AvFrame.Add(Rect, "PortraitBox", default(AvChamfer));
             portrait = AvLay.Solid(Rect, "Portrait", Color.white);
             portrait.preserveAspect = true;
             for (int i = 0; i < 4; i++)
             {
-                key[i] = AvText.Make(Rect, "Key" + Keys[i], AvTextRole.Micro, Keys[i]);
-                AvText.Fit(key[i], false);
-                value[i] = AvText.Make(Rect, "Value" + Keys[i], AvTextRole.Label);
-                AvText.Fit(value[i], false);
+                key[i] = WmcSheet.Text(Rect, "Key" + Keys[i], AvTextRole.Micro, text: Keys[i]);
+                value[i] = WmcSheet.Text(Rect, "Value" + Keys[i], AvTextRole.Label);
             }
             bio = AvText.Make(Rect, "Bio", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             Restyle();
@@ -132,8 +126,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            WmcDraw.PaintCard(frame, "card", AvTheme.Surface);
             portraitBox.Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("frame", AvTheme.Frame));
             title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             subtitle.color = AvInk.Dim;

@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Math;
 using BoscaliSummer.Modules.Hud.Domain;
 using UnityEngine;
 
@@ -20,7 +21,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private CameraBaseState state;
 
         private bool hasEye;
-        private WVVec3 smoothedEye;
+        private Vec3 smoothedEye;
         private bool hasRotation;
         private Quaternion smoothedRotation;
 
@@ -150,9 +151,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             Transform nose = aircraft.transform;
             Rigidbody rb = cam.followingRB;
             bool hasVelocity = rb != null;
-            WVVec3 noseDir = FromUnity(nose.forward);
-            WVVec3 velocity = hasVelocity ? FromUnity(rb.velocity) : WVVec3.Zero;
-            WVVec3 dir = WingviewMath.BlendDirection(noseDir, velocity, hasVelocity);
+            Vec3 noseDir = FromUnity(nose.forward);
+            Vec3 velocity = hasVelocity ? FromUnity(rb.velocity) : Vec3.Zero;
+            Vec3 dir = WingviewMath.BlendDirection(noseDir, velocity, hasVelocity);
 
             float yawDeg = nose.eulerAngles.y;
             float rawRate = hasPrevYaw ? Mathf.DeltaAngle(prevYawDeg, yawDeg) / dt : 0f;
@@ -169,13 +170,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             // Vanilla's orbit distance frames the aircraft too tight once Wingview's own lag is gone
             // (sim capture 2026-09-29): pull back so it sits small in the lower third.
             float distance = WingviewMath.FollowDistance(aircraft.maxRadius, viewDistAdjust) * DistanceScale;
-            WingviewMath.Pose pose = WingviewMath.ComputePose(FromUnity(nose.position), dir, WVVec3.Up, distance);
+            WingviewMath.Pose pose = WingviewMath.ComputePose(FromUnity(nose.position), dir, Vec3.Up, distance);
 
             // Smooth the eye as an offset from the aircraft, not an absolute world position: the
             // floating origin shifts mid-flight, and an absolute smoothed eye was left kilometres
             // behind (the aircraft vanished off-screen in a turn, seen in the sim 2026-09-29).
-            WVVec3 target = FromUnity(nose.position);
-            WVVec3 offset = pose.Eye - target;
+            Vec3 target = FromUnity(nose.position);
+            Vec3 offset = pose.Eye - target;
             smoothedEye = hasEye
                 ? WingviewMath.ExpSmooth(smoothedEye, offset, WingviewMath.PositionSmoothingRate, dt)
                 : offset;
@@ -210,7 +211,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private void RememberView(float pan, float tilt) { lastPan = pan; lastTilt = tilt; hasLastView = true; }
 
-        private static WVVec3 FromUnity(Vector3 v) => new WVVec3(v.x, v.y, v.z);
-        private static Vector3 ToUnity(WVVec3 v) => new Vector3(v.X, v.Y, v.Z);
+        private static Vec3 FromUnity(Vector3 v) => new Vec3(v.x, v.y, v.z);
+        private static Vector3 ToUnity(Vec3 v) => new Vector3(v.X, v.Y, v.Z);
     }
 }

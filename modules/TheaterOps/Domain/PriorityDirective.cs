@@ -50,8 +50,6 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         private readonly Dictionary<string, PriorityDirective> entries =
             new Dictionary<string, PriorityDirective>(MaximumFactions, StringComparer.Ordinal);
 
-        internal int Count => entries.Count;
-
         internal bool TryGet(string faction, out PriorityDirective directive)
         {
             if (string.IsNullOrEmpty(faction))

@@ -6,7 +6,7 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>
     /// Read-only view of the mission's rotating world events, published by the Events
     /// module. The host owns rotation; a client reads the state the host broadcast. A
-    /// consumer multiplies <see cref="SupportCostMultiplier"/> into whatever it prices,
+    /// consumer multiplies <see cref="SupportCostMultiplierFor"/> into whatever it prices,
     /// and reads exactly 1 while no event is active.
     /// </summary>
     internal interface IActiveEventsView

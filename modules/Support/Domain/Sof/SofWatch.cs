@@ -106,15 +106,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private SofWatchPlan Decide(SofDesk desk, ISofWatchWorld world, WatchPacer pacer, bool aiFaction, float now)
         {
             Prune(now);
-            SofWatchPlan sweep = SweepPlan(desk, world, now);
+            SofWatchPlan sweep = SweepPlan(desk, now);
             if (sweep.Action != SofWatchAction.None) return sweep;
             int humans = world.Humans;
             SofTeam team = Mine(desk);
             if (team != null && team.State == TeamState.Lost) restUntil = Math.Max(restUntil, now + LostRestSeconds);
             pacer.SetUrgent(WatchDomain.Sof, false); // refreshed below only while a team is in danger: a stale reservation would hold CYBER off the shared limiter
-            // A human working SOF suspends everything except the one thing that cannot wait: a team in the field still gets its exfil when the exposure says so.
-            bool suspended = !Idle(humans, now);
-            if (suspended && (team == null || (team.State != TeamState.Moving && team.State != TeamState.OnSite))) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
             if (team == null || team.State == TeamState.Lost) return RaisePlan(desk, world, humans, now);
             if (team.Slot != lastSlot) { lastSlot = team.Slot; lastExposure = -1f; }
             float prior = lastExposure, priorAt = lastExposureAt;
@@ -124,7 +121,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case TeamState.Moving:
                 case TeamState.Returning:
                 case TeamState.OnSite:
-                    return SteerPlan(team, prior, priorAt, pacer, aiFaction, now, suspended);
+                    return SteerPlan(team, prior, priorAt, pacer, aiFaction, now);
                 case TeamState.Ready:
                     return ReadyPlan(desk, world, team, now);
                 default:
@@ -133,7 +130,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         }
 
         /// <summary>Defence first: a QRF rolls on hostile teams near our sites when one can. HOLD rolls it at once; otherwise OVERLORD lets the first one stay <see cref="SweepAfterSeconds"/> (the raider's window; an operator can always sweep sooner).</summary>
-        private SofWatchPlan SweepPlan(SofDesk desk, ISofWatchWorld world, float now)
+        private SofWatchPlan SweepPlan(SofDesk desk, float now)
         {
             int n = desk.Hostiles.Count;
             if (n == 0 || desk.SweepEndsAt > now || now < desk.SweepReadyAt) return SofWatchPlan.Idle(SofWatchWhy.None);
@@ -269,7 +266,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         // ---- Steering --------------------------------------------------------------------------
 
-        private SofWatchPlan SteerPlan(SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now, bool safetyOnly)
+        private SofWatchPlan SteerPlan(SofTeam team, float prior, float priorAt, WatchPacer pacer, bool aiFaction, float now)
         {
             bool rising = prior >= 0f && team.Exposure > prior + RisingEpsilon;
             int exposure = (int)Math.Round(team.Exposure);
@@ -286,7 +283,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             bool committed = Committed(team, rate);
             if (team.State != TeamState.Returning && ((team.Exposure >= ExfilAt && rising && !committed) || (team.Exposure >= ProjectedFloor && projected >= ProjectedExfil)))
                 return Exfil(team, WatchCode.SofExfil, exposure);
-            if (safetyOnly) return SofWatchPlan.Idle(SofWatchWhy.Suspended);
             if (team.HoldOn && team.Exposure <= ResumeBelow) return Verb(team, TeamVerb.Hold, WatchCode.SofResume, exposure);
             // Inside a defended circle a push costs more exposure per metre than walking (x1.5 rate for x1.5 speed against a fixed recovery): slow down while climbing, and recover on site.
             if (team.PushOn && rising && committed) return Verb(team, TeamVerb.Push, WatchCode.SofResume, exposure);

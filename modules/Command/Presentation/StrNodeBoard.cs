@@ -40,8 +40,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Restyle();
         }
 
-        public int Capacity => rows.Length;
-
         public void SetCount(int n)
         {
             count = Mathf.Max(0, n);

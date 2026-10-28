@@ -290,12 +290,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// The pinned perk strip and the highlighted row. The strip shows the inspected perk, else the armed one, else the first ready one, else
         /// the first: it always reads a real perk. Inspecting arms nothing and spends nothing.
         /// </summary>
-        public static void Order(OpsPageView v, IReadOnlyList<CallTile> tiles, AimSource aim, string aimGrid, bool pending, string words, int allocation,
+        public static void Order(OpsPageView v, IReadOnlyList<CallTile> tiles, AimSource aim, string aimGrid, bool pending, string words,
             SupportActionId? inspected = null)
         {
-            CallTile armed = default;
             v.Armed = false;
-            foreach (CallTile t in tiles) if (t.State == CallState.Armed) { armed = t; v.Armed = true; break; }
+            foreach (CallTile t in tiles) if (t.State == CallState.Armed) { v.Armed = true; break; }
             v.Pending = pending;
             string where = aim == AimSource.Pod ? "LOCKED TARGET" : aim == AimSource.Map ? "MAP CLICK" : aim == AimSource.Team ? "SOF TEAM LASER" : "";
 
@@ -499,7 +498,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private static string LowAlloc(string needWord)
         {
-            needWord = needWord ?? "";
+            needWord ??= "";
             if (lowAlloc.TryGetValue(needWord, out string hit)) return hit;
             string s = "LOW ALLOC" + Dot + needWord.Replace(" ALLOC", " AP");
             if (lowAlloc.Count < 32) lowAlloc[needWord] = s;

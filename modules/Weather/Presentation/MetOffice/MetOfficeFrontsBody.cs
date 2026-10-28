@@ -80,16 +80,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// <summary>The front symbols of the mockup in a 28 x 16 box: warm half-discs, cold triangles, an occluded alternation, a dash-dot squall line. Shared by the chart legend and the next-fronts card.</summary>
     internal static class MetFrontGlyph
     {
-        public static Color Ink(MetFrontKind kind)
+        public static Color Ink(MetFrontKind kind) => EnvInk.Role(kind switch
         {
-            switch (kind)
-            {
-                case MetFrontKind.Warm: return EnvInk.Role("caution");
-                case MetFrontKind.Squall: return EnvInk.Role("danger");
-                case MetFrontKind.Occluded: return EnvInk.Role("ink-dim");
-                default: return EnvInk.Role("info");
-            }
-        }
+            MetFrontKind.Warm => "caution",
+            MetFrontKind.Squall => "danger",
+            MetFrontKind.Occluded => "ink-dim",
+            _ => "info",
+        });
 
         public static void Draw(EnvCanvas c, MetFrontKind kind, float x, float y)
         {

@@ -9,7 +9,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class TargetPresetRadialPage : IRadialMenuPage
     {
-        public string Title => "TARGET FILTERS";
 
         public int EntryCount
         {

@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>One group of the mission's own convoy list: name, what is in it, price, whether it can be bought now, and BUY (the game's own purchase).</summary>
-    internal sealed class StrConvoyRow : StrPart
+    internal sealed class StrConvoyRow : StrLaidPart
     {
         private const float Pad = 8f, ButtonW = 88f, CostW = 64f;
 
@@ -110,15 +110,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Changed();
         }
 
-        public override float Measure(float width) => Shown ? Lay(width, false) : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) Lay(s.W, true);
-        }
-
-        private float Lay(float width, bool place)
+        protected override float Lay(float width, bool place)
         {
             float right = width - Pad - ButtonW, textW = Mathf.Max(40f, right - 8f - Pad);
             float detailH = detail.text.Length > 0 ? Mathf.Max(15f, AvText.Height(detail, textW)) : 0f;

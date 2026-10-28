@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     /// </summary>
     internal sealed class WatchOfficerPolicy
     {
-        public const float ThinkSeconds = 2f, SoloIdleSeconds = 60f, GroupIdleSeconds = 300f, NoContactSeconds = 90f,
+        public const float ThinkSeconds = 2f, NoContactSeconds = 90f,
             RodWindowSeconds = 90f, ClusterMeters = 1500f, MinRevealLeft = 4f, MarkWindowSeconds = 60f,
             PostedSeconds = TaskedBoard.CallSeconds, SkipSeconds = 60f, FailureBackoffSeconds = 10f, ScanFailureBackoffSeconds = 30f,
             NearnessMeters = 30000f;
@@ -95,38 +95,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly Dictionary<int, float> scanned = new Dictionary<int, float>(MaxSites);
         private readonly List<int> scratch = new List<int>(MaxRemembered);
         private readonly WatchTarget[] picks = new WatchTarget[MaxTargets];
-        private float nextThinkAt, lastHumanAt = float.NegativeInfinity, noTargetSince = float.NaN;
+        private float nextThinkAt, noTargetSince = float.NaN;
 
         /// <summary>The SPACE front's directive and focus pin (the host sets it every tick; neutral = RECON, the rule as it always was).</summary>
         public DirectorBias Bias = DirectorBias.Neutral(Front.Space);
 
-        // ---- Idle rule ---------------------------------------------------------------------------
-
-        /// <summary>
-        /// Which CALLS count as a human working SPACE: only the scan and the camera. Firing a rod, a TASKED claim or any other CALL is
-        /// not SPACE work and never suspends OVERLORD (the other human verbs are the MARK and SEND commands).
-        /// </summary>
-        public static bool CountsAsHumanWork(Runtime.SupportActionId action) =>
-            action == Runtime.SupportActionId.Recon || action == Runtime.SupportActionId.SatCamera;
-
-        /// <summary>A human of this faction did a SPACE domain verb (MARK, SEND, CLAIM, a scan). Looking at the feed is not work.</summary>
-        public void RecordHuman(float now)
-        {
-            if (SpaceRules.MissionTime(now) && now > lastHumanAt) lastHumanAt = now;
-        }
-
-        /// <summary>
-        /// OPS FRONTS S2: the director is always on. A human at the SPACE desk no longer sends it away (it posts beside the human, inside the board reserve and its own post cap);
-        /// the human's own MARKs and posts simply take their slots first. Kept as a method so the idle numbers stay documented and tested.
-        /// </summary>
-        public bool Idle(int humans, float now) => true;
-
-        /// <summary>The old idle rule (solo 60 s, company 300 s after a human domain verb), kept for the record and for the tests that pin its numbers.</summary>
-        public bool QuietOfHumans(int humans, float now)
-        {
-            if (humans <= 0) return true;
-            return now - lastHumanAt >= (humans == 1 ? SoloIdleSeconds : GroupIdleSeconds);
-        }
+        // OPS FRONTS S2: the director is always on. A human at the SPACE desk does not send it away (it posts beside the human, inside the board reserve and its own post cap);
+        // the human's own MARKs and posts simply take their slots first.
 
         // ---- Scoring -----------------------------------------------------------------------------
 
@@ -159,7 +134,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             if (t.Strategic) weight *= 1.5f;
             float near = 1f;
             if (float.IsFinite(t.FrontMeters) && t.FrontMeters >= 0f)
-                near = 1f + 0.5f * Math.Max(0f, Math.Min(1f, 1f - t.FrontMeters / NearnessMeters));
+                near = 1f + 0.5f * Math.Clamp(1f - t.FrontMeters / NearnessMeters, 0f, 1f);
             return value * weight * near * (t.Moving ? 0.5f : 1f);
         }
 
@@ -172,7 +147,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             float now = inputs.Now;
             if (!SpaceRules.MissionTime(now) || now < nextThinkAt) return WatchPlan.Idle(WatchWhy.NotDue);
-            if (!Idle(inputs.Humans, now)) { noTargetSince = float.NaN; return WatchPlan.Idle(WatchWhy.Suspended); }
             nextThinkAt = now + ThinkSeconds;
             if (!inputs.Linked) return WatchPlan.Idle(WatchWhy.NoUplink);
             Prune(now);
@@ -365,7 +339,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             markHead = markCount = 0;
             remembered.Clear(); scanned.Clear(); strandedCount = strandedTries = 0;
-            nextThinkAt = 0f; lastHumanAt = float.NegativeInfinity; noTargetSince = float.NaN;
+            nextThinkAt = 0f; noTargetSince = float.NaN;
         }
 
         private void Remember(int[] ids, int count, float until, float backoff, float now)

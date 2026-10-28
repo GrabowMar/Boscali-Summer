@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             PenaltyDb = penaltyDb;
             SignalDbm = signalDbm;
         }
-
-        public bool BeyondHorizon => HorizonKm > 0f && DistanceKm > HorizonKm;
         public bool Open(float squelch) => Quality >= squelch;
 
         /// <summary>S-units: S1..S9, then the over-nine decibels, as a receiver reports it.</summary>

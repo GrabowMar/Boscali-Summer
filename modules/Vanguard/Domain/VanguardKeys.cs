@@ -1,6 +1,6 @@
 namespace BoscaliSummer.Modules.Vanguard.Domain
 {
-    internal enum VanguardRole { None, Decoy, Jammer, Drone, Glider, Interceptor, Carrier, Torpedo, Towed, Sentinel, Gunship, Scout, Lander }
+    internal enum VanguardRole { None, Decoy, Jammer, Drone, Glider, Interceptor, Torpedo, Towed, Sentinel, Gunship, Scout, Lander }
 
     /// <summary>Unit jsonKeys baked into the mod's Blueprinter bundle by VanguardBuilder. Renaming one is a save/MP break.</summary>
     internal static class VanguardKeys
@@ -30,8 +30,8 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const string Manta = "VG_Manta";                // XQ-90 MANTA heavy escort drone (runtime missile clone of REMORA)
         public const string MantaMount = "VG_Manta_Wing";      // MANTA on its wing station; it blocks the neighbouring station
 
-        /// <summary>GLAIVE family (gun drones carried as missiles); Carrier is the legacy shared role.</summary>
-        public static bool IsGunDrone(VanguardRole role) => role == VanguardRole.Sentinel || role == VanguardRole.Gunship || role == VanguardRole.Carrier;
+        /// <summary>GLAIVE family (gun drones carried as missiles).</summary>
+        public static bool IsGunDrone(VanguardRole role) => role == VanguardRole.Sentinel || role == VanguardRole.Gunship;
 
         /// <summary>Hand-steerable from the CMenu (STEER DRONES BY HAND). AEGIS darts, the ORCA torpedo and the ALE-X kite are never hand-flown.</summary>
         public static bool IsSteerable(VanguardRole role) =>
@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             {
                 case MaldX: return VanguardRole.Decoy;
                 case MaldJ: return VanguardRole.Jammer;
-                case Remora: return VanguardRole.Drone;
+                case Remora:
                 case Manta: return VanguardRole.Drone;
                 case HawcX: return VanguardRole.Glider;
                 case AegisDart: return VanguardRole.Interceptor;

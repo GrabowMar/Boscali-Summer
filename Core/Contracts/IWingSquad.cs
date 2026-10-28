@@ -35,8 +35,6 @@ namespace BoscaliSummer.Core.Contracts
         bool TryCreatePilot(int seed, out string name, out string callsign,
             out string background, out int persona);
 
-        Sprite PilotPortrait(string name, string callsign);
-
         /// <summary>Borrowed portrait for a role; clothing/equipment changes with role or faction.</summary>
         Sprite PersonnelPortrait(string name, string callsign, PortraitRole role, int faction = -1);
 

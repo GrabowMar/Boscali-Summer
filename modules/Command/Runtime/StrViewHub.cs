@@ -37,17 +37,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public int Revision => Current.Revision;
         /// <summary>Interface state, a copy; written only through the methods below.</summary>
         public StrUiState Ui => ui;
-        /// <summary>The last feeds the reader copied (the wing line of the tasked sortie, the automation read-back).</summary>
-        internal ref readonly StrFeeds Feeds => ref feeds;
 
         /// <summary>Platform (P1..) and sortie (S1..) numbering, reset on scene reset and on a faction change.</summary>
         internal StrOrdinals Platforms { get; } = new StrOrdinals("P");
         internal StrOrdinals SortieNumbers { get; } = new StrOrdinals("S");
 
-        /// <summary>Test seam: when set, feeds come from here instead of the services.</summary>
-        internal Func<StrFeeds> FeedsSource;
-        /// <summary>Test seam: when set, verbs go here instead of the services.</summary>
-        internal IStrVerbs Verbs;
 
         // The reader's memory between ticks (it keeps nothing of its own): the stopwatch of a first report that has not come, the
         // 1 Hz refreshes, and the buffers the feeds point at, so a tick allocates nothing.
@@ -96,7 +90,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             float left;
             try { left = slot < 0 ? await player.CmdGetDelayContribute() : await player.CmdGetDelaySpawnConvoy((byte)slot); }
             catch (Exception) { return; }   // the pilot left or the request was dropped: the cooldown keeps its last answer, or stays unknown
-            if (this == null || epoch != supplyEpoch || float.IsNaN(left) || float.IsInfinity(left)) return;
+            if (this == null || epoch != supplyEpoch || !float.IsFinite(left)) return;
             float at = Time.unscaledTime + Mathf.Max(0f, left);
             if (slot < 0) DonateReadyAt = at;
             else ConvoyReadyAt[slot] = at;
@@ -159,8 +153,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (settings != null && !MissionProfile.AllowsModule("strategic-command")) return;
             float now = Time.unscaledTime;
-            if (FeedsSource != null) feeds = FeedsSource();
-            else StrFeedsReader.Read(ref feeds, this, now);
+            StrFeedsReader.Read(ref feeds, this, now);
             NoteFaction(feeds.FactionCode);
 
             StrViewBuilder.Build(Current, in feeds, in ui, Platforms, SortieNumbers, now);
@@ -225,7 +218,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (settings != null && !MissionProfile.AllowsModule("strategic-command"))
                 return new StrAct(StrWhy.Forbidden, "STR IS SWITCHED OFF FOR THIS MISSION");
-            StrAct act = StrActions.Run(kind, id, arg, Current, Verbs ?? verbs, ref ui, Time.unscaledTime);
+            StrAct act = StrActions.Run(kind, id, arg, Current, verbs, ref ui, Time.unscaledTime);
             TickNow();
             return act;
         }
@@ -234,7 +227,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         {
             if (settings != null && !MissionProfile.AllowsModule("strategic-command"))
                 return new StrAct(StrWhy.Forbidden, "STR IS SWITCHED OFF FOR THIS MISSION");
-            StrAct act = StrActions.Draw(Current, Verbs ?? verbs, ref ui, startX, startZ, fixX, fixZ, Time.unscaledTime);
+            StrAct act = StrActions.Draw(Current, verbs, ref ui, startX, startZ, fixX, fixZ, Time.unscaledTime);
             TickNow();
             return act;
         }

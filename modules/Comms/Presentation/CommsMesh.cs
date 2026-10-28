@@ -139,8 +139,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
     }
 
     /// <summary>
-    /// One glyph in a UI rect: the palette buttons, the log rails and the cockpit markers all
-    /// use it. Redraws only when its key, tint or rotation changes.
+    /// One glyph in a UI rect, for the cockpit markers. Redraws only when its key, tint or
+    /// rotation changes.
     /// </summary>
     [RequireComponent(typeof(CanvasRenderer))]
     internal sealed class CommsGlyphGraphic : MaskableGraphic

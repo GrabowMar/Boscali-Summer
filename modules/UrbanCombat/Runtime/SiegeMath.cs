@@ -77,9 +77,9 @@ namespace BoscaliSummer.Garrisons
         public static int EffectiveGarrisons(int configured, int tier, int max)
         {
             if (configured <= 0) return 0;
-            return Math.Max(0, Math.Min(Math.Max(0, max), configured + GarrisonBonus(tier)));
+            return Math.Clamp(configured + GarrisonBonus(tier), 0, Math.Max(0, max));
         }
 
-        private static int ClampTier(int tier) => Math.Max(0, Math.Min(MaxTier, tier));
+        private static int ClampTier(int tier) => Math.Clamp(tier, 0, MaxTier);
     }
 }

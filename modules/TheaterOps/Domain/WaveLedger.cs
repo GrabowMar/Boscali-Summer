@@ -27,11 +27,5 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             Credits -= CreditsPerWave;
             Bought++;
         }
-
-        internal void Reset()
-        {
-            Credits = 0;
-            Bought = 0;
-        }
     }
 }

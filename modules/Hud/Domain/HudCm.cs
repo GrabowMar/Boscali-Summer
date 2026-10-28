@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static byte SeekerMask(string seeker) =>
             seeker == "IR" ? IrMask : seeker == "ARH" || seeker == "SARH" ? RadarMask : (byte)0;
 
-        public static bool Counters(in CmStation s, string seeker) => (s.Mask & SeekerMask(seeker)) != 0;
-
         public static string TagOf(byte mask, bool chargeable, string name)
         {
             if ((mask & IrMask) != 0) return "IR";
@@ -82,15 +80,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>The short name on an EXPENDABLES row: FLR for flares, CHF for chaff, else the tag (JAM, or the first letters of the name).</summary>
         public static string Word(in CmStation s) => s.Tag == "IR" ? "FLR" : s.Tag == "RDR" ? "CHF" : s.Tag ?? "CM";
-
-        /// <summary>"IR 72", "RDR 30"; a jammer is just "JAM".</summary>
-        public static string Tile(in CmStation s) => s.Chargeable ? s.Tag : s.Tag + " " + s.Ammo;
-
-        /// <summary>The tile's words: the count, then LOW or EMPTY when it is ("RDR 4 LOW"): words alongside the colour.</summary>
-        public static string Words(in CmStation s)
-        {
-            CmLevel level = Level(s);
-            return level == CmLevel.Low ? Tile(s) + " LOW" : level == CmLevel.Empty ? Tile(s) + " EMPTY" : Tile(s);
-        }
     }
 }

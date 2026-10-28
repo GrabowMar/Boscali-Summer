@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     /// <summary>Engine-free front state codec. Every reader returns an inert value (Protocol 0 or the foreign byte alone) instead of throwing.</summary>
     internal static class FrontWire
     {
-        public const int MaxQueue = FrontRules.MaxQueue, MaxLog = FrontRules.LogCapacity, MaxName = 16, ByteBudget = 400;
+        public const int MaxQueue = FrontRules.MaxQueue, MaxLog = FrontRules.LogCapacity, MaxName = 16;
         private const int MinQueueBytes = 4, MinLogBytes = 7;
         private const byte FlagFocus = 1, FlagLock = 2;
 
@@ -116,7 +116,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     FrontLogRow r = f.Log[l];
                     w.WriteByte(r.Code);
                     w.WriteByte((byte)r.A); w.WriteByte((byte)(r.A >> 8)); w.WriteByte((byte)r.B); w.WriteByte((byte)(r.B >> 8));
-                    int age = (int)Math.Max(0d, Math.Min(ushort.MaxValue, Math.Round(s.Now - r.Time)));
+                    int age = (int)Math.Clamp(Math.Round(s.Now - r.Time), 0d, ushort.MaxValue);
                     w.WriteByte((byte)age); w.WriteByte((byte)(age >> 8));
                 }
             }
@@ -179,12 +179,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         }
 
         private static FrontStateData Bad() => new FrontStateData();
-
-        public static int StateSize(FrontStateData s)
-        {
-            var c = new ByteCounter();
-            WriteState(c, s);
-            return c.Bytes;
-        }
     }
 }

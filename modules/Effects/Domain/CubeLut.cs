@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Effects.Domain
                         for (int c = 0; c < 3; c++)
                         {
                             float value = Sample(cube, cubeSize, r * step, g * step, b * step, c);
-                            pixels[at++] = (byte)(Math.Min(1f, Math.Max(0f, value)) * 255f + 0.5f);
+                            pixels[at++] = (byte)(Math.Clamp(value, 0f, 1f) * 255f + 0.5f);
                         }
                         pixels[at++] = 255;
                     }

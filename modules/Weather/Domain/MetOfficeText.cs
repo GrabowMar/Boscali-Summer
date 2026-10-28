@@ -27,16 +27,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return "WIND " + fromDeg.ToString("000", CultureInfo.InvariantCulture) + "° · " + AvNum.Fixed(mps, 0) + " M/S " + AvNum.Fixed(mps * 1.943844f, 0) + " KT";
         }
 
-        public static string FrontWord(MetFrontKind kind)
+        public static string FrontWord(MetFrontKind kind) => kind switch
         {
-            switch (kind)
-            {
-                case MetFrontKind.Warm: return "WARM FRONT";
-                case MetFrontKind.Occluded: return "OCCLUDED FRONT";
-                case MetFrontKind.Squall: return "SQUALL LINE";
-                default: return "COLD FRONT";
-            }
-        }
+            MetFrontKind.Warm => "WARM FRONT",
+            MetFrontKind.Occluded => "OCCLUDED FRONT",
+            MetFrontKind.Squall => "SQUALL LINE",
+            _ => "COLD FRONT",
+        };
 
         /// <summary>"62 KM W" for a front's distance and the compass word of its bearing.</summary>
         public static string Where(float km, float bearingDeg) => AvNum.Fixed(km, 0) + " KM " + WeatherWords.Cardinal(bearingDeg);
@@ -98,7 +95,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             utc.ToString("ddHHmm", CultureInfo.InvariantCulture) + "Z " + utc.ToString("MMM yy", CultureInfo.InvariantCulture).ToUpperInvariant();
 
         /// <summary>The log card holds 43 mono-12 columns per line (315 px at 7.2 px). A line is "hh:mm:ss HOST " (14) plus what happened, so what is at most this long.</summary>
-        public const int LogMaxWhat = 28, LogColumns = 43;
+        public const int LogMaxWhat = 28;
 
         /// <summary>One event-log line: the mission time, who acted and what happened. What is cut at <see cref="LogMaxWhat"/>, so a line can never wrap out of the card (the notes below already fit).</summary>
         public static string LogLine(float missionSeconds, string who, string what)
@@ -122,10 +119,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static string RainNote(float? intensity) =>
             "RAIN " + (!intensity.HasValue ? "AUTO" : intensity.Value <= 0.01f ? "DRY" : (intensity.Value < 0.5f ? "LIGHT " : "HEAVY ") + AvNum.Fixed(intensity.Value * 100f, 0) + "%");
         public static string ScenarioNote(int scenario) => MetCatalog.ScenarioNames[scenario] + " ▲ CUT";
-        /// <summary>The STORY stepper's value: "FRONTAL SYSTEM 1 / 5" for a chosen story, "AUTO · COLD FRONT" while the mission class picks (the story under the camera), "— / 5" with no tape.</summary>
-        public static string StoryValue(int pick, int count, string storyUnderCamera, bool hasStory) =>
-            pick >= 0 ? (storyUnderCamera ?? "").ToUpperInvariant() + " " + (pick + 1) + " / " + count
-            : hasStory ? "AUTO · " + (storyUnderCamera ?? "").ToUpperInvariant() : "— / " + count;
         public static string StoryNote(int story) => story < 0 || story >= WeatherStories.Count ? "STORY AUTO ▲ CUT" : "STORY " + (story + 1) + " " + WeatherStories.Name(story).ToUpperInvariant() + " ▲ CUT";
     }
 }

@@ -307,7 +307,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
             HoloGrid.Snap(planeX, planeZ, wantCell, out int cx, out int cz);
             ColorTheme theme = ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
-            GhostTint ink = theme != null ? Tint(theme.AllClear) : FallbackInk;
+            GhostTint ink = theme != null ? TerrainGhostOverlay.Tint(theme.AllClear) : FallbackInk;
             inkColour = new Color(ink.R / 255f, ink.G / 255f, ink.B / 255f, 1f);
             if (job.Running != null)
             {
@@ -416,10 +416,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             for (int column = 0; column < 4; column++)
                 matrix[row, column] = values[row * 4 + column];
         }
-
-        private static GhostTint Tint(Color c) => new GhostTint(Byte(c.r), Byte(c.g), Byte(c.b));
-
-        private static byte Byte(float v) => (byte)(Mathf.Clamp01(v) * 255f + .5f);
 
         private void ReleaseRender()
         {

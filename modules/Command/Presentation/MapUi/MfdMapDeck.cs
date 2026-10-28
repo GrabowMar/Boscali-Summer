@@ -331,7 +331,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             deckCanvas.overrideSorting = true;
             deckCanvas.targetDisplay = source.targetDisplay;
 
-            CopyScaler(source.GetComponent<CanvasScaler>(), backdrop.GetComponent<CanvasScaler>());
+            MfdScreenFinish.CopyScaler(source.GetComponent<CanvasScaler>(), backdrop.GetComponent<CanvasScaler>());
 
             CanvasGroup group = backdrop.GetComponent<CanvasGroup>();
             group.alpha = 1f;
@@ -370,27 +370,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return root.GetComponent<RectTransform>();
         }
 
-        private static void CopyScaler(CanvasScaler source, CanvasScaler destination)
-        {
-            if (destination == null) return;
-
-            if (source == null)
-            {
-                destination.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                destination.referenceResolution = new Vector2(1920f, 1080f);
-                destination.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-                destination.matchWidthOrHeight = 0.5f;
-                return;
-            }
-
-            destination.uiScaleMode = source.uiScaleMode;
-            destination.scaleFactor = source.scaleFactor;
-            destination.referenceResolution = source.referenceResolution;
-            destination.screenMatchMode = source.screenMatchMode;
-            destination.matchWidthOrHeight = source.matchWidthOrHeight;
-            destination.referencePixelsPerUnit = source.referencePixelsPerUnit;
-        }
-
         private static void ConfigureBackdrop(RectTransform root, Vector2 canvasSize)
         {
             AvLay.Fill(root);
@@ -404,7 +383,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             backdropBaseImage.enabled = true;
             AvSurfaceGradient.Apply(backdropBaseImage, Color.white, (Color.white * .72f).WithAlpha(1f));
 
-            if (Approximately(backdropCanvasSize, canvasSize) && root.childCount > 0)
+            if (MfdLayout.Same(backdropCanvasSize, canvasSize) && root.childCount > 0)
             {
                 ApplyAppearance();
                 return;
@@ -692,9 +671,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             backdropUserImage = null;
             backdropGradientImage = null;
         }
-
-        private static bool Approximately(Vector2 a, Vector2 b) =>
-            Mathf.Approximately(a.x, b.x) && Mathf.Approximately(a.y, b.y);
 
         private static void DestroyOwned(ref GameObject root)
         {

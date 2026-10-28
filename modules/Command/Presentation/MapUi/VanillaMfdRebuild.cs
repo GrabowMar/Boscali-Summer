@@ -482,7 +482,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected virtual void OnPageChanged(int index) { }
 
             /// <summary>The next page's flow, in the same order <see cref="TabItems"/> declares them.</summary>
-            protected AvFlow CreatePage(string name = null) => Console.Page(nextPage++);
+            protected AvFlow CreatePage() => Console.Page(nextPage++);
 
             protected void SetSelectedTab(int index) => Console.SetPage(index);
 

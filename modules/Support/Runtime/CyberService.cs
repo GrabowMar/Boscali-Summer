@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public CyberOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.CyberSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.CyberRefund(faction.Owner, op, cr);
             public CyberOutcome PostPackage(ulong op, in CyberNode node, in PackageDef def, bool exploit, float effort) =>
-                service.manager.PostCyberPackage(faction.Owner, op, node, def, exploit, effort);
+                service.manager.PostCyberPackage(faction.Owner, op, node, def, effort);
         }
 
         private readonly Dictionary<FactionHQ, FactionCyber> factions = new Dictionary<FactionHQ, FactionCyber>();
@@ -134,7 +134,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return TryExpand(f, kind);
         }
 
-        /// <summary>True once this faction has at least one standing EW truck.</summary>
         /// <summary>True once any faction has a CYBER desk (the cheap gate of the detection scope patch).</summary>
         internal bool HasFactions => factions.Count > 0;
 
@@ -259,7 +258,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (AnchorSlot slot in f.Slots)
                 {
                     if (slot.Unit == unit) { enrolled = true; break; }
-                    if (slot.Kind == AnchorKind.EwTruck && UplinkSpawner.Down(slot.Unit, f.Owner)) vacant = vacant ?? slot;
+                    if (slot.Kind == AnchorKind.EwTruck && UplinkSpawner.Down(slot.Unit, f.Owner)) vacant ??= slot;
                 }
                 if (enrolled) continue;
                 GlobalPosition p = unit.transform.position.ToGlobalPosition();

@@ -37,14 +37,6 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             return (cut > max / 2 ? s.Substring(0, cut) : s.Substring(0, max)).TrimEnd(' ', ',', ';', '-');
         }
 
-        /// <summary>A five-letter ladder cell's fill: 1 for ranks passed, the progress inside the current rank, 0 above.
-        /// <paramref name="overall"/> is <c>PilotXp.Fill</c> (rank + progress, in fifths).</summary>
-        public static float Cell(float overall, int cell)
-        {
-            float f = overall * 5f - cell;
-            return f <= 0f ? 0f : f >= 1f ? 1f : f;
-        }
-
         private static uint Hash(string a, string b)
         {
             uint h = 2166136261u;

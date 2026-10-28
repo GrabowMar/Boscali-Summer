@@ -77,7 +77,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         /// <summary>The picture, or null while the camera refuses (night, no sky state): a refused feed shows words, never the last frame.</summary>
         public Texture Output => verdict == OpticalVerdict.Ok ? colour : null;
-        public Camera Camera => cam;
         public int FramesRendered { get; private set; }
 
         /// <summary>False while the feed is not on screen: the camera does not render and spends nothing.</summary>
@@ -196,7 +195,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 for (int i = 0; i < hostMirroredContacts.Count && rowCount < rows.Length; i++)
                 {
                     FeedContact row = hostMirroredContacts[i];
-                    if (float.IsNaN(row.X) || float.IsInfinity(row.X) || float.IsNaN(row.Z) || float.IsInfinity(row.Z)) continue;
+                    if (!float.IsFinite(row.X) || !float.IsFinite(row.Z)) continue;
                     if (filter && row.Expires <= now) continue;
                     FeedContact old = rows[rowCount];
                     bool same = rowCount < had && old.Id == row.Id && old.X == row.X && old.Z == row.Z && old.Class == row.Class && old.Percent == row.Percent;

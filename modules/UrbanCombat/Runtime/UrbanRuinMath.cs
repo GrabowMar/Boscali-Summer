@@ -27,7 +27,7 @@ namespace BoscaliSummer.Garrisons
         public static float DamageFraction(float maxHp, float currentHp)
         {
             if (maxHp <= 0f) return 0f;
-            return Math.Max(0f, Math.Min(1f, 1f - currentHp / maxHp));
+            return Math.Clamp(1f - currentHp / maxHp, 0f, 1f);
         }
 
     }

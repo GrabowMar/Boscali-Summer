@@ -16,9 +16,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Seconds of waiting for a first report after which the host is taken not to answer.</summary>
         public const float NoAnswerSeconds = 30f;
 
-        /// <summary>The 596 px bay is the smallest the panel is built for; the footer overlays its last 76 px, so everything that matters ends at or above FoldLine.</summary>
-        public const float BayHeight = 596f, FoldLine = 520f;
-
         /// <summary>Tickets the hero lane draws: the first few of the model's sorties. The model keeps up to MaxSorties so the map can tag them all.</summary>
         public static int TicketsDrawn(StrViewModel vm) => vm == null ? 0 : Math.Min(vm.SortieCount, HeroTickets);
 
@@ -33,7 +30,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             if (into == null || platforms == null || sorties == null) return false;
 
-            long second = float.IsNaN(nowUnscaled) || float.IsInfinity(nowUnscaled) ? 0L : (long)Math.Floor(nowUnscaled);
+            long second = !float.IsFinite(nowUnscaled) ? 0L : (long)Math.Floor(nowUnscaled);
             bool noticeOn = ui.Notice != null && nowUnscaled < ui.NoticeUntil;
             bool armed = nowUnscaled < ui.ReplanArmedUntil;
             // The decaying numbers (report age, time since publication, waiting, post feed age) enter the key by whole second, so a reader that
@@ -64,12 +61,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         // ---- small shared helpers (the unknown mapping lives here) ------------------------------------------------------------
 
         /// <summary>Whole seconds of a decaying feed number, -1 when it is unknown.</summary>
-        private static int Sec(float v) => float.IsNaN(v) || float.IsInfinity(v) || v < 0f ? -1 : (int)Math.Floor(Math.Min(v, 1e9f));
+        private static int Sec(float v) => !float.IsFinite(v) || v < 0f ? -1 : (int)Math.Floor(Math.Min(v, 1e9f));
 
-        private static float Fin(float v) => float.IsNaN(v) || float.IsInfinity(v) ? float.NaN : v;
+        private static float Fin(float v) => !float.IsFinite(v) ? float.NaN : v;
 
         /// <summary>0..1 or NaN.</summary>
-        private static float Unit(float v) => float.IsNaN(v) || float.IsInfinity(v) ? float.NaN : v < 0f ? 0f : v > 1f ? 1f : v;
+        private static float Unit(float v) => !float.IsFinite(v) ? float.NaN : v < 0f ? 0f : v > 1f ? 1f : v;
 
         /// <summary>A byte count where 255 means unknown: -1 for unknown.</summary>
         private static int Cnt(byte b) => b == 255 ? -1 : b;
@@ -203,7 +200,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             // Rule 2: the age is the engine's own; the builder has no threshold.
             private void Header(bool hasSnap)
             {
-                float age = !float.IsNaN(f.WarAgeSeconds) && !float.IsInfinity(f.WarAgeSeconds) && f.WarAgeSeconds >= 0f && hasSnap ? f.WarAgeSeconds : float.NaN;
+                float age = float.IsFinite(f.WarAgeSeconds) && f.WarAgeSeconds >= 0f && hasSnap ? f.WarAgeSeconds : float.NaN;
                 Put(ref m.Mode, mode);
                 Put(ref m.Stale, stale);
                 Put(ref m.AgeSeconds, age);
@@ -336,7 +333,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             {
                 float worst = float.NaN;
                 if (hasSnap && !float.IsNaN(m.AgeSeconds)) worst = m.AgeSeconds;
-                if (f.PostsAvailable && !float.IsNaN(f.PostsAgeSeconds) && !float.IsInfinity(f.PostsAgeSeconds) && f.PostsAgeSeconds >= 0f)
+                if (f.PostsAvailable && float.IsFinite(f.PostsAgeSeconds) && f.PostsAgeSeconds >= 0f)
                     worst = float.IsNaN(worst) ? f.PostsAgeSeconds : Math.Max(worst, f.PostsAgeSeconds);
                 string age = hasSnap ? StrWords.Dot + "REPORT " + (float.IsNaN(worst) ? "AGE " + StrWords.Dash : TheaterReadout.Age(worst).ToUpperInvariant() + " OLD") : "";
 

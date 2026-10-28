@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             back.color = AvStyleHost.FuiColor("ground", Color.black);
             refusal.color = OpsInk.Word(AvState.Caution);
-            statusBack.color = OpsInk.A(AvStyleHost.FuiColor("ground", Color.black), 0.72f);
+            statusBack.color = AvStyleHost.FuiColor("ground", Color.black).WithAlpha(0.72f);
             status.color = OpsInk.Word(statusTone == AvState.Inert ? AvState.Info : statusTone);
             foreach (FeedBracket b in brackets) b?.Restyle();
         }

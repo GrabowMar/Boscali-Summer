@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public static AnchorHealth Of(float healthFraction, bool down)
         {
             if (down) return AnchorHealth.Down;
-            if (float.IsNaN(healthFraction) || float.IsInfinity(healthFraction)) return AnchorHealth.Down;
+            if (!float.IsFinite(healthFraction)) return AnchorHealth.Down;
             return healthFraction <= DamagedHealth ? AnchorHealth.Damaged : AnchorHealth.Live;
         }
 
@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         /// <summary>The plain rebuild timer of OPS FRONTS S0: bar progress for a stretch of seconds (40 units a minute, so a truck is back in 2.5 minutes after its grace).</summary>
         public static float TimerProgress(float seconds) =>
-            float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f ? 0f : TimerPerMinute / 60f * Math.Min(seconds, 60f);
+            !float.IsFinite(seconds) || seconds <= 0f ? 0f : TimerPerMinute / 60f * Math.Min(seconds, 60f);
 
         public static float RebuildGoal(AnchorKind kind) => kind == AnchorKind.EwTruck ? RebuildTruck : RebuildDataCenter;
     }
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     /// <summary>Core §7 restore bar: a plain timer in S0 (40 units a minute), funded by the front budget from S1.</summary>
     internal sealed class RebuildBar
     {
-        public RebuildBar(float goal) { Goal = goal > 0f && !float.IsNaN(goal) && !float.IsInfinity(goal) ? goal : 1f; }
+        public RebuildBar(float goal) { Goal = goal > 0f && float.IsFinite(goal) ? goal : 1f; }
 
         public float Goal { get; }
         public float Value { get; private set; }
@@ -46,14 +46,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         /// <summary>Adds <paramref name="amount"/> (a player chip-in or an auto-fund). Returns what the bar actually took.</summary>
         public float Fund(float amount)
         {
-            if (float.IsNaN(amount) || float.IsInfinity(amount) || amount <= 0f) return 0f;
+            if (!float.IsFinite(amount) || amount <= 0f) return 0f;
             float take = Math.Min(amount, Goal - Value);
             Value += take;
             return take;
         }
-
-        /// <summary>One timer step: <see cref="AnchorRules.TimerProgress"/> for <paramref name="seconds"/>. Returns what the bar took.</summary>
-        public float Tick(float seconds) => Fund(AnchorRules.TimerProgress(seconds));
 
         public void Reset() { Value = 0f; }
     }
@@ -78,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         public static int Pick(IReadOnlyList<SiteCandidate> legal, float diagonal, int max, IReadOnlyList<SiteCandidate> avoid, float avoidRadius, List<int> chosen)
         {
             chosen.Clear();
-            if (legal == null || legal.Count > MaxCandidates || max <= 0 || float.IsNaN(diagonal) || float.IsInfinity(diagonal) || diagonal <= 0f) return 0;
+            if (legal == null || legal.Count > MaxCandidates || max <= 0 || !float.IsFinite(diagonal) || diagonal <= 0f) return 0;
             double minFront = diagonal * (double)FrontFraction, minSep = diagonal * (double)SeparationFraction;
             var order = new List<SiteCandidate>();
             for (int i = 0; i < legal.Count; i++)
@@ -124,8 +121,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
 
         public CyberAnchorSet(int trucks, int dataCenters)
         {
-            slots[(int)AnchorKind.EwTruck] = Make(Math.Max(0, Math.Min(AnchorRules.MaxTrucks, trucks)));
-            slots[(int)AnchorKind.DataCenter] = Make(Math.Max(0, Math.Min(AnchorRules.MaxDataCenters, dataCenters)));
+            slots[(int)AnchorKind.EwTruck] = Make(Math.Clamp(trucks, 0, AnchorRules.MaxTrucks));
+            slots[(int)AnchorKind.DataCenter] = Make(Math.Clamp(dataCenters, 0, AnchorRules.MaxDataCenters));
         }
 
         private static Slot[] Make(int n)

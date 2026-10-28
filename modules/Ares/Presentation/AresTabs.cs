@@ -2,7 +2,6 @@ using System;
 using BepInEx.Configuration;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Ares.Domain;
 using BoscaliSummer.Modules.Ares.Runtime;
 using NOAvionics;

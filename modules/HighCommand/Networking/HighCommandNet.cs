@@ -49,7 +49,6 @@ namespace BoscaliSummer.Modules.HighCommand.Networking
     {
         public const byte Friendly = 1;
         public const byte Known = 2;
-        public const byte Kia = 4;
         public const byte Transit = 8;
         public const byte Disrupted = 16;
         public const byte Alert = 32;

@@ -9,68 +9,20 @@ namespace NOAvionics
     /// </summary>
     public static class AvTheme
     {
-        public static Color Accent
+        // The live game theme, or a fixed colour when the theme is not up yet.
+        private static Color Live(System.Func<ColorTheme, Color> read, float r, float g, float b)
         {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.AllClear; }
-                catch { return new Color(0.30f, 1.00f, 0.35f, 1f); }
-            }
+            try { return read(ThemeManager.Active.ColorTheme); }
+            catch { return new Color(r, g, b, 1f); }
         }
 
-        public static Color Friendly
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.MapIconFriendly; }
-                catch { return new Color(0.45f, 0.95f, 0.55f, 1f); }
-            }
-        }
-
-        public static Color Warning
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.Warning; }
-                catch { return new Color(1.00f, 0.55f, 0.20f, 1f); }
-            }
-        }
-
-        public static Color Alert
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.Alert; }
-                catch { return new Color(1.00f, 0.18f, 0.12f, 1f); }
-            }
-        }
-
-        public static Color Hostile
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.HudUnitHostile; }
-                catch { return new Color(1.00f, 0.08f, 0.04f, 1f); }
-            }
-        }
-
-        public static Color Neutral
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.HudUnitNeutral; }
-                catch { return new Color(0.50f, 0.50f, 0.50f, 1f); }
-            }
-        }
-
-        public static Color Selected
-        {
-            get
-            {
-                try { return ThemeManager.Active.ColorTheme.HudUnitSelected; }
-                catch { return new Color(0.30f, 1.00f, 0.35f, 1f); }
-            }
-        }
+        public static Color Accent => Live(t => t.AllClear, 0.30f, 1.00f, 0.35f);
+        public static Color Friendly => Live(t => t.MapIconFriendly, 0.45f, 0.95f, 0.55f);
+        public static Color Warning => Live(t => t.Warning, 1.00f, 0.55f, 0.20f);
+        public static Color Alert => Live(t => t.Alert, 1.00f, 0.18f, 0.12f);
+        public static Color Hostile => Live(t => t.HudUnitHostile, 1.00f, 0.08f, 0.04f);
+        public static Color Neutral => Live(t => t.HudUnitNeutral, 0.50f, 0.50f, 0.50f);
+        public static Color Selected => Live(t => t.HudUnitSelected, 0.30f, 1.00f, 0.35f);
 
         public static Color TextPrimary => Unity(AvTokens.TextPrimary);
         public static Color Dim => Unity(AvTokens.TextDim);

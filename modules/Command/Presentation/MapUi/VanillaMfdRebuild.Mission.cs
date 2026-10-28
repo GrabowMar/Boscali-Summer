@@ -224,13 +224,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 FactionHQ hq = map != null ? map.HQ : null;
                 MfdResourceHistory history = hq == null ? null : FactionResourceHistoryStore.For(hq);
                 int count = history != null ? history.Count : 0;
-                int run = 0, runStart = 0;
-                for (int i = 0; i < count; i++)
-                {
-                    float v = history.Value(0, i);
-                    if (!float.IsFinite(v)) { run = 0; runStart = i + 1; continue; }
-                    trendBuffer[run++] = v;
-                }
+                int runStart = 0, run = 0;
+                float lo = 0f, hi = 0f;
+                if (count > 0) run = history.FiniteRun(0, trendBuffer, out runStart, out lo, out hi);
                 if (run < 2)
                 {
                     trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
@@ -239,8 +235,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     return;
                 }
                 trendChart.SetShown(true);
-                float lo = trendBuffer[0], hi = trendBuffer[0];
-                for (int i = 1; i < run; i++) { lo = Mathf.Min(lo, trendBuffer[i]); hi = Mathf.Max(hi, trendBuffer[i]); }
                 trendChart.SetSeries(trendBuffer, run, AvNum.Money(lo), AvNum.Money(hi), AvNum.Money(trendBuffer[run - 1]));
                 trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))) + " ON FILE");
             }
@@ -435,9 +429,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 boardSection=page.Section(AvIcon.ListDetails,"FACTION TASKING");
                 AvButtons filters=page.Buttons(
-                    new AvControl.Spec("OFFERS",()=>{secondaryFilter=MfdSecondaryObjectives.FilterAvailable;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
-                    new AvControl.Spec("ACTIVE",()=>{secondaryFilter=MfdSecondaryObjectives.FilterActive;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
-                    new AvControl.Spec("RESULTS",()=>{secondaryFilter=MfdSecondaryObjectives.FilterResults;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();}),
+                    new AvControl.Spec("OFFERS",()=>SetFilter(MfdSecondaryObjectives.FilterAvailable)),
+                    new AvControl.Spec("ACTIVE",()=>SetFilter(MfdSecondaryObjectives.FilterActive)),
+                    new AvControl.Spec("RESULTS",()=>SetFilter(MfdSecondaryObjectives.FilterResults)),
                     new AvControl.Spec("DESK",OpenContractDesk,AvButtonStyle.Default,MfdChromeIcon.For("LEDGER")));
                 secondaryFilterControls=new[]{filters.Controls[0],filters.Controls[1],filters.Controls[2]};
                 openDesk=filters.Controls[3];openDesk.Help="Open the tactical task desk with the same host actions.";
@@ -450,6 +444,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 actionsBack=AvLay.Solid(Console.Root,"Mission actions ground",Color.clear);
                 actionsBack.transform.SetSiblingIndex(taskActions.Rect.GetSiblingIndex());
                 taskActions.SetShown(false);
+            }
+            private void SetFilter(int filter)
+            {
+                secondaryFilter=filter;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();
             }
             private int SelectedIndex()
             {
@@ -598,7 +596,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 model.ObjectivesDone = model.ObjectivesActive = 0;
 
                 GlobalPosition from = Datum.originPosition.ToGlobalPosition();
-                if (hq != null && MissionPosition.TryGetActiveObjectives(hq, out List<Objective> active) && active != null)
+                if (BoscaliSummer.Core.Game.GameAccess.TryGetActiveObjectives(hq, out List<Objective> active))
                 {
                     for (int i = 0; i < active.Count && model.Objectives.Count < MaxObjectiveLines; i++)
                     {
@@ -768,11 +766,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 switch (typeName)
                 {
                     case "DestroyUnits": return AvIcon.Target;
-                    case "CrashAircraft": return AvIcon.Plane;
-                    case "CaptureAirbase": return AvIcon.Flag;
-                    case "ReachUnits": return AvIcon.MapPin;
-                    case "ReachWaypoints": return AvIcon.MapPin;
+                    case "CrashAircraft":
                     case "SuccessfulSortie": return AvIcon.Plane;
+                    case "CaptureAirbase": return AvIcon.Flag;
+                    case "ReachUnits":
+                    case "ReachWaypoints": return AvIcon.MapPin;
                     case "WaitSeconds": return AvIcon.Clock;
                     case "CompleteOtherObjective": return AvIcon.CircleCheck;
                     case "SpotUnit": return AvIcon.Eye;

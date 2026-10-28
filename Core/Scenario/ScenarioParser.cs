@@ -101,7 +101,6 @@ namespace BoscaliSummer.Core.Scenario
                 Row row = Read(raw, out string error);
                 if (row == null) { def.Error(line, error); continue; }
                 string keyword = row.Args[0].Text.ToLowerInvariant();
-                error = null;
                 switch (keyword)
                 {
                     case "cut": case "card": case "say": case "hint": case "wait":

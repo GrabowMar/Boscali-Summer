@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal FrontMirror FrontMirror => frontMirror;
 
         /// <summary>A window or card that reads the mirror is on screen: while it is, the feed asks the host for a state until one arrives.</summary>
-        internal MirrorFeed<FrontStateData> FrontFeed => frontFeed ?? (frontFeed = new MirrorFeed<FrontStateData>(frontMirror, SpaceCommandKind.FrontSync));
+        internal MirrorFeed<FrontStateData> FrontFeed => frontFeed ??= new MirrorFeed<FrontStateData>(frontMirror, SpaceCommandKind.FrontSync);
 
         /// <summary>One front command for a transport-authenticated player (host only; the service judges it).</summary>
         internal FrontResult RunFrontVerb(Player player, in SpaceCommand command) =>

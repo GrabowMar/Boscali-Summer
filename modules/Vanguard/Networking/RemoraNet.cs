@@ -65,20 +65,16 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 nextResend = Time.unscaledTime + ResendInterval;
                 foreach (RemoraView view in RemoraBoard.Views.Values) Broadcast(view);
             }
-            if (Time.unscaledTime < nextRegistration) return;
-            nextRegistration = Time.unscaledTime + 0.5f;
-            ClientHandlers.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+            NetFeed.Poll(ClientHandlers, ref nextRegistration);
         }
 
         private static void Broadcast(RemoraView view)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
-            if (server == null || !server.Active) return;
-            server.SendToAll(new RemoraState
+            NetFeed.Broadcast(new RemoraState
             {
                 Protocol = ProtocolVersion, Drone = view.Drone, Launcher = view.Launcher,
                 Fired = view.Fired, Phase = (byte)view.Phase, Flares = view.Flares, Jams = view.Jams, Shots = view.Shots,
-            }, authenticatedOnly: true, excludeLocalPlayer: true);
+            });
         }
 
         private void Receive(INetworkPlayer sender, RemoraState state)

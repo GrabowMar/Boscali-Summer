@@ -1,14 +1,11 @@
 using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-// Filled by the engine writer and reader, and by tests.
-#pragma warning disable CS0649
     /// <summary>Stick values in the game's ControlInputs convention (pitch + is nose down).</summary>
     internal struct StickInputs
     {
         public float Pitch, Roll, Yaw, Throttle, Brake;
     }
-#pragma warning restore CS0649
 
     /// <summary>Maps Pure demands to the game's ControlInputs and back.
     /// <list type="bullet">

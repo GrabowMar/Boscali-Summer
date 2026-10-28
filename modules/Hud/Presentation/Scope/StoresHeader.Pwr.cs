@@ -4,8 +4,7 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // PWR BUS (LAYOUT.md 3.2): the capacitor. The charge as a numeral in kJ, its rate word, a row of cells (the filled share is the charge) and, while an energy weapon is fitted, the cost of one shot as a tick on the row
-    // and a label under it.
+    // PWR BUS (LAYOUT.md 3.2): the capacitor. The charge as a numeral in kJ, its rate word and a row of cells (the filled share is the charge).
     internal sealed partial class StoresHeader
     {
         /// <summary>The PWR BUS block in <paramref name="r"/>; true while a shot's spent cells or the jammer's marker move with the beat.</summary>
@@ -41,39 +40,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 else g.Fill(cx + StoresMath.UnlitTickX, top, 1f, StoresMath.CellH, Dim);
             }
 
-            // The cost of one shot of the fitted energy weapon: a tick across the row where it falls (BRIGHT when the charge covers it or the weapon is selected) and the word under it.
-            float cost = StoresMath.CostKj(d);
-            if (cost > 0f)
-            {
-                bool selectedRail = StoresMath.HasHero(d) && d.Stations[d.Selected].Class == StoreClass.Rail, bright = selectedRail || d.CapKj >= cost;
-                float tx = x + StoresMath.CostTickX(cells, cost, max);
-                g.Line(tx, y + StoresLayout.TickTop, tx, y + StoresLayout.TickBottom, bright ? Hi : Ink);
-                g.Text(ScopeStr.Cat(CostWord(), " ", (int)Math.Round(cost), null), x + iw, y + StoresLayout.CostY, bright ? Hi : Ink, 12f, ScopeAlign.Right, bright);
-            }
-
             // The jammer's marker rides the fill's edge while it draws power.
             bool jamOn = false;
             for (int i = 0; i < d.CmCount; i++) jamOn |= d.Cm[i].Chargeable && d.Cm[i].Active;
             if (jamOn)
             {
-                bool room = cost > 0f || stack;
+                bool room = stack;
                 g.Tri(x + StoresLayout.JamMarkX(Math.Max(0f, lit * StoresMath.CellPitch - (StoresMath.CellPitch - StoresMath.CellW)), room, w), y + StoresLayout.JamMark(room) + (int)(now * 4f) % 2, 0f, 3f, Hi);
             }
             return jamOn || shot;
-        }
-
-        /// <summary>The first word of the fitted energy weapon's name (the first rail station's), made once per weapon.</summary>
-        private string CostWord()
-        {
-            string name = null;
-            for (int i = 0; i < d.StationCount && name == null; i++)
-                if (d.Stations[i].Class == StoreClass.Rail) name = d.Stations[i].Name;
-            if (!ReferenceEquals(costFor, name) || costWord == null)
-            {
-                costFor = name;
-                costWord = StoresMath.CostWord(name);
-            }
-            return costWord;
         }
     }
 }

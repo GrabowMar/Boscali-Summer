@@ -99,17 +99,6 @@ namespace BoscaliSummer.Core.Config
             new[] { "4 Look and comfort", "Effects", "Enabled", "Display grade and sharpening" },
             new[] { "4 Look and comfort", "Performance", "Enabled", "Adaptive effect quality" },        };
 
-        /// <summary>Menu rows that match no bound entry, as "Section.Key". Empty when the table is sound.</summary>
-        internal static List<string> Missing(ConfigFile config)
-        {
-            var missing = new List<string>();
-            foreach (string[] row in Menu)
-            {
-                if (!config.ContainsKey(new ConfigDefinition(row[1], row[2]))) missing.Add(row[1] + "." + row[2]);
-            }
-            return missing;
-        }
-
         /// <summary>
         /// Sorts every bound entry into listed, key or hidden. Call once, after every module
         /// has bound its settings.

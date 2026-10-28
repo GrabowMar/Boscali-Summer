@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public static float JamFactor(float baseFactor, float power)
         {
             if (!(baseFactor < 1f)) return baseFactor;
-            return Math.Max(0.1f, Math.Min(1f, 1f - (1f - baseFactor) * Sane(power)));
+            return Math.Clamp(1f - (1f - baseFactor) * Sane(power), 0.1f, 1f);
         }
 
         /// <summary>SAT CAMERA reach: +15 % for every other own satellite that also covers the aim (the camera's own bird is the first).</summary>
@@ -36,7 +36,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public static float SamNetDuration(float seconds, int heldEnemyNodes) => seconds * Math.Min(1.6f, 1f + 0.15f * Math.Max(0, heldEnemyNodes));
 
         /// <summary>SOF odds: never above 95 % and never below 20 %.</summary>
-        public static float ClampOdds(float odds) => float.IsNaN(odds) ? 0.2f : Math.Max(0.2f, Math.Min(0.95f, odds));
+        public static float ClampOdds(float odds) => float.IsNaN(odds) ? 0.2f : Math.Clamp(odds, 0.2f, 0.95f);
 
         /// <summary>SABOTAGE STRIKE odds: 70 % (the SOF base) times the power, +5 % per live own camp (at most +15 %).</summary>
         public static float SabotageOdds(float power, int liveCamps) => ClampOdds(0.7f * Sane(power) + Math.Min(0.15f, 0.05f * Math.Max(0, liveCamps)));
@@ -48,6 +48,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public static float OverwatchSeconds(float power) => 60f * Sane(power);
 
-        private static float Sane(float power) => float.IsNaN(power) || float.IsInfinity(power) || power <= 0f ? 1f : Math.Max(0.6f, Math.Min(1.5f, power));
+        internal static float Sane(float power) => Math.Clamp(FrontRules.Sane(power), 0.6f, 1.5f);
     }
 }

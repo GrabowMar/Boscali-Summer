@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
-using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using NOAvionics;
 using Rewired;

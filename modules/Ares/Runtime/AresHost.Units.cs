@@ -27,9 +27,6 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         public int FrozenCount => frozen.Count;
         public int ProtectedCount => protectedUnits.Count;
         public int FollowerCount => followers.Count;
-        public bool IsProtected(Unit unit) => protectedUnits.Contains(unit);
-        public bool IsFrozen(Unit unit) => frozen.ContainsKey(unit);
-        public bool IsFollowing(Unit unit) => followers.Contains(unit);
 
         private string ForSelection(string verb, Func<Unit, bool> act)
         {
@@ -97,20 +94,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             });
         }
 
-        public string ArmMove()
-        {
-            if (Selection().Count == 0) return Say("Select ground units or ships on the map first.");
-            return Arm("MOVE", "MOVE HERE: click where the selected ground units and ships should drive. Esc cancels.", false,
-                (at, heading) => MoveSelectionTo(at));
-        }
-
         public string MoveSelectionTo(GlobalPosition at) => ForSelection("ORDERED TO MOVE", unit => Order(unit, at));
-
-        public string ArmTeleport()
-        {
-            if (Selection().Count == 0) return Say("Select units on the map first.");
-            return Arm("TELEPORT", "TELEPORT: click where the selection should jump to. Esc cancels.", false, (at, heading) => TeleportSelectionTo(at));
-        }
 
         /// <summary>The selection keeps its layout around its centre; aircraft keep their height above the ground.</summary>
         public string TeleportSelectionTo(GlobalPosition at)
@@ -178,10 +162,10 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             return true;
         }
 
-        /// <summary>Every weapon station to full, flares and chaff too; an aircraft also refuels unless <paramref name="refuel"/> is off
-        /// (INFINITE AMMO: a refuel posts a feed line, and twice a second that is spam).</summary>
         internal static bool RearmUnit(Unit unit) => RearmUnit(unit, true);
 
+        /// <summary>Every weapon station to full, flares and chaff too; an aircraft also refuels unless <paramref name="refuel"/> is off
+        /// (INFINITE AMMO: a refuel posts a feed line, and twice a second that is spam).</summary>
         internal static bool RearmUnit(Unit unit, bool refuel)
         {
             bool any = false;

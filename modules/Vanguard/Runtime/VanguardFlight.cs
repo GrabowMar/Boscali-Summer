@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             this.slot = slot;
             seed = unchecked((uint)missile.GetInstanceID()) % 997 / 997f;
             launcher = missile.owner;
-            manta = missile.definition != null && missile.definition.jsonKey == VanguardKeys.Manta;
+            manta = RemoraBoard.IsManta(missile);
             statKey = manta ? "manta." : "remora.";
             if (manta) flareBursts = MantaRules.FlareBursts;
             if (role == VanguardRole.Interceptor) InitAegis();
@@ -163,7 +163,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 case VanguardRole.Drone: return manta ? MantaRules.Lifetime : 480f;
                 case VanguardRole.Interceptor: return AegisLifetime();
                 case VanguardRole.Torpedo: return OrcaLifetime();
-                case VanguardRole.Carrier: return 300f;
                 case VanguardRole.Sentinel:
                 case VanguardRole.Gunship: return 420f;
                 case VanguardRole.Towed: return 300f;
@@ -177,11 +176,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Plan(float age)
         {
             GlobalPosition pos = missile.GlobalPosition();
-            if (role == VanguardRole.Decoy) { PlanBait(pos); return; }
             switch (role)
             {
                 case VanguardRole.Glider: PlanHawcx(pos, age); break;
-                case VanguardRole.Decoy: PlanDecoy(pos); break;
+                case VanguardRole.Decoy: PlanBait(pos); break;
                 case VanguardRole.Jammer: PlanJammer(pos); break;
                 case VanguardRole.Drone: PlanDrone(pos); break;
                 case VanguardRole.Interceptor: PlanIntercept(pos); break;

@@ -21,22 +21,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
     internal static class VanillaMfdPanelCatalog
     {
-        public static VanillaMfdPanelId FromShortName(string shortName)
-        {
-            if (string.IsNullOrWhiteSpace(shortName)) return VanillaMfdPanelId.Unknown;
-
-            switch (shortName.Trim().ToUpperInvariant())
-            {
-                case "BDF": return VanillaMfdPanelId.Bdf;
-                case "FAC": return VanillaMfdPanelId.Bdf;
-                case "MAP": return VanillaMfdPanelId.Map;
-                case "HUD": return VanillaMfdPanelId.Hud;
-                case "PALA": return VanillaMfdPanelId.Pala;
-                case "TGT": return VanillaMfdPanelId.Tgt;
-                case "MIS": return VanillaMfdPanelId.Mis;
-                default: return VanillaMfdPanelId.Unknown;
-            }
-        }
 
         public static string Label(VanillaMfdPanelId id)
         {

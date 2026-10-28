@@ -25,7 +25,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private const int NativeLayerCount = 6;
             private const int OverlayLayerCount = 5;
             private const int RoadsLayer = 4;
-            private const int OverlayCount = OverlayLayerCount;
 
             private static readonly string[] LayerNames =
                 { "OBJECTIVES", "TARGET DETAILS", "JAMMING", "GRID LABELS", "PILOTS", "AIRBASES" };
@@ -75,7 +74,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private MfdPagingGrid layers, overlays, hover, sizes;
             private AvControl presetAll, presetNone, presetDefaults;
             private AvNote detailSummary, previewCaption;
-            private readonly AvRow[] overlayRows = new AvRow[OverlayCount];
+            private readonly AvRow[] overlayRows = new AvRow[OverlayLayerCount];
             private AvMetric[] metrics;
             private int selectedPage;
             private int visibleLayers;
@@ -102,31 +101,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private bool Available => options != null && SceneSingleton<DynamicMap>.i != null;
 
             /// <summary>Resolved once and re-resolved after a rollback; never a scene scan.</summary>
-            private ComMapOverlay Overlay
-            {
-                get
-                {
-                    if (overlay == null) ModuleServices.TryGet(out overlay);
-                    return overlay;
-                }
-            }
+            private ComMapOverlay Overlay => Late(ref overlay);
+            private LogisticsMapOverlay Logistics => Late(ref logistics);
+            private RoadMapOverlay Roads => Late(ref roads);
 
-            private LogisticsMapOverlay Logistics
+            private static T Late<T>(ref T cache) where T : Object
             {
-                get
-                {
-                    if (logistics == null) ModuleServices.TryGet(out logistics);
-                    return logistics;
-                }
-            }
-
-            private RoadMapOverlay Roads
-            {
-                get
-                {
-                    if (roads == null) ModuleServices.TryGet(out roads);
-                    return roads;
-                }
+                if (cache == null) ModuleServices.TryGet(out cache);
+                return cache;
             }
 
             protected override void BuildContent()
@@ -190,7 +172,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 // What each overlay draws and where its data comes from, with its live state.
                 page.Section(AvIcon.InfoCircle, "OVERLAY BRIEF", "WHAT IT DRAWS · WHERE FROM");
-                for (int i = 0; i < OverlayCount; i++)
+                for (int i = 0; i < OverlayLayerCount; i++)
                 {
                     overlayRows[i] = page.Add(new AvRow(page.Content));
                     overlayRows[i].Set(OverlayNames[i], OverlayBriefs[i], "—", AvState.Inert);
@@ -601,7 +583,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? "Restore the game's defaults: every layer on, unit tooltips and full-size symbols."
                     : "Map is not available yet.";
 
-                for (int i = 0; i < OverlayCount; i++)
+                for (int i = 0; i < OverlayLayerCount; i++)
                     SetOverlayRow(i, OverlayReady(i), OverlayReady(i) && OverlayLayer(i), overlaysReady && source.HasControlData);
 
                 metrics[0].Set(overlaysReady ? AvNum.Fixed(source.CellMetres, 0) : "—", "M",
@@ -643,7 +625,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             private static bool IsUsableSize(float value) =>
-                !float.IsNaN(value) && !float.IsInfinity(value);
+                float.IsFinite(value);
 
             /// <summary>Checked at click time, not at build time: a scene change can land between.</summary>
             private bool ToggleReady() => options != null && SceneSingleton<DynamicMap>.i != null;

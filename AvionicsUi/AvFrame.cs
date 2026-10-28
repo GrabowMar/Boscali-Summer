@@ -35,6 +35,13 @@ namespace NOAvionics
             SetVerticesDirty();
         }
 
+        /// <summary>Paints the card style <paramref name="classes"/> from the sheet, the given tokens standing in where it names none.</summary>
+        public void PaintCard(string classes, Color fill, Color stroke)
+        {
+            AvStyle c = AvStyleHost.FuiStyle(classes);
+            Paint(AvStyleHost.Resolve(c.Background, fill), AvStyleHost.Resolve(c.Border, stroke));
+        }
+
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();

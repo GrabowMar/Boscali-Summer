@@ -64,8 +64,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private string kind;
         private string sourceText;
         private Color restColor = Color.white;
-        public Image NativeIcon;
-        public Image Selection;
 
         public void Set(string text, Sprite sprite = null, bool selected = false)
         {
@@ -75,11 +73,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 string next = Kind(text);
                 if (next != kind) { kind = next; SetVerticesDirty(); }
                 restColor = AvTheme.RailInfo;
-            }
-            if (NativeIcon != null)
-            {
-                NativeIcon.sprite = sprite;
-                NativeIcon.enabled = sprite != null;
             }
             enabled = sprite == null;
             SetSelected(selected);
@@ -97,15 +90,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             restColor = tint;
             color = tint;
             // A glyph wearing a native sprite is hidden; a direct kind must bring it back.
-            enabled = NativeIcon == null || NativeIcon.sprite == null;
+            enabled = true;
         }
 
         /// <summary>Latched controls brighten their glyph; colour is never the only signal.</summary>
         public void SetSelected(bool selected)
         {
-            if (Selection != null) Selection.enabled = selected;
             color = selected ? AvTheme.Accent : restColor;
-            if (NativeIcon != null) NativeIcon.color = AvTheme.TextPrimary;
         }
 
         /// <summary>Only the platform/unit-type kinds that have no acceptable Tabler stand-in
@@ -178,17 +169,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             for (int i = 0; i < segments; i++)
                 mesh.AddTriangle(start, start + 1 + i, start + 2 + i);
-        }
-
-        private void Ring(VertexHelper mesh, float cx, float cy, float radius, int segments)
-        {
-            for (int i = 0; i < segments; i++)
-            {
-                float a = i / (float)segments * Mathf.PI * 2f;
-                float b = (i + 1) / (float)segments * Mathf.PI * 2f;
-                Line(mesh, cx + Mathf.Cos(a) * radius, cy + Mathf.Sin(a) * radius,
-                           cx + Mathf.Cos(b) * radius, cy + Mathf.Sin(b) * radius);
-            }
         }
 
         private void Line(VertexHelper mesh, float x1, float y1, float x2, float y2)

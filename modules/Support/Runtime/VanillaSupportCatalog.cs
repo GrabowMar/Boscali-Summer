@@ -11,11 +11,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         public MissileDefinition Artillery(string key) => Resolve(key, BallisticShell.Is, HeavyWords, 200f);
 
-        /// <summary>
-        /// PRSM flies the same blind-aimpoint ballistic shell as the rod.
-        /// </summary>
-        public MissileDefinition Prsm(string key) => Artillery(key);
-
         /// <summary>Vanilla CruiseMissile1 carries 450 (nuclear warheads start at 1.5 M), so the shells' 200 cap would leave no cruise missile at all.</summary>
         public MissileDefinition Cruise(string key) => Resolve(key, IsCruiseSeeker, CruiseWords, 10000f);
 

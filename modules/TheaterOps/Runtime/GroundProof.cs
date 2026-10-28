@@ -20,8 +20,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         internal static int AdvanceRan, AdvanceGround, AdvanceEnrolled, AdvanceReplaced;
         /// <summary>Why an enrolled member's poll was left to vanilla: its group has no key, no front to stage behind, or the last pass is stale.</summary>
         internal static int AdvanceUnassigned, AdvanceNoFront, AdvanceStale;
-        /// <summary>Delivery postfix: every call, the calls that replaced the sort key, depot and airbase rewrites (airbase is never rewritten), airbase queries left alone.</summary>
-        internal static int DeliveryRan, DeliveryReplaced, DepotRewrites, AirbaseRewrites, AirbaseSkips;
+        /// <summary>Delivery postfix: every call, the calls that replaced the sort key, depot rewrites, airbase queries left alone (an airbase is never rewritten).</summary>
+        internal static int DeliveryRan, DeliveryReplaced, DepotRewrites, AirbaseSkips;
         /// <summary>Members that found no usable slot candidate and hold where they stood; group passes that held in place for want of a known friendly side, and passes with no line to stage behind.</summary>
         internal static int SlotFallbacks, SlotMarches, FrameHold, FrameNoFront;
     }
@@ -324,7 +324,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             }
             return new Dictionary<string, object>
             {
-                { "calls", GroundProbe.DeliveryRan }, { "depotRewrites", GroundProbe.DepotRewrites }, { "airbaseRewrites", GroundProbe.AirbaseRewrites },
+                { "calls", GroundProbe.DeliveryRan }, { "depotRewrites", GroundProbe.DepotRewrites }, { "airbaseRewrites", 0 },
                 { "airbaseSkips", GroundProbe.AirbaseSkips }, { "mode", "wrapper" }, { "depots", depots }, { "firstDepotIsNearest", nearest },
             };
         }

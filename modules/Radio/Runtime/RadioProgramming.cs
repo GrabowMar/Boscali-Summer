@@ -17,7 +17,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
     /// </summary>
     internal static class RadioProgramming
     {
-        public const int MaximumBulletins = 12;
 
         private sealed class StationVoice
         {
@@ -103,9 +102,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public static string ProgramName(string stationId, DateTime when) =>
             Voice(stationId).Shows[(int)DaypartAt(when)];
 
-        public static int BulletinCount(string stationId) =>
-            Math.Min(MaximumBulletins, Voice(stationId).Bulletins.Length);
-
         public static string Bulletin(string stationId, int index)
         {
             string[] lines = Voice(stationId).Bulletins;
@@ -114,15 +110,12 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             return lines[wrapped];
         }
 
-        private static StationVoice Voice(string stationId)
+        private static StationVoice Voice(string stationId) => stationId switch
         {
-            switch (stationId)
-            {
-                case BuiltInStationRules.AgrapolId: return Agrapol;
-                case BuiltInStationRules.MarisId: return Maris;
-                case BuiltInStationRules.BaseId: return Base;
-                default: return Generic;
-            }
-        }
+            BuiltInStationRules.AgrapolId => Agrapol,
+            BuiltInStationRules.MarisId => Maris,
+            BuiltInStationRules.BaseId => Base,
+            _ => Generic,
+        };
     }
 }

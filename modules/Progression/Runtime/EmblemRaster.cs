@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Progression.Runtime
@@ -297,7 +298,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         private static float Stroke(float x, float y, float ax, float ay, float bx, float by)
         {
             float ex = bx - ax, ey = by - ay, wx = x - ax, wy = y - ay;
-            float t = Clamp01((wx * ex + wy * ey) / (ex * ex + ey * ey));
+            float t = Scalar.Clamp01((wx * ex + wy * ey) / (ex * ex + ey * ey));
             return Len(wx - ex * t, wy - ey * t);
         }
 
@@ -311,7 +312,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             {
                 float ix = points[i * 2], iy = points[i * 2 + 1], jx = points[j * 2], jy = points[j * 2 + 1];
                 float ex = jx - ix, ey = jy - iy, wx = x - ix, wy = y - iy;
-                float t = Clamp01((wx * ex + wy * ey) / (ex * ex + ey * ey));
+                float t = Scalar.Clamp01((wx * ex + wy * ey) / (ex * ex + ey * ey));
                 float bx = wx - ex * t, by = wy - ey * t;
                 best = Math.Min(best, bx * bx + by * by);
                 bool above = y >= iy, below = y < jy, left = ex * wy > ey * wx;
@@ -350,9 +351,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return full;
         }
 
-        private static float Cover(float distance, float pixel) => Clamp01(0.5f - distance / pixel);
-
-        private static float Clamp01(float value) => value < 0f ? 0f : value > 1f ? 1f : value;
+        private static float Cover(float distance, float pixel) => Scalar.Clamp01(0.5f - distance / pixel);
 
         private static void Mix(ref float r, ref float g, ref float b, Rgba paint, float amount)
         {
@@ -362,6 +361,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             b += (paint.B - b) * amount;
         }
 
-        private static byte Byte(float value) => (byte)(Clamp01(value) * 255f + 0.5f);
+        private static byte Byte(float value) => (byte)(Scalar.Clamp01(value) * 255f + 0.5f);
     }
 }

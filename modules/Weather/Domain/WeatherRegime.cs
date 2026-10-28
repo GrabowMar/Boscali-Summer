@@ -51,91 +51,27 @@ namespace BoscaliSummer.Modules.Weather.Domain
             TacticalBriefing = tacticalBriefing;
         }
 
-        public static RegimeSnapshot FromType(WeatherRegimeType type)
+        // One row per WeatherRegimeType, in enum order.
+        private static readonly RegimeSnapshot[] Table =
         {
-            switch (type)
-            {
-                case WeatherRegimeType.Clear:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Clear,
-                        "Clear Sky",
-                        "CLR",
-                        targetConditions: 0.05f,
-                        targetCloudHeight: 3800f,
-                        targetTurbulence: 0.05f,
-                        windSpeedMultiplier: 0.6f,
-                        tacticalBriefing: "OPTIMAL VISIBILITY // FULL IR SENSOR RANGE // NO CEILING CONSTRAINTS");
+            new RegimeSnapshot(WeatherRegimeType.Clear, "Clear Sky", "CLR", targetConditions: 0.05f, targetCloudHeight: 3800f, targetTurbulence: 0.05f,
+                windSpeedMultiplier: 0.6f, tacticalBriefing: "OPTIMAL VISIBILITY // FULL IR SENSOR RANGE // NO CEILING CONSTRAINTS"),
+            new RegimeSnapshot(WeatherRegimeType.Fair, "Fair", "FEW", targetConditions: 0.18f, targetCloudHeight: 3200f, targetTurbulence: 0.10f,
+                windSpeedMultiplier: 0.8f, tacticalBriefing: "LIGHT CLOUD SHREDS // STABLE AIRFLOW // MINIMAL SENSOR OCCLUSION"),
+            new RegimeSnapshot(WeatherRegimeType.Scattered, "Scattered Clouds", "SCT", targetConditions: 0.35f, targetCloudHeight: 2700f, targetTurbulence: 0.20f,
+                windSpeedMultiplier: 1.0f, tacticalBriefing: "ISOLATED CLOUD MASKING // USABLE FOR RADAR/OPTICAL TERRAIN BREAKS"),
+            new RegimeSnapshot(WeatherRegimeType.Broken, "Broken Deck", "BKN", targetConditions: 0.52f, targetCloudHeight: 2200f, targetTurbulence: 0.35f,
+                windSpeedMultiplier: 1.2f, tacticalBriefing: "VARIABLE CEILING // RESTRICTED HIGH-ALTITUDE BOMBING // POP-UP THREATS"),
+            new RegimeSnapshot(WeatherRegimeType.Overcast, "Overcast", "OVC", targetConditions: 0.68f, targetCloudHeight: 1800f, targetTurbulence: 0.50f,
+                windSpeedMultiplier: 1.4f, tacticalBriefing: "LOW CEILING // REDUCED AMBIENT LIGHT // CAS FORCED INTO SHORAD ENVELOPE"),
+            new RegimeSnapshot(WeatherRegimeType.RainSquall, "Rain Squall", "RA+", targetConditions: 0.82f, targetCloudHeight: 1500f, targetTurbulence: 0.70f,
+                windSpeedMultiplier: 1.7f, tacticalBriefing: "ACTIVE PRECIPITATION // GUSTS BUFFETING AIRCRAFT // DEGRADED IR TRACKING"),
+            new RegimeSnapshot(WeatherRegimeType.Storm, "Thunderstorm", "TS", targetConditions: 0.95f, targetCloudHeight: 1200f, targetTurbulence: 0.90f,
+                windSpeedMultiplier: 2.1f, tacticalBriefing: "SEVERE TURBULENCE // FREQUENT LIGHTNING // EXTREME LOW DECK"),
+        };
 
-                case WeatherRegimeType.Fair:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Fair,
-                        "Fair",
-                        "FEW",
-                        targetConditions: 0.18f,
-                        targetCloudHeight: 3200f,
-                        targetTurbulence: 0.10f,
-                        windSpeedMultiplier: 0.8f,
-                        tacticalBriefing: "LIGHT CLOUD SHREDS // STABLE AIRFLOW // MINIMAL SENSOR OCCLUSION");
-
-                case WeatherRegimeType.Scattered:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Scattered,
-                        "Scattered Clouds",
-                        "SCT",
-                        targetConditions: 0.35f,
-                        targetCloudHeight: 2700f,
-                        targetTurbulence: 0.20f,
-                        windSpeedMultiplier: 1.0f,
-                        tacticalBriefing: "ISOLATED CLOUD MASKING // USABLE FOR RADAR/OPTICAL TERRAIN BREAKS");
-
-                case WeatherRegimeType.Broken:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Broken,
-                        "Broken Deck",
-                        "BKN",
-                        targetConditions: 0.52f,
-                        targetCloudHeight: 2200f,
-                        targetTurbulence: 0.35f,
-                        windSpeedMultiplier: 1.2f,
-                        tacticalBriefing: "VARIABLE CEILING // RESTRICTED HIGH-ALTITUDE BOMBING // POP-UP THREATS");
-
-                case WeatherRegimeType.Overcast:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Overcast,
-                        "Overcast",
-                        "OVC",
-                        targetConditions: 0.68f,
-                        targetCloudHeight: 1800f,
-                        targetTurbulence: 0.50f,
-                        windSpeedMultiplier: 1.4f,
-                        tacticalBriefing: "LOW CEILING // REDUCED AMBIENT LIGHT // CAS FORCED INTO SHORAD ENVELOPE");
-
-                case WeatherRegimeType.RainSquall:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.RainSquall,
-                        "Rain Squall",
-                        "RA+",
-                        targetConditions: 0.82f,
-                        targetCloudHeight: 1500f,
-                        targetTurbulence: 0.70f,
-                        windSpeedMultiplier: 1.7f,
-                        tacticalBriefing: "ACTIVE PRECIPITATION // GUSTS BUFFETING AIRCRAFT // DEGRADED IR TRACKING");
-
-                case WeatherRegimeType.Storm:
-                    return new RegimeSnapshot(
-                        WeatherRegimeType.Storm,
-                        "Thunderstorm",
-                        "TS",
-                        targetConditions: 0.95f,
-                        targetCloudHeight: 1200f,
-                        targetTurbulence: 0.90f,
-                        windSpeedMultiplier: 2.1f,
-                        tacticalBriefing: "SEVERE TURBULENCE // FREQUENT LIGHTNING // EXTREME LOW DECK");
-
-                default:
-                    return FromType(WeatherRegimeType.Fair);
-            }
-        }
+        public static RegimeSnapshot FromType(WeatherRegimeType type) =>
+            Table[(uint)type < (uint)Table.Length ? (int)type : (int)WeatherRegimeType.Fair];
 
         public static RegimeSnapshot FromConditions(float conditions)
         {

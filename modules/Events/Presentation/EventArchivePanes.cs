@@ -52,8 +52,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         public void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card inert");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            frame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
             scrollView.Restyle();
         }
     }
@@ -113,9 +112,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
         }
 
         /// <summary>Four corner brackets just inside a w x h plate, the way a printed plate is registered.</summary>
-        public static void Brackets(AvQuadGraphic quads, float w, float h, Color c, float inset = 6f, float arm = 16f)
+        public static void Brackets(AvQuadGraphic quads, float w, float h, Color c)
         {
-            const float t = 2f;
+            const float t = 2f, inset = 6f, arm = 16f;
             float x1 = w - inset, y1 = h - inset;
             quads.Add(inset, inset, arm, t, c); quads.Add(inset, inset, t, arm, c);
             quads.Add(x1 - arm, inset, arm, t, c); quads.Add(x1 - t, inset, t, arm, c);
@@ -201,8 +200,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         public override void Restyle()
         {
-            AvStyle c = AvStyleHost.FuiStyle("card");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            frame.PaintCard("card", AvTheme.Surface, AvTheme.Hairline);
             crestBox.Paint(AvInk.Inert, AvInk.Frame);
             crestBox.BracketColor = AvInk.Key;
             crest.color = AvInk.Key;

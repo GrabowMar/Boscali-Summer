@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// The host seams the new OPS FRONTS perks and the anchor rebuilds go through. The perk starters hand the effect to the CYBER and SOF services; the
-    /// <c>*RebuildFunding</c> methods are the single hook per anchor kind that S1 replaces with the front budget (S0: a plain timer).
+    /// <c>*RebuildFunding</c> methods are the single hook per anchor kind that the front budget pays.
     /// </summary>
     internal sealed partial class SupportManager
     {

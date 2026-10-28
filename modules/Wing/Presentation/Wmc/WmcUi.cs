@@ -46,6 +46,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
+        /// <summary>Whether any row flies in element <paramref name="e"/>.</summary>
+        public bool HasElement(int e)
+        {
+            for (int i = 0; i < Count; i++)
+                if (Rows[i].Element == e) return true;
+            return false;
+        }
+
         /// <summary>Whether row <paramref name="m"/> is in this refresh's scope.</summary>
         public bool InScope(in SnapshotMember m)
         {

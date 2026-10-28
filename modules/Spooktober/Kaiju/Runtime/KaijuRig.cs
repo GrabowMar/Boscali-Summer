@@ -102,21 +102,13 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
         public static string State(KaijuAction a) => a == KaijuAction.Rise ? "Walk" : a.ToString();
 
         /// <summary>Animator speed: scale makes the authored timing too brisk for a mountain, so most actions run slow.</summary>
-        public static float Playback(KaijuAction a)
+        public static float Playback(KaijuAction a) => a switch
         {
-            switch (a)
-            {
-                case KaijuAction.Walk:
-                case KaijuAction.Rise: return 0.8f;
-                case KaijuAction.Roar:
-                case KaijuAction.Spike:
-                case KaijuAction.Flinch: return 0.8f;
-                case KaijuAction.SwipeL:
-                case KaijuAction.SwipeR: return 0.55f;
-                case KaijuAction.Death: return 0.6f;
-                default: return 1f;
-            }
-        }
+            KaijuAction.Walk or KaijuAction.Rise or KaijuAction.Roar or KaijuAction.Spike or KaijuAction.Flinch => 0.8f,
+            KaijuAction.SwipeL or KaijuAction.SwipeR => 0.55f,
+            KaijuAction.Death => 0.6f,
+            _ => 1f,
+        };
 
         /// <summary>Real seconds an action lasts; Walk/Idle/Rise are open-ended (0).</summary>
         public static float Duration(KaijuAction a)

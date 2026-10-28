@@ -42,10 +42,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private float nextRefresh, refusedUntil;
 
         internal bool IsOpen => window != null && window.Visible;
-        internal RectTransform Root => window.Root;
-        internal AvWindow Window => window;
-        internal void RefreshNow() => Refresh();
-        internal MetOfficeModel Model => model;
 
         internal static MetOfficeWindow Create(Transform parent, IWeatherChartSource source, IMetOfficeCommands commands)
         {
@@ -67,26 +63,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             Refresh();
         }
 
-        /// <summary>Shows the window without touching input (the offline harness has no cursor manager, Rewired or pause menu).</summary>
-        internal void ShowFrame()
-        {
-            window.Show();
-            nextRefresh = 0f;
-            Refresh();
-        }
-
-        /// <summary>The harness: a left click on a registered control through its AvHit, the call Update makes with the real mouse. False when the id has no control (PinClass has the class chips instead).</summary>
-        internal bool Click(MetControl id) => ClickControl(control[(int)id]);
-
-        /// <summary>The control a catalog id was registered as (null when none): lets the check prove no control was wired to the wrong id.</summary>
-        internal AvControl ControlOf(MetControl id) => control[(int)id];
-
         // Harness probes the column partials register as they are built (Tasks 7 to 9): counts and clicks the check needs without the shell knowing the columns' fields,
         // so the check compiles at every stage. Probe is -1 and ClickPart false until the column that registers the name exists.
         private readonly Dictionary<string, Func<int>> probes = new Dictionary<string, Func<int>>();
         private readonly Dictionary<string, Func<int, bool>> clicks = new Dictionary<string, Func<int, bool>>();
-        internal int Probe(string name) => probes.TryGetValue(name, out Func<int> probe) ? probe() : -1;
-        internal bool ClickPart(string name, int index) => clicks.TryGetValue(name, out Func<int, bool> click) && click(index);
 
         private static bool ClickControl(AvControl c)
         {
@@ -230,8 +210,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         // ---- Build ---------------------------------------------------------------------------------
 
-        private static void Tip(GameObject target, string sentence) => AvHelpTip.Attach(target, sentence);
-
         private AvControl.Spec Spec(MetControl id, string label, AvIcon icon = AvIcon.None, AvButtonStyle style = AvButtonStyle.Default) =>
             new AvControl.Spec(label, () => Press(id), style, icon);
 
@@ -312,12 +290,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 chip.Set(words[i], states[i]);
                 chip.Place(new AvSlot(ChipX[i], 6f, ChipW[i], 18f));
                 window.Ticker.Register(chip);
-                Tip(chip.Rect.gameObject, MetCatalog.ChipHelp[i]);
+                AvHelpTip.Attach(chip.Rect.gameObject, MetCatalog.ChipHelp[i]);
             }
             dtg = AvText.Make(r, "Dtg", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
             AvLay.Place(dtg, right - 492f, 0f, 272f, 30f);
             dtg.color = EnvInk.Role("ink-muted");
-            Tip(dtg.gameObject, MetCatalog.DtgHelp);
+            AvHelpTip.Attach(dtg.gameObject, MetCatalog.DtgHelp);
             roleChip = new AvChip(r);
             roleChip.Place(new AvSlot(right - 214f, 6f, 150f, 18f));
             window.Ticker.Register(roleChip);
@@ -335,7 +313,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             window.Footer.Set(MetOfficeRules.Status(model), ready ? AvState.Info : AvState.Caution);
             if (refusedUntil > 0f && Time.unscaledTime > refusedUntil && hovered == null && tipHovered == null) { window.Footer.SetHint(null); refusedUntil = 0f; }
             roleChip.Set(model.Host ? "HOST // ALL PLAYERS" : "READ ONLY", model.Host ? AvState.Ready : AvState.Caution);
-            Tip(roleChip.Rect.gameObject, model.Host ? MetCatalog.RoleHostHelp : MetCatalog.RoleClientHelp);
+            AvHelpTip.Attach(roleChip.Rect.gameObject, model.Host ? MetCatalog.RoleHostHelp : MetCatalog.RoleClientHelp);
             AvText.Set(dtg, MetOfficeText.Dtg(DateTime.UtcNow) + " · " + MetOfficeText.MissionClock(model.MissionSeconds) + " · SN " + (model.SerialHex.Length > 0 ? model.SerialHex : "----"));
             RefreshDesk();
 

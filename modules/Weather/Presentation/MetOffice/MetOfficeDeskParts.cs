@@ -110,15 +110,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// <summary>The figures a sky is drawn with on its tile and in the inspector: cover and base of the high (0), mid (1) and low (2) layer.</summary>
     internal static class MetSkyFacts
     {
-        public static float Cover(SkyDef d, int layer)
+        public static float Cover(SkyDef d, int layer) => layer switch
         {
-            switch (layer)
-            {
-                case 0: return d.HasHigh ? Mathf.Clamp01(d.Nominal.High.Cover) : 0f;
-                case 1: return d.HasMid ? Mathf.Clamp01(d.Nominal.Mid.Cover) : 0f;
-                default: return d.HasLow ? Mathf.Clamp01(Mathf.Max(d.Nominal.SheetCover, d.Nominal.CumulusCover)) : 0f;
-            }
-        }
+            0 => d.HasHigh ? Mathf.Clamp01(d.Nominal.High.Cover) : 0f,
+            1 => d.HasMid ? Mathf.Clamp01(d.Nominal.Mid.Cover) : 0f,
+            _ => d.HasLow ? Mathf.Clamp01(Mathf.Max(d.Nominal.SheetCover, d.Nominal.CumulusCover)) : 0f,
+        };
 
         public static float Base(SkyDef d, int layer) => layer == 0 ? d.Nominal.High.Base : layer == 1 ? d.Nominal.Mid.Base : d.Nominal.CloudBase;
 

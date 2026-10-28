@@ -1,3 +1,4 @@
+using System;
 using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.FireAndDestruction.Domain
@@ -48,23 +49,13 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         internal static bool ShouldCount(float lastHitAt, float now) =>
             now - lastHitAt >= DebounceSeconds;
 
-        /// <summary>Wisp smoke starts with the second counted hit on a building.</summary>
-        internal static bool HasWisp(int hits) => hits >= 2;
-
-        /// <summary>
-        /// Wisp intensity multiplier from the hit count: a thin wisp on hit two, the
-        /// heavier plume setting from hit three on. Zero means no wisp yet.
-        /// </summary>
-        internal static float WispIntensity(int hits) =>
-            hits >= 3 ? 1f : hits >= 2 ? 0.45f : 0f;
-
         /// <summary>
         /// Breach edge length from vanilla's blast power term (cube root of yield, ~1-6
         /// conventional), clamped to the readable band. Linear and monotonic.
         /// </summary>
         internal static float BreachSize(float blastPower)
         {
-            float size = MinBreachSize + Max(0f, blastPower) * 1.2f;
+            float size = MinBreachSize + Math.Max(0f, blastPower) * 1.2f;
             return Scalar.Clamp(size, MinBreachSize, MaxBreachSize);
         }
 
@@ -73,15 +64,13 @@ namespace BoscaliSummer.Modules.FireAndDestruction.Domain
         /// clamped so sheds and hangars both leave a readable mark.
         /// </summary>
         internal static float GroundScarDiameter(float footprintX, float footprintZ) =>
-            Scalar.Clamp(Max(footprintX, footprintZ) * GroundScarGrowth, MinGroundScar, MaxGroundScar);
+            Scalar.Clamp(Math.Max(footprintX, footprintZ) * GroundScarGrowth, MinGroundScar, MaxGroundScar);
 
         /// <summary>
         /// Tree rows burn to an ash bed through the existing burn-scar pool rather than a
         /// building scar. Rows run ~113 m long, so the bed is wider than a wall scar.
         /// </summary>
         internal static float TreeRowAshDiameter(float footprintX, float footprintZ) =>
-            Scalar.Clamp(Max(footprintX, footprintZ) * 0.9f, MinTreeRowAsh, MaxTreeRowAsh);
-
-        private static float Max(float a, float b) => a > b ? a : b;
+            Scalar.Clamp(Math.Max(footprintX, footprintZ) * 0.9f, MinTreeRowAsh, MaxTreeRowAsh);
     }
 }

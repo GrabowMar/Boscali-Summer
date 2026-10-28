@@ -77,8 +77,8 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         /// <summary>
-        /// The horizon fade for ground <paramref name="below"/> metres under the aircraft (negative: above it) and <paramref name="flatMetres"/> away along the ground: 1 from <see cref="HorizonFullDegrees"/> of depression,
-        /// falling linearly to <see cref="HorizonFloor"/> at <see cref="HorizonFloorDegrees"/> and under (straight below is 90 degrees, level or higher is 0 or less).
+        /// The horizon fade for ground <paramref name="below"/> metres under the aircraft (negative: above it) and <paramref name="flatMetres"/> away along the ground: 1 from 8 degrees of depression,
+        /// falling linearly to <see cref="HorizonFloor"/> at 1 degree and under (straight below is 90 degrees, level or higher is 0 or less).
         /// </summary>
         internal static float HorizonFactor(float below, float flatMetres)
         {
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             return HorizonFloor + (1f - HorizonFloor) * t;
         }
 
-        /// <summary>tan of <see cref="HorizonFloorDegrees"/> and of <see cref="HorizonFullDegrees"/>.</summary>
+        /// <summary>tan of 1 degree and of 8 degrees.</summary>
         private const float HorizonFloorSlope = .0174551f, HorizonFullSlope = .1405408f;
 
         /// <summary>

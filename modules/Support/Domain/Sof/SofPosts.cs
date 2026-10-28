@@ -12,8 +12,5 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public static bool IsPost(SupportActionId action) => action == SupportActionId.SofCover || action == SupportActionId.SofLase;
 
         public static string Label(SupportActionId action) => action == SupportActionId.SofCover ? "COVER TEAM" : "LASE TARGET";
-
-        /// <summary>The board row title, e.g. <c>COVER TEAM A-1</c>; the mark id of the post is the team slot + 1.</summary>
-        public static string Title(SupportActionId action, int markId) => Label(action) + (markId >= 1 && markId <= SofRules.MaxTeams ? " " + SofRules.Callsign(markId - 1) : "");
     }
 }

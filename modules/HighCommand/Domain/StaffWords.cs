@@ -24,11 +24,11 @@ namespace BoscaliSummer.Modules.HighCommand.Domain
         /// <summary>"Staff board is 42 s old: waiting for the host." An age that cannot be read says so instead of printing a number.</summary>
         public static string Stale(float seconds) =>
             !float.IsFinite(seconds) ? "Staff board is out of date: waiting for the host." :
-            "Staff board is " + ((int)Math.Min(Math.Max(seconds, 0f), 99999f)).ToString(CultureInfo.InvariantCulture) + " s old: waiting for the host.";
+            "Staff board is " + ((int)Math.Clamp(seconds, 0f, 99999f)).ToString(CultureInfo.InvariantCulture) + " s old: waiting for the host.";
 
         /// <summary>"BOUNTY +3000 · MAJ GEN Mira Keller KILLED AT Sandrift Airbase" (cause given by the caller).</summary>
         public static string KillLine(int funds, string rank, string name, string cause) =>
-            ("BOUNTY +" + Math.Min(Math.Max(funds, 0), MaximumFunds).ToString(CultureInfo.InvariantCulture) + " · " + Who(rank, name) + " " + Clip(cause, MaximumCause)).TrimEnd();
+            ("BOUNTY +" + Math.Clamp(funds, 0, MaximumFunds).ToString(CultureInfo.InvariantCulture) + " · " + Who(rank, name) + " " + Clip(cause, MaximumCause)).TrimEnd();
 
         /// <summary>"NO BOUNTY, OFFICE ALREADY CLAIMED · MAJ GEN Mira Keller"</summary>
         public static string ClaimedLine(string rank, string name) => ("NO BOUNTY, OFFICE ALREADY CLAIMED · " + Who(rank, name)).TrimEnd();

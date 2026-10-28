@@ -800,16 +800,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         // -------------------------------------------------------------------------- shared text
 
-        private static string ModeText()
-        {
-            if (manager == null) return "AUTO";
-            switch (manager.Mode)
-            {
-                case ReceiverMode.Fm: return "FM";
-                case ReceiverMode.Am: return "AM";
-                default: return "AUTO";
-            }
-        }
+        private static string ModeText() =>
+            manager == null ? "AUTO" : manager.Mode == ReceiverMode.Fm ? "FM" : manager.Mode == ReceiverMode.Am ? "AM" : "AUTO";
 
         private static string StepText(RadioBand band)
         {

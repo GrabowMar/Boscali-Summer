@@ -63,17 +63,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
         }
 
-        /// <summary>The magnitude at one frequency, for tests.</summary>
-        public static float Level(float[] magnitudes, float kilohertz, int minKilohertz, int maxKilohertz)
-        {
-            if (magnitudes == null || magnitudes.Length == 0) return 0f;
-            int span = maxKilohertz - minKilohertz;
-            if (span <= 0) return 0f;
-            int bin = (int)Math.Round((kilohertz - minKilohertz) / span * (magnitudes.Length - 1));
-            if (bin < 0 || bin >= magnitudes.Length) return 0f;
-            return magnitudes[bin];
-        }
-
         /// <summary>Deterministic value noise in [0,1); the same bin and frame always match.</summary>
         private static float Noise(int bin, int frame)
         {

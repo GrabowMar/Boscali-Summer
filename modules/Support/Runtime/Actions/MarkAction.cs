@@ -16,8 +16,6 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
     /// </summary>
     internal sealed class MarkAction : ISupportAction
     {
-        public float BaseCost(in SupportContext context) => 1f; // availability flag; the allocation price is CallSheet x CallPricing
-
         public SupportResult Execute(in SupportContext context)
         {
             if (context.Owner == null) return SupportResult.CapabilityUnavailable;

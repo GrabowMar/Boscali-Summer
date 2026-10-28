@@ -44,8 +44,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Rect = AvLay.Child(parent, "NameField " + (keyText ?? placeholder));
             if (keyText != null)
             {
-                key = AvText.Make(Rect, "Key", AvTextRole.Label, keyText, TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(key, false);
+                key = WmcSheet.Text(Rect, "Key", AvTextRole.Label, TextAlignmentOptions.MidlineLeft, keyText);
             }
             inner = new AvField(Rect, placeholder, limit, null);
             input = inner.Rect.GetComponent<TMP_InputField>();

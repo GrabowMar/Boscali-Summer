@@ -74,6 +74,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ticker?.Add(pageIndex, AvTickRate.Fast, Watch);
         }
 
+        /// <summary>The sub-tab strip a tabbed page opens with: one button per label, pressing one calls <paramref name="show"/>.</summary>
+        public static AvControl[] Tabs(AvFlow flow, string[] labels, AvIcon[] icons, Action<int> show)
+        {
+            var specs = new AvControl.Spec[labels.Length];
+            for (int i = 0; i < specs.Length; i++)
+            {
+                int k = i;
+                specs[i] = new AvControl.Spec(labels[i], () => show(k), AvButtonStyle.Default, icons[i]);
+            }
+            return flow.Buttons(specs).Controls;
+        }
+
         public int Current => current;
 
         public AvFlow Flow(int i) => flows[i];
@@ -186,8 +198,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Rect = AvLay.Child(parent, "Buttons " + keyText);
             state = railState;
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
-            key = AvText.Make(Rect, "Key", AvTextRole.Label, keyText, TextAlignmentOptions.MidlineLeft);
-            AvText.Fit(key, false);
+            key = WmcSheet.Text(Rect, "Key", AvTextRole.Label, TextAlignmentOptions.MidlineLeft, keyText);
             controls = new AvControl[specs.Length];
             for (int i = 0; i < specs.Length; i++) controls[i] = AvControl.Make(Rect, specs[i]);
             Restyle();

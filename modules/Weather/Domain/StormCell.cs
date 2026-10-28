@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>Tower top: the base plus the depth, rising with the strength (a weak cell is a young, low tower).</summary>
         public float Top => Base + Depth * WeatherMath.Smoothstep(0.1f, 0.6f, Strength);
-        public float TopMax => Base + Depth;
 
         /// <summary>Strikes per minute at the centre: only a developed cell is electric.</summary>
         public float LightningRate => LightningPeak * WeatherMath.Smoothstep(0.55f, 0.85f, Strength);
@@ -44,21 +43,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return (float)Math.Sqrt(dx * dx + dz * dz);
         }
 
-        // Each reading below takes the point as (x, z) or, for a caller that reads several at one point, as the Distance already measured: the same value, one square root.
-
-        /// <summary>mm/h: the Gaussian core P * strength * exp(-(d/R)^2) plus a faint wider halo, each cut to zero at its support.</summary>
-        public float RainAt(float x, float z) => RainAtDistance(Distance(x, z));
-
         public float RainAtDistance(float d)
         {
             if (d >= HaloSupport * Radius) return 0f;
-            float core = Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
-            float halo = 0.12f * Gauss(d, 2.5f * Radius) * Taper(d, HaloSupport * Radius);
+            float core = WeatherMath.Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
+            float halo = 0.12f * WeatherMath.Gauss(d, 2.5f * Radius) * Taper(d, HaloSupport * Radius);
             return PeakRain * Strength * (core + halo);
         }
-
-        /// <summary>Cloud cover: full inside R, gone by 2.2 R.</summary>
-        public float CoverAt(float x, float z) => Strength <= 0f ? 0f : CoverAtDistance(Distance(x, z));
 
         public float CoverAtDistance(float d)
         {
@@ -66,32 +57,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return Strength * (1f - WeatherMath.Smoothstep(Radius, 2.2f * Radius, d));
         }
 
-        /// <summary>The buoyant core that shapes the crown: continuous, with no flat centre that would make a cylindrical tower.</summary>
-        public float ShapeAt(float x, float z) => ShapeAtDistance(Distance(x, z));
-
         public float ShapeAtDistance(float d) =>
-            d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, 1.4f * Radius) * Taper(d, CoverSupport * Radius);
-
-        /// <summary>0..1 how deep a point is in the core (rain-weighted), for HUD and hazard.</summary>
-        public float CoreAt(float x, float z) => CoreAtDistance(Distance(x, z));
+            d >= CoverSupport * Radius ? 0f : Strength * WeatherMath.Gauss(d, 1.4f * Radius) * Taper(d, CoverSupport * Radius);
 
         public float CoreAtDistance(float d) =>
-            d >= CoverSupport * Radius ? 0f : Strength * Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
-
-        /// <summary>exp(-d^2 / 9R^2) * (1 - smoothstep(3R, 6R, d)): how strongly a strike rate at the centre reads at a point.</summary>
-        public float LightningWeight(float x, float z) => LightningWeightAtDistance(Distance(x, z));
+            d >= CoverSupport * Radius ? 0f : Strength * WeatherMath.Gauss(d, Radius) * Taper(d, CoverSupport * Radius);
 
         public float LightningWeightAtDistance(float d)
         {
             if (d >= LightningSupport * Radius) return 0f;
             return (float)Math.Exp(-(d * d) / (9f * Radius * Radius)) * (1f - WeatherMath.Smoothstep(3f * Radius, 6f * Radius, d));
-        }
-
-        /// <summary>Horizontal outflow (gust front) and vertical draft at a point; all zero beyond 4 R.</summary>
-        public void WindAt(float x, float z, out float outX, out float outZ, out float vertical, out float turbulence)
-        {
-            float dx = x - X, dz = z - Z;
-            WindAtOffset(dx, dz, (float)Math.Sqrt(dx * dx + dz * dz), out outX, out outZ, out vertical, out turbulence);
         }
 
         /// <summary><see cref="WindAt"/> for a caller that holds the point's offset from the centre (dx, dz) and its length d.</summary>
@@ -104,8 +79,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
             // A draft level of exactly 0 (a young or a spent cell; the levels are never negative) makes every term it multiplies exactly +0, as the Gaussians are finite:
             // the exponentials of those terms are not taken.
-            float rising = up == 0f ? 0f : 6f * up * Gauss(d, Radius);
-            float sinking = down == 0f ? 0f : 8f * down * Gauss(d, Radius * 0.8f);
+            float rising = up == 0f ? 0f : 6f * up * WeatherMath.Gauss(d, Radius);
+            float sinking = down == 0f ? 0f : 8f * down * WeatherMath.Gauss(d, Radius * 0.8f);
             vertical = (rising - sinking) * taper;
 
             // The gust front spreads out from the core as the downdraft matures.
@@ -114,7 +89,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (down != 0f)
             {
                 float ring = Radius * (1f + 0.75f * WeatherMath.Smoothstep(0.4f, 1f, Strength));
-                gust = (15f * down * Gauss(d - ring, Radius * 0.6f) + 6f * down * Gauss(d, Radius * 0.7f)) * taper *
+                gust = (15f * down * WeatherMath.Gauss(d - ring, Radius * 0.6f) + 6f * down * WeatherMath.Gauss(d, Radius * 0.7f)) * taper *
                     WeatherMath.Smoothstep(0f, 0.3f * Radius, d);
             }
             if (d > 1f)
@@ -123,17 +98,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 outZ = dz / d * gust;
             }
 
-            turbulence = (0.25f * up + 0.55f * down + 0.2f * Strength) * Gauss(d, Radius * 2f) * taper;
+            turbulence = (0.25f * up + 0.55f * down + 0.2f * Strength) * WeatherMath.Gauss(d, Radius * 2f) * taper;
         }
 
         /// <summary>1 inside 0.7 of the support, easing to exactly 0 at the support.</summary>
         private static float Taper(float d, float support) => 1f - WeatherMath.Smoothstep(0.7f * support, support, d);
-
-        private static float Gauss(float x, float width)
-        {
-            float u = x / width;
-            return (float)Math.Exp(-u * u);
-        }
     }
 
     /// <summary>
@@ -160,14 +129,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private const int SlotCount = 0, SlotX = 1, SlotZ = 2, SlotRank = 3, SlotRadius = 4, SlotSevere = 5,             SlotHail = 7, SlotDepth = 8, SlotLightning = 9, SlotStrike = 10;
 
         [ThreadStatic] private static StormCell[] scratch;
-
-        /// <summary>Candidate k of cell (gx, gz), or false when the cell has no such candidate. Returned even at strength 0.</summary>
-        public static bool Resolve(in LatticeSource src, int gx, int gz, int k, out StormCell cell)
-        {
-            cell = default;
-            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
-            return Candidate(src, prefix, LatticeHash.UnitIn(prefix, 0, SlotCount), gx, gz, k, false, ref cell);
-        }
 
         /// <summary>The cumulus lattice's twin of the same name: <see cref="Resolve"/> from the cell's hash prefix and candidate-count draw; with <paramref name="dropWeak"/> a cell of strength 0
         /// returns false before its shape is built, and the tape row is read for only the columns used. <paramref name="cell"/> is written only when the cell is returned.</summary>
@@ -205,7 +166,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             cell.Severe = severeBlend > 0.5f;
             cell.Hail = cell.Severe && cell.PeakRain >= 75f && LatticeHash.UnitIn(prefix, k, SlotHail) < 0.6f;
             float quiet = conv < 0.55f ? 0f : LatticeHash.RangeIn(prefix, k, SlotLightning, 0.3f, 4f) * (conv - 0.55f) / 0.45f;
-            cell.LightningPeak = WeatherMath.Lerp(quiet, LatticeHash.RangeIn(prefix, k, SlotStrike, 6f, 18f), severeBlend);
+            cell.LightningPeak = Scalar.Lerp(quiet, LatticeHash.RangeIn(prefix, k, SlotStrike, 6f, 18f), severeBlend);
             return true;
         }
 
@@ -258,7 +219,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static int Fetch(in LatticeSource src, CellCache<StormCell> cache, int gx, int gz, out StormCell[] items)
         {
             if (cache != null && cache.TryGet(gx, gz, out items, out int cached)) return cached;
-            items = cache != null ? cache.Reserve(gx, gz, MaxCandidates) : scratch ?? (scratch = new StormCell[MaxCandidates]);
+            items = cache != null ? cache.Reserve(gx, gz, MaxCandidates) : scratch ??= new StormCell[MaxCandidates];
             int count = ResolveCell(src, gx, gz, items);
             if (cache != null) cache.Commit(gx, gz, count);
             return count;
@@ -275,7 +236,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             int count = 0;
             float r2 = range * range;
             int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
-            StormCell[] cellCells = scratch ?? (scratch = new StormCell[MaxCandidates]);
+            StormCell[] cellCells = scratch ??= new StormCell[MaxCandidates];
             for (int gz = cz - EnumerateHalf; gz <= cz + EnumerateHalf; gz++)
             for (int gx = cx - EnumerateHalf; gx <= cx + EnumerateHalf; gx++)
             {
@@ -296,27 +257,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 }
             }
             return count;
-        }
-
-        /// <summary>The active cell whose centre is nearest a tape-frame point, searching <paramref name="rings"/> cells each way.</summary>
-        public static bool FindNearest(in LatticeSource src, CellCache<StormCell> cache, float qx, float qz, int rings,
-            float minStrength, out StormCell best)
-        {
-            best = default;
-            float bestD2 = float.MaxValue;
-            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
-            for (int gz = cz - rings; gz <= cz + rings; gz++)
-            for (int gx = cx - rings; gx <= cx + rings; gx++)
-            {
-                int n = Fetch(src, cache, gx, gz, out StormCell[] items);
-                for (int i = 0; i < n; i++)
-                {
-                    if (items[i].Strength < minStrength) continue;
-                    float d2 = Dist2(items[i], qx, qz);
-                    if (d2 < bestD2) { bestD2 = d2; best = items[i]; }
-                }
-            }
-            return bestD2 < float.MaxValue;
         }
 
         /// <summary>How many active cells lie within <paramref name="range"/> of a tape-frame point (the activeCellCount readout).</summary>

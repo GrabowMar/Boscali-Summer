@@ -10,7 +10,7 @@ namespace NOAvionics
         private readonly AvFrame frame;
         private readonly TMP_InputField input;
         private readonly TMP_Text text, hint;
-        private bool focused, invalid, guarded;
+        private bool focused, guarded;
 
         public AvField(RectTransform parent, string placeholder, int maxChars, Action<string> submit)
         {
@@ -35,7 +35,6 @@ namespace NOAvionics
         }
 
         public string Text { get => input.text; set => input.text = value ?? ""; }
-        public bool Invalid { get => invalid; set { invalid = value; Restyle(); } }
 
         private void Release() { if (guarded) { guarded = false; AvInput.KeyboardGuard.Release(); } }
 
@@ -43,7 +42,7 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            AvStyle f = AvStyleHost.FuiStyle("field", invalid ? "invalid" : focused ? "focus" : null);
+            AvStyle f = AvStyleHost.FuiStyle("field", focused ? "focus" : null);
             AvStyle b = AvStyleHost.FuiStyle("field");
             frame.Paint(AvStyleHost.Resolve(f.Background.HasValue ? f.Background : b.Background, AvTheme.Surface),
                         AvStyleHost.Resolve(f.Border, AvTheme.Hairline));

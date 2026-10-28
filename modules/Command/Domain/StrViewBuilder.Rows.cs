@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 int number = plat.Of(fv.Key ?? "");
                 bool seen = fv.Observed;
                 float pressure = FrontPressure(fv);
-                float trend = fv.Observed && !float.IsNaN(fv.Trend) && !float.IsInfinity(fv.Trend) ? Math.Max(-1f, Math.Min(1f, fv.Trend)) : float.NaN;
+                float trend = fv.Observed && float.IsFinite(fv.Trend) ? Math.Max(-1f, Math.Min(1f, fv.Trend)) : float.NaN;
 
                 string status;
                 StrInkRole ink;
@@ -154,7 +154,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     Put(ref r.Risk, p.Risk);
                     Put(ref r.X, Fin(p.X));
                     Put(ref r.Z, Fin(p.Z));
-                    Put(ref r.Radius, float.IsNaN(Fin(p.Radius)) ? 0f : Math.Max(0f, Math.Min(30000f, p.Radius)));
+                    Put(ref r.Radius, !float.IsFinite(p.Radius) ? 0f : Math.Max(0f, Math.Min(30000f, p.Radius)));
                     Put(ref r.Pressure, fv != null ? FrontPressure(fv) : float.NaN);
                     Put(ref r.Front, front > 0 ? new StrItemId(StrItemKind.Front, front) : StrItemId.None);
                     Put(ref r.Recommended, p.Recommended);
@@ -202,7 +202,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 }
 
                 int lockLeft = -1;
-                if (live && op.LockSeconds > 0f && !float.IsNaN(op.LockSeconds) && !float.IsInfinity(op.LockSeconds))
+                if (live && op.LockSeconds > 0f && float.IsFinite(op.LockSeconds))
                 {
                     float left = op.LockSeconds - Since;
                     lockLeft = left <= 0f ? 0 : (int)Math.Floor(left);
@@ -210,7 +210,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 
                 TheaterFrontView front = live ? FrontByKey(op.TargetKey) : null;
                 float pressure = front != null ? FrontPressure(front) : float.NaN;
-                float trend = front != null && front.Observed && !float.IsNaN(front.Trend) && !float.IsInfinity(front.Trend) ? Math.Max(-1f, Math.Min(1f, front.Trend)) : float.NaN;
+                float trend = front != null && front.Observed && float.IsFinite(front.Trend) ? Math.Max(-1f, Math.Min(1f, front.Trend)) : float.NaN;
                 bool byLocal = live && f.LocalId != 0UL && op.PickedById == f.LocalId;
                 string by = live && !op.PickedByStaff && !string.IsNullOrEmpty(op.PickedBy) ? op.PickedBy : "";
 
@@ -245,7 +245,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Put(ref e.Z, live ? Fin(op.Z) : float.NaN);
                 Put(ref e.OriginX, live ? Fin(op.OriginX) : float.NaN);
                 Put(ref e.OriginZ, live ? Fin(op.OriginZ) : float.NaN);
-                Put(ref e.Radius, live && !float.IsNaN(Fin(op.Radius)) ? Math.Max(0f, Math.Min(30000f, op.Radius)) : 0f);
+                Put(ref e.Radius, live && float.IsFinite(op.Radius) ? Math.Max(0f, Math.Min(30000f, op.Radius)) : 0f);
                 Put(ref e.Pressure, pressure);
                 Put(ref e.Trend, trend);
                 Put(ref e.PressureText, TheaterReadout.Percent(pressure));
@@ -360,7 +360,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 float z = Fin(linkSite ? link.Z : c.HasMarker ? c.Z : float.NaN);
                 float radius = linkSite ? link.Radius : c.HasMarker ? c.Radius : 0f;
                 bool siteKnown = !float.IsNaN(x) && !float.IsNaN(z);
-                radius = !siteKnown || float.IsNaN(Fin(radius)) ? 0f : Math.Max(0f, Math.Min(SortieLink.MaximumRadius, radius));
+                radius = !siteKnown || !float.IsFinite(radius) ? 0f : Math.Max(0f, Math.Min(SortieLink.MaximumRadius, radius));
 
                 StrWingIn wing = default; bool hasWing = false;
                 for (int i = 0; i < f.WingCount && f.Wing != null && i < f.Wing.Length; i++)
@@ -409,7 +409,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             // Distance and bearing from the local aircraft to the site: a dash unless both ends are known.
             private string SiteDistance(bool siteKnown, float x, float z)
             {
-                if (!siteKnown || !f.HasOwn || float.IsNaN(Fin(f.OwnX)) || float.IsNaN(Fin(f.OwnZ))) return StrWords.Dash;
+                if (!siteKnown || !f.HasOwn || !float.IsFinite(f.OwnX) || !float.IsFinite(f.OwnZ)) return StrWords.Dash;
                 float dx = x - f.OwnX, dz = z - f.OwnZ;
                 float km = (float)Math.Sqrt(dx * dx + dz * dz) / 1000f;
                 int bearing = (int)Math.Round((Math.Atan2(dx, dz) * 180.0 / Math.PI + 360.0) % 360.0);
@@ -467,9 +467,9 @@ namespace BoscaliSummer.Modules.Command.Domain
             // A row never claims to be fresher than it is: its own age plus the age of the feed that carried it.
             private string SeenWords(float intelAge)
             {
-                if (float.IsNaN(Fin(intelAge)) || intelAge < 0f) return "SEEN " + StrWords.Dash;
+                if (!float.IsFinite(intelAge) || intelAge < 0f) return "SEEN " + StrWords.Dash;
                 if (intelAge >= 600f) return "SEEN 10+ MIN AGO";
-                float seen = intelAge + (float.IsNaN(Fin(f.PostsAgeSeconds)) ? 0f : Math.Max(0f, f.PostsAgeSeconds));
+                float seen = intelAge + (!float.IsFinite(f.PostsAgeSeconds) ? 0f : Math.Max(0f, f.PostsAgeSeconds));
                 return "SEEN " + OldText(seen).Replace(" OLD", " AGO");
             }
 
@@ -483,7 +483,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             private void Supply()
             {
                 StrSupplyView v = m.Supply;
-                bool known = f.SupplyKnown && !float.IsNaN(Fin(f.Allocation));
+                bool known = f.SupplyKnown && float.IsFinite(f.Allocation);
                 float funds = known ? Math.Max(0f, f.Allocation) : 0f;
                 int count = known && f.Convoys != null ? Math.Min(Math.Min(f.ConvoyCount, f.Convoys.Length), StrViewModel.MaxConvoys) : 0;
                 Put(ref v.Known, known);
@@ -495,7 +495,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 {
                     StrConvoyIn c = f.Convoys[i];
                     StrSupplyRow r = Get(v.Rows, i);
-                    bool priced = !float.IsNaN(Fin(c.Cost)) && c.Cost >= 0f;
+                    bool priced = float.IsFinite(c.Cost) && c.Cost >= 0f;
                     int wait = SecUp(c.Cooldown);
                     bool ready = priced && wait == 0 && c.Cost <= funds && !f.DonationForbidden;
                     Put(ref r.Name, (c.Name ?? "").ToUpperInvariant());
@@ -514,7 +514,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             }
 
             /// <summary>Whole seconds left, rounded up; -1 when the host has not answered.</summary>
-            private static int SecUp(float v) => float.IsNaN(v) || float.IsInfinity(v) || v < 0f ? -1 : (int)Math.Ceiling(Math.Min(v, 1e9f));
+            private static int SecUp(float v) => !float.IsFinite(v) || v < 0f ? -1 : (int)Math.Ceiling(Math.Min(v, 1e9f));
 
             private static int Whole(float v, bool up) => (int)Math.Max(-2e9, Math.Min(2e9, up ? Math.Ceiling(v) : Math.Floor(v)));
 
@@ -526,7 +526,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 int perWave = present ? Math.Max(1, w.CreditsPerWave) : 0, credits = present ? Math.Max(0, w.Credits) : 0;
                 int cost = waveCost, pool = present && w.Pool >= 0 ? w.Pool : -1;
 
-                string state, detail = "";
+                string state, detail;
                 bool held = false;
                 if (!present) state = "WAVE DESK UNAVAILABLE";
                 else if (w.State == WaveState.Off) state = TheaterWords.Wave(w.Block);
@@ -540,7 +540,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     detail = waveAfford == StrTri.Yes ? "POOL " + N(pool) + " " + StrWords.Arrow + " " + N(pool - cost) : "POOL " + N(pool) + StrWords.Dot + "NEEDS " + N(cost);
                 else detail = "POOL " + (pool >= 0 ? N(pool) : StrWords.Dash) + StrWords.Dot + "COST " + (cost >= 0 ? N(cost) : StrWords.Dash);
 
-                bool depot = present && w.DepotKnown && !float.IsNaN(Fin(w.DepotX)) && !float.IsNaN(Fin(w.DepotZ));
+                bool depot = present && w.DepotKnown && float.IsFinite(w.DepotX) && float.IsFinite(w.DepotZ);
                 Put(ref v.Present, present);
                 Put(ref v.Credits, credits);
                 Put(ref v.PerWave, perWave);

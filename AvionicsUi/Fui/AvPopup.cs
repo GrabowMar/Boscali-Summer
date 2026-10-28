@@ -64,8 +64,6 @@ namespace NOAvionics
 
         public static void CloseAny() => open?.Close();
 
-        public bool IsOpen => root != null && root.activeSelf;
-
         public void Show(Rect area, IReadOnlyList<AvPopupEntry> entries, Action<int> onPick)
         {
             page = 0;
@@ -98,8 +96,7 @@ namespace NOAvionics
             list.anchorMin = list.anchorMax = list.pivot = new Vector2(0f, 1f);
             list.anchoredPosition = new Vector2(area.x, area.y);
             list.sizeDelta = new Vector2(area.width, height);
-            AvStyle g = AvStyleHost.FuiStyle("card raised");
-            ground.Paint(AvStyleHost.Resolve(g.Background, AvTheme.SurfaceRaised), AvStyleHost.Resolve(g.Border, AvTheme.Frame));
+            ground.PaintCard("card raised", AvTheme.SurfaceRaised, AvTheme.Frame);
 
             while (rows.Count < MaxRows) rows.Add(new Row(list, rows.Count));
             for (int i = 0; i < rows.Count; i++)

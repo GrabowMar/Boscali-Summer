@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         }
 
         /// <summary>How far crests lean forward (0 round, 1 cusped). The shader scales each wave's lean so the train never folds over.</summary>
-        internal static float Steepness(float wind) => WeatherMath.Lerp(0.35f, 0.85f, WeatherMath.Smoothstep(6f, 22f, wind));
+        internal static float Steepness(float wind) => Scalar.Lerp(0.35f, 0.85f, WeatherMath.Smoothstep(6f, 22f, wind));
 
         /// <summary>Share of the sea white with foam: Monahan's U^3.41 law, half again so whitecaps read from the air. Tripled, a gale turned
         /// the sea white with dark holes (live check 2026-10-19).</summary>
@@ -117,10 +117,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         internal static float Streaks(float wind) => WeatherMath.Smoothstep(14f, 22f, wind);
 
         /// <summary>Strength of the small ripple normals: a breath of wind already wrinkles the surface.</summary>
-        internal static float Ripples(float wind) => WeatherMath.Lerp(0.25f, 1f, WeatherMath.Smoothstep(1f, 12f, wind));
+        internal static float Ripples(float wind) => Scalar.Lerp(0.25f, 1f, WeatherMath.Smoothstep(1f, 12f, wind));
 
         /// <summary>GGX roughness of the surface below the smallest drawn wave.</summary>
-        internal static float Roughness(float wind) => WeatherMath.Lerp(0.03f, 0.1f, WeatherMath.Smoothstep(2f, 20f, wind));
+        internal static float Roughness(float wind) => Scalar.Lerp(0.03f, 0.1f, WeatherMath.Smoothstep(2f, 20f, wind));
 
         /// <summary>Darker, greener-grey water as the sea builds (0 calm blue, 1 storm).</summary>
         internal static float Storminess(float wind) => WeatherMath.Smoothstep(9f, 22f, wind);

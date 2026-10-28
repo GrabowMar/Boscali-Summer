@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Support.Domain
 
         public static string Km(double metres)
         {
-            if (double.IsNaN(metres) || double.IsInfinity(metres)) return "—";
+            if (!double.IsFinite(metres)) return "—";
             double km = metres / 1000.0;
             return Math.Abs(km) >= 100.0
                 ? Math.Round(km).ToString("0", CultureInfo.InvariantCulture)

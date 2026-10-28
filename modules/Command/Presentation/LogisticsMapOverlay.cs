@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             bool shown = DynamicMap.mapMaximized && (IndustryVisible || SupplyVisible);
             SetShown(shown);
             if (!shown) return;
-            if (rootRect.parent != dynamicMap.mapImage.transform) Reparent();
+            if (rootRect.parent != dynamicMap.mapImage.transform) MapUiAccess.AttachInk(rootRect, dynamicMap);
             if (Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + RefreshInterval;
             Refresh();
@@ -122,23 +122,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (dynamicMap == null || dynamicMap.mapImage == null) return;
             root = new GameObject("BoscaliLogistics", typeof(RectTransform), typeof(LogisticsGraphic));
             rootRect = (RectTransform)root.transform;
-            Reparent();
+            MapUiAccess.AttachInk(rootRect, dynamicMap);
             graphic = root.GetComponent<LogisticsGraphic>();
             graphic.raycastTarget = false;
             initialized = true;
-        }
-
-        private void Reparent()
-        {
-            rootRect.SetParent(dynamicMap.mapImage.transform, false);
-            rootRect.anchorMin = Vector2.zero;
-            rootRect.anchorMax = Vector2.one;
-            rootRect.offsetMin = rootRect.offsetMax = Vector2.zero;
-            rootRect.pivot = new Vector2(.5f, .5f);
-            rootRect.localScale = Vector3.one;
-            rootRect.localPosition = Vector3.zero;
-            // Above the territory tint, below the native contacts.
-            rootRect.SetSiblingIndex(dynamicMap.mapImage.transform.childCount > 1 ? 1 : 0);
         }
 
         private void SetShown(bool visible)
@@ -166,12 +153,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
                         // A base's factory or dump works for whoever holds the base (its own HQ can lag a capture); one with no side at all is nobody's.
                         Airbase airbase = site.GetAirbase();
                         FactionHQ owner = airbase != null && airbase.CurrentHQ != null ? airbase.CurrentHQ : unit.NetworkHQ;
-                        if (owner != null && siteCount < MaxSites && TryPosition(unit, hq, out Vector3 at, owner))
+                        if (owner != null && siteCount < MaxSites && MapUiAccess.TryPosition(unit, hq, out Vector3 at, owner))
                             sites[siteCount++] = new Site { Position = at, Kind = kind, Friendly = hq == null || owner == hq };
                     }
                     else if (unit is GroundVehicle && unit.definition is VehicleDefinition vehicle &&
                         vehicle.vehicleType == VehicleType.TRUCK && truckCount < MaxTrucks &&
-                        TryPosition(unit, hq, out Vector3 truckAt))
+                        MapUiAccess.TryPosition(unit, hq, out Vector3 truckAt))
                     {
                         // Only our own trucks show which way they drive; a known enemy fix carries no heading.
                         Vector3 f = unit.transform.forward;
@@ -196,14 +183,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 case BuildingType.AMMO: kind = SiteKind.Ammo; return true;
                 default: kind = default; return false;
             }
-        }
-
-        /// <summary>Own side: the live position. Others: only what the local faction knows.</summary>
-        private static bool TryPosition(Unit unit, FactionHQ hq, out Vector3 position, FactionHQ owner = null)
-        {
-            GlobalPosition? at = hq == null || (owner ?? unit.NetworkHQ) == hq ? unit.GlobalPosition() : hq.GetKnownPosition(unit);
-            position = at.HasValue ? at.Value.AsVector3() : default;
-            return at.HasValue && float.IsFinite(position.x) && float.IsFinite(position.z);
         }
 
         /// <summary>Nearest front point for every friendly site; the front is the control field's own trace.</summary>

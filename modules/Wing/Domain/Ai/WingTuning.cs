@@ -5,9 +5,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal static class WingTuning
     {
 
-        /// <summary>Slot distance in metres defining the capture transition.</summary>
-        public const float CaptureDistance = 300f;
-
         /// <summary>Slot-reach standing weapons range in metres. The aircraft does not manoeuvre to engage.</summary>
         public const float ReachSlotMetres = 6000f;
 

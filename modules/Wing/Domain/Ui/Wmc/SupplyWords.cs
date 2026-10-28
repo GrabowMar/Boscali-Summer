@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -111,7 +112,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (inbound > 0) return N(inbound) + " inbound · they join as they take off";
             return "Pick a pilot, an airframe, its fit and a base; REQUISITION launches it.";
         }
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

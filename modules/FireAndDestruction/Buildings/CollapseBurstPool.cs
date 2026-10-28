@@ -115,7 +115,7 @@ namespace BoscaliSummer.Fire
         /// <summary>Collapse rumbles played since load (automation readout).</summary>
         internal static int Rumbles { get; private set; }
 
-        internal void EmitLanding(GlobalPosition position, Vector3 normal, float size)
+        internal void EmitLanding(GlobalPosition position, float size)
         {
             Burst nearest = null; float best = 10000f;
             foreach (Burst burst in bursts)

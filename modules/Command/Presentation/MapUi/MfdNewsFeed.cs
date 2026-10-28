@@ -235,16 +235,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Append(new HeadlineItem(tag, color, headline, Priority.Notable, isLarp: true));
         }
 
-        /// <summary>
-        /// Translates a raw game log or kill-feed line into a ticker headline.
-        /// Returns true when a headline reached the wire; individual traffic is
-        /// deliberately ignored and reports false.
-        /// </summary>
-        public bool IngestGameEvent(string rawLine)
-        {
-            return IngestGameEvent(rawLine, 0f);
-        }
-
         public bool IngestGameEvent(string rawLine, float now)
         {
             if (string.IsNullOrWhiteSpace(rawLine)) return false;

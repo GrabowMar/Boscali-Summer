@@ -1,6 +1,27 @@
 # Changelog
 
+## Unreleased — stabilisation
+
+Feature freeze: this round fixes, trims and tests what exists, and adds nothing new.
+
+- **WMC on Nuclear Option 0.34.2** ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)): 0.34.3 renamed the map
+  icon's colour method, and on 0.34.2 the missing name stopped the whole Wing module from loading. The patch now takes
+  whichever method the running game has.
+- **Fixes from the logs**: fuel-depot smoke no longer logs a Unity error each time it removes a light; an OPS command
+  is no longer sent to the host before the host's own player exists; tail paint no longer reads a texture from
+  materials that don't have one; missions with no objectives no longer flood the log with "Mission Runner was null".
+- **Cleanup**: about 6,900 lines of dead, duplicated and over-built code removed with no feature removed (the comms
+  client drops the remains of the retired polls, games and stickers; the TAC BOARD drops its unused page whitelist).
+  Both builds compile with no warnings.
+- **Licence**: the mod's own code is MIT again. Bundled third-party parts keep their licences (see the README).
+- **Contributing**: new CONTRIBUTING.md, and a README rewritten around stabilisation, troubleshooting and a FAQ.
+
 ## 0.2.10 — update
+
+- **Render scale** ([#31](https://github.com/GrabowMar/Boscali-Summer/issues/31)): `Performance > RenderScale`
+  (50–100 %, default 80 %) sets the share RENDER SCALE renders at, and a change applies at once.
+- **REMORA** ([#28](https://github.com/GrabowMar/Boscali-Summer/issues/28)): a fired round keeps its claim on the
+  missile until the missile dies, so a drone returning to escort no longer frees that missile for the next drone.
 
 - **Combat adjustments** (new module, on by default; every rule has its own switch on SET SERVER, same rules for
   both sides): radars and aircraft still share what they see at once, but ground and ship lookouts report distant

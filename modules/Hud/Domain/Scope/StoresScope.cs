@@ -62,7 +62,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float CapKj, CapMaxKj;
         /// <summary>The charge's measured rate, kJ per second: negative while something drains it.</summary>
         public float CapRate;
-        /// <summary>What one shot of the fitted energy weapon (a <see cref="StoreClass.Rail"/> station) takes from the capacitor, kJ; 0 when none is fitted or the game does not say (it does not today: no cost tick or label is drawn).</summary>
-        public float CapCostKj;
     }
 }

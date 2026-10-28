@@ -138,7 +138,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>How many contacts that SAT CAMERA revealed.</summary>
         public int CameraContacts { get; private set; }
 
-        public float GetEffectRadius(SupportActionId action, FactionHQ owner)
+        public float GetEffectRadius(SupportActionId action)
         {
             switch (action)
             {
@@ -158,17 +158,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportActionId.RadarBlind:
                     return 1500f;
                 case SupportActionId.SamNetDown:
-                    return 3000f;
-                case SupportActionId.ReconTeam:
-                    return 2000f;
-                case SupportActionId.SabotageStrike:
-                    return 1000f;
                 case SupportActionId.Overwatch:
                     return 3000f;
-                case SupportActionId.Starfall:
-                    return 600f; // half the line: five rods 300 m apart, the aim in the middle
+                case SupportActionId.ReconTeam:
                 case SupportActionId.DirectAction:
                     return 2000f;
+                case SupportActionId.Starfall:
+                    return 600f; // half the line: five rods 300 m apart, the aim in the middle
                 case SupportActionId.Fortify:
                     return 650f; // Selection radius; the overlay resolves the actual owned zone.
                 default:
@@ -523,7 +519,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private bool ReadinessOpen(Player player, in CallRow row) =>
             BypassRequirements || readiness.Readiness(player.HQ, row.Front) >= row.Rung || row.Rung <= OpsAutomation.ReadinessFloor;
 
-        /// <summary>S1 replaces the default (every front fully built, neutral quality) with the live front state.</summary>
+        /// <summary>The live front state replaces the default (every front fully built, neutral quality).</summary>
         internal void ConfigureReadiness(IFrontReadiness source) => readiness = source ?? new DefaultFrontReadiness();
 
         /// <summary>True when this peer is the host or has a live client link to one.</summary>
@@ -807,11 +803,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             else
             {
-                Status = Explain(result);
+                Status = SupportWords.Refusal(result);
             }
         }
-
-        internal static string Explain(SupportResult result) => SupportWords.Refusal(result);
 
         // ---- Server ----------------------------------------------------------------------
 
@@ -879,8 +873,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (action.Id == SupportActionId.Artillery || action.Id == SupportActionId.Prsm || action.Id == SupportActionId.Cruise)
             {
                 // Spec 3.7: operator MARKs are map marks; a strike aimed within 300 m of a fresh own-faction mark lands on it, tight.
-                SpaceMark mark = default;
-                if (space != null && space.TryNearestMark(player.HQ, request.X, request.Z, now, out mark))
+                if (space != null && space.TryNearestMark(player.HQ, request.X, request.Z, now, out SpaceMark mark))
                 {
                     aim = new GlobalPosition(mark.X, request.Y, mark.Z);
                     snapped = true; sar = mark.Source == BirdKind.Radar;
@@ -912,13 +905,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
 
             ledger.Accept(playerId, request.RequestId, (byte)action.Id, now, startCooldown: !free);
-            // An accepted scan or camera tasking is a human working SPACE: OVERLORD steps back. Replays, refusals,
-            // rods and every other CALL are not.
-            if (WatchOfficerPolicy.CountsAsHumanWork(action.Id))
-            {
-                try { space?.NoteHumanSpaceVerb(player); }
-                catch (Exception e) { logger.LogError(e); }
-            }
             logger.LogInfo("[Support] Accepted " + action.Name + " request " + request.RequestId +
                 " from " + player + " at " + context.Target +
                 (cost > 0f ? " for " + Mathf.RoundToInt(cost) + " allocation." : "."));
@@ -973,15 +959,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// Price for one player. No action prices itself from the target, so costing uses a
-        /// bare context and both the panel and the host reach the same number.
+        /// Price for one player. No action prices itself from the target, so both the panel and the host reach the same number.
         /// </summary>
         internal CallQuote QuoteFor(SupportActionDefinition action, Player player)
         {
-            // BaseCost <= 0 still means "this action is not available on this map".
-            if (player == null || !CallSheet.TryGet(action.Id, out CallRow row) ||
-                action.Action.BaseCost(new SupportContext(player, default, 0, this)) <= 0f)
-                return new CallQuote(0, "");
+            if (player == null || !CallSheet.TryGet(action.Id, out CallRow row)) return new CallQuote(0, "");
             // The host reads its own SPACE state; a client reads the faction mirror, so both quote the same +40 % when degraded.
             bool degraded = action.RequiredBird != SpaceBirdRequirement.None &&
                 TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
@@ -1133,8 +1115,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 pendingWaypoint = -1;
                 SupportResult result = (SupportResult)message.Result;
-                Status = result == SupportResult.Accepted ? "Waypoint accepted." :
-                    Explain(result);
+                Status = result == SupportResult.Accepted ? "Waypoint accepted." : SupportWords.Refusal(result);
             }
             ActiveStrikeInfo? known = null;
             for (int i = 0; i < activeStrikes.Count; i++)
@@ -1181,8 +1162,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         bool ICameraTargetService.Available => Observations != null;
         bool ICameraTargetService.HasMark =>
             Observations != null && Observations.TryGet(out _);
-        string ICameraTargetService.Status =>
-            Observations != null ? Observations.Status : "NO SENSOR ATTACHED";
         bool ICameraTargetService.CanCapture => Observations != null && Observations.CanCapture;
         bool ICameraTargetService.CanCallAtMark =>
             ArmedAction.HasValue && !pending && Observations != null && Observations.TryGet(out _);

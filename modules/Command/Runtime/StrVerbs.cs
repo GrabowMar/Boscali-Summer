@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         public bool SendWing(int contractId, out string answer)
         {
-            answer = "";
             if (!GameAccess.IsServer()) { answer = "ONLY THE HOST CAN SEND A WING"; return false; }
             if (!ModuleServices.TryGet(out ISortieWingOrderSource source) || !ModuleServices.TryGet(out IWingSortieOrders orders))
             {
@@ -69,7 +68,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         /// <summary>Recalls the sortie the wing is tasked on, as the last 1 Hz wing read found it; there is only ever one.</summary>
         public bool Recall(out string answer)
         {
-            answer = "";
             if (!GameAccess.IsServer()) { answer = "ONLY THE HOST CAN RECALL A WING"; return false; }
             if (hub.TaskedSortieId < 0 || !ModuleServices.TryGet(out IWingSortieOrders orders))
             {

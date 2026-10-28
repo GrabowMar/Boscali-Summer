@@ -131,6 +131,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return threatCount;
         }
 
+        /// <summary>An accurate track of an aircraft off the ground with the anti-air role the game's AI would fight: the odds count's own test.</summary>
+        private static bool IsAirThreat(FactionHQ hq, Aircraft enemy) =>
+            OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(enemy, TargetAccuracyMetres), enemy.radarAlt,
+                enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f);
+
         /// <summary>Enemy aircraft <paramref name="a"/>'s faction tracks within <see cref="OutnumberedJudge.RadiusMetres"/>
         /// of <paramref name="centre"/>.</summary>
         private static int CountHostiles(Aircraft a, Vec3 centre)
@@ -145,8 +150,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
                 if ((t.GetPosition().ToVec3() - centre).SqrLength > r2) continue;
                 // Parked, unarmed or stale tracks are no air threat (review M5d I2).
-                float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
-                if (OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) n++;
+                if (IsAirThreat(hq, enemy)) n++;
             }
             return n;
         }
@@ -169,8 +173,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 TrackingInfo t = pair.Value;
                 if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq) continue;
-                float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
-                if (!OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) continue;
+                if (!IsAirThreat(hq, enemy)) continue;
                 Vec3 at = t.GetPosition().ToVec3();
                 float d = (at - from).SqrLength;
                 if (d >= best) continue;
@@ -208,8 +211,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 bool isAir;
                 if (u is Aircraft enemy)
                 {
-                    if (!air || !OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt,
-                            enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f)) continue;
+                    if (!air || !IsAirThreat(hq, enemy)) continue;
                     isAir = true;
                 }
                 else if (watch.Ground && (u is GroundVehicle || u is Ship)) isAir = false;
@@ -453,7 +455,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (!UsableBy(self, doctrine, w)) continue;
                     OpportunityThreat ot = CombatAI.AnalyzeTarget(w, a, tracking, 0f, range, 100f);
                     if (ot.opportunity <= 0f) continue;
-                    int capacity = u is Missile ? 1 : System.Math.Max(1, System.Math.Min(4, (int)System.Math.Ceiling(w.WeaponInfo.CalcAttacksNeeded(u))));
+                    int capacity = u is Missile ? 1 : TargetSpread.Capacity(w.WeaponInfo.CalcAttacksNeeded(u));
                     float score = TargetSpread.Score(ot.opportunity, ot.threat, range, w.WeaponInfo.targetRequirements.maxRange, committed, players, capacity);
                     if (score <= bestScore) continue;
                     bestScore = score;
@@ -557,8 +559,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (!AreaGuard.Inside(area, t.GetPosition().ToVec3())) continue;
                     // Review A1: a stale track or a parked aircraft is no threat (the game's AI would find no target, and the
                     // element would cycle through 15 s no-target fights) — the odds count's own test.
-                    float antiAir = enemy.definition != null ? enemy.definition.roleIdentity.antiAir : 0f;
-                    if (!OutnumberedJudge.IsAirThreat(hq.IsTargetPositionAccurate(u, TargetAccuracyMetres), enemy.radarAlt, antiAir)) continue;
+                    if (!IsAirThreat(hq, enemy)) continue;
                     threat = u;
                     break;
                 }
@@ -595,7 +596,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             int n = 0;
             foreach (WingMember m in Members)
             {
-                if (m.Released || m.OnGround || m.Recovery != null || m.Settle != null || !m.Alive) continue;
+                if (!m.Sendable) continue;
                 if (who != null && !who(m)) continue;
                 // Not one that would be back within seconds, the engage acked and the radio busy for nothing (and a CAP's every
                 // 20 s): the supervisor takes back the dry and the bingo, the game's combat state leaves at its fuel floor.

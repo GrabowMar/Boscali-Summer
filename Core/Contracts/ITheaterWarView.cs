@@ -244,8 +244,6 @@ namespace BoscaliSummer.Core.Contracts
         bool CommandPending { get; }
         TheaterCommandResult LastCommand { get; }     // null once older than 6 s (unscaled)
         bool CanCommand { get; }
-        TheaterWarPosture Posture { get; }            // thin getters over Snapshot
-        IReadOnlyList<TheaterFrontView> Fronts { get; }
         IReadOnlyList<TheaterProposalView> Proposals { get; }
         TheaterOperationView ActiveOperation { get; }
         void Refresh();

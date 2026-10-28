@@ -41,15 +41,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static uint Resolve(WeatherSeedMode mode, int fixedSeed, ulong entropy, in MissionSeedInputs mission)
         {
-            switch (mode)
+            return mode switch
             {
-                case WeatherSeedMode.Mission:
-                    return FromMission(mission);
-                case WeatherSeedMode.Fixed when fixedSeed >= 1 && fixedSeed <= MaxFixed:
-                    return (uint)fixedSeed;
-                default:
-                    return Mix(entropy);
-            }
+                WeatherSeedMode.Mission => FromMission(mission),
+                WeatherSeedMode.Fixed when fixedSeed >= 1 && fixedSeed <= MaxFixed => (uint)fixedSeed,
+                _ => Mix(entropy),
+            };
         }
 
         /// <summary>SplitMix64 finaliser folded to 32 bits: neighbouring clock values give unrelated seeds.</summary>

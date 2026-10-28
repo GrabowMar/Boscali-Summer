@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         {
             m.CellCount = 0;
             if (field == null || !field.IsBuilt || !field.Lattice.IsValid) return;
-            StormCell[] cells = found ?? (found = new StormCell[StormLattice.EnumerateCap]);
+            StormCell[] cells = found ??= new StormCell[StormLattice.EnumerateCap];
             field.Frame.ToTape(0f, 0f, out float qx, out float qz);
             int n = StormLattice.Enumerate(field.Lattice, qx, qz, Range, cells);
             for (int i = 0; i < n && m.CellCount < MetOfficeModel.MaxCells; i++)

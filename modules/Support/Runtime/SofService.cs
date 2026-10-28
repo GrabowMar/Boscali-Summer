@@ -54,7 +54,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public Ports(SofService service, FactionSof faction) { this.service = service; this.faction = faction; }
             public float Now => SupportManager.MissionNow();
             public int Humans => service.manager != null ? service.manager.HumanCount(faction.Owner) : 1;
-            public int Owner => faction.Key;
             public bool Fob => faction.FobUntil > SupportManager.MissionNow();
             public SofOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.SofSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.SofRefund(faction.Owner, op, cr);
@@ -94,7 +93,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         partial void TickDefence(float now);
 
         internal static SofService Active { get; private set; }
-        internal CyberAnchorSpawner Spawner => spawner;
 
         public void Configure(SupportManager support, SpaceService spaceService, CyberService cyberService)
         {

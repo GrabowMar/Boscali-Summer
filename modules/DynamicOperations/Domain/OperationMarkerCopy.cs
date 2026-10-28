@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         /// <summary>The vicinity card's cue bar: closing on the edge, then the hold itself.</summary>
         public static float Bar(float distanceMetres, float radius, bool inside, float progress)
         {
-            if (inside) return float.IsFinite(progress) ? (progress < 0f ? 0f : progress > 1f ? 1f : progress) : 0f;
+            if (inside) return float.IsFinite(progress) ? Math.Clamp(progress, 0f, 1f) : 0f;
             return Approach(distanceMetres, radius);
         }
 
@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
         {
             if (!float.IsFinite(radius) || !float.IsFinite(distance) || radius <= 0f || distance <= 0.01f) return 0f;
             float value = radius * 20f / distance - 0.5f;
-            return value < 0f ? 0f : value > 1f ? 1f : value;
+            return Math.Clamp(value, 0f, 1f);
         }
 
         /// <summary>Countdown text, or empty when no clock is running.</summary>
@@ -166,7 +166,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Domain
             if (band <= 0f) return 0f;
             float remaining = distanceMetres - radius;
             float ratio = 1f - remaining / band;
-            return ratio < 0f ? 0f : ratio > 1f ? 1f : ratio;
+            return Math.Clamp(ratio, 0f, 1f);
         }
 
     }

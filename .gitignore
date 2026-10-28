@@ -25,6 +25,7 @@ TestResults/
 *.md
 !/README.md
 !/CHANGELOG.md
+!/CONTRIBUTING.md
 /docs/*
 !/docs/COMMUNITY_FIXES_2026-10-14.md
 !/docs/MISSION_COMPATIBILITY.md

@@ -32,11 +32,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
         public const float StationSeconds = 0.8f;  // settle on station before the first job starts
         public const float DrumRadius = 0.2f;      // winch drum, m: the drum turns length / radius radians
 
-        // ---- states
-
-        /// <summary>The kit is out (anything but stowed): it holds the ramp open and the HUD shows it.</summary>
-        public static bool Deployed(TenderState s) => s != TenderState.Stowed;
-
         /// <summary>The tender is flying on its tether, not on the deck.</summary>
         public static bool Flying(TenderState s) => s >= TenderState.Tow && s <= TenderState.Return;
 
@@ -231,9 +226,6 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
 
         /// <summary>The gripper still holds the round (until the latch ends, when it becomes the real missile on the rail).</summary>
         public static bool Carrying(float t) => t < CommitAt;
-
-        /// <summary>Latch push-in, 0..1..0 over the latch window: the round seats on the rail.</summary>
-        public static float Seat(float t) => t < Lift || t > CommitAt ? 0f : Mathf.Sin(Mathf.PI * (t - Lift) / Latch);
 
         /// <summary>Carousel advance toward the next slot, 0..1 over the last 0.5 s.</summary>
         public static float IndexStep(float t) => S((t - (Total - Index)) / Index);

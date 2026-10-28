@@ -87,15 +87,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             float now = Time.timeSinceLevelLoad;
             if (shedCharges <= 0 || now - lastShed < MaldxRules.ShedInterval) return;
             GlobalPosition self = missile.GlobalPosition();
-            Vector3 selfVel = missile.rb != null ? missile.rb.velocity : Vector3.zero;
             bool shed = false;
             for (int i = 0; i < inbound.Count && !shed; i++)
             {
                 Missile threat = inbound[i];
                 if (threat.NetworkHQ == missile.NetworkHQ) continue;
-                Vector3 to = self - threat.GlobalPosition();
-                float range = to.magnitude;
-                float closing = range > 0.01f && threat.rb != null ? Vector3.Dot(threat.rb.velocity - selfVel, to / range) : 0f;
+                float closing = ClosingOn(threat, out float range);
                 shed = MaldxRules.ShouldShed(SeductionRule.IsRadarSeeker(threat.GetSeekerType()), range, closing, shedCharges, now - lastShed);
             }
             if (!shed) return;

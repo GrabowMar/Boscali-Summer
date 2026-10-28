@@ -51,12 +51,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Restyle();
         }
 
-        private static TMP_Text Mark(RectTransform parent, string name, AvTextRole role, TextAlignmentOptions align)
-        {
-            TMP_Text t = AvText.Make(parent, name, role, "", align);
-            AvText.Fit(t, false);
-            return t;
-        }
+        private static TMP_Text Mark(RectTransform parent, string name, AvTextRole role, TextAlignmentOptions align) => WmcSheet.Text(parent, name, role, align);
 
         public override float Measure(float width) => Rows * KeyH + (Rows - 1) * Gap;
 

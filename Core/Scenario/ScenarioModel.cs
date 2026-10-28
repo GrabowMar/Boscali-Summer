@@ -210,9 +210,6 @@ namespace BoscaliSummer.Core.Scenario
         /// <summary>Pairs of sides at peace (<c>peace pmc bdf pala</c>): neither ever sights the other, so neither shoots. Every other pair is at war.</summary>
         public readonly List<KeyValuePair<ScenarioSide, ScenarioSide>> Peace = new List<KeyValuePair<ScenarioSide, ScenarioSide>>();
 
-        /// <summary>True when any statement puts somebody on the PMC side; the mission then needs a PMC faction.</summary>
-        public bool UsesPmc => Uses(ScenarioSide.Pmc);
-
         /// <summary>True when any statement puts somebody on <paramref name="side"/>; for PMC and Pirates the mission then needs that faction.</summary>
         public bool Uses(ScenarioSide side)
         {

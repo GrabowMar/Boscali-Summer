@@ -60,7 +60,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public float W => R - L;
         public float H => B - T;
         public bool Contains(float x, float y) => x >= L && x < R && y >= T && y < B;
-        public bool Overlaps(MenuRect o, float margin = 0f) => L < o.R - margin && o.L < R - margin && T < o.B - margin && o.T < B - margin;
         public static MenuRect Of(float l, float t, float w, float h) => new MenuRect(l, t, l + w, t + h);
     }
 
@@ -184,8 +183,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return MenuRect.Of(l, DiscY[i] - PlateTwo[i] / 2f, pw, PlateTwo[i]);
         }
 
-        public MenuRect Disc(int i) => new MenuRect(DiscX[i] - Rd, DiscY[i] - Rd, DiscX[i] + Rd, DiscY[i] + Rd);
-
         /// <summary>How far past the outer rim of the ring discs the Voronoi zones reach (design px, times <see cref="Rho"/>).</summary>
         public const float RingSlopPx = 70f;
 
@@ -258,13 +255,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 if (chrome + hd * (GroupH + GroupMargin) * Lg + Math.Min(n, c) * RowH * Lg <= avail + 0.5f) return c; // half a pixel: 720p lands exactly on the limit
             }
             return MinCap;
-        }
-
-        /// <summary>Width left for a row's label and state line.</summary>
-        public float RowTextWidth(bool iconless, float rightWidth)
-        {
-            float inner = DockW - 2f - 12f * Lg;
-            return inner - 5f * T - 22f * T - 9f * T - (iconless ? 0f : 45f * T) - (rightWidth > 0f ? 9f * T + rightWidth : 0f) - 10f * T;
         }
 
         /// <summary>Width of what a row draws at its right edge: ping pictograph, then checkbox / pip / chevron.</summary>

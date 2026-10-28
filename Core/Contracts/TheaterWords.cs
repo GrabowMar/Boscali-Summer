@@ -224,9 +224,6 @@ namespace BoscaliSummer.Core.Contracts
             }
         }
 
-        internal static string Carrier(TheaterCarrier carrier) =>
-            carrier == TheaterCarrier.Ground ? "GROUND" : carrier == TheaterCarrier.AirNaval ? "AIR/NAVAL" : "-";
-
         internal static string Risk(TheaterRisk risk) =>
             risk == TheaterRisk.Moderate ? "MODERATE" : risk == TheaterRisk.High ? "HIGH" : "-";
 

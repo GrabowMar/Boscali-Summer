@@ -201,7 +201,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             rebuildMs = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000f / System.Diagnostics.Stopwatch.Frequency;
         }
 
-        private static GhostTint Tint(Color c) => new GhostTint(Byte(c.r), Byte(c.g), Byte(c.b));
+        internal static GhostTint Tint(Color c) => new GhostTint(Byte(c.r), Byte(c.g), Byte(c.b));
 
         private static byte Byte(float v) => (byte)(Mathf.Clamp01(v) * 255f + .5f);
 

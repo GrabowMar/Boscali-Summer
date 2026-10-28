@@ -50,7 +50,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return exploit ? s * ExploitHopFactor : s;
         }
 
-        public static float HopTraceRate(NodeKind kind) => 1.5f;
+        public const float HopTraceRate = 1.5f;
 
         /// <summary>CYBER beats SPACE (the ring): a UPLINK node is an EXPLOIT target.</summary>
         public static bool Exploit(NodeKind kind) => kind == NodeKind.Uplink;
@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
         }
 
         public static float ClampFactor(float f) =>
-            float.IsNaN(f) || float.IsInfinity(f) ? 1f : Math.Max(MinTraceFactor, Math.Min(MaxTraceFactor, f));
+            !float.IsFinite(f) ? 1f : Math.Max(MinTraceFactor, Math.Min(MaxTraceFactor, f));
     }
 
     /// <summary>One operator's intrusion: hop, hold, burn, drop, trace. Pure state; the desk decides who may do what.</summary>
@@ -109,14 +109,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             node = default; return false;
         }
 
-        /// <summary>0..1 progress of the running hop (0 when none).</summary>
-        public float HopProgress(float now) =>
-            HopTarget == 0 || HopEndsAt <= HopStartedAt ? 0f : Math.Max(0f, Math.Min(1f, (now - HopStartedAt) / (HopEndsAt - HopStartedAt)));
-
         public bool TryBeginHop(int nodeId, NodeKind kind, float seconds, float now)
         {
             if (Ended || nodeId <= 0 || HopTarget != 0 || held.Count >= CyberRules.MaxHeldPerIntrusion || Holds(nodeId) ||
-                float.IsNaN(seconds) || float.IsInfinity(seconds) || seconds <= 0f || float.IsNaN(now) || now < last) return false;
+                !float.IsFinite(seconds) || seconds <= 0f || float.IsNaN(now) || now < last) return false;
             HopTarget = nodeId; HopKind = kind; HopStartedAt = now; HopEndsAt = now + seconds;
             last = now;
             return true;
@@ -144,7 +140,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
                 float seg = Math.Min(end, HopEndsAt);
                 if (seg > t)
                 {
-                    float rate = CyberRules.HopTraceRate(HopKind) + CyberRules.HeldTraceRate * held.Count;
+                    float rate = CyberRules.HopTraceRate + CyberRules.HeldTraceRate * held.Count;
                     if (held.Count > 0) heldTime += seg - t;
                     Trace += rate * factor * (seg - t);
                     t = seg;

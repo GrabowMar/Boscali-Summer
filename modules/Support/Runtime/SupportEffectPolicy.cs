@@ -12,8 +12,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public const float EmpBurstAltitude = 30000f;
         public const float MaxEmpRadius = 90000f;
 
-        public static float RodDamage(float distance) => RodDamage(distance, 1f, 1f);
-
         /// <summary>
         /// A rod's blast damage at <paramref name="distance"/>: the core and the reach shrink with <paramref name="radiusScale"/> (STARFALL's rods are about 35 %), the damage itself scales with
         /// <paramref name="damageScale"/> (the front's POWER on an ORBITAL ROD).

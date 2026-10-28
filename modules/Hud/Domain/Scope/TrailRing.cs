@@ -50,12 +50,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 for (int k = 0; k < width; k++) into[i * width + k] = Get(i, k);
             return n;
         }
-
-        public void Clear()
-        {
-            head = count = 0;
-            last = float.NegativeInfinity;
-        }
     }
 
     /// <summary>
@@ -103,14 +97,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public void Long(int i, out float x, out float y, out float z)
         {
             x = lx[i]; y = ly[i]; z = lz[i];
-        }
-
-        public void Clear()
-        {
-            recent.Clear();
-            longCount = 0;
-            longStep = LongStep;
-            longLast = float.NegativeInfinity;
         }
     }
 }

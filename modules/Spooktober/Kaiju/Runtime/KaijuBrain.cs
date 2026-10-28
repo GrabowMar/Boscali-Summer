@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Spooktober.Kaiju.Configuration;
 using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
 using BoscaliSummer.Modules.Spooktober.Kaiju.Networking;

@@ -778,7 +778,7 @@ namespace BoscaliSummer.Garrisons
             Bounds bounds = GetShellBounds(shell);
             if (roofDefense == null || !RooftopPlacement.TryPlace(shell, bounds, roofDefense,
                 out Vector3 position, out Quaternion rotation, out Vector4 roofExtents)) { job.RoofSkips++; return true; }
-            string nameHead = RooftopPlacement.NamePrefix + Sanitize(job.ZoneName) + ":" + job.Generation + ":" + slot;
+            string nameHead = RooftopPlacement.NamePrefix + GarrisonMarkerInfo.SanitizeZone(job.ZoneName) + ":" + job.Generation + ":" + slot;
             string nameTail = ":t" + job.Tier;
             Building spawned = NetworkSceneSingleton<Spawner>.i.SpawnBuilding(
                 roofDefense.unitPrefab, position.ToGlobalPosition(), rotation, job.Owner, job.Airbase,
@@ -1112,8 +1112,5 @@ namespace BoscaliSummer.Garrisons
             !string.IsNullOrEmpty(airbase.NetworknetworkUniqueName)
                 ? airbase.NetworknetworkUniqueName
                 : airbase.name;
-
-        private static string Sanitize(string value) => GarrisonMarkerInfo.SanitizeZone(value);
-
     }
 }

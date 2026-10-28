@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -23,7 +23,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         /// <summary>The confirm gate's target: the exact aircraft, so a changed selection asks again (built on press only).</summary>
         public static string Key(IReadOnlyList<uint> ids) => string.Join(",", ids);
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

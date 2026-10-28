@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const float BundleSeconds = 5f;
 
         /// <summary>The airframe carries as many bundles as flares, within sane bounds (a trainer is not defenceless, a bomber not bottomless).</summary>
-        public static int Load(int flaresMax) => Math.Max(MinLoad, Math.Min(MaxLoad, flaresMax));
+        public static int Load(int flaresMax) => Math.Clamp(flaresMax, MinLoad, MaxLoad);
 
         public static bool IsRadarSeeker(string seeker) => seeker == "ARH" || seeker == "SARH";
 
@@ -36,8 +36,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// </summary>
         public static float SeduceChance(float rangeM, float beam)
         {
-            float near = Math.Max(0f, Math.Min(1f, (SeduceMaxRange - rangeM) / (SeduceMaxRange - SeduceFullRange)));
-            float aspect = SeduceTailFloor + (1f - SeduceTailFloor) * Math.Max(0f, Math.Min(1f, beam));
+            float near = Math.Clamp((SeduceMaxRange - rangeM) / (SeduceMaxRange - SeduceFullRange), 0f, 1f);
+            float aspect = SeduceTailFloor + (1f - SeduceTailFloor) * Math.Clamp(beam, 0f, 1f);
             return SeduceBase * aspect * near;
         }
 

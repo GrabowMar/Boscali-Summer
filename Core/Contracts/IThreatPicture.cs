@@ -26,9 +26,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>Rings per faction; size <see cref="IThreatPicture.CopyAirDefence"/> buffers to this.</summary>
         public const int MaximumRings = 96;
 
-        /// <summary>Points a leg is sampled at by <see cref="IThreatPicture.TryGetSegmentExposure"/>.</summary>
-        public const int SegmentSamples = 16;
-
         /// <summary>Radar SAM cones plus launch-only rings, which are avoided as if radar-guided.</summary>
         public const byte RadarConeMask = (1 << (int)AirDefenceKind.Unknown) | (1 << (int)AirDefenceKind.RadarSam);
 
@@ -111,32 +108,6 @@ namespace BoscaliSummer.Core.Contracts
         }
     }
 
-    /// <summary>A release point and what flying to it costs against the observer's rings.</summary>
-    internal readonly struct AttackProfile
-    {
-        public readonly float ReleaseX;
-        public readonly float ReleaseZ;
-        /// <summary>Metres of the transit leg inside radar-SAM or launch-only rings at transit height.</summary>
-        public readonly float RadarConeMetres;
-        /// <summary>Metres of the transit leg inside IR-SAM or gun rings at transit height.</summary>
-        public readonly float PointDefenceMetres;
-        /// <summary>The release point itself is inside a ring at release height.</summary>
-        public readonly bool ReleaseCovered;
-        /// <summary>Every ring that costs anything here is stale.</summary>
-        public readonly bool StaleOnly;
-
-        public AttackProfile(float releaseX, float releaseZ, float radarConeMetres, float pointDefenceMetres,
-            bool releaseCovered, bool staleOnly)
-        {
-            ReleaseX = releaseX;
-            ReleaseZ = releaseZ;
-            RadarConeMetres = radarConeMetres;
-            PointDefenceMetres = pointDefenceMetres;
-            ReleaseCovered = releaseCovered;
-            StaleOnly = staleOnly;
-        }
-    }
-
     /// <summary>What the observer knows about the ground around a point.</summary>
     internal readonly struct AreaIntel
     {
@@ -176,8 +147,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IThreatPicture
     {
-        /// <summary>Bumped when the observer's rings change; 0 when there is no picture.</summary>
-        uint Version(int observer);
 
         bool IsReady(int observer);
 

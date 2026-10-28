@@ -408,13 +408,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 for (int series = 0; series < ResourceLabels.Length; series++)
                 {
-                    int run = 0, runStart = 0;
-                    for (int i = 0; i < count; i++)
-                    {
-                        float value = resourceHistory.Value(series, i);
-                        if (!float.IsFinite(value)) { run = 0; runStart = i + 1; continue; }
-                        resourceBuffer[run++] = value;
-                    }
+                    int run = resourceHistory.FiniteRun(series, resourceBuffer, out int runStart, out float lo, out float hi);
                     ResourceHistoryTile tile = history.Tiles[series];
                     string current = run > 0 ? FormatResource(series, resourceBuffer[run - 1]) : "—";
                     if (run < 2)
@@ -422,12 +416,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         tile.Set(resourceBuffer, 0, "—", "—", current,
                             count == 0 ? "NO SAMPLES" : run == 0 ? "UNAVAILABLE" : "NEEDS 2 SAMPLES");
                         continue;
-                    }
-                    float lo = resourceBuffer[0], hi = resourceBuffer[0];
-                    for (int i = 1; i < run; i++)
-                    {
-                        lo = Mathf.Min(lo, resourceBuffer[i]);
-                        hi = Mathf.Max(hi, resourceBuffer[i]);
                     }
                     float change = resourceBuffer[run - 1] - resourceBuffer[0];
                     float duration = Mathf.Max(0f, latest - resourceHistory.Time(runStart));
@@ -572,31 +560,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Encyclopedia encyclopedia = Encyclopedia.i;
                 if (encyclopedia == null) return;
 
-                switch (definitionGroup)
-                {
-                    case 0:
-                        if (encyclopedia.buildings == null) return;
-                        for (int i = 0; i < encyclopedia.buildings.Count; i++)
-                            definitions.Add(encyclopedia.buildings[i]);
-                        break;
-                    case 1:
-                        if (encyclopedia.vehicles == null) return;
-                        for (int i = 0; i < encyclopedia.vehicles.Count; i++)
-                            definitions.Add(encyclopedia.vehicles[i]);
-                        break;
-                    case 2:
-                        if (encyclopedia.ships == null) return;
-                        for (int i = 0; i < encyclopedia.ships.Count; i++)
-                            definitions.Add(encyclopedia.ships[i]);
-                        break;
-                    default:
-                        if (encyclopedia.aircraft == null) return;
-                        for (int i = 0; i < encyclopedia.aircraft.Count; i++)
-                            definitions.Add(encyclopedia.aircraft[i]);
-                        break;
-                }
+                IReadOnlyList<UnitDefinition> group = ClassGroup(encyclopedia, definitionGroup);
+                if (group == null) return;
+                for (int i = 0; i < group.Count; i++) definitions.Add(group[i]);
                 definitionsLoaded = true;
             }
+
+            /// <summary>The encyclopedia's list for one class, in <c>ClassLabels</c> order (BUILDINGS, VEHICLES, SHIPS, AIRCRAFT).</summary>
+            private static IReadOnlyList<UnitDefinition> ClassGroup(Encyclopedia encyclopedia, int group) =>
+                group == 0 ? encyclopedia.buildings : group == 1 ? encyclopedia.vehicles : group == 2 ? encyclopedia.ships :
+                (IReadOnlyList<UnitDefinition>)encyclopedia.aircraft;
 
             // ----------------------------------------------------------- LEDGER page
 
@@ -681,22 +654,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Encyclopedia encyclopedia = Encyclopedia.i;
                 int lostTotal = 0;
                 if (tracker != null && encyclopedia != null)
-                {
-                    lostTotal += ScanAttrition(tracker, encyclopedia.buildings);
-                    lostTotal += ScanAttrition(tracker, encyclopedia.vehicles);
-                    lostTotal += ScanAttrition(tracker, encyclopedia.ships);
-                    lostTotal += ScanAttrition(tracker, encyclopedia.aircraft);
-                }
+                    for (int group = 0; group < ClassLabels.Length; group++)
+                        lostTotal += ScanAttrition(tracker, ClassGroup(encyclopedia, group));
                 attritionRoster.Set(lossDefinitions, hq, "FORM 12-B / LOSSES BY TYPE",
                     tracker == null || encyclopedia == null ? "STATISTICS UNAVAILABLE" :
                     lostTotal + " LOST / TOP " + lossDefinitions.Count + " TYPES");
             }
 
-            private int ScanAttrition<T>(MissionStatsTracker tracker, IList<T> list) where T : UnitDefinition
+            private int ScanAttrition(MissionStatsTracker tracker, IReadOnlyList<UnitDefinition> list)
             {
                 if (list == null) return 0;
                 int lostSum = 0;
-                foreach (T definition in list)
+                foreach (UnitDefinition definition in list)
                 {
                     if (definition == null) continue;
                     int lost = tracker.GetLostUnits(definition);
@@ -725,16 +694,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            private float LedgerValue(MissionStatsTracker.Stat stat)
-            {
-                switch (ledgerMode)
-                {
-                    case LedgerMode.Losses: return stat.lost;
-                    case LedgerMode.Value: return stat.current;
-                    case LedgerMode.Manpower: return stat.current;
-                    default: return stat.current;
-                }
-            }
+            private float LedgerValue(MissionStatsTracker.Stat stat) =>
+                ledgerMode == LedgerMode.Losses ? stat.lost : stat.current;
 
             private string FormatLedger(float value)
             {
@@ -747,29 +708,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (hq == null || encyclopedia == null) return 0;
 
                 int total = 0;
-                switch (group)
-                {
-                    case 0:
-                        if (encyclopedia.buildings != null)
-                            for (int i = 0; i < encyclopedia.buildings.Count; i++)
-                                total += SupportedSupply(hq, encyclopedia.buildings[i]);
-                        break;
-                    case 1:
-                        if (encyclopedia.vehicles != null)
-                            for (int i = 0; i < encyclopedia.vehicles.Count; i++)
-                                total += SupportedSupply(hq, encyclopedia.vehicles[i]);
-                        break;
-                    case 2:
-                        if (encyclopedia.ships != null)
-                            for (int i = 0; i < encyclopedia.ships.Count; i++)
-                                total += SupportedSupply(hq, encyclopedia.ships[i]);
-                        break;
-                    default:
-                        if (encyclopedia.aircraft != null)
-                            for (int i = 0; i < encyclopedia.aircraft.Count; i++)
-                                total += SupportedSupply(hq, encyclopedia.aircraft[i]);
-                        break;
-                }
+                IReadOnlyList<UnitDefinition> list = ClassGroup(encyclopedia, group);
+                if (list != null)
+                    for (int i = 0; i < list.Count; i++)
+                        total += SupportedSupply(hq, list[i]);
                 return total;
             }
 
@@ -1032,7 +974,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     frame.Bracket = 8f;
                 }
 
-                protected void SetTone(AvState next)
+                public void Tone(AvState next)
                 {
                     if (next == tone) return;
                     tone = next;
@@ -1084,9 +1026,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     this.losses = losses;
                     title = AvText.Make(Rect, "Title", AvTextRole.Label);
                     summary = AvText.Make(Rect, "Summary", AvTextRole.Micro);
-                    columns = AvText.Make(Rect, "Columns", AvTextRole.Micro, losses ? "TYPE                          LIVE       LOST      LOSS %" : "TYPE                          LIVE       LOST       RSV");
                     // Numeric headings get their own aligned cells below; this line labels the name column only.
-                    columns.text = "TYPE / DESIGNATION";
+                    columns = AvText.Make(Rect, "Columns", AvTextRole.Micro, "TYPE / DESIGNATION");
                     for (int i = 0; i < Capacity; i++)
                     {
                         rows[i] = AvLay.Child(Rect, "Record " + i);
@@ -1288,8 +1229,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Contract = new AvNote(Rect, AvTextRole.ProseSmall);
                     Restyle();
                 }
-
-                public void Tone(AvState state) => SetTone(state);
 
                 public override float Measure(float width)
                 {
@@ -1505,8 +1444,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Restyle();
                 }
 
-                public void Tone(AvState state) => SetTone(state);
-
                 public override float Measure(float width)
                 {
                     float w = width - 2f * Inset, h = 8f + 15f + 3f;
@@ -1652,8 +1589,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public MfdLedgerChart Chart { get; }
 
                 public override float Measure(float width) => ChartHeight;
-
-                public override void Place(AvSlot slot) => base.Place(slot);
             }
         }
     }

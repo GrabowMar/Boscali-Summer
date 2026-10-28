@@ -22,13 +22,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float rcA = SkyMath.RainCover(x), rcB = SkyMath.RainCover(y);
             // The gate's slope only matters where the ramp crosses its 0.3-0.6 window (spec 5.2).
             float dG = Math.Min(rcA, rcB) < 0.6f && Math.Max(rcA, rcB) > 0.3f ? Math.Abs(rcA - rcB) : 0f;
-            float dB = Max(Math.Abs(x.CloudBase - y.CloudBase), Math.Abs(ArchetypeTop(x) - ArchetypeTop(y)), Math.Abs(x.DeckDepth - y.DeckDepth),
+            float dB = Max(Math.Abs(x.CloudBase - y.CloudBase), Math.Abs(SkyArchetypes.DeckTop(x) - SkyArchetypes.DeckTop(y)), Math.Abs(x.DeckDepth - y.DeckDepth),
                 Math.Abs(x.Mid.Base - y.Mid.Base), Math.Abs(x.Mid.Top - y.Mid.Top), Math.Abs(x.High.Base - y.High.Base), Math.Abs(x.High.Top - y.High.Top)) * 0.001f;
             float km = Max(12f, 16.9f * dC, 1.35f * (dR + 5f * rHi * dG), 2.25f * dB, 1.125f * markerPeakRain * dG);
             return km * 1000f;
         }
-
-        private static float ArchetypeTop(in SkyParams s) => SkyArchetypes.DeckTop(s);
 
         // Largest of the arguments by comparison, as the old params loop took it (the first wins a tie, and a NaN after the first never wins), without allocating its array.
         private static float Max(float a, float b, float c, float d, float e)

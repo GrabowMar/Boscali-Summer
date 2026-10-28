@@ -45,4 +45,13 @@ namespace NOAvionics
             Changed();
         }
     }
+
+    /// <summary>Registers an owner's restyle with its <see cref="AvTicker"/> without making the owner a part.</summary>
+    internal sealed class AvRestyleHook : AvPart
+    {
+        private readonly System.Action restyle;
+        public AvRestyleHook(System.Action restyle) { this.restyle = restyle; }
+        public override void Restyle() => restyle();
+        public override void Place(AvSlot slot) { }
+    }
 }

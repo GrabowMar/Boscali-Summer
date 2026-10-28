@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Text.RegularExpressions;
 using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Command.Domain
@@ -177,12 +176,6 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>The control-id grammar (annex 05 P11): dotted lower case, indices 1-based. One spelling for the panel, the overlay, the sim and the harness.</summary>
     internal static class StrControlIds
     {
-        private static readonly Regex Grammar = new Regex(
-            @"^(tab\.(board|sitrep|info|supply)|supply\.(give\.(10|25|50|100)|buy\.[1-8])|info\.(side\.(own|enemy)|post\.[1-8]|locate)|posture\.(cautious|steady|bold)|replan|hero\.locate|prop\.[1-3]\.(pick|locate)|front\.[1-8]\.(redirect|locate)|" +
-            @"sortie\.[1-3]\.(accept|wing|locate)|layer\.(fronts|operation|sorties)|map\.card\.(primary|secondary|close)|map\.tag\.(effort|prop|front|sortie|post)\.[1-9][0-9]*)$",
-            RegexOptions.CultureInvariant);
-
-        public static bool IsValid(string id) => !string.IsNullOrEmpty(id) && Grammar.IsMatch(id);
 
         public static string Tab(int page) => page == 0 ? "tab.board" : page == 1 ? "tab.sitrep" : page == 2 ? "tab.info" : "tab.supply";
 

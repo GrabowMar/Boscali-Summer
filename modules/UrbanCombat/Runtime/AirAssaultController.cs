@@ -200,9 +200,9 @@ namespace BoscaliSummer.Garrisons
         {
             // UH-90 Ibis: fast-rope (to 45 m) or rappel (to 120 m) a squad from a hover.
             Vector3 origin = aircraft.transform.position;
-            if (DeckBelow(aircraft, out Ship ship, out Vector3 deck))
+            if (DeckBelow(aircraft, out Ship ship, out _))
             {
-                TryShipBoarding(aircraft, ship, deck);
+                TryShipBoarding(aircraft, ship);
                 return;
             }
             if (!Physics.Raycast(origin, Vector3.down, out RaycastHit hit, FastRopePlan.RappelMaxHeight + 400f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
@@ -271,7 +271,7 @@ namespace BoscaliSummer.Garrisons
         /// Future: roping boarding parties onto cargo and disabled ships. Not implemented yet, so
         /// the squad stays aboard and no troops are spent.
         /// </summary>
-        private static bool TryShipBoarding(Aircraft aircraft, Ship ship, Vector3 deck)
+        private static bool TryShipBoarding(Aircraft aircraft, Ship ship)
         {
             Plugin.Logger.LogInfo($"[Air Assault] Ship boarding ({ship.name}) is not available yet; the squad stays aboard {aircraft.name}.");
             return false;

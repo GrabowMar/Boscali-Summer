@@ -48,6 +48,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Local aircraft: Time.timeSinceLevelLoad until which the server refuses a re-entry after a hot break (HUD sets, HUD reads).</summary>
         public static float HotLockUntil;
 
+        /// <summary>The aircraft a published unit id names (0 = none), or null once it is gone.</summary>
+        public static Aircraft Resolve(uint id) =>
+            id != 0 && UnitRegistry.TryGetUnit(new PersistentID { Id = id }, out Unit u) ? u as Aircraft : null;
+
         public static void Set(SkywellView view)
         {
             view.At = Time.timeSinceLevelLoad;

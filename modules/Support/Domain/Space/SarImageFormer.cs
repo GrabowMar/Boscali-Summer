@@ -56,8 +56,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         public SarImageFormer(int width, int height, double halfSize, in SarGeometry geometry, int seed)
         {
-            Width = Math.Max(8, Math.Min(512, width));
-            Height = Math.Max(8, Math.Min(512, height));
+            Width = Math.Clamp(width, 8, 512);
+            Height = Math.Clamp(height, 8, 512);
             HalfSize = Math.Max(50.0, halfSize);
             this.geometry = geometry;
             cotIncidence = 1.0 / Math.Tan(geometry.Incidence);
@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             int n = intensity.Length;
             uint state = (uint)seed;
-            int lookCount = Math.Max(1, Math.Min(8, looks));
+            int lookCount = Math.Clamp(looks, 1, 8);
             double floor = Math.Max(0.0, noiseFloor);
 
             for (int i = 0; i < n; i++)

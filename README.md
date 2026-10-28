@@ -4,10 +4,11 @@
 
 <p align="center">
   <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.10-alpha"><img src="https://img.shields.io/badge/release-0.2.10_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.10 alpha"></a>
-  <img src="https://img.shields.io/badge/Nuclear_Option-0.34.2-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.2">
+  <img src="https://img.shields.io/badge/status-stabilising-f0b56e?style=flat-square&labelColor=0b1b23" alt="Status: stabilising">
+  <img src="https://img.shields.io/badge/Nuclear_Option-0.34.3-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.3">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-8fb4b8?style=flat-square&labelColor=0b1b23" alt="GPL-3.0 license"></a>
-  <a href="#community"><img src="https://img.shields.io/badge/Discord-opening_soon-5865F2?style=flat-square&logo=discord&logoColor=white&labelColor=0b1b23" alt="Discord: opening soon"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Contributions welcome"></a>
 </p>
 
 <p align="center">
@@ -16,14 +17,14 @@
 </p>
 
 <p align="center">
+  <a href="#stabilisation">Stabilisation</a> ·
   <a href="#whats-inside">What's inside</a> ·
-  <a href="#vanguard">VANGUARD</a> ·
-  <a href="#screenshots">Screenshots</a> ·
-  <a href="#flight-plan">Flight plan</a> ·
   <a href="#install">Install</a> ·
   <a href="#first-flight">First flight</a> ·
   <a href="#troubleshooting">Troubleshooting</a> ·
-  <a href="#community">Community</a>
+  <a href="#faq">FAQ</a> ·
+  <a href="#reporting-a-bug">Reporting a bug</a> ·
+  <a href="#contributing">Contributing</a>
 </p>
 
 <p align="center">
@@ -34,23 +35,46 @@
 
 Nuclear Option hands you a jet and a war. **Boscali Summer builds everything around the canopy glass**: a wing that flies on your orders, a front line that grinds through towns and leaves them burning, satellites, hackers and special forces on call, storm fronts rolling in off the coast, and a radio full of people having a worse day than you.
 
-Start with **Boscali Summer** in the mission picker's **Boscali Summer** group: a scripted mission on the game's own Escalation. A cutscene, a side to choose, an opening flown under orders, then the whole war. It is one text file, and you can write your own.
+Start with **Twelve Miles Out** in the mission picker's **Boscali Summer** group. It's coup morning in the Ignus archipelago, and you fly for a private security firm keeping a freighter convoy afloat while the republic falls apart behind you.
 
-Every mission runs the whole mod. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own pick. It can remember the answer for that mission or stop asking.
-
-<table align="center">
-<tr>
-<td align="center"><b>30</b><br><sub>modules</sub></td>
-<td align="center"><b>47</b><br><sub>skies</sub></td>
-<td align="center"><b>11</b><br><sub>VANGUARD systems</sub></td>
-<td align="center"><b>9</b><br><sub>automatic HUD pages</sub></td>
-<td align="center"><b>3</b><br><sub>support fronts</sub></td>
-<td align="center"><b>48</b><br><sub>insignia marks</sub></td>
-</tr>
-</table>
+Every other mission runs the mod too. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own mix. It can remember the answer for that mission or stop asking.
 
 > [!CAUTION]
-> **Early alpha, and it's rough.** Expect bugs, balance problems, performance dips and settings that reset between versions. Multiplayer is not reliable yet. If you'd like to help test, welcome aboard. If you want a stable evening of Nuclear Option, check back in a later release.
+> **Early alpha.** Expect bugs, balance problems, performance dips and settings that reset between versions. Multiplayer is not reliable yet. The project is now concentrating on making what exists dependable, so every bug report helps directly.
+
+## Stabilisation
+
+> [!IMPORTANT]
+> **Boscali Summer is in a feature freeze.** The 0.2 releases added a lot in a short time. Until those systems are dependable, the work goes into fixing, trimming and testing what is already there: no new systems, no new weapons, no new pages.
+
+### How a fix gets made
+
+1. **Collect.** Bug reports and `BepInEx/LogOutput.log` files come in from players, and from our own test runs.
+2. **Find the cause.** Every error in a log is traced to the code that causes it, and grouped with every other place that goes through the same code.
+3. **Fix it once.** The fix goes where all the callers meet, not as a guard around the one spot where it showed up.
+4. **Check it.** Both the development and the player build must compile with zero warnings. Automated in-game scenarios (scripted flights in a sandbox copy of the game that check the outcome and collect the log) are run again for every system the change touches.
+5. **Ship it** in a small patch release, with a changelog entry.
+
+### Since 0.2.10
+
+On `main`, in the next patch:
+
+- **Wing panel restored on Nuclear Option 0.34.2** ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Nuclear Option 0.34.3 renamed a map-icon method, and on 0.34.2 the missing name stopped the whole Wing module from loading, WMC page included. The patch now uses whichever method the running game has.
+- **Fixes from the logs:**
+  - fuel-depot smoke no longer logs a Unity error each time it removes a light;
+  - an OPS command is no longer sent to the host before the host's own player exists;
+  - squadron tail paint no longer reads a texture from materials that don't have one;
+  - missions with no objectives no longer flood the log with "Mission Runner was null".
+- **Cleanup without cuts:** about 6,900 lines of dead, duplicated and over-built code removed, and no feature removed. Both builds compile with no warnings.
+- **Re-checked in game:** the OPS page and front windows, the full OPS solo flow, forest fires and squadron tail paint all pass their scenarios on the cleaned build.
+
+### Known issues
+
+- **Multiplayer is unreliable.** Everyone, host included, needs exactly the same mod version, and sessions can still fall out of sync.
+- **Settings can reset** between alpha versions.
+- **Blueprinter warnings at start-up.** With Blueprinter installed, the log shows lines like `PatchRunner ... Could not set ... _Normal_Crinkle` or `canopyCracks`. They are harmless: a few material tweaks in the mod's asset bundle don't apply.
+- **Performance** can dip late in long, busy matches and in heavy weather. See [Low frame rate](#troubleshooting).
+- Everything else that's open is on the [issue tracker](https://github.com/GrabowMar/Boscali-Summer/issues).
 
 ## What's inside
 
@@ -72,7 +96,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 
 ### 📡 Command and support
 
-- **Fire on call:** artillery, cruise missiles, recon, EMP and experimental kinetic strikes, within your allocation.
+- **Fire on call:** artillery, cruise missiles, recon, EMP and kinetic strikes, paid from your allocation.
 - **Three fronts** on the **OPS** page: satellites in SPACE, intrusions in CYBER, teams on the ground in SOF.
 - **The war on one map.** The **STR** relief map shows territory, the front line, command staff and intel. The staff proposes operations, you pick, the ground force follows.
 
@@ -87,13 +111,14 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 - **Fortified towns and trenches** with rooftop MG, AT and AA nests. A garrisoned building has to be bombed out.
 - **Airborne insertions:** Ibis fast-rope and rappel drops, plus HALO jumps 🧩.
 - **World events and contracts** that shift support prices and rewards.
+- **Combat adjustments:** sensor reports, track drift, missile faults, decoys and radar discipline, each with its own host switch.
 
 </td>
 <td width="50%" valign="top">
 
 ### 🎯 The visor
 
-- **TAC BOARD:** helmet-visor symbology for stores, countermeasures and cautions. Choose up to three information pages side by side: threats, shots, missile camera, approach, wing, strikes, refuelling, objectives, systems and cargo. Pages stay where you put them.
+- **TAC BOARD:** helmet-visor symbology for stores, countermeasures and cautions, with up to four information pages (two across, two down) that stay where you put them.
 - **C ring:** one key, ten categories of live actions. Keyboard, mouse or stick.
 - **Holo map and terrain ghost:** a standing hologram in the corner, and a wire relief of the ground showing through the cockpit.
 - **Fused night vision:** white phosphor with a thermal glow on hot units.
@@ -105,7 +130,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 
 ### ⛈️ The sky
 
-- **47 skies** with volumetric cloud, in-cloud whiteout, rain on the canopy and thunder.
+- **Layered skies** with volumetric cloud, in-cloud whiteout, rain on the canopy and thunder.
 - **Fronts, cells and storms** that drive the day's weather.
 - **MET OFFICE:** the host's weather console. Pin a sky, hold the weather, run a set-piece. Clients read along.
 
@@ -115,21 +140,17 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 ### 🎧 The seat
 
 - **A pilot in it:** first-person body, breathing, G cues and kneeboard cards.
-- **Radio:** FM, AIR, MW and your own music.
-- **Radio nets:** AWACS, tower, command and enemy chatter, with voice packs.
+- **Cockpit alarms and voice warnings:** PULL UP, TERRAIN, OVER G and BINGO FUEL. Each can be switched off.
+- **Radio:** FM, AIR, MW and your own music, plus AWACS, tower, command and enemy chatter.
 - **Chaff** (solo or hosting) that works best when you fly across the missile's line of sight, and not at all head-on.
 
 </td>
 </tr>
 </table>
 
-## VANGUARD
+### VANGUARD
 
-🧩 The experimental shelf: eleven systems nobody has signed off on.
-
-<p align="center">
-  <a href="media/readme/vanguard.png"><img src="media/readme/vanguard.png" alt="The VANGUARD gliders, missiles and pods lined up in the air above the coast" width="100%"></a>
-</p>
+🧩 The experimental shelf: eleven systems nobody has signed off on. Cargo-launched systems need an aircraft with a compatible cargo bay.
 
 | System | What it is |
 | --- | --- |
@@ -140,8 +161,6 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 | **SKYWELL** | Refuel-and-rearm tender launched from a cargo bay |
 | **KESTREL** | Recon glider that orbits a target and lases it |
 | **HAMILCAR** | Cargo glider that lands a Hexhound near the target |
-
-Cargo-launched systems need an aircraft with a compatible cargo bay. The [changelog](CHANGELOG.md) describes each one in detail.
 
 ## Screenshots
 
@@ -193,6 +212,12 @@ Cargo-launched systems need an aircraft with a compatible cargo bay. The [change
 <td align="center"><sub><b>MET OFFICE</b> · the host's weather console</sub></td>
 </tr>
 <tr>
+<td colspan="2"><a href="media/readme/vanguard.png"><img src="media/readme/vanguard.png" alt="The VANGUARD gliders, missiles and pods lined up in the air above the coast" width="100%"></a></td>
+</tr>
+<tr>
+<td colspan="2" align="center"><sub><b>VANGUARD</b> · the experimental shelf over the coast</sub></td>
+</tr>
+<tr>
 <td colspan="2"><a href="media/readme/low-pass.png"><img src="media/readme/low-pass.png" alt="Side view of an FS-20 Vortex flying a few metres above a dark evening sea" width="100%"></a></td>
 </tr>
 <tr>
@@ -200,100 +225,7 @@ Cargo-launched systems need an aircraft with a compatible cargo bay. The [change
 </tr>
 </table>
 
-<p align="center"><sub>Unedited in-game captures.</sub></p>
-
-## Flight plan
-
-Where the mod has been, where it is, and where it's pointed.
-
-<p align="center">
-  <img src="media/readme/flight-plan.svg" alt="Flight plan by major release: 0.1 flown, 0.2 public alpha is the present position, then 0.3 UI and OPS, 0.4 weapons and mechanics, 0.5 and 0.6 mechanics, 0.7 the Flying Fortress, 0.8 maps, 0.9 campaign and 1.0 release" width="100%">
-</p>
-
-<details>
-<summary><b>Legs already flown</b></summary>
-<br>
-
-The graphic shows major releases only. The updates in between:
-
-| Release | Date | What landed |
-| --- | --- | --- |
-| **0.2.4** | 14 Oct 2026 | Classic corner map by default, OPS TASKED tab with a steerable cruise missile, community fixes |
-| **0.2.3** | 13 Oct 2026 | Map selection feeds the target list, the scripted Boscali Summer mission, mission scripts, C menu stays open |
-| **0.2.2** | 13 Oct 2026 | Chaff, rebuilt radio nets, fused night vision, holo map and terrain ghost, regrouped C ring |
-| **0.2.1** | 12 Oct 2026 | Visor TAC BOARD, relief map pass, redrawn insignia, display grade |
-| **0.2.0** | 10 Oct 2026 | First public alpha: Wing Command built in, TAC BOARD, C ring, VANGUARD, MET OFFICE, airborne insertions, OPS fronts |
-| **0.1.3** | 25 Sep 2026 | Trenches, world events, radio, weather, theater operations, ace hunts |
-| **0.1.2** | 3 Sep 2026 | Progression, support calls, urban strongholds, EMP strike |
-| **0.1.1** | 1 Sep 2026 | First build |
-
-The [changelog](CHANGELOG.md) has the details from 0.2.0 on.
-
-</details>
-
-### Systems check
-
-How far each system is from where it should be at 1.0. Nothing is finished yet: everything in 0.2 is experimental. These are rough estimates, not telemetry.
-
-<p align="center">
-  <img src="media/readme/systems.svg" alt="Systems check for 0.2 alpha, completeness against 1.0. Rough: wing 60%, weather 60%, TAC BOARD 55%, C ring 55%, fire and destruction 55%, pilot immersion 45%, towns and trenches 45%, OPS fronts 40%, VANGUARD 35%, STR command map 35%, radio nets 25%, airborne 25%. Unreliable: multiplayer 20%. Not built: campaign 10%. Flying Fortress: classified." width="100%">
-</p>
-
-### Next legs
-
-No dates. This is a hobby alpha, and the route gets re-planned whenever Nuclear Option updates.
-
-**0.3 · UI + OPS** · *polish what you look at, finish what you command*
-
-- [ ] **HUD quick wins:** IAS/CAS speed mode, cycle targets by type, weapon cycle skips empty stations, a voiced PULL UP
-- [ ] **Death debrief card:** what killed you, from how far, and what would have beaten it
-- [ ] **Autonomous fronts:** SPACE, CYBER and SOF run themselves while you set the priorities
-- [ ] **SOF radar raids** and **CYBER datalink blackouts** that punch a hole in the enemy air defence for a few minutes
-- [ ] **STR command map finished:** the wave desk and the strike post
-- [ ] **First-flight primer** for the wing, the C ring, OPS and contracts
-- [x] **Lock nearest threat**, **chaff** and the **OPS TASKED tab** landed early, in 0.2.x
-
-**0.4 · WEAPONS + MECHANICS** · *answers for the things that keep killing you*
-
-- [ ] **A few more weapons** for VANGUARD
-- [ ] **Difficulty presets** for the host (Relaxed, Standard, Vanilla): air-defence interception odds, AA reloads, AI skill, damage taken
-- [ ] **SEAD contracts** that pay for radar and SAM kills, with a bonus for clearing a corridor
-
-**0.5 · MECHANICS**
-
-- [ ] **Host rules:** friendly-nuke safe zones, a cap on AI tactical nukes, team-killer handling, catch-up for late joiners
-- [ ] **Comeback mechanics:** escalation scaled to the losing side, reinforcement waves for whoever is behind
-- [ ] **Wing orders from multiplayer clients**, not only the host
-
-**0.6 · MECHANICS**
-
-- [ ] **Waypoint autopilot** and a single-player time-skip for long transits
-- [ ] **AWACS and tanker service** built on SKYWELL
-- [ ] **Simple ATC:** landing clearance and vectors to the nearest base
-- [ ] **Offline sandbox options:** infinite fuel and ammo, funds and unlocks, single player only
-
-**0.7 · FLYING FORTRESS** · `CLASSIFIED`
-
-**0.8 · MAPS** · *more places to fight over*
-
-- [ ] **Support for more maps** through an external custom maps mod
-
-**0.9 · CAMPAIGN** · *the war remembers*
-
-- [ ] **A war that persists:** fronts, captured bases, faction pools and open contracts carry over between sessions
-- [ ] **Campaign chain:** a sequence of sessions and maps with carry-over (the script side exists: chapters that unlock and flags that carry over)
-- [ ] **Training contracts:** SEAD, VTOL, carrier landings and the strategic layer
-
-**1.0 · RELEASE** · *last polish*
-
-**Along the way:** compatibility with each new Nuclear Option update comes first, and every feature gets a performance budget measured late in a long match.
-
-Not on the route: VR, missile physics or mid-mission saves. The game's developers and other mods have those covered.
-
-> [!IMPORTANT]
-> **WAYPOINT 0.7: FLYING FORTRESS** · `CLASSIFIED`
->
-> Something enormous, armed and airborne over Boscali, and every leg before it is a step towards being able to build it. Details when it flies.
+<p align="center"><sub>Unedited in-game captures. Some show earlier versions of the panels.</sub></p>
 
 ## Install
 
@@ -304,7 +236,7 @@ Not on the route: VR, missile physics or mid-mission saves. The game's developer
 
 | | Version | |
 | --- | --- | --- |
-| **Nuclear Option** | 0.34.2 | Other versions may break the mod. |
+| **Nuclear Option** | 0.34.3 | 0.34.2 also loads, but release 0.2.10 loses the WMC page on it ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Other versions may break the mod. |
 | **[BepInEx](https://github.com/BepInEx/BepInEx/releases)** | 5.4.23 or newer 5.x | BepInEx 6 is not supported. |
 | **[Blueprinter](https://github.com/nikkorap/NOBlueprinter-Releases)** | optional | Unlocks everything marked 🧩. |
 | **[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)** | optional | Adds the in-game **F1** settings window. |
@@ -322,11 +254,12 @@ Not on the route: VR, missile physics or mid-mission saves. The game's developer
 4. Start the game.
 
 **Updating?** Close the game, replace the `BoscaliSummer` folder and start again. Always restart fully after an update.<br>
-**Using NOMM or NOMNOM?** Pick **BoscaliSummer** and check that it installs the version you meant to test.
+**Using NOMM or NOMNOM?** Pick **BoscaliSummer** and check that it installs the version you meant to test.<br>
+**Uninstalling?** Delete `BepInEx/plugins/BoscaliSummer`. To remove your settings and saved data too, also delete `com.marci.boscalisummer.cfg` and the `BoscaliSummer` folder in `BepInEx/config`.
 
 ## First flight
 
-Start any mission and leave everything on at the mission systems prompt for every system below:
+Start any mission and pick **FULL EXPERIENCE** at the mission prompt to have everything below:
 
 | | |
 | --- | --- |
@@ -336,36 +269,19 @@ Start any mission and leave everything on at the mission systems prompt for ever
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | MET OFFICE weather console. The host controls it, clients read along. |
 | **WMC** | Map page for your wing: pilots, formations, loadouts and orders |
 | **STR** | Theater command, territory, front line and staff |
-| **OPS** | Support calls, fronts and readiness |
-| **SET** | Map page for module settings, plus host controls for shared rules |
+| **OPS** | Support perks, fronts and readiness |
+| **SET** | Map page for settings: **THIS PILOT** for your own options, plus host controls for shared rules |
 
 Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on each other in places, so turning one off can hide features in another.
 
-<details>
-<summary><b>TAC BOARD options</b></summary>
-<br>
-
-The TAC BOARD is the weapons, systems and warning display at the top of the screen: helmet-visor symbology with no panel behind it, spread wide along the top edge so it covers less of the sides. The classic narrow column is still there as the **STACK** layout. Its options are yours alone, apply at once and can be changed in flight, from whichever of these is handiest:
-
-- **SET → THIS PILOT → COCKPIT:** board on/off, layout, declutter, size, position, opacity, shade, manual page slots and major board parts.
-- **C ring → HUD** (key 2, top right of the ring): **Show/Hide TAC BOARD**, **Page 1 / 2 / 3**, **Display options**, **Board parts** and **Reset HUD**. Pick each slot's page manually; **Display options → Page count** chooses one, two or three simultaneous pages.
-- **F1:** the **TAC BOARD** switch only.
-- **Config file:** the same options under `[TacBoard]` in `com.marci.boscalisummer.cfg`.
-
-What each group does:
-
-- **Board.** **TAC BOARD** off hides the board and gives back the game's own weapon, countermeasure and power panels. **Layout** is wide or stack. **Size** runs from 60 % to 140 %, **move left** and **move down** slide the board away from the top-right corner (in units, a unit being a 1080p pixel), **opacity** fades the ink and **shade** sets the soft dark band behind it (0 % draws none, and a restyled kill feed then has no dark box either).
-- **Declutter.** Full shows all enabled detail. Lean drops the gauge row, unlit lamps and captions, and shows supplementary systems status only while something is wrong. Min keeps threat lamps and critical supplementary status. Your manually selected pages stay available at every level.
-- **Pages.** One to three full pages sit side by side. Each slot keeps your choice even while its feed is idle; threats, approaches and damage never replace it. Selecting a page already in another visible slot swaps those slots. Alerts continue independently of the selected pages. **RWR hold** controls how long radar-warning contacts remain after their last warning.
-- **Board parts.** Six major switches: **Stores + power**, **Tactical pages**, **Aircraft status**, **Notices**, **Nav data** and **Map + feed**. Aircraft status controls its lamps, supplementary systems strip and gauges together. Hiding stores restores the native weapon, countermeasure and power panels.
-- **Extras.** **Visor sway** lets the symbols lag a little behind head movement, **restyle feed and map** draws the kill feed and the map frame in the board's look (it stays when the board is off), and **reset to defaults** puts every option back.
-
-</details>
+The TAC BOARD's options are yours alone and apply at once, even in flight: **SET → THIS PILOT → COCKPIT**, the **HUD** branch of the C ring, or `[TacBoard]` in the config file.
 
 > [!WARNING]
-> **Multiplayer is experimental.** Every player, host included, must run the **same mod version**. The host decides shared rules such as fires, destruction, progression, support prices and events. Even with matching versions, expect rough sessions.
+> **Multiplayer is experimental.** Every player, host included, must run the **same mod version**. The host decides shared rules such as fires, destruction, progression, support prices and events.
 
 ## Troubleshooting
+
+Start with `BepInEx/LogOutput.log`. Copy it **before** you restart the game, because the next launch overwrites it. Search it for `Boscali Summer` to see what the mod loaded and what failed.
 
 <details>
 <summary><b>Nothing from the mod shows up in game</b></summary>
@@ -373,7 +289,30 @@ What each group does:
 
 - Check the path: `BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll`. Some ZIP tools add an extra folder level.
 - Make sure you have **BepInEx 5**, not 6, and that you started the game once after installing it.
-- Open `BepInEx/LogOutput.log` and search for `BoscaliSummer` to see whether it loaded or why it didn't.
+- Search the log for `Boscali Summer`. No lines at all means BepInEx never loaded the plugin. A `Module failed` line names the module that didn't start and why.
+
+</details>
+
+<details>
+<summary><b>One page or system is missing (WMC, OPS, STR, the TAC BOARD...)</b></summary>
+<br>
+
+- **Check the mission prompt.** **IMMERSION ONLY** or a custom mix switches systems off for that mission. To be asked again, set `RememberedMissions = {}` and `AskAtStart = true` under `[Mission]` in the config file.
+- **Check the module switch** in the **F1** window or in the config file.
+- **Check the log for `Module failed`.** A failed module usually means a game version the mod doesn't know yet. That is exactly how the WMC page went missing on 0.34.2 ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Report it with the log.
+
+</details>
+
+<details>
+<summary><b>OPS perks are locked or greyed out</b></summary>
+<br>
+
+The PERKS tab says why. A perk needs all of these:
+
+- **Allocation:** perks are paid from the game's own allocation, from 4 points at rung 1 up to 30 at rung 5.
+- **Front readiness:** the perk's front (SPACE, CYBER or SOF) must be at the perk's rung. Readiness grows on its own over a mission, faster when you open the front and **CHIP IN** to its READINESS programme.
+- **Qualification:** rung 1 perks need none. From rung 2 up you need the matching qualification (STRIKE, RECON, SIGNALS or ENGINEER), bought on the **SQD** page with score points. A career holds at most two.
+- **A live satellite**, for SPACE perks that use one. A lost satellite has to be rebuilt.
 
 </details>
 
@@ -386,10 +325,34 @@ They need **Blueprinter**. Cargo-launched systems also need an aircraft with a c
 </details>
 
 <details>
-<summary><b>The log warns about Wing Command</b></summary>
+<summary><b>Low frame rate</b></summary>
 <br>
 
-The old stand-alone Wing Command plugin is still installed. Boscali Summer stops it from running, so nothing is broken, but delete `WingCommand.dll` from `BepInEx/plugins` to clear the warning.
+- **SET → THIS PILOT → PERF** has one-click presets and switches for the base game: **LOD CAP**, **SHADOW CAP** and **RENDER SCALE**. The render scale share is set by `RenderScale` (50–100 %) under `[Performance]` in the config file.
+- Heavy weather and large fires cost the most. Try a calmer sky, or switch systems off for the mission at the mission prompt.
+- If one moment always stutters, report it with what was on screen.
+
+</details>
+
+<details>
+<summary><b>An alarm or voice warning is too loud, too quiet or unwanted</b></summary>
+<br>
+
+**SET → THIS PILOT → IMMERSION** has **COCKPIT ALARMS** (the reworked lock, launch, stall and radar-warning tones) and **VOICE WARNINGS** (PULL UP, TERRAIN, OVER G, BINGO FUEL). Switching **COCKPIT ALARMS** off brings back the game's own tones. Switching **VOICE WARNINGS** off silences the spoken calls.
+
+</details>
+
+<details>
+<summary><b>The log is full of warnings</b></summary>
+<br>
+
+Most of them are not the mod's. These are expected and harmless:
+
+- Blueprinter `PatchRunner ... Could not set` lines for Boscali Summer materials: a few material tweaks in the asset bundle don't apply;
+- Discord `RPC` warnings, and Steam `SDR network config` retries;
+- a Wing Command warning, if the old stand-alone plugin is still installed. Boscali Summer switches it off; delete `WingCommand.dll` to clear the warning.
+
+Anything with `Boscali Summer` in it and the word `Error` or `Exception` is worth a [bug report](#reporting-a-bug).
 
 </details>
 
@@ -409,12 +372,71 @@ Confirm everyone, the host included, has exactly the same mod version. If it sti
 
 </details>
 
-## Community
+## FAQ
 
-<!-- DISCORD: the server does not exist yet. When it does, replace the line below with the invite link and point the Discord badge at the top of this file at it. -->
-**Discord: opening soon.** The server isn't up yet. The invite goes right here the day it is.
+<details>
+<summary><b>Why no new features?</b></summary>
+<br>
 
-Until then, the [issue tracker](https://github.com/GrabowMar/Boscali-Summer/issues) is the briefing room: bugs, ideas and war stories all welcome.
+Because what is there needs to work first. The 0.2 releases grew fast, and the [stabilisation](#stabilisation) work comes before anything new. Ideas are still welcome in the issue tracker. They are collected, not built, until then.
+
+</details>
+
+<details>
+<summary><b>Do I need Blueprinter?</b></summary>
+<br>
+
+No. Without it, everything marked 🧩 is missing (VANGUARD and HALO jumps) and the rest of the mod works as usual.
+
+</details>
+
+<details>
+<summary><b>Can I use only part of the mod?</b></summary>
+<br>
+
+Yes. Pick **IMMERSION ONLY** or your own mix at the mission prompt, or switch whole modules off in the **F1** window or the config file.
+
+</details>
+
+<details>
+<summary><b>Does everyone in multiplayer need it?</b></summary>
+<br>
+
+Yes. Every player, host included, needs the same mod version. The host's settings decide the shared rules.
+
+</details>
+
+<details>
+<summary><b>Does it work with other mods?</b></summary>
+<br>
+
+Usually. The stand-alone Wing Command plugin is switched off, because Wing Command is built in. With another combat overhaul installed, the overlapping combat adjustments leave the job to it. Anything else that clashes is a bug: please report it with both mods' versions.
+
+</details>
+
+<details>
+<summary><b>Where are the cheats and the game-master tools?</b></summary>
+<br>
+
+They exist only in development builds. The release downloads are player builds, with developer cheats and debug tools left out.
+
+</details>
+
+<details>
+<summary><b>Will it break my game install?</b></summary>
+<br>
+
+The mod doesn't modify the game's files. Everything it adds lives in its plugin folder and in `BepInEx/config` (its `.cfg` file and a `BoscaliSummer` folder for crests, scenarios and other saved data), so deleting those removes it. Still, back up first, as you would for any alpha mod.
+
+</details>
+
+<details>
+<summary><b>How can I help?</b></summary>
+<br>
+
+Report bugs with logs, test in the ways you play, and send fixes. See [Contributing](#contributing).
+
+</details>
 
 ## Reporting a bug
 
@@ -422,25 +444,30 @@ Bug reports are the most useful thing you can send right now: **[open an issue](
 
 A good report has:
 
-- [ ] What happened, what you expected, and steps to reproduce it
-- [ ] Game version, mod version and your other mods
-- [ ] The mission, and whether you were playing solo, hosting or joining
-- [ ] `BepInEx/LogOutput.log`, copied **before** you restart, because the next launch overwrites it. Skim it for personal information first.
-- [ ] A screenshot or clip, if it helps
+- what happened, what you expected, and the steps to reproduce it;
+- the game version, the mod version and your other mods;
+- the mission, and whether you were playing solo, hosting or joining;
+- `BepInEx/LogOutput.log`, copied **before** you restart. Skim it for personal information first;
+- a screenshot or clip, if it helps.
 
 Want more detail in the log? With ConfigurationManager installed, turn on **Advanced settings**, then **Debug → VerboseLogging**.
 
+## Contributing
+
+**Help is welcome, and it doesn't have to be code.** Testing on your own setup, a clear bug report with a log, a troubleshooting tip that worked for you or a correction to this README all move the mod forward. If you code, fixes and cleanups that keep behaviour are the most useful pull requests right now.
+
+[CONTRIBUTING.md](CONTRIBUTING.md) covers building the mod, testing a change and opening a pull request. Questions, ideas and war stories go in the [issue tracker](https://github.com/GrabowMar/Boscali-Summer/issues).
+
 ## Development
 
-You need the **.NET 8 SDK** and a local Nuclear Option install with BepInEx. The build compiles against your game's own assemblies, so point `GameDir` at your game folder:
+You need the **.NET 8 SDK**, **Git LFS** (for the asset bundle) and a local Nuclear Option install with BepInEx. The build compiles against your game's own assemblies:
 
 ```powershell
 dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option" -p:PublicRelease=true
 ```
 
-- `-p:PublicRelease=true` makes a player build with developer cheats, sim hooks and debug tools left out; leave it out for a development build.
+- `-p:PublicRelease=true` makes a player build, with developer cheats, sim hooks and debug tools left out. Leave it out for a development build.
 - The plugin targets `netstandard2.1`.
-- To bump the version, change `<Version>` in `BoscaliSummer.csproj` **and** `PluginVersion` in `Core/Plugin.cs`. The build fails if they differ.
 - A green build doesn't mean the game is happy. Test in game, and in multiplayer if you touched anything networked.
 
 <details>
@@ -452,9 +479,9 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 | `Core/` | Plugin entry point, module loader and shared services: config, networking, UI, effects and storage |
 | `modules/` | One folder per feature module, such as `Wing`, `Support`, `Hud`, `Weather` and `FireAndDestruction` |
 | `AvionicsUi/` | The cockpit and console UI toolkit, including its `.avss` display themes |
-| `assets/` | Bundled mission and equipment assets |
+| `assets/` | The bundled mission and equipment assets |
 
-Inside a module, `Domain/` holds game-independent logic, alongside `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` for Harmony patches.
+Inside a module, `Domain/` holds logic that doesn't depend on the game, alongside `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` (Harmony patches).
 
 </details>
 
@@ -463,16 +490,24 @@ Inside a module, `Domain/` holds game-independent logic, alongside `Runtime/`, `
 > [!NOTE]
 > **This mod is developed with help from AI tools**: code, debugging, design exploration, documentation and some visual assets. Some artwork, including the layered pilot portraits, is AI-generated. The project author is responsible for everything that ships, and the screenshots above are real, unedited game captures.
 
-## Credits
+## Credits and licences
 
 - **Nuclear Option** by Shockfront Studios
 - **[BepInEx](https://github.com/BepInEx/BepInEx)** and **[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)** by the BepInEx team
 - **[Blueprinter](https://github.com/nikkorap/NOBlueprinter-Releases)** by nikkorap
 
+Boscali Summer's own code is released under the [MIT licence](LICENSE). Versions up to 0.2.5 were MIT, and 0.2.6 to 0.2.10 were published under the GNU GPL v3. Bundled third-party parts keep their own licences, kept next to them in the repository:
+
+- **[UIEffect](https://github.com/mob-sakai/UIEffect)** (MIT) and **Unity UI Extensions** (BSD-3-Clause), in `AvionicsUi/ThirdParty`;
+- **Tabler Icons** (MIT) and the **Barlow Condensed**, **JetBrains Mono** and **Rajdhani** fonts (SIL OFL), in `AvionicsUi/Assets/LICENSES`;
+- **[RainyGlassShader](https://github.com/toadstorm/RainyGlassShader)** by toadstorm (LGPL-2.1), the source of the canopy rain, in `modules/Weather/Assets/Source`;
+- the cloud noise by Anthony Ibrahim (MIT), in `modules/Weather/Visuals`;
+- sound effects and voice clips, listed in the `LICENSES.txt` files under `Core/Fx/Sfx`, `modules/Immersion/Assets/Voice` and `modules/Spooktober/Assets/Sfx`;
+- the creature model, from the [Free Creature Rig Project](https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project) on CGTrader.
+
 ---
 
 <p align="center">
-  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">GNU GPL v3</a> (versions up to 0.2.5 were MIT)</sub><br>
-  <sub>This project is an unofficial community modification and is not affiliated with, sponsored by, or endorsed by Shockfront Studios Pty Ltd. Original Nuclear Option assets, vehicle designs, audio, and code are Copyright (c) 2026 Shockfront Studios Pty Ltd. All rights reserved. Nuclear Option and Shockfront Studios are trademarks or registered trademarks of Shockfront Studios Pty Ltd. Original mod content and all other trademarks belong to their respective owners.</sub><br>
-  <sub>Creature model from <a href="https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project">Free Creature Rig Project</a> on CGTrader.</sub>
+  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">MIT licence</a> · <a href="CONTRIBUTING.md">contributions welcome</a></sub><br>
+  <sub>This project is an unofficial community modification and is not affiliated with, sponsored by, or endorsed by Shockfront Studios Pty Ltd. Original Nuclear Option assets, vehicle designs, audio, and code are Copyright (c) 2026 Shockfront Studios Pty Ltd. All rights reserved. Nuclear Option and Shockfront Studios are trademarks or registered trademarks of Shockfront Studios Pty Ltd. Original mod content and all other trademarks belong to their respective owners.</sub>
 </p>

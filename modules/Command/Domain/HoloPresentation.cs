@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Degrees above the horizon the camera looks from: the MINI is a flat 2D plan view like the game's own corner map, the BIG one shows relief.</summary>
         internal const float MiniTilt = 90f, BigTilt = 55f;
         /// <summary>Where the aircraft stands in the frame: across the middle always, and up from the bottom edge as a share of the frame's height. The MINI centres it, as the game's corner map does.</summary>
-        internal const float AircraftAcross = .5f, MiniAircraftUp = .5f;
+        internal const float MiniAircraftUp = .5f;
         /// <summary>Grid cells across the picture's reach (twice the range, at the aircraft's depth): a denser grid for the bigger picture.</summary>
         internal const int MiniCells = 48, BigCells = 96;
 
@@ -74,13 +74,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// </summary>
         internal static float AircraftUp(HoloShape shape, bool northUp) => shape == HoloShape.Mini && !northUp ? MiniAircraftUp : .5f;
 
-        /// <summary>The aircraft's place in the frame, as shares of its width and height from the lower-left corner.</summary>
-        internal static void Aircraft(HoloShape shape, bool northUp, out float across, out float up)
-        {
-            across = AircraftAcross;
-            up = AircraftUp(shape, northUp);
-        }
-
         /// <summary>Grid cells across the picture's reach for a presentation: 48 on the MINI (7 pixels apart at 1080p; 64 was a 5 pixel hatch that read as noise), 96 on the BIG one.</summary>
         internal static int GridCells(HoloShape shape) => shape == HoloShape.Mini ? MiniCells : BigCells;
 
@@ -113,10 +106,10 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             float unit = canvasHeight / 1080f, e = Smooth(size);
             float bigHeight = BigHeightShare * canvasHeight, bigWidth = Math.Min(BigAspect * bigHeight, BigWidthShare * canvasWidth);
-            x = MathF.Round(Lerp(MiniMargin * unit, (canvasWidth - bigWidth) * .5f, e));
-            y = MathF.Round(Lerp(MiniMargin * unit, (canvasHeight - bigHeight) * .5f, e));
-            width = MathF.Round(Lerp(MiniWidth * unit, bigWidth, e));
-            height = MathF.Round(Lerp(MiniHeight * unit, bigHeight, e));
+            x = MathF.Round(Scalar.Lerp(MiniMargin * unit, (canvasWidth - bigWidth) * .5f, e));
+            y = MathF.Round(Scalar.Lerp(MiniMargin * unit, (canvasHeight - bigHeight) * .5f, e));
+            width = MathF.Round(Scalar.Lerp(MiniWidth * unit, bigWidth, e));
+            height = MathF.Round(Scalar.Lerp(MiniHeight * unit, bigHeight, e));
         }
 
         /// <summary>The share of the way from the MINI's shelf and corner to the BIG's for a size (the same ease the frame takes), so furniture glides with it.</summary>
@@ -137,8 +130,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             width = Math.Min(TextureWidth, Math.Max(MinimumPixels, (int)MathF.Round(widthPixels * scale)));
             height = Math.Min(TextureHeight, Math.Max(MinimumPixels, (int)MathF.Round(heightPixels * scale)));
         }
-
-        private static float Lerp(float a, float b, float t) => a + (b - a) * t;
 
         private static float Smooth(float t) => Scalar.SmoothStep(0f, 1f, t);
     }

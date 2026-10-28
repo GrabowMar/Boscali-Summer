@@ -17,9 +17,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public const float RowH = 26f, RowGap = 2f, CtlH = 22f;
 
-        public static TMP_Text Text(RectTransform parent, string name, AvTextRole role, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft)
+        /// <summary>A kit text that shrinks toward the floor instead of wrapping.</summary>
+        public static TextMeshProUGUI Text(RectTransform parent, string name, AvTextRole role, TextAlignmentOptions align = TextAlignmentOptions.MidlineLeft,
+            string text = "")
         {
-            TMP_Text t = AvText.Make(parent, name, role, "", align);
+            TextMeshProUGUI t = AvText.Make(parent, name, role, text, align);
             AvText.Fit(t, false);
             return t;
         }
@@ -50,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static void PaintRow(AvFrame frame, Image rail, AvState state, string interaction)
         {
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), interaction);
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert), r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            WmcDraw.PaintRow(frame, r);
             if (rail != null) rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
         }
 
@@ -270,8 +272,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private Row Build(int slot, Action<int> pick)
         {
             var r = new Row { Root = AvLay.Child(Rect, "Row" + slot) };
-            r.Frame = AvFrame.Add(r.Root, "Frame", default(AvChamfer));
-            AvLay.Fill(r.Frame.rectTransform);
+            r.Frame = WmcDraw.FillFrame(r.Root);
             r.Rail = AvLay.Solid(r.Root, "Rail", Color.clear);
             r.Icon = AvLay.Solid(r.Root, "Icon", Color.white);
             r.Icon.preserveAspect = true;
@@ -461,8 +462,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < rowCount; i++)
             {
                 var s = new Strip { Root = AvLay.Child(Rect, "Strip" + i) };
-                s.Frame = AvFrame.Add(s.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(s.Frame.rectTransform);
+                s.Frame = WmcDraw.FillFrame(s.Root);
                 s.Rail = AvLay.Solid(s.Root, "Rail", Color.clear);
                 s.Track = AvLay.Solid(s.Root, "BarTrack", Color.clear);
                 s.Fill = AvLay.Solid(s.Root, "BarFill", Color.clear);
@@ -747,7 +747,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             key.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             AvStyle r = AvStyleHost.FuiStyle("row info");
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert), r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            WmcDraw.PaintRow(frame, r);
             pick.color = AvInk.Ink;
             pos.color = AvInk.Dim;
             icon.color = AvTheme.Friendly;
@@ -817,8 +817,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < boxes.Length; i++)
             {
                 var b = new Box { Root = AvLay.Child(mapRoot, "Box" + i) };
-                b.Frame = AvFrame.Add(b.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(b.Frame.rectTransform);
+                b.Frame = WmcDraw.FillFrame(b.Root);
                 b.Label = WmcSheet.Text(b.Root, "N", AvTextRole.DataSmall, TextAlignmentOptions.Center);
                 AvLay.Fill(b.Label.rectTransform);
                 AvHit hit = AvHit.On(b.Frame);
@@ -831,8 +830,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 int slot = i;
                 var r = new Row { Root = AvLay.Child(Rect, "Row" + i) };
-                r.Frame = AvFrame.Add(r.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(r.Frame.rectTransform);
+                r.Frame = WmcDraw.FillFrame(r.Root);
                 r.Rail = AvLay.Solid(r.Root, "Rail", Color.clear);
                 r.Num = WmcSheet.Text(r.Root, "Num", AvTextRole.DataSmall, TextAlignmentOptions.Center);
                 r.Store = AvText.Make(r.Root, "Store", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft, true);
@@ -1124,8 +1122,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 int slot = i;
                 var c = new Cell { Root = AvLay.Child(Rect, "Cell" + i) };
-                c.Frame = AvFrame.Add(c.Root, "Frame", default(AvChamfer));
-                AvLay.Fill(c.Frame.rectTransform);
+                c.Frame = WmcDraw.FillFrame(c.Root);
                 c.Rail = AvLay.Solid(c.Root, "Rail", Color.clear);
                 c.Name = WmcSheet.Text(c.Root, "Name", AvTextRole.ProseSmall);
                 c.Verdict = WmcSheet.Text(c.Root, "Verdict", AvTextRole.Micro);

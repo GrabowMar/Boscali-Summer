@@ -189,7 +189,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             var contentObject = new GameObject("Content", typeof(RectTransform));
             content = contentObject.GetComponent<RectTransform>();
             content.SetParent(panel, worldPositionStays: false);
-            WingUi.Stretch(content);
+            AvLay.Fill(content);
 
             BuildHeader();
             BuildCards();
@@ -205,15 +205,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             float width = PanelWidth - Pad * 2f;
 
             WingUi.Label(content, "WING COMMAND  /  AIRFRAME RECOVERY",
-                         new Rect(Pad, -10f, width, 20f), WingUi.Green, AvTokens.FontLead,
+                         new Rect(Pad, -10f, width, 20f), AvTheme.Accent, AvTokens.FontLead,
                          FontStyles.Normal, TextAlignmentOptions.Left);
-            WingUi.Rule(content, new Rect(Pad, -HeaderHeight, width, 1f), WingUi.Green);
+            WingUi.Rule(content, new Rect(Pad, -HeaderHeight, width, 1f), AvTheme.Accent);
 
             WingUi.Label(content, "PILOT DOWN", new Rect(Pad, -48f, width, 28f),
-                         WingUi.Alert, AvTokens.FontTitle + 4f, FontStyles.Normal, TextAlignmentOptions.Left);
+                         AvTheme.Alert, AvTokens.FontTitle + 4f, FontStyles.Normal, TextAlignmentOptions.Left);
             WingUi.Label(content,
                          "Select a surviving wing aircraft. A fresh player airframe will replace it in position.",
-                         new Rect(Pad, -82f, width, 20f), WingUi.Friendly, AvTokens.FontBody,
+                         new Rect(Pad, -82f, width, 20f), AvTheme.Friendly, AvTokens.FontBody,
                          FontStyles.Normal, TextAlignmentOptions.Left);
         }
 
@@ -233,7 +233,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 rt.SetParent(content, worldPositionStays: false);
                 WmcDraw.Place(rt, rect);
 
-                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), WingUi.Friendly.WithAlpha(0.58f));
+                WingUi.Panel(rt, new Rect(0f, 0f, cardWidth, CardHeight), AvTheme.Friendly.WithAlpha(0.58f));
 
                 var card = new Card { Root = go };
 
@@ -244,23 +244,23 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 });
 
                 card.Key = WingUi.Label(rt, "", new Rect(12f, -8f, 26f, 22f),
-                                        WingUi.Green, 15f, FontStyles.Normal,
+                                        AvTheme.Accent, 15f, FontStyles.Normal,
                                         TextAlignmentOptions.Center);
-                WingUi.Outline(rt, new Rect(10f, -6f, 30f, 26f), WingUi.FrameColor);
+                WmcDraw.Outline(rt, new Rect(10f, -6f, 30f, 26f), AvTheme.Frame);
 
                 card.Callsign = WingUi.Label(rt, "", new Rect(50f, -7f, 90f, 22f),
-                                             WingUi.Friendly, 15f, FontStyles.Normal,
+                                             AvTheme.Friendly, 15f, FontStyles.Normal,
                                              TextAlignmentOptions.Left);
                 card.Type = WingUi.Label(rt, "", new Rect(144f, -8f, cardWidth - 156f, 20f),
-                                         WingUi.Friendly, 13f, FontStyles.Normal,
+                                         AvTheme.Friendly, 13f, FontStyles.Normal,
                                          TextAlignmentOptions.Right);
                 card.Meta = WingUi.Label(rt, "", new Rect(50f, -34f, cardWidth - 62f, 18f),
-                                         WingUi.Dim, 10f, FontStyles.Normal,
+                                         AvTheme.Dim, 10f, FontStyles.Normal,
                                          TextAlignmentOptions.Left);
 
-                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f), WingUi.Grey.WithAlpha(0.35f));
+                card.FuelTrack = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f), Color.grey.WithAlpha(0.35f));
                 card.FuelFill = WingUi.Rule(rt, new Rect(50f, -58f, cardWidth - 62f, 2f),
-                                            WingUi.Friendly);
+                                            AvTheme.Friendly);
 
                 go.SetActive(false);
                 cards.Add(card);
@@ -273,11 +273,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             footerHint = WingUi.Label(content, "[1-8]  SELECT AIRCRAFT",
                                       new Rect(Pad, 0f, PanelWidth - Pad * 2f - 220f, 20f),
-                                      WingUi.Dim, 10f, FontStyles.Normal,
+                                      AvTheme.Dim, 10f, FontStyles.Normal,
                                       TextAlignmentOptions.Left).rectTransform;
 
             declineButton = WingUi.Button(content, "",
-                                          new Rect(PanelWidth - Pad - 210f, 0f, 210f, WingUi.RowHeight),
+                                          new Rect(PanelWidth - Pad - 210f, 0f, 210f, AvTokens.RowHeight),
                                           () => ContinueWithoutTakeover("Returning to aircraft selection"));
         }
 
@@ -342,7 +342,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 float trackWidth = card.FuelTrack.rectTransform.sizeDelta.x;
                 fill.sizeDelta = new Vector2(trackWidth * Mathf.Clamp01(fuelLevel),
                                              fill.sizeDelta.y);
-                card.FuelFill.color = low ? WingUi.Warning : WingUi.Friendly;
+                card.FuelFill.color = low ? AvTheme.Warning : AvTheme.Friendly;
             }
         }
 

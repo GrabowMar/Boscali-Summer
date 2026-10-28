@@ -1,4 +1,3 @@
-using System;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
 
@@ -31,44 +30,6 @@ namespace BoscaliSummer.Modules.Intel.Domain
                 if (!rings[i].Stale) anyFresh = true;
                 if (radius - distance > depthMetres) depthMetres = radius - distance;
             }
-        }
-
-        /// <summary>
-        /// Metres of the leg a→b inside any masked ring, sampled at the midpoints of 16 equal
-        /// pieces. A zero-length leg is a point: use <see cref="Coverage"/>.
-        /// </summary>
-        public static float SegmentExposure(AirDefenceRing[] rings, int count, float ax, float az, float bx, float bz,
-            float agl, byte mask, out bool anyFresh)
-        {
-            anyFresh = false;
-            int n = Clamp(rings, count);
-            float dx = bx - ax, dz = bz - az;
-            float length = MathF.Sqrt(dx * dx + dz * dz);
-            if (n == 0 || !(length > 0f)) return 0f;
-            const int samples = ThreatPictureLimits.SegmentSamples;
-            int covered = 0;
-            for (int s = 0; s < samples; s++)
-            {
-                float t = (s + 0.5f) / samples;
-                float px = ax + dx * t, pz = az + dz * t;
-                bool hit = false;
-                for (int i = 0; i < n; i++)
-                {
-                    if (!InMask(rings[i].Kind, mask)) continue;
-                    float radius = rings[i].EffectiveRadius(agl);
-                    if (!(radius > 0f)) continue;
-                    float rx = px - rings[i].X, rz = pz - rings[i].Z;
-                    if (rx * rx + rz * rz > radius * radius) continue;
-                    hit = true;
-                    if (!rings[i].Stale)
-                    {
-                        anyFresh = true;
-                        break;
-                    }
-                }
-                if (hit) covered++;
-            }
-            return length * covered / samples;
         }
 
         private static int Clamp(AirDefenceRing[] rings, int count) =>

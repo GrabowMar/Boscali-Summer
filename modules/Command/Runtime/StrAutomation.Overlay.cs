@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             int want = Mathf.Max(1, (int)Number(args, "n", 1f)), seen = 0;
             Canvas canvas = map.mapImage != null ? map.mapImage.GetComponentInParent<Canvas>() : null;
             if (canvas != null) canvas = canvas.rootCanvas;
-            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            Camera camera = MapUiPointer.UiCamera(canvas);
             var r = new Dictionary<string, object> { { "ok", true }, { "found", 0 }, { "hit", 0 }, { "blockedBy", "" } };
             RectTransform viewport = map.mapBackground.rectTransform;
             // The airbase icons live in the scene, not in map.mapIcons (which holds the unit icons).

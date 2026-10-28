@@ -201,8 +201,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
         }
 
-        public static PortraitSelection Select(string identity) => Select(identity, PortraitRole.Pilot);
-
         /// <summary>Identity owns body, face, hair and scene; changing service changes clothing/equipment. Faction 0 is BDF, 1 is PALA.</summary>
         public static PortraitSelection Select(string identity, PortraitRole role, int faction = -1)
         {
@@ -242,8 +240,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 default: return variation == 0 ? (faction == 1 ? 2 : 0) : (faction == 1 ? 9 : 7) + variation;
             }
         }
-
-        public static byte[] Compose(string identity, byte[] atlas) => Compose(Select(identity), atlas);
 
         public static byte[] Compose(PortraitSelection selection, byte[] atlas) =>
             FinishDisplay(ComposeLayers(selection, atlas));

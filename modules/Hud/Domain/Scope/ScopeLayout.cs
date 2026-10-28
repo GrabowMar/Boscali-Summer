@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Hero, Pwr, Exp;
         /// <summary>The major stores group is explicitly disabled: collapse its reserved columns in WIDE too.</summary>
         public bool StoresHidden;
-        /// <summary>PWR BUS has its cost row (an energy weapon is fitted): 72 high, else 54 (<see cref="ScopeLayout.CostRow"/> less).</summary>
-        public bool PwrCost;
         /// <summary>The caption shelves are off (Lean, Minimal): EXPENDABLES has no shelf row, so in WIDE it is <see cref="ScopeLayout.ExpShelfRow"/> shorter and its words move up by that much (the stores painter).</summary>
         public bool NoShelves;
         public bool Lamps;
@@ -49,8 +47,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         /// <summary>The blocks, in the order of <see cref="Block"/>: the shade's cloud field (<see cref="ShadeField"/>) is the strongest of their fall-offs.</summary>
         public const int BlockCount = 11;
-
-        public readonly BoardRect Box => new BoardRect(0f, 0f, Width, Height);
 
         public readonly BoardRect Slot(int i) => i == 0 ? Slot0 : i == 1 ? Slot1 : i == 2 ? Slot2 : i == 3 ? Slot3 : default;
 
@@ -120,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float GaugeLine1 = 12f, GaugeLine2 = 30f, GaugePitch = 18f, GaugeSpace = 16f, TickerH = 12f;
 
         // ---- LAYOUT.md 4 (STACK): box 448, every block 440 wide at x 4 (HERO and the lamp line, page, gauges, ticker), the SAT blocks 216 wide in two halves.
-        public const float StackW = 448f, StackX = 4f, StackInnerW = 440f;
+        public const float StackX = 4f, StackInnerW = 440f;
         public const float StackHeroH = 108f, StackHalfW = 216f, StackHalfX = 228f;
 
         // ---- LAYOUT.md 3.5: the page. The rectangle of a full page and of the compact SYSTEMS strip (a full page's strip included): the header is a caption shelf in its first 18 units, not a row. The painters keep the
@@ -165,7 +161,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             else
             {
                 if (hero) g.Hero = new BoardRect(storesX + HeroX, BlockTop, HeroW, HeroH);
-                if (pwr) g.Pwr = new BoardRect(storesX + SatX, BlockTop, SatW, b.PwrCost ? SatH : SatH - CostRow);
+                if (pwr) g.Pwr = new BoardRect(storesX + SatX, BlockTop, SatW, SatH - CostRow);
                 if (exp) g.Exp = new BoardRect(storesX + SatX, pwr ? g.Pwr.Bottom + BlockGap : BlockTop, SatW, b.NoShelves ? SatH - ExpShelfRow : SatH);
                 storesBottom = Math.Max(g.Hero.Bottom, Math.Max(g.Pwr.Bottom, g.Exp.Bottom));
                 if (b.Lamps) g.Lamps = new BoardRect(spineX, BlockTop, WingW, LampH);

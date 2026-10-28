@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 
             for (int i = 0; i < n; i++)
             {
-                if (!Finite(ax[i]) || !Finite(ay[i]) || !Finite(w[i]) || !Finite(h[i])) { placed[i] = default; continue; }
+                if (!float.IsFinite(ax[i]) || !float.IsFinite(ay[i]) || !float.IsFinite(w[i]) || !float.IsFinite(h[i])) { placed[i] = default; continue; }
 
                 bool done = false;
                 for (int c = 0; c < Candidates && !done; c++)
@@ -84,7 +84,5 @@ namespace BoscaliSummer.Modules.Command.Domain
             r.Y = System.Math.Max(vp.Y, System.Math.Min(r.Y, vp.Y + vp.H - r.H));
             return r;
         }
-
-        private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
     }
 }

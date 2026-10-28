@@ -70,9 +70,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public readonly StrLegendEntry[] Legend = new StrLegendEntry[MaxLegend];
         public int LegendCount;
 
-        // Worst-case quads per shape (rings 48 segments, dashed rings 24 dashes, dashed lines 40 dashes, a head is one quad), summed as shapes are added.
-        private int inkQuads, pulseQuads;
-
         // Joined words, remembered per item so that toggling a layer or adding an item moves nobody else's slot.
         private const int EffortSlot = 0, FrontSlots = 1, ProposalSlots = 9, PostSlots = 17, EffortNote = MaxTags * 2 - 2;
         private readonly string[] joinA = new string[MaxTags * 2], joinB = new string[MaxTags * 2], joinSep = new string[MaxTags * 2], joinOut = new string[MaxTags * 2];
@@ -113,18 +110,11 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             if (into == null) return;
             into.PrimCount = into.TagCount = into.LegendCount = 0;
-            into.inkQuads = into.pulseQuads = 0;
             if (vm == null || layers == StrLayers.None) return;
             into.finder = start;
             into.Fill(vm, layers);
             into.finder = null;
         }
-
-        /// <summary>Worst-case quads of the ink mesh: the shapes that do not pulse, plus one leader line per tag.</summary>
-        public int EstimateInkQuads() => inkQuads + TagCount;
-
-        /// <summary>Quads of the pulse mesh (the marching axis).</summary>
-        public int EstimatePulseQuads() => pulseQuads;
 
         // ---- fill -------------------------------------------------------------------------------------------------------------
 
@@ -308,9 +298,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (PrimCount >= MaxPrims) return;
             if ((shape == StrShape.DashedLine || shape == StrShape.DashedArrow || shape == StrShape.Arrow || shape == StrShape.Offensive) && x == x2 && z == z2) return;
             Prims[PrimCount++] = new StrPrim { Shape = shape, Ink = ink, Id = id, X = x, Z = z, X2 = x2, Z2 = z2, RadiusMetres = radius, Pulse = pulse, Selected = selected, Hollow = hollow };
-            // An offensive always paints its body in the ink mesh; marching, it adds its chevrons to the pulse mesh.
-            if (shape == StrShape.Offensive) { inkQuads += Quads(shape); if (pulse) pulseQuads += StrStrokes.ChevronQuads; }
-            else if (pulse) pulseQuads += Quads(shape); else inkQuads += Quads(shape);
         }
 
         private void AddTag(StrTagKind kind, StrItemId id, float x, float z, string text, string sub, StrInkRole ink, float value, float trend, bool ghost, StrViewModel vm, string note = "")
@@ -346,7 +333,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 legendSeen[at] = true; legendInk[at] = Prims[i].Ink; legendShape[at] = Prims[i].Shape;
             }
             for (int i = 0; i < TagCount && !legendSeen[NotchEntry]; i++)
-                if (Finite(Tags[i].Value)) { legendSeen[NotchEntry] = true; legendInk[NotchEntry] = StrInkRole.Hostile; legendShape[NotchEntry] = StrShape.Notch; }
+                if (float.IsFinite(Tags[i].Value)) { legendSeen[NotchEntry] = true; legendInk[NotchEntry] = StrInkRole.Hostile; legendShape[NotchEntry] = StrShape.Notch; }
             for (int i = 0; i < MaxLegend; i++)
                 if (legendSeen[i]) Legend[LegendCount++] = new StrLegendEntry { Label = LegendLabels[i], Shape = legendShape[i], Ink = legendInk[i] };
         }
@@ -373,36 +360,15 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         // ---- small helpers ----------------------------------------------------------------------------------------------------
 
-        private static int Quads(StrShape shape)
-        {
-            switch (shape)
-            {
-                case StrShape.Ring: return 48;
-                case StrShape.DashedRing: return 24;
-                case StrShape.Arrow: return 2;
-                case StrShape.DashedArrow: return 41;
-                case StrShape.DashedLine: return 40;
-                case StrShape.Diamond: return 4;
-                case StrShape.DiamondSolid: return 2;
-                case StrShape.Hex: return 6;
-                case StrShape.Box: return 4;
-                case StrShape.Cross: return 2;
-                case StrShape.Offensive: return StrStrokes.OffensiveQuads;
-                default: return 0;
-            }
-        }
-
         private static int Limit(int count, Array rows) => rows == null ? 0 : Math.Max(0, Math.Min(count, rows.Length));
 
         private static bool Is(StrItemId held, StrItemId id) => !id.IsNone && held == id;
 
-        private static bool Finite(float x, float z) => Finite(x) && Finite(z);
+        private static bool Finite(float x, float z) => float.IsFinite(x) && float.IsFinite(z);
 
-        private static bool Finite(float v) => !float.IsNaN(v) && !float.IsInfinity(v);
+        private static float Unit(float v) => float.IsFinite(v) ? v : float.NaN;
 
-        private static float Unit(float v) => Finite(v) ? v : float.NaN;
-
-        private static float Radius(float r) => Finite(r) && r > 0f ? r : 0f;
+        private static float Radius(float r) => float.IsFinite(r) && r > 0f ? r : 0f;
     }
 
     /// <summary>
@@ -419,7 +385,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         public static bool Find(Func<float, float, int> side, float fixX, float fixZ, float step, out float sx, out float sz)
         {
             sx = sz = 0f;
-            if (side == null || float.IsNaN(fixX) || float.IsInfinity(fixX) || float.IsNaN(fixZ) || float.IsInfinity(fixZ) || !(step > 1f)) return false;
+            if (side == null || !float.IsFinite(fixX) || !float.IsFinite(fixZ) || !(step > 1f)) return false;
             bool ours = side(fixX, fixZ) > 0;
             float best = float.MaxValue, bx = 0f, bz = 0f;
             for (int r = 0; r < Rays; r++)
@@ -458,7 +424,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         public static bool Garrison(float[] xs, float[] zs, int count, Func<float, float, int> side, float fixX, float fixZ, out float sx, out float sz)
         {
             sx = sz = 0f;
-            if (xs == null || zs == null || float.IsNaN(fixX) || float.IsInfinity(fixX) || float.IsNaN(fixZ) || float.IsInfinity(fixZ)) return false;
+            if (xs == null || zs == null || !float.IsFinite(fixX) || !float.IsFinite(fixZ)) return false;
             count = Math.Min(count, Math.Min(xs.Length, zs.Length));
             float bestScore = 0f;
             int best = -1;

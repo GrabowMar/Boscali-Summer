@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 {
                     MetMark mk = model.Marks[i];
                     float x = X(mk.AtMin, w);
-                    Color col = mk.Step ? EnvInk.Role("caution") : MetFrontGlyph.Ink(mk.Kind);
+                    Color col = MetFrontGlyph.Ink(mk.Kind);
                     c.Quad(x - 0.65f, StripTop + 1f, 1.3f, BlockH + 14f, col);
                     c.Tri(x - 4f, StripTop + 1f, x + 4f, StripTop + 1f, x, StripTop + 7f, col);
                 }

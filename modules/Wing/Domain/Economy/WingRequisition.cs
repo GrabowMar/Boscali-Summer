@@ -4,6 +4,7 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The host's side of SUPPLY (spec WMC rebuild §SUPPLY; design wmc-rebuild/supply-shop-rules §5): the draft the page
@@ -279,13 +280,14 @@ namespace BoscaliSummer.Modules.Wing.Domain
             foreach (Aircraft a in UnitRegistry.allAircraft)
             {
                 if (a == null) continue;
-                Pilot p = a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+                Pilot p = AircraftReadout.PrimaryPilot(a);
                 bool landing = p != null && p.currentState != null &&
                                (ReferenceEquals(p.currentState, p.AILandingState) || ReferenceEquals(p.currentState, p.AIHeloLandingState));
-                if (!AutoRtbCandidatePolicy.IsCandidateEligible(a.disabled, a.NetworkHQ == hq, a.Player != null,
-                        wing != null && (wing.IsMember(a) || ReferenceEquals(wing.Leader, a)), false,
-                        SpawnService.Instance != null && SpawnService.Instance.IsPending(a), false,
-                        p == null || p.dead || p.ejected, landing) || a.radarAlt < 10f) continue;
+                // Not a wing member or leader, a delivery still pending, or a pilot out: those are never sacrificed to make room.
+                if (a.disabled || a.NetworkHQ != hq || a.Player != null || landing || a.radarAlt < 10f ||
+                    (wing != null && (wing.IsMember(a) || ReferenceEquals(wing.Leader, a))) ||
+                    (SpawnService.Instance != null && SpawnService.Instance.IsPending(a)) ||
+                    p == null || p.dead || p.ejected) continue;
                 Vector3 at = a.transform.position;
                 float d = float.MaxValue;
                 foreach (Airbase f in own)

@@ -6,18 +6,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     // The weather console's presets under the names a mission script uses (IWeatherDirector).
     internal sealed partial class WeatherManager : IWeatherDirector
     {
-        public bool Hold(string setPiece)
+        public bool Hold(string setPiece) => setPiece switch
         {
-            switch (setPiece)
-            {
-                case "storm": return ApplyScenario(WeatherScenario.SquallAssault);
-                case "hurricane": return ApplyScenario(WeatherScenario.HurricaneEye);
-                case "front": return ApplyScenario(WeatherScenario.FrontalPassage);
-                case "fog": return ApplyScenario(WeatherScenario.SeaFog);
-                case "wave": return ApplyScenario(WeatherScenario.MountainWave);
-                default: return false;
-            }
-        }
+            "storm" => ApplyScenario(WeatherScenario.SquallAssault),
+            "hurricane" => ApplyScenario(WeatherScenario.HurricaneEye),
+            "front" => ApplyScenario(WeatherScenario.FrontalPassage),
+            "fog" => ApplyScenario(WeatherScenario.SeaFog),
+            "wave" => ApplyScenario(WeatherScenario.MountainWave),
+            _ => false,
+        };
 
         public void Resume() => ApplyScenario(WeatherScenario.ResetAll);
 

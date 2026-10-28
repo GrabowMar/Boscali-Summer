@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Weather.Domain;
 using BoscaliSummer.Modules.Weather.Presentation;
@@ -18,14 +19,14 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// <summary>Half of the theater, metres (x east, z north).</summary>
         internal Vector2 TheaterHalfSpan => fieldSpan * 0.5f;
 
-        internal bool TryMissionSeconds(out float seconds) => TryMissionTime(out seconds);
+        internal bool TryMissionSeconds(out float seconds) => MissionTimeSource.TryNow(out seconds);
         /// <summary>
         /// STORY: repeats one story for the whole tape, or hands the choice back to the mission class with <see cref="WeatherKey.None"/> (AUTO). A new tape identity, so a cut: the key is
         /// rebased and the new tape is placed like a capture (<see cref="TapeCuts.Story"/>). The hold state and the pin are left as they are; a pinned sky still wins over the story.
         /// </summary>
         internal bool SetStory(byte story)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (!CanCommand || fieldKey == null || !TryMissionSeconds(out float now)) return false;
             if (story != WeatherKey.None && story >= WeatherStories.Count) return false;
             fieldKey = TapeCuts.Story(fieldKey, now, story);
             RekeyAndSync(now);
@@ -41,7 +42,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// </summary>
         internal bool SetTapeMoves(bool moves)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (!CanCommand || fieldKey == null || !TryMissionSeconds(out float now)) return false;
             TapeSwitchPlan plan = TapeSwitch.Plan(fieldKey, moves, now, TapePace.Speed(settings.Pace.Value, baselineWindSpeed));
             settings.TapeMoves.Value = plan.TapeMoves;
             consoleAuto = plan.ConsoleAuto;
@@ -57,7 +58,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// </summary>
         internal bool SetPace(int pace)
         {
-            if (!CanCommand || fieldKey == null || !TryMissionTime(out float now)) return false;
+            if (!CanCommand || fieldKey == null || !TryMissionSeconds(out float now)) return false;
             pace = TapeSwitch.Step(pace, 0);
             settings.Pace.Value = pace;
             fieldKey = TapeSwitch.Held(fieldKey, TapeSwitch.Pace(fieldKey, now, TapePace.Speed(pace, baselineWindSpeed)));

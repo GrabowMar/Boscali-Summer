@@ -319,14 +319,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         }
 
         /// <summary>
-        /// Resamples a sparse trace into a smooth cubic Bezier (Catmull-Rom form) chain at
-        /// roughly <paramref name="spacing"/> metres. Returns the station count written.
-        /// </summary>
-        public static int Resample(float[] x, float[] z, int count, float spacing, bool closed,
-            float[] outX, float[] outZ)
-            => Resample(x, z, 0, count, spacing, closed, outX, outZ);
-
-        /// <summary>
         /// Index of the last trace point a position-length window may span, walking the
         /// cumulative arc lengths (<c>arc[i]</c> = distance from the first point to point
         /// <c>i</c>). The window always spans at least one segment while the trace continues,
@@ -588,15 +580,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
             nz = dx / length;
         }
 
-        /// <summary>
-        /// Routes a line through candidate positions. Each candidate carries the ground
-        /// height and a position cost (low ground plus distance from the intended offset);
-        /// the route minimizes that cost plus the height change between neighbouring
-        /// candidates, so the line settles into the flattest, lowest corridor it can reach
-        /// and stays straight where the ground is level. NaN marks ground that cannot be
-        /// dug, and an unbuildable stretch breaks the line instead of failing it whole.
-        /// <paramref name="route"/> receives one candidate index per station, or -1.
-        /// </summary>
         private static float[,] routeCumulative;
         private static int[,] routeBack;
 
@@ -680,6 +663,15 @@ namespace BoscaliSummer.Modules.Trenches.Domain
         public static bool LevelJump(int previous, int current)
             => previous >= 0 && current >= 0 && Math.Abs(current - previous) > MaximumLevelStep;
 
+        /// <summary>
+        /// Routes a line through candidate positions. Each candidate carries the ground
+        /// height and a position cost (low ground plus distance from the intended offset);
+        /// the route minimizes that cost plus the height change between neighbouring
+        /// candidates, so the line settles into the flattest, lowest corridor it can reach
+        /// and stays straight where the ground is level. NaN marks ground that cannot be
+        /// dug, and an unbuildable stretch breaks the line instead of failing it whole.
+        /// <paramref name="route"/> receives one candidate index per station, or -1.
+        /// </summary>
         public static bool PlanRoute(float[,] groundHeight, float[,] positionCost, int stations,
             float undulationWeight, int[] route)
         {
@@ -910,9 +902,6 @@ namespace BoscaliSummer.Modules.Trenches.Domain
 
         public static bool OverlapsExisting(int nearAnchors, int anchors)
             => anchors > 0 && nearAnchors * 3 > anchors;
-
-        public static bool CentresConflict(float distance, bool sameOwner)
-            => !(distance >= 0f) || distance < SpacingFor(sameOwner);
 
         /// <summary>
         /// Growth pacing for one position: a hot sector digs with priority (half the

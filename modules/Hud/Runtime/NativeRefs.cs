@@ -1,5 +1,6 @@
 using System;
 using HarmonyLib;
+using UnityEngine;
 
 namespace BoscaliSummer.Modules.Hud.Runtime
 {
@@ -14,6 +15,16 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         {
             try { return AccessTools.Field(typeof(T), name) != null ? AccessTools.FieldRefAccess<T, F>(name) : null; }
             catch (Exception) { return null; }
+        }
+
+        /// <summary>The live native HUD and the canvas its icon layer sits on; false while either is missing (no flight scene, or the layer is hidden).</summary>
+        public static bool HudCanvas(out CombatHUD hud, out Canvas canvas)
+        {
+            canvas = null;
+            hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || hud.iconLayer == null || !hud.iconLayer.gameObject.activeInHierarchy) return false;
+            canvas = hud.iconLayer.GetComponentInParent<Canvas>();
+            return canvas != null;
         }
 
         public static F Get<T, F>(AccessTools.FieldRef<T, F> field, T owner) where T : class =>

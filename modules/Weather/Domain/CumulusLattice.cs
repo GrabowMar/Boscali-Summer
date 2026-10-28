@@ -51,30 +51,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return m * Strength;
         }
 
-        /// <summary>The blob offsets and radii of the template in group units (before the aspect), for tests.</summary>
-        public void Blob(int index, out float ox, out float oz, out float r)
-        {
-            switch (index)
-            {
-                case 0: ox = B0X; oz = B0Z; r = B0R; break;
-                case 1: ox = B1X; oz = B1Z; r = B1R; break;
-                case 2: ox = B2X; oz = B2Z; r = B2R; break;
-                case 3: ox = B3X; oz = B3Z; r = B3R; break;
-                case 4: ox = B4X; oz = B4Z; r = B4R; break;
-                case 5: ox = B5X; oz = B5Z; r = B5R; break;
-                default: ox = B6X; oz = B6Z; r = B6R; break;
-            }
-        }
-
-        /// <summary>The tape-frame position of a blob's centre (the blob offset is in group units: the along part is stretched by the aspect).</summary>
-        public void BlobCentre(int index, out float x, out float z)
-        {
-            Blob(index, out float ox, out float oz, out _);
-            float along = ox * Aspect;
-            x = X + along * AxisX - oz * AxisZ;
-            z = Z + along * AxisZ + oz * AxisX;
-        }
-
         internal void SetBlob(int index, float ox, float oz, float r)
         {
             switch (index)
@@ -124,18 +100,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SlotBlobs = 7, SlotTop = 8, SlotBlob = 16;
 
         [ThreadStatic] private static CumulusGroup[] scratch;
-
-        /// <summary>
-        /// The one pure resolver: candidate k of cell (gx, gz), or false when the cell has no such candidate. A candidate exists when
-        /// k &lt; floor(u_cell * (N + 1)), N the genus constant at the candidate's own centre, so the count of a cell is uniform on
-        /// 0..N. The group is returned even at strength 0; <see cref="Strength"/> is read at the centre, never at a sample point.
-        /// </summary>
-        public static bool Resolve(in LatticeSource src, int gx, int gz, int k, out CumulusGroup g)
-        {
-            g = default;
-            uint prefix = LatticeHash.CellPrefix(src.Salt ^ SaltMix, gx, gz);
-            return Candidate(src, prefix, LatticeHash.UnitIn(prefix, 0, SlotCount), gx, gz, k, false, ref g);
-        }
 
         /// <summary>
         /// <see cref="Resolve"/> for a caller that already holds the cell's hash prefix and candidate-count draw. With <paramref name="dropWeak"/> (ResolveCell, which discards
@@ -211,37 +175,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public static int Fetch(in LatticeSource src, CellCache<CumulusGroup> cache, int gx, int gz, out CumulusGroup[] items)
         {
             if (cache != null && cache.TryGet(gx, gz, out items, out int cached)) return cached;
-            items = cache != null ? cache.Reserve(gx, gz, Math.Max(1, Math.Min(MaxCandidates, src.CandidateBound))) : scratch ?? (scratch = new CumulusGroup[MaxCandidates]);
+            items = cache != null ? cache.Reserve(gx, gz, Math.Max(1, Math.Min(MaxCandidates, src.CandidateBound))) : scratch ??= new CumulusGroup[MaxCandidates];
             int count = ResolveCell(src, gx, gz, items);
             if (cache != null) cache.Commit(gx, gz, count);
             return count;
-        }
-
-        /// <summary>
-        /// The cover of the lattice at a tape-frame point, read from the (2 * half + 1)^2 cells around it. <paramref name="clear"/> is
-        /// the product of (1 - cover) over the groups (groups combine as 1 - (1 - c1)(1 - c2)...), <paramref name="shape"/> the
-        /// strongest single group and <paramref name="crownDepth"/> the tallest crown above the local base. A null cache resolves
-        /// every cell afresh (tests); the field passes its own.
-        /// </summary>
-        public static void Sample(in LatticeSource src, CellCache<CumulusGroup> cache, float qx, float qz, int half,
-            out float clear, out float shape, out float crownDepth)
-        {
-            clear = 1f; shape = 0f; crownDepth = 0f;
-            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
-            for (int gz = cz - half; gz <= cz + half; gz++)
-            for (int gx = cx - half; gx <= cx + half; gx++)
-            {
-                int count = Fetch(src, cache, gx, gz, out CumulusGroup[] items);
-                for (int i = 0; i < count; i++)
-                {
-                    float c = items[i].CoverAt(qx, qz);
-                    if (c <= 0f) continue;
-                    clear *= 1f - c;
-                    if (c > shape) shape = c;
-                    float crown = items[i].TopDepth * (float)Math.Pow(c, 0.65);
-                    if (crown > crownDepth) crownDepth = crown;
-                }
-            }
         }
 
         /// <summary>How many groups at or above <see cref="ActiveStrength"/> have their centre within a range of a tape-frame point.</summary>
@@ -313,28 +250,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 float crown = near.Items[i].TopDepth * (float)Math.Pow(c, 0.65);
                 if (crown > crownDepth) crownDepth = crown;
             }
-        }
-
-        /// <summary>The out group (strength at least <paramref name="minStrength"/>) whose centre is nearest a tape-frame point, searching
-        /// <paramref name="rings"/> cells each way. False when there is none.</summary>
-        public static bool FindNearest(in LatticeSource src, CellCache<CumulusGroup> cache, float qx, float qz, int rings,
-            float minStrength, out CumulusGroup best)
-        {
-            best = default;
-            float bestD2 = float.MaxValue;
-            int cx = LatticeHash.CellOf(qx, Cell), cz = LatticeHash.CellOf(qz, Cell);
-            for (int gz = cz - rings; gz <= cz + rings; gz++)
-            for (int gx = cx - rings; gx <= cx + rings; gx++)
-            {
-                int count = Fetch(src, cache, gx, gz, out CumulusGroup[] items);
-                for (int i = 0; i < count; i++)
-                {
-                    if (items[i].Strength < minStrength) continue;
-                    float dx = items[i].X - qx, dz = items[i].Z - qz, d2 = dx * dx + dz * dz;
-                    if (d2 < bestD2) { bestD2 = d2; best = items[i]; }
-                }
-            }
-            return bestD2 < float.MaxValue;
         }
     }
 }

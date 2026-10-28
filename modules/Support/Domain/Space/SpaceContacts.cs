@@ -59,7 +59,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// </summary>
         public const ulong WatchOfficerId = ulong.MaxValue; // keep equal to Core PlayerIdentity.Reserved, which refuses it for every player
         public const float RevealSeconds = 20f, MovingMarkSeconds = 180f, StaticMarkSeconds = 480f, AttemptWindowSeconds = 60f;
-        private const float MaximumCoordinate = 10000000f;
 
         private readonly struct MarkRecord
         {
@@ -95,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             public void AddEffort(int amount)
             {
                 long next = (long)Effort + amount;
-                Effort = (int)Math.Max(int.MinValue, Math.Min(int.MaxValue, next));
+                Effort = (int)Math.Clamp(next, int.MinValue, int.MaxValue);
             }
         }
 
@@ -116,7 +115,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             float now, BirdKind source = BirdKind.Optical)
         {
             if (retired || id <= 0 || typeId < 0 || (byte)classification >= (byte)ContactClass.PlayerAircraft ||
-                !Coordinate(x) || !Coordinate(z) || !SpaceRules.MissionTime(now) ||
+                !SpaceRules.Coordinate(x) || !SpaceRules.Coordinate(z) || !SpaceRules.MissionTime(now) ||
                 !Deadline(now, RevealSeconds, out _) || (source != BirdKind.Optical && source != BirdKind.Radar)) return false;
             Prune(now);
             int generation;
@@ -253,7 +252,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return true;
         }
 
-        private static bool Coordinate(float value) => float.IsFinite(value) && Math.Abs(value) <= MaximumCoordinate;
         private bool RemoveReveal(int id)
         {
             confirmed.Remove(id);

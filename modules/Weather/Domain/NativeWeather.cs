@@ -16,10 +16,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
             MinConditions = minConditions; MaxConditions = maxConditions;
             WindVariability = windVariability; TurbulenceMultiplier = turbulenceMultiplier;
         }
-
-        /// <summary>The settings defaults with a given mission wind (x east, z north).</summary>
-        public static NativeBaseline Mission(float windX, float windZ, float turbulence = 0f) =>
-            new NativeBaseline(windX, 0f, windZ, turbulence, 0.05f, 0.88f, 0.5f, 1f);
     }
 
     /// <summary>One set of native outputs: what <c>LevelInfo.conditions</c>, <c>cloudHeight</c>, <c>windVelocity</c> and <c>windTurbulence</c> should follow.</summary>
@@ -68,7 +64,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         /// <summary>The factor <see cref="Wind"/> scales the mission wind by at a point: <c>lerp(1, clamp(windSpeed / BaseWindSpeed, 0.25, 3), variability)</c>.</summary>
         public static float WindFactor(in WeatherPoint at, float windVariability) =>
-            WeatherMath.Lerp(1f, Scalar.Clamp(at.WindSpeed / WeatherField.BaseWindSpeed, MinWindRatio, MaxWindRatio), Scalar.Clamp01(windVariability));
+            Scalar.Lerp(1f, Scalar.Clamp(at.WindSpeed / WeatherField.BaseWindSpeed, MinWindRatio, MaxWindRatio), Scalar.Clamp01(windVariability));
 
         /// <summary>
         /// The mission's own wind and turbulence as a client recovers them from the first message it adopts, instead of from its own <c>LevelInfo</c> (the host's SyncVars may already hold the host's scaled values):

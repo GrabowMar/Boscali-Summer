@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 GlobalPosition at = camera.transform.GlobalPosition();
                 m.HasCamera = true;
-                m.CamX = (float)at.x * KmPerMetre; m.CamZ = (float)at.z * KmPerMetre;
+                m.CamX = at.x * KmPerMetre; m.CamZ = at.z * KmPerMetre;
                 Vector3 forward = camera.transform.forward;
                 m.CamHeadingDeg = forward.x * forward.x + forward.z * forward.z < 1e-6f ? 0f : WeatherMath.VectorToHeading(forward.x, forward.z);
             }

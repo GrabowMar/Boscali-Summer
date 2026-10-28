@@ -37,6 +37,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         internal static void ClearAces() => aces.Clear();
 
+        /// <summary>Active ace perks: bit 0 toughness, 1 countermeasures, 2 notch expert, 3 ghost.
+        /// Reads the same authority/settings gate as the actual perk hooks.</summary>
         internal static int AceAbilityMask(Aircraft aircraft)
         {
             if (aircraft == null || !aces.ContainsKey(aircraft)) return 0;

@@ -299,8 +299,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 Restyle();
             }
 
-            public SkillNodeState State => state;
-
             /// <summary>What the grade buys, shown on the node's last line once the board has the height for it.</summary>
             public void SetEffect(string text)
             {
@@ -372,7 +370,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                         stroke = accent;
                         break;
                     default:
-                        accent = AvTheme.RailInert;
                         ink = AvTheme.Disabled;
                         break;
                 }

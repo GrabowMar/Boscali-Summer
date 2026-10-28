@@ -10,7 +10,5 @@ namespace BoscaliSummer.Core.Game
         internal static bool Granted { get; private set; }
 
         internal static void Accept() => Granted = true;
-
-        internal static void Lock() => Granted = false;
     }
 }

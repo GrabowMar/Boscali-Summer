@@ -26,12 +26,6 @@ namespace BoscaliSummer.Core.Util
         public int Length { get; private set; }
         public bool Overflow { get; private set; }
 
-        public void Reset()
-        {
-            Length = 0;
-            Overflow = false;
-        }
-
         private bool Room(int n)
         {
             if (Overflow || Length + n > buffer.Length) Overflow = true;

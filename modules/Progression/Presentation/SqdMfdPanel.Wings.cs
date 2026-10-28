@@ -441,8 +441,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             public override void Restyle()
             {
-                AvStyle c = AvStyleHost.FuiStyle("card inert");
-                frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                frame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
                 Color tone = SqdTone.Rail(state);
                 for (int i = 0; i < tally.Length; i++) tally[i].color = i < aliveCount ? tone : AvTheme.Hairline;
                 rail.color = tone;

@@ -241,15 +241,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void Remove()
         {
             Release();
-            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            GameObject shell = missile.gameObject;
-            missile.Networkdisabled = true;
-            shell.SetActive(false);
-            if (spawner != null && spawner.IsServer && spawner.ServerObjectManager != null) spawner.ServerObjectManager.Destroy(shell);
-            Destroy(shell); // the network destroy silently skips an unregistered identity
+            VanguardFlight.RemoveQuietly(missile);
         }
 
-        private void Publish() => KestrelNet.Broadcast(new KestrelState
+        private void Publish() => NetFeed.Broadcast(new KestrelState
         {
             Protocol = KestrelNet.ProtocolVersion, MissileId = missile.persistentID.Id, Phase = (byte)Phase,
             StationLeft = (uint)Mathf.CeilToInt(StationLeft), Spotted = (byte)Spotted,

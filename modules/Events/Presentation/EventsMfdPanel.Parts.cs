@@ -223,8 +223,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             public override void Restyle()
             {
                 line.color = AvStyleHost.FuiColor("hairline", AvTheme.Hairline);
-                AvStyle c = AvStyleHost.FuiStyle("card inert");
-                noteFrame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                noteFrame.PaintCard("card inert", AvTheme.SurfaceInert, AvTheme.Hairline);
                 noteText.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
                 for (int i = 0; i < Capacity; i++) RestyleEntry(i);
             }

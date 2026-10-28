@@ -1,4 +1,4 @@
-using System.Globalization;
+using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -80,7 +80,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static string SaveFailed => "Could not write pilots.user.json: the pilot is not saved";
 
         private static string Count(int n, string one, string many) => N(n) + " " + (n == 1 ? one : many);
-
-        private static string N(int v) => v.ToString(CultureInfo.InvariantCulture);
     }
 }

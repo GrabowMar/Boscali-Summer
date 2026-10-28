@@ -134,8 +134,6 @@ namespace BoscaliSummer.Modules.Events.Runtime
             return EventSelector.EffectSummary(AffectsFaction(factionName) ? Effective(definition) : 1f);
         }
 
-        public float SupportCostMultiplierFor(ulong playerId) => BaseMultiplierFor(playerId);
-
         public float SupportCooldownMultiplierFor(ulong playerId)
         {
             EventDefinition definition = EventCatalog.At(currentIndex);
@@ -149,7 +147,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         internal float LocalSupportCooldownMultiplier => SupportCooldownMultiplierFor(LocalPlayerId());
 
-        private float BaseMultiplierFor(ulong playerId)
+        public float SupportCostMultiplierFor(ulong playerId)
         {
             EventDefinition definition = EventCatalog.At(currentIndex);
             if (definition == null || settings == null) return 1f;

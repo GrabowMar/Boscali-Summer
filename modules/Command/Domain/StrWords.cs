@@ -104,7 +104,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         /// <summary>The line every stale war report carries: its age and what waits. An unknown age is not guessed.</summary>
         public static string StaleReport(float ageSeconds) =>
-            (float.IsNaN(ageSeconds) || float.IsInfinity(ageSeconds) || ageSeconds < 0f ? "REPORT STALE" : "REPORT " + ((int)System.Math.Floor(ageSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " S OLD")
+            (!float.IsFinite(ageSeconds) || ageSeconds < 0f ? "REPORT STALE" : "REPORT " + ((int)System.Math.Floor(ageSeconds)).ToString(System.Globalization.CultureInfo.InvariantCulture) + " S OLD")
             + Dot + "ORDERS WAIT FOR THE HOST";
 
         /// <summary>The NoAnswer board's own why and do lines (the engine has no such reason).</summary>

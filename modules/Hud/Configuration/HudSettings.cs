@@ -26,18 +26,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<BoardPage> Page3 { get; }
         public ConfigEntry<BoardPage> Page4 { get; }
         public ConfigEntry<bool> ShowStores { get; }
-        public ConfigEntry<bool> PageThreat { get; }
-        public ConfigEntry<bool> PageShot { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
-        public ConfigEntry<bool> PageApproach { get; }
-        public ConfigEntry<bool> PageWing { get; }
-        public ConfigEntry<bool> PageStrike { get; }
-        public ConfigEntry<bool> PageDock { get; }
-        public ConfigEntry<bool> PageObjective { get; }
-        public ConfigEntry<bool> PageCargo { get; }
-        public ConfigEntry<bool> PageSystems { get; }
         public ConfigEntry<float> ThreatHoldSeconds { get; }
-        public ConfigEntry<float> PageMinSeconds { get; }
         public ConfigEntry<bool> ShowLamps { get; }
         public ConfigEntry<bool> ShowGauges { get; }
         public ConfigEntry<bool> ShowTicker { get; }
@@ -101,34 +91,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ShowStores = config.Bind(section, "ShowStores", d.ShowStores,
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
-            PageThreat = config.Bind(section, "PageThreat", d.PageThreat,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageShot = config.Bind(section, "PageShot", d.PageShot,
-                "Legacy page whitelist. Ignored by manual page slots.");
             PageMissileCam = config.Bind(section, "PageMissileCam", d.PageMissileCam,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageApproach = config.Bind(section, "PageApproach", d.PageApproach,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageWing = config.Bind(section, "PageWing", d.PageWing,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageStrike = config.Bind(section, "PageStrike", d.PageStrike,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageDock = config.Bind(section, "PageDock", d.PageDock,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageObjective = config.Bind(section, "PageObjective", d.PageObjective,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageSystems = config.Bind(section, "PageSystems", d.PageSystems,
-                "Legacy page whitelist. Ignored by manual page slots.");
-            PageCargo = config.Bind(section, "PageCargo", d.PageCargo,
-                "Legacy page whitelist. Ignored by manual page slots.");
+                "Show the missile camera card (the newest own missile in the air) beside the board." + live);
 
             ThreatHoldSeconds = config.Bind(section, "ThreatHoldSeconds", d.ThreatHoldSeconds,
                 new ConfigDescription("How many seconds the radar-warning page keeps a contact after its last warning." + live,
                     new AcceptableValueRange<float>(BoardOptions.HoldMin, BoardOptions.HoldMax)));
-
-            PageMinSeconds = config.Bind(section, "PageMinSeconds", d.PageMinSeconds,
-                new ConfigDescription("Legacy automatic-page dwell setting. Ignored: pages now stay manually selected.",
-                    new AcceptableValueRange<float>(0f, BoardOptions.DwellMax)));
 
             ShowLamps = config.Bind(section, "ShowLamps", d.ShowLamps,
                 "Show the lamp row: the aircraft's switch states and the threat lamps." + live);
@@ -172,18 +140,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Page3 = Page3.Value;
             into.Page4 = Page4.Value;
             into.ShowStores = ShowStores.Value;
-            into.PageThreat = PageThreat.Value;
-            into.PageShot = PageShot.Value;
             into.PageMissileCam = PageMissileCam.Value;
-            into.PageApproach = PageApproach.Value;
-            into.PageWing = PageWing.Value;
-            into.PageStrike = PageStrike.Value;
-            into.PageDock = PageDock.Value;
-            into.PageObjective = PageObjective.Value;
-            into.PageCargo = PageCargo.Value;
-            into.PageSystems = PageSystems.Value;
             into.ThreatHoldSeconds = ThreatHoldSeconds.Value;
-            into.PageMinSeconds = PageMinSeconds.Value;
             into.ShowLamps = ShowLamps.Value;
             into.ShowGauges = ShowGauges.Value;
             into.ShowTicker = ShowTicker.Value;
@@ -209,18 +167,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         BoardPage ITacBoardSettings.Page3 { get => Page3.Value; set => Page3.Value = value; }
         BoardPage ITacBoardSettings.Page4 { get => Page4.Value; set => Page4.Value = value; }
         bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
-        bool ITacBoardSettings.PageThreat { get => PageThreat.Value; set => PageThreat.Value = value; }
-        bool ITacBoardSettings.PageShot { get => PageShot.Value; set => PageShot.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
-        bool ITacBoardSettings.PageApproach { get => PageApproach.Value; set => PageApproach.Value = value; }
-        bool ITacBoardSettings.PageWing { get => PageWing.Value; set => PageWing.Value = value; }
-        bool ITacBoardSettings.PageStrike { get => PageStrike.Value; set => PageStrike.Value = value; }
-        bool ITacBoardSettings.PageDock { get => PageDock.Value; set => PageDock.Value = value; }
-        bool ITacBoardSettings.PageObjective { get => PageObjective.Value; set => PageObjective.Value = value; }
-        bool ITacBoardSettings.PageCargo { get => PageCargo.Value; set => PageCargo.Value = value; }
-        bool ITacBoardSettings.PageSystems { get => PageSystems.Value; set => PageSystems.Value = value; }
         float ITacBoardSettings.ThreatHoldSeconds { get => ThreatHoldSeconds.Value; set => ThreatHoldSeconds.Value = value; }
-        float ITacBoardSettings.PageMinSeconds { get => PageMinSeconds.Value; set => PageMinSeconds.Value = value; }
         bool ITacBoardSettings.ShowLamps { get => ShowLamps.Value; set => ShowLamps.Value = value; }
         bool ITacBoardSettings.ShowGauges { get => ShowGauges.Value; set => ShowGauges.Value = value; }
         bool ITacBoardSettings.ShowTicker { get => ShowTicker.Value; set => ShowTicker.Value = value; }
@@ -234,8 +182,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ConfigEntryBase[] all =
             {
                 Enabled, Layout, Scale, OffsetX, OffsetY, Opacity, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
-                PageThreat, PageShot, PageMissileCam, PageApproach, PageWing, PageStrike, PageDock, PageObjective, PageSystems, PageCargo,
-                ThreatHoldSeconds, PageMinSeconds, ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners,
+                PageMissileCam,
+                ThreatHoldSeconds, ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         internal bool Healthy => Faults < UnhealthyAt;
 
         /// <summary>The wait before the next review: reviewSeconds times the fault count, between 1 and 4 (10, 20, 30, 40, 40 ... for a 10 s review).</summary>
-        internal float NextDelay(float reviewSeconds) => reviewSeconds * Math.Min(4, Math.Max(1, Faults));
+        internal float NextDelay(float reviewSeconds) => reviewSeconds * Math.Clamp(Faults, 1, 4);
 
         internal void Ok() { Faults = 0; }
 

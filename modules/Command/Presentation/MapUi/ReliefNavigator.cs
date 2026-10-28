@@ -2,7 +2,6 @@ using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using Rewired;
-using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -75,7 +74,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float dt = Mathf.Min(Time.unscaledDeltaTime, .1f);
             Vector2 mouse = Input.mousePosition;
             bool inside = MfdTerrainRelief.ViewportPoint(mouse, out float vx, out float vy);
-            bool free = inside && !MapUiPointer.OverControls() && !Typing();
+            bool free = inside && !MapUiPointer.OverControls() && !MfdMapInteractions.Typing();
 
             // The wheel button is read as a held state, not as its one-frame press: on a live session
             // Windows, Unity and Rewired all showed the button held over the map while the press frame
@@ -191,16 +190,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void ReadAxes(ReliefRig rig, bool free, float vx, float vy, float dt)
         {
-            if (Typing()) return;
+            if (MfdMapInteractions.Typing()) return;
             if (player == null && ReInput.isReady) player = ReInput.players.GetPlayer(0);
 
             float zoom = player != null ? player.GetAxis("Zoom View") : 0f;
             // Ctrl + wheel turns and Shift + wheel tilts, a notch at a time: the orbit without holding
             // the wheel button down, which some mice and drivers never report as a held button.
             float wheel = Input.mouseScrollDelta.y;
-            if (wheel != 0f && free && (ControlHeld() || ShiftHeld()))
+            if (wheel != 0f && free && (MfdMapInteractions.ControlHeld() || MfdMapInteractions.ShiftHeld()))
             {
-                if (ControlHeld()) Turn(Mathf.Sign(wheel) * WheelTurnDegrees);
+                if (MfdMapInteractions.ControlHeld()) Turn(Mathf.Sign(wheel) * WheelTurnDegrees);
                 else Tilt(Mathf.Sign(wheel) * WheelTiltDegrees);
                 zoom = 0f;
             }
@@ -292,7 +291,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             focusEasing = true;
         }
 
-        private static void AngleTo(ReliefRig rig, float yaw, float pitch)
+        private static void AngleTo(float yaw, float pitch)
         {
             targetYaw = ReliefRig.WrapAngle(yaw);
             targetPitch = Mathf.Clamp(pitch, ReliefRig.MinPitch, ReliefRig.MaxPitch);
@@ -302,16 +301,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Turn(float degrees)
         {
             ReliefRig rig = MfdTerrainRelief.Rig;
-            AngleTo(rig, (angleEasing ? targetYaw : rig.Yaw) + degrees, angleEasing ? targetPitch : rig.Pitch);
+            AngleTo((angleEasing ? targetYaw : rig.Yaw) + degrees, angleEasing ? targetPitch : rig.Pitch);
         }
 
         internal static void Tilt(float degrees)
         {
             ReliefRig rig = MfdTerrainRelief.Rig;
-            AngleTo(rig, angleEasing ? targetYaw : rig.Yaw, (angleEasing ? targetPitch : rig.Pitch) + degrees);
+            AngleTo(angleEasing ? targetYaw : rig.Yaw, (angleEasing ? targetPitch : rig.Pitch) + degrees);
         }
 
-        internal static void North() => AngleTo(MfdTerrainRelief.Rig, 0f, ReliefRig.DefaultPitch);
+        internal static void North() => AngleTo(0f, ReliefRig.DefaultPitch);
 
         internal static void Fit()
         {
@@ -361,19 +360,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         /// <summary>Shift or Ctrl hands a left drag to the selection box.</summary>
         private static bool BoxHeld() => MfdMapInteractions.BoxDrag();
-        private static bool ShiftHeld() =>
-            Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
-        private static bool ControlHeld() =>
-            Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
 
         private static bool LeftDragClaimed() => StrMapOverlay.DrawArmed ||
             ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
-
-        private static bool Typing()
-        {
-            GameObject selected = EventSystem.current?.currentSelectedGameObject;
-            return selected != null && selected.GetComponent<TMP_InputField>() != null;
-        }
 
         /// <summary>Map closed: drop gestures and easing, keep the view.</summary>
         internal static void Release()

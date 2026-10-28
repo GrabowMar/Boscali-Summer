@@ -34,9 +34,6 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private bool contentValid;
         private float retryAt;
         private int captures, draws;
-        internal int CaptureCount => captures;
-        internal int GlassDraws => draws;
-        internal RenderTexture Target => target;
         internal void SetGlassView(ICanopyGlassView value) => canopy = value;
 
         internal void Tick(CockpitPilotRig rig, Transform cockpit, Camera eye, Camera renderCamera, float ambient, bool enabled, float reflectionStrength = 1f)
@@ -111,7 +108,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (!FxRtPool.Own(candidate)) { Object.Destroy(candidate); return false; }
             if (!candidate.Create()) { FxRtPool.Disown(candidate); Object.Destroy(candidate); return false; }
             target = candidate;
-            if (capture == null) capture = new CommandBuffer { name = "Boscali pilot-only capture" };
+            capture ??= new CommandBuffer { name = "Boscali pilot-only capture" };
             contentValid = false;
             return true;
         }

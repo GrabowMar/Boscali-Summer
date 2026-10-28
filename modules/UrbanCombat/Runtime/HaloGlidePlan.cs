@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -311,10 +312,6 @@ namespace BoscaliSummer.Garrisons
             return f.sqrMagnitude > 0.04f ? f.normalized : fallback;
         }
 
-        private static float Smooth(float u)
-        {
-            u = Mathf.Clamp01(u);
-            return u * u * (3f - 2f * u);
-        }
+        private static float Smooth(float u) => Scalar.SmoothStep(0f, 1f, u);
     }
 }

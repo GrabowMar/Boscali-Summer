@@ -1,4 +1,4 @@
-using System;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// allocation refuses with the reason; the sandbox recruits for free.</summary>
         public static CallQuote Recruit(float value, float rate, float allocation, bool sandbox, bool paid)
         {
-            float price = sandbox || paid ? 0f : value * Math.Max(0f, Math.Min(1f, rate));
+            float price = sandbox || paid ? 0f : value * Scalar.Clamp01(rate);
             if (allocation < price)
                 return new CallQuote { Reason = $"needs {Money(price)}, the allocation holds {Money(allocation)}" };
             return new CallQuote { Allowed = true, Charge = price };

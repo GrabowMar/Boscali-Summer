@@ -8,8 +8,6 @@ namespace BoscaliSummer.Core.Contracts
     /// </summary>
     internal interface IRadialMenuPage
     {
-        /// <summary>Short page name shown on the wheel, e.g. TARGET PRESETS.</summary>
-        string Title { get; }
 
         /// <summary>Entry count for the next display. The host caps how many it draws.</summary>
         int EntryCount { get; }
