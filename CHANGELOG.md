@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.12 — update
 
 - **Centre combat alerts**: urgent warnings now show where the pilot is looking, not only in the TAC BOARD corner.
   - **WARNING banner** at the top centre: MISSILE, PULL UP, FIRE, ENGINE OUT (red) and LOCKED, BINGO FUEL (amber), with a
