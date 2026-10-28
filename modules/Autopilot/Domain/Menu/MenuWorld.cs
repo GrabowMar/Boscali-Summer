@@ -197,7 +197,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public string DeckTitle = "";
         public bool ReceiverAvailable, ReceiverOn;
         public string Station = "";
-        public bool CanStopAll;
 
         // COMMS
         public bool CallsAvailable, CanCall;

@@ -235,6 +235,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             terrainRain.Reset();
             atmosphere.Restore();
             clouds.Restore();
+            HighAltitudeSky.Clear();
             flightClouds?.Restore();
             heatHaze.Restore();
 
@@ -289,6 +290,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             terrainRain.Reset();
             atmosphere.Restore();
             clouds.Restore();
+            HighAltitudeSky.Clear();
             flightClouds?.Restore();
             heatHaze.Restore();
             sunShafts.Dispose();
@@ -483,6 +485,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 TeardownRainSystems();
                 atmosphere.Restore();
                 clouds.Restore();
+                HighAltitudeSky.Clear();
                 flightClouds?.Restore();
                 return;
             }
@@ -559,7 +562,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             }
             // Clouds, rain and terrain must read the same atmosphere for this frame.
             if (liveWeather) { UpdateRainSystems(weatherTime); sunDisc.Tick(LevelInfo.i, view, viewTransmission); }
-            else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); sunDisc.Release(); }
+            else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); HighAltitudeSky.Clear(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
             sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value, viewTransmission);
@@ -587,6 +590,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 flightClouds?.Restore();
                 clouds.Restore();
+                HighAltitudeSky.Clear();
             }
             Trace();
 
@@ -747,12 +751,15 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             float glassMoisture = Mathf.Max(rainIntensity, viewCondensation);
 
             // Haze first: everything below reads the fog colour it produces.
+            float viewHeight = currentCam.transform.position.GlobalY();
             if (hazeEnabled)
                 atmosphere.Apply(RainVisualsEnabled
                     ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null,
                     LevelInfo.i != null && LevelInfo.i.moon != null ? LevelInfo.i.moon.intensity : 0f,
-                    DarkNightsEnabled);
+                    DarkNightsEnabled, viewHeight);
             else atmosphere.Restore();
+            // From very high up: the curved Earth past the far plane, and cloud layers that stop at its horizon.
+            HighAltitudeSky.Publish(viewHeight, LevelInfo.i != null ? LevelInfo.i.sun : null);
             UpdateLighting();
 
             // Night sky (2026-10-18): aurora on clear nights (seeded per mission: about seven missions in ten get one), and sprites and
@@ -1508,20 +1515,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (targetsReady) SnapToTargets(level);
         }
 
-        public void SetForcedRain(float? rainIntensity)
-        {
-            if (!CanCommand || !IsCaptured || !RequireClock("forced rain", out float missionTime)) return;
-            forcedRainIntensity = rainIntensity.HasValue ? Mathf.Clamp01(rainIntensity.Value) : (float?)null;
-            lastForecastSampleTime = -999f;
-            BroadcastSync(missionTime);
-
-            string rainDesc = !rainIntensity.HasValue ? "AUTO" :
-                              rainIntensity.Value <= 0.01f ? "FORCE DRY (0%)" :
-                              rainIntensity.Value <= 0.5f ? $"LIGHT RAIN ({Mathf.RoundToInt(rainIntensity.Value * 100f)}%)" :
-                              $"HEAVY STORM ({Mathf.RoundToInt(rainIntensity.Value * 100f)}%)";
-            NotifyPlayer($"PRECIPITATION: {rainDesc}", rainIntensity);
-        }
-
         public void ClearManualOverride()
         {
             if (fieldKey == null || !RequireClock("resume", out float missionTime)) return;
@@ -1560,7 +1553,6 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return -1;
         }
 
-        internal byte ForcedSets => fieldKey?.Sets ?? 0;
         internal bool CanCommand => GameAccess.IsServer();
 
 
@@ -1588,39 +1580,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             ClearManualOverride();
         }
 
-        internal void SetForcedSets(byte sets)
-        {
-            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
-            fieldKey = fieldKey.WithSets(sets);
-            RekeyAndSync(now);
-        }
-
-        internal bool HasAnchor => fieldKey != null && fieldKey.HasAnchor;
-
-        /// <summary>Stands the storm eye and lenticulars <paramref name="ahead"/> metres in front of
-        /// the camera, along its level heading (0 puts them right here).</summary>
-        internal void PlaceAhead(float ahead)
-        {
-            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
-            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
-            if (camera == null) return;
-            GlobalPosition here = camera.transform.GlobalPosition();
-            Vector3 forward = camera.transform.forward;
-            forward.y = 0f;
-            if (forward.sqrMagnitude < 0.001f) forward = Vector3.forward;
-            forward.Normalize();
-            fieldKey = fieldKey.WithAnchor(here.x + forward.x * ahead, here.z + forward.z * ahead);
-            RekeyAndSync(now);
-        }
-
-        internal void ClearPlacement()
-        {
-            if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return;
-            fieldKey = fieldKey.WithoutAnchor();
-            RekeyAndSync(now);
-        }
-
-        /// <summary>One click: a held state with its set-pieces and placement, sent as one key.</summary>
+        /// <summary>One preset (mission scripts through IWeatherDirector, sims, the console's AUTO = ResetAll): a held state with its set-pieces and placement, sent as one key.</summary>
         internal bool ApplyScenario(WeatherScenario scenario)
         {
             if (!CanCommand || fieldKey == null || !MissionTimeSource.TryNow(out float now)) return false;
@@ -1640,7 +1600,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             fieldKey = PlaceOpening(WeatherScenarios.Apply(scenario, fieldKey.Rebased(now, false),
                 camera != null, x, z, forward.x, forward.z));
             RekeyAndSync(now);
-            NotifyPlayer("SCENARIO " + scenario.ToString().ToUpperInvariant(), forcedRainIntensity);
+            NotifyPlayer(consoleAuto ? "MISSION WEATHER" : "SCENARIO " + scenario.ToString().ToUpperInvariant(), forcedRainIntensity);
             return true;
         }
 

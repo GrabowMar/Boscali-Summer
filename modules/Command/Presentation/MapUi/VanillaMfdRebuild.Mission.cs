@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         /// <summary>
         /// The MIS bezel as a briefing board. MISSION is the hero card (name, clock, lead objective,
-        /// briefing) over key numbers, the escalation ladder, the lead contract and a live log;
+        /// briefing) over key numbers, the escalation ladder, the lead contract and a funds trend;
         /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS shares the tactical briefing,
         /// phase gates and host actions with the task desk. Reads happen in <see cref="Gather"/> into one reusable
         /// <see cref="BoardModel"/>; <see cref="Render"/> only writes it to already-built parts.
@@ -55,9 +55,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly BoardModel model = new BoardModel();
             private readonly List<string> objectiveTypes = new List<string>(MaxObjectiveLines);
             private readonly List<Objective> activeObjectives = new List<Objective>(MaxObjectiveLines);
-            private readonly MissionLog log = new MissionLog();
-            private readonly MissionEventTracker tracker = new MissionEventTracker();
-            private Mission trackedMission;
             private int objectiveSummarySignature;
             private bool hasObjectiveSummary;
 
@@ -75,8 +72,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvSection leadSection;
             private AvRow leadContractRow;
             private AvControl leadContractOpen;
-            private AvSection logSection;
-            private AvList logList;
             private AvNote boardLedger;
             private const string BrowseHelp = "Open the contract board and browse optional missions.";
 
@@ -124,7 +119,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string[] TabTips { get; } = new[]
             {
-                "Mission: the briefing, lead objective, escalation ladder, lead contract, live log and a funds trend.",
+                "Mission: the briefing, lead objective, escalation ladder, lead contract and a funds trend.",
                 "Objectives: the checklist with progress and distance to each objective, and a map of how far each one has come.",
                 "Contracts: browse, accept or abort optional contracts, or open the shared contract desk.",
             };
@@ -205,11 +200,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 boardLedger = page.Add(new AvNote(page.Content, AvTextRole.DataSmall));
                 boardLedger.CollapseEmpty = true;
 
-                logSection = page.Section(AvIcon.Activity, "OPERATIONS LOG");
-                logList = page.Add(new AvList(page.Content, page.Ticker, MfdMissionBoard.LogShown, BindLogRow));
-                logSection.SetShown(false);
-                logList.SetShown(false);
-
                 trendSection = page.Section(AvIcon.ChartLine, "FUNDS TREND", "NO OBSERVATIONS YET");
                 trendChart = new AvLineChart(page.Content, 100f);
                 trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
@@ -237,13 +227,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 trendChart.SetShown(true);
                 trendChart.SetSeries(trendBuffer, run, AvNum.Money(lo), AvNum.Money(hi), AvNum.Money(trendBuffer[run - 1]));
                 trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))) + " ON FILE");
-            }
-
-            private void BindLogRow(int index, AvRow row)
-            {
-                MissionLog.Entry entry = log.Newest(index);
-                row.Set(entry.Text, null, entry.Stamp, entry.State);
-                row.Help = entry.Text;
             }
 
             private void RenderBrief()
@@ -308,10 +291,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 boardLedger.Set(!model.Installed ? "" : "OFFERED " + Cash(model.Offered) + "   ·   IN FIELD " + Cash(model.AtStake) +
                     "   ·   PAID OUT " + Cash(model.Paid));
 
-                int shown = Math.Min(log.Count, MfdMissionBoard.LogShown);
-                logSection.SetShown(shown > 0);
-                logList.SetShown(shown > 0);
-                logList.SetCount(shown);
                 RenderTrend();
             }
 
@@ -549,13 +528,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
                 FactionHQ hq = map != null ? map.HQ : null;
 
-                if (!ReferenceEquals(mission, trackedMission))
-                {
-                    trackedMission = mission;
-                    tracker.Reset();
-                    log.Clear();
-                }
-
                 model.Clock = MissionClock(manager);
                 if (mission == null)
                 {
@@ -585,7 +557,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 GatherObjectives(mission, hq);
                 GatherContracts();
-                ObserveEvents();
             }
 
             private void GatherObjectives(Mission mission, FactionHQ hq)
@@ -720,25 +691,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MfdSecondaryObjectives.SortForDisplay(model.Contracts, secondaryFilter);
                 secondaryHasCapacity = model.Limit <= 0 || model.ActiveContracts < model.Limit;
                 model.Lead = leadActive ?? leadOffer;
-            }
-
-            private void ObserveEvents()
-            {
-                tracker.Begin();
-                for (int i = 0; i < model.Objectives.Count; i++)
-                {
-                    ObjectiveLine line = model.Objectives[i];
-                    tracker.Observe(log, model.Clock, "OBJECTIVE", "O:" + line.Key, line.Title, line.Phase);
-                }
-                for (int i = 0; i < allContracts.Count; i++)
-                {
-                    SecondaryObjectiveView entry = allContracts[i];
-                    MissionPhase phase = entry.IsComplete ? MissionPhase.Done : entry.IsActive ? MissionPhase.Active
-                        : entry.IsOffered ? MissionPhase.Offered : MissionPhase.Closed;
-                    tracker.Observe(log, model.Clock, "CONTRACT", "C:" + entry.Id,
-                        MfdSecondaryObjectives.TitleLine(entry.Id, entry.Title), phase);
-                }
-                tracker.End(log, model.Clock);
             }
 
             // ------------------------------------------------------------- helpers

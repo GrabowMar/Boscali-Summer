@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Command.Domain
 {
     /// <summary>
     /// Pure: why an action is or is not allowed, from the model alone, with the refusal in words that say what to do.
-    /// A stale feed disables only its own verbs: the war report gates pick, redirect, posture and replan; the sortie list gates accept and the wing.
+    /// A stale feed disables only its own verbs: the war report gates pick, redirect, posture and replan; the sortie list gates accept.
     /// Money is never a pick refusal (R4): the pool lives in the wave strip.
     /// </summary>
     internal static class StrGate
@@ -23,33 +23,10 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case StrActionKind.Replan: return Replan(vm);
                 case StrActionKind.Posture: return Posture(vm, arg);
                 case StrActionKind.Accept: return Accept(vm, id);
-                case StrActionKind.SendWing: return WingGate(vm.IsHost, vm.SortiesLive, Sortie(vm, id), false);
-                case StrActionKind.Recall: return WingGate(vm.IsHost, vm.SortiesLive, Sortie(vm, id), true);
                 case StrActionKind.BuyConvoy: return Buy(vm, arg);
                 case StrActionKind.Donate: return Donate(vm, arg);
                 default: return new StrAct(StrWhy.NoBoard, "NOT AN ACTION");
             }
-        }
-
-        /// <summary>
-        /// The wing button of one sortie ticket. Host only; SEND WING needs the sortie list to be current and the card accepted; RECALL
-        /// needs a live tasking and nothing else. row is null when the card is not on the board.
-        /// </summary>
-        internal static StrAct WingGate(bool isHost, bool sortiesLive, StrSortieRow row, bool recall)
-        {
-            if (!isHost) return new StrAct(StrWhy.HostOnly, "ONLY THE HOST CAN SEND A WING" + StrWords.Dot + "ASK THE HOST OR FLY IT YOURSELF");
-            if (recall)
-            {
-                bool tasked = row != null && row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation);
-                return tasked ? Allowed : new StrAct(StrWhy.NoWing, "NO WING TASKING TO RECALL");
-            }
-            if (!sortiesLive) return SortiesStale();
-            if (row == null) return new StrAct(StrWhy.NoWing, "THIS SORTIE IS NOT ON THE BOARD");
-            if (row.Offered) return new StrAct(StrWhy.WingRefused, "ACCEPT THIS SORTIE FIRST" + StrWords.Dot + "THEN SEND YOUR WING");
-            if (!row.Active) return new StrAct(StrWhy.NoWing, "THIS SORTIE IS OVER");
-            if (!row.HasWing) return new StrAct(StrWhy.NoWing, "THE WING HAS NO ORDER FOR THIS SORTIE YET" + StrWords.Dot + "RECRUIT A WING FIRST");
-            if (!string.IsNullOrEmpty(row.WingRefusal)) return new StrAct(StrWhy.WingRefused, row.WingRefusal);
-            return Allowed;
         }
 
         private static StrAct Pick(StrViewModel vm, StrItemId id)
@@ -229,16 +206,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case StrActionKind.Accept:
                     verbs.Accept(StrGate.Sortie(vm, id).ContractId);
                     return Noted(ref ui, StrWhy.None, "ACCEPT SENT" + StrWords.Dot + "THE HOST ANSWERS NEXT", nowUnscaled, true);
-                case StrActionKind.SendWing:
-                {
-                    bool ok = verbs.SendWing(StrGate.Sortie(vm, id).ContractId, out string said);
-                    return Wing(ref ui, ok, said, "WING ORDER SENT", nowUnscaled);
-                }
-                case StrActionKind.Recall:
-                {
-                    bool ok = verbs.Recall(out string said);
-                    return Wing(ref ui, ok, said, "WING RECALLED", nowUnscaled);
-                }
                 case StrActionKind.BuyConvoy:
                 {
                     string name = StrGate.SupplyRow(vm, arg).Name;
@@ -278,12 +245,6 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         /// <summary>The view would not take the order (a command not allowed right now): nothing was sent.</summary>
         private static StrAct Declined() => new StrAct(StrWhy.NoBoard, "THE STAFF DID NOT TAKE THE ORDER" + StrWords.Dot + "TRY AGAIN");
-
-        private static StrAct Wing(ref StrUiState ui, bool ok, string said, string whenSent, float now)
-        {
-            bool blank = string.IsNullOrEmpty(said);
-            return Noted(ref ui, ok ? StrWhy.None : StrWhy.WingRefused, blank ? (ok ? whenSent : "THE WING DID NOT TAKE THE ORDER") : said, now, ok);
-        }
 
         private static StrAct Noted(ref StrUiState ui, StrWhy why, string text, float now, bool sent)
         {

@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class StrMapTag : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float RowH = 17f, Pad = 6f, LaneW = 84f, LaneH = 6f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 3f, RestLaneW = 40f;
+        private const float RowH = 17f, Pad = 6f, LaneW = 84f, LaneH = 6f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 2f;
 
         internal StrItemId Id;
         internal StrTagKind Kind;
@@ -60,8 +60,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Fills the tag from its spec, sizes it and counter-scales it. It is not placed yet. A tag rests as one short row (the number, then the lane of a front
-        /// or the item's first words); <paramref name="full"/> opens the second row with the place and the lane's words, for the plate under the cursor.
+        /// Fills the tag from its spec, sizes it and counter-scales it. It is not placed yet. A front, the effort and a ghosted proposal rest as their number
+        /// box alone (the box carries the status ink); other tags rest as the number and first words. <paramref name="full"/> opens the name, the lane and
+        /// its words, for the plate under the cursor.
         /// </summary>
         internal void Show(in StrTagSpec s, float inverse, bool full)
         {
@@ -77,8 +78,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // CROSSING") carrying the amber chip of the main effort, and its second row is the lane with the lane's own words.
             string number, rest, chipText = effort ? s.Text ?? "" : "", second = effort ? s.Note ?? "" : s.Sub ?? "";
             SplitNumber(effort ? s.Sub ?? "" : s.Text ?? "", out number, out rest);
-            bool twoRows = full && (hasLane || (rest.Length > 0 && second.Length > 0)), laneFirst = hasLane && !twoRows;
-            string row1 = laneFirst ? "" : rest.Length > 0 || twoRows ? rest : second;
+            bool twoRows = full && (hasLane || (rest.Length > 0 && second.Length > 0));
+            bool bare = !full && number.Length > 0 && (hasLane || (s.Kind == StrTagKind.Proposal && s.Ghost && !s.Hot && !s.Selected));
+            string row1 = bare ? "" : rest.Length > 0 || twoRows ? rest : second;
             if (!twoRows) second = "";
 
             box.SetActive(number.Length > 0);
@@ -91,16 +93,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvText.Set(sub, second);
             sub.gameObject.SetActive(second.Length > 0);
             sub.color = (effort ? AvInk.Ink : ink).WithAlpha(fade);
-            lane.SetActive(hasLane);
-            if (hasLane) lane.Set(s.Value, s.Trend);
+            lane.SetActive(hasLane && twoRows);
+            if (hasLane && twoRows) lane.Set(s.Value, s.Trend);
 
-            // Size: row one is the box, the title (or, at rest, the lane) and the chip; row two is the lane and its words.
+            // Size: row one is the box, the title and the chip; row two is the lane and its words.
             float pad = full ? Pad : RestPad;
             float boxW = number.Length > 0 ? box.WidthFor() : 0f, chipW = effort && chipText.Length > 0 ? chip.WidthFor() : 0f;
-            float titleW = row1.Length > 0 ? Mathf.Ceil(AvText.Width(title)) : 0f, lane1 = laneFirst ? RestLaneW : 0f;
+            float titleW = row1.Length > 0 ? Mathf.Ceil(AvText.Width(title)) : 0f;
             float w1 = boxW;
             if (titleW > 0f) w1 += (w1 > 0f ? Gap : 0f) + titleW;
-            if (lane1 > 0f) w1 += (w1 > 0f ? Gap : 0f) + lane1;
             if (chipW > 0f) w1 += (w1 > 0f ? 2f * Gap : 0f) + chipW;
             float w2 = twoRows ? (hasLane ? LaneW + 6f : 0f) + (second.Length > 0 ? Mathf.Ceil(AvText.Width(sub)) : 0f) : 0f;
             float w = Mathf.Clamp(Mathf.Max(w1, w2) + 2f * pad, full ? MinW : 0f, MaxW), h = 2f * pad - 2f + RowH + (twoRows ? RowH - 2f : 0f);
@@ -112,8 +113,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvLay.Place(title.rectTransform, x, top, Mathf.Max(20f, (chipW > 0f ? chipX - Gap : w - pad) - x), RowH - 2f);
             if (chipW > 0f) chip.Place(chipX, top, chipW, RowH - 2f);
             float y2 = top + RowH, sx = pad;
-            if (laneFirst) lane.Place(x, h - pad - StrLaneBar.PadBottom - LaneH, lane1, LaneH);   // low in the row: the notch head needs the room above the track
-            else if (hasLane) { lane.Place(pad, y2 + (RowH - 2f - LaneH) * 0.5f + 1f, LaneW, LaneH); sx += LaneW + 6f; }
+            if (hasLane && twoRows) { lane.Place(pad, y2 + (RowH - 2f - LaneH) * 0.5f + 1f, LaneW, LaneH); sx += LaneW + 6f; }
             AvLay.Place(sub.rectTransform, sx, y2 - 1f, Mathf.Max(20f, w - sx - pad), RowH - 2f);
 
             Paint(ink, fade, s.Hot, s.Selected);

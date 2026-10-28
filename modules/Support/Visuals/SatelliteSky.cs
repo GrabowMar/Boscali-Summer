@@ -8,12 +8,12 @@ using BoscaliSummer.Modules.Support.Domain.Space;
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
-    /// Three persistent typed birds. Client-local meshes have no collider or targeting identity.
+    /// Three persistent typed birds (<see cref="SatelliteModels"/>: telescope, side-looking radar, rod magazine), lit by the sun, sensor face to nadir,
+    /// wings turned to the sun. Client-local meshes have no collider or targeting identity.
     /// </summary>
     internal sealed class SatelliteSky : MonoBehaviour, ISceneService
     {
         private const float DisplayRange = 60000f;
-        private const float MeshSpan = 12f;
         private const float ApparentSize = 0.0022f;
         private const float MinimumSpan = 40f;
 
@@ -39,51 +39,59 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private static readonly GeoBird[] latest = new GeoBird[SpaceRules.BirdCount];
         private static readonly bool[] hasGeo = new bool[SpaceRules.BirdCount];
 
-        private static readonly Color HullDay = new Color(0.86f, 0.92f, 0.96f, 1f);
-        private static readonly Color HullNight = new Color(0.72f, 1f, 0.94f, 1f);
-        private static readonly Color Panel = new Color(0.16f, 0.26f, 0.52f, 1f);
         private static readonly int BaseColor = Shader.PropertyToID("_BaseColor");
-        private static readonly int ColorId = Shader.PropertyToID("_Color");
+#if !PUBLIC_RELEASE
+        /// <summary>Dev only (OpsFxDemo "birds"): all three birds show whatever the local faction owns, for look checks from a spectator camera.</summary>
+        internal static bool DemoAll;
+#endif
 
         private SupportManager support;
         private readonly Transform[] birds = new Transform[SpaceRules.BirdCount];
-        private Mesh mesh;
+        private readonly Transform[] wings = new Transform[SpaceRules.BirdCount];
+        private readonly float[] spans = new float[SpaceRules.BirdCount];
+        private readonly Mesh[] meshes = new Mesh[SpaceRules.BirdCount * 2];
         private readonly bool[] has = new bool[SpaceRules.BirdCount];
-        private bool present;
+        private bool present, built;
         private float nextState, failedUntil;
-        private Material hullMaterial;
-        private Material panelMaterial;
+        private Material[] materials;
         private Material glintMaterial;
         private Mesh glintMesh;
         private readonly Transform[] glints = new Transform[SpaceRules.BirdCount];
         private readonly MeshRenderer[] glintRenderers = new MeshRenderer[SpaceRules.BirdCount];
         private MaterialPropertyBlock glintBlock;
-        private Color lastHull;
-        private bool hullPainted;
 
         public void Configure(SupportManager manager) => support = manager;
 
         public void ResetForScene()
         {
+#if !PUBLIC_RELEASE
+            DemoAll = false;
+#endif
             System.Array.Clear(hasGeo, 0, hasGeo.Length);
             for (int i = 0; i < birds.Length; i++)
             {
                 if (birds[i] != null) Destroy(birds[i].gameObject);
-                birds[i] = null;
+                if (glints[i] != null) Destroy(glints[i].gameObject);
+                birds[i] = null; wings[i] = null; glints[i] = null;
             }
-            if (mesh != null) Destroy(mesh);
-            mesh = null;
+            for (int i = 0; i < meshes.Length; i++) { if (meshes[i] != null) Destroy(meshes[i]); meshes[i] = null; }
+            if (materials != null)
+                foreach (Material m in materials)
+                {
+                    if (m == null) continue;
+                    // Only the textures SatelliteModels made; an unset _BaseMap returns the shared default, which must never be destroyed.
+                    Texture map = m.HasProperty("_BaseMap") ? m.GetTexture("_BaseMap") : null;
+                    if (map != null && map.name.StartsWith("BoscaliSat", System.StringComparison.Ordinal)) Destroy(map);
+                    Destroy(m);
+                }
+            materials = null;
+            built = false;
             present = false;
             nextState = 0f;
             failedUntil = 0f;
-            if (hullMaterial != null) Destroy(hullMaterial);
-            if (panelMaterial != null) Destroy(panelMaterial);
-            hullMaterial = null;
-            panelMaterial = null;
             if (glintMaterial != null) Destroy(glintMaterial);
             if (glintMesh != null) Destroy(glintMesh);
             glintMaterial = null; glintMesh = null;
-            System.Array.Clear(glints, 0, glints.Length);
         }
 
         private void OnDestroy() => ResetForScene();
@@ -115,26 +123,37 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 present = false;
                 if (GameManager.GetLocalPlayer<Player>(out Player player) && player != null && support.TryGetSpaceFamily(player.HQ, out _))
                     for (int i = 0; i < has.Length; i++) { has[i] = support.HasSpaceBird(player.HQ, (BirdKind)i); present |= has[i]; }
+#if !PUBLIC_RELEASE
+                if (DemoAll) { present = true; for (int i = 0; i < has.Length; i++) has[i] = true; }
+#endif
             }
             if (GameManager.GetLocalPlayer<Player>(out Player me) && me != null)
                 for (int i = 0; i < hasGeo.Length; i++) hasGeo[i] = support.TryOwnGeo(me.HQ, i, out latest[i]);
             if (!present) { Hide(); return; }
-            if (mesh == null) Build();
+            if (!built) Build();
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             float night = level != null ? 1f - Mathf.InverseLerp(0.02f, 0.4f, level.GetAmbientLight()) : 0f;
-            float size = Mathf.Max(MinimumSpan, DisplayRange * ApparentSize) / MeshSpan;
+            Vector3 toSun = level != null && level.sun != null ? -level.sun.transform.forward : Vector3.up;
+            float apparent = Mathf.Max(MinimumSpan, DisplayRange * ApparentSize);
             var csm = SceneSingleton<CameraStateManager>.i;
             Camera cam = csm != null ? csm.mainCamera : Camera.main;
             float now = SupportManager.MissionNow();
-            // Dusk and night: the hull shows as a glint that flares as the panels catch the sun; by day the plain hull is enough.
+            // Dusk and night: the bird still in sunlight shows as a glint that flares as the panels catch the sun; by day the lit hull is enough.
             float dusk = Mathf.Clamp01(night * 1.6f);
             glintBlock ??= new MaterialPropertyBlock();
             for (int i = 0; i < birds.Length; i++)
             {
+                float size = apparent / spans[i];
                 Vector3 offset = Track(i, now) * DisplayRange;
                 birds[i].position = new GlobalPosition(offset.x, offset.y, offset.z).ToLocalPosition();
                 birds[i].localScale = new Vector3(size, size, size);
                 if (birds[i].gameObject.activeSelf != has[i]) birds[i].gameObject.SetActive(has[i]);
+                if (has[i])
+                {
+                    // The wings turn about their boom (local X) until the cells face the sun.
+                    Vector3 s = birds[i].InverseTransformDirection(toSun);
+                    wings[i].localRotation = Quaternion.AngleAxis(Mathf.Atan2(s.z, s.y) * Mathf.Rad2Deg, Vector3.right);
+                }
                 Transform glint = glints[i];
                 if (glint == null || !has[i] || cam == null) { if (glint != null && glint.gameObject.activeSelf) glint.gameObject.SetActive(false); continue; }
                 float flare = 0.3f + 0.7f * Mathf.Pow(Mathf.Max(0f, Mathf.Sin(now * 0.7f + i * 2.4f)), 10f);
@@ -143,38 +162,17 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 if (!glinting) continue; // hidden: no transform or colour writes (they are all rewritten the frame it shows)
                 glint.position = birds[i].position;
                 glint.rotation = cam.transform.rotation;
-                float span = size * MeshSpan * (3f + 4f * flare);
+                float span = apparent * (3f + 4f * flare);
                 glint.localScale = new Vector3(span, span, span);
                 glintBlock.SetColor(BaseColor, new Color(1f, 0.93f, 0.75f, dusk * flare * 0.9f));
                 glintRenderers[i].SetPropertyBlock(glintBlock);
-            }
-            Color hull = Color.Lerp(HullDay, HullNight, night);
-            if (!hullPainted || hull != lastHull)
-            {
-                hullMaterial.SetColor(BaseColor, hull);
-                hullMaterial.SetColor(ColorId, hull);
-                lastHull = hull;
-                hullPainted = true;
             }
         }
 
         private void Build()
         {
-            mesh = new Mesh { name = "PersistentSatellite" };
-            mesh.vertices = ToVectors(SatelliteMeshData.HullVerts, SatelliteMeshData.PanelVerts);
-            mesh.subMeshCount = 2;
-            mesh.SetTriangles(SatelliteMeshData.HullTris, 0);
-            mesh.SetTriangles(Offset(SatelliteMeshData.PanelTris, SatelliteMeshData.HullVerts.Length / 3), 1);
-            mesh.RecalculateNormals();
-            mesh.RecalculateBounds();
-            Shader shader = Shader.Find("Universal Render Pipeline/Unlit")
-                ?? Shader.Find("Sprites/Default")
-                ?? Shader.Find("Unlit/Color");
-            hullMaterial = new Material(shader) { name = "BoscaliSatHull" };
-            hullPainted = false;
-            panelMaterial = new Material(shader) { name = "BoscaliSatPanel" };
-            panelMaterial.SetColor(BaseColor, Panel);
-            panelMaterial.SetColor(ColorId, Panel);
+            built = true;
+            materials = SatelliteModels.Materials();
             glintMesh = new Mesh { name = "BirdGlint" };
             glintMesh.vertices = new[] { new Vector3(-.5f, -.5f, 0), new Vector3(.5f, -.5f, 0), new Vector3(-.5f, .5f, 0), new Vector3(.5f, .5f, 0) };
             glintMesh.uv = new[] { new Vector2(0, 0), new Vector2(1, 0), new Vector2(0, 1), new Vector2(1, 1) };
@@ -183,16 +181,20 @@ namespace BoscaliSummer.Modules.Support.Visuals
             glintMaterial = new Material(SupportParticles.Material(true)) { name = "BoscaliBirdGlint" };
             for (int i = 0; i < birds.Length; i++)
             {
-                var go = new GameObject("BoscaliBird:" + (BirdKind)i);
+                var kind = (BirdKind)i;
+                Mesh body = meshes[i * 2] = SatelliteModels.Body(kind);
+                Mesh wing = meshes[i * 2 + 1] = SatelliteModels.Wings(kind);
+                spans[i] = Mathf.Max(1f, wing.bounds.size.x);
+                var go = new GameObject("BoscaliBird:" + kind);
                 go.transform.SetParent(transform, false);
-                go.transform.localRotation = Quaternion.Euler(0f, i * 120f, 0f);
+                go.transform.localRotation = Quaternion.Euler(0f, i * 120f + 20f, 0f);
                 birds[i] = go.transform;
-                go.AddComponent<MeshFilter>().sharedMesh = mesh;
-                var renderer = go.AddComponent<MeshRenderer>();
-                renderer.shadowCastingMode = ShadowCastingMode.Off;
-                renderer.receiveShadows = false;
-                renderer.sharedMaterials = new[] { hullMaterial, panelMaterial };
-                var glint = new GameObject("BoscaliGlint:" + (BirdKind)i);
+                Dress(go, body);
+                var w = new GameObject("Wings");
+                w.transform.SetParent(go.transform, false);
+                wings[i] = w.transform;
+                Dress(w, wing);
+                var glint = new GameObject("BoscaliGlint:" + kind);
                 glint.transform.SetParent(transform, false);
                 glint.AddComponent<MeshFilter>().sharedMesh = glintMesh;
                 var glintRenderer = glint.AddComponent<MeshRenderer>();
@@ -205,6 +207,15 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
         }
 
+        private void Dress(GameObject go, Mesh mesh)
+        {
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            renderer.sharedMaterials = materials;
+        }
+
         private void Hide()
         {
             for (int i = 0; i < birds.Length; i++)
@@ -212,25 +223,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 if (birds[i] != null && birds[i].gameObject.activeSelf) birds[i].gameObject.SetActive(false);
                 if (glints[i] != null && glints[i].gameObject.activeSelf) glints[i].gameObject.SetActive(false);
             }
-        }
-
-        private static Vector3[] ToVectors(float[] first, float[] second)
-        {
-            var merged = new Vector3[first.Length / 3 + second.Length / 3];
-            for (int i = 0; i < merged.Length; i++)
-            {
-                float[] source = i < first.Length / 3 ? first : second;
-                int at = i < first.Length / 3 ? i * 3 : (i - first.Length / 3) * 3;
-                merged[i] = new Vector3(source[at], source[at + 1], source[at + 2]);
-            }
-            return merged;
-        }
-
-        private static int[] Offset(int[] tris, int baseIndex)
-        {
-            var shifted = new int[tris.Length];
-            for (int i = 0; i < tris.Length; i++) shifted[i] = tris[i] + baseIndex;
-            return shifted;
         }
     }
 }

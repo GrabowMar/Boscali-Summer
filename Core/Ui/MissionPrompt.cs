@@ -181,10 +181,12 @@ namespace BoscaliSummer.Core.Ui
             infoBody.Set("Hover any system on the left to read what it does and whether it changes the mission.");
             infoEffect.Set("");
 
-            if (Board != null && Board.Keys.Count > 0)
+            bool promptKeys = false;
+            if (Board != null) foreach (ClientKeySetting key in Board.Keys) promptKeys |= key.OnPrompt;
+            if (promptKeys)
             {
                 var controls = side.Add(new AvCard(side.Content, side.Ticker, side.Inner, "CONTROLS"));
-                foreach (ClientKeySetting key in Board.Keys) KeyBindControl.Add(controls.Flow, key);
+                foreach (ClientKeySetting key in Board.Keys) if (key.OnPrompt) KeyBindControl.Add(controls.Flow, key);
             }
 
             var notes = side.Add(new AvCard(side.Content, side.Ticker, side.Inner, "WHAT'S NEW"));

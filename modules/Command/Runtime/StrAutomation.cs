@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         public static Dictionary<string, object> Select(Dictionary<string, object> args) => PointAt("Select", args, true);
 
         /// <summary>
-        /// <c>{verb, index, arg}</c>: an alias of Press for the README scenario and the trailer. pick and accept and wing take the 1-based ticket, replan arms
+        /// <c>{verb, index, arg}</c>: an alias of Press for the README scenario and the trailer. pick and accept take the 1-based ticket, replan arms
         /// and confirms in one call, posture takes arg 0..2 (or cycles to the next), redirect takes the index-th front lane that has an offer.
         /// </summary>
         public static Dictionary<string, object> Verb(Dictionary<string, object> args)
@@ -75,7 +75,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
             {
                 case "pick": id = StrControlIds.Prop(index, "pick"); break;
                 case "accept": id = StrControlIds.Sortie(index, "accept"); break;
-                case "wing": id = StrControlIds.Sortie(index, "wing"); break;
                 case "replan": id = StrControlIds.Replan; break;
                 case "posture":
                     int p = args != null && args.ContainsKey("arg") ? Mathf.Clamp((int)Number(args, "arg", 0f), 0, 2) : ((int)vm.Posture + 1) % 3;
@@ -96,8 +95,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
 
         /// <summary>
-        /// <c>{act (accept|wing), chip (default STRIKE)}</c>: presses the first ticket with that family chip the verb applies to (accept needs an offered one, wing an accepted one)
-        /// through the panel's own control, so the gate, the verbs and the wing desk are the production path. Returns the ticket's index and the press result.
+        /// <c>{act (accept), chip (default STRIKE)}</c>: presses the first offered ticket with that family chip
+        /// through the panel's own control, so the gate and the verbs are the production path. Returns the ticket's index and the press result.
         /// </summary>
         public static Dictionary<string, object> Ticket(Dictionary<string, object> args)
         {
@@ -106,7 +105,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (hub == null) return Fail("Ticket", "no STR hub in this scene");
             hub.TickNow();
             StrViewModel vm = hub.Current;
-            string act = Text(args, "act") ?? "wing";
+            string act = Text(args, "act") ?? "accept";
             string chip = Text(args, "chip") ?? "STRIKE";
             for (int i = 0; i < vm.SortieCount; i++)
             {

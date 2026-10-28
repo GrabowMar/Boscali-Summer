@@ -42,6 +42,8 @@ missile-alarm-0..2.wav (eleven_text_to_sound_v2) and the warning voice "Levi A."
 stall-horn.wav         missile loops are one generated beep and the stall loop one generated warble laid out by `pulse`; the rest
 gpws-whoop.wav         are cuts made by `build` in tools/Build-SoundClips.py.
 master-caution.wav
-vo-pull-up.wav  vo-terrain.wav  vo-bingo.wav  vo-over-g.wav
+vo-*.wav               Voice warnings remade 2026-10-28 (flow 2p0c5LzKv16HTnnMBjeh, voice "Amanda T", eleven_multilingual_v2):
+                       pull up, terrain, over G, bingo fuel and stall (replaces the game's spoken "stall"), band-limited
+                       280 Hz-4.5 kHz with light drive like a cockpit warning unit.
 ui-click-0.wav  ui-click-1.wav  ui-confirm.wav  ui-caution.wav
 near-crack-0.wav  near-crack-1.wav  gear-lever.wav  canopy-close.wav

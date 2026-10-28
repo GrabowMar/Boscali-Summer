@@ -311,16 +311,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
     }
 
-    /// <summary>One sortie tied to the operation: family chip, title and who flies it, the data line, ACCEPT, the wing button, LOCATE ON MAP, and the one line under it when the main verb is refused or the wing is out.</summary>
+    /// <summary>One sortie tied to the operation: family chip, title and who flies it, the data line, ACCEPT, LOCATE ON MAP, and the one line under it when ACCEPT is refused.</summary>
     internal sealed class StrSortieTicket : StrLaidPart
     {
-        private const float Pad = 5f, AcceptW = 66f, WingW = 78f, ButtonGap = 4f;
+        private const float Pad = 5f, ButtonW = 148f;
 
         private readonly int index;
         private readonly AvFrame frame;
         private readonly StrSlab chip, state;
         private readonly TMP_Text title, by, data, note;
-        private readonly StrButton accept, wing, locate;
+        private readonly StrButton accept, locate;
         private StrSortieRow row;
         private StrInkRole ink = StrInkRole.Offered;
         private bool noteIsReason;
@@ -337,7 +337,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             data = Text(Rect, "Data", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft);
             note = Text(Rect, "Note", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             accept = new StrButton(Rect, "ACCEPT", AvButtonStyle.Primary, () => Hub.Run(StrActionKind.Accept, row.Id));
-            wing = new StrButton(Rect, "SEND WING", AvButtonStyle.Default, () => Hub.Run(StrPanelText.WingTasked(row) ? StrActionKind.Recall : StrActionKind.SendWing, row.Id));
             locate = new StrButton(Rect, "LOCATE ON MAP", AvButtonStyle.Quiet, () => Locate(row.Id));
             Restyle();
         }
@@ -372,15 +371,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Set(data, line);
             string reason = StrPanelText.TicketReason(r);
             noteIsReason = reason.Length > 0;
-            AvText.Set(note, noteIsReason ? reason : r.WingText);
+            AvText.Set(note, reason);
             note.gameObject.SetActive(note.text.Length > 0);
             accept.SetActive(r.Offered);
             state.SetActive(!r.Offered);
             if (r.Offered)
                 accept.Bind(Controls, StrControlIds.Sortie(index + 1, "accept"), "ACCEPT", () => Vm.Sorties[index].Accept, "Take this sortie. Finishing it counts toward the reinforcement wave.");
             else state.SetOutline(r.StateText.Length > 0 ? r.StateText : "DONE", r.Active ? AvInk.Effort : AvInk.Dim);
-            wing.Bind(Controls, StrControlIds.Sortie(index + 1, "wing"), r.WingLabel, () => Vm.Sorties[index].Wing,
-                "Task your recruited wing to this sortie. Their kills count toward it.");
             locate.Bind(Controls, StrControlIds.Sortie(index + 1, "locate"), "LOCATE ON MAP", () => LocateGate(Vm.Sorties[index].Id), "Fly the map to this sortie.");
             Paint();
             Changed();
@@ -388,7 +385,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         protected override float Lay(float width, bool place)
         {
-            float bx = width - Pad - AcceptW - ButtonGap - WingW, leftW = bx - Pad - 10f;
+            float bx = width - Pad - ButtonW, leftW = bx - Pad - 10f;
             bool hasNote = note.gameObject.activeSelf && note.text.Length > 0;
             float noteH = hasNote ? AvText.Height(note, width - 2f * Pad - 8f) : 0f;
             float h = Pad + 20f + 3f + 18f + Pad - 1f;
@@ -400,10 +397,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvLay.Place(title.rectTransform, tx, Pad, Mathf.Max(30f, leftW - (tx - Pad) - byW - 4f), 20f);
             AvLay.Place(by.rectTransform, bx - 10f - byW, Pad, byW, 20f);
             AvLay.Place(data.rectTransform, Pad + 5f, Pad + 23f, leftW, 18f);
-            accept.Place(bx, Pad, AcceptW, 20f);
-            state.Place(bx, Pad, AcceptW, 20f);
-            wing.Place(bx + AcceptW + ButtonGap, Pad, WingW, 20f);
-            locate.Place(bx, Pad + 23f, AcceptW + ButtonGap + WingW, 18f);
+            accept.Place(bx, Pad, ButtonW, 20f);
+            state.Place(bx, Pad, ButtonW, 20f);
+            locate.Place(bx, Pad + 23f, ButtonW, 18f);
             if (hasNote) AvLay.Place(note.rectTransform, Pad + 5f, Pad + 43f, width - 2f * Pad - 8f, noteH);
             return h;
         }
@@ -423,7 +419,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             Paint();
             accept.Restyle();
-            wing.Restyle();
             locate.Restyle();
         }
     }

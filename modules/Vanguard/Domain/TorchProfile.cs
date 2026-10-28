@@ -11,9 +11,10 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     /// </summary>
     internal static class TorchProfile
     {
-        public const float BurnSeconds = 15f;       // s of full thrust in one load of fuel
+        public const float BurnSeconds = 30f;       // s of full thrust in one load of fuel
         public const float RampIn = .3f, RampOut = .4f;
-        public const float Accel = 1f * 9.81f;      // m/s2 at full thrust, all bottles together
+        public const float Accel = 1.8f * 9.81f;    // m/s2 at full thrust, all bottles together
+        public const float Steer = .12f;            // share of a bottle's sideways lever arm it yaws with: one-sided bottles steer, pairs cancel
         public const float HoldGrace = .15f;        // s the burn holds after the last fire call (one is sent every frame while held)
         public const float ReplayInterval = .5f;    // s between the flying peer's "still burning" replays to the others
         public const float ReplayHold = .65f;       // s a replay keeps a remote peer's plume lit

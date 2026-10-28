@@ -38,11 +38,13 @@ namespace BoscaliSummer.Modules.Performance
                 "Helps a GPU-limited machine only. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.ShadowDistanceCap, ClientPreset.LastResort);
-            context.AddClientSetting("BASE GAME", "RENDER SCALE",
-                "Render the 3D world at reduced resolution (BepInEx config Performance > RenderScale, 80% by default) and upscale it. " +
+            ClientSettingToggle scale = context.AddClientSetting("BASE GAME", "RENDER SCALE",
+                "Render the 3D world at the RESOLUTION below and upscale it. " +
                 "Helps a GPU-limited machine only; the world looks softer. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.RenderScaleCap, ClientPreset.LastResort);
+            context.AddClientLevel("BASE GAME", "RESOLUTION", "3D world resolution under RENDER SCALE. Lower is faster and softer.",
+                context.Settings.Performance.RenderScale, .5f, 1f, .05f, requires: scale);
             context.AddClientSetting("BASE GAME", "SCENE CLEANUP",
                 "Unload unused assets and collect garbage on scene transitions " +
                 "(menu/mission loads), never during flight. Frees memory; loads take slightly longer. Client-local.",

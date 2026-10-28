@@ -93,9 +93,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         private static string TrendWords(float trend)
         {
             if (float.IsNaN(trend)) return "";
-            if (trend >= 0.05f) return StrWords.Up + "RISING";
-            if (trend <= -0.05f) return StrWords.Down + "FALLING";
-            return StrWords.Level + "STEADY";
+            if (trend >= 0.05f) return "RISING";
+            if (trend <= -0.05f) return "FALLING";
+            return "STEADY";
         }
 
         /// <summary>Splits "TITLE - detail" at the first " - "; a text without one is all title.</summary>
@@ -173,7 +173,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Supply();
                 Tiles();
                 Sitrep();
-                Log();
                 Misc();
                 Banner();
                 Footer(hasSnap);
@@ -405,8 +404,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 {
                     StrSortieRow r = m.Sorties[i];
                     PutAct(ref r.Accept, StrGate.Check(m, StrActionKind.Accept, r.Id));
-                    bool tasked = r.HasWing && (r.WingState == WingSortieState.Tasked || r.WingState == WingSortieState.OnStation);
-                    PutAct(ref r.Wing, StrGate.WingGate(m.IsHost, m.SortiesLive, r, tasked));
                 }
             }
 

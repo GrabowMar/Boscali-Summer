@@ -82,6 +82,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             DrawGhost(map, c.Map);
         }
 
+        /// <summary>After Boscali's relief has committed this frame's view (its LateUpdate runs first): a moved relief redraws
+        /// here, or the legs and rings placed in <see cref="Tick"/> trail the ground by a render while it pans.</summary>
+        public void LateTick()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (!shown || map == null || map.iconLayer == null || layer != map.iconLayer.transform || !DynamicMap.mapMaximized) return;
+            if (WmcMapProjection.Revision != drawnRevision) Draw(map);
+        }
+
         /// <summary>A CAP or SWEEP right-drag: the ring it would guard and its radius, every frame.</summary>
         private void DrawGhost(DynamicMap map, WmcMapInput input)
         {

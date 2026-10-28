@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         // Glyphs: the kit font asset holds the arrow, the degree sign and the dot; the cross (and the triangle up) reach the game through the kit's own
         // AvStates.Glyph, which prints them in game. The check mark, the level bar and the triangle down are in no font the game has (the first in-game
         // capture drew a box for the bar), so a yes is the word OK and the trend words carry a sign: never a box (annex 05 P9 risk).
-        public const string Up = "+ ", Down = "- ", Level = "= ", Yes = "OK", No = "✕", Arrow = "→", Degree = "°";
+        public const string Yes = "OK", No = "✕", Arrow = "→", Degree = "°";
 
         /// <summary>The word an empty office card carries: the post nobody holds.</summary>
         public static string OfficeOf(int tier) => tier == 0 ? "THEATER" : tier == 1 ? "COMPONENT" : "BASE";
@@ -139,13 +139,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case ObjectiveFamily.Logistics: return "SUPPLY";
                 default: return "SORTIE";
             }
-        }
-
-        /// <summary>SEND WING, COVER, SCOUT by intent; RECALL while tasked.</summary>
-        public static string WingLabel(WingSortieIntent intent, bool tasked)
-        {
-            if (tasked) return "RECALL";
-            return intent == WingSortieIntent.Cover ? "COVER" : intent == WingSortieIntent.Observe ? "SCOUT" : "SEND WING";
         }
 
         /// <summary>DEFCON word: 5 NORMAL, 4 ELEVATED, 3 HIGH, 2 SEVERE, 1 MAXIMUM, anything else NOT MEASURED.</summary>

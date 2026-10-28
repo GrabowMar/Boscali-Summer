@@ -22,7 +22,8 @@ namespace BoscaliSummer.Core.Config
 
     /// <summary>
     /// What the F1 plugin-settings window lists: the short table of switches below, the
-    /// keybinds in one group, and nothing else.
+    /// keybinds in one group, and nothing else. Look, comfort and cockpit-feel settings are on
+    /// the SET console, which applies them in flight; F1 keeps the systems' on/off switches.
     ///
     /// <para>The mod binds around five hundred entries. Nearly all of them are tuning values
     /// that are only safe to move by someone who knows what they feed, so they are not in the
@@ -52,7 +53,6 @@ namespace BoscaliSummer.Core.Config
         private static readonly string[][] Menu =
         {
             new[] { "0 Mission", "Mission", "AskAtStart", "Ask which systems run at mission start" },
-            new[] { "0 Mission", "Scenario", "Cutscenes", "Cutscenes in scripted missions" },
             new[] { "1 Battlefield", "Support", "Enabled", "Support calls (OPS)" },
             new[] { "1 Battlefield", "Command", "Enabled", "Command map and STR" },
             new[] { "1 Battlefield", "HighCommand", "Enabled", "Chain of command" },
@@ -79,25 +79,12 @@ namespace BoscaliSummer.Core.Config
             new[] { "2 Pilot and squadron", "Squadron", "SandboxFreeCalls", "Sandbox: calls cost nothing" },
             new[] { "2 Pilot and squadron", "Comms", "Enabled", "Map comms, polls and games" },
 
-            new[] { "3 Cockpit", "TacBoard", "Enabled", "TAC BOARD" },
-            new[] { "3 Cockpit", "Wmc", "Show", "Wing panel (WMC)" },
-            new[] { "3 Cockpit", "Command", "HoloMap", "Holo map" },
+            // Look, comfort, HUD and cockpit-feel switches live on the SET console (map > SET), which applies them in flight.
             new[] { "3 Cockpit", "Radio", "Enabled", "Cockpit radio" },
             new[] { "3 Cockpit", "Autopilot", "Enabled", "Autopilot and interaction menu" },
             new[] { "3 Cockpit", "QoL", "Enabled", "Quality of life" },
-            new[] { "3 Cockpit", "Immersion", "Enabled", "Cockpit immersion" },
-            new[] { "3 Cockpit", "Immersion", "HeadMotionEnabled", "Head motion" },
-            new[] { "3 Cockpit", "Immersion", "HelmetVisorEnabled", "Helmet visor" },
-            new[] { "3 Cockpit", "Immersion", "PilotBodyEnabled", "Pilot body" },
-
-            new[] { "4 Look and comfort", "Avionics", "Theme", "Panel theme" },
-            new[] { "4 Look and comfort", "Avionics", "ReducedMotion", "Panels: no animation" },
-            new[] { "4 Look and comfort", "Immersion", "ComfortMotionEnabled", "Comfort: less camera motion" },
-            new[] { "4 Look and comfort", "Weather", "ReducedFlashes", "Comfort: no lightning flashes" },
-            new[] { "4 Look and comfort", "Weather", "CinematicCloudsEnabled", "Volumetric clouds" },
-            new[] { "4 Look and comfort", "Weather", "RainVisualsEnabled", "Rain visuals" },
-            new[] { "4 Look and comfort", "Effects", "Enabled", "Display grade and sharpening" },
-            new[] { "4 Look and comfort", "Performance", "Enabled", "Adaptive effect quality" },        };
+            new[] { "3 Cockpit", "Immersion", "Enabled", "Cockpit immersion (tune it on SET > COCKPIT)" },
+        };
 
         /// <summary>
         /// Sorts every bound entry into listed, key or hidden. Call once, after every module

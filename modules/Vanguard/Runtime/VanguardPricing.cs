@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     /// Writes <see cref="VanguardPrices"/> onto the loaded bundle's assets on every peer (the loadout menu, the host's charges
     /// and the kill rewards all read them), so a price change needs no bundle rebuild. Blueprinter applies its bundle patches
     /// while the first GameWorld loads, after sceneLoaded, which puts the baked values back: a 1 Hz probe on the MALD-X
-    /// definition re-applies whenever it drifts (sim 2026-10-25, vg-economy). Idempotent.
+    /// definition re-applies whenever it drifts (sim 2026-10-25, vg-economy). Idempotent. Carries <see cref="VanguardLabels"/> too.
     /// </summary>
     internal sealed class VanguardPricing : MonoBehaviour, ISceneService
     {
@@ -27,17 +27,24 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (Drifted()) Apply();
         }
 
-        private static bool Drifted()
+        private int labelledMounts;
+
+        // Also re-applies once the runtime stores have joined the mount list, so they get their icons.
+        private bool Drifted()
         {
             if (Encyclopedia.i == null) return false;
+            if (Encyclopedia.i.weaponMounts.Count != labelledMounts) return true;
             foreach (MissileDefinition def in Encyclopedia.i.missiles)
-                if (def != null && def.jsonKey == VanguardKeys.MaldX) return def.value != VanguardPrices.Munition(VanguardKeys.MaldX);
+                if (def != null && def.jsonKey == VanguardKeys.MaldX)
+                    return def.value != VanguardPrices.Munition(VanguardKeys.MaldX) || def.unitName != VanguardLabels.MaldXName;
             return false;
         }
 
-        private static void Apply()
+        private void Apply()
         {
             if (Encyclopedia.i == null) return;
+            VanguardLabels.Apply(Encyclopedia.i);
+            labelledMounts = Encyclopedia.i.weaponMounts.Count;
             foreach (MissileDefinition def in Encyclopedia.i.missiles)
             {
                 float price = def != null ? VanguardPrices.Munition(def.jsonKey) : 0f;

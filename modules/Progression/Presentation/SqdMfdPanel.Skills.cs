@@ -73,10 +73,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             skillRows.AddRange(skillBoard.Rows);
             skillBranches.AddRange(skillBoard.Branches);
 
+            // Every line always holds one line of text and the prose two, so the card keeps one height
+            // whatever is selected: a card that grew on a click squeezed the board above it.
             AvCard detail = new AvCard(p.Content, console.Ticker, p.Inner, null, true, "raised");
             skillStripTitle = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Head) { MinHeight = 14f, StretchText = true });
             skillStripEffect = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
-            skillStripDetail = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Prose) { MinHeight = 14f, StretchText = true });
+            skillStripDetail = detail.Flow.Add(new AvNote(detail.Flow.Content, AvTextRole.Prose) { MinHeight = 38f, StretchText = true });
             AvButtons buttons = detail.Flow.Buttons(
                 new AvControl.Spec("COMMIT GRADE", CommitSelected, AvButtonStyle.Primary, AvIcon.CircleCheck));
             skillConfirmButton = buttons.Controls[0];
@@ -195,8 +197,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 skillStripTitle.Set("WAITING FOR THE HOST");
                 skillStripTitle.Color = AvTheme.RailCaution;
-                skillStripEffect.SetShown(false);
-                skillStripDetail.Set("Pick sent. The board updates when the host confirms it.");
+                skillStripEffect.Set("PICK SENT");
+                skillStripEffect.Color = AvTheme.RailCaution;
+                skillStripDetail.Set("The board updates when the host confirms it.");
             }
             else if (hasSelection)
             {
@@ -208,7 +211,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     ? "SUPPORT TOOL · " + PerkCatalog.CapabilityCode(definition.Capability)
                     : PerkCatalog.EffectLabel(selected.Id));
                 skillStripEffect.Color = SqdTone.Text(AvState.Ready);
-                skillStripEffect.SetShown(true);
                 skillStripDetail.Set(selected.Description);
             }
             else
@@ -216,10 +218,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 int free = view.AvailablePoints;
                 skillStripTitle.Set(skillIdleTitle);
                 skillStripTitle.Color = AvTheme.TextPrimary;
-                skillStripEffect.SetShown(false);
-                skillStripDetail.Set((progression.BypassRequirements ? "Debug bypass: every grade is open. "
-                    : free > 0 ? AvNum.Thousands(free) + (free == 1 ? " pick in hand. " : " picks in hand. ")
-                    : "No pick in hand. ") + skillIdleDetail);
+                skillStripEffect.Set(progression.BypassRequirements ? "DEBUG BYPASS · EVERY GRADE OPEN"
+                    : free > 0 ? AvNum.Thousands(free) + (free == 1 ? " PICK IN HAND" : " PICKS IN HAND")
+                    : "NO PICK IN HAND");
+                skillStripEffect.Color = free > 0 || progression.BypassRequirements ? SqdTone.Text(AvState.Ready) : AvTheme.Disabled;
+                skillStripDetail.Set(skillIdleDetail);
             }
         }
 
@@ -270,7 +273,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             private readonly AvFrame frame;
             private readonly Image rail;
-            private readonly TMP_Text glyph, label, effect;
+            private readonly TMP_Text icon, glyph, label, effect;
             private readonly Action<byte> onSelect;
             private readonly byte id;
             private SkillNodeState state = SkillNodeState.Locked;
@@ -287,6 +290,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 Rect = AvLay.Child(parent, "Node " + perkId);
                 frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(5f)); AvLay.Fill(frame.rectTransform);
                 rail = AvLay.Solid(Rect, "Rail", Color.clear);
+                // The grade's own picture leads the node; the state glyph moves to the top-right corner.
+                icon = AvIcons.Make(Rect, IconOf(perkId), AvGridTokens.IconHead, Color.white);
                 glyph = AvIcons.Make(Rect, AvIcon.Lock, AvGridTokens.IconInline, Color.white);
                 label = AvText.Make(Rect, "Name", AvTextRole.Label, "", TextAlignmentOptions.TopLeft, true);
                 label.characterSpacing = 1f; // a long word (SURVEILLANCE) must fit the node without breaking mid-word
@@ -321,6 +326,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 Restyle();
             }
 
+            private static AvIcon IconOf(byte perkId) =>
+                PerkCatalog.IsDefined(perkId) && Enum.TryParse(PerkCatalog.Get(perkId).Icon, out AvIcon named) ? named : AvIcon.Star;
+
             private static AvIcon GlyphFor(SkillNodeState s)
             {
                 switch (s)
@@ -338,7 +346,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 base.Place(s);
                 AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
-                AvLay.Place(glyph.rectTransform, 9f, 5f, 14f, 14f);
+                AvLay.Place(icon.rectTransform, 8f, 4f, 16f, 16f);
+                AvLay.Place(glyph.rectTransform, s.W - 19f, 5f, 14f, 14f);
                 bool tall = s.H >= EffectHeight && effect.text.Length > 0 && AvText.Width(effect) <= s.W - 11f;   // a long effect waits for the detail card
                 AvLay.Place(label.rectTransform, 8f, 21f, s.W - 11f, tall ? 32f : s.H - 24f);
                 effect.gameObject.SetActive(tall);
@@ -376,6 +385,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 frame.Paint(fill, stroke);
                 rail.color = accent;
                 glyph.color = state == SkillNodeState.Locked ? AvTheme.Disabled : accent;
+                icon.color = state == SkillNodeState.Locked ? AvTheme.Disabled : accent;
                 label.color = ink;
                 effect.color = state == SkillNodeState.Locked ? AvTheme.Disabled : SqdTone.Text(AvState.Ready);
                 if (Connector != null)

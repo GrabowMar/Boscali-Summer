@@ -146,21 +146,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             {
                 Put(ref m.SortieCounts[i], count < 0 ? -1 : count);
                 Put(ref m.SortieShares[i], all && sum > 0 ? count / (float)sum : float.NaN);
-            }
-
-            // ---- rule 12: the staff log, newest first, as received ----------------------------------------------------------------
-
-            private void Log()
-            {
-                string[] log = snap?.Log;
-                int n = log == null ? 0 : Math.Min(log.Length, StrViewModel.MaxLog);
-                for (int i = 0; i < n; i++)
-                {
-                    string line = log[i] ?? "";
-                    Put(ref m.Log[i], line.Length > 64 ? line.Substring(0, 64) : line);
-                }
-                Put(ref m.LogCount, n);
-            }
-        }
+            }        }
     }
 }

@@ -848,8 +848,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private readonly float[] rain;
         private readonly AvState[] state;
         private int nowIndex;
-        /// <summary>The mark in front of a caution cell's code; null keeps the kit glyph. The Met Office reads the kit's caution triangle as "CUT", so it passes another one.</summary>
-        public string CautionMark;
 
         public EnvOutlookStrip(RectTransform parent, int cells) : base(parent, "Outlook strip")
         {
@@ -872,7 +870,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (i < 0 || i >= count) return;
             AvText.Set(time[i], timeText);
             bool alarm = s == AvState.Caution || s == AvState.Danger;
-            AvText.Set(code[i], (alarm ? (s == AvState.Caution && CautionMark != null ? CautionMark : AvStates.Glyph(s)) : "") + (codeText ?? ""));
+            AvText.Set(code[i], (alarm ? AvStates.Glyph(s) : "") + (codeText ?? ""));
             glyph[i].gameObject.SetActive(showGlyph);
             glyph[i].SetKind(regime);
             rain[i] = Mathf.Clamp01(rainProbability);

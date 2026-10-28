@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     internal static class SunspearProfile
     {
         public const string Info = "WI_VG_Sunspear";
-        public const string Name = "HEL-60 SUNSPEAR", ShortName = "SUNSPEAR";
+        public const string Name = "HEL-60 Sunspear", ShortName = "LASER 60KW";
         public const float Power = 160f;          // vanilla 120
         public const float MaxAngleDeg = 60f;     // turret cone around the pod's nose, vanilla 30
         public const float FireDamage = 45f;      // vanilla 40

@@ -108,18 +108,11 @@ namespace BoscaliSummer.Modules.Command.Domain
             return vm.Effort.FrontTag.Length > 0 ? "CALLS OFF " + vm.Effort.FrontTag : "CALLS OFF";
         }
 
-        /// <summary>The one line under a ticket's data when its main verb is refused (accept while offered, the wing once accepted); "" otherwise.</summary>
+        /// <summary>The one line under a ticket's data when ACCEPT is refused; "" otherwise.</summary>
         public static string TicketReason(StrSortieRow row)
         {
-            if (row == null) return "";
-            if (row.Offered) return row.Accept.Allowed ? "" : row.Accept.Text;
-            if (row.Active) return row.Wing.Allowed ? "" : row.Wing.Text;
-            return "";
+            return row != null && row.Offered && !row.Accept.Allowed ? row.Accept.Text : "";
         }
-
-        /// <summary>The wing is out on this sortie: the one definition the ticket's and the card's wing button share (RECALL while true, the send verb otherwise).</summary>
-        public static bool WingTasked(StrSortieRow row) =>
-            row != null && row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation);
 
         /// <summary>
         /// The second line of the map's layer plate: how old the board is and whose it is ("BOARD 4S OLD · BDF"). A board that never arrived claims
@@ -154,24 +147,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         {
             int n = enemy ? s.EnemyCount : s.OwnCount;
             return enemy ? n + " CONFIRMED" : n + (n == 1 ? " POST" : " POSTS");
-        }
-
-        /// <summary>What the staff log says when it has no lines: the staff has not written yet, or there is no staff report to read.</summary>
-        public static void LogNote(StrViewModel vm, out string title, out string detail)
-        {
-            bool report = vm != null && (vm.Mode == StrBoardMode.Operation || vm.Mode == StrBoardMode.Proposals || vm.Mode == StrBoardMode.Assessing ||
-                                         vm.Mode == StrBoardMode.NoOpening || vm.Mode == StrBoardMode.Reduced);
-            if (report)
-            {
-                title = "NO STAFF LOG YET";
-                detail = "The staff writes a line when it deals, picks, holds or pays.";
-                return;
-            }
-            title = "NO STAFF LOG";
-            string head = vm == null || string.IsNullOrEmpty(vm.Banner.Head) ? "NO STAFF REPORT" : vm.Banner.Head;
-            detail = head + StrWords.Dot + "THE LOG READS THE STAFF'S REPORT";
-        }
-    }
+        }    }
 
     /// <summary>The control-id grammar (annex 05 P11): dotted lower case, indices 1-based. One spelling for the panel, the overlay, the sim and the harness.</summary>
     internal static class StrControlIds

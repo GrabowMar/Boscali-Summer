@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Ares
             typeof(AresUnitDamagePatch),
             typeof(AresAircraftDamagePatch),
             typeof(AresPartDamagePatch),
+            typeof(AresShockwavePatch),
             typeof(AresGForceDamagePatch),
             typeof(AresWaterDamagePatch),
             typeof(AresBlackoutPatch),

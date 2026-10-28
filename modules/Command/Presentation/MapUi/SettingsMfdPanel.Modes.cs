@@ -52,22 +52,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             else
             {
                 AvTabBar tabs = c.Tabs(
-                    (AvIcon.Typography, "DISPLAY"),
+                    (AvIcon.Typography, "PANELS"),
                     (AvIcon.Map2, "MAP"),
-                    (AvIcon.Eye, "COCKPIT"),
-                    (AvIcon.WaveSine, "IMMERSION"),
+                    (AvIcon.Target, "HUD"),
+                    (AvIcon.WaveSine, "COCKPIT"),
+                    (AvIcon.CloudRain, "WORLD"),
                     (AvIcon.Gauge, "PERF"));
                 TabHelp.Apply(tabs,
-                    "Glass, surface texture, tint, motion and interface audio, with a live preview of the finish.",
-                    "Map layout, terrain, backdrop imagery and the news ticker, with a layout schematic.",
-                    "TAC BOARD HUD: layout, size, position, pages and blocks. Also the visor terrain ghost and the radial target presets.",
-                    "Cockpit head inertia, camera vibrations, Mach buffeting, sun glare, G-vignette, and aerodynamic audio.",
-                    "Client-local work budgets and panel effects, with a live frame-time trace. Each switch applies " +
-                    "during this mission. Maintenance clears cache or restores factory settings; factory reset requires a game restart.");
-                BuildDisplayPage(c.Page(CDisplay), CDisplay);
+                    "How every MFD panel looks: colour scheme, screen finish, panel motion and sound, and which screens the bezel offers.",
+                    "Map console layout, terrain, contacts, mouse handling, backdrop and the news ticker, with a layout schematic.",
+                    "Keys, the TAC BOARD, the visor maps, flight aids, comms notices and the radial target presets.",
+                    "What you feel in the cockpit: head motion, shakes, glare, visor, pilot body and cockpit sound.",
+                    "What the world looks like on this machine: sky, rain, sea, world effects, colour grade and mission pictures.",
+                    "One-click quality presets, client work budgets and a live frame-time trace. " +
+                    "Maintenance clears cache or restores factory settings; factory reset requires a game restart.");
+                BuildPanelsPage(c.Page(CPanels), CPanels);
                 BuildMapPage(c.Page(CMap), CMap);
-                BuildCockpitPage(c.Page(CCockpit), CCockpit);
-                BuildImmersionPage(c.Page(CImmersion), CImmersion);
+                BuildHudPage(c.Page(CHud), CHud);
+                BuildBoardPage(c.Page(CCockpit), CCockpit, "COCKPIT");
+                BuildBoardPage(c.Page(CWorld), CWorld, "WORLD");
                 BuildPerformancePage(c.Page(CPerf), CPerf);
             }
 
@@ -114,7 +117,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvLay.Nest(Rect, true);
                 pilot = AvControl.Make(Rect, new AvControl.Spec("THIS PILOT", () => pick(false), AvButtonStyle.Default, AvIcon.User));
                 server = AvControl.Make(Rect, new AvControl.Spec("SERVER", () => pick(true), AvButtonStyle.Default, AvIcon.Database));
-                pilot.Help = "Settings for your own machine: display, map, cockpit and performance. " +
+                pilot.Help = "Settings for your own machine: panels, map, HUD, cockpit, world look and performance. " +
                              "Saved automatically and never shared.";
                 server.Help = "Rules of this game. Host-authoritative: the host can change them, " +
                               "everyone else sees them locked.";

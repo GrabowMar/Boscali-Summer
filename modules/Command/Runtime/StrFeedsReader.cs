@@ -40,7 +40,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             ReadWar(ref into, hub, now, slow, ref faction);
             into.FactionCode = faction;
             ReadSorties(ref into, hub, now);
-            ReadPostsAndWing(ref into, hub, slow);
+            ReadPosts(ref into, hub, slow);
             ReadSupply(ref into, hub, now, slow, local, haveFaction ? hq : null);
             into.PickerPrompt = MapPicker.Prompt ?? "";
             if (slow) hub.KnownAirDefence = KnownAirDefence(hub, haveFaction ? hq : null);
@@ -136,8 +136,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
 
         // Enemy command posts: the confirmed rows of the high command view, copied as they are (global metres, display names). A board that has not
-        // arrived or has gone stale is not available, which the board prints as such rather than as an empty list. The wing line is host only (RefreshWing).
-        private static void ReadPostsAndWing(ref StrFeeds into, StrViewHub hub, bool slow)
+        // arrived or has gone stale is not available, which the board prints as such rather than as an empty list.
+        private static void ReadPosts(ref StrFeeds into, StrViewHub hub, bool slow)
         {
             into.PostsAvailable = false;
             into.PostsAgeSeconds = -1f;
@@ -175,34 +175,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         IntelAge = row.IntelAge, X = row.X, Z = row.Z, BountyCapped = row.BountyClaimed,
                     };
                 }
-            }
-
-            if (slow) RefreshWing(into.IsHost, into.Sorties, hub);
-            into.Wing = hub.WingBuffer;
-            into.WingCount = hub.WingCount;
-        }
-
-        // Refreshed at 1 Hz for the tied cards the board can show (at most five): the order source says what SEND WING would do, the orders
-        // say why not and how the last tasking is going. A client has neither service.
-        private static void RefreshWing(bool isHost, System.Collections.Generic.IReadOnlyList<SecondaryObjectiveView> cards, StrViewHub hub)
-        {
-            hub.WingCount = 0;
-            hub.TaskedSortieId = -1;
-            if (!isHost || cards == null || !ModuleServices.TryGet(out ISortieWingOrderSource source) ||
-                !ModuleServices.TryGet(out IWingSortieOrders orders)) return;
-            for (int i = 0; i < cards.Count && hub.WingCount < hub.WingBuffer.Length; i++)
-            {
-                SecondaryObjectiveView card = cards[i];
-                if (card == null || card.Link == null || !card.Link.Tied || !card.Link.OperationLive) continue;
-                if (!source.TryGetWingOrder(card.Id, out WingSortieOrder order)) continue;
-                var row = new StrWingIn { SortieId = card.Id, Intent = order.Intent, Refusal = orders.Refusal(in order), State = WingSortieState.None, Words = "" };
-                if (orders.TryGetStatus(card.Id, out WingSortieStatus status))
-                {
-                    row.State = status.State;
-                    row.Words = status.Words;
-                    if (status.State == WingSortieState.Tasked || status.State == WingSortieState.OnStation) hub.TaskedSortieId = card.Id;
-                }
-                hub.WingBuffer[hub.WingCount++] = row;
             }
         }
 

@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
     /// under the pen, the ruler) and rebuilds every frame only while something is moving.
     /// Neither takes raycasts: the map's own icons stay clickable through the ink.</para>
     /// </summary>
+    [DefaultExecutionOrder(101)] // After the map commits the displayed relief pose, or the ink trails a pan by a render.
     internal sealed class CommsMapLayer : MonoBehaviour, ISceneService
     {
         private const int MaxTags = 48;
@@ -95,7 +96,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             return true;
         }
 
-        private void Update()
+        private void LateUpdate()
         {
             if (settings == null || manager == null) return;
             bool wanted = settings.Enabled.Value && settings.ShowOnMap.Value && !Application.isBatchMode;

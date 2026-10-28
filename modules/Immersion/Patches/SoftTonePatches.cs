@@ -170,13 +170,16 @@ namespace BoscaliSummer.Modules.Immersion.Patches
         }
     }
 
-    /// <summary>The stall horn loop is the mod's modern warble (Core/Fx/Sfx stall-horn); vanilla's spoken "stall" still plays.</summary>
+    /// <summary>The stall horn loop is the mod's modern warble (Core/Fx/Sfx stall-horn) and the spoken "stall" is the
+    /// mod's warning voice (vo-stall), matching PULL UP / TERRAIN.</summary>
     [HarmonyPatch(typeof(AoADisplay), nameof(AoADisplay.Initialize))]
     internal static class StallHornPatch
     {
-        private static void Postfix(AudioSource ___hornSource)
+        private static void Postfix(AudioSource ___hornSource, ref AudioClip ___stallVoice)
         {
-            if (SoftTones.On && ___hornSource != null) ___hornSource.clip = SfxClips.Get("stall-horn") ?? ___hornSource.clip;
+            if (!SoftTones.On) return;
+            if (___hornSource != null) ___hornSource.clip = SfxClips.Get("stall-horn") ?? ___hornSource.clip;
+            ___stallVoice = SfxClips.Get("vo-stall") ?? ___stallVoice;
         }
     }
 

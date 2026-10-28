@@ -6,6 +6,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Patches;
 using BoscaliSummer.Modules.Wing.Networking;
 using BoscaliSummer.Modules.Wing.Configuration;
+using BoscaliSummer.Modules.Wing.Presentation;
 using BoscaliSummer.Core.Lifecycle;
 // Unity calls Awake, Update, FixedUpdate and OnDestroy by reflection.
 #pragma warning disable IDE0051
@@ -119,6 +120,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingFrameGate.NoteFrame(Time.unscaledDeltaTime);
             float dt = Time.deltaTime;
             for (int i = 0; i < services.Count; i++) Run(services[i], Phase.Tick, dt);
+        }
+
+        // The map relief commits its view in LateUpdate (order 100); WMC's map layer follows it here (order 10000).
+        private void LateUpdate()
+        {
+            WmcPanel panel = WmcPanel.Instance;
+            if (active && panel != null && !faulted.Contains(panel)) panel.Overlay.LateTick();
         }
 
         private void FixedUpdate()

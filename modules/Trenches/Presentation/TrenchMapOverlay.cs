@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Trenches.Presentation
     /// curves (<see cref="TrenchMapGraphic"/>), not a baked texture, and it is active only
     /// while the map is maximized: the cockpit HUD and MFD surfaces never see it.
     /// </summary>
+    [DefaultExecutionOrder(101)] // After the map commits the displayed relief pose, or the line trails a pan by a render.
     internal sealed class TrenchMapOverlay : MonoBehaviour, ISceneService
     {
         private TrenchesSettings settings;
@@ -76,7 +77,7 @@ namespace BoscaliSummer.Modules.Trenches.Presentation
             }
         }
 
-        private void Update()
+        private void LateUpdate()
         {
             if (settings == null || !settings.Enabled.Value || !settings.ShowOnTacticalMap.Value)
             {

@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             // The effort plate is first so that first-fit placement never displaces it.
             if (op && live)
                 AddTag(StrTagKind.Effort, e.Id, e.X, e.Z, Join(EffortSlot * 2, e.Tag, " ", e.KindText), Join(EffortSlot * 2 + 1, e.FrontTag, " ", e.Name),
-                       StrInkRole.Effort, Unit(e.Pressure), Unit(e.Trend), false, vm, Join(EffortNote, e.PressureText, " ", e.TrendText));
+                       StrInkRole.Effort, Unit(e.Pressure), Unit(e.Trend), false, vm, Join(EffortNote, e.PressureText, HostileSep, e.TrendText));
 
             // 1. a cross at each front anchor
             if (fronts)
@@ -140,7 +140,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     if (r == null || !Finite(r.X, r.Z)) continue;
                     AddPrim(StrShape.Cross, r.Ink, r.Id, r.X, r.Z, 0f, 0f, 0f, false);
                     AddTag(StrTagKind.Front, r.Id, r.X, r.Z, Join((FrontSlots + i) * 2, r.Tag, " ", r.Name),
-                           r.Observed ? Join((FrontSlots + i) * 2 + 1, r.PressureText, " ", r.TrendText) : r.StatusText,
+                           r.Observed ? Join((FrontSlots + i) * 2 + 1, r.PressureText, HostileSep, r.TrendText) : r.StatusText,
                            r.Ink, Unit(r.Pressure), Unit(r.Trend), false, vm);
                 }
             }
@@ -311,6 +311,9 @@ namespace BoscaliSummer.Modules.Command.Domain
         }
 
         // "a" + sep + "b" once per change: the joined string is remembered against the three references it was made from.
+        // "62% HOSTILE · RISING": the lane's share says whose it is, as the card does.
+        private static readonly string HostileSep = " HOSTILE" + StrWords.Dot;
+
         private string Join(int slot, string a, string sep, string b)
         {
             if (string.IsNullOrEmpty(a)) return b ?? "";

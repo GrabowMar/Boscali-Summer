@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         public readonly PerkEffect Effect;
         public readonly float Multiplier;
         public readonly string Capability;
+
+        /// <summary>The node's glyph, an <c>AvIcon</c> member name (kept a string so the catalogue stays engine-free).</summary>
         public readonly string Icon;
 
         public PerkDefinition(
@@ -93,65 +95,63 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         /// </summary>
         public static readonly PerkDefinition[] All =
         {
+            // Each lane pays for its own kind of flying: STRIKE kills and fast fire missions, RECON
+            // spotting and range, SIGNALS jamming and cheap support, ENGINEER service runs and captures.
+            // Grade 6 is the lane's big capstone.
             new PerkDefinition(0, Strike, 1, "Strike Qualification",
                 "Authorises Rod-from-God kinetic strikes from a STRIKE satellite.",
-                SupportCapabilities.Artillery, "strike"),
+                SupportCapabilities.Artillery, "Bomb"),
             new PerkDefinition(1, Strike, 2, "Target Priority",
-                "15% more allocation from combat rewards.", PerkEffect.CombatReward, 1.15f, "combat"),
-            new PerkDefinition(2, Strike, 3, "Response Time",
-                "10% faster support re-tasking.", PerkEffect.SupportCooldown, 0.90f, "logistics"),
+                "Kills pay 15% more allocation.", PerkEffect.CombatReward, 1.15f, "Crosshair"),
+            new PerkDefinition(2, Strike, 3, "Hot Turnaround",
+                "Support re-tasks 15% faster after every call.", PerkEffect.SupportCooldown, 0.85f, "Clock"),
             new PerkDefinition(3, Strike, 4, "Strike Package",
-                "12% more allocation from combat rewards.", PerkEffect.CombatReward, 1.12f, "combat"),
-            new PerkDefinition(4, Strike, 5, "Strike Schedule",
-                "20% cheaper support requests.", PerkEffect.SupportCost, 0.80f, "logistics"),
+                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Coins"),
+            new PerkDefinition(4, Strike, 5, "Bounty Hunter",
+                "Kills pay a further 25% more.", PerkEffect.CombatReward, 1.25f, "Skull"),
             new PerkDefinition(5, Strike, 6, "Time on Target",
-                "15% faster support re-tasking.", PerkEffect.SupportCooldown, 0.85f, "logistics"),
+                "Capstone: support re-tasks 30% faster.", PerkEffect.SupportCooldown, 0.70f, "Burst"),
 
             new PerkDefinition(6, Recon, 1, "Recon Qualification",
-                "Authorises reconnaissance sweeps and JTAC target marking.", SupportCapabilities.Recon, "recon"),
+                "Authorises reconnaissance sweeps and JTAC target marking.", SupportCapabilities.Recon, "Satellite"),
             new PerkDefinition(7, Recon, 2, "Lean Cruise",
-                "5% lower fuel consumption.", PerkEffect.FuelUse, 0.95f, "fuel"),
-            new PerkDefinition(8, Recon, 3, "Surveillance Loop",
-                "15% more allocation from captures and pilot rescue.",
-                PerkEffect.ObjectiveReward, 1.15f, "objective"),
+                "Burn 8% less fuel.", PerkEffect.FuelUse, 0.92f, "Gauge"),
+            new PerkDefinition(8, Recon, 3, "Spotter's Fee",
+                "Spotting enemy units pays 30% more.", PerkEffect.ReconReward, 1.30f, "Eye"),
             new PerkDefinition(9, Recon, 4, "Extended Patrol",
-                "8% lower fuel consumption.", PerkEffect.FuelUse, 0.92f, "fuel"),
-            new PerkDefinition(10, Recon, 5, "Eyes On",
-                "20% faster support re-tasking.", PerkEffect.SupportCooldown, 0.80f, "logistics"),
-            new PerkDefinition(11, Recon, 6, "Pathfinder",
-                "15% cheaper support requests.", PerkEffect.SupportCost, 0.85f, "logistics"),
+                "Burn a further 12% less fuel.", PerkEffect.FuelUse, 0.88f, "FlightPath"),
+            new PerkDefinition(10, Recon, 5, "Pathfinder",
+                "Captures and pilot rescues pay 20% more.", PerkEffect.ObjectiveReward, 1.20f, "MapPin"),
+            new PerkDefinition(11, Recon, 6, "Long Watch",
+                "Capstone: spotting pays a further 50% more.", PerkEffect.ReconReward, 1.50f, "Camera"),
 
             new PerkDefinition(12, Signals, 1, "Signals Qualification",
                 "Authorises EMP and radar-disruption strikes from an EW satellite.",
-                SupportCapabilities.Emp, "ew"),
-            new PerkDefinition(13, Signals, 2, "Signal Discipline",
-                "10% cheaper support requests.", PerkEffect.SupportCost, 0.90f, "logistics"),
-            new PerkDefinition(14, Signals, 3, "Escort Duty",
-                "15% more allocation from combat rewards.", PerkEffect.CombatReward, 1.15f, "combat"),
-            new PerkDefinition(15, Signals, 4, "Spectrum Efficiency",
-                "10% cheaper support requests.", PerkEffect.SupportCost, 0.90f, "logistics"),
+                SupportCapabilities.Emp, "Broadcast"),
+            new PerkDefinition(13, Signals, 2, "Jammer's Cut",
+                "Jamming enemy radar pays 30% more.", PerkEffect.JammingReward, 1.30f, "WaveSine"),
+            new PerkDefinition(14, Signals, 3, "Signal Discipline",
+                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Radio"),
+            new PerkDefinition(15, Signals, 4, "Escort Duty",
+                "Kills pay 15% more allocation.", PerkEffect.CombatReward, 1.15f, "Formation"),
             new PerkDefinition(16, Signals, 5, "Blackout Tempo",
-                "20% faster support re-tasking.", PerkEffect.SupportCooldown, 0.80f, "logistics"),
+                "Jamming pays a further 40% more.", PerkEffect.JammingReward, 1.40f, "EyeOff"),
             new PerkDefinition(17, Signals, 6, "Full Spectrum",
-                "15% faster support re-tasking.", PerkEffect.SupportCooldown, 0.85f, "logistics"),
+                "Capstone: support calls cost 30% less.", PerkEffect.SupportCost, 0.70f, "RadarDish"),
 
             new PerkDefinition(18, Engineer, 1, "Engineer Qualification",
                 "Authorises controlled-zone fortification.",
-                SupportCapabilities.Fortify, "fortify"),
+                SupportCapabilities.Fortify, "Shield"),
             new PerkDefinition(19, Engineer, 2, "Ground Crew",
-                "20% more allocation from supply, refuel and repair.",
-                PerkEffect.ServiceReward, 1.20f, "ground"),
-            new PerkDefinition(20, Engineer, 3, "Field Refit",
-                "10% more allocation from supply, refuel and repair.",
-                PerkEffect.ServiceReward, 1.10f, "ground"),
-            new PerkDefinition(21, Engineer, 4, "Zone Control",
-                "15% more allocation from captures and pilot rescue.",
-                PerkEffect.ObjectiveReward, 1.15f, "objective"),
+                "Supply, refuel and repair runs pay 20% more.", PerkEffect.ServiceReward, 1.20f, "Truck"),
+            new PerkDefinition(20, Engineer, 3, "Zone Control",
+                "Captures and pilot rescues pay 20% more.", PerkEffect.ObjectiveReward, 1.20f, "Territory"),
+            new PerkDefinition(21, Engineer, 4, "Field Refit",
+                "Service runs pay a further 25% more.", PerkEffect.ServiceReward, 1.25f, "Settings"),
             new PerkDefinition(22, Engineer, 5, "Bastion Doctrine",
-                "20% cheaper support requests.", PerkEffect.SupportCost, 0.80f, "logistics"),
+                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Building"),
             new PerkDefinition(23, Engineer, 6, "Depot Network",
-                "25% more allocation from supply, refuel and repair.",
-                PerkEffect.ServiceReward, 1.25f, "ground")
+                "Capstone: service runs pay a further 50% more.", PerkEffect.ServiceReward, 1.50f, "BuildingFactory")
         };
 
         /// <summary>
@@ -171,7 +171,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         }
 
         /// <summary>
-        /// Short label for what a passive grade buys, sized for one board cell: "+15% COMBAT",
+        /// Short label for what a passive grade buys, sized for one board cell: "+15% KILLS",
         /// "-10% COOLDOWN". A tool grants an authorisation instead of a multiplier, so it has no
         /// label and the panel names the tool's state instead. Pure, so the board's copy is
         /// testable without the game.
@@ -185,7 +185,9 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             int percent = (int)Math.Round(Math.Abs(definition.Multiplier - 1f) * 100f);
             switch (definition.Effect)
             {
-                case PerkEffect.CombatReward: return "+" + percent + "% COMBAT";
+                case PerkEffect.CombatReward: return "+" + percent + "% KILLS";
+                case PerkEffect.ReconReward: return "+" + percent + "% SPOTTING";
+                case PerkEffect.JammingReward: return "+" + percent + "% JAMMING";
                 case PerkEffect.ServiceReward: return "+" + percent + "% SERVICE";
                 case PerkEffect.ObjectiveReward: return "+" + percent + "% CAPTURE";
                 case PerkEffect.FuelUse: return "-" + percent + "% FUEL";

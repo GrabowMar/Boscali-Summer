@@ -5,13 +5,12 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Weather.Presentation
 {
-    /// <summary>The inside of the NEXT FRONTS card (R4): the two nearest fronts, each with its symbol, distance and bearing and ETA (STATIC while the front stands still).</summary>
+    /// <summary>The fronts under the wind line, nearest first, each with its symbol, kind, distance and bearing.</summary>
     internal sealed class MetFrontsBody : EnvPart
     {
-        private const int Rows = 2;
-        private const float RowH = 20f;
-        private readonly TMP_Text[] word = new TMP_Text[Rows], where = new TMP_Text[Rows], eta = new TMP_Text[Rows];
-        private readonly TMP_Text none;
+        private const int Rows = MetOfficeModel.MaxFronts;
+        private const float RowH = 20f, WordW = 150f;
+        private readonly TMP_Text[] word = new TMP_Text[Rows], where = new TMP_Text[Rows];
         private readonly MetFrontKind[] kind = new MetFrontKind[Rows];
         private readonly bool[] used = new bool[Rows];
         private readonly int[] order = new int[MetOfficeModel.MaxFronts];
@@ -25,13 +24,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 string ink = r == 0 ? "ink" : "ink-dim";
                 word[r] = Txt("Word" + r, AvTextRole.Head, TextAlignmentOptions.MidlineLeft, ink, false, true);
                 where[r] = Txt("Where" + r, AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft, ink, false, true);
-                eta[r] = Txt("Eta" + r, AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight, r == 0 ? "key" : "ink-dim", false, true);
             }
-            none = Txt("None", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "ink-dim", false, true);
             Restyle();
         }
 
-        public override float Measure(float width) => MetOfficeLayout.FrontsCard - MetOfficeLayout.CardChrome;
+        public override float Measure(float width) => MetOfficeLayout.FrontsBody;
 
         public void Set(MetOfficeModel m)
         {
@@ -46,27 +43,23 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     kind[r] = f.Kind;
                     AvText.Set(word[r], MetOfficeText.FrontWord(f.Kind));
                     AvText.Set(where[r], MetOfficeText.Where(d, bearing));
-                    AvText.Set(eta[r], MetOfficeText.Eta(f.EtaMinutes));
                 }
                 else
                 {
-                    AvText.Set(word[r], r == 0 ? "NO FRONT" : "");
-                    AvText.Set(where[r], ""); AvText.Set(eta[r], "");
+                    AvText.Set(word[r], r == 0 && m.Captured ? "NO FRONT NEAR" : "");
+                    AvText.Set(where[r], "");
                 }
             }
-            AvText.Set(none, n == 0 ? "NONE IN ±150 KM · THIS TAPE HAS NO FRONT NEAR YOU" : "");
             Redraw();
         }
 
         protected override void Layout(float w, float h)
         {
-            AvLay.Place(none, 0f, RowH, w, RowH - 1f);
             for (int r = 0; r < Rows; r++)
             {
                 float y = r * RowH;
-                AvLay.Place(word[r], 30f, y, 112f, RowH - 1f);
-                AvLay.Place(where[r], 144f, y, 74f, RowH - 1f);
-                AvLay.Place(eta[r], w - 76f, y, 76f, RowH - 1f);
+                AvLay.Place(word[r], 30f, y, WordW, RowH - 1f);
+                AvLay.Place(where[r], 30f + WordW + 4f, y, Mathf.Max(1f, w - WordW - 34f), RowH - 1f);
             }
         }
 
@@ -77,7 +70,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
     }
 
-    /// <summary>The front symbols of the mockup in a 28 x 16 box: warm half-discs, cold triangles, an occluded alternation, a dash-dot squall line. Shared by the chart legend and the next-fronts card.</summary>
+    /// <summary>The front symbols in a 28 x 16 box: warm half-discs, cold triangles, an occluded alternation, a dash-dot squall line. Shared by the fronts card and the strip's ticks.</summary>
     internal static class MetFrontGlyph
     {
         public static Color Ink(MetFrontKind kind) => EnvInk.Role(kind switch

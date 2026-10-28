@@ -22,12 +22,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         // Page indices are per console (each console has its own ticker and page set).
-        private const int CDisplay = 0, CMap = 1, CCockpit = 2, CImmersion = 3, CPerf = 4;
+        private const int CPanels = 0, CMap = 1, CHud = 2, CCockpit = 3, CWorld = 4, CPerf = 5;
         private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
         private static readonly string[] ClientPageNames =
         {
-            "PILOT · DISPLAY STYLE", "PILOT · MAP & BACKDROP", "PILOT · COCKPIT", "PILOT · IMMERSION", "PILOT · PERFORMANCE"
+            "PILOT · PANELS", "PILOT · MAP CONSOLE", "PILOT · HUD & KEYS", "PILOT · COCKPIT FEEL", "PILOT · WORLD LOOK", "PILOT · PERFORMANCE"
         };
 
         private static readonly string[] ServerPageNames =
@@ -150,8 +150,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     : "Locked. These are the host's values for this server.";
             }
             if (page == CPerf) return "Saved automatically. Maintenance shows any restart needed.";
-            if (page == CImmersion || page == CCockpit) return "Changes apply now. No mission or game restart.";
-            return "Saved automatically. Hover a control for help.";
+            if (page == CPanels || page == CMap) return "Saved automatically. Hover a control for help.";
+            return "Changes apply now. No mission or game restart.";
         }
 
         private void Install(VirtualMFD mfd)
@@ -233,9 +233,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             changeTime[changeCount] = Time.unscaledTime;
             changeCount++;
         }
-
-        private bool EffectsEnabled() => settings.DisplayEffects.Value;
-        private static string EffectsDisabled() => "Turn on DISPLAY EFFECTS first.";
 
         private void ApplyDisplayEffects()
         {
@@ -327,12 +324,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return cell;
         }
 
-        /// <summary>A 0-to-max level stored as a float config entry, as a dial that steps by <paramref name="step"/>.</summary>
-        private SetRingCell PercentRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,
-            float min, float max, float step, string help, Func<bool> enabled = null, Func<string> reason = null) =>
-            Ring(flow, row, page, title, () => AvNum.Percent(entry.Value), () => Mathf.Clamp01(entry.Value / max),
+        /// <summary>A level stored as a float config entry, as a dial that steps by <paramref name="step"/> inside min..max.</summary>
+        private SetRingCell EntryRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,
+            float min, float max, float step, Func<float, string> text, string help, Func<bool> enabled = null, Func<string> reason = null) =>
+            Ring(flow, row, page, title, () => text(entry.Value), () => Mathf.Clamp01((entry.Value - min) / (max - min)),
                 d => entry.Value = Mathf.Clamp(Mathf.Round((entry.Value + d * step) * 100f) / 100f, min, max),
                 () => entry.Value > min + .001f, () => entry.Value < max - .001f, help, enabled, reason);
+
+        private SetRingCell PercentRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,
+            float min, float max, float step, string help, Func<bool> enabled = null, Func<string> reason = null) =>
+            EntryRing(flow, row, page, title, entry, min, max, step, v => AvNum.Percent(v), help, enabled, reason);
 
         private AvRow Stepper(AvFlow flow, int page, string title, Func<string> get, Action<int> change,
             Func<bool> decrease, Func<bool> increase, string help, Func<bool> enabled = null,

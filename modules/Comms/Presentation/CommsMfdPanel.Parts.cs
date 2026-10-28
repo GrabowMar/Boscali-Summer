@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
     // Local layout parts of the COM console. The kit has no part for a key grid with wide keys, a swatch-and-width
-    // line, a four-cell tally or a multi-column ledger row, so each is composed here from kit primitives.
+    // line or a multi-column ledger row, so each is composed here from kit primitives.
     internal sealed partial class CommsMfdPanel
     {
         /// <summary>
@@ -178,101 +178,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         }
 
         /// <summary>
-        /// A strip of small counters, each a key and a mono value on one line over a ten-step bar: the three
-        /// personal mark budgets and the shared board's load in one 36 px line.
-        /// </summary>
-        private sealed class TallyPart : AvPart
-        {
-            private const float Height = 36f;
-            private readonly AvFrame[] frames;
-            private readonly TMP_Text[] keys, values;
-            private readonly AvGaugeGraphic[] bars;
-            private readonly AvState[] states;
-            private AvSlot lastSlot;
-            private bool placed;
-
-            public TallyPart(RectTransform parent, params string[] keyTexts)
-            {
-                Rect = AvLay.Child(parent, "Tally");
-                int n = keyTexts.Length;
-                frames = new AvFrame[n]; keys = new TMP_Text[n]; values = new TMP_Text[n];
-                bars = new AvGaugeGraphic[n]; states = new AvState[n];
-                for (int i = 0; i < n; i++)
-                {
-                    RectTransform cell = AvLay.Child(Rect, "Tally " + keyTexts[i]);
-                    frames[i] = AvFrame.Add(cell, "Instrument", AvChamfer.Diagonal(2f));
-                    AvLay.Fill(frames[i].rectTransform);
-                    frames[i].Bracket = 3f;
-                    keys[i] = AvText.Make(cell, "Key", AvTextRole.Micro, keyTexts[i]);
-                    values[i] = AvText.Make(cell, "Value", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
-                    AvText.Fit(keys[i], false); AvText.Fit(values[i], false);
-                    var go = new GameObject("Bar", typeof(RectTransform), typeof(CanvasRenderer));
-                    go.transform.SetParent(cell, false);
-                    bars[i] = go.AddComponent<AvGaugeGraphic>();
-                    bars[i].Shape = AvGaugeShape.Segments; bars[i].Segments = 10; bars[i].SegmentGap = 1.5f; bars[i].raycastTarget = false;
-                    states[i] = AvState.Info;
-                }
-                Restyle();
-            }
-
-            /// <summary>Hover help while the pointer is over cell <paramref name="index"/>.</summary>
-            public void Help(int index, string text)
-            {
-                frames[index].raycastTarget = !string.IsNullOrEmpty(text);
-                AvHelpTip.Attach(frames[index].gameObject, text);
-            }
-
-            public void Set(int index, string value, float fill01, AvState state)
-            {
-                bars[index].Value = fill01;
-                bool moved = AvText.Set(values[index], value);
-                if (state != states[index]) { states[index] = state; Restyle(); }
-                if (moved && placed) PlaceCell(index, CellWidth(lastSlot.W));
-            }
-
-            public override float Measure(float width) => Height;
-
-            private float CellWidth(float w) => AvFlowMath.ColumnWidth(w, frames.Length, AvGridTokens.Gap);
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                lastSlot = s; placed = true;
-                float cw = CellWidth(s.W);
-                for (int i = 0; i < frames.Length; i++) PlaceCell(i, cw);
-            }
-
-            private void PlaceCell(int i, float cw)
-            {
-                var cell = (RectTransform)frames[i].rectTransform.parent;
-                AvLay.Place(cell, i * (cw + AvGridTokens.Gap), 0f, cw, Height);
-                float vw = AvText.Width(values[i]) + 2f;
-                float kw = Mathf.Min(AvText.Width(keys[i]) + 2f, Mathf.Max(0f, cw - 12f - vw - 4f));
-                AvLay.Place(keys[i].rectTransform, 6f, 3f, kw, 16f);
-                AvLay.Place(values[i].rectTransform, cw - 6f - vw, 2f, vw, 18f);
-                AvLay.Place((RectTransform)bars[i].transform, 6f, Height - 11f, cw - 12f, 5f);
-            }
-
-            public override void Restyle()
-            {
-                for (int i = 0; i < frames.Length; i++)
-                {
-                    frames[i].Paint(AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert), AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
-                    frames[i].BracketColor = AvStyleHost.FuiColor("ink-muted", AvTheme.Dim).WithAlpha(0.5f);
-                    frames[i].SetVerticesDirty();
-                    keys[i].color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
-                    values[i].color = states[i] == AvState.Caution
-                        ? AvStyleHost.FuiInk("chip caution", AvTheme.Warning)
-                        : AvStyleHost.FuiInk("metric-value", AvTheme.TextPrimary);
-                    bars[i].Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
-                    Color fill = AvStyleHost.FuiFill("metric-fill " + AvStates.Class(states[i]), AvTheme.Accent);
-                    bars[i].FillColor = fill; bars[i].FillEnd = Color.Lerp(fill, Color.white, 0.25f);
-                    bars[i].SetVerticesDirty();
-                }
-            }
-        }
-
-        /// <summary>
         /// One ledger line of the net: a tag, who, the words (they wrap, and the line grows), a trailing mono value,
         /// and optionally a key at the far end. A column with no text gives its width back to the words. The line
         /// is the kit's list row in every other respect: state rail, hover and click, hover help.
@@ -379,15 +284,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 trail.color = AvStyleHost.FuiInk("row-value", AvTheme.TextPrimary);
                 if (key != null) key.Restyle();
             }
-        }
-
-        /// <summary>Everything on a page except its pooled rows, from the last layout: what the rows may not take.</summary>
-        private static float FixedHeight(AvFlow page, NetRow[] pool)
-        {
-            float h = page.ContentHeight;
-            foreach (NetRow row in pool)
-                if (row != null && row.PlacedShown) h -= row.PlacedHeight + AvGridTokens.Gap;
-            return Mathf.Max(0f, h);
         }
     }
 }

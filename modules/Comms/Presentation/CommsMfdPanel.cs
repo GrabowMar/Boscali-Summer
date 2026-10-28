@@ -192,18 +192,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         // ---- Shared helpers ------------------------------------------------------------------
 
-        /// <summary>The kit's fixed state vocabulary a comms tone maps onto (R1: colour always carries a word too).</summary>
-        private static AvState ToneState(CommsTone tone)
-        {
-            switch (tone)
-            {
-                case CommsTone.Friendly: return AvState.Ready;
-                case CommsTone.Caution: return AvState.Caution;
-                case CommsTone.Danger: return AvState.Danger;
-                default: return AvState.Info;
-            }
-        }
-
         /// <summary>
         /// Lays <paramref name="specs"/> out as full rows of <paramref name="columns"/> equal
         /// icon buttons (a short last row stays left-aligned rather than stretching). Returns
@@ -237,16 +225,5 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             // SetShown also tells the owning flow, so the page re-lays on the next tick instead of on the slow sweep.
             part?.SetShown(visible);
         }
-
-        private static string Ago(float seconds)
-        {
-            int total = Mathf.Max(0, Mathf.FloorToInt(seconds));
-            if (total < 60) return total + "s";
-            if (total < 3600) return total / 60 + "m";
-            return total / 3600 + "h";
-        }
-
-        // Names are cleaned to CommsText.MaxName on arrival; the same limit here keeps a ledger column from ever overflowing.
-        private string Who(ulong author, string name) => author == comms.LocalId ? "YOU" : CommsText.Name(name);
     }
 }

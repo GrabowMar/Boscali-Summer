@@ -140,7 +140,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             return Readout(manager);
         }
 
-        /// <summary>Drive the Met Office (the weather console) without a mouse: <c>action</c> is <c>open</c>, <c>close</c>, <c>press</c> (with <c>control</c>, a MetControl name such as Hold, PaceUp, PinSelected, SetSupercell, AnchorAhead, RainLight, ScenReset), <c>read</c> (the input state too, with no window yet) or <c>settle</c> (tape running at the default pace, so a run starts from a known state).
+        /// <summary>Drive the Met Office (the weather console) without a mouse: <c>action</c> is <c>open</c>, <c>close</c>, <c>press</c> (with <c>control</c>, a MetControl name: SkyNext, SkyPrev, Auto or Reroll), <c>read</c> (the input state too, with no window yet) or <c>settle</c> (tape running at the default pace, so a run starts from a known state).
         /// Host only. A press goes through the same rules and the same one-request path as a click or a key, so a disabled control is refused and reads <c>pressed</c> 0.</summary>
         public static Dictionary<string, object> Console(Dictionary<string, object> args)
         {
@@ -152,7 +152,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (action == "press")
             {
                 if (!Enum.TryParse(Text(args, "control"), true, out MetControl parsed) || !Enum.IsDefined(typeof(MetControl), parsed))
-                    return Fail("Console", "press needs control: a MetControl name (Hold, PaceUp, PinSelected, SetSupercell, ...)");
+                    return Fail("Console", "press needs control: a MetControl name (SkyNext, SkyPrev, Auto, Reroll)");
                 control = parsed;
             }
             else if (action != "open" && action != "close" && action != "read" && action != "settle") return Fail("Console", "action is open, close, press, read or settle");

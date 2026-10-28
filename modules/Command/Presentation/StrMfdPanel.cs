@@ -46,9 +46,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         // SITREP
         private AvSection sortieSection;
         private readonly AvRow[] sensors = new AvRow[4];
-        // INFO
-        private StrNote logNote;
-        private readonly AvRow[] misc = new AvRow[StrViewModel.MiscCount];
 
         /// <summary>The scene's panel, for the automation hooks.</summary>
         internal static StrMfdPanel Active { get; private set; }
@@ -90,10 +87,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             boundModel = null;
             boundRevision = -1;
             otherSection = allSection = sortieSection = null;
-            logNote = null;
             for (int i = 0; i < lanes.Length; i++) lanes[i] = null;
             for (int i = 0; i < sensors.Length; i++) sensors[i] = null;
-            for (int i = 0; i < misc.Length; i++) misc[i] = null;
             nextLog = 0f;
         }
 
@@ -159,7 +154,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             TabHelp.Apply(tabBar,
                 "The live operation, the staff's proposals, the platforms and the posture.",
                 "Force balance, sensors, the alert level and the AI sortie board.",
-                "Your chain of command and the enemy posts you have confirmed, the staff's log, and report ages and host switches.",
+                "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.",
                 "Spend your own funds: buy a ground group for your side, or give to the faction pool.");
             metrics = console.Metrics("SECTORS", "AIR", "GROUND", "POOL");
 
@@ -210,11 +205,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             p.Section(AvIcon.UsersGroup, "CHAIN OF COMMAND", "READ ONLY · THE STAFF RUNS ITSELF");
             Add(p, new StrChainPart(p.Content, Controls, hub));
-            p.Section(AvIcon.ListDetails, "STAFF LOG", "NEWEST FIRST · ROW NUMBERS, NOT CLOCK TIMES");
-            Add(p, new StrTeletype(p.Content, Controls, hub));
-            logNote = p.Add(new StrNote(p.Content, AvIcon.ListDetails));
-            p.Section(AvIcon.Activity, "MISC", "REPORT AGES · THE HOST · HOST SWITCHES");
-            for (int i = 0; i < misc.Length; i++) misc[i] = p.Add(new AvRow(p.Content));
+            p.Section(AvIcon.Activity, "MISC", "HOVER A LAMP FOR WHAT IT READS");
+            Add(p, new StrMiscStrip(p.Content, Controls, hub));
         }
 
         // The game's own contribute menu on the map: the same two commands, the same gates.
@@ -239,8 +231,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             BindSections(vm);
             BindTiles(vm);
             BindSensors(vm);
-            BindLog(vm);
-            BindMisc(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
             boundRevision = hub.Revision;
@@ -292,24 +282,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             sensors[1].Set("KNOWN AD", "ENEMY AIR DEFENCE YOUR SIDE KNOWS ABOUT. INTEL MAY BE INCOMPLETE", vm.KnownAdText, vm.KnownAdText == "NOT AVAILABLE" ? AvState.Inert : AvState.Info);
             sensors[2].Set("FRONT", frontRest.Length > 0 ? "THE FRONT LINE" + StrWords.Dot + frontRest : "THE FRONT LINE", frontValue, frontValue == StrWords.Dash ? AvState.Inert : AvState.Info);
             sensors[3].Set("CONTESTED BASES", "AIRBASES UNDER CAPTURE", vm.ContestedBasesText, vm.ContestedBasesText == StrWords.Dash ? AvState.Inert : vm.ContestedBasesText == "0" ? AvState.Info : AvState.Caution);
-        }
-
-        private void BindMisc(StrViewModel vm)
-        {
-            for (int i = 0; i < misc.Length; i++)
-            {
-                StrMiscLine line = vm.Misc[i];
-                if (line.Key != null) misc[i].Set(line.Key, line.Text, line.Value, line.State);
-            }
-        }
-
-        private void BindLog(StrViewModel vm)
-        {
-            bool empty = vm.LogCount == 0;
-            logNote.SetShown(empty);
-            if (!empty) return;
-            StrPanelText.LogNote(vm, out string title, out string detail);
-            logNote.Set(title, detail);
         }
     }
 }

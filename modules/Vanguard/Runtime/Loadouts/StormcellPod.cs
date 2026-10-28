@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             RuntimeStores.Add(new StoreRecipe
             {
                 Key = VanguardKeys.StormcellMount, Donor = "ECMPod1", Carriers = Carriers,
-                Build = mount => HidePod<StormcellUnit>(mount, "PCU-9 STORMCELL", 180f, 0.4f, StoreArt.Stormcell)
+                Build = mount => HidePod<StormcellUnit>(mount, "PCU-9 Stormcell", 180f, 0.4f, StoreArt.Stormcell)
             });
 
         /// <summary>Turns a cloned pod mount into a hidden one: its own Weapon/Countermeasure components go (the ECM pod's RadarJammer already
@@ -98,16 +98,27 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     {
         private PowerSupply supply;
         private float extra;
+        private Aircraft carrier;
+        private Transform rotor; // the baked model's ram-air turbine (models/Stormcell.py joint "Rotor"), null without the bundle
 
         public override void AttachToHardpoint(Aircraft aircraft, Hardpoint hardpoint, WeaponMount weaponMount)
         {
             base.AttachToHardpoint(aircraft, hardpoint, weaponMount);
+            carrier = aircraft;
+            if (rotor == null) rotor = StoreArt.Joint(transform, "Rotor");
             if (supply != null) return;
             supply = aircraft.GetPowerSupply();
             if (supply != null) extra = StormcellPod.Fit(supply);
         }
 
         public override float GetMass() => 0f; // info is null on this mount
+
+        // Visual only: the turbine windmills with airspeed, up to about 12 turns a second.
+        private void Update()
+        {
+            if (rotor != null && carrier != null)
+                rotor.Rotate(transform.forward, Mathf.Min(carrier.speed * 30f, 4300f) * Time.deltaTime, Space.World);
+        }
 
         private void OnDestroy()
         {

@@ -202,6 +202,20 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         }
     }
 
+    /// <summary>A blast's push snaps wing joints with no damage at all (AeroPart.CheckAttachment then detaches the part), so a
+    /// protected unit takes no shockwave. AeroPart overrides without calling base, hence two targets.</summary>
+    [HarmonyPatch]
+    internal static class AresShockwavePatch
+    {
+        private static IEnumerable<System.Reflection.MethodBase> TargetMethods()
+        {
+            yield return AccessTools.Method(typeof(UnitPart), nameof(UnitPart.TakeShockwave));
+            yield return AccessTools.Method(typeof(AeroPart), nameof(AeroPart.TakeShockwave));
+        }
+
+        private static bool Prefix(UnitPart __instance) => !AresCheats.Protects(__instance.parentUnit);
+    }
+
     [HarmonyPatch(typeof(Pilot), nameof(Pilot.TakeGForceDamage))]
     internal static class AresGForceDamagePatch
     {

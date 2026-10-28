@@ -7,6 +7,9 @@ namespace NOAvionics
     {
         public AvControl[] Controls { get; }
 
+        /// <summary>A taller row for a primary page action; 0 keeps the grid row.</summary>
+        public float MinHeight;
+
         public AvButtons(RectTransform parent, AvControl.Spec[] specs)
         {
             Rect = AvLay.Child(parent, "Buttons");
@@ -16,7 +19,7 @@ namespace NOAvionics
 
         public override float Measure(float width)
         {
-            float w = AvFlowMath.ColumnWidth(width, Controls.Length, AvGridTokens.Gap), h = AvGridTokens.Row;
+            float w = AvFlowMath.ColumnWidth(width, Controls.Length, AvGridTokens.Gap), h = Mathf.Max(AvGridTokens.Row, MinHeight);
             foreach (AvControl c in Controls) h = Mathf.Max(h, c.PreferredHeight(w));
             return Mathf.Ceil(h);
         }

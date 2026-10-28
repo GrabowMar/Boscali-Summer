@@ -24,10 +24,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             else
             {
-                // One click sets every switch a feature tagged with a preset, plus the panel effects below.
+                // One click sets every switch a feature tagged with a preset, on any tab, plus PANELS' PANEL FX and blur.
                 // Sound, comfort, master switches and the frame limit are never touched.
                 int[] fxTier = { (int)AvFxTier.Full, (int)AvFxTier.Lite, (int)AvFxTier.Off };
-                flow.Section(AvIcon.Gauge, "PRESET", "ONE CLICK");
+                flow.Section(AvIcon.Gauge, "PRESET", "ONE CLICK · ALSO SETS WORLD, COCKPIT, PANELS");
                 var preset = flow.Add(AvSegmented.Strip(flow.Content, ClientPreset.Names,
                     () =>
                     {
@@ -49,35 +49,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 preset.Options[1].Help = "BALANCED: drops the costliest extras (pilot reflection, terrain wet pass, panel blur) and turns ADAPTIVE FX and the invisible far-unit savings on.";
                 preset.Options[2].Help = "FAST: all optional visuals off, panel effects off, LOD and shadow caps on, units past 15 km not drawn. Sound and motion are left alone.";
                 flow.Ticker.Add(page, AvTickRate.Slow, preset.Refresh);
-
-                string previous = null;
-                AvCellGrid grid = null;
-                for (int i = 0; i < count; i++)
-                {
-                    var row = rows[i];
-                    if (row.Section != previous)
-                    {
-                        previous = row.Section;
-                        flow.Section(AvIcon.Activity, previous, "NO RESTART");
-                        grid = flow.Grid(2);
-                    }
-                    ToggleCell(flow, grid, page, row.Label, row.Help, () => row.Value, row.Set);
-                }
+                BuildBoardRows(flow, page, CPerf);
             }
 
-            flow.Section(AvIcon.Bolt, "PANEL EFFECTS", "RENDER COST");
-            var blurCell = AvCell.Toggle(flow.Content, "BLUR BEHIND", "",
-                () => settings.AvionicsBlurBehind.Value,
-                v => { settings.AvionicsBlurBehind.Value = v; Echo("BLUR BEHIND — " + (v ? "ON" : "OFF")); });
-            blurCell.Help = "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).";
-            var fxSeg = new AvSegmented(flow.Content, "FX TIER", new[] { "OFF", "LITE", "FULL" },
-                () => (int)settings.AvionicsFxTier.Value,
-                i => { settings.AvionicsFxTier.Value = (AvFxTier)i; Echo("FX TIER — " + settings.AvionicsFxTier.Value); });
-            fxSeg.Options[0].Help = "OFF: no panel animation or glass effects at all. Cheapest.";
-            fxSeg.Options[1].Help = "LITE: keep the scan and shine effects, drop the heavier passes.";
-            fxSeg.Options[2].Help = "FULL: every panel effect the theme defines.";
-            flow.Row(blurCell, fxSeg);
-            flow.Ticker.Add(page, AvTickRate.Slow, () => { fxSeg.Refresh(); blurCell.Refresh(); });
+            // Command's own budget: how often the map's sector grid is rebuilt.
+            flow.Section(AvIcon.Map2, "MAP GRID", "CPU");
+            var grid = flow.Add(new SetRingRow(flow.Content));
+            EntryRing(flow, grid, page, "SECTOR REFRESH", settings.GridRefreshInterval, .2f, 2f, .1f, v => AvNum.Seconds(v, 1),
+                "How often the map's sector grid updates. Longer intervals reduce CPU work. Recommended: 0.5 s.");
 
             BuildMaintenance(flow, page);
 

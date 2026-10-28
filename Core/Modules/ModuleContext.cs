@@ -19,7 +19,7 @@ namespace BoscaliSummer.Core.Modules
         private readonly List<Component> installedComponents = new List<Component>();
         private readonly List<Type> registeredServices = new List<Type>();
         private readonly List<IHostSettingsView> registeredHostSettings = new List<IHostSettingsView>();
-        private readonly List<ClientSettingToggle> registeredClientSettings = new List<ClientSettingToggle>();
+        private readonly List<ClientSetting> registeredClientSettings = new List<ClientSetting>();
         private readonly List<ClientKeySetting> registeredClientKeys = new List<ClientKeySetting>();
         private readonly List<IClientEffect> registeredEffects = new List<IClientEffect>();
         private readonly List<Action> teardown = new List<Action>();
@@ -80,19 +80,36 @@ namespace BoscaliSummer.Core.Modules
             registeredHostSettings.Add(view);
         }
 
-        /// <summary>Publish an immediately applied client-local toggle to SET.</summary>
-        public void AddClientSetting(string section, string label, string help,
-            BepInEx.Configuration.ConfigEntry<bool> entry, bool[] presets = null)
+        /// <summary>Publish an immediately applied client-local toggle to SET; the section picks its SET tab.</summary>
+        public ClientSettingToggle AddClientSetting(string section, string label, string help,
+            BepInEx.Configuration.ConfigEntry<bool> entry, bool[] presets = null, ClientSettingToggle requires = null) =>
+            entry == null ? null : Track(new ClientSettingToggle(section, label, help, entry, presets, requires));
+
+        /// <summary>Publish a client-local level to SET as a dial; <paramref name="text"/> prints it (a percentage when null).</summary>
+        public void AddClientLevel(string section, string label, string help, BepInEx.Configuration.ConfigEntry<float> entry,
+            float min, float max, float step, Func<float, string> text = null, ClientSettingToggle requires = null)
         {
-            if (entry == null) return;
-            registeredClientSettings.Add(ClientSettings.Add(section, label, help, entry, presets));
+            if (entry != null) Track(new ClientSettingLevel(section, label, help, entry, min, max, step, text, requires));
         }
 
-        /// <summary>Publish a client-local key to SET and the mission prompt, where the player rebinds it.</summary>
-        public void AddClientKey(string label, string help, BepInEx.Configuration.ConfigEntry<KeyCode> entry)
+        /// <summary>Publish a client-local enum to SET as a segment strip; <paramref name="names"/> follow the enum's order.</summary>
+        public void AddClientChoice<T>(string section, string label, string help, BepInEx.Configuration.ConfigEntry<T> entry,
+            string[] names, ClientSettingToggle requires = null) where T : Enum
+        {
+            if (entry != null) Track(new ClientSettingChoice(section, label, help, entry, names, requires));
+        }
+
+        private T Track<T>(T row) where T : ClientSetting
+        {
+            registeredClientSettings.Add(ClientSettings.Add(row));
+            return row;
+        }
+
+        /// <summary>Publish a client-local key to SET (and, unless <paramref name="onPrompt"/> is false, the mission prompt), where the player rebinds it.</summary>
+        public void AddClientKey(string label, string help, BepInEx.Configuration.ConfigEntry<KeyCode> entry, bool onPrompt = true)
         {
             if (entry == null) return;
-            registeredClientKeys.Add(ClientSettings.AddKey(label, help, entry));
+            registeredClientKeys.Add(ClientSettings.AddKey(label, help, entry, onPrompt));
         }
 
         /// <summary>

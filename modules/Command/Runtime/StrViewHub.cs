@@ -46,8 +46,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // The reader's memory between ticks (it keeps nothing of its own): the stopwatch of a first report that has not come, the
         // 1 Hz refreshes, and the buffers the feeds point at, so a tick allocates nothing.
         internal float WaitingSince = -1f, NextSlowAt;
-        internal int KnownAirDefence = -1, WingCount, TaskedSortieId = -1;
-        internal readonly StrWingIn[] WingBuffer = new StrWingIn[StrViewModel.MaxSorties];
+        internal int KnownAirDefence = -1;
         internal readonly StrPostIn[] PostBuffer = new StrPostIn[StrViewModel.MaxPosts];
         internal readonly StrOfficerIn[] OfficerBuffer = new StrOfficerIn[2 * StrViewModel.MaxOfficers];
         internal AirDefenceRing[] Rings;
@@ -128,7 +127,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             ui = default;
             LayersFromSettings();
             feeds = default;
-            WaitingSince = -1f; NextSlowAt = 0f; KnownAirDefence = -1; WingCount = 0; TaskedSortieId = -1;
+            WaitingSince = -1f; NextSlowAt = 0f; KnownAirDefence = -1;
             ForgetSupply();
             nextTick = 0f; lastFaction = ""; lastSortieAnswer = "";
         }

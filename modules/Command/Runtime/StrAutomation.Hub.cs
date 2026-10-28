@@ -123,17 +123,14 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 { "bannerTitleLen", vm.Banner.Head.Length }, { "bannerDoLen", vm.Banner.Do.Length }, { "footerLen", vm.FooterStatus.Length },
             };
             var tickets = new Dictionary<string, object>();
-            int ticketsWithPost = 0, wingTasked = 0;
+            int ticketsWithPost = 0;
             for (int i = 0; i < vm.SortieCount; i++)
             {
                 StrSortieRow row = vm.Sorties[i];
                 if (row.PostId >= 0) ticketsWithPost++;
-                if (row.HasWing && (row.WingState == WingSortieState.Tasked || row.WingState == WingSortieState.OnStation)) wingTasked++;
                 tickets["t" + (i + 1)] = new Dictionary<string, object>
                 {
                     { "contractId", row.ContractId }, { "postId", row.PostId }, { "chip", row.ChipText }, { "offered", row.Offered ? 1 : 0 }, { "active", row.Active ? 1 : 0 },
-                    { "hasWing", row.HasWing ? 1 : 0 }, { "wingState", (int)row.WingState }, { "wingLabel", row.WingLabel }, { "wingText", row.WingText },
-                    { "wingRefusal", row.WingRefusal }, { "wingAllowed", row.Wing.Allowed ? 1 : 0 }, { "wingGate", row.Wing.Text },
                 };
             }
             var postRows = new Dictionary<string, object>();
@@ -150,7 +147,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             }
             r["tickets"] = tickets;
             r["postRows"] = postRows;
-            r["ticketCheck"] = new Dictionary<string, object> { { "withPost", ticketsWithPost }, { "postRowsWithTicket", postRowsWithTicket }, { "wingTasked", wingTasked } };
+            r["ticketCheck"] = new Dictionary<string, object> { { "withPost", ticketsWithPost }, { "postRowsWithTicket", postRowsWithTicket } };
             r["map"] = MapBlock();
             StrUiState ui = hub.Ui;
             r["link"] = new Dictionary<string, object>

@@ -169,9 +169,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
                 if (shader == null) shader = Shader.Find("Sprites/Default");
                 if (shader == null) return false;
-                beamMaterial = new Material(shader) { color = new Color(1f, .06f, .04f) };
+                // Additive, so the beam reads as a glow over the scene, not an opaque red bar (dim RGB = soft glow).
+                beamMaterial = new Material(shader) { color = new Color(.6f, .04f, .03f) };
+                LanceFxPlayer.MakeAdditive(beamMaterial);
             }
             line = Strip("KestrelLaser", BeamWidth, 0);
+            line.widthCurve = AnimationCurve.Linear(0f, .25f, 1f, 1f); // pencil-thin at the lens, full width at the spot
             dot = Strip("KestrelDot", DotSize, 8);
             return true;
         }

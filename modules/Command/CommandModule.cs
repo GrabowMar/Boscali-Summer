@@ -47,6 +47,9 @@ namespace BoscaliSummer.Modules.Command
             context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
+            context.AddClientKey("TGT PRESET 1", "Applies TGT quick slot 1.", context.Settings.Command.TargetPresetKey1, false);
+            context.AddClientKey("TGT PRESET 2", "Applies TGT quick slot 2.", context.Settings.Command.TargetPresetKey2, false);
+            context.AddClientKey("TGT PRESET 3", "Applies TGT quick slot 3.", context.Settings.Command.TargetPresetKey3, false);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
             context.AddService<ITacticalLog>(new MfdRadioLog());

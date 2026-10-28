@@ -44,6 +44,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int r) && r >= 30 && r <= 100) radius = r / 100f;
         }
 
+        /// <summary>
+        /// The burst's E1 field on the ground, 0..1, at an offset east (<paramref name="dx"/>) and north (<paramref name="dz"/>) of ground zero. A high-altitude burst's gamma
+        /// rays knock electrons loose that the geomagnetic field turns into the pulse, so the field peaks in a broad arc on the equator side of ground zero (the "smile";
+        /// south here, the theatre being northern) and drops to about a fifth just poleward of it, where the field lines run straight down; it thins toward the edge of
+        /// the footprint. Nothing travels: the pulse is everywhere at once.
+        /// </summary>
+        public static float EmpField(float dx, float dz, float radius)
+        {
+            if (!(radius > 0f)) return 0f;
+            float x = dx / radius, z = dz / radius;
+            float r = (float)Math.Sqrt(x * x + z * z);
+            if (float.IsNaN(r) || r > 1f) return 0f;
+            float hx = x, hz = z - 0.15f;
+            float hole = (float)Math.Exp(-(hx * hx + hz * hz) / 0.04f);
+            float smile = 0.85f + 0.15f * Math.Max(-1f, Math.Min(1f, -z / 0.6f));
+            float t = Math.Max(0f, Math.Min(1f, (r - 0.7f) / 0.3f));
+            float edge = 1f - 0.65f * t * t * (3f - 2f * t);
+            return Math.Max(0f, Math.Min(1f, smile * edge * (1f - 0.8f * hole)));
+        }
+
         public static string EmpName(string name, float radius) =>
             name + ":r=" + radius.ToString("R", CultureInfo.InvariantCulture);
 

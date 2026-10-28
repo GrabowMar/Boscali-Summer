@@ -39,6 +39,9 @@ namespace BoscaliSummer.Modules.Scenario
             });
             // A dedicated server builds and hosts the scripted mission; the story is each player's own screen.
             if (Application.isBatchMode) return;
+            context.AddClientSetting("MISSIONS", "CUTSCENES",
+                "Camera cutscenes in scripted missions. OFF keeps you in the cockpit; the story still plays on the boards.",
+                context.Settings.Scenario.Cutscenes);
             context.AddSceneService<ScenarioHost>(95).Configure(library, missions.ScriptOf, context.Settings.Scenario, context.Logger);
         }
     }

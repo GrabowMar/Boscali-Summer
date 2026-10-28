@@ -113,14 +113,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Global metres of the site and its ring (0..1500); progress 0..1 (NaN unknown).</summary>
         public float X = float.NaN, Z = float.NaN, Radius, Progress = float.NaN;
         public StrAct Accept;
-        /// <summary>SEND WING, COVER, SCOUT or RECALL; the wing line ("WING TASKED"); the gate.</summary>
-        public string WingLabel = "SEND WING", WingText = "";
-        /// <summary>The host's cached refusal of SEND WING for this card, "" when it would be accepted (the wing gate reads it).</summary>
-        public string WingRefusal = "";
-        /// <summary>The wing entry for this card exists (host only), and the state it reports.</summary>
-        public bool HasWing;
-        public WingSortieState WingState;
-        public StrAct Wing;
     }
 
     /// <summary>One confirmed enemy command post. N-08: enemy rows carry no internal state, so no Away and no Destroyed.</summary>
@@ -257,7 +249,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>Everything the panel and the overlay display, filled in place by StrViewBuilder.</summary>
     internal sealed class StrViewModel
     {
-        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxLog = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7, MaxConvoys = 8;
+        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7, MaxConvoys = 8;
 
         /// <summary>Bumps only when a displayed value changed.</summary>
         public int Revision;
@@ -301,7 +293,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public int[] SortieCounts = { -1, -1, -1, -1, -1 };
         public float[] SortieShares = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
         public string SortieBoardCaption = "";
-        public string[] Log = new string[MaxLog]; public int LogCount;
         /// <summary>Footer strip: line 1 states status and age, line 2 is the flavour or the latest result.</summary>
         public string FooterStatus = "", FooterNote = "";
         /// <summary>Selected and hovered ids resolved against the rows; SelectionVanished asks the hub to clear its copy.</summary>

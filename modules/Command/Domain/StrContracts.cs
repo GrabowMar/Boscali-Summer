@@ -31,16 +31,16 @@ namespace BoscaliSummer.Modules.Command.Domain
         public StrItemId Selected, Hover;
         public bool ShowFronts, ShowOperation, ShowSorties;
         public float ReplanArmedUntil;      // unscaled time until which a first REPLAN press stays armed; 0 = not armed
-        public string Notice;               // one local result line (an accept or wing answer)
+        public string Notice;               // one local result line (an accept answer)
         public float NoticeUntil;           // unscaled time it stops showing (6 s)
     }
 
-    internal enum StrActionKind : byte { Pick, Replan, Posture, Accept, SendWing, Recall, BuyConvoy, Donate }
+    internal enum StrActionKind : byte { Pick, Replan, Posture, Accept, BuyConvoy, Donate }
 
     internal enum StrWhy : byte
     {
         None, NoBoard, Stale, Pending, Locked, Gone, NoOperation, SamePosture,
-        NotOffered, BoardFull, HostOnly, WingRefused, NoWing, NoFunds, Cooldown, Forbidden, BadDraw,
+        NotOffered, BoardFull, NoFunds, Cooldown, Forbidden, BadDraw,
     }
 
     /// <summary>The answer of a gate or an action: allowed or the reason, plus whether a verb was sent.</summary>
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         public bool Allowed => Why == StrWhy.None;
     }
 
-    /// <summary>The engine, sorties and wing verbs behind one seam, so the runner is testable with a fake.</summary>
+    /// <summary>The engine and sorties verbs behind one seam, so the runner is testable with a fake.</summary>
     internal interface IStrVerbs
     {
         bool Pick(int proposalId, int revision);                    // ITheaterWarView.RequestPick (a redirect while an operation lives)
@@ -61,8 +61,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         bool Draw(float startX, float startZ, float fixX, float fixZ);   // ITheaterWarView.RequestDraw (a pilot-drawn offensive)
         bool Posture(TheaterWarPosture posture);
         void Accept(int contractId);                                // ISecondaryObjectivesView.RequestAccept (void; the answer is ActionResult)
-        bool SendWing(int contractId, out string answer);           // host only: ISortieWingOrderSource.TryGetWingOrder then IWingSortieOrders.Send
-        bool Recall(out string answer);
         bool BuyConvoy(int index);                                  // the game's own Player.CmdPurchaseConvoy: the pilot's funds pay, a depot delivers
         bool Donate(float amount);                                  // the game's own Player.CmdDonateFactionFunds: the pilot's funds into the faction pool
     }
@@ -104,16 +102,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public Sprite Portrait;                        // borrowed, never destroyed here
     }
 
-    /// <summary>What the wing did on one sortie, copied from IWingSortieOrders by the reader (host only). N-08: no Kills.</summary>
-    internal struct StrWingIn
-    {
-        public int SortieId;
-        public string Refusal;             // null when SEND WING would be accepted now; cached from the last 1 Hz refresh
-        public WingSortieState State;
-        public WingSortieIntent Intent;
-        public string Words;               // WingSortieStatus.Words
-    }
-
     /// <summary>One convoy group of the mission's own purchase list, in the game's order (the index is the purchase index). Cooldown: seconds until the host allows it again, -1 until the host has answered.</summary>
     internal struct StrConvoyIn
     {
@@ -151,8 +139,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public string StaffStatus;         // the service's own words for an empty or old board, "" when none
         public StrOfficerIn[] Officers;
         public int OfficerCount;
-        public StrWingIn[] Wing;
-        public int WingCount;
         public string PickerPrompt;        // MapPicker.Prompt, "" when no gesture is armed
         public int KnownAirDefence;        // -1 unknown
         // census: the measured counts behind the tiles, SITREP and the alert level

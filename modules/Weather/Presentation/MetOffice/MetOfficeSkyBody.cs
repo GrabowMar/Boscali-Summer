@@ -6,15 +6,11 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
-    /// The inside of the SKY NOW card (R1, R1b): the pictogram, class code and word, cover, the sky's name line, the METAR line and the three layer tiles.
+    /// The inside of the SKY OVERHEAD card: the pictogram, class code and word, cover, the sky's name and who set it, the METAR line and the three layer tiles.
     /// Frameless (the card owns the frame). Values arrive as a <see cref="MetOfficeModel"/>; nothing here reads the game.
     /// </summary>
     internal sealed class MetSkyBody : EnvPart
     {
-        /// <summary>The mark of a caution sky (broken, overcast): not the kit's triangle, which this window keeps for "CUT".</summary>
-        public const string CautionMark = "● ";
-
-        private static string RegimeMark(AvState s) => s == AvState.Caution ? CautionMark : AvStates.Glyph(s);
 
         private const float HeadY = 44f, MetarY = 62f, TileY = 84f, TileH = 36f, TileGap = 4f;
         private readonly TMP_Text code, word, cover, coverCap, head, metarKey, metarText;
@@ -54,11 +50,11 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Set(MetOfficeModel m)
         {
             RegimeSnapshot regime = RegimeSnapshot.FromType(m.Class);
-            state = WeatherEnvView.RegimeState(m.Class);
-            AvText.Set(code, RegimeMark(state) + regime.Code);
-            AvText.Set(word, regime.Name.ToUpperInvariant());
-            AvText.Set(cover, MetOfficeText.Cover(m.Cover));
-            AvText.Set(head, m.PinnedSky >= 0 ? MetOfficeText.SkyHead(m.SkyNumber, m.SkyName.ToUpperInvariant()) + " · PINNED" : "AUTO · CLASS SKY");
+            state = m.Captured ? WeatherEnvView.RegimeState(m.Class) : AvState.Inert;
+            AvText.Set(code, m.Captured ? AvStates.Glyph(state) + regime.Code : "—");
+            AvText.Set(word, m.Captured ? regime.Name.ToUpperInvariant() : "NO SKY YET");
+            AvText.Set(cover, m.Captured ? MetOfficeText.Cover(m.Cover) : "");
+            AvText.Set(head, !m.Captured ? MetOfficeRules.Waiting : MetOfficeText.SkyHead(m.SkyNumber, m.SkyName.ToUpperInvariant()) + (m.PinnedSky >= 0 ? " · SET BY HOST" : " · MISSION WEATHER"));
             AvText.Set(metarText, m.Metar.Length > 0 ? m.Metar : "—");
             glyph.SetKind(m.Class);
             for (int i = 0; i < 3; i++)

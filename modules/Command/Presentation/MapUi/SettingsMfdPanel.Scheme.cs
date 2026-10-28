@@ -73,23 +73,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Pilots take and fly the tasks from the MIS console.");
                 return;
             }
-            c.Orders(CDisplay,
-                "Pick a scheme first: every console repaints at once.",
-                "LIVE SIGNAL 0% with REDUCED MOTION gives a still display.",
+            c.Orders(CPanels,
+                "Pick a scheme, then a finish: every console repaints at once.",
+                "CUSTOM opens the four finish dials; GLASS puts them back.",
                 "Caution stays amber and danger red in every scheme.");
             c.Orders(CMap,
                 "EXPANDED LAYOUT off returns the game's own map screen.",
-                "Raise MAP DARKENING before you lower CONSOLE OPACITY.",
+                "Map layers (industry, supply, roads) live on the MAP bezel.",
                 "Custom backdrops come from the wallpapers folder; RESCAN after adding one.");
+            c.Orders(CHud,
+                "The TAC BOARD takes a change on its next tick, in flight.",
+                "Every key the mod reads is at the foot of this page.");
             c.Orders(CCockpit,
-                "RADIAL PRESETS puts the TGT quick slots on the cockpit wheel.",
-                "The presets themselves are built on the TGT console, not here.");
-            c.Orders(CImmersion,
                 "Every cue on this page is felt by this pilot only.",
                 "Turn a single cue down before you switch the whole set off.");
+            c.Orders(CWorld,
+                "World looks are drawn on this machine only; the host's weather is the same.",
+                "PERF presets also set the costly looks on this page.");
             c.Orders(CPerf,
                 "Watch FRAME TIME while you change a budget.",
-                "FX TIER LITE keeps the glass and drops the moving effects.",
+                "A preset is a starting point: tune single switches after it.",
                 "Changes apply in this mission; no restart.");
         }
 

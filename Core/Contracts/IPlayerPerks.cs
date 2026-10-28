@@ -13,7 +13,9 @@ namespace BoscaliSummer.Core.Contracts
         ObjectiveReward = 3,
         SupportCost = 4,
         SupportCooldown = 5,
-        SupportEffectScale = 6 // Retired; keep its numeric value stable.
+        SupportEffectScale = 6, // Retired; keep its numeric value stable.
+        ReconReward = 7,
+        JammingReward = 8
     }
 
     /// <summary>

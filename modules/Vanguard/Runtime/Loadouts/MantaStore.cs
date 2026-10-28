@@ -61,8 +61,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
                 info = UnityEngine.Object.Instantiate(missile.GetWeaponInfo());
                 info.name = "WI_" + VanguardKeys.Manta;
-                info.weaponName = "XQ-90 MANTA";
-                info.shortName = "MANTA";
+                info.weaponName = "XQ-90 Manta";
+                info.shortName = "XQ-90";
                 info.description = "Heavy escort drone, a bigger REMORA on two wing stations: four radar missiles with shoot-look-shoot, twelve flare bursts, a body-guard slot toward whatever locks you, a 20 km passive sensor that reveals enemy aircraft, fifteen minutes of endurance. DESIGNATE an aircraft and it hunts inside 16 km; a ground unit and it dives in as a guided bomb. Out of rounds it stays on your wing as a decoy.";
                 info.massPerRound = MantaRules.Mass;
                 info.costPerRound = VanguardPrices.Munition(VanguardKeys.Manta);
@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
                 definition = UnityEngine.Object.Instantiate(remora);
                 definition.name = definition.jsonKey = VanguardKeys.Manta;
-                definition.unitName = "XQ-90 MANTA";
+                definition.unitName = "XQ-90 Manta";
                 definition.description = info.description;
                 definition.value = VanguardPrices.Munition(VanguardKeys.Manta);
                 definition.mass = MantaRules.Mass;
@@ -114,7 +114,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void BuildMount(WeaponMount mount)
         {
             mount.info = info;
-            mount.mountName = "XQ-90 MANTA";
+            mount.mountName = "XQ-90 Manta";
             mount.drag *= 3f;
             mount.RCS *= 4f;
             foreach (MountedMissile station in mount.prefab.GetComponentsInChildren<MountedMissile>(true))

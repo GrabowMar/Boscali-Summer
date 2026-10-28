@@ -70,6 +70,7 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Register(new WingHudPanel());
             runtime.Register(new WingScopeFeed());
             runtime.Register(new WmcPanel());
+            context.AddClientSetting("SCREENS", "WING PANEL", "The WMC wing panel on a map bezel button.", context.Settings.Wing.ShowWmc);
             runtime.Register(new DevService());
             context.AddComponent<BridgeState>();
             context.AddService<IWingSquad>(new WingSquadService());

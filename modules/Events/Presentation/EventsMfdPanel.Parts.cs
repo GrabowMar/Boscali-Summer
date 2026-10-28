@@ -49,16 +49,16 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 if (count.text != text) count.text = text;
             }
 
-            public override float Measure(float width) => 46f;
+            public override float Measure(float width) => 60f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
                 AvLay.Place(rail.rectTransform, 6f, 0f, s.W - 12f, 2f);
-                AvLay.Place(glyph.rectTransform, 8f, 6f, 16f, 16f);
-                AvLay.Place(title.rectTransform, 28f, 4f, s.W - 34f, 20f);
-                AvLay.Place(drawer.rectTransform, 8f, 25f, 52f, 16f);
-                AvLay.Place(count.rectTransform, s.W - 8f - 44f, 25f, 44f, 16f);
+                AvLay.Place(glyph.rectTransform, 8f, 10f, 18f, 18f);
+                AvLay.Place(title.rectTransform, 30f, 8f, s.W - 36f, 22f);
+                AvLay.Place(drawer.rectTransform, 8f, 36f, 52f, 16f);
+                AvLay.Place(count.rectTransform, s.W - 8f - 44f, 36f, 44f, 16f);
             }
 
             public override void Restyle()

@@ -53,8 +53,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 h = Mix(h, f.StaffStatus == null ? 0 : f.StaffStatus.GetHashCode());
                 h = Mix(h, f.OfficerCount);
                 for (int i = 0; f.Officers != null && i < f.OfficerCount && i < f.Officers.Length; i++) h = Mix(h, Officer(in f.Officers[i]));
-                h = Mix(h, f.WingCount);
-                for (int i = 0; f.Wing != null && i < f.WingCount && i < f.Wing.Length; i++) h = Mix(h, Wing(in f.Wing[i]));
                 h = Mix(h, f.PickerPrompt == null ? 0 : f.PickerPrompt.GetHashCode());
                 h = Mix(h, f.KnownAirDefence);
                 h = Mix(h, Census(in f.Census));
@@ -114,17 +112,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 h = Mix(h, o.X.GetHashCode());
                 h = Mix(h, o.Z.GetHashCode());
                 return Mix(h, o.Portrait == null ? 0 : RuntimeHelpers.GetHashCode(o.Portrait));
-            }
-        }
-
-        private static int Wing(in StrWingIn w)
-        {
-            unchecked
-            {
-                int h = Mix(w.SortieId, (int)w.State);
-                h = Mix(h, (int)w.Intent);
-                h = Mix(h, w.Refusal == null ? 0 : w.Refusal.GetHashCode());
-                return Mix(h, w.Words == null ? 0 : w.Words.GetHashCode());
             }
         }
 

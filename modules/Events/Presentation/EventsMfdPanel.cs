@@ -248,7 +248,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             {
                 if (deskCaseCatalog >= 0) OpenArchive(ArchiveShelf.Events, deskCaseCatalog);
             }, AvButtonStyle.Quiet, AvIcon.Bookmark));
-            deskCaseAction.Controls[0].Help = "Read this event's catalog dossier, including its authored effects and timed orders.";
+            deskCaseAction.MinHeight = 44f;
+            deskCaseAction.Controls[0].Help ="Read this event's catalog dossier, including its authored effects and timed orders.";
             deskCaseAction.SetShown(false);
 
             recentSection = p.Section(AvIcon.ListDetails, "RECENT", "OPEN");
@@ -440,11 +441,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 tiles[i].SetCount(records);
             }
             archiveSection.SetCaption(AvNum.Thousands(held) + " RECORDS HELD");
-            // The poster card grows into the page; an empty file stays one row and the bay cover takes the rest.
-            float grow = file != null ? 1f : 0f;
-            if (deskCase.Grow != grow)
+            // A filed case shows its 16:9 poster; an empty file stays one row and the bay cover takes the rest.
+            bool wide = file != null;
+            if (deskCase.Wide != wide)
             {
-                deskCase.Grow = grow;
+                deskCase.Wide = wide;
                 console.Page(TabDesk).RequestRelayout();
             }
             if (file == null)

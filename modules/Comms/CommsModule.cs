@@ -42,6 +42,13 @@ namespace BoscaliSummer.Modules.Comms
             CommsMfdPanel panel = context.AddSceneService<CommsMfdPanel>(73);
             panel.Configure(context.Settings.Comms, manager, context.Logger);
 
+            var comms = context.Settings.Comms;
+            context.AddClientSetting("COMMS", "MAP INK", "Show pings, markers and drawings on the map.", comms.ShowOnMap);
+            context.AddClientSetting("COMMS", "COCKPIT PINGS", "Show pings as markers in the cockpit view.", comms.CockpitPingMarkers);
+            context.AddClientSetting("COMMS", "HUD NOTICES", "Post comms messages on the TAC BOARD notice line.", comms.HudNotices);
+            context.AddClientSetting("COMMS", "PING SOUND", "A short tone when a ping arrives.", comms.PingSound);
+            context.AddClientKey("DRAW KEY", "Hold to draw on the map while the COMMS map tool is open.", comms.DrawHoldKey, false);
+
             context.AddHostSettings(new HostSettingsTable("COMMS")
                 .Toggle(1, context.Settings.Comms.AllowAllChannel, "ALL CHANNEL",
                     "Let players post to everyone, the other side included. Off keeps all comms inside each team.")

@@ -23,6 +23,15 @@ namespace BoscaliSummer.Modules.Support.Visuals
             switch (fx)
             {
                 case "probe": return new Dictionary<string, object> { { "ok", true }, { "x", at.x }, { "z", at.z }, { "y", ground.y }, { "sea", Datum.LocalSeaY } };
+                case "birds": // show all three sky birds and say where they hang (global metres), for placing a camera beside them
+                    SatelliteSky.DemoAll = true;
+                    var birds = new Dictionary<string, object> { { "ok", true } };
+                    for (int i = 0; i < 3; i++)
+                    {
+                        Vector3 b = SatelliteSky.Track(i, Runtime.SupportManager.MissionNow()) * 60000f;
+                        birds["b" + i] = b.x.ToString("F0") + "," + b.y.ToString("F0") + "," + b.z.ToString("F0");
+                    }
+                    return birds;
                 case "sweep": AreaFx.Sweep(ground, radius, 8f, AreaFx.ReconTint, own); break;
                 case "optical": AreaFx.Sweep(ground, radius, 8f, AreaFx.OpticalTint, own); break;
                 case "team": AreaFx.Sweep(ground, radius, 8f, AreaFx.TeamTint, own); break;
@@ -43,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     break;
                 case "rod": KineticRodStrikeVisuals.TriggerImpact(ground); break;
                 case "descent": new GameObject("RodDescentDemo").AddComponent<RodDescentDemo>().Begin(ground); break;
-                case "emp": EmpVisualEffect.Trigger(ground + Vector3.up * 6000f, radius); break;
+                case "emp": EmpVisualEffect.Trigger(ground + Vector3.up * Runtime.SupportEffectPolicy.EmpBurstAltitude, radius); break;
                 case "flare": FlareMissileBurstVisuals.TriggerBarrage(ground + Vector3.up * 1200f, radius, 15f, 36, own); break;
                 case "launch": SatelliteLaunchVisuals.Play(ground, 16f); break;
                 case "rear":

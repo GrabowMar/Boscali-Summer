@@ -192,9 +192,19 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float erode = Math.Max(0f, 0.80f - detail) * billow * edge * Scalar.Lerp(0.75f, 0.55f, sheet);
                 float keep = Math.Max(0.05f, 1f - erode);
                 layerShape = Scalar.Clamp01((layerShape - erode) / keep); tower = Scalar.Clamp01((tower - erode) / keep);
+                // The shader's micro erosion (2026-10-28) at a zero footprint.
+                if (edge > 0.2f)
+                {
+                    float micro = (1f - Sample(nx / 520f + 0.53f, nz / 520f + 0.53f, y / 460f + 0.37f, 2)) * 0.30f * billow * edge * (1f - 0.5f * sheet);
+                    layerShape = Scalar.Clamp01((layerShape - micro) / (1f - micro)); tower = Scalar.Clamp01((tower - micro) / (1f - micro));
+                }
                 float crisp = (1f - 0.6f * sheet) * 0.65f * edge;
                 layerShape = Scalar.Lerp(layerShape, Scalar.Clamp01((layerShape - 0.08f) * 1.6f), crisp);
                 tower = Scalar.Lerp(tower, Scalar.Clamp01((tower - 0.08f) * 1.6f), crisp);
+                // The shader's hard edges (2026-10-28).
+                float hard = 1f - 0.6f * sheet;
+                layerShape = Scalar.Lerp(layerShape, Scalar.Clamp01((layerShape - 0.10f) / 0.25f), hard);
+                tower = Scalar.Lerp(tower, Scalar.Clamp01((tower - 0.10f) / 0.25f), hard);
             }
             float layerDensity = Scalar.Clamp01((layerShape - 0.12f) / 0.70f) * WeatherMath.Smoothstep(0.02f, 0.10f, layer);
             float rain = p.RainRate / 100f, scud = 0f;
@@ -559,6 +569,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             // Both octaves take the rounded lobes (channel 2); a sheet keeps a third of the broad (0) and stringy (1) texture (the shader's cauliflower pass, 2026-10-26).
             float s = sheetBlend * 0.35f;
+            nx += y * 0.35f; // the shader's altitude shear (2026-10-28)
             float detail = Scalar.Lerp(Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 2),
                     Sample(nx / (1250f * k), nz / (1250f * k), y / (1250f * k), 0), s) * 0.72f +
                 Scalar.Lerp(Sample(nx / (1250f * k) * 3.1f + 0.21f, nz / (1250f * k) * 3.1f + 0.21f, y / (1250f * k) * 3.1f + 0.21f, 2),

@@ -42,20 +42,18 @@ namespace BoscaliSummer.Modules.Weather
             ocean.Configure(context.Settings.Weather, manager, context.Logger);
             context.AddClientEffect(ocean);
 
-            context.AddClientSetting("RAIN VISUALS", "RAIN FX MASTER",
-                "Stop falling-rain particles, canopy effects and rain haze. Terrain wetness has its own switch. " +
-                "Applies now; no mission or game restart.",
+            ClientSettingToggle rain = context.AddClientSetting("RAIN", "RAIN FX",
+                "Falling rain, canopy effects and rain haze. Terrain wetness has its own switch. Applies now.",
                 context.Settings.Weather.RainVisualsEnabled);
-            context.AddClientSetting("RAIN VISUALS", "CANOPY DROPLETS",
-                "Stop canopy droplet simulation, glass draws and fallback particles. " +
-                "Requires RAIN FX MASTER to be on. " +
-                "Applies now; no mission or game restart.",
-                context.Settings.Weather.CanopyRainEnabled, ClientPreset.Light);
-            context.AddClientSetting("RAIN VISUALS", "TERRAIN WET PASS",
-                "Stop the extra nearby-terrain draw passes and surface checks. " +
-                "Applies now; no mission or game restart.",
+            context.AddClientSetting("RAIN", "CANOPY DROPLETS",
+                "Droplets beading and running on the canopy glass. Applies now.",
+                context.Settings.Weather.CanopyRainEnabled, ClientPreset.Light, rain);
+            context.AddClientSetting("RAIN", "TERRAIN WET PASS",
+                "Wet, darker ground near you in rain: extra nearby-terrain draw passes. Applies now.",
                 context.Settings.Weather.TerrainRainEnabled, ClientPreset.Heavy);
-            context.AddClientSetting("RAIN AUDIO", "RAIN SOUND",
+            context.AddClientLevel("RAIN", "RAIN DENSITY", "How many falling-rain streaks you see. The particle budget stays fixed.",
+                context.Settings.Weather.RainDensity, .25f, 2f, .25f, requires: rain);
+            context.AddClientSetting("RAIN", "RAIN SOUND",
                 "Rain, canopy impact and distance-delayed thunder through the game's effects volume. Applies now.",
                 context.Settings.Weather.RainAudioEnabled);
             context.AddClientSetting("SKY", "REDUCED FLASHES",

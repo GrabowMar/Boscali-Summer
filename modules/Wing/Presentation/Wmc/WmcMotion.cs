@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public const float PunchFrom = 0.94f, PunchSeconds = 0.12f;
         private static AvReveal reveal;
 
-        public static bool Reduced => WingSettings.Instance != null && WingSettings.Instance.ReduceMotion.Value;
+        public static bool Reduced => AvFxDriver.ReducedMotion || WingSettings.Instance != null && WingSettings.Instance.ReduceMotion.Value;
 
         /// <summary>The driver lives on the panel root (built once).</summary>
         public static void Attach(GameObject root)

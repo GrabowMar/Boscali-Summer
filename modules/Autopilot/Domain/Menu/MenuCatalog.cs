@@ -169,11 +169,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             WorldStation now = w.Stations[active];
             if (n > 1)
             {
-                int next = (active + 1) % n, prev = (active + n - 1) % n;
+                int next = (active + 1) % n;
                 c.Rows.Add(b.Reg(MenuRow.Action("weapons/next", "station-next", "NEXT STATION", "NEXT: STA " + (next + 1) + D + StationName(w.Stations[next]) + " " + StationAmmo(w.Stations[next]),
                     "STEP FORWARD THROUGH THE LOADOUT", "STA " + (next + 1) + D + StationName(w.Stations[next]))));
-                c.Rows.Add(b.Reg(MenuRow.Action("weapons/prev", "station-prev", "PREV STATION", "PREV: STA " + (prev + 1) + D + StationName(w.Stations[prev]) + " " + StationAmmo(w.Stations[prev]),
-                    "STEP BACK THROUGH THE LOADOUT", "STA " + (prev + 1) + D + StationName(w.Stations[prev]))));
             }
             var picks = new List<MenuRow>(n);
             for (int i = 0; i < n; i++)
@@ -213,24 +211,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
 
         private static MenuRow Cargo(MenuWorld w)
         {
+            // the loads themselves are picked in SELECT STATION; this branch is only the cycle and the drop zone
             var kids = new List<MenuRow>();
             int loads = 0;
-            for (int i = 0; i < w.Stations.Count; i++)
-            {
-                WorldStation station = w.Stations[i];
-                if (station.Cargo == CargoKind.None) continue;
-                loads++;
-                bool empty = station.Ammo <= 0;
-                string role = station.Cargo == CargoKind.Paratroopers ? "PARATROOPERS" : station.Cargo == CargoKind.Troops ? "TROOPS"
-                    : station.Cargo == CargoKind.Glider ? "GLIDER" : "CARGO";
-                MenuRow pick = MenuRow.Pick("weapons/cargo/st" + (i + 1), "hardpoint", "STA " + (i + 1) + D + StationName(station),
-                    role + ": " + (empty ? "EMPTY" : StationAmmo(station)), "ACTIVE" + D + role + " " + StationAmmo(station),
-                    i == w.ActiveStation, "SELECT LOAD; USE YOUR NORMAL FIRE CONTROL", "LOAD SELECTED", empty ? MenuTone.Dim : MenuTone.Normal, hatched: empty);
-                pick.Index = i;
-                kids.Add(pick);
-            }
+            foreach (WorldStation station in w.Stations) if (station.Cargo != CargoKind.None) loads++;
             if (loads == 0) return null;
-            kids.Insert(0, MenuRow.Action("weapons/cargo/next", "station-next", "NEXT CARGO LOAD", "LOADS: " + loads,
+            kids.Add(MenuRow.Action("weapons/cargo/next", "station-next", "NEXT CARGO LOAD", "LOADS: " + loads,
                 "SELECT THE NEXT CARGO, TROOP OR GLIDER STATION", "CARGO LOAD SELECTED"));
             if (w.CargoZoneAvailable && w.CargoZoneCapable)
             {
@@ -284,12 +270,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.DroneOrdered)
                 kids.Add(MenuRow.Action("weapons/drones/auto", "drone-screen", "BACK ON TASK", "ORDERED: " + name,
                     "CLEAR ITS ORDER: THE DRONE GOES BACK TO ITS OWN JOB", "BACK ON TASK: " + name, MenuTone.Caution));
-            if (n > 1)
-            {
-                int next = linked < 0 ? 0 : (linked + 1) % n;
-                kids.Add(MenuRow.Action("weapons/drones/next", "station-next", "NEXT DRONE", "NEXT: " + w.DroneNames[next],
-                    "LINK THE NEXT DRONE; THIS ONE KEEPS ITS ORDER", "LINK: " + w.DroneNames[next]));
-            }
             kids.Add(MenuRow.Toggle("weapons/drones/feed", "missile-view", w.DroneFeed,
                 F("SHOW DRONE FEED", "HUD FEED: OFF", "THE LINKED DRONE'S CAMERA ON YOUR HUD", "DRONE FEED ON"),
                 F("HIDE DRONE FEED", "HUD FEED: ON", "FEED CARD OFF THE HUD; IT STAYS WHILE THE DRONE HOLDS YOUR HEADING", "DRONE FEED OFF")));
@@ -349,41 +329,48 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
                 F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
             // Slots stay in place when their count changes, so a live rebuild never moves an action under the pointer.
+            // A pick sets itself up (2026-10-28): it turns the board, the pages and the slot on; OFF in slot n leaves n - 1 pages.
             for (int slot = 1; slot <= BoardPageCounts.Length; slot++)
             {
                 int selected = (int)(slot == 1 ? w.BoardPage1 : slot == 2 ? w.BoardPage2 : slot == 3 ? w.BoardPage3 : w.BoardPage4);
                 if (selected < 0 || selected >= BoardPages.Length || selected == (int)BoardPage.Systems) selected = (int)BoardPage.Threat;
+                bool shown = w.BoardOn && w.BoardPagesOn && slot <= w.BoardPageCount;
                 string prefix = "hud/page" + slot;
-                var choices = new List<MenuRow>(BoardPages.Length);
+                var choices = new List<MenuRow>(BoardPages.Length + 1);
                 for (int i = 0; i < BoardPages.Length; i++)
                 {
                     if (i == (int)BoardPage.Systems) continue;
                     MenuSwitch page = BoardPages[i];
                     MenuRow choice = MenuRow.Pick(prefix + "/" + page.Slug, null, page.Name,
-                        "PAGE " + slot + ": AVAILABLE", "PAGE " + slot + ": SELECTED", i == selected, page.Desc,
+                        "PAGE " + slot + ": AVAILABLE", "PAGE " + slot + ": SHOWN", shown && i == selected, page.Desc,
                         "PAGE " + slot + ": " + page.Name);
                     choice.Index = i;
-                    choice.Verb = "SELECT";
-                    choice.Blocked = !w.BoardOn ? "TAC BOARD: OFF" : slot > w.BoardPageCount ? "INCREASE PAGE COUNT" : !w.BoardPagesOn ? "TACTICAL PAGES: OFF" : null;
+                    choice.Verb = "SHOW";
                     choices.Add(choice);
                 }
-                MenuRow pick = MenuRow.Submenu(prefix, "station-select", "SELECT PAGE " + slot,
-                    "PAGE " + slot + ": " + BoardPages[selected].Name, "CHOOSE THIS PANEL; IT STAYS UNTIL YOU CHANGE IT",
-                    "PAGE " + slot, "PAGE", choices, iconless: true);
-                pick.Blocked = choices[0].Blocked;
-                c.Rows.Add(b.Reg(pick));
+                if (slot > 1)
+                {
+                    MenuRow off = MenuRow.Pick(prefix + "/off", null, "OFF", "PAGE " + slot + ": SHOWN", "PAGE " + slot + ": OFF", !shown,
+                        "BOARD KEEPS " + MenuText.Plural(slot - 1, "PAGE", "PAGES"), "PAGE " + slot + ": OFF", MenuTone.Dim);
+                    off.Index = -1;
+                    choices.Add(off);
+                }
+                c.Rows.Add(b.Reg(MenuRow.Submenu(prefix, "station-select", "SELECT PAGE " + slot,
+                    "PAGE " + slot + ": " + (shown ? BoardPages[selected].Name : "OFF"), "PICK A PANEL; THE BOARD AND SLOT TURN ON",
+                    "PAGE " + slot, "PAGE", choices, iconless: true)));
             }
 
             MenuRow declutter = MenuRow.Cycle("hud/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ", BoardDeclutters, Clamp(w.BoardDeclutter, BoardDeclutters), "HUD DECLUTTER: ");
             MenuRow layout = MenuRow.Cycle("hud/layout", "shape", "SET BOARD LAYOUT", "BOARD LAYOUT: ", BoardLayouts, Clamp(w.BoardLayout, BoardLayouts), "BOARD LAYOUT: ");
             MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
             MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
-            MenuRow count = MenuRow.Cycle("hud/count", "station-select", "SET PAGE COUNT", "PAGE COUNT: ", BoardPageCounts, Clamp(w.BoardPageCount - 1, BoardPageCounts), "PAGE COUNT: ");
             MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
-            var display = new List<MenuRow> { count, layout, declutter, size, shade, sway };
+            var display = new List<MenuRow> { layout, declutter, size, shade, sway };
             if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
+            // the ground ghost is drawn on the visor, not the board: it lives here but never waits for the board
+            if (w.TerrainAvailable) display.Add(MenuRow.Cycle("hud/ghost", "shape", "SET GROUND GHOST", "GROUND GHOST: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "GROUND GHOST: "));
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
-                "PAGE COUNT: " + BoardPageCounts[Clamp(w.BoardPageCount - 1, BoardPageCounts)], "PAGE COUNT, LAYOUT, SIZE, SHADE AND SWAY", "DISPLAY", "OPTIONS", display)));
+                "LAYOUT: " + BoardLayouts[Clamp(w.BoardLayout, BoardLayouts)] + D + BoardSizes[Clamp(w.BoardSize, BoardSizes)], "LAYOUT, DECLUTTER, SIZE, SHADE, SWAY, GHOST", "DISPLAY", "OPTIONS", display)));
             List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
                 partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
@@ -596,13 +583,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(In("RECEIVER", MenuRow.Action("cockpit/seek", "seek", "SEEK NEXT STATION", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: OFF",
                     "SCAN UP THE DIAL TO THE NEXT STATION", "STATION CHANGED"))));
             }
-            if (w.DeckAvailable || w.ReceiverAvailable)
-            {
-                MenuRow stop = MenuRow.Action("cockpit/stopall", "stop-audio", "STOP ALL AUDIO",
-                    "RECEIVER: " + (w.ReceiverOn ? "ON" : "OFF") + D + "MUSIC: " + (w.DeckPlaying ? "ON" : "OFF"), "SILENCE ALL RADIO AND MUSIC", "AUDIO STOPPED");
-                if (!w.CanStopAll) stop.Blocked = "NOTHING PLAYING";
-                c.Rows.Add(b.Reg(In(w.ReceiverAvailable ? "RECEIVER" : "MUSIC DECK", stop)));
-            }
             if (w.FeelAvailable)
             {
                 List<MenuRow> kids = Switches("cockpit/feel/", "", FeelSwitches, w.Feel, out int on);
@@ -742,12 +722,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(MenuRow.Cycle("view/nvg-gain", "night-vision", "SET NVG GAIN", "NVG GAIN: ",
                     new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Clamp(w.NvgGain, 0, 3), "NVG GAIN: ")));
             if (w.TerrainAvailable)
-            {
                 c.Rows.Add(b.Reg(MenuRow.Toggle("view/holo", "map", w.HoloMap,
                     F("ENABLE HOLO MAP", "HOLO MAP: OFF", "MAP KEY STOPS AT A 3D TERRAIN HOLOGRAM", "HOLO MAP ON"),
                     F("DISABLE HOLO MAP", "HOLO MAP: ON", "MAP KEY GOES STRAIGHT TO THE FULL MAP", "HOLO MAP OFF"))));
-                c.Rows.Add(b.Reg(MenuRow.Cycle("view/ghost", "shape", "SET GROUND GHOST", "GROUND GHOST: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "GROUND GHOST: ")));
-            }
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
             else if (w.HasNvg && w.NvgOn) Badge(c, "NVG ON", show: true);

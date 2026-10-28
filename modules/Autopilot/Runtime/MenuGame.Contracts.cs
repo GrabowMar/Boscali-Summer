@@ -139,7 +139,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.ReceiverAvailable = radio.ReceiverAvailable;
             w.ReceiverOn = radio.ReceiverOn;
             w.Station = radio.ReceiverStation ?? "";
-            w.CanStopAll = radio.DeckPlaying || radio.ReceiverOn;
         }
 
         private static void ReadComms(MenuWorld w)
@@ -211,10 +210,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "cockpit/trkprev": return () => Service<IRadioRemote>()?.DeckPrevious();
                 case "cockpit/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
                 case "cockpit/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
-                case "cockpit/stopall": return () => Service<IRadioRemote>()?.StopAll();
                 case "cockpit/kneeboard": return () => { IKneeboardGallery cards = Service<IKneeboardGallery>(); if (cards != null) cards.Selected = cards.Selected + 1; };
                 case "view/holo": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.HoloMap = !t.HoloMap; };
-                case "view/ghost": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
+                case "hud/ghost": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
@@ -233,7 +231,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "hud/layout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
                 case "hud/shade": return OnBoard(board => board.Shade = Next(MenuCatalog.ShadeSteps, board.Shade));
                 case "hud/size": return OnBoard(board => board.Scale = Next(MenuCatalog.SizeSteps, board.Scale));
-                case "hud/count": return OnBoard(board => board.PageCount = board.PageCount % MenuCatalog.BoardPageCounts.Length + 1);
                 case "hud/sway": return OnBoard(board => board.Sway = !board.Sway);
                 case "hud/reset": return OnBoard(board => board.ResetToDefaults());
                 case "weapons/drones/attack": return StrikeOrScreen;
@@ -241,7 +238,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/drones/look": return () => Service<IDroneCommand>()?.SendToLook();
                 case "weapons/drones/nose": return () => Service<IDroneCommand>()?.MatchNose();
                 case "weapons/drones/auto": return () => Service<IDroneCommand>()?.Release();
-                case "weapons/drones/next": return () => Service<IDroneCommand>()?.Cycle(1);
                 case "weapons/drones/feed": return () => Service<IDroneCommand>()?.ToggleFeed();
                 case "weapons/drones/terminal": return () => Service<IDroneCommand>()?.OpenTerminal();
             }
@@ -251,7 +247,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             const string Page1 = "hud/page1/", Page2 = "hud/page2/", Page3 = "hud/page3/", Page4 = "hud/page4/", Parts = "hud/parts/", Feel = "cockpit/feel/";
             int slot = row.Id.StartsWith(Page1, StringComparison.Ordinal) ? 1 : row.Id.StartsWith(Page2, StringComparison.Ordinal) ? 2 :
                 row.Id.StartsWith(Page3, StringComparison.Ordinal) ? 3 : row.Id.StartsWith(Page4, StringComparison.Ordinal) ? 4 : 0;
-            if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, (BoardPage)index));
+            if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, index));
             if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
             if (row.Id.StartsWith(Feel, StringComparison.Ordinal) && FeelFlags.TryGetValue(row.Id.Substring(Feel.Length), out Flag<IImmersionSettings> effect))
@@ -267,10 +263,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
         private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
 
-        /// <summary>Keep all saved slots distinct, including hidden slots that a later count change may reveal.</summary>
-        private static void SelectBoardPage(ITacBoardSettings board, int slot, BoardPage page)
+        /// <summary>
+        /// A page pick sets itself up: board on, pages on, the slot counted in. <paramref name="index"/> -1 is OFF: the board keeps
+        /// the slots before it. Saved slots stay distinct, hidden ones too, so a later pick that reveals them shows no twin.
+        /// </summary>
+        private static void SelectBoardPage(ITacBoardSettings board, int slot, int index)
         {
-            if (slot > board.PageCount) return;
+            if (index < 0) { board.PageCount = Math.Max(1, Math.Min(board.PageCount, slot - 1)); return; }
+            var page = (BoardPage)index;
+            board.Enabled = true;
+            if (board.ScopeMode == BoardScopeMode.Off) board.ScopeMode = BoardScopeMode.Manual;
+            if (slot > board.PageCount) board.PageCount = slot;
             BoardPage[] pages = { board.Page1, board.Page2, board.Page3, board.Page4 };
             for (int i = 0; i < pages.Length; i++)
                 if (i != slot - 1 && pages[i] == page) { pages[i] = pages[slot - 1]; break; }

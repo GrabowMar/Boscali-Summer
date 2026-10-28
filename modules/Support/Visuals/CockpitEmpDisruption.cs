@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 Vector3 delta = localPlayer.Aircraft.transform.position - burstPoint;
                 float dist = new Vector2(delta.x, delta.z).magnitude;
                 if (dist <= radius && localPlayer.Aircraft.transform.position.y <= Datum.LocalSeaY + 25000f)
-                    TriggerForPlayer(localPlayer.Aircraft, Mathf.Lerp(1.5f, 0.7f, dist / radius));
+                    TriggerForPlayer(localPlayer.Aircraft, Mathf.Lerp(0.5f, 1.5f, Runtime.SupportEffectPolicy.EmpField(delta.x, delta.z, radius)));
             }
         }
 
@@ -56,6 +56,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void Disrupt(float severity)
         {
+            // One pulse, one upset: the host loop, the detonation patch and a second burst can all ask within the same second, and every
+            // repeat restarted the E1 blackout flash and the jolt, so a pilot under the burst saw it pulse for as long as the asks came.
+            if (disruptionRoutine != null) return;
             currentSeverity = severity;
             disruptionDuration = Mathf.Clamp(severity * 5.5f, 4f, 10f);
             endTime = Time.time + disruptionDuration;

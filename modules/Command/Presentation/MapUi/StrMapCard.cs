@@ -6,16 +6,16 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The click card of the selected item (annex 05 P10): the item's words, and one button that commits (pick or redirect, accept, send wing) beside a second
-    /// one and a close. Built once under the map viewport and registered with the pointer guard, so wheel, drag and clicks stop at it; it never raises itself.
+    /// The click card of the selected item (annex 05 P10): a header row (chip, title, close), the item's words, and a button row only when the item has
+    /// something to commit (pick or redirect, accept, send wing). Built once under the map viewport and registered with the pointer guard, so wheel, drag and clicks stop at it; it never raises itself.
     /// Every press goes through the hub, the same command path the panel uses, and a refused button shows its reason on the footer line.
     /// </summary>
     internal sealed class StrMapCardMarker : MonoBehaviour { }
 
     internal sealed class StrMapCard
     {
-        internal const float Width = 320f, MaxHeight = 200f, Gap = 8f, Margin = 6f;
-        private const float Pad = 8f, ButtonH = 20f, CloseW = 28f;
+        internal const float Width = 236f, MaxHeight = 160f, Gap = 6f, Margin = 6f;
+        private const float Pad = 6f, HeadH = 18f, ButtonH = 18f, CloseW = 18f;
 
         private readonly StrMapOverlay owner;
         private readonly StrControls controls;
@@ -74,11 +74,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 case StrCardAct.Pick: return hub.Run(StrActionKind.Pick, b.Target);
                 case StrCardAct.Accept: return hub.Run(StrActionKind.Accept, b.Target);
-                case StrCardAct.SendWing: return hub.Run(StrActionKind.SendWing, b.Target);
-                case StrCardAct.Recall: return hub.Run(StrActionKind.Recall, b.Target);
-                case StrCardAct.Focus:
-                    hub.Select(b.Target, true);
-                    return new StrAct(StrWhy.None, "MAP FOCUSED", true);
                 default: return new StrAct(StrWhy.NoBoard, "NOT AN ACTION");
             }
         }
@@ -125,18 +120,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             string head = plan.Tag.Length > 0 ? plan.Tag + " " + plan.Title : plan.Title;
             AvText.Set(title, head);
 
+            // Header: chip, title, and the close in the corner, so the close never costs a row of its own.
             float inner = Width - 2f * Pad, y = Pad;
-            float chipW = hasChip ? chip.WidthFor() : 0f;
-            if (hasChip) chip.Place(Pad, y + 1f, chipW, 18f);
-            AvLay.Place(title.rectTransform, Pad + (hasChip ? chipW + 6f : 0f), y, inner - (hasChip ? chipW + 6f : 0f), 20f);
-            y += 24f;
+            float chipW = hasChip ? chip.WidthFor() : 0f, titleX = Pad + (hasChip ? chipW + 4f : 0f);
+            if (hasChip) chip.Place(Pad, y + 1f, chipW, HeadH - 2f);
+            AvLay.Place(title.rectTransform, titleX, y, Width - Pad - CloseW - 4f - titleX, HeadH);
+            close.Place(Width - Pad - CloseW, y, CloseW, HeadH);
+            close.Bind(controls, "map.card.close", "×", () => new StrAct(StrWhy.None, ""), "Close this card. Esc does the same.");
+            y += HeadH + 3f;
             for (int i = 0; i < lines.Length; i++)
             {
                 bool on = i < plan.LineCount;
                 lines[i].gameObject.SetActive(on);
                 if (!on) continue;
                 AvText.Set(lines[i], plan.Lines[i]);
-                lines[i].color = i == 0 ? AvInk.Ink : AvInk.Dim;
+                lines[i].color = i == 0 ? ink : AvInk.Dim;   // the first line is the item's state, in the item's own ink
                 float h = AvText.Height(lines[i], inner);
                 AvLay.Place(lines[i].rectTransform, Pad, y, inner, h);
                 y += h + 2f;
@@ -151,20 +149,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvLay.Place(reason.rectTransform, Pad, y + 2f, inner, h);
                 y += h + 4f;
             }
-            y += 4f;
 
-            // Buttons: the primary takes what the secondary and the close leave; a card with one verb gives it the whole row.
-            bool two = plan.Secondary.Act != StrCardAct.None;
-            float row = inner - CloseW - 4f, second = two ? Mathf.Floor((row - 4f) * 0.4f) : 0f, first = row - (two ? second + 4f : 0f);
-            primary.Place(Pad, y, first, ButtonH);
+            // Buttons: none when there is nothing to commit; one verb gets the whole row, two split it 60/40.
+            bool one = plan.Primary.Act != StrCardAct.None, two = one && plan.Secondary.Act != StrCardAct.None;
+            primary.SetActive(one);
             secondary.SetActive(two);
-            if (two) secondary.Place(Pad + first + 4f, y, second, ButtonH);
-            close.Place(Pad + row + 4f, y, CloseW, ButtonH);
-            primary.Bind(controls, "map.card.primary", plan.Primary.Label, () => plan.Primary.Gate, Help(plan.Primary.Act));
-            if (two) secondary.Bind(controls, "map.card.secondary", plan.Secondary.Label, () => plan.Secondary.Gate, Help(plan.Secondary.Act));
-            else controls.Remove("map.card.secondary");
-            close.Bind(controls, "map.card.close", "×", () => new StrAct(StrWhy.None, ""), "Close this card. Esc does the same.");
-            y += ButtonH + Pad;
+            if (one)
+            {
+                y += 3f;
+                float second = two ? Mathf.Floor((inner - 4f) * 0.4f) : 0f, first = inner - (two ? second + 4f : 0f);
+                primary.Place(Pad, y, first, ButtonH);
+                primary.Bind(controls, "map.card.primary", plan.Primary.Label, () => plan.Primary.Gate, Help(plan.Primary.Act));
+                if (two)
+                {
+                    secondary.Place(Pad + first + 4f, y, second, ButtonH);
+                    secondary.Bind(controls, "map.card.secondary", plan.Secondary.Label, () => plan.Secondary.Gate, Help(plan.Secondary.Act));
+                }
+                y += ButtonH;
+            }
+            else controls.Remove("map.card.primary");
+            if (!two) controls.Remove("map.card.secondary");
+            y += Pad;
 
             height = Mathf.Min(MaxHeight, y);
             root.sizeDelta = new Vector2(Width, height);
@@ -181,9 +186,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 case StrCardAct.Pick: return "Make this the faction's main effort. The staff and the AI ground force carry it out.";
                 case StrCardAct.Accept: return "Take this sortie. Finishing it counts toward the reinforcement wave.";
-                case StrCardAct.SendWing: return "Task your recruited wing to this sortie. Their kills count toward it.";
-                case StrCardAct.Recall: return "Recall the wing from this sortie.";
-                case StrCardAct.Focus: return "Fly the map to this item.";
                 default: return "";
             }
         }

@@ -81,16 +81,20 @@ namespace BoscaliSummer.Modules.Progression.Patches
         /// <summary>
         /// Maps a vanilla reward category onto a perk effect. Written against the enum members
         /// rather than their ordinals, so a renamed or reordered member is a compile error
-        /// instead of a silently wrong bonus.
+        /// instead of a silently wrong bonus. Kills, spotting and jamming each pay their own lane.
         /// </summary>
         private static bool TryEffect(FactionHQ.RewardType type, out PerkEffect effect)
         {
             switch (type)
             {
                 case FactionHQ.RewardType.Kill:
-                case FactionHQ.RewardType.Recon:
-                case FactionHQ.RewardType.Jamming:
                     effect = PerkEffect.CombatReward;
+                    return true;
+                case FactionHQ.RewardType.Recon:
+                    effect = PerkEffect.ReconReward;
+                    return true;
+                case FactionHQ.RewardType.Jamming:
+                    effect = PerkEffect.JammingReward;
                     return true;
                 case FactionHQ.RewardType.Supply:
                 case FactionHQ.RewardType.Refuel:

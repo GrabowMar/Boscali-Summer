@@ -86,15 +86,6 @@ namespace BoscaliSummer.Modules.Comms.Domain
             return ((rounded % 360) + 360) % 360;
         }
 
-        /// <summary>"42s", "3m 05s": a countdown that fits in a chip.</summary>
-        public static string Countdown(float seconds)
-        {
-            int total = seconds <= 0f || float.IsNaN(seconds) ? 0 : (int)Math.Ceiling(seconds);
-            if (total < 60) return total.ToString(CultureInfo.InvariantCulture) + "s";
-            return (total / 60).ToString(CultureInfo.InvariantCulture) + "m " +
-                   (total % 60).ToString("00", CultureInfo.InvariantCulture) + "s";
-        }
-
         private static string Km(float metres)
         {
             if (float.IsNaN(metres) || float.IsInfinity(metres)) return "—";

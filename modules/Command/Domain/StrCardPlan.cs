@@ -2,8 +2,9 @@ using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Command.Domain
 {
-    /// <summary>What a card button does. The map card runs it through the hub, the one command path (Focus is a select that flies the map).</summary>
-    internal enum StrCardAct : byte { None, Pick, Accept, SendWing, Recall, Focus }
+    /// <summary>What a card button does. The map card runs it through the hub, the one command path. The card sits beside its own tag, so it has no
+    /// "fly the map here" verb: a card with nothing to commit has no button row.</summary>
+    internal enum StrCardAct : byte { None, Pick, Accept }
 
     /// <summary>One button of the card: its word, its action, the item the action is aimed at and the gate as of the model it was built from.</summary>
     internal struct StrCardButton
@@ -64,7 +65,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             Line(e.VehiclesText, e.GroupsText);
             Line(e.MovementText);
             if (e.LockSeconds > 0) Line("LOCK", e.LockText);
-            Primary = Focus(vm, id);
         }
 
         private void Proposal(StrViewModel vm, StrItemId id)
@@ -75,8 +75,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             Line(p.Aim);
             Line("RISK " + p.RiskText, p.WaveText);
             if (vm.Wave.Present) Line(vm.Wave.PoolText);
-            Primary = new StrCardButton { Label = vm.Effort.Live ? "REDIRECT HERE" : "MAKE MAIN EFFORT", Act = StrCardAct.Pick, Target = id, Gate = p.Pick };
-            Secondary = Focus(vm, id);
+            Primary = PickButton(vm, p);
         }
 
         private void Front(StrViewModel vm, StrItemId id)
@@ -86,10 +85,13 @@ namespace BoscaliSummer.Modules.Command.Domain
                 if (vm.Fronts[i] != null && vm.Fronts[i].Id == id) { f = vm.Fronts[i]; break; }
             if (f == null) return;
             Start(f.Tag, "", f.Name, f.Ink);
-            Line(f.TrendText.Length > 0 ? f.PressureText + " " + f.TrendText : f.PressureText);
-            Line(f.StatusText);
-            Line(f.OfferText);
-            Primary = Focus(vm, id);
+            // One labelled line: a bare share read as a score, so it says whose it is.
+            Line(f.StatusText, "HOSTILE " + f.PressureText, f.TrendText);
+            // A front with a proposal on it commits that proposal from here; without one there is nothing to press.
+            StrProposalRow offer = f.Offer.IsNone ? null : StrGate.Proposal(vm, f.Offer);
+            if (offer == null) return;
+            Line("OFFER " + f.OfferText);
+            Primary = PickButton(vm, offer);
         }
 
         private void Sortie(StrViewModel vm, StrItemId id)
@@ -99,18 +101,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             Start(s.Tag, s.ChipText, s.Title, s.Offered ? StrInkRole.Offered : StrInkRole.Effort);
             Line(s.DistanceText, s.RewardText, s.TimeText);
             Line(s.StateText, s.ByText);
-            Line(s.WingText);
-            var wing = new StrCardButton { Label = s.WingLabel, Act = StrPanelText.WingTasked(s) ? StrCardAct.Recall : StrCardAct.SendWing, Target = id, Gate = s.Wing };
-            if (s.Offered)
-            {
-                Primary = new StrCardButton { Label = "ACCEPT", Act = StrCardAct.Accept, Target = id, Gate = s.Accept };
-                Secondary = wing;
-            }
-            else
-            {
-                Primary = wing;
-                Secondary = Focus(vm, id);
-            }
+            if (s.Offered) Primary = new StrCardButton { Label = "ACCEPT", Act = StrCardAct.Accept, Target = id, Gate = s.Accept };
         }
 
         private void Post(StrViewModel vm, StrItemId id)
@@ -125,14 +116,12 @@ namespace BoscaliSummer.Modules.Command.Domain
             Line(p.BountyText, p.Capped ? "CAPPED" : "");
             Line(p.TraitText);
             Line(p.SeenText);
-            // Annex 05 P10 and 9.4 step 10: FOCUS is the post card's primary button; a ticket on offer adds its ACCEPT beside it.
-            Primary = Focus(vm, id);
             if (ticket != null && ticket.Offered)
-                Secondary = new StrCardButton { Label = "ACCEPT", Act = StrCardAct.Accept, Target = ticket.Id, Gate = ticket.Accept };
+                Primary = new StrCardButton { Label = "ACCEPT STRIKE", Act = StrCardAct.Accept, Target = ticket.Id, Gate = ticket.Accept };
         }
 
-        private static StrCardButton Focus(StrViewModel vm, StrItemId id) =>
-            new StrCardButton { Label = "FOCUS", Act = StrCardAct.Focus, Target = id, Gate = StrAnchors.LocateGate(vm, id) };
+        private static StrCardButton PickButton(StrViewModel vm, StrProposalRow p) =>
+            new StrCardButton { Label = vm.Effort.Live ? "REDIRECT HERE" : "MAKE MAIN EFFORT", Act = StrCardAct.Pick, Target = p.Id, Gate = p.Pick };
 
         private void Start(string tag, string chip, string title, StrInkRole ink)
         {

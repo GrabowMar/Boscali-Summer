@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Events
             SuperEventAlert alert = context.AddSceneService<SuperEventAlert>(67);
             alert.Configure(context.Settings.Events, manager);
 
-            context.AddClientSetting("WORLD EVENTS", "EVENT PICTURES",
+            context.AddClientSetting("MISSIONS", "EVENT PICTURES",
                 "Show event artwork. OFF uses a generic event symbol in event cards, archive dossiers and alerts. Applies now.",
                 context.Settings.Events.PicturesEnabled);
 

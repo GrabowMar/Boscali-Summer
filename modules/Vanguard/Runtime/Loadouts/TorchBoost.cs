@@ -20,8 +20,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
     internal static class TorchBoost
     {
         public static readonly Type[] PatchTypes = Type.EmptyTypes;
-        private const string Name = "SRB-2 TORCH";
+        private const string Name = "SRB-2 Torch";
         private const float AxisBelowSaddle = 0.273f; // models/Torch.py: the case axis under the saddle top (the model's origin)
+        private const float NozzleX = 0.182f;         // models/Torch.py NOZZLE_EXITS: the two nozzle exits either side of the centreline
         private static VLSBooster booster;
 
         public static void Register(ModuleContext context)
@@ -101,6 +102,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 plume.transform.localPosition += Vector3.forward * (body.min.z - casing.min.z);
                 if (plume.TryGetComponent(out MeshRenderer drum)) UnityEngine.Object.DestroyImmediate(drum);
                 if (plume.TryGetComponent(out MeshFilter drumShape)) UnityEngine.Object.DestroyImmediate(drumShape);
+                // Two bottles side by side: a flame and smoke trail on each nozzle, one roar (the twin's audio goes).
+                GameObject twin = UnityEngine.Object.Instantiate(plume, bottle.transform);
+                twin.name = "TorchPlume";
+                foreach (AudioSource roar in twin.GetComponentsInChildren<AudioSource>(true)) UnityEngine.Object.DestroyImmediate(roar);
+                twin.transform.localPosition = plume.transform.localPosition + Vector3.right * NozzleX;
+                plume.transform.localPosition -= Vector3.right * NozzleX;
             }
             TorchFx.Quiet(bottle);
             bottle.AddComponent<TorchFx>();
@@ -109,8 +116,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             info.name = "WI_VG_Torch";
             info.weaponPrefab = null;
             info.weaponName = Name;
-            info.shortName = "TORCH";
-            info.description = "Strap-on boost rockets, burned like a throttle: hold fire and every TORCH bottle pushes along the nose at a full g, let go and they wait. Fifteen seconds of full thrust per load; dry casings drop away, and the burn shows up hot to heat seekers.";
+            info.shortName = "SRB-2";
+            info.description = "Strap-on boost rockets, burned like a throttle: hold fire and every TORCH bottle pushes along the nose at nearly two g, let go and they wait. Thirty seconds of full thrust per load; bottles on one wing only yaw the jet away from that side; dry casings drop away, and the burn shows up hot to heat seekers.";
             info.effectiveness = default;      // no role: the AI never scores it (AnalyzeTarget returns 0 before any range test)
             info.targetRequirements = new TargetRequirements { maxRange = 1000f }; // the missile HUD's range ladder divides by maxRange
             info.pK = 0f;
@@ -254,7 +261,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 int lit = 0;
                 foreach (TorchPod pod in Fleet[craft]) if (pod.burning) lit++;
-                craft.rb.AddForce(craft.transform.forward * TorchProfile.Force(craft.GetMass(), lit, throttle));
+                // Pushed off its own side (scaled by Steer, sideways only): a bottle on one wing yaws the jet away from it.
+                Vector3 com = craft.rb.worldCenterOfMass;
+                float side = Vector3.Dot(transform.position - com, craft.transform.right) * TorchProfile.Steer;
+                craft.rb.AddForceAtPosition(craft.transform.forward * TorchProfile.Force(craft.GetMass(), lit, throttle), com + craft.transform.right * side);
             }
             if (fuel <= 0f || !IsAttached()) Burnout();
             else if (throttle <= 0f) Quench();

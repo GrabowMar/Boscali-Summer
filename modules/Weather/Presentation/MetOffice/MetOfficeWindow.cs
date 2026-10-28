@@ -11,32 +11,30 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
-    /// The weather console (Ctrl+O), concept B "MET OFFICE": a synoptic chart on the left, instruments and set-pieces in the middle, story, time, scenarios and log on the right,
-    /// a command line of eight keys under them. The host steers; a client sees the same window read-only with every control off and the reason on the footer.
+    /// The weather console (Ctrl+O): the sky picker on the left (class tabs, the skies of the class as tiles, AUTO), the sky overhead and the wind and fronts on the right,
+    /// the weather along the wind across the bottom. A tile click sets that sky for every player; AUTO hands the weather back to the mission. The host steers; a client sees
+    /// the same window read-only with every control off and the reason on the footer.
     ///
     /// <para>The window reads the world only through <see cref="IWeatherChartSource"/> and writes only through <see cref="IMetOfficeCommands"/>. While open it owns the pointer and the
-    /// keyboard exactly as the old console did (<see cref="MetOfficeInput"/>): Rewired mouse and keyboard off, own hit test, everything restored as found.</para>
+    /// keyboard (<see cref="MetOfficeInput"/>): Rewired mouse and keyboard off, own hit test, everything restored as found.</para>
     /// </summary>
     internal sealed partial class MetOfficeWindow : MonoBehaviour
     {
         private const int SortOrder = 30004;
         private static readonly int ControlCount = Enum.GetValues(typeof(MetControl)).Length;
-        private static readonly float[] ChipX = { 330f, 406f, 496f }, ChipW = { 70f, 84f, 60f };
 
         private IWeatherChartSource source;
         private IMetOfficeCommands commands;
         private readonly MetOfficeModel model = new MetOfficeModel();
         private readonly MetSkyPicker picker = new MetSkyPicker();
         private readonly MetOfficeInput input = new MetOfficeInput();
-        private readonly MetRepaint repaint = new MetRepaint();
         private AvWindow window;
-        private readonly AvControl[] control = new AvControl[ControlCount];
+        private readonly AvControl[] control = new AvControl[ControlCount];   // Pin, SkyPrev and SkyNext have no single control: the tiles and the arrow keys are theirs
         private AvChip roleChip;
         private TMP_Text dtg;
         private Image backing;
-        private MetTagLegend tagLegend;
-        private readonly List<AvHit> hitList = new List<AvHit>(96);
-        private readonly List<AvHelpTip> tipList = new List<AvHelpTip>(24);
+        private readonly List<AvHit> hitList = new List<AvHit>(32);
+        private readonly List<AvHelpTip> tipList = new List<AvHelpTip>(8);
         private AvHit hovered;
         private AvHelpTip tipHovered;
         private float nextRefresh, refusedUntil;
@@ -53,7 +51,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             return view;
         }
 
-        /// <summary>Opens the window, takes the input and only then refreshes, so an exception in Fill or a column refresh cannot leave the window open with the mouse and keyboard free (or captured by nothing).</summary>
+        /// <summary>Opens the window, takes the input and only then refreshes, so an exception in Fill cannot leave the window open with the mouse and keyboard free (or captured by nothing).</summary>
         internal void Show()
         {
             bool wasOpen = IsOpen;
@@ -61,19 +59,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (!wasOpen) input.Take();
             nextRefresh = 0f;
             Refresh();
-        }
-
-        // Harness probes the column partials register as they are built (Tasks 7 to 9): counts and clicks the check needs without the shell knowing the columns' fields,
-        // so the check compiles at every stage. Probe is -1 and ClickPart false until the column that registers the name exists.
-        private readonly Dictionary<string, Func<int>> probes = new Dictionary<string, Func<int>>();
-        private readonly Dictionary<string, Func<int, bool>> clicks = new Dictionary<string, Func<int, bool>>();
-
-        private static bool ClickControl(AvControl c)
-        {
-            AvHit hit = c != null ? c.GetComponentInChildren<AvHit>(true) : null;
-            if (hit == null) return false;
-            ((IPointerClickHandler)hit).OnPointerClick(WindowPointer.Data());
-            return true;
         }
 
         internal void Close()
@@ -117,12 +102,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 SetTip(mouse);
                 if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
             }
-            // The tag legend shares the footer with the hover sentence: it steps aside while a sentence (or a refusal) is on.
-            tagLegend.Rect.gameObject.SetActive(hovered == null && tipHovered == null && refusedUntil <= 0f);
             if (Time.unscaledTime >= nextRefresh) { nextRefresh = Time.unscaledTime + 0.25f; Refresh(); }
         }
 
-        // Read-only parts (cards, the chart) carry help tips but no AvHit; the disabled Rewired mouse never hovers them.
+        // Read-only parts carry help tips but no AvHit; the disabled Rewired mouse never hovers them.
         private void SetTip(Vector2 mouse)
         {
             AvHelpTip under = null;
@@ -137,10 +120,19 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (tipHovered != null) tipHovered.OnPointerEnter(WindowPointer.Data());
         }
 
-        // ---- Actions: every press, key or automation hook goes through here --------------------------
+        private void Keys()
+        {
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) || Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt)) return;
+            if (Input.GetKeyDown(KeyCode.Backspace)) Press(MetControl.Auto);
+            if (Input.GetKeyDown(KeyCode.R)) Press(MetControl.Reroll);
+            if (Input.GetKeyDown(KeyCode.LeftArrow)) Press(MetControl.SkyPrev);
+            if (Input.GetKeyDown(KeyCode.RightArrow)) Press(MetControl.SkyNext);
+        }
 
-        /// <summary>One request per press. A disabled control is refused with its reason on the footer.</summary>
-        internal bool Press(MetControl id)
+        // ---- Actions: every click, key or automation hook goes through here --------------------------
+
+        /// <summary>One request per press (<paramref name="sky"/> is the tile's sky for <see cref="MetControl.Pin"/>). A disabled control is refused with its reason on the footer.</summary>
+        internal bool Press(MetControl id, int sky = -1)
         {
             source.Fill(model);
             MetState state = MetOfficeRules.State(id, model);
@@ -150,75 +142,23 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 refusedUntil = Time.unscaledTime + 2.5f;
                 return false;
             }
-            bool ok = Do(id);
+            bool ok = id switch
+            {
+                MetControl.Pin => sky >= 0 && (sky == model.PinnedSky || commands.PinSky(sky)),   // the sky already set: nothing to send
+                MetControl.SkyPrev => commands.PinSky(picker.Step(model.PinnedSky, -1)),
+                MetControl.SkyNext => commands.PinSky(picker.Step(model.PinnedSky, 1)),
+                MetControl.Auto => commands.PinSky(-1),
+                _ => commands.Reroll(),
+            };
             nextRefresh = 0f;
             return ok;
         }
 
-        private bool Do(MetControl id)
-        {
-            switch (id)
-            {
-                case MetControl.Hold: return commands.SetTapeMoves(!model.Running);
-                case MetControl.PaceDown: return commands.SetPace(TapeSwitch.Step(model.Pace, -1));
-                case MetControl.PaceUp: return commands.SetPace(TapeSwitch.Step(model.Pace, 1));
-                case MetControl.PinAuto: return commands.PinSky(-1);
-                case MetControl.PinPrev: return commands.PinSky(picker.Step(-1));
-                case MetControl.PinNext: return commands.PinSky(picker.Step(1));
-                case MetControl.PinSelected: return commands.PinSky(picker.Selected);
-                case MetControl.Reroll: return commands.Reroll();
-                case MetControl.AnchorHere: return commands.PlaceAhead(0f);
-                case MetControl.AnchorAhead: return commands.PlaceAhead(30000f);
-                case MetControl.AnchorDefault: return commands.ClearPlacement();
-                // Seam stubs: MetOfficeRules keeps the front-in controls disabled until S5 flips their MetAvail, and the adapter refuses them until it implements them.
-                case MetControl.StoryAuto: return commands.SetStory(-1);
-                case MetControl.StoryPrev: return commands.SetStory(StoryStep(-1));
-                case MetControl.StoryNext: return commands.SetStory(StoryStep(1));
-                case MetControl.Front2: return commands.FrontIn(2);
-                case MetControl.Front5: return commands.FrontIn(5);
-                case MetControl.Front10: return commands.FrontIn(10);
-                case MetControl.Front30: return commands.FrontIn(30);
-                default:
-                    if (id >= MetControl.SetSquall && id <= MetControl.SetSeaFog) return commands.SetSets((byte)(ForcedMask() ^ MetCatalog.SetBits[MetCatalog.SetIndex(id)]));
-                    if (id >= MetControl.RainAuto && id <= MetControl.RainHeavy) return commands.SetRain(MetCatalog.RainValues[id - MetControl.RainAuto]);
-                    if (id >= MetControl.ScenHurricane && id <= MetControl.ScenReset) return commands.Scenario(MetCatalog.Scenarios[MetCatalog.ScenarioIndex(id)]);
-                    return false;
-            }
-        }
-
-        /// <summary>The story the stepper moves to, wrapping inside StoryCount (0 while no story is authored).</summary>
-        private int StoryStep(int direction) => MetOfficeRules.StoryStep(model.StoryPick, model.StoryCount, direction);
-
-        private byte ForcedMask()
-        {
-            byte mask = 0;
-            for (int i = 0; i < MetOfficeModel.SetCount; i++) if (model.Sets[i].Forced) mask |= MetCatalog.SetBits[i];
-            return mask;
-        }
-
-        private void CycleRain()
-        {
-            source.Fill(model);   // a press never steps from a stale refresh
-            int now = 0;
-            for (int i = 0; i < MetCatalog.RainValues.Length; i++) if (RainMatches(i)) now = i;
-            Press(MetCatalog.From(MetControl.RainAuto, (now + 1) % MetCatalog.RainValues.Length));
-        }
-
-        private bool RainMatches(int i) =>
-            MetCatalog.RainValues[i].HasValue == model.ForcedRain.HasValue &&
-            (!model.ForcedRain.HasValue || Mathf.Abs(MetCatalog.RainValues[i].Value - model.ForcedRain.Value) < 0.05f);
-
         // ---- Build ---------------------------------------------------------------------------------
 
-        private AvControl.Spec Spec(MetControl id, string label, AvIcon icon = AvIcon.None, AvButtonStyle style = AvButtonStyle.Default) =>
-            new AvControl.Spec(label, () => Press(id), style, icon);
+        private AvControl.Spec Spec(MetControl id, string label, AvIcon icon = AvIcon.None) => new AvControl.Spec(label, () => Press(id), AvButtonStyle.Default, icon);
 
-        private AvControl Reg(MetControl id, AvControl c)
-        {
-            control[(int)id] = c;
-            repaint.Track(MetRail.Attach(c.Rect, MetCatalog.Info(id).Effect));
-            return c;
-        }
+        private AvControl Reg(MetControl id, AvControl c) { control[(int)id] = c; return c; }
 
         private AvFlow Column(string name, float x, float width)
         {
@@ -227,11 +167,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             return new AvFlow(col, window.Ticker, width + 2f * AvGridTokens.Pad, 0f);
         }
 
-        private MetCard Card(AvFlow flow, string title)
-        {
-            MetCard card = flow.Add(new MetCard(flow.Content, window.Ticker, title));
-            return card;
-        }
+        private MetCard Card(AvFlow flow, string title) => flow.Add(new MetCard(flow.Content, window.Ticker, title));
 
         private void Build(Transform uiRoot)
         {
@@ -244,23 +180,17 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             }
             window.Closed += OnWindowClosed;
-            window.CloseControl.Help = "Close the Met Office (Esc or Ctrl+O).";
-            window.Ticker.Register(repaint);
+            window.CloseControl.Help = "Close the weather console (Esc or Ctrl+O).";
             window.Root.Find("Body").gameObject.SetActive(false);   // the kit body (scroll view) stays empty: the columns are placed on the root
-            // The kit frame is 0.82 alpha when glassy and only the cards have their own fill, so the free-standing parts (section headers, the anchor and rain rows) would show the cockpit through them.
+            // The kit frame is 0.82 alpha when glassy and only the cards have their own fill, so the free-standing class tabs would show the cockpit through them.
             backing = AvLay.Solid(window.Root, "Backing", Color.clear);
             AvLay.Place(backing.rectTransform, 4f, MetOfficeLayout.Title + 2f, MetOfficeLayout.Width - 8f, MetOfficeLayout.Height - MetOfficeLayout.Footer - MetOfficeLayout.Title - 4f);
             backing.color = MetTitleTint.BackingColor();
             BuildTitleBar();
-            BuildHero();
-            BuildLeft();
-            BuildCentre();
+            BuildPicker();
             BuildRight();
-            BuildTape();
+            BuildStrip();
             window.Footer.Place(new AvSlot(0f, MetOfficeLayout.Height - MetOfficeLayout.Footer, MetOfficeLayout.Width, MetOfficeLayout.Footer));
-            tagLegend = new MetTagLegend(window.Root);
-            tagLegend.Place(new AvSlot(MetOfficeLayout.Width - MetTagLegend.Width - 10f, MetOfficeLayout.Height - MetOfficeLayout.Footer + 8f, MetTagLegend.Width, 14f));
-            window.Ticker.Register(tagLegend);
 
             hitList.AddRange(window.Root.GetComponentsInChildren<AvHit>(true));
             tipList.AddRange(window.Root.GetComponentsInChildren<AvHelpTip>(true));
@@ -282,18 +212,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             TMP_Text plateText = AvText.Make(r, "IdPlateText", AvTextRole.DataStrong, "ENV", TextAlignmentOptions.Center);
             AvLay.Place(plateText, 8f, 5f, 52f, 20f);
             plateText.color = EnvInk.Role("ground");
-            string[] words = { "SMOOTH", "FADE 20 S", "CUT" };
-            AvState[] states = { AvState.Info, AvState.Ready, AvState.Caution };
-            for (int i = 0; i < words.Length; i++)
-            {
-                var chip = new AvChip(r);
-                chip.Set(words[i], states[i]);
-                chip.Place(new AvSlot(ChipX[i], 6f, ChipW[i], 18f));
-                window.Ticker.Register(chip);
-                AvHelpTip.Attach(chip.Rect.gameObject, MetCatalog.ChipHelp[i]);
-            }
             dtg = AvText.Make(r, "Dtg", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvLay.Place(dtg, right - 492f, 0f, 272f, 30f);
+            AvLay.Place(dtg, right - 432f, 0f, 212f, 30f);
             dtg.color = EnvInk.Role("ink-muted");
             AvHelpTip.Attach(dtg.gameObject, MetCatalog.DtgHelp);
             roleChip = new AvChip(r);
@@ -309,15 +229,12 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             if (source == null || window == null) return;
             source.Fill(model);
             picker.Sync(model);
-            bool ready = model.Host && model.Captured;
-            window.Footer.Set(MetOfficeRules.Status(model), ready ? AvState.Info : AvState.Caution);
+            window.Footer.Set(MetOfficeRules.Status(model), model.Host && model.Captured ? AvState.Info : AvState.Caution);
             if (refusedUntil > 0f && Time.unscaledTime > refusedUntil && hovered == null && tipHovered == null) { window.Footer.SetHint(null); refusedUntil = 0f; }
             roleChip.Set(model.Host ? "HOST // ALL PLAYERS" : "READ ONLY", model.Host ? AvState.Ready : AvState.Caution);
             AvHelpTip.Attach(roleChip.Rect.gameObject, model.Host ? MetCatalog.RoleHostHelp : MetCatalog.RoleClientHelp);
-            AvText.Set(dtg, MetOfficeText.Dtg(DateTime.UtcNow) + " · " + MetOfficeText.MissionClock(model.MissionSeconds) + " · SN " + (model.SerialHex.Length > 0 ? model.SerialHex : "----"));
+            AvText.Set(dtg, MetOfficeText.Dtg(DateTime.UtcNow) + " · " + MetOfficeText.MissionClock(model.MissionSeconds));
             RefreshDesk();
-
-            // Controls: enabled state and the hover line (the reason while disabled), then each column's latches and labels.
             for (int i = 0; i < ControlCount; i++)
             {
                 if (control[i] == null) continue;
@@ -326,9 +243,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 control[i].Help = MetOfficeRules.Tip(id, model);
             }
         }
-
-        /// <summary>TMP re-lays a label on every assignment, so a refresh only writes the ones that changed.</summary>
-        private static void Label(AvControl c, string text) { if (c.Label != text) c.Label = text; }
 
         /// <summary>Sims and the offline harness: the state a check needs, without a mouse.</summary>
         internal Dictionary<string, object> Readout()
@@ -339,12 +253,9 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             // Numbers only: the sim checks compare numbers (result_above / result_below).
             return WithInput(new Dictionary<string, object>
             {
-                { "open", IsOpen ? 1 : 0 }, { "host", model.Host ? 1 : 0 }, { "captured", model.Captured ? 1 : 0 }, { "running", model.Running ? 1 : 0 }, { "pace", model.Pace },
-                { "speed", model.SpeedMps }, { "pinnedSky", model.PinnedSky + 1 }, { "enabledControls", enabled }, { "controls", ControlCount },
-                { "fronts", model.FrontCount }, { "cells", model.CellCount }, { "sets", (int)ForcedMask() }, { "anchor", model.HasAnchor ? 1 : 0 },
-                { "story", model.StoryPick + 1 }, { "salt", model.LayoutSalt },
-                { "rain", model.ForcedRain.HasValue ? (int)Mathf.Round(model.ForcedRain.Value * 100f) : -1 },
-                { "inputHeld", input.MouseIsOurs ? 1 : 0 },
+                { "open", IsOpen ? 1 : 0 }, { "host", model.Host ? 1 : 0 }, { "captured", model.Captured ? 1 : 0 }, { "pinnedSky", model.PinnedSky + 1 },
+                { "forced", model.Forced ? 1 : 0 }, { "browsedClass", (int)picker.Class }, { "enabledControls", enabled }, { "controls", ControlCount },
+                { "fronts", model.FrontCount }, { "salt", model.LayoutSalt }, { "inputHeld", input.MouseIsOurs ? 1 : 0 },
             });
         }
 
@@ -366,7 +277,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         }
     }
 
-    /// <summary>Tints the title bar's own pieces (the ID plate and the clock text) when the theme changes.</summary>
+    /// <summary>Tints the title bar's own pieces (the ID plate and the clock text) and the backing when the theme changes.</summary>
     internal sealed class MetTitleTint : AvPart
     {
         private readonly AvFrame plate;

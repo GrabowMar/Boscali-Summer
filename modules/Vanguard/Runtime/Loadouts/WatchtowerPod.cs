@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             RuntimeStores.Add(new StoreRecipe
             {
                 Key = VanguardKeys.WatchtowerMount, Donor = "JammingPod1", Carriers = StormcellPod.Carriers,
-                Build = mount => StormcellPod.HidePod<WatchtowerUnit>(mount, "ASQ-X WATCHTOWER", 150f, 0.5f, StoreArt.Watchtower)
+                Build = mount => StormcellPod.HidePod<WatchtowerUnit>(mount, "ASQ-30 Watchtower", 150f, 0.5f, StoreArt.Watchtower)
             });
             context.AddSceneService<WatchtowerService>(60);
         }

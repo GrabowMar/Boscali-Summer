@@ -225,7 +225,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             switch (row.Id)
             {
                 case "weapons/next": return With(a => a.weaponManager.NextWeaponStation());
-                case "weapons/prev": return With(a => a.weaponManager.PreviousWeaponStation());
                 case "weapons/link": return With(a => a.weaponManager.ToggleGunsLinked());
                 case "weapons/turret": return () => CombatHUD.i?.ToggleAutoControl();
                 case "flight/lights/nav": return With(a => a.ToggleNavLights());
@@ -258,11 +257,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "targets/clear": return () => CombatHUD.i?.DeselectAll(true);
             }
             if (row.Id.StartsWith("weapons/select/st", StringComparison.Ordinal)) return With(a => SelectStation(a, index));
-            if (row.Id.StartsWith("weapons/cargo/st", StringComparison.Ordinal)) return With(a =>
-            {
-                if (a.weaponStations != null && index >= 0 && index < a.weaponStations.Count && CargoStationRead.KindOf(a.weaponStations[index]) != CargoKind.None)
-                    SelectStation(a, index);
-            });
             return null;
         }
 

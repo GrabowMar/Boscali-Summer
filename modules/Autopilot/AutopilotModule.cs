@@ -36,6 +36,9 @@ namespace BoscaliSummer.Modules.Autopilot
             context.AddClientKey("MENU KEY", "The key that opens the interaction menu: hold it and point, or tap it to keep the menu open.",
                 settings.AceRadialKey);
             context.AddClientKey("CHAFF KEY", "A key that pops one chaff salvo.", settings.ChaffKey);
+            context.AddClientSetting("FLIGHT AIDS", "ILS APPROACH",
+                "Gear down near a field: the TAC BOARD shows the APPROACH page (runway funnel, localizer, glideslope).",
+                settings.IlsHud);
             context.AddSceneService<LandingLight>(51);
             context.AddSceneService<ChaffDispenser>(51).Configure(settings);
             CinematicViewPatch.Setting = settings.CinematicCamera;

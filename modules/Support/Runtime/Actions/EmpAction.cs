@@ -102,6 +102,10 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
                             float dz = unit.transform.position.z - target.z;
                             if (dx * dx + dz * dz > radiusSquared) continue;
                             if (unit.transform.position.y > Datum.LocalSeaY + 25000f) continue;
+                            // Every unit is hit at the same instant; how long its radar stays blind follows the field where it stands (the weak spot just
+                            // north of ground zero lets go after about a third of the time, the strong arc south of it holds the whole duration).
+                            float field = SupportEffectPolicy.EmpField(dx, dz, radius);
+                            if (elapsed > duration * (0.35f + 0.65f * field)) continue;
 
                             unit.Jam(new Unit.JamEventArgs
                             {
@@ -111,7 +115,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
 
                             if (unit is Aircraft ac && elapsed < 0.5f)
                             {
-                                Visuals.CockpitEmpDisruption.TriggerForPlayer(ac, 1f);
+                                Visuals.CockpitEmpDisruption.TriggerForPlayer(ac, Mathf.Lerp(0.5f, 1.5f, field));
                             }
                         }
                     }

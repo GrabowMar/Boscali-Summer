@@ -413,6 +413,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 Changed();
             }
 
+            /// <summary>Poster card: a full-width 16:9 poster above the words. Off, the plate is a 64px thumbnail.</summary>
+            public bool Wide;
+
             public override float Measure(float width) => Arrange(width, false, 0f);
 
             public override void Place(AvSlot s)
@@ -430,17 +433,16 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 float bodyW = width - 24f;
                 float bh = body.text.Length > 0 ? AvText.Height(body, bodyW) : 0f;
                 float total = 12f + head + (bh > 0f ? 8f + bh : 0f) + 12f;
-                if (!place) return total;
 
-                if (slotHeight > total + 60f)
+                if (Wide)
                 {
-                    // Poster card: full-width poster (never squarer than about 1.15:1, so the art is not sliced),
-                    // then title, meta and body, the whole stack centred in the card.
+                    // The poster keeps the art's own 16:9, so the card is sized by it and leaves room for the controls.
                     float fth = AvText.Height(title, bodyW);
                     float fmh = meta.text.Length > 0 ? AvText.Height(meta, bodyW) : 0f;
                     float words = fth + (fmh > 0f ? 4f + fmh : 0f) + (bh > 0f ? 8f + bh : 0f);
-                    float plateH = Mathf.Clamp(slotHeight - 24f - words - 10f, PlateSize, bodyW / 1.15f);
+                    float plateH = Mathf.Round(bodyW * 9f / 16f);
                     float stack = plateH + 10f + words;
+                    if (!place) return 12f + stack + 12f;
                     float top = Mathf.Max(12f, (slotHeight - stack) * 0.5f);
                     AvLay.Place(rail.rectTransform, 0f, 0f, 3f, slotHeight);
                     AvLay.Place(plate.Root, x, top, bodyW, plateH);
@@ -452,8 +454,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     AvLay.Place(meta.rectTransform, x, y, bodyW, fmh);
                     y += fmh + (fmh > 0f ? 4f : 0f) + 4f;
                     AvLay.Place(body.rectTransform, x, y, bodyW, bh);
-                    return total;
+                    return slotHeight;
                 }
+                if (!place) return total;
 
                 AvLay.Place(rail.rectTransform, 0f, 0f, 3f, total);
                 AvLay.Place(plate.Root, x, 12f, PlateSize, PlateSize);

@@ -362,24 +362,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 bool siteKnown = !float.IsNaN(x) && !float.IsNaN(z);
                 radius = !siteKnown || !float.IsFinite(radius) ? 0f : Math.Max(0f, Math.Min(SortieLink.MaximumRadius, radius));
 
-                StrWingIn wing = default; bool hasWing = false;
-                for (int i = 0; i < f.WingCount && f.Wing != null && i < f.Wing.Length; i++)
-                    if (f.Wing[i].SortieId == c.Id) { wing = f.Wing[i]; hasWing = true; break; }
-                bool tasked = hasWing && (wing.State == WingSortieState.Tasked || wing.State == WingSortieState.OnStation);
-
-                string wingText = "";
-                if (hasWing)
-                {
-                    switch (wing.State)
-                    {
-                        case WingSortieState.Tasked:
-                        case WingSortieState.OnStation: wingText = (wing.Words ?? "") + (link != null && link.WingCounts ? StrWords.Dot + "COUNTS" : ""); break;
-                        case WingSortieState.Done: wingText = "WING DONE"; break;
-                        case WingSortieState.Failed: wingText = "WING LOST"; break;
-                        case WingSortieState.Recalled: wingText = "WING RECALLED"; break;
-                    }
-                }
-
                 int number = sort.Of(c.Id);
                 Put(ref r.Id, new StrItemId(StrItemKind.Sortie, c.Id));
                 Put(ref r.ContractId, c.Id);
@@ -399,11 +381,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Put(ref r.Z, z);
                 Put(ref r.Radius, radius);
                 Put(ref r.Progress, c.IsActive ? Unit(c.Progress) : float.NaN);
-                Put(ref r.WingLabel, StrWords.WingLabel(hasWing ? wing.Intent : WingSortieIntent.None, tasked));
-                Put(ref r.WingText, wingText);
-                Put(ref r.WingRefusal, hasWing && wing.Refusal != null ? wing.Refusal : "");
-                Put(ref r.HasWing, hasWing);
-                Put(ref r.WingState, hasWing ? wing.State : WingSortieState.None);
             }
 
             // Distance and bearing from the local aircraft to the site: a dash unless both ends are known.

@@ -169,6 +169,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // The displayed pose as matrices, for the bulk reprojection: an orthographic view is one affine map.
         private static Matrix4x4 modelToUi, modelToImage, modelToParent;
         private static Transform fastParent;
+        // View-space depth row of the same pose (in front of the camera is negative), and whether the camera holds that pose now.
+        private static Vector4 modelDepth;
+        private static bool poseExact;
         private sealed class MarkerLabels
         {
             internal TMP_Text[] Text;
@@ -348,6 +351,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static void Tick()
         {
+            // The camera is about to move: projections take the per-point path until the displayed pose is final again.
+            poseExact = false;
             if (!Requested)
             {
                 // Map closed: park. Relief switched off: free it.
@@ -453,6 +458,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Matrix4x4 viewportTransform = map.mapBackground.transform.localToWorldMatrix;
             bool hierarchyMoved = imageTransform != lastImageTransform || viewportTransform != lastViewportTransform;
             if (hierarchyMoved) viewRevision++;
+            // From here to the next Tick the camera holds the displayed pose, so every projection (icons, layers, WMC) is one multiply.
+            poseExact = BuildProjection();
             // Native UpdateIcons refreshes only a fifth of the roster per frame. Seed
             // every existing faction-known glyph once when switching to the relief view.
             if (opening && map.mapIcons != null)
@@ -1020,9 +1027,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             point = default;
             if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
-            Vector3 world = sceneRoot.transform.position + new Vector3(
-                worldX / source.MapSize.x * ModelSpanX, modelY,
-                worldZ / source.MapSize.y * ModelSpanZ);
+            var model = new Vector3(worldX / source.MapSize.x * ModelSpanX, modelY, worldZ / source.MapSize.y * ModelSpanZ);
+            if (poseExact)
+            {
+                // Same answer as the path below in one multiply: layers reproject thousands of points on every terrain render.
+                if (Vector4.Dot(modelDepth, new Vector4(model.x, model.y, model.z, 1f)) >= 0f) return false;
+                Vector3 at = modelToImage.MultiplyPoint3x4(model);
+                point = new Vector2(at.x, at.y);
+                return true;
+            }
+            Vector3 world = sceneRoot.transform.position + model;
             Vector3 screen = camera.WorldToViewportPoint(world);
             if (screen.z <= 0f) return false;
             RectTransform viewport = owner.mapBackground.rectTransform;
@@ -1086,7 +1100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             RectTransform imageRect = MapImageRect(owner.mapImage);
             if (imageRect == null) return;
             Rect rect = imageRect.rect;
-            bool fast = BuildProjection();
+            bool fast = poseExact;
             staleIconFixes.Clear();
             foreach (KeyValuePair<MapIcon, IconFix> entry in iconFixes)
             {
@@ -1134,9 +1148,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // Clip space runs -1..1 across the viewport; depth is dropped, as the per-point path drops it.
             Matrix4x4 toViewport = Matrix4x4.TRS(new Vector3(bounds.center.x, bounds.center.y, 0f),
                 Quaternion.identity, new Vector3(bounds.width * .5f, bounds.height * .5f, 0f));
-            modelToUi = viewport.localToWorldMatrix * toViewport * camera.projectionMatrix *
-                camera.worldToCameraMatrix * Matrix4x4.Translate(sceneRoot.transform.position);
+            Matrix4x4 modelToView = camera.worldToCameraMatrix * Matrix4x4.Translate(sceneRoot.transform.position);
+            modelToUi = viewport.localToWorldMatrix * toViewport * camera.projectionMatrix * modelToView;
             modelToImage = owner.mapImage.transform.worldToLocalMatrix * modelToUi;
+            modelDepth = modelToView.GetRow(2);
             fastParent = null;
             return true;
         }
@@ -2034,6 +2049,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rig.Reset();
             ReliefNavigator.Reset();
             viewRevision = 0;
+            poseExact = false;
         }
     }
 
