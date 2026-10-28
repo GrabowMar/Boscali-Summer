@@ -264,6 +264,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 // No idle close: a pilot flying on the stick (Rewired, not Input) touches nothing for minutes; only Esc, X, death or a faction change closes.
 
                 // With the Rewired mouse off (by us, or already) the event system hears nothing: hit-test our own controls.
+                KeepInput();
                 Mouse device = TryMouse();
                 if (mouseDisabledByUs || (device != null && !device.enabled)) Pointer(mouse);
                 IFrontRoom room = lastView != null ? rooms[(int)lastView.Front] : null;
@@ -315,6 +316,26 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             Mouse mouse = TryMouse();
             if (lease.Acquire(mouse != null, mouse != null && mouse.enabled))
+            {
+                mouse.enabled = false;
+                mouseDisabledByUs = true;
+            }
+        }
+
+        /// <summary>
+        /// Every frame while open: takes back what another overlay handed back under the window (the C-menu, the Met Office or the cinematic console
+        /// held the mouse when the window opened and switched it on again as they closed, leaving the window deaf: no hit test, event system unheard).
+        /// </summary>
+        private void KeepInput()
+        {
+            if (!CursorManager.GetFlag(CursorFlags.SelectionMenu))
+            {
+                CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
+                ownsCursorFlag = true;
+            }
+            Mouse mouse = TryMouse();
+            if (mouse == null || !mouse.enabled) return;
+            if (lease.Acquire(true, true) || mouseDisabledByUs)
             {
                 mouse.enabled = false;
                 mouseDisabledByUs = true;
