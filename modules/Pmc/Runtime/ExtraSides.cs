@@ -85,16 +85,7 @@ namespace BoscaliSummer.Modules.Pmc.Runtime
                 hq.faction = Faction;
                 hq.missionStatsTracker = stats;
                 stats.hq = hq;
-                var sync = new SyncSettings
-                {
-                    From = SyncFrom.Server,
-                    To = SyncTo.Owner | SyncTo.ObserversOnly | SyncTo.OwnerAndObservers,
-                    Timing = SyncTiming.Variable,
-                    Interval = 0.1f
-                };
-                FieldInfo syncField = AccessTools.Field(typeof(NetworkBehaviour), "_syncSettings") ?? AccessTools.Field(typeof(NetworkBehaviour), "syncSettings");
-                syncField?.SetValue(hq, sync);
-                syncField?.SetValue(stats, sync);
+                // SyncSettings stays at Mirage's default (server -> owner and observers, every 0.1 s), which is what the HQ needs.
                 if (!FactionRegistry.factions.Contains(Faction)) FactionRegistry.factions.Add(Faction);
                 FactionRegistry.factionLookup[Key] = Faction;
                 MissionManager.CurrentMission?.EnsureFactionExists(Faction, out _);
