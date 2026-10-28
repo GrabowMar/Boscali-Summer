@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private const float BingoWarnSeconds = 120f;
         private static readonly Vector2 Anchor = new Vector2(24f, 180f);
         /// <summary>The shade stands this far outside the strip (its feathered edge is <see cref="HudSprites.FeatherEdge"/> wide, so the strip's own edge is under the full part) at this alpha; the brackets' arm and stroke.</summary>
-        private const float ShadeMargin = 44f, ShadeAlpha = 0.45f, BracketArm = 8f, ChromeStroke = 1.5f;
+        private const float ShadeMargin = 44f, BracketArm = 8f, ChromeStroke = 1.5f;
 
         public string Name => "HUD";
 
@@ -117,7 +117,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             background = HudSprites.Child(root, "Shade", HudSprites.Feather, sliced: true);
             background.rectTransform.offsetMin = new Vector2(-ShadeMargin, -ShadeMargin);
             background.rectTransform.offsetMax = new Vector2(ShadeMargin, ShadeMargin);
-            background.color = new Color(HudSprites.ShadeTint.r, HudSprites.ShadeTint.g, HudSprites.ShadeTint.b, ShadeAlpha);
+            background.color = HudSprites.BackdropColor;
             chrome = AvVector.Create(root, "Chrome", 24);
             chromeKey = 0;
             // A kit accent rail down the left edge says it is the wing's.
@@ -202,6 +202,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void Refresh(WingService wing, PlayerAutopilot ap)
         {
+            // The strip stands on the HUD's one backdrop (HudSprites.Backdrop, the pilot's BACKGROUNDS), as the board and the centre alerts do.
+            if (background != null && background.color != HudSprites.BackdropColor) background.color = HudSprites.BackdropColor;
             SetLadder(false);
             bool changed = !stripSized;
             int n = wing != null ? Mathf.Min(wing.Members.Count, rows.Length) : 0;

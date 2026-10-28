@@ -7,6 +7,7 @@ using BoscaliSummer.Modules.Hud.Patches;
 using BoscaliSummer.Modules.Hud.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
@@ -58,6 +59,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float bootStart;
         private StatusPanel panel;
         private ThirdPersonHudCluster cluster;
+        // The centre combat layer (WARNING banner, THREAT RING, shot callouts) and the aircraft it is up for (null: down).
+        private CombatAlerts alerts;
+        private Aircraft alertAircraft;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
@@ -84,6 +88,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The live own-missile set (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal MissileTracker Tracker => missileTracker;
+
+        /// <summary>The centre combat layer (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
+        internal CombatAlerts Alerts => alerts;
 
         private void OnEnable()
         {
@@ -119,6 +126,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (channel == "sys" && CueFeed.TakeNotice(text, tone)) return;
             // A mission's hints ("task") are task lines on the CUE stack while it is drawn.
             if (channel == "task" && CueFeed.TakeTask(text)) return;
+            // The THREAT page's "ARH MISSILE INBOUND" and "LOCK - ..." warnings are the centre banner's words already (its advice too): said once, there.
+            if (alerts != null && alerts.Shown && tone == HudTone.Warning && (channel == "missile" || channel == "rwr")) return;
             store.Notice(channel, tone, text, detail);
         }
 
@@ -140,6 +149,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (Application.isBatchMode) return;
             try { Tick(); }
             catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
+            // The centre combat layer's blink, ring and pop, every frame (its data comes with the 10 Hz read).
+            try { alerts?.Frame(alertAircraft, threats, this, Time.unscaledTime); }
+            catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
             if (panel != null)
@@ -150,12 +162,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and the radar-warning watch (how long it keeps a contact after its last warning).</summary>
+        /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and every backdrop of the mod's HUD (<see cref="HudSprites.Backdrop"/>).</summary>
         private void TakeOptions()
         {
             settings?.Snapshot(ref options);
             if (panel != null) panel.Options = options;
-            threats.Hold = options.ThreatHoldSeconds;
+            HudSprites.Backdrop = ScopeLayout.CloudAlpha * options.Shade;      // the one backdrop every HUD block of the mod stands on
         }
 
         private void Tick()
@@ -254,6 +266,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             try { panel.Present(frame); }
             catch (Exception e) { PatchGuard.Report("Hud.Present", e); }
             cluster.Board = panel.KeepClearBox;      // the third-person cluster keeps clear of the board's box
+
+            // The centre combat layer: its switch, a live aircraft, and only where an overlay may show (no pause, map or cinematic). Independent of the board's own switch.
+            try
+            {
+                bool showAlerts = options.CentreAlerts && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                alerts ??= new CombatAlerts();
+                alerts.Read(showAlerts && alerts.Ensure(), hudAircraft, frame, threats, now);
+                alertAircraft = showAlerts ? hudAircraft : null;
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Alerts", e); }
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
@@ -395,6 +417,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             panel = null;
             cluster?.Destroy();
             cluster = null;
+            alerts?.Destroy();
+            alerts = null;
+            alertAircraft = null;
             nextRead = 0;
             targetReadout.Release();
             bootAircraft = null;
@@ -432,6 +457,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileFeed.Release();
             panel?.Hide();
             cluster?.Hide();
+            alerts?.Hide();
+            alertAircraft = null;
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Tick(false, null);

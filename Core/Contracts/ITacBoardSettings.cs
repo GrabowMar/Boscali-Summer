@@ -26,13 +26,7 @@ namespace BoscaliSummer.Core.Contracts
         BoardLayout Layout { get; set; }
         /// <summary>Size multiplier, 0.6 to 1.4.</summary>
         float Scale { get; set; }
-        /// <summary>Units moved left from the right screen edge, 0 to 1200.</summary>
-        float OffsetX { get; set; }
-        /// <summary>Units moved down from the top edge, 0 to 600.</summary>
-        float OffsetY { get; set; }
-        /// <summary>Ink opacity of the whole board, 0.25 to 1.</summary>
-        float Opacity { get; set; }
-        /// <summary>Strength of the dark band behind the symbology, 0 (none) to 1.</summary>
+        /// <summary>Strength of the one backdrop behind every HUD block of the mod (board, left column, TAC MAP, wing strip, centre alerts), 0 (none) to 1.</summary>
         float Shade { get; set; }
         BoardDeclutter Declutter { get; set; }
         BoardScopeMode ScopeMode { get; set; }
@@ -46,8 +40,6 @@ namespace BoscaliSummer.Core.Contracts
         bool ShowStores { get; set; }
         /// <summary>The MISSILE CAM feed picture (the missile card); the page slots do not consult it.</summary>
         bool PageMissileCam { get; set; }
-        /// <summary>Seconds the radar-warning page keeps a contact after its last warning, 2 to 30.</summary>
-        float ThreatHoldSeconds { get; set; }
         bool ShowLamps { get; set; }
         bool ShowGauges { get; set; }
         bool ShowTicker { get; set; }
@@ -57,6 +49,8 @@ namespace BoscaliSummer.Core.Contracts
         bool Sway { get; set; }
         /// <summary>Restyle the kill feed and the map frame in the board's look.</summary>
         bool Corners { get; set; }
+        /// <summary>The centre combat layer: WARNING banner, threat ring, shot callouts. Independent of <see cref="Enabled"/>.</summary>
+        bool CentreAlerts { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
         void ResetToDefaults();
     }

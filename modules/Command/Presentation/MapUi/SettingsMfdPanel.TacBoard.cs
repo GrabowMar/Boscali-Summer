@@ -66,16 +66,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var look = flow.Add(new SetRingRow(flow.Content));
             BoardRing(flow, look, page, "SIZE", () => board.Scale, v => board.Scale = v, 0.6f, 1.4f, .05f, v => AvNum.Percent(v),
                 "How big the whole board is.", on, off);
-            BoardRing(flow, look, page, "OPACITY", () => board.Opacity, v => board.Opacity = v, 0.25f, 1f, .05f, v => AvNum.Percent(v),
-                "How solid the board's ink reads against the sky.", on, off);
-            BoardRing(flow, look, page, "MOVE LEFT", () => board.OffsetX, v => board.OffsetX = v, 0f, 1200f, 20f, Units,
-                "Slides the board left from the right screen edge, 20 units a step (a unit is a 1080p pixel).", on, off);
-            BoardRing(flow, look, page, "MOVE DOWN", () => board.OffsetY, v => board.OffsetY = v, 0f, 600f, 20f, Units,
-                "Slides the board down from the top screen edge, 20 units a step (a unit is a 1080p pixel).", on, off);
-            BoardRing(flow, look, page, "SHADE", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
-                "The dark band behind the symbols. 0% draws none (a restyled kill feed has no dark box then either).", on, off);
-            BoardRing(flow, look, page, "RWR HOLD", () => board.ThreatHoldSeconds, v => board.ThreatHoldSeconds = v, 2f, 30f, 1f, v => AvNum.Seconds(v, 0),
-                "Seconds radar warning keeps a contact after its last warning.", on, off);
+            BoardRing(flow, look, page, "BACKGROUNDS", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
+                "The one soft backdrop behind every block of the HUD: the board, the left column, the map, the wing strip and the centre alerts. 0% draws none.", () => true, off);
 
             flow.Section(AvIcon.Radar2, "TAC BOARD PAGES", "MANUAL · UP TO 2 x 2");
             Func<bool> pagesOn = () => board.Enabled && board.ScopeMode != BoardScopeMode.Off;
@@ -105,6 +97,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.ShowSystems, v => board.ShowSystems = v, on, off);
             ToggleCell(flow, blocks, page, "FEED AND MAP", "Draw the kill feed and map frame in the board's look. Stays on with the board off.",
                 () => board.Corners, v => board.Corners = v);
+            ToggleCell(flow, blocks, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
+                () => board.CentreAlerts, v => board.CentreAlerts = v);
 
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESET");
             AvCellGrid extras = flow.Grid(2);
@@ -119,9 +113,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
         }
-
-        /// <summary>An offset as the option holds it: design units (a 1080p pixel; the screen's height over 1080 device pixels, never under 0.85 of one), not pixels.</summary>
-        private static string Units(float v) => AvNum.Fixed(v, 0) + " units";
 
         private void BoardPageChoice(AvFlow flow, int page, string title, Func<BoardPage> get, Action<BoardPage> set,
             Func<bool> enabled, Func<string> reason) =>

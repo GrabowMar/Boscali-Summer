@@ -93,7 +93,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 return;
             }
             // The pilot's opacity is the root group's alpha (nothing else in the board animates it); the shade is outside it (StatusPanel.Shade.cs).
-            if (rootGroup.alpha != Options.Opacity) rootGroup.alpha = Options.Opacity;
             board = frame;
             now = frame.Now;
             units = frame.Units;

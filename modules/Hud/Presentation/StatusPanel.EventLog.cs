@@ -90,7 +90,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             logPlan = EventLogLayout.Plan(boxLeft, boxTop, logCount, widest, level);
             LeftHudStack.LogBottom = logPlan.Present ? logPlan.Top + logPlan.Height : 0f;
             Show(logRoot, true);
-            if (logGroup.alpha != Options.Opacity) logGroup.alpha = Options.Opacity;
             PlaceOnGrid(logSurface, 0f, 0f, Whole(canvasRect.rect.width), Whole(canvasRect.rect.height));
             ScopeCanvas g = logCanvas;
             g.Furniture = logPlan.Furniture;

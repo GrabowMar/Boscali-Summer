@@ -53,8 +53,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private float lastLock = float.NegativeInfinity, lastSpike = float.NegativeInfinity;
         private float lockSince, spikeSince;
 
-        /// <summary>How long the THREAT page keeps a radar after its newest warning (the pilot's option, set by the board each tick). The LOCK and SPKE lamps keep their own shorter holds.</summary>
-        public float Hold = BoardOptions.Default.ThreatHoldSeconds;
+        /// <summary>How long the THREAT page keeps a radar after its newest warning. The LOCK and SPKE lamps keep their own shorter holds.</summary>
+        public const float Hold = HudThreats.ContactHoldS;
 
         public ThreatPicture Read(Aircraft aircraft, BoardFrame frame)
         {
@@ -158,6 +158,28 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
         }
 
+        /// <summary>The live inbound missiles (not the ghosts) and the number each keeps (M1, M2): the centre THREAT RING's, every frame. Returns how many.</summary>
+        public int LiveMissiles(Missile[] into, int[] numbers)
+        {
+            int n = 0;
+            for (int i = 0; i < tracks.Count && n < into.Length; i++)
+            {
+                Inbound k = tracks[i];
+                if (k.Defeated || k.Ref == null || k.Ref.disabled) continue;
+                into[n] = k.Ref;
+                numbers[n++] = k.Number;
+            }
+            return n;
+        }
+
+        /// <summary>The radar locking us now (its lock within <see cref="HudThreats.LockHold"/>) and its name.</summary>
+        public bool TryLock(float now, out Unit emitter, out string name)
+        {
+            emitter = now - lastLock < HudThreats.LockHold && lockEmitter != null && !lockEmitter.disabled ? lockEmitter : null;
+            name = emitter != null ? NameOf(emitter) : null;
+            return emitter != null;
+        }
+
         /// <summary>Compass degrees off the nose, 0..360 clockwise, on the horizontal plane.</summary>
         private static float Bearing(Transform own, Vector3 rel)
         {
@@ -170,7 +192,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// Seconds to impact: range over the closing speed along the line of sight while it is closing, else (a missile being beamed closes slowly while it still turns in on us)
         /// range over its own speed, the time it would take flying straight at us. Never NaN: a missile with no speed left reads a long time, not nothing.
         /// </summary>
-        private static float Tti(float range, float closure, float speed)
+        internal static float Tti(float range, float closure, float speed)
         {
             float t = ThreatRank.Tti(range, closure);
             return !float.IsNaN(t) ? t : range / Mathf.Max(speed, ThreatRank.MinClosureMps);
