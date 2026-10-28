@@ -1,5 +1,6 @@
 using NOAvionics;
 using System;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
@@ -238,6 +239,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildCockpitPage(AvFlow flow, int page)
         {
+            BuildKeyRows(flow);
             BuildTacBoardRows(flow, page);
             BuildVisorRows(flow, page);
             flow.Section(AvIcon.Camera, "COCKPIT", "TARGETING");
@@ -245,6 +247,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, switches, page, "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
+        }
+
+        /// <summary>Keys the installed features read live (the interaction menu key first), rebound in place.</summary>
+        private void BuildKeyRows(AvFlow flow)
+        {
+            var keys = clientSettings?.Keys;
+            if (keys == null || keys.Count == 0) return;
+            flow.Section(AvIcon.AdjustmentsHorizontal, "KEYS", "CLICK, THEN PRESS A KEY");
+            foreach (ClientKeySetting key in keys) KeyBindControl.Add(flow, key);
         }
     }
 }

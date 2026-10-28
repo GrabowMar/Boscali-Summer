@@ -729,7 +729,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             }
             if (!hasFolders)
                 emptyAlert.Show(AvIcon.AlertTriangle, "NO MUSIC ON FILE",
-                    "Put OGG or WAV files in BepInEx/plugins/BoscaliSummer/Music, then press the rescan key. " +
+                    "Put OGG or WAV files in BepInEx/config/BoscaliSummer/Music, then press the rescan key. " +
                     "The folder key opens it.", AvState.Caution);
             else if (trackCount == 0)
                 emptyAlert.Show(AvIcon.Music, "FOLDER EMPTY",

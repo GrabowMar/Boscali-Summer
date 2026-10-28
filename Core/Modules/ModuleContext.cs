@@ -20,6 +20,7 @@ namespace BoscaliSummer.Core.Modules
         private readonly List<Type> registeredServices = new List<Type>();
         private readonly List<IHostSettingsView> registeredHostSettings = new List<IHostSettingsView>();
         private readonly List<ClientSettingToggle> registeredClientSettings = new List<ClientSettingToggle>();
+        private readonly List<ClientKeySetting> registeredClientKeys = new List<ClientKeySetting>();
         private readonly List<IClientEffect> registeredEffects = new List<IClientEffect>();
         private readonly List<Action> teardown = new List<Action>();
 
@@ -87,6 +88,13 @@ namespace BoscaliSummer.Core.Modules
             registeredClientSettings.Add(ClientSettings.Add(section, label, help, entry, presets));
         }
 
+        /// <summary>Publish a client-local key to SET and the mission prompt, where the player rebinds it.</summary>
+        public void AddClientKey(string label, string help, BepInEx.Configuration.ConfigEntry<KeyCode> entry)
+        {
+            if (entry == null) return;
+            registeredClientKeys.Add(ClientSettings.AddKey(label, help, entry));
+        }
+
         /// <summary>
         /// Opt a client-local effect into the shared resource/diagnostic bus. A rejected
         /// registration fails only this module's installation, so the host rolls it back.
@@ -128,6 +136,9 @@ namespace BoscaliSummer.Core.Modules
             for (int i = registeredClientSettings.Count - 1; i >= 0; i--)
                 ClientSettings.Remove(registeredClientSettings[i]);
             registeredClientSettings.Clear();
+            for (int i = registeredClientKeys.Count - 1; i >= 0; i--)
+                ClientSettings.Remove(registeredClientKeys[i]);
+            registeredClientKeys.Clear();
             for (int i = registeredServices.Count - 1; i >= 0; i--)
                 Services.Remove(registeredServices[i]);
             registeredServices.Clear();

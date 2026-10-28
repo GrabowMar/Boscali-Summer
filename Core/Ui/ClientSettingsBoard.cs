@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BepInEx.Configuration;
+using UnityEngine;
 
 namespace BoscaliSummer.Core.Ui
 {
@@ -45,11 +46,37 @@ namespace BoscaliSummer.Core.Ui
         public void Set(bool value) => entry.Value = value;
     }
 
+    /// <summary>A client-local key the owning feature reads live; SET and the mission prompt rebind it in place.</summary>
+    internal sealed class ClientKeySetting
+    {
+        internal ClientKeySetting(string label, string help, ConfigEntry<KeyCode> entry)
+        {
+            Label = label;
+            Help = help;
+            Entry = entry;
+        }
+
+        public string Label { get; }
+        public string Help { get; }
+        public ConfigEntry<KeyCode> Entry { get; }
+    }
+
     internal sealed class ClientSettingsBoard
     {
         private readonly List<ClientSettingToggle> rows = new List<ClientSettingToggle>();
+        private readonly List<ClientKeySetting> keys = new List<ClientKeySetting>();
 
         public IReadOnlyList<ClientSettingToggle> Rows => rows;
+        public IReadOnlyList<ClientKeySetting> Keys => keys;
+
+        public ClientKeySetting AddKey(string label, string help, ConfigEntry<KeyCode> entry)
+        {
+            var key = new ClientKeySetting(label, help, entry);
+            keys.Add(key);
+            return key;
+        }
+
+        public void Remove(ClientKeySetting key) => keys.Remove(key);
 
         public ClientSettingToggle Add(string section, string label, string help, ConfigEntry<bool> entry,
             bool[] presets = null)

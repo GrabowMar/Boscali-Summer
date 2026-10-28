@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Autopilot
             context.AddSceneService<ApproachScopeFeed>(49).Configure(settings, controller);
             new AutopilotScopeGauge().Register();      // the TAC BOARD's AUTOPILOT gauge while it flies the landing
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
+            context.AddClientKey("MENU KEY", "The key that opens the interaction menu: hold it and point, or tap it to keep the menu open.",
+                settings.AceRadialKey);
+            context.AddClientKey("CHAFF KEY", "A key that pops one chaff salvo.", settings.ChaffKey);
             context.AddSceneService<LandingLight>(51);
             context.AddSceneService<ChaffDispenser>(51).Configure(settings);
             CinematicViewPatch.Setting = settings.CinematicCamera;

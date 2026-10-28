@@ -1,12 +1,19 @@
 # Changelog
 
-## Unreleased — stabilisation
+## 0.2.11 — stabilisation
 
 Feature freeze: this round fixes, trims and tests what exists, and adds nothing new.
 
 - **WMC on Nuclear Option 0.34.2** ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)): 0.34.3 renamed the map
   icon's colour method, and on 0.34.2 the missing name stopped the whole Wing module from loading. The patch now takes
   whichever method the running game has.
+- **NOMM no longer loses the mod**: the radio library and event pictures live in `BepInEx/config/BoscaliSummer` (moved
+  over once from `plugins` on first start), so the mod never creates anything inside `BepInEx/plugins`. A `Music` /
+  `Events` folder re-created there while the game ran became a second "BoscaliSummer" entry for NOMM, which then
+  deleted the real install. The release zip no longer ships a `Music` folder.
+- **Interaction menu key**: rebind it (and the chaff key) under CONTROLS on the mission prompt or SET > THIS PILOT >
+  COCKPIT > KEYS: click, press a key, Esc keeps, Backspace clears. A note warns when the key is also one of the game's
+  own controls (for example a camera switch on C), because a press then does both.
 - **Fixes from the logs**: fuel-depot smoke no longer logs a Unity error each time it removes a light; an OPS command
   is no longer sent to the host before the host's own player exists; tail paint no longer reads a texture from
   materials that don't have one; missions with no objectives no longer flood the log with "Mission Runner was null".

@@ -98,7 +98,9 @@ namespace BoscaliSummer.Core
                     var offered = new List<ModuleMetadata>();
                     foreach (IModule module in Compose(settings))
                         if (!MissionProfile.IsCore(module.Metadata.Id)) offered.Add(module.Metadata);
-                    mod.runtimeRoot.AddComponent<MissionPrompt>().Offered = offered.ToArray();
+                    MissionPrompt prompt = mod.runtimeRoot.AddComponent<MissionPrompt>();
+                    prompt.Offered = offered.ToArray();
+                    prompt.Board = mod.clientSettings;
                 }
                 CapabilityReport.Log();
                 return mod;

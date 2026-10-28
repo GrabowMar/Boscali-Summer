@@ -23,7 +23,7 @@ namespace BoscaliSummer.Core.Ui
         private static readonly (string id, string title, string sub, string info, AvIcon icon)[] Labels =
         {
             ("command", "AVIONICS", "MFD panels and tactical map", "The MFD pages and the tactical map: relief map, threat scope, systems and the rail of screens behind the map.", AvIcon.Map2),
-            ("autopilot", "AUTOPILOT", "Autopilot and the C menu", "Autopilot modes and the C interaction menu for weapons, drones, wing orders and cockpit shortcuts.", AvIcon.FlightPath),
+            ("autopilot", "AUTOPILOT", "Autopilot, interaction menu", "Autopilot modes and the interaction menu (its key is under CONTROLS) for weapons, drones, wing orders and cockpit shortcuts.", AvIcon.FlightPath),
             ("immersion", "IMMERSION", "G cues, visor, pilot body", "The pilot's body and senses: G-LOC and grey-out, visor, heartbeat, cockpit voices and night lighting.", AvIcon.Pilot),
             ("effects", "EFFECTS", "Display grade, sharpening", "A colour grade and sharpening pass over the game image.", AvIcon.AdjustmentsHorizontal),
             ("qol", "QUALITY OF LIFE", "Small cockpit conveniences", "Small cockpit conveniences that save a few clicks.", AvIcon.Coffee),
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Core.Ui
             ("radio", "RADIO", "Cockpit radio stations", "Music and talk stations you tune from the cockpit.", AvIcon.Radio),
             ("chatter", "CHATTER", "Voices on the radio nets", "Voice packs on the radio nets: tower, flight, AWACS and ground calls that react to the fight.", AvIcon.Headset),
             ("comms", "COMMS", "Map pings, polls, team comms", "Map pings, polls and quick team messages; brevity calls follow the caller.", AvIcon.Message2),
-            ("wing", "WING", "Wingmen on your orders", "Your own AI wingmen: they taxi, take off, hold formation and fly the orders you give from the map or the C menu.", AvIcon.Formation),
+            ("wing", "WING", "Wingmen on your orders", "Your own AI wingmen: they taxi, take off, hold formation and fly the orders you give from the map or the interaction menu.", AvIcon.Formation),
             ("strategic-command", "STR", "Theater command, war map", "Theater command: a strategic map with striped front lines, offensive arrows and plans you draw yourself.", AvIcon.Territory),
             ("support", "OPS", "Support calls and fronts", "Support calls and the SPACE, CYBER and SOF fronts: strikes, satellites and special operations paid for with power.", AvIcon.CallDown),
             ("high-command", "HIGH COMMAND", "Chain of command, VIP staff", "A chain of command above you: staff officers and VIPs who hand down orders and can be lost.", AvIcon.Crest),
@@ -95,6 +95,9 @@ namespace BoscaliSummer.Core.Ui
 
         /// <summary>Every module the player may switch, in roster order.</summary>
         internal ModuleMetadata[] Offered = Array.Empty<ModuleMetadata>();
+
+        /// <summary>The installed features' keys, rebound under CONTROLS before the mission starts.</summary>
+        internal ClientSettingsBoard Board;
 
         private void Update()
         {
@@ -177,6 +180,12 @@ namespace BoscaliSummer.Core.Ui
             infoHead.Set(AvIcon.InfoCircle, title, "HOVER A SYSTEM", false);
             infoBody.Set("Hover any system on the left to read what it does and whether it changes the mission.");
             infoEffect.Set("");
+
+            if (Board != null && Board.Keys.Count > 0)
+            {
+                var controls = side.Add(new AvCard(side.Content, side.Ticker, side.Inner, "CONTROLS"));
+                foreach (ClientKeySetting key in Board.Keys) KeyBindControl.Add(controls.Flow, key);
+            }
 
             var notes = side.Add(new AvCard(side.Content, side.Ticker, side.Inner, "WHAT'S NEW"));
             foreach (var note in Notes)

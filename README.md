@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.10-alpha"><img src="https://img.shields.io/badge/release-0.2.10_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.10 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.11-alpha"><img src="https://img.shields.io/badge/release-0.2.11_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.11 alpha"></a>
   <img src="https://img.shields.io/badge/status-stabilising-f0b56e?style=flat-square&labelColor=0b1b23" alt="Status: stabilising">
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.3-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.3">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
@@ -55,9 +55,9 @@ Every other mission runs the mod too. When a mission starts, a prompt on the map
 4. **Check it.** Both the development and the player build must compile with zero warnings. Automated in-game scenarios (scripted flights in a sandbox copy of the game that check the outcome and collect the log) are run again for every system the change touches.
 5. **Ship it** in a small patch release, with a changelog entry.
 
-### Since 0.2.10
+### In 0.2.11
 
-On `main`, in the next patch:
+The latest patch release:
 
 - **Wing panel restored on Nuclear Option 0.34.2** ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Nuclear Option 0.34.3 renamed a map-icon method, and on 0.34.2 the missing name stopped the whole Wing module from loading, WMC page included. The patch now uses whichever method the running game has.
 - **Fixes from the logs:**
@@ -65,6 +65,8 @@ On `main`, in the next patch:
   - an OPS command is no longer sent to the host before the host's own player exists;
   - squadron tail paint no longer reads a texture from materials that don't have one;
   - missions with no objectives no longer flood the log with "Mission Runner was null".
+- **NOMM no longer loses the mod.** The radio library and event pictures moved from `BepInEx/plugins/BoscaliSummer` to `BepInEx/config/BoscaliSummer`, so the mod never re-creates a folder inside `plugins`. That re-created folder could make NOMM delete the real install. The release zip no longer ships a `Music` folder.
+- **The menu key is yours to choose.** The interaction menu key (C by default) can be changed at the mission prompt and in SET, with a warning when it clashes with one of the game's own controls.
 - **Cleanup without cuts:** about 6,900 lines of dead, duplicated and over-built code removed, and no feature removed. Both builds compile with no warnings.
 - **Re-checked in game:** the OPS page and front windows, the full OPS solo flow, forest fires and squadron tail paint all pass their scenarios on the cleaned build.
 
@@ -236,7 +238,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 
 | | Version | |
 | --- | --- | --- |
-| **Nuclear Option** | 0.34.3 | 0.34.2 also loads, but release 0.2.10 loses the WMC page on it ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Other versions may break the mod. |
+| **Nuclear Option** | 0.34.3 | 0.34.2 also works. Other versions may break the mod. |
 | **[BepInEx](https://github.com/BepInEx/BepInEx/releases)** | 5.4.23 or newer 5.x | BepInEx 6 is not supported. |
 | **[Blueprinter](https://github.com/nikkorap/NOBlueprinter-Releases)** | optional | Unlocks everything marked 🧩. |
 | **[ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager)** | optional | Adds the in-game **F1** settings window. |
@@ -244,7 +246,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.10.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.10-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.11.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.11-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -254,7 +256,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 4. Start the game.
 
 **Updating?** Close the game, replace the `BoscaliSummer` folder and start again. Always restart fully after an update.<br>
-**Using NOMM or NOMNOM?** Pick **BoscaliSummer** and check that it installs the version you meant to test.<br>
+**Using NOMM?** Boscali Summer isn't in the NOMM catalogue yet, so install it by hand as above; NOMM still lists it. **Close the game before you enable, disable or update mods, launch vanilla, or join a server from NOMM.** NOMM moves mods it switches off to `BepInEx/disabledPlugins`, and moving the folder of a mod that is still running can lose it. See [My mods vanished after using NOMM](#troubleshooting).<br>
 **Uninstalling?** Delete `BepInEx/plugins/BoscaliSummer`. To remove your settings and saved data too, also delete `com.marci.boscalisummer.cfg` and the `BoscaliSummer` folder in `BepInEx/config`.
 
 ## First flight
@@ -263,7 +265,7 @@ Start any mission and pick **FULL EXPERIENCE** at the mission prompt to have eve
 
 | | |
 | --- | --- |
-| <kbd>C</kbd> | The ring: weapons, HUD, flight, wing, comms, cockpit, support, view, defence and targets |
+| <kbd>C</kbd> | The interaction menu: weapons, HUD, flight, wing, comms, cockpit, support, view, defence and targets. C is the default; change it under **CONTROLS** at the mission prompt or **SET → THIS PILOT → COCKPIT → KEYS**. |
 | <kbd>Map</kbd> | Tap for the MFD map, hold for the big holo map |
 | <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed: on/off switches for the mod's systems, and the keys. Tuning values are in the config file only. |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | MET OFFICE weather console. The host controls it, clients read along. |
@@ -335,10 +337,28 @@ They need **Blueprinter**. Cargo-launched systems also need an aircraft with a c
 </details>
 
 <details>
+<summary><b>My mods vanished after using NOMM</b></summary>
+<br>
+
+- **Look in `BepInEx/disabledPlugins`.** NOMM moves mods there when you switch them off, choose **launch vanilla**, or launch into a server from its server browser (every mod not on that server's list is switched off). Switch them back on in NOMM.
+- **If `BepInEx/plugins/BoscaliSummer` holds only empty `Events` and `Music` folders,** delete that folder and install the mod again. Up to 0.2.10 the mod re-created those two folders inside `plugins` while it ran. If NOMM had just moved the mod away, it then treated the new empty folder as the mod and deleted the real copy. From 0.2.11 on, the mod never writes inside `plugins`.
+- Close the game before you let NOMM change anything.
+
+</details>
+
+<details>
+<summary><b>The interaction menu opens when I press C for something else</b></summary>
+<br>
+
+C is only the default. Change the **MENU KEY** under **CONTROLS** on the mission prompt, or in **SET → THIS PILOT → COCKPIT → KEYS**: click it, then press the key you want. Esc keeps the old key, and Backspace leaves the menu with no key. The note under the button warns when the key you chose is also one of the game's own controls, because a press then does both.
+
+</details>
+
+<details>
 <summary><b>An alarm or voice warning is too loud, too quiet or unwanted</b></summary>
 <br>
 
-**SET → THIS PILOT → IMMERSION** has **COCKPIT ALARMS** (the reworked lock, launch, stall and radar-warning tones) and **VOICE WARNINGS** (PULL UP, TERRAIN, OVER G, BINGO FUEL). Switching **COCKPIT ALARMS** off brings back the game's own tones. Switching **VOICE WARNINGS** off silences the spoken calls.
+**SET → THIS PILOT → PERF**, under **IMMERSION**, has **COCKPIT ALARMS** (the reworked lock, launch, stall and radar-warning tones) and **VOICE WARNINGS** (PULL UP, TERRAIN, OVER G, BINGO FUEL). Switching **COCKPIT ALARMS** off brings back the game's own tones. Switching **VOICE WARNINGS** off silences the spoken calls.
 
 </details>
 
@@ -427,6 +447,14 @@ They exist only in development builds. The release downloads are player builds, 
 <br>
 
 The mod doesn't modify the game's files. Everything it adds lives in its plugin folder and in `BepInEx/config` (its `.cfg` file and a `BoscaliSummer` folder for crests, scenarios and other saved data), so deleting those removes it. Still, back up first, as you would for any alpha mod.
+
+</details>
+
+<details>
+<summary><b>Where do my own music and event pictures go?</b></summary>
+<br>
+
+In `BepInEx/config/BoscaliSummer`: radio tracks in `Music` (one folder per station), event pictures in `Events`. Older versions kept them in `BepInEx/plugins/BoscaliSummer`, and the mod moves them over once on its first start. Mod managers own the `plugins` folder, so the mod no longer keeps anything of yours there.
 
 </details>
 

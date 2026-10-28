@@ -282,7 +282,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             settings = radioSettings ?? throw new ArgumentNullException(nameof(radioSettings));
             services = registry;
-            libraryPath = Path.Combine(Paths.PluginPath, "BoscaliSummer", "Music");
+            libraryPath = BoscaliSummer.Core.Storage.ModFolders.UserContent("Music", Plugin.Logger);
             receiver = new RadioProgram(this, gameObject, "BoscaliRadio", Plugin.Logger);
             deck = new RadioProgram(this, gameObject, "BoscaliDeck", Plugin.Logger);
             receiver.SetCrossfade(settings.CrossfadeSeconds.Value);

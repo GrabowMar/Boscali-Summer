@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using BepInEx;
 using BoscaliSummer.Modules.Events.Configuration;
+using BoscaliSummer.Core.Storage;
 using BoscaliSummer.Core.Util;
 using UnityEngine;
 
@@ -10,7 +11,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
     /// Event art, loaded first from loose PNGs a player drops into
-    /// <c>BepInEx/plugins/BoscaliSummer/Events/</c>, then from a distinct bundled image for each event.
+    /// <c>BepInEx/config/BoscaliSummer/Events/</c>, then from a distinct bundled image for each event.
     /// Everything still renders without art
     /// (the vector glyph is the fallback), so this is decoration, never a dependency: a
     /// missing file, an oversized poster or a bad header just means the glyph shows.
@@ -178,14 +179,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             if (prepared) return;
             prepared = true;
-            root = Path.Combine(Paths.PluginPath, "BoscaliSummer", "Events");
+            root = ModFolders.UserContent("Events", Plugin.Logger);
             try
             {
                 Directory.CreateDirectory(root);
             }
             catch
             {
-                // A read-only plugins folder still renders glyphs; nothing to report.
+                // A read-only config folder still renders glyphs; nothing to report.
             }
         }
     }

@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Autopilot.Configuration
             // The game ships no keyboard binding for Radial Menu (only a mouse button and the gamepad), so the keyboard needs this key of its own.
             AceRadialKey = config.Bind("Autopilot", "AceRadialKey", UnityEngine.KeyCode.C,
                 "Keyboard key that opens the interaction menu at once (default C; None closes this way in). " +
+                "Also set from SET > THIS PILOT > COCKPIT > KEYS or the mission prompt's CONTROLS card. " +
                 "Tap it to keep the menu open for clicks, or hold it, point at a row and release.");
             ChaffKey = config.Bind("Autopilot", "ChaffKey", UnityEngine.KeyCode.None,
                 "Keyboard key that pops one chaff salvo (default None: use the countermeasure button or the interaction menu).");
