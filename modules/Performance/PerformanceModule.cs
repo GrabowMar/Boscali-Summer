@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Performance
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.ShadowDistanceCap, ClientPreset.LastResort);
             context.AddClientSetting("BASE GAME", "RENDER SCALE",
-                "Render the 3D world at 80% resolution and upscale it, for about a third fewer pixels. " +
+                "Render the 3D world at reduced resolution (BepInEx config Performance > RenderScale, 80% by default) and upscale it. " +
                 "Helps a GPU-limited machine only; the world looks softer. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.RenderScaleCap, ClientPreset.LastResort);

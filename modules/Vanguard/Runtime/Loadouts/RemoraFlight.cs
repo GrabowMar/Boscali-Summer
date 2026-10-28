@@ -217,7 +217,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     }
                     else c = droneScan[i];
                     if (c.Unit == null || c.Unit.disabled || (!ram && left <= 0 && !c.Designated && !(GunUsable && c.Unit is Aircraft))) continue;
-                    bool claimed = !c.Designated && DroneOrders.Claimed(c.Unit, missile);
+                    bool claimed = !c.Designated && DroneOrders.Claimed(c.Unit, missile, droneRounds);
                     if (claimed && c.Unit is Missile) continue;   // one shooter per inbound missile, never a pile-on
                     if (pass == 0 && (claimed || (!ram && SinceRound(c.Unit, now) < float.MaxValue))) continue;
                     if (!found || c.Cue < best.Cue || (c.Cue == best.Cue && c.Range < best.Range)) { best = c; found = true; }
@@ -325,6 +325,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 droneRounds.Add(shot);
                 droneAimed.Add(aimed);
                 droneShotAt.Add(now);
+                // A round in flight holds its own claim, so an emptied drone going back to escort does not free the target for the next one.
+                DroneOrders.Claim(shot, aimed);
                 shot.onDisableUnit += _ =>
                 {
                     if (aimed != null && FastMath.InRange(shot.GlobalPosition(), aimed.GlobalPosition(), RemoraArcher.HitRadius))

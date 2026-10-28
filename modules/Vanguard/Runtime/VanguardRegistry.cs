@@ -122,12 +122,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (on) Rammers.Add(launcher); else Rammers.Remove(launcher);
         }
 
-        /// <summary>Another live drone is already shooting at or ramming <paramref name="target"/>.</summary>
-        public static bool Claimed(Unit target, Missile by)
+        /// <summary>Another live drone, or a round another drone fired, is already shooting at or ramming <paramref name="target"/>.
+        /// <paramref name="own"/>: the asker's rounds in flight, which never block it.</summary>
+        public static bool Claimed(Unit target, Missile by, List<Missile> own = null)
         {
             if (target == null) return false;
             foreach (KeyValuePair<Missile, Unit> claim in Claims)
-                if (claim.Key != by && claim.Value == target && Alive(claim.Key)) return true;
+                if (claim.Key != by && claim.Value == target && Alive(claim.Key) && (own == null || !own.Contains(claim.Key))) return true;
             return false;
         }
 

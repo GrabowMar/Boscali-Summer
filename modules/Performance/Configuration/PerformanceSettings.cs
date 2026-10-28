@@ -8,6 +8,7 @@ namespace BoscaliSummer.Modules.Performance.Configuration
         public ConfigEntry<bool> LodBiasFloor { get; }
         public ConfigEntry<bool> ShadowDistanceCap { get; }
         public ConfigEntry<bool> RenderScaleCap { get; }
+        public ConfigEntry<float> RenderScale { get; }
         public ConfigEntry<bool> CleanupOnSceneChange { get; }
         public ConfigEntry<bool> SkipRemoteTurretSearch { get; }
         public ConfigEntry<bool> ThinDistantTracers { get; }
@@ -28,9 +29,13 @@ namespace BoscaliSummer.Modules.Performance.Configuration
                 "shadow-cascade work. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
             RenderScaleCap = config.Bind("Performance", "RenderScaleCap", false,
-                "Client-local Unity tuning: render the 3D scene at most at 80% resolution and upscale it " +
+                "Client-local Unity tuning: render the 3D scene at most at RenderScale resolution and upscale it " +
                 "(screen-overlay HUD stays sharp). Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
+            RenderScale = config.Bind("Performance", "RenderScale", 0.8f,
+                new ConfigDescription("Share of the screen resolution the 3D scene renders at while RenderScaleCap " +
+                    "is on (0.8 = 80%). Lower is faster and softer. Applies immediately.",
+                    new AcceptableValueRange<float>(0.5f, 1f)));
             CleanupOnSceneChange = config.Bind("Performance", "CleanupOnSceneChange", false,
                 "Client-local Unity tuning: unload unused assets and collect garbage on " +
                 "scene transitions (menu/mission loads), never during flight. " +

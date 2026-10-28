@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private bool scaleApplied;
         private float scaleOriginal = 1f;
         private UniversalRenderPipelineAsset scaleAsset;
+        private float scaleCap = ClientTuningMath.RenderScaleCap;
         private float lastCleanup = -CleanupSpacingSeconds;
         private const float CleanupSpacingSeconds = 30f;
 
@@ -151,6 +152,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 
         private void SyncScale(bool want)
         {
+            float cap = ClientTuningMath.ClampRenderScale(settings.RenderScale.Value);
+            // A new share from the config: hand the game value back, then cap again.
+            if (want && scaleApplied && cap != scaleCap) SyncScale(false);
             if (want == scaleApplied) return;
             try
             {
@@ -160,7 +164,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     if (asset == null) return;
                     scaleAsset = asset;
                     scaleOriginal = asset.renderScale;
-                    asset.renderScale = ClientTuningMath.PlanRenderScale(scaleOriginal, true);
+                    scaleCap = cap;
+                    asset.renderScale = ClientTuningMath.PlanRenderScale(scaleOriginal, true, cap);
                     scaleApplied = true;
                     Plugin.Logger?.LogInfo("Performance: render scale cap on (game " +
                         scaleOriginal.ToString("F2") + " -> " + asset.renderScale.ToString("F2") + ").");
@@ -169,7 +174,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 {
                     scaleApplied = false;
                     if (scaleAsset == null) return;
-                    scaleAsset.renderScale = ClientTuningMath.RestoreRenderScale(scaleOriginal, scaleAsset.renderScale);
+                    scaleAsset.renderScale = ClientTuningMath.RestoreRenderScale(scaleOriginal, scaleAsset.renderScale, scaleCap);
                     Plugin.Logger?.LogInfo("Performance: render scale restored to " +
                         scaleAsset.renderScale.ToString("F2") + ".");
                     scaleAsset = null;
@@ -191,9 +196,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 return;
             }
             float current = scaleAsset.renderScale;
-            if (current <= ClientTuningMath.RenderScaleCap) return;
+            if (current <= scaleCap) return;
             scaleOriginal = current;
-            scaleAsset.renderScale = ClientTuningMath.RenderScaleCap;
+            scaleAsset.renderScale = scaleCap;
         }
 
         private void RunCleanup()
