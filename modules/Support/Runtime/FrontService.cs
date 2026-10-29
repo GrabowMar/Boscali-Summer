@@ -27,9 +27,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
     /// faction's vanilla funds moves into the fronts; every 5 s the real services are read into a <see cref="FrontWorld"/>, lost anchors queue their rebuild programme, the books tick and
     /// each finished programme is turned into its world effect through the existing spawners and effects. Superiority is recomputed against the strongest enemy and, at +40, presses the
     /// enemy front it beats (SPACE on SOF exposure, CYBER on SPACE cooldowns, SOF on CYBER trace). The same service answers the faction's commands, builds its mirror and gates perks
-    /// (<see cref="IFrontReadiness"/>): the host reads the books, a client reads the mirror.
+    /// (<see cref="IFrontPower"/>): the host reads the books, a client reads the mirror.
     /// </summary>
-    internal sealed class FrontService : MonoBehaviour, ISceneService, IFrontReadiness
+    internal sealed class FrontService : MonoBehaviour, ISceneService, IFrontPower
     {
         private const int MaximumFactions = 8;
         private const float WorldSeconds = 5f, SnapshotSeconds = 1f;
@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             manager = support; space = spaceService; cyber = cyberService; sof = sofService; ops = opsService;
             Active = this;
-            manager.ConfigureReadiness(this);
+            manager.ConfigureFronts(this);
             manager.AttachFronts(this);
         }
 

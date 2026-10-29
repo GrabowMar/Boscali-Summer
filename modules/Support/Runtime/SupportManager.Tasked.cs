@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Host authority for TASKED calls. The desk (Domain) owns the accounting; this half supplies the live facts it
-    /// cannot know: perks, readiness, cooldowns, the KINETIC bird, and the native rod launch.
+    /// cannot know: perks, skill grades, cooldowns, the KINETIC bird, and the native rod launch.
     /// </summary>
     internal sealed partial class SupportManager
     {
@@ -90,7 +90,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!claiming) return TaskedOutcome.None;
             float now = MissionNow();
             if (!BypassRequirements && !HostAuthorised(player, definition)) return TaskedOutcome.Locked;
-            if (!BypassRequirements && CallSheet.TryGet(action, out CallRow gate) && !ReadinessOpen(player, gate)) return TaskedOutcome.Locked;
             if (definition.SpaceTask.HasValue && !state.CanStart(definition.SpaceTask.Value, now)) return TaskedOutcome.BirdBusy;
             if (!DisableCooldowns && ledger.IsCoolingDown(playerId, (byte)action, now, CooldownFor(player, action)))
             {
@@ -128,7 +127,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Player pilot = FindPlayer(owner, job.Pilot);
             if (definition == null || pilot == null || !(job.Slot is TaskedSlot slot)) { job.ReportFailure(); return; }
             var context = new SupportContext(pilot, new GlobalPosition(job.Aim.X, 0f, job.Aim.Z), job.RequestId, this,
-                slot.Transaction, job, readiness.Power(pilot.HQ, Front.Space));
+                slot.Transaction, job, fronts.Power(pilot.HQ, Front.Space));
             SupportResult result;
             try { result = definition.Action.Execute(context); }
             catch (Exception e) { logger.LogError(e); result = SupportResult.SpawnFailed; }

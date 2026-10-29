@@ -21,7 +21,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportResult.NoMarkTarget: return "NEGATIVE: NO CONTACT — MARK A UNIT";
                 case SupportResult.NoCamp: return "NEGATIVE: NO LIVE CAMP — RESTORE A SOF CAMP";
                 case SupportResult.NoAnchor: return "NEGATIVE: NO ENEMY ANCHOR NEAR THE AIM — MOVE THE AIM";
-                case SupportResult.NeedsReadiness: return "NEGATIVE: FRONT READINESS TOO LOW FOR THIS PERK";
                 case SupportResult.NoMovers: return "NEGATIVE: NO MOVING CONTACTS NEAR THE AIM";
                 case SupportResult.NothingToSiphon: return "NEGATIVE: NOTHING TO SIPHON";
                 case SupportResult.NoReadyTeam: return "NEGATIVE: NO READY TEAM";

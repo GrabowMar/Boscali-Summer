@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly SpaceActionTransaction SpaceTask;
         /// <summary>Set only for a claimed TASKED call: the action must report its physical launch to this job.</summary>
         public readonly TaskedLaunchJob Tasked;
-        /// <summary>The perk's front POWER (<see cref="IFrontReadiness.Power"/>, 0.6 .. 1.5): scales radius, duration, strikes, damage and odds.</summary>
+        /// <summary>The perk's front POWER (<see cref="IFrontPower.Power"/>, 0.6 .. 1.5): scales radius, duration, strikes, damage and odds.</summary>
         public readonly float Power;
         /// <summary>The aim was snapped to a fresh own-faction MARK: the strike uses the tight optical/SAR disk, not the standard CEP.</summary>
         public readonly bool MarkSnapped, MarkSar;

@@ -182,7 +182,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             CyberFeed.Update(network);
             SofFeed.Update(network);
             OpsFeed.Update(network);
-            FrontFeed.Want(true); // readiness gates every perk tile, so the client always wants its faction's fronts
+            FrontFeed.Want(true); // POWER scales every perk tile, so the client always wants its faction's fronts
             FrontFeed.Update(network);
             Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
             Visuals.FrontEffectVisuals.Tick(frontMirror, MissionNow());

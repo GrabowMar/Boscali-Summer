@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return sof != null ? sof.PerkSabotage(owner, target, power, out succeeded) : SupportResult.NoCamp;
         }
 
-        FrontSides ISupportHost.Facts(FactionHQ owner) => readiness.Facts(owner);
+        FrontSides ISupportHost.Facts(FactionHQ owner) => fronts.Facts(owner);
 
         /// <summary>The faction's own satellites that are up and whose footprint holds the point (the SAT CAMERA's room bonus counts the ones besides its own).</summary>
         int ISupportHost.BirdsCovering(FactionHQ owner, GlobalPosition at)

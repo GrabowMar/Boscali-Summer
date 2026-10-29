@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     break;
                 case "scan": spendMark = m.LocalAllocation; request = Scan(m, Arg(args, "unitUnit") as Unit, Text(args, "aim") == "footprint") ? -1 : 0; break;
                 case "strict": Strict = true; request = -1; break;
-                case "readiness": ReadinessFloor = (int)Number(args, "floor", 5f); request = -1; break; // TEST ONLY: opens the front gate for the sim
+                case "grade": GradeFloor = (int)Number(args, "floor", 6f); request = -1; break; // TEST ONLY: lifts every pilot's OPS skill grade for the sim
                 case "rod": request = Fire(m, Text(args, "action") == "prsm" ? SupportActionId.Prsm : SupportActionId.Artillery); break;
                 case "perk": request = Perk(m, Text(args, "action") ?? ""); break; // the protocol 41 perks: overwatch, starfall, siphon, direct (see tests/ingame/ops-abilities.json)
                 case "mark":
@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>TEST ONLY (set by the sim's <c>readiness</c> verb): perks of rung <= this pass the readiness gate and every qualification gate (the allocation is still spent). 0 = off.</summary>
-        internal static int ReadinessFloor;
+        internal static int GradeFloor;
         private static float spendMark;
         private static bool replyHooked;
         /// <summary>TEST ONLY (the sim's <c>strict</c> verb): ignores the dev BypassRequirements config for this run, so a solo pilot meets every real gate and price.</summary>

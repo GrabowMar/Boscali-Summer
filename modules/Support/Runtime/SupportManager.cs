@@ -56,7 +56,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private SupportSettings settings;
         private IPlayerPerks perks;
         private SupportNet network;
-        private IFrontReadiness readiness = new DefaultFrontReadiness();
+        private IFrontPower fronts = new DefaultFrontPower();
         private SpaceService space;
         private int sceneGeneration = 1;
         private ManualLogSource logger;
@@ -468,16 +468,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// Why the local pilot cannot use this perk right now, or "" when nothing blocks it: the progression qualification
-        /// (NEEDS STRIKE QUALIFICATION) first, then the front readiness (NEEDS READINESS 3).
+        /// Why the local pilot cannot use this perk right now, or "" when nothing blocks it: the pilot's grade in the perk's
+        /// system first (NEEDS SPACE SKILL 4, from <see cref="CallGate"/>), then the satellite it needs.
         /// </summary>
         internal string LockReason(SupportActionId id)
         {
             if (!CallSheet.TryGet(id, out CallRow row) || catalog == null) return "";
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
-            if (!IsAuthorised(def)) return "NEEDS " + row.FrontWord + " SKILL";
-            if (!BypassRequirements && readiness.Readiness(player.HQ, row.Front) < row.Tier && row.Tier > OpsAutomation.ReadinessFloor) return "NEEDS READINESS " + row.Tier;
+            if (!IsAuthorised(def)) return CallGate.LockWord(row);
             if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
             return "";
         }
@@ -492,12 +491,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             _ => true
         };
 
-        /// <summary>Host: the front readiness gate for one perk; the dev bypass opens everything.</summary>
-        private bool ReadinessOpen(Player player, in CallRow row) =>
-            BypassRequirements || readiness.Readiness(player.HQ, row.Front) >= row.Tier || row.Tier <= OpsAutomation.ReadinessFloor;
-
-        /// <summary>The live front state replaces the default (every front fully built, neutral quality).</summary>
-        internal void ConfigureReadiness(IFrontReadiness source) => readiness = source ?? new DefaultFrontReadiness();
+        /// <summary>The live front state replaces the default (neutral POWER, no facts).</summary>
+        internal void ConfigureFronts(IFrontPower source) => fronts = source ?? new DefaultFrontPower();
 
         /// <summary>True when this peer is the host or has a live client link to one.</summary>
         public bool Online => GameAccess.IsServer() || GameAccess.NetworkManagerOrNull?.Client?.Active == true;
@@ -506,12 +501,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public float LocalCooldownRemaining(SupportActionId id) =>
             DisableCooldowns || !localCooldownUntil.TryGetValue(id, out float until) ? 0f : Mathf.Max(0f, until - MissionNow());
 
-        public bool IsAuthorised(SupportActionDefinition action)
-        {
-            if (BypassRequirements || OpsAutomation.ReadinessFloor > 0) return true; // the floor is the sim's test-only gate opener
-            if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return false;
-            return QualificationOpen(player, action);
-        }
+        /// <summary>Client: the local pilot's grade opens the perk (<see cref="CallGate"/>, the rule the host applies); the dev bypass opens everything.</summary>
+        public bool IsAuthorised(SupportActionDefinition action) =>
+            BypassRequirements || !CallSheet.TryGet(action.Id, out CallRow row) || CallGate.Open(row, LocalGrade(row));
+
+        /// <summary>The local pilot's grade in the perk's system, from the Progression view (1 before it answers); the sim's test-only floor lifts it.</summary>
+        private static int LocalGrade(in CallRow row) =>
+            Math.Max(OpsAutomation.GradeFloor,
+                ModuleServices.TryGet<IProgressionView>(out IProgressionView view) && view != null ? view.Grade(row.FrontWord) : 1);
 
         /// <summary>
         /// Price for the local player, including the support-cost perk. The server runs the
@@ -532,7 +529,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             if (DisableCooldowns || player == null || !CallSheet.TryGet(action, out CallRow row)) return 0f;
             float seconds = CallSheet.Cooldown(row.Tier) * EventsCooldownMultiplier(player);
-            return PerkPower.Cooldown(seconds, readiness.Power(player.HQ, row.Front));
+            return PerkPower.Cooldown(seconds, fronts.Power(player.HQ, row.Front));
         }
 
         /// <summary>
@@ -828,8 +825,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             float cost = free ? 0f : QuoteFor(action, player).Cost;
             CallRow row = default;
             if (!free && (cost <= 0f || !CallSheet.TryGet(action.Id, out row))) return SupportResult.CapabilityUnavailable;
-            if (!free && !ReadinessOpen(player, row)) return SupportResult.NeedsReadiness;
-            float power = free ? 1f : readiness.Power(player.HQ, row.Front);
+            float power = free ? 1f : fronts.Power(player.HQ, row.Front);
 
             SpaceActionTransaction transaction = null;
             if (action.SpaceTask.HasValue)
@@ -902,12 +898,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             _ => requirement == SpaceBirdRequirement.None
         };
 
+        /// <summary>Host: the player's grade in the perk's system opens it (<see cref="CallGate"/>); the sim's test-only floor lifts the grade.</summary>
         private bool HostAuthorised(Player player, SupportActionDefinition action) =>
-            OpsAutomation.ReadinessFloor > 0 || QualificationOpen(player, action);
-
-        /// <summary>M1 interim: every OPS lane's grade 1 is free, so this is open; the grade gate lands with CallGate (M1 Task 5).</summary>
-        private bool QualificationOpen(Player player, SupportActionDefinition action) =>
-            !CallSheet.TryGet(action.Id, out CallRow row) || perks.Grade(PlayerIdentity.Of(player), row.FrontWord) >= 1;
+            !CallSheet.TryGet(action.Id, out CallRow row) ||
+            CallGate.Open(row, Math.Max(OpsAutomation.GradeFloor, perks.Grade(PlayerIdentity.Of(player), row.FrontWord)));
 
         internal float ServerCooldownFor(Player player, SupportActionId action) => CooldownFor(player, action);
 
