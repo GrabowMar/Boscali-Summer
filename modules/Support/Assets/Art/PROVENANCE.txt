@@ -1,0 +1,23 @@
+OPS window art — provenance (Boscali Summer, 2026-10-29)
+
+Generated with OpenAI image generation (ChatGPT, through the Codex CLI 0.162.1
+image tool on the author's ChatGPT login), one image per prompt, every prompt
+asking for no letters or numbers. Then shrunk for embedding (Pillow):
+
+  ops_bg_orbit.png      navy console ground: hairline grid, engraved orbit
+                        arcs (512 x 768, palette, brightened x1.9)
+  ops_bg_network.png    green phosphor CRT glass: scanlines, faint burn-in
+                        (512 x 768, palette, brightened x1.6)
+  ops_bg_dossier.png    aged manila case-file sheet: ruled lines, coffee
+                        ring, fold crease (512 x 768, palette)
+  ops_recon_*.png       grainy black-and-white aerial reconnaissance prints,
+                        one per SHADOW target look: relay, datacenter, uplink,
+                        ewtruck, ground, building, camp (256 x 256 greyscale;
+                        the window tints them warm)
+  ops_emblem_*.png      space / cyber / sof command emblems cut from one
+                        three-emblem sheet, white with alpha = brightness
+                        (256 x 256)
+
+Loaded by Presentation/Fronts/FrontArt.cs from the embedded resources
+BoscaliSummer.Support.Art.<name>.png. A missing file falls back to the drawn
+look; tests/OpsM1.Tests/ArtTests.cs (local) pins every name the code asks for.
