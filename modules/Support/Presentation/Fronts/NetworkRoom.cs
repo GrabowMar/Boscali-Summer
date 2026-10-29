@@ -170,7 +170,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 int slot = i;
                 Image hit = FrontKit.Solid(b, "NodeHit" + i, 0f, 0f, 30f, 30f, Color.clear);
                 hit.raycastTarget = true;
-                AvHit.On(hit).Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) Do(() => actions.SelectNode(hitIds[slot])); };
+                // a picked node opens the NODE tab
+                AvHit.On(hit).Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) Do(() => { wantTab = 0; actions.SelectNode(hitIds[slot]); }); };
                 hit.gameObject.SetActive(false);
                 nodeHits[i] = hit;
             }
@@ -323,6 +324,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void Pick(int id)
         {
             if (id != selected) locateId = id;
+            wantTab = 0; // the list pick opens the node's inspector
             actions.SelectNode(id);
         }
 

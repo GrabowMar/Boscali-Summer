@@ -101,6 +101,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void PickTeam(int slot)
         {
             if (lastView != null) lastView.Reason = "";
+            wantTab = 0; // a picked team opens the TEAMS tab
             actions.SelectTeam(slot);
         }
 
@@ -108,6 +109,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void PickTarget(int id)
         {
             if (lastView != null) { lastView.HasDraft = false; lastView.Reason = ""; }
+            wantTab = 2; // a picked target opens ORDERS, where its missions are
             actions.SelectTarget(id);
         }
 
