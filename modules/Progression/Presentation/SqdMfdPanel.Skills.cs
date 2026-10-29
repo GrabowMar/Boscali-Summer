@@ -100,10 +100,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// A tool's node reads "STK TOOL" - STK, SAT, EW, ENG are the support codes the OPS page and
         /// the wing badges already use. A passive grade gets its own name. One name per node, ever.
         /// </summary>
-        private static string CellName(PerkView view, PerkDefinition definition) =>
-            definition.IsTool
-                ? PerkCatalog.CapabilityCode(definition.Capability) + " TOOL"
-                : view.Name.ToUpperInvariant();
+        private static string CellName(PerkView view, PerkDefinition definition) => view.Name.ToUpperInvariant();
 
         private void CommitSelected()
         {
@@ -207,9 +204,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 skillStripTitle.Set(definition.Lane + " · G" + AvNum.Thousands(definition.Grade) + " · " +
                     selected.Name.ToUpperInvariant());
                 skillStripTitle.Color = SqdTone.Select;
-                skillStripEffect.Set(definition.IsTool
-                    ? "SUPPORT TOOL · " + PerkCatalog.CapabilityCode(definition.Capability)
-                    : PerkCatalog.EffectLabel(selected.Id));
+                skillStripEffect.Set(definition.Lane + " SKILL · GRADE " + AvNum.Thousands(definition.Grade));
                 skillStripEffect.Color = SqdTone.Text(AvState.Ready);
                 skillStripDetail.Set(selected.Description);
             }
@@ -239,12 +234,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             PerkDefinition definition = PerkDefinitionOf(perk);
             // A shut node answers "why not" on hover instead of only after a click.
-            string effect = definition.IsTool ? "Support tool" : PerkCatalog.EffectLabel(row.Id);
             string help = perk.Unlocked ? perk.Name + " — held. " + perk.Description
-                : perk.Affordable || armed ? perk.Name + " (" + effect + ") — " + perk.Description
+                : perk.Affordable || armed ? perk.Name + " — " + perk.Description
                 : perk.Name + " — " + BlockReason(perk);
             row.Node.Paint(CellName(perk, definition), state, help);
-            row.Node.SetEffect(definition.IsTool ? "SUPPORT TOOL" : effect.ToUpperInvariant());
+            row.Node.SetEffect("GRADE " + AvNum.Thousands(definition.Grade));
         }
 
         private static void PaintLane(SkillBranchRow lane, PerkView[] perks)

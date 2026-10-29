@@ -4,9 +4,8 @@ using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.Progression.Runtime
 {
     /// <summary>
-    /// One grade of a qualification: a lane, the grade it occupies, and either a multiplier
-    /// or a support capability, never both. Grade 1 of every lane is that lane's tool — the
-    /// support authorisation — and grades 2..6 hang off the grade before them.
+    /// One OPS skill: a lane (SPACE, CYBER or SOF), the grade it occupies, and what it unlocks.
+    /// Grade 1 of every lane is free; grades 2..6 hang off the grade before them.
     /// </summary>
     internal readonly struct PerkDefinition
     {
@@ -19,202 +18,77 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         public readonly string Name;
         public readonly string Description;
         public readonly byte Cost;
-        public readonly PerkEffect Effect;
-        public readonly float Multiplier;
-        public readonly string Capability;
 
         /// <summary>The node's glyph, an <c>AvIcon</c> member name (kept a string so the catalogue stays engine-free).</summary>
         public readonly string Icon;
 
-        public PerkDefinition(
-            byte id, string lane, byte grade, string name, string description,
-            PerkEffect effect, float multiplier, string icon)
+        public PerkDefinition(byte id, string lane, byte grade, string name, string description, string icon)
         {
             Id = id;
             Lane = lane;
             Grade = grade;
             Name = name;
             Description = description;
-            Cost = PickCost;
-            Effect = effect;
-            Multiplier = multiplier;
-            Capability = null;
+            Cost = grade == 1 ? (byte)0 : PickCost;
             Icon = icon;
         }
-
-        public PerkDefinition(
-            byte id, string lane, byte grade, string name, string description,
-            string capability, string icon)
-        {
-            Id = id;
-            Lane = lane;
-            Grade = grade;
-            Name = name;
-            Description = description;
-            Cost = PickCost;
-            Effect = PerkEffect.FuelUse;
-            Multiplier = 1f;
-            Capability = capability;
-            Icon = icon;
-        }
-
-        /// <summary>A lane's tool: the node that grants a support capability.</summary>
-        public bool IsTool => Capability != null;
     }
 
     /// <summary>
-    /// The career board: four qualifications of six grades. Grade 1 is the lane's OPS
-    /// authorisation, grades 2..6 are its passives, and the grade-6 node is the capstone a
-    /// pilot can only reach by staying in one lane. A career may hold at most
-    /// <see cref="AuthorisationLimit"/> tools, so two lanes open and two stay closed.
+    /// The career board: the three OPS systems, six grades each. Grade 1 is owned by every pilot,
+    /// grade 6 is the capstone a pilot only reaches by spending a whole life's picks in one lane.
     /// </summary>
     internal static class PerkCatalog
     {
         /// <summary>The one heading the SQD board draws every lane under.</summary>
-        public const string Qualifications = "QUALIFICATIONS";
+        public const string Qualifications = "OPS SKILLS";
 
-        // Lane names are both the SQD lane captions and the OPS lock copy.
-        public const string Strike = "STRIKE";
-        public const string Recon = "RECON";
-        public const string Signals = "SIGNALS";
-        public const string Engineer = "ENGINEER";
+        // Lane names are the SQD lane captions, the OPS system words and the lock copy.
+        public const string Space = "SPACE";
+        public const string Cyber = "CYBER";
+        public const string Sof = "SOF";
 
-        /// <summary>Grades per lane; also the deepest the board ever gets.</summary>
+        public static readonly string[] Lanes = { Space, Cyber, Sof };
+
+        /// <summary>Grades per lane; also the most picks one pilot life earns.</summary>
         public const int MaximumDepth = 6;
 
-        /// <summary>Tolls a career may hold. One per lane, so this is also the lane cap.</summary>
-        public const int AuthorisationLimit = 2;
-
         /// <summary>
-        /// Ordered so that <c>All[i].Id == i</c>, each lane occupies a contiguous id block
-        /// starting at its grade 1, and grades run 1..<see cref="MaximumDepth"/> without
-        /// gaps. A prerequisite is derived from that order (<see cref="PrerequisiteOf"/>),
-        /// so it can never point forward or across lanes. <c>ProgressionTests</c> asserts the
-        /// shape, the mask width, the authorisation cap, and that this table and
-        /// <c>SupportCatalog</c> agree on every capability.
+        /// Ordered so that <c>All[i].Id == i</c>, each lane occupies a contiguous id block starting at
+        /// its grade 1, and grades run 1..<see cref="MaximumDepth"/> without gaps. A prerequisite is
+        /// derived from that order (<see cref="PrerequisiteOf"/>), so it can never point forward or
+        /// across lanes. The OPS perk each grade unlocks is <c>CallSheet</c>'s (front, grade).
         /// </summary>
         public static readonly PerkDefinition[] All =
         {
-            // Each lane pays for its own kind of flying: STRIKE kills and fast fire missions, RECON
-            // spotting and range, SIGNALS jamming and cheap support, ENGINEER service runs and captures.
-            // Grade 6 is the lane's big capstone.
-            new PerkDefinition(0, Strike, 1, "Strike Qualification",
-                "Authorises Rod-from-God kinetic strikes from a STRIKE satellite.",
-                SupportCapabilities.Artillery, "Bomb"),
-            new PerkDefinition(1, Strike, 2, "Target Priority",
-                "Kills pay 15% more allocation.", PerkEffect.CombatReward, 1.15f, "Crosshair"),
-            new PerkDefinition(2, Strike, 3, "Hot Turnaround",
-                "Support re-tasks 15% faster after every call.", PerkEffect.SupportCooldown, 0.85f, "Clock"),
-            new PerkDefinition(3, Strike, 4, "Strike Package",
-                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Coins"),
-            new PerkDefinition(4, Strike, 5, "Bounty Hunter",
-                "Kills pay a further 25% more.", PerkEffect.CombatReward, 1.25f, "Skull"),
-            new PerkDefinition(5, Strike, 6, "Time on Target",
-                "Capstone: support re-tasks 30% faster.", PerkEffect.SupportCooldown, 0.70f, "Burst"),
+            new PerkDefinition(0, Space, 1, "RECON PASS", "OPTICAL: one sweep reveals your satellite's circle.", "Satellite"),
+            new PerkDefinition(1, Space, 2, "SAT CAMERA", "OPTICAL: hold the camera on a target.", "Camera"),
+            new PerkDefinition(2, Space, 3, "OVERWATCH", "RADAR: follow moving units for 60 s.", "Eye"),
+            new PerkDefinition(3, Space, 4, "STARFALL", "KINETIC: 3-5 small rods walked in a line.", "Burst"),
+            new PerkDefinition(4, Space, 5, "ORBITAL ROD", "KINETIC: one big rod, 420 m blast.", "Bomb"),
+            new PerkDefinition(5, Space, 6, "4TH MODULE SLOT", "Capstone: carry every module at once.", "Settings"),
 
-            new PerkDefinition(6, Recon, 1, "Recon Qualification",
-                "Authorises reconnaissance sweeps and JTAC target marking.", SupportCapabilities.Recon, "Satellite"),
-            new PerkDefinition(7, Recon, 2, "Lean Cruise",
-                "Burn 8% less fuel.", PerkEffect.FuelUse, 0.92f, "Gauge"),
-            new PerkDefinition(8, Recon, 3, "Spotter's Fee",
-                "Spotting enemy units pays 30% more.", PerkEffect.ReconReward, 1.30f, "Eye"),
-            new PerkDefinition(9, Recon, 4, "Extended Patrol",
-                "Burn a further 12% less fuel.", PerkEffect.FuelUse, 0.88f, "FlightPath"),
-            new PerkDefinition(10, Recon, 5, "Pathfinder",
-                "Captures and pilot rescues pay 20% more.", PerkEffect.ObjectiveReward, 1.20f, "MapPin"),
-            new PerkDefinition(11, Recon, 6, "Long Watch",
-                "Capstone: spotting pays a further 50% more.", PerkEffect.ReconReward, 1.50f, "Camera"),
+            new PerkDefinition(6, Cyber, 1, "ELINT SWEEP", "Reveal enemy radars in your truck's reach.", "RadarDish"),
+            new PerkDefinition(7, Cyber, 2, "DECOY BARRAGE", "Flares meet missiles fired at you.", "Formation"),
+            new PerkDefinition(8, Cyber, 3, "RADAR BLIND", "Jam one radar deep.", "EyeOff"),
+            new PerkDefinition(9, Cyber, 4, "SIPHON", "Steal enemy front funds.", "Coins"),
+            new PerkDefinition(10, Cyber, 5, "SAM NET DOWN", "A whole SAM net goes dark.", "WaveSine"),
+            new PerkDefinition(11, Cyber, 6, "EMP", "Capstone: a high-altitude burst blinds radars wide.", "Broadcast"),
 
-            new PerkDefinition(12, Signals, 1, "Signals Qualification",
-                "Authorises EMP and radar-disruption strikes from an EW satellite.",
-                SupportCapabilities.Emp, "Broadcast"),
-            new PerkDefinition(13, Signals, 2, "Jammer's Cut",
-                "Jamming enemy radar pays 30% more.", PerkEffect.JammingReward, 1.30f, "WaveSine"),
-            new PerkDefinition(14, Signals, 3, "Signal Discipline",
-                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Radio"),
-            new PerkDefinition(15, Signals, 4, "Escort Duty",
-                "Kills pay 15% more allocation.", PerkEffect.CombatReward, 1.15f, "Formation"),
-            new PerkDefinition(16, Signals, 5, "Blackout Tempo",
-                "Jamming pays a further 40% more.", PerkEffect.JammingReward, 1.40f, "EyeOff"),
-            new PerkDefinition(17, Signals, 6, "Full Spectrum",
-                "Capstone: support calls cost 30% less.", PerkEffect.SupportCost, 0.70f, "RadarDish"),
-
-            new PerkDefinition(18, Engineer, 1, "Engineer Qualification",
-                "Authorises controlled-zone fortification.",
-                SupportCapabilities.Fortify, "Shield"),
-            new PerkDefinition(19, Engineer, 2, "Ground Crew",
-                "Supply, refuel and repair runs pay 20% more.", PerkEffect.ServiceReward, 1.20f, "Truck"),
-            new PerkDefinition(20, Engineer, 3, "Zone Control",
-                "Captures and pilot rescues pay 20% more.", PerkEffect.ObjectiveReward, 1.20f, "Territory"),
-            new PerkDefinition(21, Engineer, 4, "Field Refit",
-                "Service runs pay a further 25% more.", PerkEffect.ServiceReward, 1.25f, "Settings"),
-            new PerkDefinition(22, Engineer, 5, "Bastion Doctrine",
-                "Support calls cost 15% less allocation.", PerkEffect.SupportCost, 0.85f, "Building"),
-            new PerkDefinition(23, Engineer, 6, "Depot Network",
-                "Capstone: service runs pay a further 50% more.", PerkEffect.ServiceReward, 1.50f, "BuildingFactory")
+            new PerkDefinition(12, Sof, 1, "JTAC LASE", "Your team lases targets for your bombs.", "Crosshair"),
+            new PerkDefinition(13, Sof, 2, "RECON TEAM", "Your team reveals what is around it.", "MapPin"),
+            new PerkDefinition(14, Sof, 3, "FORTIFY", "Dig in a held town.", "Shield"),
+            new PerkDefinition(15, Sof, 4, "SABOTAGE STRIKE", "Your team destroys a revealed site.", "Skull"),
+            new PerkDefinition(16, Sof, 5, "DIRECT ACTION", "Raid a site from where the team stands.", "Building"),
+            new PerkDefinition(17, Sof, 6, "TIER ONE", "Capstone: missions +20% odds, exposure rises at half rate.", "Territory")
         };
 
         /// <summary>
         /// The node a grade hangs off: the previous grade in the same lane, or
-        /// <see cref="PerkView.NoPrerequisite"/> for a lane's tool.
+        /// <see cref="PerkView.NoPrerequisite"/> for a lane's free grade 1.
         /// </summary>
         public static byte PrerequisiteOf(byte id) =>
             IsDefined(id) && All[id].Grade > 1 ? (byte)(id - 1) : PerkView.NoPrerequisite;
-
-        public static string CapabilityCode(string capability)
-        {
-            if (capability == SupportCapabilities.Recon) return "SAT";
-            if (capability == SupportCapabilities.Fortify) return "ENG";
-            if (capability == SupportCapabilities.Artillery) return "STK";
-            if (capability == SupportCapabilities.Emp) return "EW";
-            return "AUT";
-        }
-
-        /// <summary>
-        /// Short label for what a passive grade buys, sized for one board cell: "+15% KILLS",
-        /// "-10% COOLDOWN". A tool grants an authorisation instead of a multiplier, so it has no
-        /// label and the panel names the tool's state instead. Pure, so the board's copy is
-        /// testable without the game.
-        /// </summary>
-        public static string EffectLabel(byte id)
-        {
-            if (!IsDefined(id)) return string.Empty;
-            PerkDefinition definition = All[id];
-            if (definition.IsTool) return string.Empty;
-
-            int percent = (int)Math.Round(Math.Abs(definition.Multiplier - 1f) * 100f);
-            switch (definition.Effect)
-            {
-                case PerkEffect.CombatReward: return "+" + percent + "% KILLS";
-                case PerkEffect.ReconReward: return "+" + percent + "% SPOTTING";
-                case PerkEffect.JammingReward: return "+" + percent + "% JAMMING";
-                case PerkEffect.ServiceReward: return "+" + percent + "% SERVICE";
-                case PerkEffect.ObjectiveReward: return "+" + percent + "% CAPTURE";
-                case PerkEffect.FuelUse: return "-" + percent + "% FUEL";
-                case PerkEffect.SupportCost: return "-" + percent + "% PRICE";
-                case PerkEffect.SupportCooldown: return "-" + percent + "% COOLDOWN";
-                default: return string.Empty;
-            }
-        }
-
-        // Multiplier runs on every fuel draw; the passives per effect never change after startup.
-        private static readonly PerkDefinition[][] PassivesByEffect = BuildPassives();
-
-        private static PerkDefinition[][] BuildPassives()
-        {
-            var table = new PerkDefinition[Enum.GetValues(typeof(PerkEffect)).Length][];
-            for (int effect = 0; effect < table.Length; effect++)
-            {
-                var list = new System.Collections.Generic.List<PerkDefinition>();
-                for (int i = 0; i < All.Length; i++)
-                    if (All[i].Capability == null && (int)All[i].Effect == effect) list.Add(All[i]);
-                table[effect] = list.ToArray();
-            }
-            return table;
-        }
-
-        /// <summary>The capability-free perks that carry <paramref name="effect"/>, in catalogue order.</summary>
-        public static PerkDefinition[] Passives(PerkEffect effect) => PassivesByEffect[(int)effect];
 
         public static bool IsDefined(byte id) => id < All.Length;
 
@@ -229,9 +103,9 @@ namespace BoscaliSummer.Modules.Progression.Runtime
     internal static class PerkPoints
     {
         /// <summary>
-        /// One pick per qualification grade. Grade <c>n</c> costs <c>n × scorePerPoint</c>,
-        /// so grades get longer as they get better: grade 1 lands early, the grade-6
-        /// capstone needs the long sortie. Aces pay bonus picks on top of the ladder.
+        /// One pick per paid grade. The n-th pick costs <c>n × scorePerPoint</c>, so picks get
+        /// longer as they get better: the first lands early, the sixth needs the long sortie.
+        /// Aces pay bonus picks on top of the ladder.
         /// </summary>
         public static int Earned(int score, int scorePerPoint, int maximumPoints)
         {
@@ -259,7 +133,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         }
 
         /// <summary>
-        /// Score still missing for the next grade, or -1 once the ladder is exhausted (or
+        /// Score still missing for the next pick, or -1 once the ladder is exhausted (or
         /// the dial is invalid). Pure, so the SQD hint never invents a number.
         /// </summary>
         public static int RemainingToNext(int score, int scorePerPoint)
@@ -284,6 +158,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         public PerkState(uint mask = 0u) => Mask = mask;
 
+        /// <summary>Picks committed; free grades and undefined (stale) bits cost nothing.</summary>
         public int SpentPoints
         {
             get
@@ -295,23 +170,25 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             }
         }
 
-        /// <summary>Tools committed, whether or not they are still legal under today's cap.</summary>
-        public int Authorisations
-        {
-            get
-            {
-                int held = 0;
-                for (int i = 0; i < PerkCatalog.All.Length; i++)
-                    if (PerkCatalog.All[i].IsTool && Has(PerkCatalog.All[i].Id)) held++;
-                return held;
-            }
-        }
-
         public int AvailablePoints(int earnedPoints) => Math.Max(0, earnedPoints - SpentPoints);
 
-        public bool Has(byte id) => (Mask & (1u << id)) != 0u;
+        /// <summary>Grade 1 of every lane is always owned; other defined grades follow the mask.</summary>
+        public bool Has(byte id) =>
+            PerkCatalog.IsDefined(id) && (PerkCatalog.All[id].Grade == 1 || (Mask & (1u << id)) != 0u);
 
-        /// <summary>A lane's tool, or a grade whose predecessor is already committed.</summary>
+        /// <summary>The highest grade owned in <paramref name="lane"/>, or 0 for a lane the board does not have.</summary>
+        public int GradeOf(string lane)
+        {
+            int grade = 0;
+            for (int i = 0; i < PerkCatalog.All.Length; i++)
+            {
+                PerkDefinition definition = PerkCatalog.All[i];
+                if (definition.Lane == lane && definition.Grade > grade && Has(definition.Id)) grade = definition.Grade;
+            }
+            return grade;
+        }
+
+        /// <summary>A lane's grade 1, or a grade whose predecessor is already committed.</summary>
         public bool PrerequisiteMet(byte id) =>
             PerkCatalog.IsDefined(id) &&
             (PerkCatalog.PrerequisiteOf(id) == PerkView.NoPrerequisite ||
@@ -328,8 +205,6 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             if (!PerkCatalog.IsDefined(id) || Has(id)) return PerkView.BlockNone;
             PerkDefinition definition = PerkCatalog.Get(id);
             if (!PrerequisiteMet(id)) return PerkView.BlockGrade;
-            if (definition.IsTool && Authorisations >= PerkCatalog.AuthorisationLimit)
-                return PerkView.BlockCap;
             return AvailablePoints(earnedPoints) >= definition.Cost
                 ? PerkView.BlockNone
                 : PerkView.BlockPoints;
@@ -346,7 +221,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return true;
         }
 
-        /// <summary>Debug bypass: grants a grade without picks, order or the career cap.</summary>
+        /// <summary>Debug bypass: grants a grade without picks or order.</summary>
         public bool ForceUnlock(byte id)
         {
             if (!PerkCatalog.IsDefined(id) || Has(id)) return false;

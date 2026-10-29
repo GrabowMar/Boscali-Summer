@@ -176,7 +176,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     if (!TryFind(perks, definition.Id, out PerkView view)) continue;
                     int grade = definition.Grade - 1;
                     if (grade >= 0 && grade < committedHeld[l].Length) committedHeld[l][grade] = view.Unlocked;
-                    if (definition.IsTool && !view.Unlocked && view.Block == PerkView.BlockCap) closed = true;
                 }
                 committedLanes.SetLane(l, committedHeld[l], closed);
             }

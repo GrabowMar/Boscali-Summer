@@ -253,35 +253,12 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         public float Multiplier(ulong playerId, PerkEffect effect)
         {
-            RefreshGeneration(playerId);
-            if (!states.TryGetValue(playerId, out PerkState state)) return 1f;
-            // PerkStrength scales the distance each bonus travels from 1.0, so 0 makes passives
-            // cosmetic and 2.0 doubles them without editing the catalogue. Authorisation perks
-            // carry no multiplier and are unaffected.
-            float strength = settings.PerkStrength.Value;
-            float multiplier = 1f;
-            PerkDefinition[] passives = PerkCatalog.Passives(effect);
-            for (int i = 0; i < passives.Length; i++)
-            {
-                PerkDefinition definition = passives[i];
-                if (state.Has(definition.Id))
-                    multiplier *= 1f + (definition.Multiplier - 1f) * strength;
-            }
-            return multiplier;
+            // The OPS lanes carry no flying passives; the contract goes in M1 Task 2.
+            return 1f;
         }
 
-        public bool Grants(ulong playerId, string capability)
-        {
-            RefreshGeneration(playerId);
-            if (BypassRequirements) return true;
-            if (capability == null || !states.TryGetValue(playerId, out PerkState state)) return false;
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
-            {
-                PerkDefinition definition = PerkCatalog.All[i];
-                if (definition.Capability == capability) return state.Has(definition.Id);
-            }
-            return false;
-        }
+        // Every lane's grade 1 is free, so every old capability is held; grade gating lands in M1 Task 5.
+        public bool Grants(ulong playerId, string capability) => true;
 
         private PerkState GetOrCreate(ulong id)
         {
