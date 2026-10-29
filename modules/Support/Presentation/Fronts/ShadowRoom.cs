@@ -688,7 +688,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 bool teamUp = false;
                 for (int i = 0; i < s.Teams.Count; i++) teamUp |= s.Teams[i].Present;
                 string hint = s.Active ? (teamUp ? ReconHint : "TRAIN A TEAM, THEN RECON GROUND")
-                    : s.Meta == "NO CAMP STANDING" ? "NO CAMP YET · QUEUE A CAMP IN PROGRAMMES (RIGHT)" : "WAITING FOR THE HOST";
+                    : s.Meta == "NO CAMP STANDING" ? "NO CAMP YET · QUEUE A CAMP IN THE FRONT TAB'S PROGRAMMES" : "WAITING FOR THE HOST";
                 FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, targets.Width - 28f), s.Active || hint.StartsWith("NO CAMP", StringComparison.Ordinal) ? FrontKit.Tone(AvState.Info) : AvInk.Dim);
             }
 

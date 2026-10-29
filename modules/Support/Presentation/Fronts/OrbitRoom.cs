@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private const float TopH = 502f, Gap = 8f, ColumnW = 290f; // the console column keeps its width; the map takes the rest of the hero
         private float mapW = 880f, colPx = 886f;
         private const float BarH = 100f, DragSlop = 6f, LegendX = 14f;
-        private const float TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f;
+        private const float TrackW = 320f, PicX = 8f, PicY = 60f;
         // The console column (box pixels): MET plate, three poll rows, the hostile tally, the inspector, the uplink sites.
         private const float FdY = 28f, FdH = 40f, RowsY = 72f, RowH = 48f, RowStep = 50f, HostY = 226f, HostH = 30f, InspY = 262f, SiteHeadY = 366f, SiteY0 = 384f;
         private const float SiteH = 30f, ChipH = 20f;
@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly TrackRow[] rows = new TrackRow[TrackRows];
         private AvControl prev, next, mark, send;
         private TMP_Text briefA, briefB, trackEmpty;
+        private float chainY = 328f; // the SELECT > MARK > TRANSMIT chain; the buttons sit above it, the brief under it
         private readonly TMP_Text[] chainText = new TMP_Text[3];
         private FrontVector chain;
         private float chainInner;
@@ -461,10 +462,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 rows[i] = new TrackRow(b, skin, 8f, 28f + i * 39f, w - 16f, 37f, () => Do(() => Feed.SelectEntry(rowIds[slot])));
             }
             float bw = (w - 16f - 6f) / 2f;
-            prev = Tool(b, "PREV", 8f, 264f, bw, () => Do(() => Feed.PrevPage()), "Previous page of the track file.");
-            next = Tool(b, "NEXT", 14f + bw, 264f, bw, () => Do(() => Feed.NextPage()), "Next page of the track file.");
-            mark = Tool(b, "MARK", 8f, 294f, bw, () => Do(() => Feed.Confirm()), "Mark the selected track so it shows on every pilot's map.");
-            send = Tool(b, "TRANSMIT", 14f + bw, 294f, bw, () => Do(() => Feed.Send()), "Post the marked tracks as TASKED targets for any pilot.");
+            chainY = Mathf.Max(328f, h - 62f);
+            prev = Tool(b, "PREV", 8f, chainY - 64f, bw, () => Do(() => Feed.PrevPage()), "Previous page of the track file.");
+            next = Tool(b, "NEXT", 14f + bw, chainY - 64f, bw, () => Do(() => Feed.NextPage()), "Next page of the track file.");
+            mark = Tool(b, "MARK", 8f, chainY - 34f, bw, () => Do(() => Feed.Confirm()), "Mark the selected track so it shows on every pilot's map.");
+            send = Tool(b, "TRANSMIT", 14f + bw, chainY - 34f, bw, () => Do(() => Feed.Send()), "Post the marked tracks as TASKED targets for any pilot.");
             mark.SetStyle(AvButtonStyle.Primary);
             send.SetStyle(AvButtonStyle.Primary);
 
@@ -475,14 +477,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             float cx = 8f;
             for (int i = 0; i < chainText.Length; i++)
             {
-                chainText[i] = FrontKit.Mono(b, "Chain" + i, cx + 8f, ChainY, chainInner * ChainShare[i] - 10f, 18f, 10f, TextAlignmentOptions.MidlineLeft, true);
+                chainText[i] = FrontKit.Mono(b, "Chain" + i, cx + 8f, chainY, chainInner * ChainShare[i] - 10f, 18f, 10f, TextAlignmentOptions.MidlineLeft, true);
                 cx += chainInner * ChainShare[i] + 8f;
             }
             // An empty file says why in full under its one worded row (the slots below it are not drawn).
             trackEmpty = OpsParts.Wrapped(b, "TrackEmpty", 12f, 72f, w - 24f, 120f, 11f);
             trackEmpty.gameObject.SetActive(false);
-            briefA = FrontKit.Mono(b, "BriefA", 10f, ChainY + 22f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            briefB = FrontKit.Mono(b, "BriefB", 10f, ChainY + 38f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            briefA = FrontKit.Mono(b, "BriefA", 10f, chainY + 22f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            briefB = FrontKit.Mono(b, "BriefB", 10f, chainY + 38f, w - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             skin.Add(() => { briefA.color = RoomInk.Engrave; briefB.color = Mc.Steel; });
         }
 
@@ -1431,10 +1433,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int j = 0; j < i; j++) x += chainInner * ChainShare[j] + 8f;
             float cw = chainInner * ChainShare[i];
             Color ink = done ? OpsInk.Word(AvState.Ready) : live ? AvInk.Select : AvInk.Dim;
-            chain.Rect(x, ChainY, cw, 18f, ink.WithAlpha(live ? 0.22f : 0.10f));
-            chain.Frame(x, ChainY, cw, 18f, 1f, ink.WithAlpha(live || done ? 0.95f : 0.55f));
-            chain.Rect(x, ChainY, 3f, 18f, ink);
-            if (i < chainText.Length - 1) chain.Tri(new Vector2(x + cw + 1.5f, ChainY + 5f), new Vector2(x + cw + 6.5f, ChainY + 9f), new Vector2(x + cw + 1.5f, ChainY + 13f), AvInk.Dim);
+            chain.Rect(x, chainY, cw, 18f, ink.WithAlpha(live ? 0.22f : 0.10f));
+            chain.Frame(x, chainY, cw, 18f, 1f, ink.WithAlpha(live || done ? 0.95f : 0.55f));
+            chain.Rect(x, chainY, 3f, 18f, ink);
+            if (i < chainText.Length - 1) chain.Tri(new Vector2(x + cw + 1.5f, chainY + 5f), new Vector2(x + cw + 6.5f, chainY + 9f), new Vector2(x + cw + 1.5f, chainY + 13f), AvInk.Dim);
             FrontKit.Set(chainText[i], text, done || live ? AvInk.Ink : AvInk.Dim);
         }
 

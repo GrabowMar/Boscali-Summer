@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class NetworkRoom : IFrontRoom
     {
-        private const float PurgeW = 96f, TopH = 540f, Gap = 8f, ColW = 270f, LinkKm = 12f, InspW = 540f, RowH = 24f, ListY = 42f, StripH = 34f, Adv = 6.3f;
+        private const float PurgeW = 96f, TopH = 540f, Gap = 8f, LinkKm = 12f, InspW = 540f, RowH = 24f, ListY = 42f, StripH = 34f, Adv = 6.3f;
         private const int Cols = 12, Rows = 8, MaxNodes = 16, MaxAnchors = 4, MaxHops = 3, ListRows = 12, MaxChips = 8, DosRows = 6;
         private static readonly string[] KindName = { "RADAR", "SAM C2", "RELAY", "UPLINK", "DATA CENTER" };
 
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
-        private float heroW, colX;
+        private float heroW, colX, colW;
         private FrontMapPlate plate;
 
         private FrontBox graph, inspector, list;
@@ -101,7 +101,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
             heroW = w; mapH = h; sessW = cw; sessH = ch;
-            colX = 16f; // the session column's left edge inside its own tab
+            colX = 16f; colW = cw - 2f * colX; // the session block's left edge and width inside its own tab
             session = new FrontBox(column, skin, "Session", 0f, 0f, cw, ch, "SESSION · TRACE AND NETWORK", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty4");
             sessBody = session.Rect;
             BuildGraph(hero);
@@ -116,6 +116,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private FrontBox session;
         private RectTransform sessBody;
+        private float InfStep => (colW + 5f) / 5f; // five INFOCON blocks, 5 px apart, across the block
         private float sessW, sessH;
 
         // ---- Graph and session column ------------------------------------------------------------------------------------
@@ -193,46 +194,46 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // YOUR session.
             traceHead = Head(sessBody, "TraceHead", colX, 30f, 130f, "// YOUR TRACE");
-            opTag = FrontKit.Mono(sessBody, "OpTag", colX + 134f, 30f, ColW - 134f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true, 1f);
-            traceValue = FrontKit.Mono(sessBody, "TraceValue", colX + ColW * 0.5f - 65f, 84f, 130f, 34f, 26f, TextAlignmentOptions.Midline, true);
-            traceWord = FrontKit.Mono(sessBody, "TraceWord", colX, 126f, ColW, 24f, 16f, TextAlignmentOptions.Midline, true, 2f);
-            traceLo = FrontKit.Mono(sessBody, "TraceLo", colX + 6f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
-            traceHi = FrontKit.Mono(sessBody, "TraceHi", colX + ColW - 46f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineRight);
+            opTag = FrontKit.Mono(sessBody, "OpTag", colX + 134f, 30f, colW - 134f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true, 1f);
+            traceValue = FrontKit.Mono(sessBody, "TraceValue", colX + colW * 0.5f - 65f, 84f, 130f, 34f, 26f, TextAlignmentOptions.Midline, true);
+            traceWord = FrontKit.Mono(sessBody, "TraceWord", colX, 126f, colW, 24f, 16f, TextAlignmentOptions.Midline, true, 2f);
+            traceLo = FrontKit.Mono(sessBody, "TraceLo", colX + colW * 0.5f - 129f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineLeft); // the dial's ends, not the block's
+            traceHi = FrontKit.Mono(sessBody, "TraceHi", colX + colW * 0.5f + 89f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineRight);
             traceLo.text = "0"; traceHi.text = "100";
-            hopLine = FrontKit.Mono(sessBody, "HopLine", colX, 154f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            hopBar = new FrontBar(sessBody, skin, colX, 173f, ColW, 8f);
-            estLine = FrontKit.Mono(sessBody, "EstLine", colX, 184f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            nextLine = Wrapped(sessBody, "NextLine", colX + 9f, 205f, ColW - 9f, 42f, 10.5f, true);
+            hopLine = FrontKit.Mono(sessBody, "HopLine", colX, 154f, colW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            hopBar = new FrontBar(sessBody, skin, colX, 173f, colW, 8f);
+            estLine = FrontKit.Mono(sessBody, "EstLine", colX, 184f, colW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            nextLine = Wrapped(sessBody, "NextLine", colX + 9f, 205f, colW - 9f, 42f, 10.5f, true);
             heldHead = FrontKit.Mono(sessBody, "HeldHead", colX, 258f, 96f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             heldHead.text = "// HELD";
-            heldVal = FrontKit.Mono(sessBody, "HeldVal", colX + ColW - 60f, 258f, 60f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
+            heldVal = FrontKit.Mono(sessBody, "HeldVal", colX + colW - 60f, 258f, 60f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
 
             // The FACTION's network (a separate line: its total is never divided by your cap).
-            facHead = Head(sessBody, "FacHead", colX, 284f, ColW, "// FACTION NETWORK");
+            facHead = Head(sessBody, "FacHead", colX, 284f, colW, "// FACTION NETWORK");
             string[] fk = { "NODES HELD", "SESSIONS", "EW TRUCKS", "DATA CENTER" };
             for (int i = 0; i < 4; i++)
             {
                 facKey[i] = FrontKit.Mono(sessBody, "FacKey" + i, colX, 302f + i * 18f, 110f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
                 facKey[i].text = fk[i];
-                facVal[i] = FrontKit.Mono(sessBody, "FacVal" + i, colX + 110f, 302f + i * 18f, ColW - 110f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+                facVal[i] = FrontKit.Mono(sessBody, "FacVal" + i, colX + 110f, 302f + i * 18f, colW - 110f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
             }
-            threatHead = Head(sessBody, "ThreatHead", colX, 380f, ColW, "// NETWORK THREAT · INFOCON");
+            threatHead = Head(sessBody, "ThreatHead", colX, 380f, colW, "// NETWORK THREAT · INFOCON");
             for (int i = 0; i < 5; i++)
             {
-                infocon[i] = FrontKit.Mono(sessBody, "Infocon" + i, colX + i * 55f, 398f, 50f, 22f, 14f, TextAlignmentOptions.Midline, true);
+                infocon[i] = FrontKit.Mono(sessBody, "Infocon" + i, colX + i * InfStep, 398f, InfStep - 5f, 22f, 14f, TextAlignmentOptions.Midline, true);
                 infocon[i].text = (5 - i).ToString();
             }
-            threatWord = FrontKit.Mono(sessBody, "ThreatWord", colX, 422f, ColW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            threatNote = FrontKit.Mono(sessBody, "ThreatNote", colX, 440f, ColW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            purge = Button(sessBody, "PURGE", colX + ColW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
+            threatWord = FrontKit.Mono(sessBody, "ThreatWord", colX, 422f, colW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
+            threatNote = FrontKit.Mono(sessBody, "ThreatNote", colX, 440f, colW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            purge = Button(sessBody, "PURGE", colX + colW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
                 "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
                 (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.");
             purge.Interactable = false;
-            keyHead = Head(sessBody, "KeyHead", colX, 464f, ColW, "// KEY");
+            keyHead = Head(sessBody, "KeyHead", colX, 464f, colW, "// KEY");
             string[] words = { "HELD", "HOPPING", "IN REACH", "OUT OF REACH", "TRACED", "OWN ANCHOR" };
             for (int i = 0; i < 6; i++)
             {
-                keyText[i] = FrontKit.Mono(sessBody, "Key" + i, colX + 26f + (i / 3) * 130f, 482f + (i % 3) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
+                keyText[i] = FrontKit.Mono(sessBody, "Key" + i, colX + 26f + (i / 3) * colW * 0.5f, 482f + (i % 3) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
                 keyText[i].text = words[i];
             }
             skin.Add(() =>
@@ -832,7 +833,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void PaintSession(FrontVector g, NetworkRoomView n)
         {
-            float w = ColW;
+            float w = colW;
             // The column is its own pane of glass beside the map: a faint wash and a phosphor edge.
             g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, sessH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
             g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, sessH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
@@ -934,9 +935,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 int lv = 5 - i;
                 bool lit = lv >= level;
-                float bx = colX + i * 55f;
-                g.Rect(bx, 398f, 50f, 22f, lit ? tone.WithAlpha(0.28f) : Glass);
-                g.Frame(bx, 398f, 50f, 22f, 1.2f, lit ? tone : Faint);
+                float bx = colX + i * InfStep;
+                g.Rect(bx, 398f, InfStep - 5f, 22f, lit ? tone.WithAlpha(0.28f) : Glass);
+                g.Frame(bx, 398f, InfStep - 5f, 22f, 1.2f, lit ? tone : Faint);
                 FrontKit.Set(infocon[i], lv.ToString(), lit ? Bright : OutInk);
             }
             FrontKit.Set(threatWord, "INFOCON " + level + " · " + n.ThreatWord, tone);
@@ -949,7 +950,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Color[] ink = { Own, HopInk, Amber, OutInk, TraceRed, Own };
             for (int i = 0; i < 6; i++)
             {
-                Vector2 p = new Vector2(colX + 12f + (i / 3) * 130f, 490f + (i % 3) * 16f);
+                Vector2 p = new Vector2(colX + 12f + (i / 3) * colW * 0.5f, 490f + (i % 3) * 16f);
                 if (i == 0) { g.Line(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 2.2f, ink[i]); g.Disc(p, 3.5f, ink[i], 10); }
                 else if (i == 1) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 2f, ink[i], 4f, 3f);
                 else if (i == 2) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 1.2f, ink[i], 3f, 3f);
@@ -1169,12 +1170,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Glyph(g, nd.Kind, new Vector2(26f, mid), 5.5f, k, 1.4f);
                 if (AllyHeld(nd)) g.Ring(new Vector2(26f, mid), 8.5f, 1f, k, 20, 1f, 1f);
                 FrontKit.Set(rowMode[r], PermRich(Perms(nd)), Phos);
-                FrontKit.Set(rowHandle[r], Fit(rowHandle[r], nd.Handle, 90f), out_ ? OutInk : Bright);
+                FrontKit.Set(rowHandle[r], Fit(rowHandle[r], nd.Handle, 90f), out_ && !pick ? OutInk : Bright);
                 FrontKit.Set(rowOwner[r], nd.Owner.Length == 0 ? "—" : Fit(rowOwner[r], nd.Owner, 52f), nd.Owner.Length == 0 ? PhosDim : nd.Owner == "YOU" ? Phos : Ally);
                 string state = nd.State == NetNodeState.Held ? "HELD" + (AllyHeld(nd) ? " · ALLY" : "")
                     : nd.State == NetNodeState.Hopping ? "HOPPING " + nd.HopPct + " %" + (nd.Owner == "YOU" ? "" : " · ALLY")
                     : (nd.State == NetNodeState.InReach ? "IN REACH" : "OUT OF REACH") + (nd.Reach.Length > 0 ? " · " + nd.Reach.Replace(" · ", " ") : "");
-                FrontKit.Set(rowState[r], Fit(rowState[r], state, listW - 222f - 4f), nd.State == NetNodeState.InReach ? Amber : out_ ? OutInk : k);
+                FrontKit.Set(rowState[r], Fit(rowState[r], state, listW - 222f - 4f), nd.State == NetNodeState.InReach ? Amber : out_ ? (pick ? Bright : OutInk) : k);
             }
             g.Flush();
         }
