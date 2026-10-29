@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "The share of each faction's funds that flows into its three fronts every minute. 0 % leaves fronts to donations only.",
                     0.005f, v => AvNum.Percent(v, 1))
                 .Number(24, settings.FrontShareCap, "FRONT SHARE CAP",
-                    "The most funds per minute a faction's fronts take, however large its treasury. 250 raises a front from READINESS 1 to 5 in about 40 minutes.",
+                    "The most funds per minute a faction's fronts take, however large its treasury. 250 funds a satellite relaunch in about 8 minutes.",
                     25f, v => v.ToString("0") + " / MIN")
                 .Number(23, settings.ProgrammeCostScale, "PROGRAMME COSTS",
                     "Scales every front programme's cost. 1.0 charges the table (LAUNCH SATELLITE 300, ASAT 900 ...).",

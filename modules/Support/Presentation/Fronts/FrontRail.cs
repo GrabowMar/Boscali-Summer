@@ -599,7 +599,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontPerkView v = pv.Value;
                 if (unlocked != v.Unlocked) { unlocked = v.Unlocked; Restyle(); }
                 bool blocked = !string.IsNullOrEmpty(v.Reason), gated = !blocked && v.Unlocked && !string.IsNullOrEmpty(v.Gate);
-                FrontKit.Set(rung, "R" + v.Rung, v.Unlocked ? FrontKit.Tone(AvState.Ready) : AvInk.Dim);
+                FrontKit.Set(rung, v.Rung > 0 ? "G" + v.Rung : "—", v.Unlocked ? FrontKit.Tone(AvState.Ready) : AvInk.Dim);
                 FrontKit.Set(name, v.Name, v.Unlocked && !blocked ? AvInk.Ink : AvInk.Dim);
                 FrontKit.Set(effect, C2Kit.FitTo(effect, blocked ? v.Reason : gated ? v.Gate : v.Effect, effect.rectTransform.rect.width), blocked || gated ? FrontKit.Tone(AvState.Caution) : AvInk.Dim);
                 if (wait) FrontKit.Set(state, "—", AvInk.Dim);

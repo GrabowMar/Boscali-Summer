@@ -261,7 +261,9 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             return (states.TryGetValue(playerId, out PerkState state) ? state : NoPicks).GradeOf(lane);
         }
 
-        int IProgressionView.Grade(string lane) => localState.GradeOf(lane);
+        // Through the host's generation-checked path: a one-life pilot's new generation drops the grades here too, without waiting for the SQD poll.
+        int IProgressionView.Grade(string lane) =>
+            GameManager.GetLocalPlayer<Player>(out Player player) && player != null ? Grade(PlayerIdentity.Of(player), lane) : localState.GradeOf(lane);
 
         private PerkState GetOrCreate(ulong id)
         {

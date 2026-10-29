@@ -151,7 +151,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             blocker = FrontKit.Mono(Rect, "Blocker", PadX, 33f, 434f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
 
             // The pilot's skill grade pips with the grade, then the superiority bar with its word and value.
-            pips = OpsParts.Pips(Rect, "Pip", CallSheet.MaxGrade);
+            pips = OpsParts.Pips(Rect, "Pip", CallSheet.MaxGrade - 1); // the paid grades 2..6; grade 1 is free
             readiness = FrontKit.Mono(Rect, "Readiness", 86f, 51f, 26f, 18f, 12f, TextAlignmentOptions.MidlineLeft, true);
             supLabel = FrontKit.Mono(Rect, "SupLabel", 114f, 51f, 70f, 18f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
             supLabel.text = "SUPERIORITY";
@@ -266,7 +266,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FrontKit.Set(blocker, c.Alert ?? "", c.AlertTone == AvState.Inert ? AvInk.Dim : FrontKit.Tone(c.AlertTone));
 
             FrontKit.Set(readiness, GradeWords[Mathf.Clamp(c.Grade, 0, CallSheet.MaxGrade)], AvInk.Ink);
-            OpsParts.Fill(pips, c.Grade, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
+            OpsParts.Fill(pips, c.Grade - 1, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
             Color tone = FrontKit.Tone(c.Tone);
             float half = barW * 0.5f, len = Mathf.Abs(c.Superiority) / 100f * half;
             supFill.color = AvInk.State(c.Tone).WithAlpha(c.Known ? 0.85f : 0f);
@@ -329,7 +329,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             badge = new OpsTag(Rect, "Code", 10f);
             badge.Place(10f, 1.5f, 36f, 18f);
             name = FrontKit.Mono(Rect, "Name", 52f, 0f, 134f, Height, 12f, TextAlignmentOptions.MidlineLeft, true);
-            pips = OpsParts.Pips(Rect, "RungPip", CallSheet.MaxGrade);
+            pips = OpsParts.Pips(Rect, "RungPip", CallSheet.MaxGrade - 1); // the paid grades 2..6 the perk needs
             OpsParts.PlacePips(pips, 190f, 5.5f, 7f, 10f, 9f);
             rung = FrontKit.Mono(Rect, "Rung", 238f, 0f, 22f, Height, 10f, TextAlignmentOptions.MidlineLeft);
             price = FrontKit.Mono(Rect, "Price", 262f, 0f, 48f, Height, 11f, TextAlignmentOptions.MidlineLeft, true);
@@ -382,7 +382,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FrontKit.Set(price, r.Price, live ? AvInk.Ink : AvInk.Dim);
             FrontKit.Set(state, r.State, FrontKit.Tone(r.Tone));
             rail.color = AvInk.State(r.Tone == AvState.Inert ? AvState.Info : r.Tone).WithAlpha(r.Tone == AvState.Inert ? 0.5f : 1f);
-            OpsParts.Fill(pips, r.Rung, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
+            OpsParts.Fill(pips, Mathf.Max(0, r.Rung - 1), AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
             Look();
         }
     }
