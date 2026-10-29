@@ -100,13 +100,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            heroW = w; mapH = h;
-            colX = w - 12f - ColW;
+            heroW = w; mapH = h; sessW = cw; sessH = ch;
+            colX = 16f; // the session column's left edge inside its own tab
+            session = new FrontBox(column, skin, "Session", 0f, 0f, cw, ch, "SESSION · TRACE AND NETWORK", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty4");
+            sessBody = session.Rect;
             BuildGraph(hero);
             BuildInspector(column, 0f, 0f, cw, ch);
             BuildList(column, 0f, 0f, cw, ch);
-            columnTabs = new[] { new ColumnTab("NODE", AvIcon.ListDetails, inspector.Rect), new ColumnTab("NODES", AvIcon.Link, list.Rect) };
+            columnTabs = new[]
+            {
+                new ColumnTab("NODE", AvIcon.ListDetails, inspector.Rect), new ColumnTab("NODES", AvIcon.Link, list.Rect),
+                new ColumnTab("SESSION", AvIcon.ShieldLock, session.Rect)
+            };
         }
+
+        private FrontBox session;
+        private RectTransform sessBody;
+        private float sessW, sessH;
 
         // ---- Graph and session column ------------------------------------------------------------------------------------
 
@@ -134,11 +144,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             graph = new FrontBox(hero, skin, "Network", 0f, 0f, heroW, mapH, "CYBER SITUATION · THEATRE NODE GRAPH", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty1");
             RectTransform b = graph.Rect;
             // The plate fills the box body left of the session column (which therefore never covers a node) and clips its own vector layer.
-            plate = new FrontMapPlate(b, skin, colX - 4f, mapH, Cols, Rows);
+            plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows); // the whole room is map: the session lives in its column tab
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
             plate.TopInset = StripH;                                           // and the grid names and ruler start under it
-            side = FrontVector.Add(b, "Side"); // the session column's dial, pips, blocks and key swatches
-            AvLay.Place(side.rectTransform, 0f, 0f, heroW, mapH);
+            side = FrontVector.Add(sessBody, "Side"); // the session tab's dial, pips, blocks and key swatches
+            AvLay.Place(side.rectTransform, 0f, 0f, sessW, sessH);
             airbases = new FrontMap.AirbaseLayer(b);
             for (int i = 0; i < MaxNodes; i++)
             {
@@ -181,47 +191,47 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             routeSub = FrontKit.Mono(b, "RouteSub", plate.X + plate.W - 226f, plate.Y + 17f, 216f, 15f, 10.5f, TextAlignmentOptions.MidlineRight);
 
             // YOUR session.
-            traceHead = Head(b, "TraceHead", colX, 30f, 130f, "// YOUR TRACE");
-            opTag = FrontKit.Mono(b, "OpTag", colX + 134f, 30f, ColW - 134f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true, 1f);
-            traceValue = FrontKit.Mono(b, "TraceValue", colX + ColW * 0.5f - 65f, 84f, 130f, 34f, 26f, TextAlignmentOptions.Midline, true);
-            traceWord = FrontKit.Mono(b, "TraceWord", colX, 126f, ColW, 24f, 16f, TextAlignmentOptions.Midline, true, 2f);
-            traceLo = FrontKit.Mono(b, "TraceLo", colX + 6f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
-            traceHi = FrontKit.Mono(b, "TraceHi", colX + ColW - 46f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineRight);
+            traceHead = Head(sessBody, "TraceHead", colX, 30f, 130f, "// YOUR TRACE");
+            opTag = FrontKit.Mono(sessBody, "OpTag", colX + 134f, 30f, ColW - 134f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true, 1f);
+            traceValue = FrontKit.Mono(sessBody, "TraceValue", colX + ColW * 0.5f - 65f, 84f, 130f, 34f, 26f, TextAlignmentOptions.Midline, true);
+            traceWord = FrontKit.Mono(sessBody, "TraceWord", colX, 126f, ColW, 24f, 16f, TextAlignmentOptions.Midline, true, 2f);
+            traceLo = FrontKit.Mono(sessBody, "TraceLo", colX + 6f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
+            traceHi = FrontKit.Mono(sessBody, "TraceHi", colX + ColW - 46f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineRight);
             traceLo.text = "0"; traceHi.text = "100";
-            hopLine = FrontKit.Mono(b, "HopLine", colX, 154f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            hopBar = new FrontBar(b, skin, colX, 173f, ColW, 8f);
-            estLine = FrontKit.Mono(b, "EstLine", colX, 184f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            nextLine = Wrapped(b, "NextLine", colX + 9f, 205f, ColW - 9f, 42f, 10.5f, true);
-            heldHead = FrontKit.Mono(b, "HeldHead", colX, 258f, 96f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
+            hopLine = FrontKit.Mono(sessBody, "HopLine", colX, 154f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            hopBar = new FrontBar(sessBody, skin, colX, 173f, ColW, 8f);
+            estLine = FrontKit.Mono(sessBody, "EstLine", colX, 184f, ColW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            nextLine = Wrapped(sessBody, "NextLine", colX + 9f, 205f, ColW - 9f, 42f, 10.5f, true);
+            heldHead = FrontKit.Mono(sessBody, "HeldHead", colX, 258f, 96f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             heldHead.text = "// HELD";
-            heldVal = FrontKit.Mono(b, "HeldVal", colX + ColW - 60f, 258f, 60f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
+            heldVal = FrontKit.Mono(sessBody, "HeldVal", colX + ColW - 60f, 258f, 60f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
 
             // The FACTION's network (a separate line: its total is never divided by your cap).
-            facHead = Head(b, "FacHead", colX, 284f, ColW, "// FACTION NETWORK");
+            facHead = Head(sessBody, "FacHead", colX, 284f, ColW, "// FACTION NETWORK");
             string[] fk = { "NODES HELD", "SESSIONS", "EW TRUCKS", "DATA CENTER" };
             for (int i = 0; i < 4; i++)
             {
-                facKey[i] = FrontKit.Mono(b, "FacKey" + i, colX, 302f + i * 18f, 110f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+                facKey[i] = FrontKit.Mono(sessBody, "FacKey" + i, colX, 302f + i * 18f, 110f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
                 facKey[i].text = fk[i];
-                facVal[i] = FrontKit.Mono(b, "FacVal" + i, colX + 110f, 302f + i * 18f, ColW - 110f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+                facVal[i] = FrontKit.Mono(sessBody, "FacVal" + i, colX + 110f, 302f + i * 18f, ColW - 110f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
             }
-            threatHead = Head(b, "ThreatHead", colX, 380f, ColW, "// NETWORK THREAT · INFOCON");
+            threatHead = Head(sessBody, "ThreatHead", colX, 380f, ColW, "// NETWORK THREAT · INFOCON");
             for (int i = 0; i < 5; i++)
             {
-                infocon[i] = FrontKit.Mono(b, "Infocon" + i, colX + i * 55f, 398f, 50f, 22f, 14f, TextAlignmentOptions.Midline, true);
+                infocon[i] = FrontKit.Mono(sessBody, "Infocon" + i, colX + i * 55f, 398f, 50f, 22f, 14f, TextAlignmentOptions.Midline, true);
                 infocon[i].text = (5 - i).ToString();
             }
-            threatWord = FrontKit.Mono(b, "ThreatWord", colX, 422f, ColW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            threatNote = FrontKit.Mono(b, "ThreatNote", colX, 440f, ColW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            purge = Button(b, "PURGE", colX + ColW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
+            threatWord = FrontKit.Mono(sessBody, "ThreatWord", colX, 422f, ColW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
+            threatNote = FrontKit.Mono(sessBody, "ThreatNote", colX, 440f, ColW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            purge = Button(sessBody, "PURGE", colX + ColW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
                 "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
                 (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.");
             purge.Interactable = false;
-            keyHead = Head(b, "KeyHead", colX, 464f, ColW, "// KEY");
+            keyHead = Head(sessBody, "KeyHead", colX, 464f, ColW, "// KEY");
             string[] words = { "HELD", "HOPPING", "IN REACH", "OUT OF REACH", "TRACED", "OWN ANCHOR" };
             for (int i = 0; i < 6; i++)
             {
-                keyText[i] = FrontKit.Mono(b, "Key" + i, colX + 26f + (i / 3) * 130f, 482f + (i % 3) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
+                keyText[i] = FrontKit.Mono(sessBody, "Key" + i, colX + 26f + (i / 3) * 130f, 482f + (i % 3) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
                 keyText[i].text = words[i];
             }
             skin.Add(() =>
@@ -822,8 +832,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             float w = ColW;
             // The column is its own pane of glass beside the map: a faint wash and a phosphor edge.
-            g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, mapH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
-            g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, mapH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
+            g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, sessH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
+            g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, sessH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
             // Trace gauge: a half dial of ticks, lit up to the trace, coloured by zone.
             Vector2 c = new Vector2(colX + w * 0.5f, 118f);
             const float r = 70f;

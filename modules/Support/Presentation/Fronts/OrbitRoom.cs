@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class OrbitRoom : IFrontRoom
     {
-        private const float TopH = 502f, Gap = 8f, PW = 278f, ColumnW = PW + 12f; // the console column keeps its width; the map takes the rest of the hero
+        private const float TopH = 502f, Gap = 8f, ColumnW = 290f; // the console column keeps its width; the map takes the rest of the hero
         private float mapW = 880f, colPx = 886f;
         private const float BarH = 100f, DragSlop = 6f, LegendX = 14f;
         private const float TrackW = 320f, ChainY = 328f, PicX = 8f, PicY = 60f;
@@ -152,7 +152,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            mapW = w; mapH = h; colPx = 12f; colW = cw; colH = ch;
+            mapW = w; mapH = h; colPx = 12f; colW = cw; colH = ch; PW = cw - 24f; // the console panels span the column
             sats = new FrontBox(column, skin, "Satellites", 0f, 0f, cw, ch, "SATELLITES · STATION KEEPING", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
             colBody = sats.Rect;
             BuildSituation(hero, w);
@@ -168,6 +168,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         private FrontBox sats;
+        private float PW = 278f;
         private RectTransform colBody;
         private float colW, colH;
 
