@@ -25,9 +25,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // The terminal's own fixed inks (a different console in a different room: they sit on top of the pilot's scheme). Keep text on them at 4.5:1 over the glass.
         private static readonly Color Phos = RoomInk.Phosphor, PhosDim = RoomInk.PhosphorDim, TraceRed = RoomInk.Trace,
-            Faint = RoomInk.Rgb(0x2F8F55), OutInk = RoomInk.Rgb(0x5C8F70), Bright = RoomInk.Rgb(0xC9FFD8), Ally = RoomInk.Rgb(0x62D6F2),
-            HopInk = RoomInk.Rgb(0xE9FFD2), Amber = RoomInk.Rgb(0xFFB547), WarnRed = RoomInk.Rgb(0xD9605A), Glass = RoomInk.Rgb(0x020A06, 0.95f),
-            Black = RoomInk.Rgba(0f, 0f, 0f, 1f);
+            Faint = RoomInk.Rgb(0x1E6E85), OutInk = RoomInk.Rgb(0x5E8795), Bright = RoomInk.PhosphorInk, Ally = RoomInk.Rgb(0x8FA8FF),
+            HopInk = RoomInk.Hop, Amber = RoomInk.Rgb(0xFFB020), WarnRed = RoomInk.Rgb(0xD9605A), Glass = RoomInk.Rgb(0x02090F, 0.95f);
+        private static readonly Vector2[] hexPts = new Vector2[6];
 
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
@@ -146,6 +146,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             RectTransform b = graph.Rect;
             // The plate fills the box body left of the session column (which therefore never covers a node) and clips its own vector layer.
             plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows); // the whole room is map: the session lives in its column tab
+            plate.Tint = RoomInk.Rgba(0.6f, 0.88f, 1f, 1f);
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
             plate.TopInset = StripH;                                           // and the grid names and ruler start under it
             side = FrontVector.Add(sessBody, "Side"); // the session tab's dial, pips, blocks and key swatches
@@ -278,6 +279,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private AvControl Button(RectTransform p, string label, float x, float y, float w, AvButtonStyle style, Action click, string help)
         {
             AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, style));
+            c.Accent = Phos;
             AvLay.Place(c.Rect, x, y, w, 34f);
             c.SingleLine();
             c.Help = help;
@@ -439,11 +441,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             int count = Math.Min(n.Nodes.Count, MaxNodes);
             Spread(n, count);
 
-            // The glass: a green-black tint over the satellite picture, scanlines and a CRT vignette. Every layer is under 0.2 alpha, so it reads as a tint.
+            // The glass: a teal-black tint over the satellite picture and a vignette. Every layer is under 0.2 alpha, so it reads as a tint.
             float px = mv.X, py = mv.Y, pw = mv.W, ph = mv.H;
-            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x04180E, 0.19f));
-            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x0B4A25, 0.11f));
-            for (float sy = py + 1f; sy < py + ph; sy += 3f) g.Rect(px, sy, pw, 1f, Black.WithAlpha(0.13f));
+            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x02101A, 0.19f));
+            g.Rect(px, py, pw, ph, RoomInk.Rgb(0x0B3A4A, 0.11f));
             Color v0 = RoomInk.Crt.WithAlpha(0.19f), v1 = RoomInk.Crt.WithAlpha(0f);
             const float e = 110f;
             g.Grad(px, py, e, ph, v0, v1, v1, v0);
@@ -528,7 +529,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Color k = a.Health == AnchorHealth.Live ? own : a.Health == AnchorHealth.Damaged ? amber : danger;
                 if (a.Kind == AnchorKind.EwTruck && a.Reach > 0f)
                 {
-                    g.Disc(p, a.Reach * mv.Scale, k.WithAlpha(a.Health == AnchorHealth.Down ? 0.02f : 0.05f), 64);
+                    g.Disc(p, a.Reach * mv.Scale, k.WithAlpha(a.Health == AnchorHealth.Down ? 0.015f : 0.03f), 64);
                     g.Ring(p, a.Reach * mv.Scale, 1.2f, k.WithAlpha(a.Health == AnchorHealth.Down ? 0.2f : 0.6f), 72, 1f, 1f);
                 }
                 g.Disc(p, 13f, AvInk.Ground.WithAlpha(0.9f), 20);
@@ -550,7 +551,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Color k = NodeInk(nd);
                 if ((p - nodeTrue[i]).sqrMagnitude > 4f) { g.Line(nodeTrue[i], p, 1f, k.WithAlpha(0.5f)); g.Disc(nodeTrue[i], 2f, k.WithAlpha(0.8f), 8); } // fanned out of a shared spot: a tick to where it really stands
                 if (nd.State == NetNodeState.Held) { g.Disc(p, 19f, k.WithAlpha(0.07f), 24); g.Disc(p, 15f, k.WithAlpha(0.18f), 24); }
-                g.Disc(p, 12f, AvInk.Ground.WithAlpha(0.88f), 20);
+                g.Disc(p, 13f, Glass, 6); // every node sits on a hex plate (the ICE look)
+                Hex(g, p, 13f, k.WithAlpha(0.45f), 1f);
                 Glyph(g, nd.Kind, p, 9f, k, nd.State == NetNodeState.Held ? 2f : 1.5f);
                 if (AllyHeld(nd)) g.Ring(p, 17f, 1.2f, k.WithAlpha(0.9f), 28, 1f, 1f);
                 if (nd.State == NetNodeState.Traced)
@@ -966,6 +968,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The trace gauge's zones: phosphor while clean, amber while warm, trace red once it is hot.</summary>
         private static Color Zone(float pct) => pct < 25f ? Phos : pct < 60f ? Amber : TraceRed;
 
+        private static void Hex(FrontVector g, Vector2 p, float r, Color k, float w)
+        {
+            for (int i = 0; i < 6; i++) { float a = Mathf.PI / 3f * i; hexPts[i] = p + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r; }
+            g.Polyline(hexPts, w, k, true);
+        }
+
         private static void Truck(FrontVector g, Vector2 p, Color k)
         {
             g.Frame(p.x - 9f, p.y - 2f, 18f, 8f, 1.4f, k);
@@ -991,9 +999,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     g.Line(p + new Vector2(0f, -r * 0.2f), p + new Vector2(0f, r * 0.45f), w, k);
                     break;
                 case NodeKind.Relay:
-                    var hex = new Vector2[6];
-                    for (int i = 0; i < 6; i++) { float a = Mathf.PI / 3f * i; hex[i] = p + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r; }
-                    g.Polyline(hex, w, k, true);
+                    Hex(g, p, r, k, w);
                     g.Disc(p, 2.4f, k, 8);
                     break;
                 case NodeKind.Uplink:

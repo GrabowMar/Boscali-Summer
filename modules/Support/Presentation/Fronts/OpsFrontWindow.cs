@@ -130,14 +130,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(columnRoots[i], cx, ty, cw, ch);
                 rooms[i].Build(roomRoots[i], HeroW, mh, columnRoots[i], cw, ch);
                 IReadOnlyList<ColumnTab> panels = rooms[i].Column;
-                // ORBIT and NETWORK panels sit on painted glass, the console's engraved grid and the terminal's phosphor (SHADOW is paper already).
-                string ground = i == (int)Front.Space ? "ops_bg_orbit" : i == (int)Front.Cyber ? "ops_bg_network" : null;
-                for (int k = 0; ground != null && k < panels.Count; k++) FrontArt.Ground(panels[k].Panel, ground, GroundTint);
+                // Every panel sits on its room's painted ground: ORBIT's orbit-chart glass, NETWORK's glass over circuit, SHADOW's olive map-table canvas.
+                string ground = i == (int)Front.Space ? "ops_bg_orbit" : i == (int)Front.Cyber ? "ops_bg_network" : "ops_bg_shadow";
+                for (int k = 0; k < panels.Count; k++) FrontArt.Ground(panels[k].Panel, ground, GroundTint);
                 var items = new (AvIcon, string)[panels.Count + 1];
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
                 int room = i;
                 bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); });
+                bars[i].SetAccent(i == (int)Front.Space ? RoomInk.Ice : i == (int)Front.Cyber ? RoomInk.Phosphor : RoomInk.Gold);
                 bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
                 skin.Add(bars[i].Restyle);
             }

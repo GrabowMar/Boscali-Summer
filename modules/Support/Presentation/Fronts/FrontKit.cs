@@ -122,7 +122,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal sealed class FrontBox
     {
         private const float TagH = 14f;
-        private static Texture2D scan;
 
         private readonly AvFrame frame;
         private readonly Image band, rule, rail, tagPlate;
@@ -144,8 +143,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Rect = AvLay.Child(parent, "Box " + name);
             AvLay.Place(Rect, x, y, w, h);
             bool paper = look == FrontLook.Folder;
-            frame = FrontKit.Panel(Rect, "Frame", 0f, 0f, w, h, paper ? 0f : 6f, paper ? 0f : 7f);
-            if (look == FrontLook.Terminal) Scanlines(Rect, w, h);
+            frame = FrontKit.Panel(Rect, "Frame", 0f, 0f, w, h, 6f, 7f);
             if (look != FrontLook.Plain)
             {
                 dress = FrontVector.Add(Rect, "Dress");
@@ -223,7 +221,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             AvLay.Place(band.rectTransform, 1f, 1f, tabEnd - 1f, FrontKit.HeaderH - 1f);
             dress.Clear();
-            dress.Tri(new Vector2(tabEnd, 1f), new Vector2(tabEnd + 12f, FrontKit.HeaderH), new Vector2(tabEnd, FrontKit.HeaderH), RoomInk.Manila);
+            dress.Tri(new Vector2(tabEnd, 1f), new Vector2(tabEnd + 12f, FrontKit.HeaderH), new Vector2(tabEnd, FrontKit.HeaderH), RoomInk.OliveGlass);
             dress.Flush();
         }
 
@@ -234,7 +232,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 case FrontLook.Console:
                     frame.Paint(RoomInk.ConsoleBody, RoomInk.Bezel.WithAlpha(0.9f));
-                    frame.BracketColor = RoomInk.Bezel;
+                    frame.BracketColor = RoomInk.Ice;
                     band.color = RoomInk.Plate;
                     rail.color = RoomInk.Telemetry;
                     rule.color = RoomInk.Bezel.WithAlpha(0.8f);
@@ -245,24 +243,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     Bezel();
                     break;
                 case FrontLook.Terminal:
-                    frame.Paint(RoomInk.Crt, RoomInk.PhosphorDim.WithAlpha(0.55f));
-                    frame.BracketColor = RoomInk.PhosphorDim;
+                    frame.Paint(RoomInk.Crt, RoomInk.Phosphor.WithAlpha(0.3f));
+                    frame.BracketColor = RoomInk.Phosphor;
                     band.color = RoomInk.CrtBar;
                     rail.color = RoomInk.Phosphor;
-                    rule.color = RoomInk.PhosphorDim.WithAlpha(0.7f);
-                    title.color = RoomInk.Phosphor;
+                    rule.color = RoomInk.Phosphor.WithAlpha(0.3f);
+                    title.color = RoomInk.PhosphorInk;
                     tag.color = RoomInk.PhosphorDim;
                     if (icon != null) icon.color = RoomInk.Phosphor;
                     break;
                 case FrontLook.Folder:
-                    frame.Paint(RoomInk.Board, RoomInk.Khaki.WithAlpha(0.8f));
-                    frame.BracketColor = Color.clear;
-                    band.color = RoomInk.Manila;
-                    rail.color = RoomInk.Grease;
-                    rule.color = RoomInk.Manila.WithAlpha(0.85f);
-                    title.color = RoomInk.Typewriter;
-                    tag.color = RoomInk.Typewriter;
-                    if (icon != null) icon.color = RoomInk.Typewriter;
+                    frame.Paint(RoomInk.Board, RoomInk.Gold.WithAlpha(0.35f));
+                    frame.BracketColor = RoomInk.Gold;
+                    band.color = RoomInk.OliveGlass;
+                    rail.color = RoomInk.Gold;
+                    rule.color = RoomInk.Gold.WithAlpha(0.5f);
+                    title.color = RoomInk.FieldInk;
+                    tag.color = RoomInk.Gold;
+                    if (icon != null) icon.color = RoomInk.Gold;
                     break;
                 default:
                     frame.Paint(AvInk.Surface.WithAlpha(0.62f), AvInk.Hairline);
@@ -274,7 +272,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (icon != null) icon.color = AvInk.Dim;
                     break;
             }
-            Color quiet = look == FrontLook.Terminal ? RoomInk.PhosphorDim : look == FrontLook.Console ? RoomInk.Engrave.WithAlpha(0.75f) : AvInk.Dim;
+            Color quiet = look == FrontLook.Terminal ? RoomInk.PhosphorDim : look == FrontLook.Console ? RoomInk.Engrave.WithAlpha(0.75f)
+                : look == FrontLook.Folder ? RoomInk.Gold.WithAlpha(0.8f) : AvInk.Dim;
             if (meta != null) meta.color = metaTone.a > 0f ? metaTone : quiet;
         }
 
@@ -290,26 +289,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 dress.Line(c + new Vector2(-1.6f, -1.6f), c + new Vector2(1.6f, 1.6f), 0.9f, RoomInk.Plate.WithAlpha(1f));
             }
             dress.Flush();
-        }
-
-        /// <summary>CRT scanlines over the terminal glass (under the pane's own content): one faint phosphor row in three.</summary>
-        private static void Scanlines(RectTransform box, float w, float h)
-        {
-            if (scan == null)
-            {
-                scan = new Texture2D(1, 3, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Point, hideFlags = HideFlags.HideAndDontSave };
-                Color line = RoomInk.Phosphor.WithAlpha(0.045f);
-                scan.SetPixels(new[] { line, Color.clear, Color.clear });
-                scan.Apply(false, true);
-            }
-            var go = new GameObject("Scanlines", typeof(RectTransform), typeof(CanvasRenderer));
-            go.transform.SetParent(box, false);
-            var raw = go.AddComponent<RawImage>();
-            raw.texture = scan;
-            raw.raycastTarget = false;
-            float bh = h - FrontKit.HeaderH - 2f;
-            raw.uvRect = new Rect(0f, 0f, 1f, bh / 3f);
-            AvLay.Place(raw.rectTransform, 1f, FrontKit.HeaderH + 1f, w - 2f, bh);
         }
     }
 

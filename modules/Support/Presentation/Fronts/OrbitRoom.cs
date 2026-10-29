@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static class Mc
         {
             public static readonly Color Go = RoomInk.Rgb(0x57E389), Hold = RoomInk.Telemetry, NoGo = RoomInk.Rgb(0xFF6B5E), Off = RoomInk.Rgb(0x142038),
-                Steel = RoomInk.Rgb(0x9DB4D3), PlateInk = RoomInk.Rgb(0x050A18), Ice = RoomInk.Rgb(0x7FE6FF), Lost = RoomInk.Rgb(0x6D7F99);
+                Steel = RoomInk.Rgb(0x9DB4D3), PlateInk = RoomInk.Rgb(0x050A18), Ice = RoomInk.Ice, Lost = RoomInk.Rgb(0x6D7F99);
         }
 
         /// <summary>A GO / NO-GO lamp: unlit (no telemetry), GO, caution, NO-GO. Ordered by severity so the worst of a row is its maximum.</summary>
@@ -311,6 +311,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private AvControl Small(RectTransform p, string label, float x, float y, float w, Action click, string help)
         {
             AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, AvButtonStyle.Default));
+            c.Accent = RoomInk.Ice;
             AvLay.Place(c.Rect, x, y, w, 24f);
             c.SingleLine();
             c.Help = help;
@@ -446,6 +447,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private AvControl Tool(RectTransform p, string label, float x, float y, float w, Action click, string help)
         {
             AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, AvButtonStyle.Default));
+            c.Accent = RoomInk.Ice;
             AvLay.Place(c.Rect, x, y, w, 26f);
             c.SingleLine();
             c.Help = help;

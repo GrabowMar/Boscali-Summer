@@ -171,6 +171,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>A strip the room lays over the plate top (NETWORK's bounce chain): the ruler and the grid names start below it.</summary>
         public float TopInset { get; set; }
 
+        /// <summary>The theatre picture's colour: each room sees the same map through its own glass (NETWORK teal, SHADOW sand).</summary>
+        public Color Tint { get; set; } = new Color(0.9f, 0.94f, 0.92f, 1f);
+
         public Vector2 P(float u, float v) => View.P(u, v);
 
         /// <summary>Map point (u, v) in screen pixels: where a click must land to hit it (the in-game GUI check aims with it).</summary>
@@ -207,8 +210,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             image.enabled = mini.enabled = has;
             if (has)
             {
-                image.texture = tex; image.uvRect = v.ImageUv(uv); image.color = new Color(0.9f, 0.94f, 0.92f, 1f);
-                mini.texture = tex; mini.uvRect = uv; mini.color = new Color(0.8f, 0.85f, 0.83f, 1f);
+                image.texture = tex; image.uvRect = v.ImageUv(uv); image.color = Tint;
+                mini.texture = tex; mini.uvRect = uv; mini.color = new Color(Tint.r * 0.9f, Tint.g * 0.9f, Tint.b * 0.9f, 1f);
             }
             // A light scrim keeps markers legible over bright terrain without hiding it; with no image it is the old opaque ground.
             G.Rect(v.X, v.Y, v.W, v.H, AvInk.Ground.WithAlpha(has ? 0.16f : 0.9f));

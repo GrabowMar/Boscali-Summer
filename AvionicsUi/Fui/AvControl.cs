@@ -21,6 +21,7 @@ namespace NOAvionics
         private AvFx fx;
         private string classes, baseClass;
         private bool hover, pressed, latched, armed, interactable = true, iconRight, iconOnly;
+        private Color? accent;
 
         public RectTransform Rect => (RectTransform)transform;
         public event Action Clicked;
@@ -80,6 +81,12 @@ namespace NOAvionics
         public bool Interactable { get => interactable; set { if (interactable == value) return; interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
         public string Label { get => text.text; set => AvText.Set(text, value); }
 
+        /// <summary>
+        /// A console's own accent over the scheme (the OPS rooms are different consoles): a primary control fills with it, a latched one
+        /// takes its wash, edge and rail, the rest keep a hairline of it. A danger control keeps its own red. Null = the scheme's look.
+        /// </summary>
+        public Color? Accent { get => accent; set { accent = value; Restyle(); } }
+
         /// <summary>Swap the button's icon after build (play/pause); no-op when the button has none.</summary>
         public void SetIcon(AvIcon icon) { if (glyph != null && icon != AvIcon.None) { AvIcons.Set(glyph, icon, AvGridTokens.IconInline); glyph.color = text.color; } }
 
@@ -110,12 +117,21 @@ namespace NOAvionics
                 edge = AvStyleHost.Resolve(s.Border, AvTheme.Frame).WithAlpha(0.75f);
                 ink = AvStyleHost.Resolve(s.Color, AvTheme.TextPrimary).WithAlpha(0.82f);
             }
+            Color? railInk = null;
+            if (accent.HasValue && interactable && !classes.Contains("danger"))
+            {
+                Color a = accent.Value;
+                if (classes.Contains("primary")) { back = a.WithAlpha(hover || pressed ? 0.95f : 0.82f); edge = a; ink = Color.Lerp(Color.black, a, 0.1f); }
+                else if (latched || armed || pressed) { back = a.WithAlpha(0.18f); edge = a; ink = Color.Lerp(Color.white, a, 0.25f); railInk = a; }
+                else if (hover) { back = a.WithAlpha(0.1f); edge = a.WithAlpha(0.8f); ink = Color.white; }
+                else edge = a.WithAlpha(0.35f);
+            }
             frame.Paint(back, edge);
             text.color = ink;
-            Color bracket = ink.WithAlpha(latched || armed || hover ? 0.72f : 0.18f);
+            Color bracket = (accent ?? ink).WithAlpha(latched || armed || hover ? 0.72f : 0.18f);
             if (bracket != frame.BracketColor) { frame.BracketColor = bracket; frame.SetVerticesDirty(); }
             if (glyph != null) glyph.color = ink;
-            rail.color = s.Rail.HasValue ? AvStyleHost.Resolve(s.Rail, Color.clear) : Color.clear;
+            rail.color = railInk ?? (s.Rail.HasValue ? AvStyleHost.Resolve(s.Rail, Color.clear) : Color.clear);
         }
     }
 }

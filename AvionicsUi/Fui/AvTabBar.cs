@@ -95,6 +95,9 @@ namespace NOAvionics
             }
         }
 
+        /// <summary>Every tab takes a console's own accent (see <see cref="AvControl.Accent"/>); null returns them to the scheme.</summary>
+        public void SetAccent(Color? accent) { foreach (AvControl t in tabs) t.Accent = accent; }
+
         public override void Restyle() { foreach (AvControl t in tabs) t.Restyle(); }
     }
 }

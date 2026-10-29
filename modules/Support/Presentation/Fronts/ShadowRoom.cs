@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private FrontBox situation, roster, targets, composer;
         private FrontVector side, listG, formG, fileMarks;
         private RawImage filePaper, filePhoto;
+        private readonly RawImage[] rowThumb = new RawImage[MaxTargets];
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] teamLabels = new TMP_Text[MaxTeams], targetLabels = new TMP_Text[MaxTargets], campLabels = new TMP_Text[MaxCamps],
             heldLabels = new TMP_Text[MaxHeld], enemyMarks = new TMP_Text[MaxEnemies];
@@ -460,6 +461,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             situation = new FrontBox(hero, skin, "Shadow", 0f, 0f, heroW, mapH, "SOF SITUATION · PRESENCE AND INFILTRATION", AvIcon.Eye, FrontLook.Folder).Tagged("FILE 07-S");
             RectTransform b = situation.Rect;
             plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows);
+            plate.Tint = RoomInk.Rgba(1f, 0.92f, 0.7f, 1f);
             side = FrontVector.Add(b, "Side");   // overlay notes on the map
             AvLay.Place(side.rectTransform, 0f, 0f, heroW, mapH);
             plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings and teams are labelled where they stand
@@ -566,6 +568,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             RectTransform b = targets.Rect;
             listG = FrontVector.Add(b, "ListGfx");
             AvLay.Place(listG.rectTransform, 0f, 0f, w, h);
+            for (int i = 0; i < MaxTargets; i++) rowThumb[i] = FrontArt.Fill(b, "ops_recon_ground", 0f, 0f, 1f, 1f, PrintTint); // each card's recon print
             // The file's dossier sheet and recon print lie over the folder drawn in ListGfx; their marks (print border, crosshair, china marker, note rules) go on top.
             filePaper = FrontArt.Fill(b, "ops_bg_dossier", 0f, 0f, 1f, 1f, Color.white);
             filePhoto = FrontArt.Fill(b, "ops_recon_ground", 0f, 0f, 1f, 1f, PrintTint);
@@ -618,6 +621,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             targets.SetMeta(s.Targets.Count + " REVEALED", s.Targets.Count > 0 ? FrontKit.Tone(AvState.Danger) : AvInk.Dim);
             FrontVector g = listG;
             g.Clear();
+            fileMarks.Clear(); // the marks over every print: the cards' and the file's
             int n = s.Targets.Count;
             // A tray of at least four rows: the cards grow while the list is short, shrink as it fills, and the picked target's package takes what is left.
             int rows = Math.Max(4, (n + 1) / 2);
@@ -641,7 +645,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 bool on = i < n;
                 if (rowHit[i].gameObject.activeSelf != on) { rowHit[i].gameObject.SetActive(on); rowName[i].gameObject.SetActive(on); rowDetail[i].gameObject.SetActive(on); rowTag[i].gameObject.SetActive(on); }
-                if (!on) continue;
+                if (!on) { if (rowThumb[i] != null) rowThumb[i].gameObject.SetActive(false); continue; }
                 SofTargetView t = s.Targets[i];
                 rowId[i] = t.Id;
                 float rx = 8f + (i % 2) * (cw + 8f), ry = ListTop + (i / 2) * pitch;
@@ -655,30 +659,45 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     g.Rect(rx + 3f, ty + 14.4f, cw - 6f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f)); // ruling under both lines: alpha under 0.2, a tint and not a ground
                     g.Rect(rx + 3f, ty + 27.2f, cw - 6f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f));
                 }
-                g.Rect(rx + 34f, ry + 1f, 1f, ch - 2f, RoomInk.Rgba(0.78f, 0.25f, 0.2f, 0.3f));
+                g.Rect(rx + 48f, ry + 1f, 1f, ch - 2f, RoomInk.Rgba(0.78f, 0.25f, 0.2f, 0.3f));
                 g.Frame(rx, ry, cw, ch, sel ? 2f : 1f, sel ? Paper.Pen : Paper.CardEdge);
                 Hand.Hole(g, rx + 6.5f, ry + 6.5f, 2.3f);
                 AvLay.Place(rowHit[i].rectTransform, rx, ry, cw, ch);
-                float nw = cw - 42f, ly = ty + (roomy ? 14f : 13.5f);
-                AvLay.Place(rowName[i].rectTransform, rx + 38f, ty, nw, 14.5f);
-                AvLay.Place(rowDetail[i].rectTransform, rx + 38f, ly, 50f, 13f);
-                AvLay.Place(rowTag[i].rectTransform, rx + 88f, ly, cw - 92f, 13f);
-                // The kind glyph in typewriter ink, circled twice in china marker (a resisted one is struck through and circled in faded ink).
-                Vector2 gp = new Vector2(rx + 21f, ry + ch * 0.5f);
+                float nw = cw - 56f, ly = ty + (roomy ? 14f : 13.5f);
+                AvLay.Place(rowName[i].rectTransform, rx + 52f, ty, nw, 14.5f);
+                AvLay.Place(rowDetail[i].rectTransform, rx + 52f, ly, 50f, 13f);
+                AvLay.Place(rowTag[i].rectTransform, rx + 102f, ly, cw - 106f, 13f);
+                // The target's recon print clipped to the card; without one, its kind glyph circled twice in china marker.
+                // A resisted target is struck through and its print faded; an exploitable one carries an amber dot.
+                RawImage thumb = rowThumb[i];
+                Texture2D print = thumb != null ? FrontArt.Get(PrintOf(t)) : null;
+                if (thumb != null && thumb.gameObject.activeSelf != (print != null)) thumb.gameObject.SetActive(print != null);
+                FrontVector mk = print != null ? fileMarks : g;
+                Vector2 gp = new Vector2(rx + 25f, ry + ch * 0.5f);
                 float ro = Mathf.Min(13f, ch * 0.5f - 1.5f);
-                Color mark = t.Resisted ? Paper.PenDim : grease;
-                Hand.Circle(g, gp, ro, 1.8f, mark, t.Id * 5 + 1);
-                Hand.Circle(g, gp, ro - 3.2f, 1.4f, mark, t.Id * 5 + 3);
-                TargetGlyph(g, t.Kind, gp, 5f, Paper.Pen);
-                if (t.Resisted) g.Line(gp + new Vector2(-8f, 7f), gp + new Vector2(8f, -7f), 1.6f, Paper.Pen);
-                if (t.Exploit) g.Disc(gp + new Vector2(ro * 0.72f, -ro * 0.72f), 2.8f, Paper.Amber, 8);
+                if (print != null)
+                {
+                    thumb.texture = print;
+                    thumb.color = t.Resisted ? PrintTint.WithAlpha(0.45f) : PrintTint;
+                    FrontArt.Place(thumb, rx + 4f, ry + 3f, 42f, ch - 6f);
+                    mk.Frame(rx + 3f, ry + 2f, 44f, ch - 4f, 1f, Paper.PhotoPaper);
+                }
+                else
+                {
+                    Color mark = t.Resisted ? Paper.PenDim : grease;
+                    Hand.Circle(g, gp, ro, 1.8f, mark, t.Id * 5 + 1);
+                    Hand.Circle(g, gp, ro - 3.2f, 1.4f, mark, t.Id * 5 + 3);
+                    TargetGlyph(g, t.Kind, gp, 5f, Paper.Pen);
+                }
+                if (t.Resisted) mk.Line(gp + new Vector2(-12f, 9f), gp + new Vector2(12f, -9f), 1.8f, Paper.Grease);
+                if (t.Exploit) mk.Disc(new Vector2(rx + 41f, ry + 8f), 3f, Paper.Amber, 10);
                 if (sel) clipAt = i;
                 FrontKit.Set(rowName[i], C2Kit.FitTo(rowName[i], t.Name, nw), Paper.Pen);
                 // Detail is "D2 · LASE": the grid ref on the left, the best mission (or EXPLOIT / RESISTED) typed as a tag on the right.
                 int cut = t.Detail.IndexOf(" · ", StringComparison.Ordinal);
                 string grid = cut > 0 ? t.Detail.Substring(0, cut) : t.Detail, tag = cut > 0 ? t.Detail.Substring(cut + 3) : "";
                 FrontKit.Set(rowDetail[i], "GRID " + grid, Paper.PenDim);
-                FrontKit.Set(rowTag[i], C2Kit.FitTo(rowTag[i], tag, cw - 92f), t.Exploit ? Paper.Amber : t.Resisted ? Paper.PenDim : Paper.Blue);
+                FrontKit.Set(rowTag[i], C2Kit.FitTo(rowTag[i], tag, cw - 106f), t.Exploit ? Paper.Amber : t.Resisted ? Paper.PenDim : Paper.Blue);
             }
             if (clipAt >= 0)
             {
@@ -727,8 +746,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool wide = bodyH >= 125f, big = bodyH >= 160f;
             float pw = wide ? 112f : 58f, ph = wide ? 88f : Mathf.Min(bodyH - 14f, 46f);
             var photo = new Rect(fx + 10f, bodyY + 8f, pw, ph);
-            FrontVector m = fileMarks;
-            m.Clear();
+            FrontVector m = fileMarks; // cleared at the start of PaintTargets
             if (filePaper != null) { FrontArt.Place(filePaper, fx, bodyY, fw, bodyH); m.Frame(fx, bodyY, fw, bodyH, 1f, Paper.FolderEdge); }
             Texture2D print = havePick ? FrontArt.Get(PrintOf(pick)) : null;
             bool printed = print != null && filePhoto != null;
@@ -853,6 +871,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private AvControl Button(RectTransform p, string label, float x, float y, float w, float h, AvButtonStyle style, Action click, string help)
         {
             AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, style));
+            c.Accent = RoomInk.Gold;
             AvLay.Place(c.Rect, x, y, w, h);
             c.SingleLine();
             if (!string.IsNullOrEmpty(help)) c.Help = help;
