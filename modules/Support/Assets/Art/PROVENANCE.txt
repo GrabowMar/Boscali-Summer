@@ -4,10 +4,12 @@ Generated with OpenAI image generation (ChatGPT, through the Codex CLI 0.162.1
 image tool on the author's ChatGPT login), one image per prompt, every prompt
 asking for no letters or numbers. Then shrunk for embedding (Pillow):
 
-  ops_bg_orbit.png      navy console ground: hairline grid, engraved orbit
-                        arcs (512 x 768, palette, brightened x1.9)
-  ops_bg_network.png    green phosphor CRT glass: scanlines, faint burn-in
-                        (512 x 768, palette, brightened x1.6)
+  ops_bg_orbit.png      smoked navy glass over a faint orbit chart, one
+                        diagonal sheen (512 x 768, palette, brightened x1.5)
+  ops_bg_network.png    smoked cyan glass over a circuit board, hex
+                        micro-pattern (512 x 768, palette, brightened x1.35)
+  ops_bg_shadow.png     worn olive map-table canvas, grease smudges, tape
+                        marks (512 x 768, palette, brightened x1.2)
   ops_bg_dossier.png    aged manila case-file sheet: ruled lines, coffee
                         ring, fold crease (512 x 768, palette)
   ops_recon_*.png       grainy black-and-white aerial reconnaissance prints,
