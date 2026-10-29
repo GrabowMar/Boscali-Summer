@@ -32,8 +32,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     {
         public Front Front;
         public ProgrammeId Id;
-        /// <summary>For READINESS: the new level.</summary>
-        public int Rung;
         /// <summary>What the programme captured while it was funded (its cost when it was queued): the exact amount a refused effect gives back.</summary>
         public float Cost;
         public bool Settled;
@@ -51,7 +49,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
     internal sealed class FrontSide
     {
-        public int Readiness = 1, Superiority;
+        public int Superiority;
         public float Budget;
         public FrontDirective Directive;
         public float PriorityWeight = 1f / 3f;
@@ -86,15 +84,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         }
 
         public FrontSide Side(Front f) => sides[(int)f];
-
-        public int Readiness(Front f) => sides[(int)f].Readiness;
-
-        /// <summary>Readiness never drops below 1 nor rises above 5.</summary>
-        public void AddReadiness(Front f, int delta)
-        {
-            FrontSide s = sides[(int)f];
-            s.Readiness = Math.Clamp(s.Readiness + delta, 1, FrontRules.MaxReadiness);
-        }
 
         public void SetSuperiority(Front f, int value) => sides[(int)f].Superiority = Math.Clamp(value, -100, 100);
 
@@ -139,10 +128,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             if (s.Queue.Count >= FrontRules.MaxQueue) return FrontOutcome.QueueFull;
             switch (id)
             {
-                case ProgrammeId.Readiness: if (s.Readiness >= FrontRules.MaxReadiness) return FrontOutcome.ReadinessMax; break;
                 case ProgrammeId.LaunchSatellite: if (w.BirdsDown <= 0) return FrontOutcome.BirdsUp; break;
                 case ProgrammeId.UplinkSite: if (w.Uplinks >= w.UplinkMax) return FrontOutcome.UplinksMax; break;
-                case ProgrammeId.Asat: if (sides[(int)Front.Cyber].Readiness < FrontRules.AsatCyberReadiness) return FrontOutcome.NeedsCyber3; break;
                 case ProgrammeId.DataCenter: if (w.DataCenters >= w.DataCenterMax) return FrontOutcome.DataCentersMax; break;
                 case ProgrammeId.EwTruck: if (w.Trucks >= w.TruckMax) return FrontOutcome.TrucksMax; break;
                 case ProgrammeId.TrainTeam: if (w.Teams >= FrontRules.TeamCap) return FrontOutcome.TeamCap; break;
@@ -159,10 +146,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             reason = Refusal(f, id, w);
             if (reason.Length > 0) return false;
             FrontSide s = sides[(int)f];
-            int rung = s.Readiness;
-            var e = new FrontProgrammeEntry { Id = id, Cost = FrontRules.Cost(id, rung, CostScale), Build = FrontRules.BuildSeconds(id, rung) };
+            var e = new FrontProgrammeEntry { Id = id, Cost = FrontRules.Cost(id, CostScale), Build = FrontRules.BuildSeconds(id) };
             if (index < 0 || index > s.Queue.Count) s.Queue.Add(e); else s.Queue.Insert(index, e);
-            AddLog(s, FrontLogCode.Queued, (int)id, rung, now);
+            AddLog(s, FrontLogCode.Queued, (int)id, 0, now);
             return true;
         }
 
@@ -210,7 +196,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     FrontProgrammeEntry done = s.Queue[0];
                     s.Queue.RemoveAt(0);
                     var ev = new FrontEvent { Front = (Front)i, Id = done.Id, Cost = done.Cost };
-                    if (done.Id == ProgrammeId.Readiness) { AddReadiness((Front)i, 1); ev.Rung = s.Readiness; ev.Settled = true; AddLog(s, FrontLogCode.Done, (int)done.Id, ev.Rung, now); }
                     events.Add(ev);
                     Advance(now);
                 }
@@ -227,7 +212,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             if (e == null || e.Settled) return;
             e.Settled = true;
             FrontSide s = sides[(int)e.Front];
-            if (failure == FrontOutcome.None) { AddLog(s, FrontLogCode.Done, (int)e.Id, e.Rung, now); return; }
+            if (failure == FrontOutcome.None) { AddLog(s, FrontLogCode.Done, (int)e.Id, 0, now); return; }
             s.Budget += e.Cost;
             AddLog(s, FrontLogCode.Failed, (int)e.Id, (int)failure, now);
         }
@@ -325,7 +310,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 FrontSide s = sides[i];
                 FrontRow r = d.Fronts[i];
                 bool locked = s.DirectiveLockUntil > now;
-                r.Readiness = (byte)s.Readiness; r.Superiority = (sbyte)s.Superiority;
+                r.Superiority = (sbyte)s.Superiority;
                 r.Budget = (ushort)Math.Clamp(Math.Round(s.Budget), 0, ushort.MaxValue);
                 r.Directive = s.Directive; r.PriorityPct = (byte)Math.Round(s.PriorityWeight * 100f);
                 r.HasFocus = s.HasFocus; r.FocusX = s.FocusX; r.FocusZ = s.FocusZ;

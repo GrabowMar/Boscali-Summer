@@ -51,12 +51,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             switch ((FrontLogCode)l.Code)
             {
                 case FrontLogCode.Done:
-                    if (l.A == (short)ProgrammeId.Readiness)
-                    {
-                        string unlocks = "";
-                        foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Tier == l.B) unlocks += (unlocks.Length > 0 ? ", " : "") + r.Label;
-                        return new FrontNotice(FrontNoticeKind.Up, FrontRules.Name(f) + " READINESS " + l.B + (unlocks.Length > 0 ? " · NEW: " + unlocks : ""));
-                    }
                     return new FrontNotice(FrontNoticeKind.Up, FrontWords.Line(f, l));
                 case FrontLogCode.Failed: return new FrontNotice(FrontNoticeKind.Failed, FrontWords.Line(f, l));
                 case FrontLogCode.Rebuild: return new FrontNotice(FrontNoticeKind.Lost, FrontWords.Line(f, l));

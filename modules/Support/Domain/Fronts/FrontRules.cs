@@ -7,6 +7,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     /// <summary>One enum for every front's posture; <see cref="FrontRules.IsValid"/> says which belong to which front.</summary>
     internal enum FrontDirective : byte { Recon = 0, Strike = 1, Defend = 2, Balanced = 3, Attack = 4, Sabotage = 5, Hold = 6 }
 
+    /// <summary>Front programmes; <c>Readiness</c> (0) is retired with OPS M1 (skills replaced it): never queued, the value stays reserved.</summary>
     internal enum ProgrammeId : byte
     {
         Readiness = 0, LaunchSatellite = 1, UplinkSite = 2, Asat = 3, DataCenter = 4, EwTruck = 5, ZeroDay = 6, TrainTeam = 7, Camp = 8, Fob = 9
@@ -27,21 +28,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
     internal static class FrontRules
     {
-        public const int FrontCount = 3, MaxQueue = 4, MaxReadiness = 5, TeamCap = 4, LogCapacity = 8;
+        public const int FrontCount = 3, MaxQueue = 4, TeamCap = 4, LogCapacity = 8;
         public const float DefaultShare = 0.03f, DefaultShareCap = 250f, MaxShareCap = 5000f,
             /// <summary>Programme funds one donated allocation point buys (a sortie's ~40 allocation then buys about half a minute of the faction's whole trickle).</summary>
             DonateRate = 3f, MaxShare = 0.10f, ShareIntervalSeconds = 60f, LockSeconds = 60f;
-        public const int AsatCyberReadiness = 3;
 
         public static float ClampShare(float share) => float.IsNaN(share) ? DefaultShare : Math.Clamp(share, 0f, MaxShare);
 
-        /// <summary>The table of spec 3.5. READINESS is listed at rung 1 (cost 150, 120 s); rung n costs 150*n and builds 120*n s.</summary>
+        /// <summary>The table of spec 3.5, indexed by <see cref="ProgrammeId"/>. Row 0 (READINESS) is retired with OPS M1 and only keeps the index aligned: it belongs to no front.</summary>
         public static readonly FrontProgramme[] Programmes =
         {
-            new FrontProgramme(ProgrammeId.Readiness, null, "READINESS", 150f, 120f, "NEXT RUNG ONLY, MAX 5"),
+            new FrontProgramme(ProgrammeId.Readiness, null, "READINESS", 0f, 0f, "RETIRED"),
             new FrontProgramme(ProgrammeId.LaunchSatellite, Front.Space, "LAUNCH SATELLITE", 300f, 240f, "A SATELLITE DOWN"),
             new FrontProgramme(ProgrammeId.UplinkSite, Front.Space, "UPLINK SITE", 200f, 180f, "AN UPLINK BELOW MAX"),
-            new FrontProgramme(ProgrammeId.Asat, Front.Space, "ASAT", 900f, 180f, "CYBER READINESS 3"),
+            new FrontProgramme(ProgrammeId.Asat, Front.Space, "ASAT", 900f, 180f, ""),
             new FrontProgramme(ProgrammeId.DataCenter, Front.Cyber, "DATA CENTER", 250f, 180f, "A DATA CENTER BELOW MAX"),
             new FrontProgramme(ProgrammeId.EwTruck, Front.Cyber, "EW TRUCK", 120f, 120f, "A TRUCK BELOW MAX"),
             new FrontProgramme(ProgrammeId.ZeroDay, Front.Cyber, "ZERO-DAY", 600f, 180f, ""),
@@ -53,15 +53,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public static FrontProgramme Info(ProgrammeId id) => Programmes[(int)id];
 
         public static bool BelongsTo(Front front, ProgrammeId id) =>
-            (int)id < Programmes.Length && (id == ProgrammeId.Readiness || Programmes[(int)id].Front == front);
+            (int)id < Programmes.Length && id != ProgrammeId.Readiness && Programmes[(int)id].Front == front;
 
-        /// <summary>Config-scaled cost of a programme (READINESS at the given current rung n: 150*n).</summary>
-        public static float Cost(ProgrammeId id, int rung, float scale) =>
-            Math.Max(1f, (float)Math.Round(Info(id).Cost * (id == ProgrammeId.Readiness ? Math.Max(1, rung) : 1) * Sane(scale)));
+        /// <summary>Config-scaled cost of a programme.</summary>
+        public static float Cost(ProgrammeId id, float scale) => Math.Max(1f, (float)Math.Round(Info(id).Cost * Sane(scale)));
 
-        public static float Cost(ProgrammeId id, float scale) => Cost(id, 1, scale);
-
-        public static float BuildSeconds(ProgrammeId id, int rung) => Info(id).BuildSeconds * (id == ProgrammeId.Readiness ? Math.Max(1, rung) : 1);
+        public static float BuildSeconds(ProgrammeId id) => Info(id).BuildSeconds;
 
         /// <summary>A scale or factor from config or the wire: itself when finite and above 0, else 1.</summary>
         internal static float Sane(float scale) =>float.IsFinite(scale) && scale > 0f ? scale : 1f;

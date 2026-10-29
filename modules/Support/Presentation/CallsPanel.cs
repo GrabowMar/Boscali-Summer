@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvTabBar tabs = console.Tabs((AvIcon.Flag, "FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
             string[] hints =
             {
-                "[1] Fronts: status, blocker, readiness, superiority, your support, what is building. OPEN for its window.",
+                "[1] Fronts: status, blocker, your skill grade, superiority, your support, what is building. OPEN for its window.",
                 "[2] Click a perk to arm it, aim (pod, map right-click or a team laser), then FIRE.",
                 "[3] Click a posted strike to arm it, then FIRE claims and launches it. The cruise block steers your salvo."
             };
@@ -222,7 +222,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             console.Orders(0,
                 "OPEN a front for its map, programmes and perks.",
                 "A stamp says OPERATIONAL, DEGRADED, OFFLINE or WAITING; the line under it names what is wrong now.",
-                "Readiness and superiority belong to the faction and are shared by every pilot on your side.");
+                "Superiority belongs to the faction and is shared by every pilot on your side; your skill grades are your own.");
             console.Orders(1,
                 "Click a perk to arm it. Nothing is spent until FIRE.",
                 "Aim with your pod or a team laser, or right-click the map (that fires at once). Otherwise press FIRE.",
@@ -339,7 +339,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FollowArm();
             OpsPageViews.Perks(view, tiles);
             FrontMirror fm = manager.FrontMirror;
-            OpsPageViews.Cards(view, fm.State, fm.Known, now, manager.Online);
+            OpsPageViews.Cards(view, fm.State, fm.Known, now, manager.Online, manager.LocalGrades());
             OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, inspectedPerk);
             SpaceFeedMirror sm = manager.SpaceMirror;
             if (!sm.Known) inspectedPost = 0; // post ids restart with each faction's desk and each mission: a pick must not outlive the mirror it was made on and land on another faction's post

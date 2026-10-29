@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public Front Front;
         public bool Known;
         public FrontStatus Status;
-        public int Readiness, Superiority;
+        public int Grade, Superiority;
         /// <summary>Alert = the current blocker or recovery line (what is wrong NOW, "NO ACTIVE BLOCKER" otherwise); Event = the newest log row as history, EventAge its age.</summary>
         public string Word, Directive, Building, BuildNote, Alert, Queue, Event, EventAge;
         /// <summary>The front's perk power as the card shows it: <c>POWER ×1.25</c> (empty before the host has spoken).</summary>
@@ -104,7 +104,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         // ---- Fronts -----------------------------------------------------------------------------------------
 
         /// <param name="online">False when the host link is down: every front stamps OFFLINE (the last mirror reading is still shown).</param>
-        public static void Cards(OpsPageView v, FrontStateData d, bool known, float now, bool online = true)
+        /// <param name="grades">The local pilot's skill grade per front system (index = <see cref="Front"/>); null reads as grade 1.</param>
+        public static void Cards(OpsPageView v, FrontStateData d, bool known, float now, bool online = true, int[] grades = null)
         {
             int ahead = 0, alerts = 0;
             for (int i = 0; i < FrontRules.FrontCount; i++)
@@ -112,6 +113,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 var f = (Front)i;
                 FrontCardView c = default;
                 c.Front = f; c.Known = known;
+                c.Grade = grades != null && i < grades.Length ? Math.Max(1, grades[i]) : 1;
                 foreach (PerkRowView p in v.Perks)
                 {
                     if (p.Front != f) continue;
@@ -126,11 +128,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     v.Cards[i] = c;
                     continue;
                 }
-                c.Readiness = row.Readiness;
                 c.Superiority = row.Superiority;
                 c.FundingPct = row.PriorityPct; c.Budget = row.Budget;
                 c.QueueCount = row.Queue.Count;
-                foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Tier <= row.Readiness) c.Unlocked++;
+                foreach (CallRow r in CallSheet.Rows) if (r.Front == f && CallGate.Open(r, c.Grade)) c.Unlocked++;
                 c.Word = FrontSuperiority.Word(row.Superiority);
                 c.Power = FrontSuperiority.PowerWord(row.Superiority);
                 v.PowerLine[i] = FrontSuperiority.PowerLine(row.Superiority);
@@ -183,9 +184,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     FrontQueueRow q = row.Queue[pick];
                     bool building = q.Percent >= 100;
                     int left = BuildLeft(q, d, now);
-                    float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id, row.Readiness));
+                    float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id));
                     c.Phase = building ? ProgrammePhase.Building : ProgrammePhase.Funding;
-                    c.Building = q.Id == ProgrammeId.Readiness ? "READINESS " + row.Readiness + " → " + Math.Min(FrontRules.MaxReadiness, row.Readiness + 1) : FrontRules.Info(q.Id).Name;
+                    c.Building = FrontRules.Info(q.Id).Name;
                     c.BuildProgress = building ? 1f - left / build : q.Percent / 100f;
                     c.BuildNote = building ? FrontRules.Clock(left) + " LEFT" : q.Percent + " % FUNDED";
                 }
@@ -208,7 +209,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 for (int q = 0; q < row.Queue.Count; q++)
                 {
                     if (q == pick) continue;
-                    behind += (behind.Length > 0 ? Dot : "") + (row.Queue[q].Id == ProgrammeId.Readiness ? "READINESS" : FrontRules.Info(row.Queue[q].Id).Name);
+                    behind += (behind.Length > 0 ? Dot : "") + FrontRules.Info(row.Queue[q].Id).Name;
                 }
                 c.Queue = behind;
                 v.Cards[i] = c;
@@ -256,7 +257,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 case CallState.Offline: return "NO UPLINK";
                 case CallState.LowCredit: return LowAlloc(t.StateWord);
                 case CallState.Cooldown: return C2Cap.StateWord(t).Replace("COOL ", "COOLDOWN ");
-                default: return t.StateWord; // LOCKED carries its reason (NEEDS READINESS 3)
+                default: return t.StateWord; // LOCKED carries its reason (NEEDS SPACE SKILL 4)
             }
         }
 

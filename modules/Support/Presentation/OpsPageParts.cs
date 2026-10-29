@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     {
         private const float PadX = 12f;
         private static readonly string[] Rooms = { "ORBIT", "NETWORK", "SHADOW" };
-        private static readonly string[] ReadinessWords = BuildWords("R", "", FrontRules.MaxReadiness);
+        private static readonly string[] GradeWords = BuildWords("G", "", CallSheet.MaxGrade);
         private static readonly string[] QueueWords = BuildWords("", "/" + FrontRules.MaxQueue, FrontRules.MaxQueue);
 
         private static string[] BuildWords(string prefix, string suffix, int max)
@@ -150,8 +150,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             blocker = FrontKit.Mono(Rect, "Blocker", PadX, 33f, 434f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
 
-            // Readiness pips with the rung, then the superiority bar with its word and value.
-            pips = OpsParts.Pips(Rect, "Pip", FrontRules.MaxReadiness);
+            // The pilot's skill grade pips with the grade, then the superiority bar with its word and value.
+            pips = OpsParts.Pips(Rect, "Pip", CallSheet.MaxGrade);
             readiness = FrontKit.Mono(Rect, "Readiness", 86f, 51f, 26f, 18f, 12f, TextAlignmentOptions.MidlineLeft, true);
             supLabel = FrontKit.Mono(Rect, "SupLabel", 114f, 51f, 70f, 18f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
             supLabel.text = "SUPERIORITY";
@@ -265,8 +265,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             FrontKit.Set(blocker, c.Alert ?? "", c.AlertTone == AvState.Inert ? AvInk.Dim : FrontKit.Tone(c.AlertTone));
 
-            FrontKit.Set(readiness, c.Known ? ReadinessWords[Mathf.Clamp(c.Readiness, 0, FrontRules.MaxReadiness)] : "—", AvInk.Ink);
-            OpsParts.Fill(pips, c.Known ? c.Readiness : 0, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
+            FrontKit.Set(readiness, GradeWords[Mathf.Clamp(c.Grade, 0, CallSheet.MaxGrade)], AvInk.Ink);
+            OpsParts.Fill(pips, c.Grade, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
             Color tone = FrontKit.Tone(c.Tone);
             float half = barW * 0.5f, len = Mathf.Abs(c.Superiority) / 100f * half;
             supFill.color = AvInk.State(c.Tone).WithAlpha(c.Known ? 0.85f : 0f);

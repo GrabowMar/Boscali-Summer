@@ -26,9 +26,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return copy;
         }
 
-        /// <summary>The faction's readiness on a front as the host last told it; 5 (everything open) until the first snapshot, the host still enforces.</summary>
-        public int Readiness(Front front) => Known ? State.Fronts[(int)front].Readiness : FrontRules.MaxReadiness;
-
         /// <summary>Perk POWER from the mirrored superiority; 1 until the first snapshot.</summary>
         public float Power(Front front) => Known ? FrontSuperiority.Power(State.Fronts[(int)front].Superiority) : 1f;
     }

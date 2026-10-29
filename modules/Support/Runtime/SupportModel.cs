@@ -215,7 +215,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         NoCamp = 134,
         /// <summary>OPS FRONTS S0: SABOTAGE STRIKE found no enemy anchor near the aim.</summary>
         NoAnchor = 135,
-        /// <summary>OPS FRONTS S0: the front readiness is below the perk rung.</summary>
         // 136 NeedsReadiness: retired with front READINESS (OPS M1); never reuse.
         /// <summary>OVERWATCH found no moving enemy ground unit near the aim.</summary>
         NoMovers = 137,

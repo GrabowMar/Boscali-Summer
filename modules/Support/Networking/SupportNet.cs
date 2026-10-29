@@ -131,8 +131,9 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// Protocol 42 makes the rooms two-sided: two SpaceCommand kinds (CyberPurge, SofSweep; no payload, the host derives the faction and every target), CYBER outcomes 20..22 and IntrusionEnd PURGED,
         /// the CyberStateMessage carries the enemy holds on the faction's own network (kind and point) and its PURGE clock, and a held node row says the victim is purging it; SOF outcomes 23..25,
         /// the SofStateMessage carries its SWEEP clock, each enemy row says whether it was detected near the faction's own sites and whether a QRF hunts it, and an own team row says it is hunted.
+        /// Protocol 43 (OPS M1) removes front READINESS: the FRONTS row loses its readiness byte, programme 0 and the outcomes 11 / 14 and result 136 are retired; perks unlock by the pilot's skill grade.
         /// </summary>
-        internal const byte ProtocolVersion = 42;
+        internal const byte ProtocolVersion = 43;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;

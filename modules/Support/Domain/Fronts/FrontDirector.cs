@@ -113,12 +113,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     }
 
     /// <summary>
-    /// What a faction with no humans queues by itself when its front has nothing building (the AI faction raises its fronts without a pilot). <paramref name="asatReady"/> (the host's call: CYBER
-    /// readiness 3, an enemy bird up, spacing since the last one) lets SPACE build an ASAT, so an AI faction hits back in orbit too.
+    /// What a faction with no humans queues by itself when its front has nothing building (the AI faction raises its fronts without a pilot). <paramref name="asatReady"/> (the host's call: an
+    /// enemy bird up, spacing since the last one) lets SPACE build an ASAT, so an AI faction hits back in orbit too.
     /// </summary>
     internal static class FrontAi
     {
-        public static ProgrammeId? Next(Front front, int readiness, in FrontWorld w, bool samKnown, bool asatReady = false)
+        public static ProgrammeId? Next(Front front, in FrontWorld w, bool samKnown, bool asatReady = false)
         {
             switch (front)
             {
@@ -126,14 +126,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     if (asatReady) return ProgrammeId.Asat;
                     break;
                 case Front.Cyber:
-                    if (samKnown && readiness >= 3) return ProgrammeId.ZeroDay;
+                    if (samKnown) return ProgrammeId.ZeroDay;
                     break;
                 case Front.Sof:
                     if (w.Teams < 2) return ProgrammeId.TrainTeam;
-                    if (w.HasHeldBuilding && readiness >= 3) return ProgrammeId.Fob;
+                    if (w.HasHeldBuilding) return ProgrammeId.Fob;
                     break;
             }
-            return readiness < FrontRules.MaxReadiness ? ProgrammeId.Readiness : (ProgrammeId?)null;
+            return null;
         }
     }
 }

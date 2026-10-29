@@ -23,7 +23,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private const int Offers = 4, Rungs = 8, Backlog = FrontRules.MaxQueue - 1; // the perk box takes up to 8 rows (SPACE has 7)
         private const int Chip = 25;
         private const float CardY = 28f, CardH = 78f, BacklogH = 24f, OfferHintH = 14f;
-        private static readonly string[] ReadyWords = { "", "BASELINE", "ALERTED", "OPERATIONAL", "ADVANCED", "FULL SPECTRUM" };
 
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
@@ -75,7 +74,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // ---- FRONT STATUS ----
             status = new FrontBox(parent, skin, "Status", x, cy, w, StatusH, "FRONT STATUS", AvIcon.Gauge);
             RectTransform s = status.Rect;
-            keyList.Add(Key(s, "READINESS", 10f, 30f, 92f, 20f));
+            keyList.Add(Key(s, "YOUR SKILL", 10f, 30f, 92f, 20f));
             for (int i = 0; i < 5; i++)
             {
                 pipWell[i] = FrontKit.Solid(s, "PipWell" + i, 104f + i * 56f, 32f, 52f, 16f, Color.clear);
@@ -219,13 +218,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static string LockWord(bool mine, string by, float left) =>
             mine ? "HELD BY YOU · " + FrontKit.Clock(left) : "LOCKED · " + (string.IsNullOrEmpty(by) ? "?" : by) + " · " + FrontKit.Clock(left);
 
-        /// <summary>The one-line state of the front for the window's title bar: readiness rung and superiority band, or words before the host speaks.</summary>
+        /// <summary>The one-line state of the front for the window's title bar: the pilot's skill grade and the superiority band, or words before the host speaks.</summary>
         public static string Headline(FrontRoomView v)
         {
             FrontRow r = v.Row;
             if (FrontViews.IsWaiting(r)) return "WAITING FOR HOST";
-            int ready = Mathf.Clamp(r.Readiness, 1, 5);
-            return "R" + ready + " " + ReadyWords[ready] + " · " + FrontSuperiority.Word(r.Superiority) + " " + FrontKit.Signed(r.Superiority);
+            return "YOUR SKILL " + Mathf.Clamp(v.Grade, 1, 6) + "/6 · " + FrontSuperiority.Word(r.Superiority) + " " + FrontKit.Signed(r.Superiority);
         }
 
         public void Paint(FrontRoomView v)
@@ -234,12 +232,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontRow r = v.Row;
             bool wait = FrontViews.IsWaiting(r); // the host has not told us this front yet: every host figure is a dash, never a made-up R1 or zero
 
-            // Readiness.
-            int ready = Mathf.Clamp(r.Readiness, 1, 5);
+            // The pilot's own skill grade in this system: grade 1 is free, the five pips are the paid grades 2..6.
+            int grade = Mathf.Clamp(v.Grade, 1, 6);
             for (int i = 0; i < 5; i++)
-                pipFill[i].color = !wait && i < ready ? (ready >= 4 ? AvInk.State(AvState.Ready) : AvInk.Select) : Color.clear;
-            if (wait) FrontKit.Set(readyWord, "— · WAITING FOR HOST", AvInk.Dim);
-            else FrontKit.Set(readyWord, "R" + ready + " · " + ReadyWords[ready], ready >= 4 ? FrontKit.Tone(AvState.Ready) : AvInk.Ink);
+                pipFill[i].color = i < grade - 1 ? (grade >= 5 ? AvInk.State(AvState.Ready) : AvInk.Select) : Color.clear;
+            FrontKit.Set(readyWord, "YOUR SKILL " + grade + " / 6", grade >= 5 ? FrontKit.Tone(AvState.Ready) : AvInk.Ink);
 
             // Superiority.
             if (tipFront != front && supTip != null) { tipFront = front; supTip.Text = SuperiorityHelp(front); }
@@ -307,7 +304,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else if (held) directive.SetMeta(LockWord(!blocked, r.DirectiveBy, left), FrontKit.Tone(AvState.Caution));
             else directive.SetMeta(FrontRules.Name(r.Directive) + " ACTIVE", AvInk.Dim);
             programmes.SetMeta(wait ? "QUEUE —" : "QUEUE " + queued + "/" + FrontRules.MaxQueue, AvInk.Dim);
-            perks.SetMeta(wait ? "READINESS —" : open + " OF " + v.Perks.Count + " AVAILABLE" + (v.PowerLine.Length > 0 ? " · " + v.PowerLine : ""), AvInk.Dim);
+            perks.SetMeta(open + " OF " + v.Perks.Count + " AVAILABLE" + (v.PowerLine.Length > 0 ? " · " + v.PowerLine : ""), AvInk.Dim);
         }
 
         /// <summary>The perk box holds up to eight rows in the room five used to take: the pitch shrinks from 20 px (5 rows or fewer) to 14 px (7), with smaller type once it is under 18; rows beyond the count are hidden.</summary>
@@ -349,15 +346,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             : f == Front.Cyber ? "SUPERIORITY vs the strongest enemy: their nodes you hold (50), your EW trucks and data centers alive (30), a lower trace than theirs (20). Ahead, your perks hit harder; at +40 enemy satellites recharge slower."
             : "SUPERIORITY vs the strongest enemy: teams in the field (40), buildings held (40), camps alive (20). Ahead, your perks hit harder; at +40 enemy hackers are traced faster.";
 
-        /// <summary>What a programme does for the faction, in one line; READINESS names the perks the next rung unlocks.</summary>
+        /// <summary>What a programme does for the faction, in one line.</summary>
         private static string Does(ProgrammeId id, FrontRoomView v)
         {
             switch (id)
             {
-                case ProgrammeId.Readiness:
-                    string unlocks = "";
-                    foreach (FrontPerkView p in v.Perks) if (p.Rung == v.Row.Readiness + 1) unlocks += (unlocks.Length > 0 ? ", " : "") + p.Name;
-                    return unlocks.Length > 0 ? "UNLOCKS " + unlocks : "RAISES THE FRONT ONE RUNG";
                 case ProgrammeId.LaunchSatellite: return "REPLACES A LOST SATELLITE";
                 case ProgrammeId.UplinkSite: return "REBUILDS AN UPLINK SITE · ONLY WHEN ONE IS DOWN";
                 case ProgrammeId.Asat: return "SHOOTS DOWN AN ENEMY SATELLITE";
@@ -434,7 +427,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontKit.Set(next, C2Kit.FitTo(next, after, next.rectTransform.rect.width), AvInk.Dim);
             }
 
-            // Nothing in work: one prompt, then what the next readiness rung would cost and unlock (all from the mirrors and the rules table).
+            // Nothing in work: one prompt, then the offers (all from the mirrors and the rules table).
             private void Idle(FrontRoomView v, bool wait)
             {
                 stripe.color = AvInk.Frame;

@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     internal enum FrontOutcome : byte
     {
         None = 0, Ok = 1, Queued = 2, Donated = 3, DirectiveSet = 4, PrioritySet = 5, FocusSet = 6, FocusCleared = 7,
-        NotAProgramme = 8, AlreadyQueued = 9, QueueFull = 10, ReadinessMax = 11, BirdsUp = 12, UplinksMax = 13, NeedsCyber3 = 14, DataCentersMax = 15,
+        NotAProgramme = 8, AlreadyQueued = 9, QueueFull = 10, /* 11 ReadinessMax: retired (OPS M1) */ BirdsUp = 12, UplinksMax = 13, /* 14 NeedsCyber3: retired (OPS M1) */ DataCentersMax = 15,
         TrucksMax = 16, TeamCap = 17, CampsMax = 18, NoHeldBuilding = 19, NoSamNet = 20, NotQueued = 21, BadAmount = 22, LowAllocation = 23,
         NoDonations = 24, Locked = 25, BadPosture = 26, BadWeights = 27, Offline = 28, Unavailable = 29, RateLimited = 30, BadFront = 31,
         /// <summary>GEO burn verdicts (Detail = seconds of burn, Charged = fuel percent spent; for NoFuel Detail = percent needed).</summary>
@@ -25,8 +25,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public static string Callsign(Front f) => f == Front.Space ? "DARKSTAR" : f == Front.Cyber ? "HEXWARD" : "SHADOW";
 
-        public static string Programme(ProgrammeId id, int rung = 0) =>
-            id == ProgrammeId.Readiness && rung > 0 ? "READINESS " + Math.Min(FrontRules.MaxReadiness, rung) : FrontRules.Info(id).Name;
+        public static string Programme(ProgrammeId id) => FrontRules.Info(id).Name;
 
         public static string Refusal(FrontOutcome code, Front front)
         {
@@ -35,10 +34,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.NotAProgramme: return "NOT A " + FrontRules.Name(front) + " PROGRAMME";
                 case FrontOutcome.AlreadyQueued: return "ALREADY QUEUED";
                 case FrontOutcome.QueueFull: return "QUEUE FULL, WAIT FOR A PROGRAMME TO FINISH";
-                case FrontOutcome.ReadinessMax: return "READINESS ALREADY AT MAX";
                 case FrontOutcome.BirdsUp: return "ALL SATELLITES ARE UP";
                 case FrontOutcome.UplinksMax: return "UPLINKS AT MAX";
-                case FrontOutcome.NeedsCyber3: return "NEEDS CYBER READINESS 3";
                 case FrontOutcome.DataCentersMax: return "DATA CENTERS AT MAX";
                 case FrontOutcome.TrucksMax: return "EW TRUCK LIMIT: 2";
                 case FrontOutcome.TeamCap: return "TEAM CAP REACHED";
@@ -100,11 +97,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             var id = (ProgrammeId)Math.Max(0, Math.Min(FrontRules.Programmes.Length - 1, (int)row.A));
             switch ((FrontLogCode)row.Code)
             {
-                case FrontLogCode.Queued: return call + Programme(id, row.B + 1) + " QUEUED";
-                case FrontLogCode.Started: return call + Programme(id, 0) + " FUNDED, BUILD " + FrontRules.Clock(row.B);
+                case FrontLogCode.Queued: return call + Programme(id) + " QUEUED";
+                case FrontLogCode.Started: return call + Programme(id) + " FUNDED, BUILD " + FrontRules.Clock(row.B);
                 case FrontLogCode.Done:
-                    return call + (id == ProgrammeId.Readiness ? "READINESS UP, NOW " + row.B
-                        : id == ProgrammeId.LaunchSatellite ? "SATELLITE LAUNCHED" : Programme(id) + " COMPLETE");
+                    return call + (id == ProgrammeId.LaunchSatellite ? "SATELLITE LAUNCHED" : Programme(id) + " COMPLETE");
                 case FrontLogCode.Effect: return call + "SATELLITE ON STATION · " + Bird(row.B);
                 case FrontLogCode.Failed:
                     string cause = Refusal((FrontOutcome)(byte)row.B, f);

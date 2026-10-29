@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
     internal sealed class FrontRow
     {
-        public byte Readiness = 1;
         public sbyte Superiority;
         public ushort Budget;
         public FrontDirective Directive;
@@ -39,7 +38,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         {
             var c = new FrontRow
             {
-                Readiness = Readiness, Superiority = Superiority, Budget = Budget, Directive = Directive, PriorityPct = PriorityPct, HasFocus = HasFocus,
+                Superiority = Superiority, Budget = Budget, Directive = Directive, PriorityPct = PriorityPct, HasFocus = HasFocus,
                 FocusX = FocusX, FocusZ = FocusZ, DirectiveLockUntil = DirectiveLockUntil, DirectiveBy = DirectiveBy
             };
             c.Queue.AddRange(Queue); c.Log.AddRange(Log);
@@ -48,7 +47,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public bool SameAs(FrontRow o)
         {
-            if (Readiness != o.Readiness || Superiority != o.Superiority || Budget != o.Budget || Directive != o.Directive || PriorityPct != o.PriorityPct ||
+            if (Superiority != o.Superiority || Budget != o.Budget || Directive != o.Directive || PriorityPct != o.PriorityPct ||
                 HasFocus != o.HasFocus || !SpaceMirror.SamePoint(FocusX, o.FocusX) || !SpaceMirror.SamePoint(FocusZ, o.FocusZ) ||
                 !SpaceMirror.SameExpiry(DirectiveLockUntil, o.DirectiveLockUntil) || (DirectiveBy ?? "") != (o.DirectiveBy ?? "") ||
                 Queue.Count != o.Queue.Count || Log.Count != o.Log.Count) return false;
@@ -96,7 +95,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             {
                 FrontRow f = s.Fronts[i];
                 bool locked = f.DirectiveLockUntil > s.Now;
-                w.WriteByte(f.Readiness); w.WriteByte((byte)f.Superiority);
+                w.WriteByte((byte)f.Superiority);
                 w.WriteByte((byte)f.Budget); w.WriteByte((byte)(f.Budget >> 8));
                 w.WriteByte((byte)f.Directive); w.WriteByte(f.PriorityPct);
                 w.WriteByte((byte)((f.HasFocus ? FlagFocus : 0) | (locked ? FlagLock : 0)));
@@ -136,7 +135,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             {
                 FrontRow f = s.Fronts[i];
                 var front = (Front)i;
-                if (!r.TryReadByte(out f.Readiness) || f.Readiness < 1 || f.Readiness > FrontRules.MaxReadiness || !r.TryReadByte(out byte sup) ||
+                if (!r.TryReadByte(out byte sup) ||
                     !r.TryReadByte(out byte b0) || !r.TryReadByte(out byte b1) || !r.TryReadByte(out byte dir) || !r.TryReadByte(out f.PriorityPct) || f.PriorityPct > 100 ||
                     !r.TryReadByte(out byte flags) || (flags & ~(FlagFocus | FlagLock)) != 0) return Bad();
                 f.Superiority = (sbyte)sup;

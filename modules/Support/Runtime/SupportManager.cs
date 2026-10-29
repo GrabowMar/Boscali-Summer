@@ -503,12 +503,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>Client: the local pilot's grade opens the perk (<see cref="CallGate"/>, the rule the host applies); the dev bypass opens everything.</summary>
         public bool IsAuthorised(SupportActionDefinition action) =>
-            BypassRequirements || !CallSheet.TryGet(action.Id, out CallRow row) || CallGate.Open(row, LocalGrade(row));
+            BypassRequirements || !CallSheet.TryGet(action.Id, out CallRow row) || CallGate.Open(row, LocalGrade(row.FrontWord));
 
-        /// <summary>The local pilot's grade in the perk's system, from the Progression view (1 before it answers); the sim's test-only floor lifts it.</summary>
-        private static int LocalGrade(in CallRow row) =>
+        /// <summary>The local pilot's grade in an OPS system (SPACE, CYBER, SOF), from the Progression view (1 before it answers); the sim's test-only floor lifts it.</summary>
+        private static int LocalGrade(string system) =>
             Math.Max(OpsAutomation.GradeFloor,
-                ModuleServices.TryGet<IProgressionView>(out IProgressionView view) && view != null ? view.Grade(row.FrontWord) : 1);
+                ModuleServices.TryGet<IProgressionView>(out IProgressionView view) && view != null ? view.Grade(system) : 1);
+
+        private readonly int[] localGrades = new int[FrontRules.FrontCount];
+
+        /// <summary>The local pilot's grade per front system (index = <see cref="Front"/>), refreshed on each call, for the OPS page cards and the front window.</summary>
+        internal int[] LocalGrades()
+        {
+            for (int i = 0; i < localGrades.Length; i++) localGrades[i] = LocalGrade(FrontRules.Name((Front)i));
+            return localGrades;
+        }
 
         /// <summary>
         /// Price for the local player, including the support-cost perk. The server runs the

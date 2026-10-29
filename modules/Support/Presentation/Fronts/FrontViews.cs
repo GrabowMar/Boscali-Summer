@@ -30,6 +30,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct FrontInputs
     {
         public int Allocation;
+        /// <summary>The local pilot's skill grade per front system (index = <see cref="Front"/>, 1..6): what unlocks its perks. Null reads as grade 1.</summary>
+        public int[] Grades;
         public float Now, CostScale;
         public string Faction, Callsign;
         public DateTime Utc;
@@ -83,9 +85,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private static readonly ProgrammeId[][] OfferSet =
         {
-            new[] { ProgrammeId.Readiness, ProgrammeId.LaunchSatellite, ProgrammeId.UplinkSite, ProgrammeId.Asat },
-            new[] { ProgrammeId.Readiness, ProgrammeId.DataCenter, ProgrammeId.EwTruck, ProgrammeId.ZeroDay },
-            new[] { ProgrammeId.Readiness, ProgrammeId.TrainTeam, ProgrammeId.Camp, ProgrammeId.Fob },
+            new[] { ProgrammeId.LaunchSatellite, ProgrammeId.UplinkSite, ProgrammeId.Asat },
+            new[] { ProgrammeId.DataCenter, ProgrammeId.EwTruck, ProgrammeId.ZeroDay },
+            new[] { ProgrammeId.TrainTeam, ProgrammeId.Camp, ProgrammeId.Fob },
         };
 
         /// <summary>Airbase map marks: world metres onto the plate, a short upper-case name, capped so the label pool never overflows.</summary>
@@ -123,6 +125,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             v.Row = row;
             v.FocusGrid = row.HasFocus ? OpsKit.Grid(row.FocusX, row.FocusZ) : "";
             v.PowerLine = IsWaiting(row) ? "" : FrontSuperiority.PowerLine(row.Superiority);
+            v.Grade = GradeOf(c, f);
             float stamp = known && d != null ? d.Now : c.Now;
             v.FeedAge = known && d != null ? Math.Max(0f, c.Now - d.Now) : -1f;
             for (int i = 0; i < v.Shares.Length; i++) v.Shares[i] = known && d != null ? d.Fronts[i].PriorityPct : 0;
@@ -130,13 +133,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < row.Queue.Count && v.Queue.Count < FrontRules.MaxQueue; i++)
             {
                 FrontQueueRow q = row.Queue[i];
-                float cost = FrontRules.Cost(q.Id, row.Readiness, c.CostScale);
-                float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id, row.Readiness));
+                float cost = FrontRules.Cost(q.Id, c.CostScale);
+                float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id));
                 bool building = i == 0 && q.Percent >= 100; // only the head ever builds: a waiting programme a donor filled is FUNDED, not BUILDING
                 int left = (int)Math.Max(0f, Math.Ceiling(q.BuildLeft - (building ? c.Now - stamp : 0f)));
                 v.Queue.Add(new FrontQueueView
                 {
-                    Id = q.Id, Name = ProgrammeName(q.Id, row.Readiness), Cost = cost, Building = building, BuildLeft = left, BuildTotal = (int)build,
+                    Id = q.Id, Name = FrontWords.Programme(q.Id), Cost = cost, Building = building, BuildLeft = left, BuildTotal = (int)build,
                     Progress = building ? Mathf.Clamp01(1f - left / build) : q.Percent / 100f
                 });
             }
@@ -146,8 +149,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 bool queued = row.Queue.Exists(q => q.Id == id);
                 v.Offers.Add(new FrontOfferView
                 {
-                    Id = id, Name = ProgrammeName(id, row.Readiness), Cost = FrontRules.Cost(id, row.Readiness, c.CostScale),
-                    BuildSeconds = (int)FrontRules.BuildSeconds(id, row.Readiness), Queued = queued,
+                    Id = id, Name = FrontWords.Programme(id), Cost = FrontRules.Cost(id, c.CostScale),
+                    BuildSeconds = (int)FrontRules.BuildSeconds(id), Queued = queued,
                     Refusal = queued ? "" : IsWaiting(row) ? "WAITING FOR THE HOST" : Refusal(f, id, known ? d : null, row, c)
                 });
             }
@@ -158,8 +161,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 int price = c.Price != null ? c.Price(r.Id) : CallSheet.BasePrice(r.Tier);
                 v.Perks.Add(new FrontPerkView
                 {
-                    Rung = r.Tier, Name = r.Label, Effect = PerkEffect(r.Id), Price = price, Unlocked = !IsWaiting(row) && r.Tier <= row.Readiness,
-                    Gate = FootprintGate(r.Id, c), Reason = IsWaiting(row) ? "" : PerkReason(r.Id, r.Tier, row, price, c)
+                    Rung = r.Grade, Name = r.Label, Effect = PerkEffect(r.Id), Price = price, Unlocked = CallGate.Open(r, v.Grade),
+                    Gate = FootprintGate(r.Id, c), Reason = PerkReason(r, v.Grade, price, c)
                 });
             }
 
@@ -172,11 +175,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        /// <summary>Why a perk is not usable right now, read from what the rail already holds ("" when it is): the readiness rung, the satellite it needs, then the allocation price.</summary>
-        private static string PerkReason(SupportActionId id, int rung, FrontRow row, int price, in FrontInputs c)
+        /// <summary>Why a perk is not usable right now ("" when it is): the pilot's skill grade (<see cref="CallGate"/>), the satellite it needs, then the allocation price.</summary>
+        private static string PerkReason(in CallRow r, int grade, int price, in FrontInputs c)
         {
-            if (rung > row.Readiness) return "NEEDS READINESS " + rung;
-            int k = PerkBird(id);
+            if (!CallGate.Open(r, grade)) return CallGate.LockWord(r);
+            int k = PerkBird(r.Id);
             if (k >= 0 && c.HasBird != null)
             {
                 if ((c.BirdsDown & (1 << k)) != 0) return "SATELLITE LOST · REBUILD " + (c.BirdPercent != null && k < c.BirdPercent.Length ? c.BirdPercent[k] : 0) + " %";
@@ -185,8 +188,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return price > c.Allocation ? "NEEDS " + price + " AP · YOU HAVE " + c.Allocation : "";
         }
 
-        private static string ProgrammeName(ProgrammeId id, int readiness) =>
-            id == ProgrammeId.Readiness ? "READINESS " + readiness + " → " + Math.Min(FrontRules.MaxReadiness, readiness + 1) : FrontRules.Info(id).Name;
+        /// <summary>The local pilot's grade in a front's system (1 when the window passed none).</summary>
+        internal static int GradeOf(in FrontInputs c, Front f) => c.Grades != null && (int)f < c.Grades.Length ? Math.Max(1, c.Grades[(int)f]) : 1;
 
         /// <summary>The client's best reading of why a programme cannot be queued; the host judges again on the press.</summary>
         public static string Refusal(Front f, ProgrammeId id, FrontStateData d, FrontRow row, in FrontInputs c)
@@ -194,9 +197,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (row.Queue.Count >= FrontRules.MaxQueue) return FrontWords.Refusal(FrontOutcome.QueueFull, f);
             switch (id)
             {
-                case ProgrammeId.Readiness: return row.Readiness >= FrontRules.MaxReadiness ? FrontWords.Refusal(FrontOutcome.ReadinessMax, f) : "";
                 case ProgrammeId.LaunchSatellite: return c.BirdsDown == 0 ? FrontWords.Refusal(FrontOutcome.BirdsUp, f) : "";
-                case ProgrammeId.Asat: return d != null && d.Fronts[(int)Front.Cyber].Readiness < FrontRules.AsatCyberReadiness ? FrontWords.Refusal(FrontOutcome.NeedsCyber3, f) : "";
                 case ProgrammeId.TrainTeam: return c.Teams >= FrontRules.TeamCap ? FrontWords.Refusal(FrontOutcome.TeamCap, f) : "";
                 case ProgrammeId.Fob: return c.HeldBuilding ? "" : FrontWords.Refusal(FrontOutcome.NoHeldBuilding, f);
                 default: return "";

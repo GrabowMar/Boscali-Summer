@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
                     "The most funds per minute a faction's fronts take, however large its treasury. 250 raises a front from READINESS 1 to 5 in about 40 minutes.",
                     25f, v => v.ToString("0") + " / MIN")
                 .Number(23, settings.ProgrammeCostScale, "PROGRAMME COSTS",
-                    "Scales every front programme's cost. 1.0 charges the table (READINESS 150 x rung, LAUNCH SATELLITE 300, ASAT 900 ...).",
+                    "Scales every front programme's cost. 1.0 charges the table (LAUNCH SATELLITE 300, ASAT 900 ...).",
                     0.05f, v => v.ToString("0.00") + "x");
     }
 }

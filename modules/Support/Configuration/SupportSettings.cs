@@ -186,7 +186,7 @@ namespace BoscaliSummer.Modules.Support.Configuration
             FrontShareCap = config.Bind("Support", "FrontShareCap", FrontRules.DefaultShareCap,
                 new ConfigDescription("Host: the most funds one faction's fronts take per 60 s tick, however rich the treasury (default 250: READINESS 1 to 5 in about 40 minutes, a satellite relaunch in about 8).", new AcceptableValueRange<float>(0f, FrontRules.MaxShareCap)));
             ProgrammeCostScale = config.Bind("Support", "ProgrammeCostScale", 1f,
-                new ConfigDescription("Host: scales every front programme's cost (1 = the table: READINESS 150 x rung, LAUNCH SATELLITE 300, ASAT 900 ...).", new AcceptableValueRange<float>(0.25f, 4f)));
+                new ConfigDescription("Host: scales every front programme's cost (1 = the table: LAUNCH SATELLITE 300, ASAT 900 ...).", new AcceptableValueRange<float>(0.25f, 4f)));
         }
 
         private static ConfigEntry<KeyboardShortcut> BindCallKey(ConfigFile config, int slot) =>

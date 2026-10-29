@@ -238,7 +238,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             OpsStateData ops = manager.OpsMirror.State;
             var c = new FrontInputs
             {
-                Allocation = (int)manager.LocalAllocation, Now = now, CostScale = manager.Settings != null ? manager.Settings.ProgrammeCostScale.Value : 1f,
+                Allocation = (int)manager.LocalAllocation, Grades = manager.LocalGrades(), Now = now, CostScale = manager.Settings != null ? manager.Settings.ProgrammeCostScale.Value : 1f,
                 Utc = DateTime.UtcNow, Frame = new MapFrame(span.x, span.y), HasBird = hasBird,
                 BirdsDown = manager.OpsMirror.Known ? ops.BirdsDown : (byte)0, BirdPercent = ops.BirdPercent, EnemyBirdsDown = manager.OpsMirror.Known ? ops.EnemyBirdsDown : (byte)0, EnemyKnown = manager.OpsMirror.Known && ops.Active,
                 SpaceLinked = space.Known && space.State.Active, Family = space.State.Family,

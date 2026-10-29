@@ -102,13 +102,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>The enemy CYBER front's pressure on this faction's SPACE task cooldowns (1 = none, 1.5 = CYBER leads by 40 or more).</summary>
         internal float SpaceCooldownFactor(FactionHQ owner) => owner != null && factions.TryGetValue(owner, out FactionFront f) ? f.Pressure.SpaceCooldown : 1f;
 
-        public int Readiness(FactionHQ hq, Front front)
-        {
-            if (hq == null) return FrontRules.MaxReadiness;
-            if (GameAccess.IsServer()) return factions.TryGetValue(hq, out FactionFront f) ? f.Book.Readiness(front) : FrontRules.MaxReadiness;
-            return IsLocalFaction(hq) ? manager.FrontMirror.Readiness(front) : FrontRules.MaxReadiness;
-        }
-
         public float Power(FactionHQ hq, Front front)
         {
             if (hq == null) return 1f;
@@ -145,10 +138,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
-        /// <summary>Dev readout for the solo acceptance sim: the first other faction's readiness sum, queued programmes and superiority sum, and the viewer's host budget.</summary>
-        internal bool EnemyReadout(FactionHQ viewer, out int readinessSum, out int queued, out int superioritySum, out float hostBudget)
+        /// <summary>Dev readout for the solo acceptance sim: the first other faction's queued programmes and superiority sum, and the viewer's host budget.</summary>
+        internal bool EnemyReadout(FactionHQ viewer, out int queued, out int superioritySum, out float hostBudget)
         {
-            readinessSum = queued = superioritySum = 0; hostBudget = 0f;
+            queued = superioritySum = 0; hostBudget = 0f;
             if (viewer != null && factions.TryGetValue(viewer, out FactionFront mine))
                 for (int i = 0; i < FrontRules.FrontCount; i++) hostBudget += mine.Book.Side((Front)i).Budget;
             foreach (FactionFront f in order)
@@ -157,7 +150,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 for (int i = 0; i < FrontRules.FrontCount; i++)
                 {
                     FrontSide side = f.Book.Side((Front)i);
-                    readinessSum += side.Readiness; queued += side.Queue.Count; superioritySum += side.Superiority;
+                    queued += side.Queue.Count; superioritySum += side.Superiority;
                 }
                 return true;
             }
@@ -292,7 +285,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>A faction with no humans raises its fronts itself: when a front has nothing building it queues the next programme of its doctrine (READINESS, a team, a ZERO-DAY, a FOB).</summary>
+        /// <summary>A faction with no humans raises its fronts itself: when a front has nothing building it queues the next programme of its doctrine (a team, a ZERO-DAY, a FOB, an ASAT).</summary>
         private void AiQueue(FactionFront f, float now)
         {
             for (int i = 0; i < FrontRules.FrontCount; i++)
@@ -300,8 +293,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 var front = (Front)i;
                 if (f.Book.Side(front).Queue.Count > 0) continue;
                 bool sam = front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _);
-                bool asat = front == Front.Space && now >= f.NextAiAsat && f.Book.Readiness(Front.Cyber) >= FrontRules.AsatCyberReadiness && EnemyBirdUp(f.Owner);
-                ProgrammeId? next = FrontAi.Next(front, f.Book.Readiness(front), f.World, sam, asat);
+                bool asat = front == Front.Space && now >= f.NextAiAsat && EnemyBirdUp(f.Owner);
+                ProgrammeId? next = FrontAi.Next(front, f.World, sam, asat);
                 if (!next.HasValue) continue;
                 f.Book.Queue(front, next.Value, f.World, now, out _);
                 if (next.Value == ProgrammeId.Asat) f.NextAiAsat = now + AiAsatSpacingSeconds;
@@ -325,7 +318,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 switch (e.Id)
                 {
-                    case ProgrammeId.Readiness: break;
                     case ProgrammeId.LaunchSatellite: ok = space != null && space.TryLaunchBird(owner, out bird); failure = FrontOutcome.BirdsUp; break;
                     case ProgrammeId.UplinkSite: ok = space != null && space.TryRebuildUplink(owner); failure = f.World.Uplinks >= f.World.UplinkMax ? FrontOutcome.UplinksMax : FrontOutcome.NoSite; break;
                     case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); failure = FrontOutcome.DataCentersMax; break;
@@ -351,7 +343,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (ok)
             {
                 if (e.Id == ProgrammeId.LaunchSatellite) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
-                Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id, e.Rung) + " complete.");
+                Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " complete.");
                 return;
             }
             Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " had no effect (" + why + "); " + (int)e.Cost + " returned to the front budget.");

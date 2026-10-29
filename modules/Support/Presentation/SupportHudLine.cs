@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 noticeUntil = now + SpaceNoticeTracker.ToastSeconds;
                 AvUiSound.Play(opsNotice.Kind == OpsNoticeKind.Done ? AvUiCue.Confirm : AvUiCue.Caution);
             }
-            // The fronts' milestones: a programme done (readiness names its new perks), failed, or an asset lost.
+            // The fronts' milestones: a programme done, failed, or an asset lost.
             FrontNotice front = frontNotices.Observe(manager.FrontMirror.Known, manager.FrontMirror.State, now, quiet);
             if (front.Kind != FrontNoticeKind.None)
             {

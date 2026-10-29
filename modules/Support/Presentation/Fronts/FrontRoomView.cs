@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Gate;
         public bool Unlocked;
         public int Price;
-        /// <summary>Why the pilot cannot use it now (readiness rung, missing satellite, allocation); empty when it is available.</summary>
+        /// <summary>Why the pilot cannot use it now (skill grade, missing satellite, allocation); empty when it is available.</summary>
         public string Reason;
     }
 
@@ -129,6 +129,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public readonly List<FrontPerkView> Perks = new List<FrontPerkView>(8);
         /// <summary>This front's perk power as the rail words it: <c>POWER ×1.25 · AHEAD</c> (empty before the host has spoken).</summary>
         public string PowerLine = "";
+        /// <summary>The local pilot's skill grade in this front's system (1..6), shown where front readiness used to be.</summary>
+        public int Grade = 1;
         public readonly List<FrontLogLine> Log = new List<FrontLogLine>(8);
 
         // ORBIT payload.

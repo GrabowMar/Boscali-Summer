@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return r;
         }
 
-        /// <summary>TEST ONLY (set by the sim's <c>readiness</c> verb): perks of rung <= this pass the readiness gate and every qualification gate (the allocation is still spent). 0 = off.</summary>
+        /// <summary>TEST ONLY (set by the sim's <c>grade</c> verb): every pilot holds at least this OPS skill grade, so perks up to it pass the grade gate (the allocation is still spent). 0 = off.</summary>
         internal static int GradeFloor;
         private static float spendMark;
         private static bool replyHooked;
@@ -335,7 +335,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["taskedRows"] = pv.Tasked.Count;
                 var cards = new List<object>(3);
                 foreach (FrontCardView c in pv.Cards)
-                    cards.Add(new Dictionary<string, object> { { "front", (int)c.Front }, { "readiness", c.Readiness }, { "superiority", c.Superiority }, { "directive", c.Directive }, { "building", c.Building }, { "alert", c.Alert } });
+                    cards.Add(new Dictionary<string, object> { { "front", (int)c.Front }, { "grade", c.Grade }, { "superiority", c.Superiority }, { "directive", c.Directive }, { "building", c.Building }, { "alert", c.Alert } });
                 r["cards"] = cards;
             }
             FrontController fronts = Find<FrontController>();
@@ -392,7 +392,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 for (int f = 0; f < FrontRules.FrontCount; f++)
                 {
                     FrontRow row = m.FrontMirror.State.Fronts[f];
-                    r["front" + f + "Readiness"] = (int)row.Readiness;
                     r["front" + f + "Directive"] = (int)row.Directive;
                     r["front" + f + "Queue"] = row.Queue.Count;
                     r["front" + f + "Budget"] = (int)row.Budget;
@@ -584,8 +583,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["lastOutcome"] = lastOutcome; r["lastCharged"] = lastCharged;
             r["enemyBirdsDown"] = (int)m.OpsMirror.State.EnemyBirdsDown;
             if (FrontService.Active != null && GameManager.GetLocalPlayer(out Player p) && p != null &&
-                FrontService.Active.EnemyReadout(p.HQ, out int rd, out int q, out int es, out float hb))
-            { r["enemyReadiness"] = rd; r["enemyQueued"] = q; r["enemySup"] = es; r["hostBudget"] = (int)hb; }
+                FrontService.Active.EnemyReadout(p.HQ, out int q, out int es, out float hb))
+            { r["enemyQueued"] = q; r["enemySup"] = es; r["hostBudget"] = (int)hb; }
             return r;
         }
 
