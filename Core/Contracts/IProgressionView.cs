@@ -82,6 +82,13 @@ namespace BoscaliSummer.Core.Contracts
         void RequestUnlock(byte perkId);
 
         /// <summary>
+        /// The local pilot's grade in an OPS lane (SPACE, CYBER or SOF), from the last snapshot:
+        /// 1 before any snapshot, 6 under the debug bypass, 0 for a lane the board does not have.
+        /// The same rule the host applies through <see cref="IPlayerPerks.Grade"/>.
+        /// </summary>
+        int Grade(string lane);
+
+        /// <summary>
         /// Drives the snapshot poll. The client refreshes its perk state only while a view is
         /// open, so a closed panel costs no traffic and an open one can never show stale state.
         /// </summary>

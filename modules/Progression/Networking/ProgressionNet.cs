@@ -85,8 +85,9 @@ namespace BoscaliSummer.Modules.Progression.Networking
         /// <summary>
         /// Version 5 adds host-approved per-aircraft engine maps. Version 6 adds host-relayed squadron crests.
         /// Version 7 re-themes the qualification grades (same ids, new effects), so a mixed pair would pay different bonuses.
+        /// Version 8 replaces the board with the SPACE / CYBER / SOF skill lanes (ids 0..17 mean new grades).
         /// </summary>
-        internal const byte ProtocolVersion = 7;
+        internal const byte ProtocolVersion = 8;
 
         /// <summary>Perk id meaning "send me a snapshot, change nothing".</summary>
         internal const byte QueryOnly = byte.MaxValue;

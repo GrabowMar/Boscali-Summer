@@ -22,101 +22,101 @@ namespace BoscaliSummer.Modules.Support.Runtime
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Recon, "RECON PASS",
                 "RADAR bird reveals static and moving ground contacts through a live uplink.",
-                SupportCapabilities.Recon, settings.ReconEnabled, new ReconAction(),
+                settings.ReconEnabled, new ReconAction(),
                 SpaceBirdRequirement.Radar, BirdTask.Scan, SpaceRevealWindow.BirdBusySeconds));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.ElintSweep, "ELINT SWEEP",
                 "Station SIGINT array locates enemy ground radars that are emitting.",
-                SupportCapabilities.Recon, settings.ElintEnabled, new ElintAction()));
+                settings.ElintEnabled, new ElintAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.SatCamera, "SAT CAMERA",
                 "OPTICAL bird images the mark in daylight and reveals ground units in its window through a live uplink.",
-                SupportCapabilities.Recon, settings.SatCameraEnabled, new SatelliteCameraAction(),
+                settings.SatCameraEnabled, new SatelliteCameraAction(),
                 SpaceBirdRequirement.Optical, BirdTask.Camera, SpaceRevealWindow.BirdBusySeconds));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Overwatch, "OVERWATCH",
                 "RADAR bird finds the moving enemy ground units nearest the aim (3 km x power) and follows up to 4 x power of them on the map for 60 s x power.",
-                SupportCapabilities.Recon, settings.ReconEnabled, new OverwatchAction(), SpaceBirdRequirement.Radar));
+                settings.ReconEnabled, new OverwatchAction(), SpaceBirdRequirement.Radar));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Starfall, "STARFALL",
                 "KINETIC bird walks 3 to 5 small rods, 300 m apart, along the line from your aircraft through the aim.",
-                SupportCapabilities.Artillery, settings.ArtilleryEnabled, new StarfallAction(),
+                settings.ArtilleryEnabled, new StarfallAction(),
                 SpaceBirdRequirement.Kinetic, BirdTask.Rod, 14f, true));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Siphon, "SIPHON",
                 "CYBER takes funds from the strongest enemy's front budgets into yours: 40 + 15 per enemy node you hold, x power. The aim is ignored.",
-                SupportCapabilities.Emp, settings.CyberEnabled, new SiphonAction()));
+                settings.CyberEnabled, new SiphonAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.DirectAction, "DIRECT ACTION",
                 "A ready SOF team raids the revealed SAM, radar or enemy anchor nearest the aim (2 km) for 45 s / power; the roll destroys it or wounds the team.",
-                SupportCapabilities.Artillery, settings.SofEnabled, new RaidAction()));
+                settings.SofEnabled, new RaidAction()));
 
             if (fortifications != null)
                 actions.Add(new SupportActionDefinition(
                     SupportActionId.Fortify, "ZONE FORTIFICATION",
                     "Reinforce a controlled zone with defenders.",
-                    SupportCapabilities.Fortify, settings.FortifyEnabled, new FortifyAction(fortifications)));
+                    settings.FortifyEnabled, new FortifyAction(fortifications)));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Artillery, "ORBITAL ROD",
                 "KINETIC bird releases one physical rod through a live uplink.",
-                SupportCapabilities.Artillery, settings.ArtilleryEnabled, new ArtilleryAction(),
+                settings.ArtilleryEnabled, new ArtilleryAction(),
                 SpaceBirdRequirement.Kinetic, BirdTask.Rod, 14f, true));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Prsm, "PRSM STRIKE",
                 "One offboard ballistic missile onto the mark.",
-                SupportCapabilities.Artillery, settings.PrsmEnabled, new PrsmAction(), SpaceBirdRequirement.OpticalOrRadar));
+                settings.PrsmEnabled, new PrsmAction(), SpaceBirdRequirement.OpticalOrRadar));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Cruise, "CRUISE SALVO",
                 "Bounded salvo of offboard cruise missiles onto the mark, counted against the faction live cap.",
-                SupportCapabilities.Artillery, settings.CruiseEnabled, new CruiseAction(), SpaceBirdRequirement.OpticalOrRadar));
+                settings.CruiseEnabled, new CruiseAction(), SpaceBirdRequirement.OpticalOrRadar));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.Emp, "EMP SHOCK",
                 "30 s hostile radar blackout. Batteries widen the pulse; a banked SCREEN package adds up to 25% radius and duration.",
-                SupportCapabilities.Emp, settings.EmpEnabled, new EmpAction()));
+                settings.EmpEnabled, new EmpAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.FlareMissile, "DECOY BARRAGE",
                 "Airburst IR countermeasure cloud.",
-                SupportCapabilities.Recon, settings.FlareBarrageEnabled, new FlareMissileAction()));
+                settings.FlareBarrageEnabled, new FlareMissileAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.RadarBlind, "RADAR BLIND",
                 "CYBER package JAM RADAR at the aim: hostile radar range x0.4 within 1.5 km for 90 s.",
-                SupportCapabilities.Emp, settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberJamRadar)));
+                settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberJamRadar)));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.SamNetDown, "SAM NET DOWN",
                 "CYBER package SAM NET DOWN at the aim: hostile SAMs cannot launch within 3 km for 60 s.",
-                SupportCapabilities.Emp, settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberSamNetDown)));
+                settings.CyberEnabled, new CyberPerkAction(SupportActionId.CyberSamNetDown)));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.ReconTeam, "RECON TEAM",
                 "A SOF recon team reveals enemy ground units within 2 km of the aim for 5 minutes. Needs a live camp.",
-                SupportCapabilities.Recon, settings.SofEnabled, new ReconTeamAction()));
+                settings.SofEnabled, new ReconTeamAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.SabotageStrike, "SABOTAGE STRIKE",
                 "A SOF team sabotages the nearest enemy anchor within 1 km of the aim. Needs a live camp.",
-                SupportCapabilities.Artillery, settings.SofEnabled, new SabotageStrikeAction()));
+                settings.SofEnabled, new SabotageStrikeAction()));
 
             actions.Add(new SupportActionDefinition(
                 SupportActionId.JtacMark, "JTAC MARK",
                 "SOF team lases the nearest hostile unit at the mark; friendly laser-guided weapons see it.",
-                SupportCapabilities.Recon, null, new MarkAction()));
+                null, new MarkAction()));
             actions.Add(new SupportActionDefinition(
                 SupportActionId.JtacUnlase, "JTAC UNLASE",
                 "Clears one lase reference on the nearest hostile unit at the mark.",
-                SupportCapabilities.Recon, null, new UnlaseAction()));
+                null, new UnlaseAction()));
         }
 
         public SupportActionDefinition Find(SupportActionId id)

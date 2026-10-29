@@ -23,31 +23,26 @@ namespace BoscaliSummer.Modules.Progression.Configuration
                 "Host-authoritative: on a server, only the host's value applies.");
             ScorePerPoint = config.Bind("Progression", "ScorePerPoint", 250,
                 new ConfigDescription(
-                    "Score for the first qualification grade. Grade n costs n x this, so grades " +
-                    "get longer as they get better: 250 gives the tool in the first minutes and " +
-                    "a complete six-grade qualification for 5250 score, 1000 makes even the " +
-                    "first tool a long-mission reward. This reads the vanilla per-player score; " +
+                    "Score for the first OPS skill pick. Pick n costs n x this, so picks get " +
+                    "longer as they get better: 250 gives the first pick in the first minutes and " +
+                    "five picks (one lane from grade 1 to its grade-6 capstone) for 3750 score, " +
+                    "1000 makes every pick a long-mission reward. This reads the vanilla per-player score; " +
                     "Nuclear Option's rank thresholds, aircraft requirements and weapon access " +
                     "are never modified. Host-authoritative: on a server, only the host's value " +
                     "applies.",
                     new AcceptableValueRange<int>(50, 10000)));
             MaximumPoints = config.Bind("Progression", "MaximumPoints", 7,
                 new ConfigDescription(
-                    "Most picks one player can earn in a mission. The board holds four " +
-                    "qualifications of six grades each, one pick per grade, and a career may " +
-                    "hold at most two support authorisations. Score pays the six grades, so " +
-                    "this is the balance dial: 7 buys one complete qualification plus a second " +
-                    "tool, once an ace pays the seventh pick; 6 forces a choice between depth " +
-                    "and a second tool. Ace bonus picks go on top up to this ceiling. " +
+                    "Most picks one player can earn in a mission. Career picks per pilot life; " +
+                    "spend them on SPACE, CYBER or SOF skills. Grade 1 of each is free and " +
+                    "every other grade costs one pick, so score's six picks take one lane to its " +
+                    "capstone with one to spare. Ace bonus picks go on top up to this ceiling. " +
                     "Host-authoritative: on a server, only the host's value applies.",
                     new AcceptableValueRange<int>(1, 20)));
             PerkStrength = config.Bind("Progression", "PerkStrength", 1f,
                 new ConfigDescription(
-                    "Scales how strong every passive perk is, without editing the board. 1.0 is " +
-                    "the shipped balance (for example 8% lower fuel burn, +15% combat pay); 0.5 " +
-                    "halves each bonus, 0 makes passives cosmetic, 2.0 doubles them. Perks that " +
-                    "authorise a support action are unaffected - they are on or off. " +
-                    "Host-authoritative: on a server, only the host's value applies.",
+                    "Retired with the flying passives (the board is OPS skills now); has no effect. " +
+                    "Kept so the host-authority settings list keeps its shape.",
                     new AcceptableValueRange<float>(0f, 2f)));
 
             SquadronName = config.Bind("Squadron", "Name", "BOSCALI SUMMER",

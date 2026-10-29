@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         private bool unlockPending;
         private float unlockPendingSince;
 
-        public string LastResult { get; private set; } = "Fly to earn a qualification grade.";
+        public string LastResult { get; private set; } = "Fly to earn an OPS skill pick.";
 
         int IProgressionView.Rank => localRank;
         int IProgressionView.Score => localScore;
@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             nextPoll = 0f;
             unlockPending = false;
             unlockPendingSince = 0f;
-            LastResult = "Fly to earn a qualification grade.";
+            LastResult = "Fly to earn an OPS skill pick.";
             TuneFeedback = null;
             TuneFeedbackAircraft = 0;
             TuneFeedbackUntil = 0f;
@@ -146,7 +146,7 @@ namespace BoscaliSummer.Modules.Progression.Runtime
                 PerkDefinition definition = PerkCatalog.All[i];
                 bool unlocked = localState.Has(definition.Id);
                 // The same rule the host applies, so the panel cannot offer a grade the
-                // server would refuse: grade order, the career's two-tool cap, or the price.
+                // server would refuse: grade order or the price.
                 byte block = unlocked || bypass
                     ? PerkView.BlockNone
                     : localState.BlockOf(definition.Id, localEarnedPoints);
@@ -232,9 +232,9 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             if (localPlayerId != PlayerIdentity.None)
             { states[localPlayerId] = localState; generations[localPlayerId] = snapshot.Generation; }
 
-            if (snapshot.Result == ProgressionSnapshot.Unlocked) LastResult = "Qualification grade earned.";
+            if (snapshot.Result == ProgressionSnapshot.Unlocked) LastResult = "OPS skill grade earned.";
             else if (snapshot.Result == ProgressionSnapshot.Denied)
-                LastResult = "Pick refused. Check grade order and the two-tool career cap.";
+                LastResult = "Pick refused. Check grade order and your picks in hand.";
             else LastResult = NextPointHint();
         }
 
@@ -246,19 +246,23 @@ namespace BoscaliSummer.Modules.Progression.Runtime
             int remaining = PerkPoints.RemainingToNext(Math.Max(0, localScore - origin), localScorePerPoint);
             return remaining < 0
                 ? LadderComplete
-                : remaining + " more score for the next qualification grade.";
+                : remaining + " more score for the next skill pick.";
         }
 
-        // ---- Effects ---------------------------------------------------------------------
+        // ---- Skills ----------------------------------------------------------------------
 
-        public float Multiplier(ulong playerId, PerkEffect effect)
+        // A player with no state yet holds only the free grade 1s; never mutated.
+        private static readonly PerkState NoPicks = new PerkState();
+
+        public int Grade(ulong playerId, string lane)
         {
-            // The OPS lanes carry no flying passives; the contract goes in M1 Task 2.
-            return 1f;
+            RefreshGeneration(playerId);
+            if (BypassRequirements) return PerkCatalog.MaximumDepth;
+            return (states.TryGetValue(playerId, out PerkState state) ? state : NoPicks).GradeOf(lane);
         }
 
-        // Every lane's grade 1 is free, so every old capability is held; grade gating lands in M1 Task 5.
-        public bool Grants(ulong playerId, string capability) => true;
+        int IProgressionView.Grade(string lane) =>
+            BypassRequirements ? PerkCatalog.MaximumDepth : localState.GradeOf(lane);
 
         private PerkState GetOrCreate(ulong id)
         {

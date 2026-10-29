@@ -15,9 +15,7 @@ namespace BoscaliSummer.Modules.Progression
             new ModuleMetadata("progression", "Progression", "squad");
         private static readonly Type[] Patches =
         {
-            typeof(AircraftFuelUsePatch),
-            typeof(AircraftEngineMapPatch),
-            typeof(RewardAllocationPatch)
+            typeof(AircraftEngineMapPatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -34,16 +32,12 @@ namespace BoscaliSummer.Modules.Progression
             context.AddService<IPlayerPerks>(manager);
             context.AddService<IProgressionView>(manager);
 
-            // The two dials that decide how a mission's progression feels: how fast picks
-            // arrive, and how much a pick is worth. The ceiling on picks is balance and
-            // stays in the config file.
+            // The dial that decides how a mission's progression feels: how fast picks arrive.
+            // The ceiling on picks is balance and stays in the config file.
             context.AddHostSettings(new HostSettingsTable("PROGRESSION")
-                .Number(1, context.Settings.Progression.ScorePerPoint, "SCORE PER GRADE",
-                    "Score for the first qualification grade; grade n costs n x this, so grades get longer as they get better.",
-                    50)
-                .Number(2, context.Settings.Progression.PerkStrength, "PERK STRENGTH",
-                    "Scales every passive perk. Support authorisations are on or off and are unaffected.",
-                    0.05f, v => v.ToString("P0")));
+                .Number(1, context.Settings.Progression.ScorePerPoint, "SCORE PER PICK",
+                    "Score for the first OPS skill pick; pick n costs n x this, so picks get longer as they get better.",
+                    50));
 
             if (!UnityEngine.Application.isBatchMode)
             {

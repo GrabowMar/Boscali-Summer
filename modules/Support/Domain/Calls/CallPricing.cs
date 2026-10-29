@@ -9,16 +9,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
         public readonly string DegradedReason;  // chip words, e.g. "UPLINK DOWN"
         public readonly bool Exploit;           // counter-triangle advantage (-25 %)
         public readonly float EventMultiplier;  // Events module cost factor, 1 = none
-        public readonly float PerkMultiplier;   // personal progression perk factor, 1 = none, never a chip
         public readonly float Scale;            // PerkPriceScale, 1 = spec prices, never a chip
 
-        public PriceInputs(bool degraded, string degradedReason, bool exploit, float eventMultiplier, float perkMultiplier, float scale)
+        public PriceInputs(bool degraded, string degradedReason, bool exploit, float eventMultiplier, float scale)
         {
             Degraded = degraded;
             DegradedReason = degradedReason;
             Exploit = exploit;
             EventMultiplier = eventMultiplier;
-            PerkMultiplier = perkMultiplier;
             Scale = scale;
         }
     }
@@ -46,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             float price = CallSheet.BasePrice(rung)
                 * (p.Degraded ? 1f + DegradedFactor : 1f)
                 * (p.Exploit ? 1f + ExploitFactor : 1f)
-                * ev * FrontRules.Sane(p.PerkMultiplier) * FrontRules.Sane(p.Scale);
+                * ev * FrontRules.Sane(p.Scale);
             int cost = Math.Max(1, (int)Math.Round(price, MidpointRounding.AwayFromZero));
 
             string reason = "";

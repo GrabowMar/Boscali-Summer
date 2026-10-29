@@ -143,7 +143,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public readonly SupportActionId Id;
         public readonly string Name;
         public readonly string Description;
-        public readonly string Capability;
         public readonly ISupportAction Action;
         public readonly SpaceBirdRequirement RequiredBird;
         public readonly BirdTask? SpaceTask;
@@ -153,7 +152,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly ConfigEntry<bool> enabled;
 
         public SupportActionDefinition(
-            SupportActionId id, string name, string description, string capability,
+            SupportActionId id, string name, string description,
             ConfigEntry<bool> enabled, ISupportAction action,
             SpaceBirdRequirement requiredBird = SpaceBirdRequirement.None, BirdTask? spaceTask = null,
             float taskSeconds = 0f, bool requiresPhysicalLaunch = false)
@@ -161,7 +160,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Id = id;
             Name = name;
             Description = description;
-            Capability = capability;
             this.enabled = enabled;
             Action = action;
             RequiredBird = requiredBird;

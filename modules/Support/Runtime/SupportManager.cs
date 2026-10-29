@@ -476,7 +476,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!CallSheet.TryGet(id, out CallRow row) || catalog == null) return "";
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
-            if (!IsAuthorised(def)) return "NEEDS " + QualificationName(def.Capability);
+            if (!IsAuthorised(def)) return "NEEDS " + row.FrontWord + " SKILL";
             if (!BypassRequirements && readiness.Readiness(player.HQ, row.Front) < row.Rung && row.Rung > OpsAutomation.ReadinessFloor) return "NEEDS READINESS " + row.Rung;
             if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
             return "";
@@ -491,29 +491,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SpaceBirdRequirement.OpticalOrRadar => opsMirror.BirdUp(BirdKind.Optical) || opsMirror.BirdUp(BirdKind.Radar),
             _ => true
         };
-
-        /// <summary>The qualification that authorises a capability, in words (read through <see cref="IProgressionView"/>; a fixed name when it is not installed).</summary>
-        private static string QualificationName(string capability)
-        {
-            string lane = capability == SupportCapabilities.Artillery ? "STRIKE"
-                : capability == SupportCapabilities.Emp ? "SIGNALS"
-                : capability == SupportCapabilities.Fortify ? "ENGINEER" : "RECON";
-            if (ModuleServices.TryGet<IProgressionView>(out IProgressionView view) && view != null)
-            {
-                try
-                {
-                    PerkView[] list = view.GetPerks();
-                    for (int i = 0; list != null && i < list.Length; i++)
-                    {
-                        string name = list[i].Name;
-                        if (!string.IsNullOrEmpty(name) && name.EndsWith("Qualification", StringComparison.OrdinalIgnoreCase) &&
-                            name.StartsWith(lane, StringComparison.OrdinalIgnoreCase)) return name.ToUpperInvariant();
-                    }
-                }
-                catch (Exception) { /* a view that is not ready yet falls back to the fixed name */ }
-            }
-            return lane + " QUALIFICATION";
-        }
 
         /// <summary>Host: the front readiness gate for one perk; the dev bypass opens everything.</summary>
         private bool ReadinessOpen(Player player, in CallRow row) =>
@@ -554,9 +531,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private float CooldownFor(Player player, SupportActionId action)
         {
             if (DisableCooldowns || player == null || !CallSheet.TryGet(action, out CallRow row)) return 0f;
-            float seconds = CallSheet.Cooldown(row.Rung) *
-                            perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCooldown) *
-                            EventsCooldownMultiplier(player);
+            float seconds = CallSheet.Cooldown(row.Rung) * EventsCooldownMultiplier(player);
             return PerkPower.Cooldown(seconds, readiness.Power(player.HQ, row.Front));
         }
 
@@ -930,9 +905,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private bool HostAuthorised(Player player, SupportActionDefinition action) =>
             OpsAutomation.ReadinessFloor > 0 || QualificationOpen(player, action);
 
-        /// <summary>Single-player ready: a rung-1 perk needs no progression qualification (a fresh pilot has none), so every front opens with one usable perk; R2 and up still need it.</summary>
+        /// <summary>M1 interim: every OPS lane's grade 1 is free, so this is open; the grade gate lands with CallGate (M1 Task 5).</summary>
         private bool QualificationOpen(Player player, SupportActionDefinition action) =>
-            (CallSheet.TryGet(action.Id, out CallRow row) && row.Rung <= 1) || perks.Grants(PlayerIdentity.Of(player), action.Capability);
+            !CallSheet.TryGet(action.Id, out CallRow row) || perks.Grade(PlayerIdentity.Of(player), row.FrontWord) >= 1;
 
         internal float ServerCooldownFor(Player player, SupportActionId action) => CooldownFor(player, action);
 
@@ -969,8 +944,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
             // Every factor is readable on a client too (the Events and Progression mirrors, and the host's replicated PerkPriceScale), so the panel quotes what the host charges.
             var inputs = new PriceInputs(degraded, "UPLINK DOWN", row.Front == Front.Cyber && CyberExploit(player.HQ),
-                EventsCostMultiplier(player), perks.Multiplier(PlayerIdentity.Of(player), PerkEffect.SupportCost),
-                settings.PerkPriceScale.Value);
+                EventsCostMultiplier(player), settings.PerkPriceScale.Value);
             return CallPricing.Quote(row.Rung, inputs);
         }
 
