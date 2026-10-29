@@ -4,11 +4,11 @@
 
 <p align="center">
   <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.12-alpha"><img src="https://img.shields.io/badge/release-0.2.12_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.12 alpha"></a>
-  <img src="https://img.shields.io/badge/status-stabilising-f0b56e?style=flat-square&labelColor=0b1b23" alt="Status: stabilising">
+  <a href="#maintenance-mode"><img src="https://img.shields.io/badge/status-maintenance_mode-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Status: maintenance mode"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.3-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.3">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8fb4b8?style=flat-square&labelColor=0b1b23" alt="MIT license"></a>
-  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Contributions welcome"></a>
+  <a href="#maintenance-mode"><img src="https://img.shields.io/badge/reuse-whole_or_in_parts-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Reuse it whole or in parts"></a>
 </p>
 
 <p align="center">
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="#stabilisation">Stabilisation</a> ·
+  <a href="#maintenance-mode">Maintenance mode</a> ·
   <a href="#whats-inside">What's inside</a> ·
   <a href="#install">Install</a> ·
   <a href="#first-flight">First flight</a> ·
@@ -40,35 +40,14 @@ Start with **Twelve Miles Out** in the mission picker's **Boscali Summer** group
 Every other mission runs the mod too. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own mix. It can remember the answer for that mission or stop asking.
 
 > [!CAUTION]
-> **Early alpha.** Expect bugs, balance problems, performance dips and settings that reset between versions. Multiplayer is not reliable yet. The project is now concentrating on making what exists dependable, so every bug report helps directly.
+> **Alpha.** Expect bugs, balance problems, performance dips and settings that reset between versions. Multiplayer is not reliable.
 
-## Stabilisation
+## Maintenance mode
 
 > [!IMPORTANT]
-> **Boscali Summer is in a feature freeze.** The 0.2 releases added a lot in a short time. Until those systems are dependable, the work goes into fixing, trimming and testing what is already there: no new systems, no new weapons, no new pages.
+> **Boscali Summer is in maintenance mode.** Development has stalled: there is no roadmap and no release schedule, and updates will be rare. Issues and pull requests may take a long time to get an answer.
 
-### How a fix gets made
-
-1. **Collect.** Bug reports and `BepInEx/LogOutput.log` files come in from players, and from our own test runs.
-2. **Find the cause.** Every error in a log is traced to the code that causes it, and grouped with every other place that goes through the same code.
-3. **Fix it once.** The fix goes where all the callers meet, not as a guard around the one spot where it showed up.
-4. **Check it.** Both the development and the player build must compile with zero warnings. Automated in-game scenarios (scripted flights in a sandbox copy of the game that check the outcome and collect the log) are run again for every system the change touches.
-5. **Ship it** in a small patch release, with a changelog entry.
-
-### In 0.2.11
-
-The latest patch release:
-
-- **Wing panel restored on Nuclear Option 0.34.2** ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Nuclear Option 0.34.3 renamed a map-icon method, and on 0.34.2 the missing name stopped the whole Wing module from loading, WMC page included. The patch now uses whichever method the running game has.
-- **Fixes from the logs:**
-  - fuel-depot smoke no longer logs a Unity error each time it removes a light;
-  - an OPS command is no longer sent to the host before the host's own player exists;
-  - squadron tail paint no longer reads a texture from materials that don't have one;
-  - missions with no objectives no longer flood the log with "Mission Runner was null".
-- **NOMM no longer loses the mod.** The radio library and event pictures moved from `BepInEx/plugins/BoscaliSummer` to `BepInEx/config/BoscaliSummer`, so the mod never re-creates a folder inside `plugins`. That re-created folder could make NOMM delete the real install. The release zip no longer ships a `Music` folder.
-- **The menu key is yours to choose.** The interaction menu key (C by default) can be changed at the mission prompt and in SET, with a warning when it clashes with one of the game's own controls.
-- **Cleanup without cuts:** about 6,900 lines of dead, duplicated and over-built code removed, and no feature removed. Both builds compile with no warnings.
-- **Re-checked in game:** the OPS page and front windows, the full OPS solo flow, forest fires and squadron tail paint all pass their scenarios on the cleaned build.
+**Reuse it, whole or in parts.** Fork the whole mod and carry it on, lift one module into your own mod, or borrow a single patch, shader or panel. Boscali Summer's own code is under the [MIT licence](LICENSE), so all you need to keep is its copyright and licence notice. Third-party parts keep their own licences (see [Credits and licences](#credits-and-licences)), and Nuclear Option's own assets and code are not part of the offer. [Development](#development) shows how to build it and where things are.
 
 ### Known issues
 
@@ -256,7 +235,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 4. Start the game.
 
 **Updating?** Close the game, replace the `BoscaliSummer` folder and start again. Always restart fully after an update.<br>
-**Using NOMM?** Boscali Summer isn't in the NOMM catalogue yet, so install it by hand as above; NOMM still lists it. **Close the game before you enable, disable or update mods, launch vanilla, or join a server from NOMM.** NOMM moves mods it switches off to `BepInEx/disabledPlugins`, and moving the folder of a mod that is still running can lose it. See [My mods vanished after using NOMM](#troubleshooting).<br>
+**Using NOMM?** Boscali Summer isn't in the NOMM catalogue, so install it by hand as above; NOMM still lists it. **Close the game before you enable, disable or update mods, launch vanilla, or join a server from NOMM.** NOMM moves mods it switches off to `BepInEx/disabledPlugins`, and moving the folder of a mod that is still running can lose it. See [My mods vanished after using NOMM](#troubleshooting).<br>
 **Uninstalling?** Delete `BepInEx/plugins/BoscaliSummer`. To remove your settings and saved data too, also delete `com.marci.boscalisummer.cfg` and the `BoscaliSummer` folder in `BepInEx/config`.
 
 ## First flight
@@ -301,7 +280,7 @@ Start with `BepInEx/LogOutput.log`. Copy it **before** you restart the game, bec
 
 - **Check the mission prompt.** **IMMERSION ONLY** or a custom mix switches systems off for that mission. To be asked again, set `RememberedMissions = {}` and `AskAtStart = true` under `[Mission]` in the config file.
 - **Check the module switch** in the **F1** window or in the config file.
-- **Check the log for `Module failed`.** A failed module usually means a game version the mod doesn't know yet. That is exactly how the WMC page went missing on 0.34.2 ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Report it with the log.
+- **Check the log for `Module failed`.** A failed module usually means a game version the mod doesn't know. That is exactly how the WMC page went missing on 0.34.2 ([#30](https://github.com/GrabowMar/Boscali-Summer/issues/30)). Updates for new game versions can take a long time, so stay on a version from the [Install](#install) table.
 
 </details>
 
@@ -395,10 +374,10 @@ Confirm everyone, the host included, has exactly the same mod version. If it sti
 ## FAQ
 
 <details>
-<summary><b>Why no new features?</b></summary>
+<summary><b>Will there be updates?</b></summary>
 <br>
 
-Because what is there needs to work first. The 0.2 releases grew fast, and the [stabilisation](#stabilisation) work comes before anything new. Ideas are still welcome in the issue tracker. They are collected, not built, until then.
+Rarely. The mod is in [maintenance mode](#maintenance-mode): no roadmap and no schedule, so fixes and updates for new game versions come only now and then. Anyone is welcome to take the code and carry it on.
 
 </details>
 
@@ -459,18 +438,16 @@ In `BepInEx/config/BoscaliSummer`: radio tracks in `Music` (one folder per stati
 </details>
 
 <details>
-<summary><b>How can I help?</b></summary>
+<summary><b>Can I reuse the code?</b></summary>
 <br>
 
-Report bugs with logs, test in the ways you play, and send fixes. See [Contributing](#contributing).
+Yes, whole or in parts, under the [MIT licence](LICENSE). See [Maintenance mode](#maintenance-mode).
 
 </details>
 
 ## Reporting a bug
 
-Bug reports are the most useful thing you can send right now: **[open an issue](https://github.com/GrabowMar/Boscali-Summer/issues)**.
-
-A good report has:
+The [issue tracker](https://github.com/GrabowMar/Boscali-Summer/issues) stays open. In maintenance mode a report can take a long time to get an answer or a fix. A good report has:
 
 - what happened, what you expected, and the steps to reproduce it;
 - the game version, the mod version and your other mods;
@@ -482,9 +459,7 @@ Want more detail in the log? With ConfigurationManager installed, turn on **Adva
 
 ## Contributing
 
-**Help is welcome, and it doesn't have to be code.** Testing on your own setup, a clear bug report with a log, a troubleshooting tip that worked for you or a correction to this README all move the mod forward. If you code, fixes and cleanups that keep behaviour are the most useful pull requests right now.
-
-[CONTRIBUTING.md](CONTRIBUTING.md) covers building the mod, testing a change and opening a pull request. Questions, ideas and war stories go in the [issue tracker](https://github.com/GrabowMar/Boscali-Summer/issues).
+Development has stalled, so pull requests may wait a long time for review, and new features are unlikely to be merged. To take it further sooner, fork it. [CONTRIBUTING.md](CONTRIBUTING.md) covers building the mod, testing a change and the code conventions.
 
 ## Development
 
@@ -536,6 +511,6 @@ Boscali Summer's own code is released under the [MIT licence](LICENSE). Versions
 ---
 
 <p align="center">
-  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">MIT licence</a> · <a href="CONTRIBUTING.md">contributions welcome</a></sub><br>
+  <sub><b>Boscali Summer</b> by GrabowMar · released under the <a href="LICENSE">MIT licence</a> · <a href="#maintenance-mode">maintenance mode, free to reuse</a></sub><br>
   <sub>This project is an unofficial community modification and is not affiliated with, sponsored by, or endorsed by Shockfront Studios Pty Ltd. Original Nuclear Option assets, vehicle designs, audio, and code are Copyright (c) 2026 Shockfront Studios Pty Ltd. All rights reserved. Nuclear Option and Shockfront Studios are trademarks or registered trademarks of Shockfront Studios Pty Ltd. Original mod content and all other trademarks belong to their respective owners.</sub>
 </p>

@@ -1,18 +1,8 @@
 # Contributing to Boscali Summer
 
-Thanks for wanting to help. Boscali Summer is a hobby mod with a lot of moving parts, and it gets better fastest when players and modders pitch in.
+Boscali Summer is in **maintenance mode**. Development has stalled: there is no roadmap and no release schedule, and updates will be rare. Issues and pull requests may take a long time to get an answer.
 
-The mod is in a **stabilisation phase**: no new systems until the existing ones are dependable. That shapes what helps most right now.
-
-## What helps most
-
-1. **Bug reports with logs.** Read [Reporting a bug](README.md#reporting-a-bug) first. A report with `BepInEx/LogOutput.log` attached is worth ten without.
-2. **Testing.** Fly solo, host and join. Try different hardware, different missions and the mod alongside the other mods you use, then tell us what broke.
-3. **Fixes to existing behaviour.** Crashes, errors in the log, desyncs, things that don't do what the README or the in-game help says.
-4. **Cleanup that keeps behaviour.** Dead code, duplicated logic, hand-rolled versions of things the standard library or the game already provides.
-5. **Documentation.** Corrections to the README's troubleshooting and FAQ, written from what you ran into.
-
-**New features:** open an issue to discuss the idea first. Good ideas are welcome, but most will be parked until stabilisation is over. Please don't start a large feature pull request without a go-ahead.
+The code is free to reuse, whole or in parts, under the [MIT licence](LICENSE). If you want to take it further, fork it. The rest of this file is for anyone building, changing or forking the code.
 
 ## Building
 
@@ -33,10 +23,11 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 
 ## Pull requests
 
+- Fixes to existing behaviour are the most likely to be merged. New features are unlikely, and a review can take a long time.
 - Branch from `main` and keep one topic per pull request.
 - In the description, say **how you tested**: game version, solo, host or client, which mission, and what you checked. Paste the relevant log lines from before and after the change.
 - If you touch anything networked, test with a host and at least one client. Every message layout change bumps that module's `ProtocolVersion`.
-- Don't bump the mod version or edit the changelog's release headings. The maintainer does that when cutting a release.
+- Don't bump the mod version or edit the changelog's release headings.
 
 ## Code guidelines
 
@@ -46,7 +37,7 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 - **Unity objects:** compare `UnityEngine.Object` values with `== null`, never with `?.`, `??` or `is null`, because destroyed Unity objects only compare equal to null through `==`.
 - **Keep features.** Cleanup pull requests must not remove player-facing behaviour.
 - **Keep sim hooks.** Types and members named `*Automation`, `*Proof` or `*Probe`, and code under `#if !PUBLIC_RELEASE`, are driven by name from external test scenarios.
-- **No new dependencies** without discussing them in an issue first.
+- **No new dependencies.**
 
 ## Licence and assets
 
@@ -57,4 +48,4 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 
 ## Be decent
 
-Be patient and kind in issues and reviews. Everyone here is doing this for fun.
+Be patient and kind in issues and reviews. Everyone here does this for fun.
