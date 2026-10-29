@@ -195,6 +195,7 @@
     </EmbeddedResource>
     <!-- Vanilla-style weapon icons (Runtime/VanguardLabels), Freestyle renders of the store models. -->
     <EmbeddedResource Include="modules\Vanguard\Assets\Icons\*.png" LogicalName="BoscaliSummer.Vanguard.Icons.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="modules\Support\Assets\Art\*.png" LogicalName="BoscaliSummer.Support.Art.%(Filename)%(Extension)" />
     <!-- Built by tools/Compile-SpooktoberAssets.ps1. Optional: without it the rad look is embers only. -->
     <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
       <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>

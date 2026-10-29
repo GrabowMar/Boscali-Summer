@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int shownFront = -1;
         private readonly AvControl[] tabs = new AvControl[FrontRules.FrontCount];
         private TMP_Text titleText, headRight, stripLeft, stripMid, stripRight;
+        private RawImage emblem;
         private Image stripBack;
         private readonly FeedInputLease lease = new FeedInputLease();
         private readonly List<AvHit> hits = new List<AvHit>(160);
@@ -79,6 +80,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window.Footer.Set("Keyboard and joystick stay live; the mouse drives this window. It closes with Esc.", AvState.Inert);
             titleText = window.Root.Find("Title").GetComponent<TMP_Text>();
             RectTransform r = window.Root;
+            // The compartment's command emblem left of the title, in its banner colour (Mark).
+            emblem = FrontArt.Fill(r, FrontArt.Emblem(Front.Space), AvGridTokens.Pad, 4f, 22f, 22f, Color.white);
+            if (emblem != null) AvLay.Place(titleText.rectTransform, AvGridTokens.Pad + 28f, 0f, WindowWidth - 2f * AvGridTokens.Pad - 64f, TitleH);
 
             // The body is opaque: the CAP panel behind the popup must not ghost through the gaps between the plates.
             FrontKit.Solid(r, "Body", 0f, TitleH, WindowWidth, WindowHeight - TitleH - FooterH, AvInk.Ground.WithAlpha(0.98f)).transform.SetAsFirstSibling();
@@ -126,6 +130,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(columnRoots[i], cx, ty, cw, ch);
                 rooms[i].Build(roomRoots[i], HeroW, mh, columnRoots[i], cw, ch);
                 IReadOnlyList<ColumnTab> panels = rooms[i].Column;
+                // ORBIT and NETWORK panels sit on painted glass, the console's engraved grid and the terminal's phosphor (SHADOW is paper already).
+                string ground = i == (int)Front.Space ? "ops_bg_orbit" : i == (int)Front.Cyber ? "ops_bg_network" : null;
+                for (int k = 0; ground != null && k < panels.Count; k++) FrontArt.Ground(panels[k].Panel, ground, GroundTint);
                 var items = new (AvIcon, string)[panels.Count + 1];
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
@@ -153,6 +160,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return go;
         }
 
+        private static readonly Color GroundTint = Color.white.WithAlpha(0.85f);
+
         private void Restyle()
         {
             headRight.color = AvInk.Dim;
@@ -163,6 +172,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void Mark(Front f)
         {
             stripBack.color = f == Front.Space ? RoomInk.Rgb(0xFF8C1A) : f == Front.Cyber ? RoomInk.Rgb(0xFFD21F) : RoomInk.Rgb(0xC8102E);
+            if (emblem != null) { emblem.texture = FrontArt.Get(FrontArt.Emblem(f)); emblem.color = stripBack.color; }
             Color ink = f == Front.Sof ? Color.white : RoomInk.Rgb(0x0B0B0B);
             stripLeft.color = ink; stripMid.color = ink; stripRight.color = ink;
         }

@@ -41,7 +41,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private FrontMapPlate plate;
 
         private FrontBox situation, roster, targets, composer;
-        private FrontVector side, listG, formG;
+        private FrontVector side, listG, formG, fileMarks;
+        private RawImage filePaper, filePhoto;
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] teamLabels = new TMP_Text[MaxTeams], targetLabels = new TMP_Text[MaxTargets], campLabels = new TMP_Text[MaxCamps],
             heldLabels = new TMP_Text[MaxHeld], enemyMarks = new TMP_Text[MaxEnemies];
@@ -398,11 +399,18 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 g.Frame(x, y, w, h, 1f, Paper.Pen);
             }
 
-            /// <summary>A reconnaissance photograph: night-vision ground with seeded building blocks and tracks, a crosshair and the target marked in china marker.</summary>
-            public static void Recon(FrontVector g, Rect r, int seed, TargetKind kind, bool live)
+            /// <summary>
+            /// A reconnaissance photograph: night-vision ground with seeded building blocks and tracks, a crosshair and the target marked in china marker.
+            /// <paramref name="printed"/>: a real print lies under these marks, so only its paper border and the marks are drawn.
+            /// </summary>
+            public static void Recon(FrontVector g, Rect r, int seed, TargetKind kind, bool live, bool printed = false)
             {
-                g.Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f, Paper.PhotoPaper);
-                g.Rect(r.x, r.y, r.width, r.height, Paper.PhotoDark);
+                if (printed) g.Frame(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f, 2f, Paper.PhotoPaper);
+                else
+                {
+                    g.Rect(r.x - 2f, r.y - 2f, r.width + 4f, r.height + 4f, Paper.PhotoPaper);
+                    g.Rect(r.x, r.y, r.width, r.height, Paper.PhotoDark);
+                }
                 Vector2 c = r.center;
                 if (!live)
                 {
@@ -415,15 +423,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     }
                     return;
                 }
-                for (int i = 0; i < 9; i++)
+                for (int i = 0; i < 9 && !printed; i++)
                 {
                     float u = Hash(seed, i * 3), v = Hash(seed, i * 3 + 1), s = 0.08f + 0.12f * Hash(seed, i * 3 + 2);
                     float bw = Mathf.Min(r.width * s * 1.4f, r.width), bh = Mathf.Min(r.height * s * 1.2f, r.height);
                     float bx = r.x + (r.width - bw) * u, by = r.y + (r.height - bh) * v;
                     g.Rect(bx, by, bw, bh, RoomInk.Rgba(0.36f, 0.45f, 0.30f, 0.55f));
                 }
-                g.Line(new Vector2(r.x, r.y + r.height * (0.25f + 0.5f * Hash(seed, 40))), new Vector2(r.xMax, r.y + r.height * (0.25f + 0.5f * Hash(seed, 41))), 1.6f, RoomInk.Rgba(0.62f, 0.7f, 0.5f, 0.4f));
-                g.Line(new Vector2(r.x + r.width * (0.2f + 0.6f * Hash(seed, 42)), r.y), new Vector2(r.x + r.width * (0.2f + 0.6f * Hash(seed, 43)), r.yMax), 1.4f, RoomInk.Rgba(0.62f, 0.7f, 0.5f, 0.35f));
+                if (!printed) g.Line(new Vector2(r.x, r.y + r.height * (0.25f + 0.5f * Hash(seed, 40))), new Vector2(r.xMax, r.y + r.height * (0.25f + 0.5f * Hash(seed, 41))), 1.6f, RoomInk.Rgba(0.62f, 0.7f, 0.5f, 0.4f));
+                if (!printed) g.Line(new Vector2(r.x + r.width * (0.2f + 0.6f * Hash(seed, 42)), r.y), new Vector2(r.x + r.width * (0.2f + 0.6f * Hash(seed, 43)), r.yMax), 1.4f, RoomInk.Rgba(0.62f, 0.7f, 0.5f, 0.35f));
                 Color cross = RoomInk.Rgba(0.94f, 0.95f, 0.82f, 0.7f);
                 g.Line(new Vector2(r.x + 3f, c.y), new Vector2(c.x - 11f, c.y), 1f, cross);
                 g.Line(new Vector2(c.x + 11f, c.y), new Vector2(r.xMax - 3f, c.y), 1f, cross);
@@ -558,6 +566,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             RectTransform b = targets.Rect;
             listG = FrontVector.Add(b, "ListGfx");
             AvLay.Place(listG.rectTransform, 0f, 0f, w, h);
+            // The file's dossier sheet and recon print lie over the folder drawn in ListGfx; their marks (print border, crosshair, china marker, note rules) go on top.
+            filePaper = FrontArt.Fill(b, "ops_bg_dossier", 0f, 0f, 1f, 1f, Color.white);
+            filePhoto = FrontArt.Fill(b, "ops_recon_ground", 0f, 0f, 1f, 1f, PrintTint);
+            fileMarks = FrontVector.Add(b, "FileMarks");
+            AvLay.Place(fileMarks.rectTransform, 0f, 0f, w, h);
             float cw = (w - 24f) / 2f;
             for (int i = 0; i < MaxTargets; i++)
             {
@@ -714,8 +727,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool wide = bodyH >= 125f, big = bodyH >= 160f;
             float pw = wide ? 112f : 58f, ph = wide ? 88f : Mathf.Min(bodyH - 14f, 46f);
             var photo = new Rect(fx + 10f, bodyY + 8f, pw, ph);
-            Hand.Recon(g, photo, havePick ? pick.Id : 3, havePick ? pick.Kind : TargetKind.Ground, havePick);
-            if (!havePick && filed) Hand.Circle(g, photo.center, Mathf.Min(13f, ph * 0.28f), 1.8f, Paper.Grease, 5); // a bare ground point: just the mark on a blank print
+            FrontVector m = fileMarks;
+            m.Clear();
+            if (filePaper != null) { FrontArt.Place(filePaper, fx, bodyY, fw, bodyH); m.Frame(fx, bodyY, fw, bodyH, 1f, Paper.FolderEdge); }
+            Texture2D print = havePick ? FrontArt.Get(PrintOf(pick)) : null;
+            bool printed = print != null && filePhoto != null;
+            if (filePhoto != null && filePhoto.gameObject.activeSelf != printed) filePhoto.gameObject.SetActive(printed);
+            if (printed) { filePhoto.texture = print; FrontArt.Place(filePhoto, photo.x, photo.y, photo.width, photo.height); }
+            Hand.Recon(m, photo, havePick ? pick.Id : 3, havePick ? pick.Kind : TargetKind.Ground, havePick, printed);
+            if (!havePick && filed) Hand.Circle(m, photo.center, Mathf.Min(13f, ph * 0.28f), 1.8f, Paper.Grease, 5); // a bare ground point: just the mark on a blank print
             float tx = photo.xMax + 12f, tw = fx + fw - tx - 6f;
             float cy = wide ? photo.yMax + 8f : bodyY + 37f, cx = wide ? fx + 12f : tx, cw = wide ? fw - 24f : tw;
             AvLay.Place(fileTab.rectTransform, fx + 8f, fileY, 96f, FileTabH);
@@ -733,7 +753,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (note)
             {
                 float ny = cy + 38f;
-                for (int i = 0; i < 3; i++) g.Rect(fx + 10f, ny + 12.5f + i * 13.5f, fw - 20f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f)); // ruled notes: alpha under 0.2, a tint and not a ground
+                for (int i = 0; i < 3; i++) m.Rect(fx + 10f, ny + 12.5f + i * 13.5f, fw - 20f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f)); // ruled notes: alpha under 0.2, a tint and not a ground
                 AvLay.Place(fileNote.rectTransform, fx + 12f, ny, fw - 24f, 28f);
                 FrontKit.Set(fileNote, AnalystNote(pick.Kind, pick.Exploit, pick.Resisted), Paper.PenDim);
             }
@@ -744,6 +764,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 fileStamp.Set(pick.Resisted ? "RESISTED" : "EXPLOIT", pick.Resisted ? Paper.Red : Paper.Amber);
             }
             else fileStamp.Set("", Paper.Pen);
+            m.Flush();
+        }
+
+        private static readonly Color PrintTint = RoomInk.Rgb(0xFFF7E6); // a warm photographic print, not a screen
+
+        /// <summary>The recon print for a target: by kind, an anchor by the word in its name (the view carries no anchor sub-kind; cosmetic only).</summary>
+        private static string PrintOf(SofTargetView t)
+        {
+            string n = t.Name ?? "";
+            return "ops_recon_" + (t.Kind == TargetKind.Ground ? "ground" : t.Kind == TargetKind.Building ? "building" : t.Kind == TargetKind.Relay ? "relay"
+                : n.Contains("TRUCK") ? "ewtruck" : n.Contains("DATA") ? "datacenter" : n.Contains("CAMP") ? "camp" : "uplink");
         }
 
         // ---- Composer ---------------------------------------------------------------------------------------------------
