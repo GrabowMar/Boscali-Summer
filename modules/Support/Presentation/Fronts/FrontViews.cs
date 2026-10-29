@@ -155,11 +155,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (CallRow r in CallSheet.Rows)
             {
                 if (r.Front != f) continue;
-                int price = c.Price != null ? c.Price(r.Id) : CallSheet.BasePrice(r.Rung);
+                int price = c.Price != null ? c.Price(r.Id) : CallSheet.BasePrice(r.Tier);
                 v.Perks.Add(new FrontPerkView
                 {
-                    Rung = r.Rung, Name = r.Label, Effect = PerkEffect(r.Id), Price = price, Unlocked = !IsWaiting(row) && r.Rung <= row.Readiness,
-                    Gate = FootprintGate(r.Id, c), Reason = IsWaiting(row) ? "" : PerkReason(r.Id, r.Rung, row, price, c)
+                    Rung = r.Tier, Name = r.Label, Effect = PerkEffect(r.Id), Price = price, Unlocked = !IsWaiting(row) && r.Tier <= row.Readiness,
+                    Gate = FootprintGate(r.Id, c), Reason = IsWaiting(row) ? "" : PerkReason(r.Id, r.Tier, row, price, c)
                 });
             }
 

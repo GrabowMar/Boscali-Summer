@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     if (l.A == (short)ProgrammeId.Readiness)
                     {
                         string unlocks = "";
-                        foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Rung == l.B) unlocks += (unlocks.Length > 0 ? ", " : "") + r.Label;
+                        foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Tier == l.B) unlocks += (unlocks.Length > 0 ? ", " : "") + r.Label;
                         return new FrontNotice(FrontNoticeKind.Up, FrontRules.Name(f) + " READINESS " + l.B + (unlocks.Length > 0 ? " · NEW: " + unlocks : ""));
                     }
                     return new FrontNotice(FrontNoticeKind.Up, FrontWords.Line(f, l));

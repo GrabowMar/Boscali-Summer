@@ -310,7 +310,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>21 px: eighteen perks (four of them protocol 41's) and three group headers still fit the 896 px page under the pinned strip without scrolling.</summary>
         public const float Height = 21f;
         private const float StateX = 314f;
-        private static readonly string[] RungWords = { "R0", "R1", "R2", "R3", "R4", "R5" };
+        private static readonly string[] RungWords = { "", "G1", "G2", "G3", "G4", "G5", "G6" };
 
         private readonly AvFrame back;
         private readonly Image rail;
@@ -329,7 +329,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             badge = new OpsTag(Rect, "Code", 10f);
             badge.Place(10f, 1.5f, 36f, 18f);
             name = FrontKit.Mono(Rect, "Name", 52f, 0f, 134f, Height, 12f, TextAlignmentOptions.MidlineLeft, true);
-            pips = OpsParts.Pips(Rect, "RungPip", CallSheet.MaxRung);
+            pips = OpsParts.Pips(Rect, "RungPip", CallSheet.MaxGrade);
             OpsParts.PlacePips(pips, 190f, 5.5f, 7f, 10f, 9f);
             rung = FrontKit.Mono(Rect, "Rung", 238f, 0f, 22f, Height, 10f, TextAlignmentOptions.MidlineLeft);
             price = FrontKit.Mono(Rect, "Price", 262f, 0f, 48f, Height, 11f, TextAlignmentOptions.MidlineLeft, true);

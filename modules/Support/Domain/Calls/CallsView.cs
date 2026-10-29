@@ -8,16 +8,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
     internal readonly struct CallTile
     {
         public readonly SupportActionId Id;
-        public readonly string Label, RungWord, CostText, Reason, StateWord;
+        public readonly string Label, GradeWord, CostText, Reason, StateWord;
         public readonly CallState State;
         public readonly bool Enabled;
 
-        public CallTile(SupportActionId id, string label, string rungWord, string costText, string reason,
+        public CallTile(SupportActionId id, string label, string gradeWord, string costText, string reason,
             CallState state, string stateWord, bool enabled)
         {
             Id = id;
             Label = label;
-            RungWord = rungWord;
+            GradeWord = gradeWord;
             CostText = costText;
             Reason = reason;
             State = state;
@@ -30,16 +30,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
     internal static class CallsView
     {
         /// <summary>
-        /// The state word as a 21 px perk row has room for it (one line, 20 characters): a long gate is shortened (NEEDS STRIKE QUALIFICATION becomes NEEDS STRIKE QUAL., LOW ALLOC · NEED 10 AP loses the NEED,
+        /// The state word as a 21 px perk row has room for it (one line, 20 characters): a long gate is shortened (LOW ALLOC · NEED 10 AP loses the NEED,
         /// NO SATELLITE · REBUILD IT keeps its first half). The pinned strip words the same state whole.
         /// </summary>
         public static string RowWord(string word)
         {
             if (string.IsNullOrEmpty(word) || word.Length <= 20) return word ?? "";
-            return word.Replace("QUALIFICATION", "QUAL.").Replace(" · REBUILD IT", "").Replace("NEED ", "");
+            return word.Replace(" · REBUILD IT", "").Replace("NEED ", "");
         }
 
-        /// <param name="lockedReason">Empty when nothing blocks the perk, else the words of the gate (e.g. <c>NEEDS STRIKE QUALIFICATION</c>).</param>
+        /// <param name="lockedReason">Empty when nothing blocks the perk, else the words of the gate (e.g. <c>NEEDS SPACE SKILL 4</c>).</param>
         public static CallTile Tile(in CallRow row, in CallQuote quote, string lockedReason, float balance,
             float cooldownLeft, bool armed, bool pending, bool offline)
         {
@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
             else if (balance + 0.001f < quote.Cost) { state = CallState.LowCredit; word = "NEED " + quote.Cost + " ALLOC"; }
             else { state = CallState.Ready; word = "READY"; }
 
-            return new CallTile(row.Id, row.Label, row.RungWord, quote.Cost + " ALLOC", quote.Reason ?? "",
+            return new CallTile(row.Id, row.Label, row.GradeWord, quote.Cost + " ALLOC", quote.Reason ?? "",
                 state, word, state == CallState.Ready || state == CallState.Armed);
         }
     }

@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 c.Superiority = row.Superiority;
                 c.FundingPct = row.PriorityPct; c.Budget = row.Budget;
                 c.QueueCount = row.Queue.Count;
-                foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Rung <= row.Readiness) c.Unlocked++;
+                foreach (CallRow r in CallSheet.Rows) if (r.Front == f && r.Tier <= row.Readiness) c.Unlocked++;
                 c.Word = FrontSuperiority.Word(row.Superiority);
                 c.Power = FrontSuperiority.PowerWord(row.Superiority);
                 v.PowerLine[i] = FrontSuperiority.PowerLine(row.Superiority);
@@ -274,7 +274,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (t.State == CallState.Ready) ready++; // available to arm: an armed perk is spoken for and a request in flight is not available
                 v.Perks.Add(new PerkRowView
                 {
-                    Id = t.Id, Front = row.Front, Rung = row.Rung, Code = Code(t.Id), Name = t.Label, RungWord = t.RungWord, Price = Ap(t.CostText), State = CallsView.RowWord(StateWord(t)), Tone = Ink(t.State),
+                    Id = t.Id, Front = row.Front, Rung = row.Grade, Code = Code(t.Id), Name = t.Label, RungWord = t.GradeWord, Price = Ap(t.CostText), State = CallsView.RowWord(StateWord(t)), Tone = Ink(t.State),
                     Enabled = t.Enabled, Armed = t.State == CallState.Armed, Pending = t.State == CallState.Pending
                 });
             }
@@ -331,12 +331,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     gt = AvState.Ready;
                     // The cooldown the host will apply: the rung's value, divided by the front's POWER while it is ahead (the cards were mapped before this).
                     float power = FrontSuperiority.Power(v.Cards[(int)row.Front].Superiority);
-                    gate = "READY" + Dot + FrontRules.Clock(PerkPower.Cooldown(CallSheet.Cooldown(row.Rung), power)) + " COOLDOWN AFTER USE" + (t.Reason.Length > 0 ? Dot + t.Reason : "");
+                    gate = "READY" + Dot + FrontRules.Clock(PerkPower.Cooldown(CallSheet.Cooldown(row.Tier), power)) + " COOLDOWN AFTER USE" + (t.Reason.Length > 0 ? Dot + t.Reason : "");
                 }
                 else { gt = Ink(t.State); gate = StateWord(t); }
                 v.PerkStrip = new StripView
                 {
-                    Has = true, Id = (int)t.Id, Code = Code(t.Id), Stamp = StampWord(t.State), StampTone = Ink(t.State), Name = t.Label, Meta = t.RungWord,
+                    Has = true, Id = (int)t.Id, Code = Code(t.Id), Stamp = StampWord(t.State), StampTone = Ink(t.State), Name = t.Label, Meta = t.GradeWord,
                     Price = Ap(t.CostText), Brief = Brief(t.Id), Gate = gate, GateTone = gt,
                     Primary = isArmed ? "FIRE" : t.State == CallState.Pending ? "WAIT" : "ARM",
                     PrimaryEnabled = isArmed ? aim != AimSource.None || !CallSheet.NeedsAim(t.Id) : t.State == CallState.Ready, PrimaryFire = isArmed, DisarmEnabled = v.Armed

@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 CallTile t = CallsView.Tile(row, manager.Quote(row.Id), manager.LockReason(row.Id), manager.LocalAllocation,
                     cooldown, calls.Armed == row.Id, false, !manager.Online);
                 if (t.State != CallState.Ready && t.State != CallState.Armed && t.State != CallState.Cooldown) continue;
-                ready.Add(t); fronts.Add(row.FrontWord); cooldowns.Add(t.State == CallState.Cooldown ? (int)Math.Ceiling(cooldown) : 0); totals.Add(PerkPower.Cooldown(CallSheet.Cooldown(row.Rung), manager.FrontMirror.Power(row.Front))); // the length the host applies: shortened while the front is ahead
+                ready.Add(t); fronts.Add(row.FrontWord); cooldowns.Add(t.State == CallState.Cooldown ? (int)Math.Ceiling(cooldown) : 0); totals.Add(PerkPower.Cooldown(CallSheet.Cooldown(row.Tier), manager.FrontMirror.Power(row.Front))); // the length the host applies: shortened while the front is ahead
             }
             while (ready.Count > IOpsPerks.MaxPerks)
             {
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             if (index < 0 || index >= Ready().Count) return "";
             CallTile t = Ready()[index];
-            return t.State == CallState.Armed ? "ARMED · PRESS AGAIN" : t.RungWord + " · " + t.CostText;
+            return t.State == CallState.Armed ? "ARMED · PRESS AGAIN" : t.GradeWord + " · " + t.CostText;
         }
 
         public string PerkFront(int index) => index >= 0 && index < Ready().Count ? fronts[index] : "";

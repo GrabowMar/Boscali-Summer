@@ -477,7 +477,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
             if (!IsAuthorised(def)) return "NEEDS " + row.FrontWord + " SKILL";
-            if (!BypassRequirements && readiness.Readiness(player.HQ, row.Front) < row.Rung && row.Rung > OpsAutomation.ReadinessFloor) return "NEEDS READINESS " + row.Rung;
+            if (!BypassRequirements && readiness.Readiness(player.HQ, row.Front) < row.Tier && row.Tier > OpsAutomation.ReadinessFloor) return "NEEDS READINESS " + row.Tier;
             if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
             return "";
         }
@@ -494,7 +494,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>Host: the front readiness gate for one perk; the dev bypass opens everything.</summary>
         private bool ReadinessOpen(Player player, in CallRow row) =>
-            BypassRequirements || readiness.Readiness(player.HQ, row.Front) >= row.Rung || row.Rung <= OpsAutomation.ReadinessFloor;
+            BypassRequirements || readiness.Readiness(player.HQ, row.Front) >= row.Tier || row.Tier <= OpsAutomation.ReadinessFloor;
 
         /// <summary>The live front state replaces the default (every front fully built, neutral quality).</summary>
         internal void ConfigureReadiness(IFrontReadiness source) => readiness = source ?? new DefaultFrontReadiness();
@@ -531,7 +531,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private float CooldownFor(Player player, SupportActionId action)
         {
             if (DisableCooldowns || player == null || !CallSheet.TryGet(action, out CallRow row)) return 0f;
-            float seconds = CallSheet.Cooldown(row.Rung) * EventsCooldownMultiplier(player);
+            float seconds = CallSheet.Cooldown(row.Tier) * EventsCooldownMultiplier(player);
             return PerkPower.Cooldown(seconds, readiness.Power(player.HQ, row.Front));
         }
 
@@ -945,7 +945,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             // Every factor is readable on a client too (the Events and Progression mirrors, and the host's replicated PerkPriceScale), so the panel quotes what the host charges.
             var inputs = new PriceInputs(degraded, "UPLINK DOWN", row.Front == Front.Cyber && CyberExploit(player.HQ),
                 EventsCostMultiplier(player), settings.PerkPriceScale.Value);
-            return CallPricing.Quote(row.Rung, inputs);
+            return CallPricing.Quote(row.Tier, inputs);
         }
 
         // ---- Host services ---------------------------------------------------------------
