@@ -4,8 +4,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// The SKILLS board's arithmetic, kept out of the panel so a test can hold the one
-    /// property that matters: four lanes fit side by side, every node the same width, none
-    /// zero and none overlapping. The board is a tech tree - one column per qualification, one
+    /// property that matters: the lanes fit side by side, every node the same width, none
+    /// zero and none overlapping. The board is a tech tree - one column per OPS lane, one
     /// aligned tier row per grade, a narrow gutter numbering the tier - laid out with explicit
     /// rects rather than a layout tree, because a node that collapses to zero width renders as
     /// a smear of one-letter lines and the failure is invisible until it is in the game.

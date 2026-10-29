@@ -67,15 +67,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Section(AvIcon.Star, "PICK LEDGER", "MISSION SCORE TO PICKS");
             p.Row(ringScore, ringBonus, ringPicks, ringFree);
 
-            // The lanes come from the catalogue, in table order: one row per qualification, one pip per grade.
+            // The lanes come from the catalogue, in table order: one row per OPS lane, one pip per grade.
             var names = new System.Collections.Generic.List<string>(4);
             for (int i = 0; i < PerkCatalog.All.Length; i++)
                 if (!names.Contains(PerkCatalog.All[i].Lane)) names.Add(PerkCatalog.All[i].Lane);
             committedLaneNames = names.ToArray();
             for (int i = 0; i < committedHeld.Length; i++) committedHeld[i] = new bool[PerkCatalog.MaximumDepth];
-            p.Section(AvIcon.Stack2, "QUALIFICATIONS", "FORM 3-C · GRADES HELD");
+            p.Section(AvIcon.Stack2, "OPS SKILLS", "FORM 3-C · GRADES HELD");
             committedLanes = p.Add(new SkillLaneStrip(p.Content, committedLaneNames, PerkCatalog.MaximumDepth) { Grow = 1f });
-            committedLanes.Help = "HELD: every qualification lane and its six grades. A lit pip is a grade you hold; a dim lane is closed because the career already carries two support tools.";
+            committedLanes.Help = "HELD: every OPS lane and its six grades. A lit pip is a grade you hold; grade 1 of every lane is free.";
         }
 
         // ---- PILOT refresh ---------------------------------------------------------------
@@ -168,7 +168,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int l = 0; l < committedLaneNames.Length && l < committedHeld.Length; l++)
             {
                 Array.Clear(committedHeld[l], 0, committedHeld[l].Length);
-                bool closed = false;
                 for (int i = 0; i < PerkCatalog.All.Length; i++)
                 {
                     PerkDefinition definition = PerkCatalog.All[i];
@@ -177,7 +176,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     int grade = definition.Grade - 1;
                     if (grade >= 0 && grade < committedHeld[l].Length) committedHeld[l][grade] = view.Unlocked;
                 }
-                committedLanes.SetLane(l, committedHeld[l], closed);
+                committedLanes.SetLane(l, committedHeld[l]);
             }
         }
 

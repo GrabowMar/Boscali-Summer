@@ -11,8 +11,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 {
     internal sealed partial class SqdMfdPanel
     {
-        // The board is a tech tree: one column per qualification, one aligned tier row per
-        // grade. All four lanes fit side by side, so picking compares classes instead of
+        // The board is a tech tree: one column per OPS lane, one aligned tier row per
+        // grade. All three lanes fit side by side, so picking compares classes instead of
         // scrolling a list. Geometry lives in SkillBoardLayout (which a test pins); SkillBoard
         // draws it and SkillNode is one grade.
         private const string SkillIdleTitle = "NO GRADE SELECTED";
@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         // ---- SKILLS page -----------------------------------------------------------------
 
-        /// <summary>One qualification: its grades in catalogue order, grade 1 first.</summary>
+        /// <summary>One OPS lane: its grades in catalogue order, grade 1 first.</summary>
         private sealed class SkillLane
         {
             public string Name;
@@ -59,8 +59,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             PerkView[] perks = Progress != null ? Progress.GetPerks() : Array.Empty<PerkView>();
             if (perks.Length == 0)
             {
-                p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO QUALIFICATION CATALOG",
-                    "This host has not configured a qualification catalog, so there is nothing to unlock."));
+                p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO SKILL CATALOG",
+                    "This host has not configured an OPS skill catalog, so there is nothing to unlock."));
                 return;
             }
 
@@ -96,10 +96,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return lane;
         }
 
-        /// <summary>
-        /// A tool's node reads "STK TOOL" - STK, SAT, EW, ENG are the support codes the OPS page and
-        /// the wing badges already use. A passive grade gets its own name. One name per node, ever.
-        /// </summary>
+        /// <summary>A node reads its skill's name. One name per node, ever.</summary>
         private static string CellName(PerkView view, PerkDefinition definition) => view.Name.ToUpperInvariant();
 
         private void CommitSelected()
@@ -144,8 +141,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private static string BlockReason(PerkView view)
         {
-            if (view.Block == PerkView.BlockCap)
-                return "This career already carries its two support tools, so the lane stays closed.";
             if (view.Block == PerkView.BlockGrade)
                 return "The grade before it is not committed yet.";
             return "No unspent pick: fly, capture or rescue to earn the next grade.";
@@ -247,13 +242,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int n = 0; n < lane.Ids.Count; n++)
                 if (IsUnlocked(perks, lane.Ids[n])) taken++;
 
-            // A lane whose tool the host refuses on the career cap is closed for good here.
-            bool toolHeld = lane.Ids.Count > 0 && IsUnlocked(perks, lane.Ids[0]);
-            bool closed = !toolHeld && lane.Ids.Count > 0 &&
-                TryFind(perks, lane.Ids[0], out PerkView tool) && tool.Block == PerkView.BlockCap;
-
-            lane.Paint(taken, lane.Ids.Count, toolHeld ? "HELD" : closed ? "CLOSED" : "OPEN",
-                toolHeld ? AvState.Ready : closed ? AvState.Inert : AvState.Info);
+            // Grade 1 is free, so every lane is open; a lane with all six grades reads MAXED.
+            bool full = taken >= lane.Ids.Count;
+            lane.Paint(taken, lane.Ids.Count, full ? "MAXED" : "OPEN", full ? AvState.Ready : AvState.Info);
         }
 
         /// <summary>How a node reads: colour, glyph and hover help all follow from this.</summary>
@@ -388,7 +379,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         }
 
         /// <summary>
-        /// The qualification tech tree. Built once from the catalogue's fixed shape and repainted
+        /// The OPS skill tree. Built once from the catalogue's fixed shape and repainted
         /// (never rebuilt) as grades unlock: a legend row of glyph+word chips, four lane headers
         /// (name, held count, progress bar, state word) and one aligned row of nodes per tier,
         /// joined by connector lines. Placed on explicit rects by <see cref="SkillBoardLayout"/>.

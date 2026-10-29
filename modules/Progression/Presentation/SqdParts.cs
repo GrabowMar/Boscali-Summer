@@ -585,7 +585,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     }
 
     /// <summary>
-    /// The PILOT page's skills summary: one row per qualification lane, its grades as pips (held /
+    /// The PILOT page's skills summary: one row per OPS lane, its grades as pips (held /
     /// not yet), the lane name at the left and the count at the right. Rows share the part's height
     /// (within a cap), so the part can take a page's leftover height without stretching one giant cell.
     /// A row tall enough for it adds one line saying how far the lane is held; one taller still names every grade.
@@ -600,7 +600,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private readonly TMP_Text[][] gradeNames;
         private readonly Image[][] pips;
         private readonly bool[][] held;
-        private readonly bool[] closed;
 
         public SkillLaneStrip(RectTransform parent, string[] laneNames, int gradeCount)
         {
@@ -609,7 +608,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             backs = new AvFrame[lanes]; names = new TMP_Text[lanes]; counts = new TMP_Text[lanes]; notes = new TMP_Text[lanes];
             gradeTitles = new string[lanes][];
             gradeNames = new TMP_Text[lanes][];
-            pips = new Image[lanes][]; held = new bool[lanes][]; closed = new bool[lanes];
+            pips = new Image[lanes][]; held = new bool[lanes][];
             for (int l = 0; l < lanes; l++)
             {
                 backs[l] = AvFrame.Add(Rect, "Lane " + l, AvChamfer.Diagonal(4f));
@@ -628,7 +627,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     string title = "GRADE " + (g + 1), help = title;
                     foreach (PerkDefinition perk in PerkCatalog.All)
                         if (perk.Lane == laneNames[l] && perk.Grade == g + 1)
-                        { title = perk.Name.Replace(" Qualification", " AUTH"); help = perk.Name + ": " + perk.Description; break; }
+                        { title = perk.Name; help = perk.Name + ": " + perk.Description; break; }
                     gradeTitles[l][g] = title.ToUpperInvariant();
                     gradeNames[l][g] = AvText.Make(Rect, "Grade " + l + "." + g, AvTextRole.Micro,
                         gradeTitles[l][g], TextAlignmentOptions.TopLeft, true);
@@ -650,8 +649,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
         }
 
-        /// <summary>Repaint one lane: which grades are held, and whether the career cap closed the lane.</summary>
-        public void SetLane(int lane, bool[] gradesHeld, bool laneClosed)
+        /// <summary>Repaint one lane: which grades are held (grade 1 always is).</summary>
+        public void SetLane(int lane, bool[] gradesHeld)
         {
             if (lane < 0 || lane >= lanes) return;
             int taken = 0, top = -1;
@@ -660,10 +659,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 held[lane][g] = g < gradesHeld.Length && gradesHeld[g];
                 if (held[lane][g]) { taken++; top = g; }
             }
-            closed[lane] = laneClosed;
             counts[lane].text = taken + "/" + grades;
-            notes[lane].text = laneClosed ? "CLOSED · SUPPORT TOOL CAP REACHED"
-                : taken == 0 ? "NONE HELD · NEXT " + gradeTitles[lane][0]
+            notes[lane].text = taken == 0 ? "NONE HELD · NEXT " + gradeTitles[lane][0]
                 : taken >= grades ? "ALL " + grades + " GRADES HELD"
                 : "HELD TO G" + (top + 1) + " · " + gradeTitles[lane][top];
             RestyleLane(lane);
@@ -703,12 +700,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void RestyleLane(int l)
         {
-            names[l].color = closed[l] ? AvTheme.Disabled : AvInk.Ink;
-            counts[l].color = closed[l] ? AvTheme.Disabled : AvInk.Dim;
-            notes[l].color = closed[l] ? AvTheme.Disabled : AvInk.Dim;
+            names[l].color = AvInk.Ink;
+            counts[l].color = AvInk.Dim;
+            notes[l].color = AvInk.Dim;
             for (int g = 0; g < grades; g++)
             {
-                pips[l][g].color = held[l][g] ? AvInk.Key : closed[l] ? AvInk.Muted.WithAlpha(.15f) : AvInk.Muted.WithAlpha(.3f);
+                pips[l][g].color = held[l][g] ? AvInk.Key : AvInk.Muted.WithAlpha(.3f);
                 gradeNames[l][g].color = held[l][g] ? AvInk.Ink : AvInk.Dim;
             }
         }

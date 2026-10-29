@@ -14,7 +14,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
-    /// "PILOT" (registry id SQD) — pilot status, shared skill board with support authorisations,
+    /// "PILOT" (registry id SQD) — pilot status, the shared OPS skill board (SPACE, CYBER, SOF),
     /// enemy ace roster, and the squadron emblem page with a launcher for the Wing Command pilot studio. Reads encounter
     /// snapshots only; Wing Command owns aircraft orders, custom-pilot files and pilot
     /// generation. Emblems and the local pilot profile are client-local cosmetics.
@@ -164,12 +164,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             console.Orders(TabPilot,
                 "Read the flight log before you taxi: fuel state, aircraft condition and life mode.",
                 "Free picks are spent on the SKILLS tab. A committed pick cannot be withdrawn.",
-                "A dim qualification lane is closed: a career holds two support tools at most.",
+                "Grade 1 of every OPS lane is free; picks buy grades 2 to 6.",
                 "Callsign, portrait and service background come from your Wing Command profile.");
             console.Orders(TabSkills,
                 "Tap an open grade to read what it buys, then commit it. One pick, no undo.",
-                "A grade needs the grade before it. Grade 1 of every lane is a support tool.",
-                "A career holds two support tools at most; the lanes left over close.",
+                "A grade needs the grade before it. Grade 1 of every lane is free.",
+                "SPEND PICKS ON SPACE, CYBER OR SOF · GRADE 1 IS FREE",
                 "Picks come from mission score: fly, capture or rescue to earn the next one.");
             console.Orders(TabWings,
                 "Tier sets an ace wing's threat; its skill badges say what it can do to you.",
@@ -193,8 +193,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             string[] hints =
             {
-                "PILOT: your dossier. ID card, this sortie, the pick rings and every qualification lane at a glance.",
-                "SKILLS: the qualification tree, four lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
+                "PILOT: your dossier. ID card, this sortie, the pick rings and every OPS lane at a glance.",
+                "SKILLS: the OPS skill tree, three lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
                 "ACES: your flight and the known hostile ace wings, with threat, skills and who they are hunting. Wing management stays in Wing Command.",
                 "STUDIO: design the squadron emblem and name, or open the Wing Command pilot studio to write custom pilots. Everything stays on this machine.",
                 "PLANE: a live dossier of the aircraft you fly. Damage, engine map, flight data, systems, stores and the worst parts.",
