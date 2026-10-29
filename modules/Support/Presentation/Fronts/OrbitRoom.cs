@@ -142,16 +142,34 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (Feed != null) a();
         }
 
-        public void Build(RectTransform hero, float w, float h)
+        /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
+        public IReadOnlyList<ColumnTab> Column => columnTabs;
+        /// <summary>The column tab a map pick asked for since the last call, or -1.</summary>
+        public int TakeTab() { int t = wantTab; wantTab = -1; return t; }
+        private ColumnTab[] columnTabs = new ColumnTab[0];
+        private int wantTab = -1;
+        private float mapH = TopH;
+
+        public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            mapW = w - ColumnW; colPx = mapW + 6f;
+            mapW = w; mapH = h; colPx = 12f; colW = cw; colH = ch;
+            sats = new FrontBox(column, skin, "Satellites", 0f, 0f, cw, ch, "SATELLITES · STATION KEEPING", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
+            colBody = sats.Rect;
             BuildSituation(hero, w);
-            float by = TopH + Gap, bh = h - by, cw = w - TrackW - Gap;
-            docked = BuildSensor(hero, 0f, by, cw, bh, false);
-            BuildTracks(hero, cw + Gap, by, TrackW, bh);
-            enlarged = BuildSensor(hero, 0f, 0f, w, h, true); // the whole room: the map and the track file hide while it is up (brackets on the picture select tracks)
+            docked = BuildSensor(column, 0f, 0f, cw, ch, false);
+            BuildTracks(column, 0f, 0f, cw, ch);
+            enlarged = BuildSensor(hero, 0f, 0f, w, h, true); // over the map: the column stays (brackets on the picture select tracks)
             Use(docked);
+            columnTabs = new[]
+            {
+                new ColumnTab("SATELLITES", AvIcon.Satellite, sats.Rect), new ColumnTab("CAMERA", AvIcon.Camera, docked.Box.Rect),
+                new ColumnTab("TRACKS", AvIcon.Radar2, trackBox.Rect)
+            };
         }
+
+        private FrontBox sats;
+        private RectTransform colBody;
+        private float colW, colH;
 
         /// <summary>Puts <paramref name="pane"/> on screen and points the sensor fields at it.</summary>
         private void Use(CamPane pane)
@@ -159,9 +177,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (shown != null) shown.StandbyDrawn = standbyDrawn;
             shown = pane;
             bool dock = pane == docked;
-            situation.Rect.gameObject.SetActive(dock);
-            trackBox.Rect.gameObject.SetActive(dock);
-            docked.Box.Rect.gameObject.SetActive(dock);
+            situation.Rect.gameObject.SetActive(dock); // the enlarged camera lies over the map; the column tabs stay as they are
             enlarged.Box.Rect.gameObject.SetActive(!dock);
             pane.Box.Tagged("INCO"); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
             sensor = pane.Box; optical = pane.Optical; radar = pane.Radar; zoom = pane.Zoom; sizeBtn = pane.Size; picture = pane.Picture;
@@ -193,14 +209,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void BuildSituation(RectTransform hero, float heroW)
         {
-            situation = new FrontBox(hero, skin, "Orbit", 0f, 0f, heroW, TopH, "ORBITAL SITUATION · GEOSTATIONARY STATIONS", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
+            situation = new FrontBox(hero, skin, "Orbit", 0f, 0f, heroW, mapH, "ORBITAL SITUATION · GEOSTATIONARY STATIONS", AvIcon.Satellite, FrontLook.Console).Tagged("FDO");
             RectTransform body = situation.Rect;
             // The plate fills the box body left of the console column (which therefore never covers a footprint) and clips its own vector layer.
-            plate = new FrontMapPlate(body, skin, mapW, TopH, GridCols, GridRows);
+            plate = new FrontMapPlate(body, skin, mapW, mapH, GridCols, GridRows);
             side = FrontVector.Add(body, "Cards");
-            AvLay.Place(side.rectTransform, 0f, 0f, mapW, TopH);
-            colG = FrontVector.Add(body, "Column");
-            AvLay.Place(colG.rectTransform, 0f, 0f, heroW, TopH);
+            AvLay.Place(side.rectTransform, 0f, 0f, mapW, mapH);
+            colG = FrontVector.Add(colBody, "Column");
+            AvLay.Place(colG.rectTransform, 0f, 0f, colW, colH);
             FrontLabels fx = plate.Labels;
 
             for (int i = 0; i < MaxBirdLabels; i++)
@@ -245,43 +261,43 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             fx.Fixed(legendRect[0]);
 
             // ---- The console column ----
-            fdLabel = FrontKit.Mono(body, "FdLabel", colPx + 10f, FdY + 13f, 34f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
+            fdLabel = FrontKit.Mono(colBody, "FdLabel", colPx + 10f, FdY + 13f, 34f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             fdLabel.text = "MET";
-            fdMet = FrontKit.Mono(body, "FdMet", colPx + 40f, FdY + 4f, 128f, 32f, 24f, TextAlignmentOptions.MidlineLeft, true);
-            fdCap = FrontKit.Mono(body, "FdCap", colPx + 176f, FdY + 1f, 92f, 13f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
+            fdMet = FrontKit.Mono(colBody, "FdMet", colPx + 40f, FdY + 4f, 128f, 32f, 24f, TextAlignmentOptions.MidlineLeft, true);
+            fdCap = FrontKit.Mono(colBody, "FdCap", colPx + 176f, FdY + 1f, 92f, 13f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
             fdCap.text = "FLIGHT";
-            fdCall = FrontKit.Mono(body, "FdCall", colPx + 176f, FdY + 14f, 92f, 22f, 11.5f, TextAlignmentOptions.Midline, true);
+            fdCall = FrontKit.Mono(colBody, "FdCall", colPx + 176f, FdY + 14f, 92f, 22f, 11.5f, TextAlignmentOptions.Midline, true);
             for (int i = 0; i < 3; i++)
             {
                 int kind = (int)Kinds[i];
-                ownCards[i] = new PollRow(body, skin, colPx, RowsY + i * RowStep, PW, () => Select(kind));
+                ownCards[i] = new PollRow(colBody, skin, colPx, RowsY + i * RowStep, PW, () => Select(kind));
             }
-            hostA = FrontKit.Mono(body, "HostA", colPx + 10f, HostY + 2f, PW - 20f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
-            hostB = FrontKit.Mono(body, "HostB", colPx + 10f, HostY + 15f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
+            hostA = FrontKit.Mono(colBody, "HostA", colPx + 10f, HostY + 2f, PW - 20f, 14f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
+            hostB = FrontKit.Mono(colBody, "HostB", colPx + 10f, HostY + 15f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
 
             // The inspector.
             float ix = colPx, iy = InspY;
-            selHead = FrontKit.Mono(body, "SelHead", ix + 10f, iy + 3f, 170f, 16f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
-            selState = FrontKit.Mono(body, "SelState", ix + PW - 110f, iy + 3f, 100f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            selLine = FrontKit.Mono(body, "SelLine", ix + 10f, iy + 21f, PW - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            selFuelLabel = FrontKit.Mono(body, "SelFuelLabel", ix + 10f, iy + 40f, 38f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
+            selHead = FrontKit.Mono(colBody, "SelHead", ix + 10f, iy + 3f, 170f, 16f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
+            selState = FrontKit.Mono(colBody, "SelState", ix + PW - 110f, iy + 3f, 100f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+            selLine = FrontKit.Mono(colBody, "SelLine", ix + 10f, iy + 21f, PW - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+            selFuelLabel = FrontKit.Mono(colBody, "SelFuelLabel", ix + 10f, iy + 40f, 38f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 1f);
             selFuelLabel.text = "FUEL";
-            selFuel = FrontKit.Mono(body, "SelFuel", ix + PW - 82f, iy + 40f, 72f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+            selFuel = FrontKit.Mono(colBody, "SelFuel", ix + PW - 82f, iy + 40f, 72f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
             fuelRect = new Rect(ix + 50f, iy + 44f, PW - 140f, 9f);
             float by = iy + 60f;
-            relocBtn = Small(body, "RELOCATE", ix + 8f, by, 124f, StartRelocate, "Pick a new parked point for this satellite. Nothing is spent until you CONFIRM BURN.");
-            burnBtn = Small(body, "CONFIRM BURN", ix + 8f, by, 132f, Confirm, "Burn to the chosen point: the fuel is spent now and the bird slews there.");
-            cancelBtn = Small(body, "CANCEL", ix + 146f, by, 80f, Cancel, "Drop the proposal. Nothing is spent.");
-            selHint = FrontKit.Mono(body, "SelHint", ix + 10f, iy + 86f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
+            relocBtn = Small(colBody, "RELOCATE", ix + 8f, by, 124f, StartRelocate, "Pick a new parked point for this satellite. Nothing is spent until you CONFIRM BURN.");
+            burnBtn = Small(colBody, "CONFIRM BURN", ix + 8f, by, 132f, Confirm, "Burn to the chosen point: the fuel is spent now and the bird slews there.");
+            cancelBtn = Small(colBody, "CANCEL", ix + 146f, by, 80f, Cancel, "Drop the proposal. Nothing is spent.");
+            selHint = FrontKit.Mono(colBody, "SelHint", ix + 10f, iy + 86f, PW - 20f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
             relocBtn.SetStyle(AvButtonStyle.Primary);
             burnBtn.SetStyle(AvButtonStyle.Primary);
             SetBar(false, false);
 
             // The uplink sites: own ones as two-line cards, the revealed hostile ones as one-line chips.
-            siteHeadOwn = FrontKit.Mono(body, "SiteHeadOwn", colPx + 4f, SiteHeadY, 112f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            siteHeadFoe = FrontKit.Mono(body, "SiteHeadFoe", colPx + PW - 4f - 154f, SiteHeadY, 154f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            for (int i = 0; i < siteCards.Length; i++) siteCards[i] = new SiteCard(body, skin, colPx, SiteY0 + i * 32f, PW, ShowSite);
-            for (int i = 0; i < siteChips.Length; i++) siteChips[i] = new SiteChip(body, skin, colPx, SiteY0 + 64f + i * 22f, PW, ShowSite);
+            siteHeadOwn = FrontKit.Mono(colBody, "SiteHeadOwn", colPx + 4f, SiteHeadY, 112f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
+            siteHeadFoe = FrontKit.Mono(colBody, "SiteHeadFoe", colPx + PW - 4f - 154f, SiteHeadY, 154f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
+            for (int i = 0; i < siteCards.Length; i++) siteCards[i] = new SiteCard(colBody, skin, colPx, SiteY0 + i * 32f, PW, ShowSite);
+            for (int i = 0; i < siteChips.Length; i++) siteChips[i] = new SiteChip(colBody, skin, colPx, SiteY0 + 64f + i * 22f, PW, ShowSite);
             skin.Add(() =>
             {
                 selLine.color = RoomInk.Engrave; selFuelLabel.color = Mc.Steel; selHint.color = Mc.Steel; hostB.color = Mc.Steel;
@@ -318,6 +334,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void Select(int kind)
         {
+            wantTab = 0; // a picked bird shows the SATELLITES tab
             actions.Touch();
             if (!TryBird(kind, out OrbitTrackView b) || !b.Alive) return;
             selKind = kind;
@@ -1053,7 +1070,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             PaintCards(v);
             FrontVector c = colG;
             c.Clear();
-            c.Line(new Vector2(mapW + 2f, 26f), new Vector2(mapW + 2f, TopH - 4f), 1f, RoomInk.Bezel.WithAlpha(0.7f));
 
             // MET and the flight director's call.
             Slab(c, colPx, FdY, PW, FdH, RoomInk.Telemetry);

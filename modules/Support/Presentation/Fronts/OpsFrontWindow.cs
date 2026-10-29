@@ -24,7 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public const float WindowWidth = 1880f, WindowHeight = 1040f; // AvWindow caps at 1040: the shared footer is taller than the 30 this window used to force
         private const int SortOrder = 30006;
-        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = AvGridTokens.Footer, Gap = 8f, HeroW = 1290f; // the room (maps) takes every pixel the 572 px rail leaves
+        private const float TitleH = 30f, StripH = 18f, Pad = 10f, FooterH = AvGridTokens.Footer, Gap = 8f, HeroW = 1240f; // the room (maps) takes every pixel the 572 px rail leaves
 
         private IFrontActions actions;
         private AvWindow window;
@@ -33,6 +33,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private FrontRail rail;
         private readonly IFrontRoom[] rooms = new IFrontRoom[FrontRules.FrontCount];
         private readonly RectTransform[] roomRoots = new RectTransform[FrontRules.FrontCount];
+        // The management column right of the map: each room's panels are tabs, the front itself (status, posture, programmes) is the last one.
+        private readonly RectTransform[] columnRoots = new RectTransform[FrontRules.FrontCount];
+        private readonly AvTabBar[] bars = new AvTabBar[FrontRules.FrontCount];
+        private readonly int[] tabOf = new int[FrontRules.FrontCount];
+        private RectTransform railRoot;
+        private int shownFront = -1;
         private readonly AvControl[] tabs = new AvControl[FrontRules.FrontCount];
         private TMP_Text titleText, headRight, stripLeft, stripMid, stripRight;
         private Image stripBack;
@@ -101,21 +107,33 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 tabs[i] = c;
             }
 
-            // Hero and rail.
+            // Map on the left, one management column on the right (spec 6): a tab bar, then the chosen panel under it.
             float my = TitleH + 2f + StripH + Gap, mh = WindowHeight - my - FooterH - Gap;
+            float cx = Pad + HeroW + Gap, cw = WindowWidth - Pad - cx, ty = my + AvGridTokens.Tab + 6f, ch = mh - (ty - my);
             RectTransform hero = AvLay.Child(r, "Hero");
             AvLay.Place(hero, Pad, my, HeroW, mh);
             rooms[(int)Front.Space] = new OrbitRoom(actions, skin);
             rooms[(int)Front.Cyber] = new NetworkRoom(actions, skin);
             rooms[(int)Front.Sof] = new ShadowRoom(actions, skin);
+            railRoot = AvLay.Child(r, "Rail");
+            AvLay.Place(railRoot, cx, ty, cw, ch);
+            rail = new FrontRail(railRoot, skin, actions, 0f, 0f, cw, ch);
             for (int i = 0; i < rooms.Length; i++)
             {
                 roomRoots[i] = AvLay.Child(hero, "Room " + (Front)i);
                 AvLay.Place(roomRoots[i], 0f, 0f, HeroW, mh);
-                rooms[i].Build(roomRoots[i], HeroW, mh);
+                columnRoots[i] = AvLay.Child(r, "Column " + (Front)i);
+                AvLay.Place(columnRoots[i], cx, ty, cw, ch);
+                rooms[i].Build(roomRoots[i], HeroW, mh, columnRoots[i], cw, ch);
+                IReadOnlyList<ColumnTab> panels = rooms[i].Column;
+                var items = new (AvIcon, string)[panels.Count + 1];
+                for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
+                items[panels.Count] = (AvIcon.Stack2, "FRONT");
+                int room = i;
+                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); });
+                bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
+                skin.Add(bars[i].Restyle);
             }
-            float rx = Pad + HeroW + Gap;
-            rail = new FrontRail(r, skin, actions, rx, my, WindowWidth - Pad - rx, mh);
             skin.Add(Restyle);
         }
 
@@ -166,9 +184,29 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             AvText.Set(stripRight, C2Kit.FitTo(stripRight, "DTG " + (v.Dtg ?? "") + " · " + Feed(v.FeedAge), stripRight.rectTransform.rect.width));
             AvText.Set(headRight, C2Kit.FitTo(headRight, "NET " + FrontWords.Callsign(v.Front) + " · " + FrontRail.Headline(v), headRight.rectTransform.rect.width));
             for (int i = 0; i < tabs.Length; i++) tabs[i].Latched = i == (int)v.Front;
+            int front = (int)v.Front;
+            for (int i = 0; i < roomRoots.Length; i++)
+            {
+                roomRoots[i].gameObject.SetActive(i == front);
+                columnRoots[i].gameObject.SetActive(i == front);
+                bars[i].Rect.gameObject.SetActive(i == front);
+            }
+            if (shownFront != front) { shownFront = front; ShowTab(front, tabOf[front]); }
             rail.Paint(v);
-            for (int i = 0; i < roomRoots.Length; i++) roomRoots[i].gameObject.SetActive(i == (int)v.Front);
-            rooms[(int)v.Front]?.Paint(v);
+            rooms[front]?.Paint(v);
+            int want = rooms[front] != null ? rooms[front].TakeTab() : -1;
+            if (want >= 0 && want != tabOf[front]) ShowTab(front, want);
+        }
+
+        /// <summary>Shows column tab <paramref name="tab"/> of a room: one of its panels, or the FRONT panel (status, posture, programmes) after them.</summary>
+        private void ShowTab(int room, int tab)
+        {
+            IReadOnlyList<ColumnTab> panels = rooms[room].Column;
+            tabOf[room] = Mathf.Clamp(tab, 0, panels.Count);
+            for (int k = 0; k < panels.Count; k++) panels[k].Panel.gameObject.SetActive(k == tabOf[room]);
+            railRoot.gameObject.SetActive(tabOf[room] == panels.Count);
+            bars[room].Select(tabOf[room], false);
+            skin.Apply(); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
         }
 
         private static string Command(Front f) => f == Front.Space ? "ORBITAL COMMAND" : f == Front.Cyber ? "CYBER COMMAND" : "SPECIAL OPERATIONS COMMAND";

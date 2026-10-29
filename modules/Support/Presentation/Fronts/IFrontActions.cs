@@ -1,4 +1,6 @@
 using BoscaliSummer.Modules.Support.Domain.Fronts;
+using System.Collections.Generic;
+using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
@@ -35,10 +37,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         ISpaceFeedActions Orbit { get; }
     }
 
-    /// <summary>One room: a hero view that fills the left of the window; the rail beside it is shared.</summary>
+    /// <summary>One panel of a room's management column: its tab word and glyph, and the panel the tab shows.</summary>
+    internal readonly struct ColumnTab
+    {
+        public readonly string Label;
+        public readonly AvIcon Icon;
+        public readonly RectTransform Panel;
+        public ColumnTab(string label, AvIcon icon, RectTransform panel) { Label = label; Icon = icon; Panel = panel; }
+    }
+
+    /// <summary>One room: its map fills the left of the window; its management panels are tabs of the column on the right (spec 6).</summary>
     internal interface IFrontRoom
     {
-        void Build(RectTransform hero, float w, float h);
+        /// <summary>Builds the map into <paramref name="hero"/> (w x h) and one panel per <see cref="Column"/> tab into <paramref name="column"/> (cw x ch).</summary>
+        void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch);
+        /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
+        IReadOnlyList<ColumnTab> Column { get; }
+        /// <summary>The column tab a map pick asked for since the last call (a bird, node, team or target picked), or -1.</summary>
+        int TakeTab();
         void Paint(FrontRoomView v);
         /// <summary>One frame of pointer input over the room's map (wheel zoom, drag pan); true when the room must repaint.</summary>
         bool Tick(UnityEngine.Vector2 mouse);

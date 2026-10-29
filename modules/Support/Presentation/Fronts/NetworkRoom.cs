@@ -90,14 +90,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void Do(Action a) { actions.Touch(); a(); }
 
-        public void Build(RectTransform hero, float w, float h)
+        /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
+        public IReadOnlyList<ColumnTab> Column => columnTabs;
+        /// <summary>The column tab a map pick asked for since the last call, or -1.</summary>
+        public int TakeTab() { int t = wantTab; wantTab = -1; return t; }
+        private ColumnTab[] columnTabs = new ColumnTab[0];
+        private int wantTab = -1;
+        private float mapH = TopH;
+
+        public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            heroW = w;
+            heroW = w; mapH = h;
             colX = w - 12f - ColW;
             BuildGraph(hero);
-            float by = TopH + Gap, bh = h - by;
-            BuildInspector(hero, 0f, by, InspW, bh);
-            BuildList(hero, InspW + Gap, by, w - InspW - Gap, bh);
+            BuildInspector(column, 0f, 0f, cw, ch);
+            BuildList(column, 0f, 0f, cw, ch);
+            columnTabs = new[] { new ColumnTab("NODE", AvIcon.ListDetails, inspector.Rect), new ColumnTab("NODES", AvIcon.Link, list.Rect) };
         }
 
         // ---- Graph and session column ------------------------------------------------------------------------------------
@@ -123,14 +131,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void BuildGraph(RectTransform hero)
         {
-            graph = new FrontBox(hero, skin, "Network", 0f, 0f, heroW, TopH, "CYBER SITUATION · THEATRE NODE GRAPH", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty1");
+            graph = new FrontBox(hero, skin, "Network", 0f, 0f, heroW, mapH, "CYBER SITUATION · THEATRE NODE GRAPH", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty1");
             RectTransform b = graph.Rect;
             // The plate fills the box body left of the session column (which therefore never covers a node) and clips its own vector layer.
-            plate = new FrontMapPlate(b, skin, colX - 4f, TopH, Cols, Rows);
+            plate = new FrontMapPlate(b, skin, colX - 4f, mapH, Cols, Rows);
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
             plate.TopInset = StripH;                                           // and the grid names and ruler start under it
             side = FrontVector.Add(b, "Side"); // the session column's dial, pips, blocks and key swatches
-            AvLay.Place(side.rectTransform, 0f, 0f, heroW, TopH);
+            AvLay.Place(side.rectTransform, 0f, 0f, heroW, mapH);
             airbases = new FrontMap.AirbaseLayer(b);
             for (int i = 0; i < MaxNodes; i++)
             {
@@ -159,7 +167,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // The bounce chain: a glass strip across the top of the map. Its vector layer sits above every map label; the chips' words above it.
             routeVec = FrontVector.Add(b, "Route");
-            AvLay.Place(routeVec.rectTransform, 0f, 0f, heroW, TopH);
+            AvLay.Place(routeVec.rectTransform, 0f, 0f, heroW, mapH);
             routeTag = FrontKit.Mono(b, "RouteTag", plate.X + 10f, plate.Y + 2f, 50f, 20f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
             routeTag.text = "ROUTE";
             for (int i = 0; i < MaxChips; i++)
@@ -814,8 +822,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             float w = ColW;
             // The column is its own pane of glass beside the map: a faint wash and a phosphor edge.
-            g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, TopH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
-            g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, TopH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
+            g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, mapH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
+            g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, mapH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
             // Trace gauge: a half dial of ticks, lit up to the trace, coloured by zone.
             Vector2 c = new Vector2(colX + w * 0.5f, 118f);
             const float r = 70f;

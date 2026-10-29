@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Globalization;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
@@ -129,15 +130,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             actions.SelectTeam(selectedSlot);
         }
 
-        public void Build(RectTransform hero, float w, float h)
+        /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
+        public IReadOnlyList<ColumnTab> Column => columnTabs;
+        /// <summary>The column tab a map pick asked for since the last call, or -1.</summary>
+        public int TakeTab() { int t = wantTab; wantTab = -1; return t; }
+        private ColumnTab[] columnTabs = new ColumnTab[0];
+        private int wantTab = -1;
+        private float mapH = TopH;
+
+        public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            heroW = w;
+            heroW = w; mapH = h;
             colX = w - 12f - ColW;
             BuildSituation(hero);
-            float y = TopH + Gap, bh = h - y, cx = RosterW + Gap + ListW + Gap;
-            BuildRoster(hero, 0f, y, RosterW, bh);
-            BuildTargets(hero, RosterW + Gap, y, ListW, bh);
-            BuildComposer(hero, cx, y, w - cx, bh);
+            BuildRoster(column, 0f, 0f, cw, ch);
+            BuildTargets(column, 0f, 0f, cw, ch);
+            BuildComposer(column, 0f, 0f, cw, ch);
+            columnTabs = new[]
+            {
+                new ColumnTab("TEAMS", AvIcon.UsersGroup, roster.Rect), new ColumnTab("TARGETS", AvIcon.Crosshair, targets.Rect),
+                new ColumnTab("ORDERS", AvIcon.Clipboard, composer.Rect)
+            };
         }
 
         // ---- Paper, ink and pencil -----------------------------------------------------------------------------------------
@@ -434,11 +447,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void BuildSituation(RectTransform hero)
         {
-            situation = new FrontBox(hero, skin, "Shadow", 0f, 0f, heroW, TopH, "SOF SITUATION · PRESENCE AND INFILTRATION", AvIcon.Eye, FrontLook.Folder).Tagged("FILE 07-S");
+            situation = new FrontBox(hero, skin, "Shadow", 0f, 0f, heroW, mapH, "SOF SITUATION · PRESENCE AND INFILTRATION", AvIcon.Eye, FrontLook.Folder).Tagged("FILE 07-S");
             RectTransform b = situation.Rect;
-            plate = new FrontMapPlate(b, skin, heroW, TopH, Cols, Rows);
+            plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows);
             side = FrontVector.Add(b, "Side");   // overlay notes on the map
-            AvLay.Place(side.rectTransform, 0f, 0f, heroW, TopH);
+            AvLay.Place(side.rectTransform, 0f, 0f, heroW, mapH);
             plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings and teams are labelled where they stand
             airbases = new FrontMap.AirbaseLayer(b);
             for (int i = 0; i < MaxTeams; i++) teamLabels[i] = Pool(b, "TeamLabel" + i, 170f, 28f);
