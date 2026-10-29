@@ -8,7 +8,7 @@ namespace BoscaliSummer.Core.Contracts
     {
         /// <summary>
         /// The highest grade <paramref name="playerId"/> holds in <paramref name="lane"/>: 1..6 for
-        /// an OPS lane (grade 1 is free), 6 under the debug bypass, 0 for a lane the board does not have.
+        /// an OPS lane (grade 1 is free), 0 for a lane the board does not have. Never bypassed: the consumer applies its own debug bypass.
         /// </summary>
         int Grade(ulong playerId, string lane);
     }

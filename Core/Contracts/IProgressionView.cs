@@ -83,7 +83,7 @@ namespace BoscaliSummer.Core.Contracts
 
         /// <summary>
         /// The local pilot's grade in an OPS lane (SPACE, CYBER or SOF), from the last snapshot:
-        /// 1 before any snapshot, 6 under the debug bypass, 0 for a lane the board does not have.
+        /// 1 before any snapshot, 0 for a lane the board does not have. Never bypassed (the consumer applies its own debug bypass).
         /// The same rule the host applies through <see cref="IPlayerPerks.Grade"/>.
         /// </summary>
         int Grade(string lane);

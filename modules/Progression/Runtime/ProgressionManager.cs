@@ -254,15 +254,14 @@ namespace BoscaliSummer.Modules.Progression.Runtime
         // A player with no state yet holds only the free grade 1s; never mutated.
         private static readonly PerkState NoPicks = new PerkState();
 
+        // The real grade, never bypassed: Support opens perks under its own bypass, which the sim's strict verb can switch off.
         public int Grade(ulong playerId, string lane)
         {
             RefreshGeneration(playerId);
-            if (BypassRequirements) return PerkCatalog.MaximumDepth;
             return (states.TryGetValue(playerId, out PerkState state) ? state : NoPicks).GradeOf(lane);
         }
 
-        int IProgressionView.Grade(string lane) =>
-            BypassRequirements ? PerkCatalog.MaximumDepth : localState.GradeOf(lane);
+        int IProgressionView.Grade(string lane) => localState.GradeOf(lane);
 
         private PerkState GetOrCreate(ulong id)
         {

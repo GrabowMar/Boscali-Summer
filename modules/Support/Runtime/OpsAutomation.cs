@@ -582,6 +582,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             r["lastOutcome"] = lastOutcome; r["lastCharged"] = lastCharged;
             r["enemyBirdsDown"] = (int)m.OpsMirror.State.EnemyBirdsDown;
+            int gradeLocks = 0; // perks the local pilot's skill grade keeps shut (NEEDS <SYSTEM> SKILL n)
+            foreach (Domain.Calls.CallRow row in Domain.Calls.CallSheet.Rows)
+                if (m.LockReason(row.Id).StartsWith("NEEDS ", System.StringComparison.Ordinal)) gradeLocks++;
+            r["gradeLocks"] = gradeLocks;
             if (FrontService.Active != null && GameManager.GetLocalPlayer(out Player p) && p != null &&
                 FrontService.Active.EnemyReadout(p.HQ, out int q, out int es, out float hb))
             { r["enemyQueued"] = q; r["enemySup"] = es; r["hostBudget"] = (int)hb; }
