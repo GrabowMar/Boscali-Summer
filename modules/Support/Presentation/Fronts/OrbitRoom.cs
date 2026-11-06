@@ -115,6 +115,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public IReadOnlyList<ColumnTab> Column => columnTabs;
         /// <summary>The column tab a pick asked for since the last call (1 = DOWNLINK for a bird's feed), or -1.</summary>
         public int TakeTab() { int t = wantTab; wantTab = -1; return t; }
+        /// <summary>The DOWNLINK column tab's index (SATELLITES is 0).</summary>
+        internal const int DownlinkTab = 1;
         private ColumnTab[] columnTabs = new ColumnTab[0];
         private int wantTab = -1;
 
@@ -259,7 +261,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             EndPicks(); // the column leaves SATELLITES: an armed pick would wait off screen
             Select(kind);
             if (selKind != kind) return;
-            wantTab = 1;
+            wantTab = DownlinkTab;
             Do(() => Feed.SetSource((BirdKind)kind));
         }
 
@@ -392,7 +394,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             float noteX = big ? 640f : 326f;
             optical = Tool(b, "OPTICAL", 8f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Optical)), "Show the OPTICAL satellite's camera picture. Cloud softens it, night refuses it.");
             radar = Tool(b, "RADAR", 108f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Radar)), "Show the RADAR satellite's SAR picture from the last scan.");
-            zoom = Tool(b, "ZOOM", 208f, 28f, 112f, () => Do(() => Feed.CycleZoom()), "Cycle the picture zoom: WIDE, MID, CLOSE. CLOSE centres on the selected track.");
+            zoom = Tool(b, "ZOOM", 208f, 28f, 112f, () => Do(() => Feed.CycleZoom()), "Cycle the picture zoom: 1X, 2X, 4X, 8X, 16X. Zoomed in, the picture stares at the selected track.");
             sensorNote = FrontKit.Mono(b, "Note", noteX, 28f, w - noteX - 8f - 122f, 26f, 10.5f, TextAlignmentOptions.MidlineRight);
             picture = new OpsFeedPicture(b, id => Do(() => Feed.SelectEntry(id)));
             picture.Place(new AvSlot(PicX, PicY, w - 16f, h - 68f));
@@ -1072,7 +1074,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             SpaceFeedView f = v.Feed;
             // A cockpit warning outranks the sensor line: the pilot flying with this room open still sees it.
             if (f.ThreatActive) sensor.SetMeta(C2Words.Fit(f.Threat, 58), FrontKit.Tone(AvState.Danger));
-            else sensor.SetMeta((f.Source == BirdKind.Radar ? "RADAR SAR" : "OPTICAL") + " · ZOOM " + (f.ZoomEnabled ? SpaceFeedRules.ZoomWord(f.Zoom) : "—"), AvInk.Dim);
+            else sensor.SetMeta(SpaceFeedRules.ModeWord(f.Mode) + " · LINK " + f.Link + " · ZOOM " + (f.ZoomEnabled ? SpaceFeedRules.ZoomWord(f.Zoom) : "—"), AvInk.Dim);
             optical.Latched = f.Source == BirdKind.Optical;
             radar.Latched = f.Source == BirdKind.Radar;
             OpsKit.Label(zoom, f.ZoomEnabled ? "ZOOM " + SpaceFeedRules.ZoomWord(f.Zoom) : "ZOOM —");
@@ -1170,9 +1172,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // Data lines.
             int frame = Mathf.FloorToInt(Mathf.Max(0f, v.Now) * 0.412f) % 10000;
             string fr = frame.ToString("0000", CultureInfo.InvariantCulture);
-            string gsd = f.Zoom <= 0 ? "1.2" : f.Zoom == 1 ? "0.6" : "0.3";
-            string tl = none ? (sar ? "SAR" : "EO") + " · NO FRAME · STANDBY"
-                : sar ? "SAR · SCAN " + fr + " · RES 1.0 M" : "EO · FRAME " + fr + " · GSD " + gsd + " M";
+            string mode = SpaceFeedRules.ModeWord(f.Mode);
+            string tl = none ? mode + " · NO FRAME · STANDBY" : mode + (sar ? " · SCAN " : " · FRAME ") + fr + " · " + f.Telemetry[0];
             string who = "NO BIRD ON STATION";
             for (int i = 0; i < v.Birds.Count; i++)
             {

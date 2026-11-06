@@ -23,13 +23,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
     }
 
+    /// <summary>What the DOWNLINK shows: the OPTICAL bird's EO / IR (white-hot) / LOW LIGHT, the RADAR bird's SAR strip, or the KINETIC bird's STRIKE view.</summary>
+    internal enum DownlinkMode : byte { Eo, Ir, LowLight, Sar, Strike }
+
     /// <summary>The feed's own choices and its idle/restore clock. Mission time only: a pause freezes both.</summary>
     internal sealed class FeedDraft
     {
         private float closedAt = float.NaN;
 
-        public int Zoom, Page, Selected;
-        public BirdKind Source = BirdKind.Optical;
+        public int Page, Selected;
+        /// <summary>Continuous zoom 1..16 and the look's offset from the window centre (metres east, north).</summary>
+        public float Zoom = 1f, PanX, PanZ;
+        public DownlinkMode Mode = DownlinkMode.Eo;
+        public BirdKind Source => SpaceFeedRules.SourceOf(Mode);
 
         public void Touch(float now)
         {
@@ -50,8 +56,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void Clear()
         {
             closedAt = float.NaN;
-            Zoom = Page = Selected = 0;
-            Source = BirdKind.Optical;
+            Page = Selected = 0;
+            Zoom = 1f; PanX = PanZ = 0f;
+            Mode = DownlinkMode.Eo;
         }
     }
 
@@ -163,20 +170,66 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
 
         /// <summary>At most six contact targets show at once; a bounded page switch reaches the rest. Nothing scrolls.</summary>
         public const int ContactsPerPage = 6;
-        public const int ZoomSteps = 3;
 
         /// <summary>Paging for a surface that shows <paramref name="perPage"/> track-file rows (the compact page shows fewer than the station).</summary>
         public static int PageCount(int contacts, int perPage) => contacts <= 0 || perPage <= 0 ? 1 : (contacts + perPage - 1) / perPage;
         public static int ClampPage(int page, int contacts, int perPage) => Math.Max(0, Math.Min(page, PageCount(contacts, perPage) - 1));
 
-        /// <summary>Ground width the imager frames at a zoom step: the whole window, half, a quarter.</summary>
-        public static float Footprint(int step, float windowRadius)
+        // ---- DOWNLINK: zoom, pan, link ------------------------------------------------------------------------------
+
+        public const float MinZoom = 1f, MaxZoom = 16f;
+        /// <summary>The PKT n / 256 counter of a resolving picture.</summary>
+        public const int ResolvePackets = 256;
+
+        public static float ClampZoom(float zoom) => float.IsFinite(zoom) ? Math.Clamp(zoom, MinZoom, MaxZoom) : MinZoom;
+
+        /// <summary>Ground width the imager frames: the whole window (2R) at 1X, 2R / zoom closer in, zoom clamped 1..16.</summary>
+        public static float Footprint(float zoom, float windowRadius) => 2f * windowRadius / ClampZoom(zoom);
+
+        /// <summary>The old ZOOM button's steps: 1, 2, 4, 8, 16, then back to 1.</summary>
+        public static float NextZoomStep(float zoom)
         {
-            int z = Math.Max(0, Math.Min(step, ZoomSteps - 1));
-            return 2f * windowRadius / (1 << z);
+            float z = ClampZoom(zoom);
+            for (float s = 2f; s <= MaxZoom; s *= 2f) if (s > z + 1e-3f) return s;
+            return MinZoom;
         }
 
-        public static string ZoomWord(int step) => step <= 0 ? "WIDE" : step == 1 ? "MID" : "CLOSE";
+        public static string ZoomWord(float zoom) => ClampZoom(zoom).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "X";
+
+        /// <summary>How far the look may sit off the window centre: the look box (2R / zoom wide) stays inside the R window, so nothing at 1X.</summary>
+        public static float PanReach(float zoom, float windowRadius) => Math.Max(0f, windowRadius - Footprint(zoom, windowRadius) * 0.5f);
+
+        /// <summary>A pan offset pulled back along its own line to at most <paramref name="maxRadius"/>; a bad offset or no reach centres it.</summary>
+        public static (float X, float Z) ClampPan(float px, float pz, float maxRadius)
+        {
+            if (!float.IsFinite(px) || !float.IsFinite(pz) || !float.IsFinite(maxRadius) || maxRadius <= 0f) return (0f, 0f);
+            float length = (float)Math.Sqrt((double)px * px + (double)pz * pz);
+            if (length <= maxRadius) return (px, pz);
+            float k = maxRadius / length;
+            return (px * k, pz * k);
+        }
+
+        /// <summary>Link quality 1..5 from the live pads (two 5, one 3, none 1; never more than are built), one less while the bird is jammed.</summary>
+        public static int LinkQuality(int padsLive, int padsTotal, bool jammed)
+        {
+            int live = Math.Max(0, Math.Min(padsLive, padsTotal));
+            int link = live >= 2 ? 5 : live == 1 ? 3 : 1;
+            return Math.Max(1, jammed ? link - 1 : link);
+        }
+
+        private static int ClampLink(int link) => Math.Clamp(link, 1, 5);
+
+        /// <summary>Seconds a fresh picture takes to resolve: 0.6 at link 5, a quarter second more per lost step.</summary>
+        public static float ResolveSeconds(int link) => 0.6f + 0.25f * (5 - ClampLink(link));
+
+        /// <summary>The block size (post pixels) a resolved picture keeps: 1 at link 4-5, 2 at 2-3, 4 at 1.</summary>
+        public static int ResolveBands(int link) => 1 << ((5 - ClampLink(link)) / 2);
+
+        public static string ModeWord(DownlinkMode mode) =>
+            mode == DownlinkMode.Ir ? "IR" : mode == DownlinkMode.LowLight ? "LOW LIGHT" : mode == DownlinkMode.Sar ? "SAR" : mode == DownlinkMode.Strike ? "STRIKE" : "EO";
+
+        public static BirdKind SourceOf(DownlinkMode mode) =>
+            mode == DownlinkMode.Sar ? BirdKind.Radar : mode == DownlinkMode.Strike ? BirdKind.Kinetic : BirdKind.Optical;
 
         public static PostStatus PostStatusOf(in FeedPost post, float now)
         {

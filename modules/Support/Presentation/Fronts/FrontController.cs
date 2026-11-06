@@ -108,12 +108,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // The room covers the map but the manager still reads right-clicks there: an armed perk or post must not fire from inside the room.
             if (calls != null && (calls.Armed != null || calls.TaskedArmedId != 0 || calls.SteeringCruise)) calls.Disarm();
             WantFeeds(true);
-            feed?.SetVisible(front == Front.Space);
             bool shown;
             try { Build(); shown = window.Open(view); }
             catch (System.Exception e) { Plugin.Logger?.LogError("OPS front window build failed: " + e); shown = false; }
             if (!shown) { feed?.SetVisible(false); WantFeeds(false); Say("NEGATIVE: WINDOW COULD NOT OPEN", AvState.Danger); return false; }
             open = true;
+            ShowFeed();
             badSince = -1f;
             nextRefresh = Time.unscaledTime + Refresh;
             return true;
@@ -137,6 +137,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             feed?.SetVisible(false);
         }
 
+        /// <summary>The SPACE feed holds its lease and renders only while the room shows DOWNLINK (enlarged counts); SATELLITES, FRONT and other rooms let it go.</summary>
+        private void ShowFeed() => feed?.SetVisible(open && window != null && window.DownlinkShown);
+
         /// <summary>Picks belong to one faction and one scene: either changing drops them all (a vanished id is cleared by the views, nothing else).</summary>
         private void ClearSelections()
         {
@@ -159,6 +162,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             WantFeeds(open);
             if (!open) return;
             if (window == null || !window.IsOpen) { OnClosed(); return; }
+            ShowFeed(); // a tab switch or ENLARGE lands here the frame it happens
             try
             {
                 // A probe or faction read can blink for a frame (respawn handover, ownship swap): only a stretch of bad reads is a real death, despawn or faction change.
@@ -320,7 +324,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool theirs = calls != null && calls.LastWords.Length > 0 && now - calls.LastWordsAt < WordsHold;
             if (theirs && (!mine || calls.LastWordsAt >= wordsAt)) { text = calls.LastWords; tone = text.StartsWith("NEGATIVE", StringComparison.Ordinal) ? AvState.Danger : AvState.Info; }
             else if (mine) { text = words; tone = wordsTone; }
-            else if (current == Front.Space && feed != null && feed.View.Words.Length > 0) { text = feed.View.Words; tone = feed.View.WordsTone; }
+            else if (current == Front.Space && feed != null && feed.Shown && feed.View.Words.Length > 0) { text = feed.View.Words; tone = feed.View.WordsTone; }
             window.Window.Footer.Set(text, tone);
         }
 
@@ -402,10 +406,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (front == current) return;
             current = front;
-            feed?.SetVisible(front == Front.Space);
             WantFeeds(true);
             nextRefresh = 0f;
             if (open && window != null) { Build(); window.Paint(view); }
+            ShowFeed();
         }
 
         // ---- IFrontActions: NETWORK -------------------------------------------------------------------------------------

@@ -46,6 +46,13 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public float Left;
     }
 
+    /// <summary>The STRIKE view's own rod: where it lands (picture 0..1, origin bottom-left, when on the picture), its radius in metres, seconds to impact, and the 8 s hold after it.</summary>
+    internal struct FeedStrikeView
+    {
+        public bool Has, Held, OnPicture;
+        public float Eta, Radius, U, V;
+    }
+
     /// <summary>One constellation cell: the bird, its real state word and the tone of that word.</summary>
     internal struct FeedBirdView
     {
@@ -69,7 +76,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Refusal = "";
         public readonly List<FeedBracketView> Brackets = new List<FeedBracketView>(MaxBrackets);
         public BirdKind Source;
-        public int Zoom;
+        public DownlinkMode Mode;
+        /// <summary>Continuous zoom 1..16.</summary>
+        public float Zoom = 1f;
+        /// <summary>The look box on the theatre map (u, v, width in km); HasLook false while nothing is imaged.</summary>
+        public bool HasLook;
+        public float LookU, LookV, LookKm;
+        /// <summary>Link quality 1..5 (live pads, one less while degraded) and the resolve counter of the picture on screen.</summary>
+        public int Link = 1, Packets, PacketsTotal = SpaceFeedRules.ResolvePackets;
+        /// <summary>Burn-in lines, in order: GSD, SLANT, ELEV, SUN with shadow direction, cloud word ("" when not known).</summary>
+        public readonly string[] Telemetry = { "", "", "", "", "" };
+        public FeedStrikeView Strike;
+        /// <summary>The IR / LOW LIGHT picture (also in <see cref="Image"/> while that mode shows); null in EO and SAR.</summary>
+        public Texture PostTexture;
         public string Status = "";
         public AvState StatusTone = AvState.Inert;
         public readonly FeedTileView[] Tiles = new FeedTileView[SpaceFeedRules.ContactsPerPage];
@@ -106,6 +125,15 @@ namespace BoscaliSummer.Modules.Support.Presentation
         void Confirm();
         void Send();
         void SetSource(BirdKind source);
+        /// <summary>Old ZOOM button: 1, 2, 4, 8, 16, then 1.</summary>
         void CycleZoom();
+        /// <summary>Continuous zoom, clamped 1..16.</summary>
+        void SetZoom(float zoom);
+        /// <summary>Moves the look by metres east / north, clamped inside the imaged window.</summary>
+        void Pan(float dx, float dz);
+        void ResetLook();
+        void SetMode(DownlinkMode mode);
+        /// <summary>One press: MARK the selected target if it is not marked yet, then TRANSMIT once the mark is on the board.</summary>
+        void SendToTasked();
     }
 }

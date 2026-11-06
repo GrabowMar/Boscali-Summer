@@ -266,6 +266,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private OrbitRoom Orbit => rooms[(int)Front.Space] as OrbitRoom;
 
+        /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
+        internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && (tabOf[shownFront] == OrbitRoom.DownlinkTab || Orbit.Enlarged);
+
         private void OnWindowClosed()
         {
             Orbit?.EndPicks(); // a reopened window starts with no pick armed

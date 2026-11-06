@@ -108,6 +108,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     break;
                 case "relocate": request = Relocate(m, Mathf.Clamp((int)Number(args, "bird", 1f), 0, 2), Number(args, "range", 0f)); break; // own bird over an enemy mover (tests/ingame/ops-overwatch.json)
                 case "truckmove": request = m.MoveTruck((int)Number(args, "truck", 0f), Number(args, "x", 0f), Number(args, "z", 0f)); break; // TRUCK MOVE: the verdict lands in lastOutcome
+                case "downlink": // DOWNLINK mode (0 EO, 1 IR, 2 LOW LIGHT, 3 SAR, 4 STRIKE), optional zoom; the feed fields come back in the readout
+                    SpaceFeedController feed = Find<SpaceFeedController>();
+                    if (feed == null) return Fail("Verb", "no SPACE feed");
+                    feed.SetMode((DownlinkMode)Mathf.Clamp((int)Number(args, "mode", 0f), 0, (int)DownlinkMode.Strike));
+                    if (Has(args, "zoom")) feed.SetZoom(Number(args, "zoom", 1f));
+                    request = -1;
+                    break;
 #endif
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
             }
@@ -353,6 +360,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["frontWords"] = fronts.LastWords;
             }
             if (calls != null) { r["words"] = calls.LastWords; r["wordsAt"] = calls.LastWordsAt; }
+            SpaceFeedController feed = Find<SpaceFeedController>();
+            if (feed != null)
+            {
+                SpaceFeedView f = feed.View;
+                r["feedShown"] = feed.Shown ? 1 : 0;
+                r["feedMode"] = (int)f.Mode;
+                r["feedZoom"] = f.Zoom;
+                r["feedImage"] = f.Image != null ? 1 : 0;
+                r["feedPost"] = f.PostTexture != null ? 1 : 0;
+                r["feedRefusal"] = f.Refusal;
+                r["feedLink"] = f.Link;
+                r["feedPackets"] = f.Packets;
+                r["feedLook"] = f.HasLook ? 1 : 0;
+                r["feedTelemetry"] = string.Join(" | ", f.Telemetry);
+            }
             if (m == null) return r;
             r["online"] = m.Online;
             r["allocation"] = m.LocalAllocation;
