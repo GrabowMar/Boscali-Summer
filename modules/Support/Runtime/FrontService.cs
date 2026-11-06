@@ -322,8 +322,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         FrontOutcome padWhy = FrontOutcome.Unavailable;
                         ok = space != null && space.TryBuildPad(owner, e.HasPoint, e.X, e.Z, out padWhy); failure = padWhy;
                         break;
-                    case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); failure = FrontOutcome.DataCentersMax; break;
-                    case ProgrammeId.EwTruck: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.EwTruck); failure = FrontOutcome.TrucksMax; break;
+                    case ProgrammeId.DataCenter:
+                        FrontOutcome centerWhy = FrontOutcome.Unavailable;
+                        ok = cyber != null && cyber.TryBuildDataCenter(owner, e.HasPoint, e.X, e.Z, out centerWhy); failure = centerWhy;
+                        break;
+                    case ProgrammeId.EwTruck:
+                        FrontOutcome truckWhy = FrontOutcome.Unavailable;
+                        ok = cyber != null && cyber.TryDeployTruck(owner, e.HasPoint, e.X, e.Z, out truckWhy); failure = truckWhy;
+                        break;
                     case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); failure = f.World.Camps >= f.World.CampMax ? FrontOutcome.CampsMax : FrontOutcome.NoSite; break;
                     case ProgrammeId.TrainTeam:
                         SofResult r = sof != null ? sof.TrainTeam(owner) : new SofResult(SofOutcome.Unavailable);

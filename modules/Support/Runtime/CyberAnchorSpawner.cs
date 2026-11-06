@@ -37,7 +37,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
         private int serial;
-        internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
+        /// <summary>A unit this spawner raised and still holds, a destroyed one included (Unity-null but still in its group), so slot reuse can remove the wreck and its guards.</summary>
+        internal bool Owns(Unit unit) => !ReferenceEquals(unit, null) && owned.Contains(unit);
 
         /// <summary>The definition keys this mission actually resolved, for the log line and the native fixture.</summary>
         internal static string Describe()
@@ -136,7 +137,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
-        private const float CampReach = 120f, EscortReach = 15f;
+        private const float CampReach = 120f, EscortReach = 15f, TruckReach = 120f;
 
         /// <summary>The desired spot first, then 8 bearings at half and full <paramref name="reach"/>, nearest first.</summary>
         private static readonly Vector2[] Nudges = BuildNudges();
@@ -152,7 +153,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return n;
         }
 
-        // ponytail: up to 17 footprint tests per spot, only while a faction's camps are planned (once, then every 30 s retry while none fits).
+        // ponytail: up to 17 footprint tests per spot, only when a camp is planned or a truck is deployed / unpacked.
         private static bool PlanNear(VehicleDefinition definition, Vector3 desired, Airbase parent, Quaternion rotation, float reach, out GlobalPosition planned)
         {
             for (int i = 0; i < Nudges.Length; i++)
@@ -167,15 +168,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!TryPlanCamp(anchor, parent, out GlobalPosition[] positions, out Quaternion rotation)) return false;
             VehicleDefinition site = FindFirst(CampKeys, null), guard = FindFirst(CampGuardKeys, null);
             return TryCreateGroup(owner, "Camp", ordinal, new[] { site, guard, guard }, positions, rotation, parent, out camp);
-        }
-
-        internal bool TryPlanTruck(GlobalPosition anchor, Airbase parent, out GlobalPosition position, out Quaternion rotation)
-        {
-            position = default;
-            rotation = Quaternion.identity;
-            VehicleDefinition truck = FindFirst(TruckKeys, null);
-            if (truck == null) return false;
-            return PlanOne(truck, anchor.ToLocalPosition(), parent, rotation, out position);
         }
 
         internal bool TryPlanCenter(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions, out Quaternion rotation)
@@ -202,12 +194,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
-        internal bool TryCreateTruck(FactionHQ owner, int ordinal, GlobalPosition anchor, Airbase parent, out Unit truck)
+        /// <summary>One EW truck on legal level ground at <paramref name="anchor"/> or nudged up to 120 m round it (an exact open-country point rarely fits). Held in place.</summary>
+        internal bool TryCreateTruckNear(FactionHQ owner, int ordinal, GlobalPosition anchor, Airbase parent, out Unit truck)
         {
             truck = null;
-            if (!TryPlanTruck(anchor, parent, out GlobalPosition position, out Quaternion rotation)) return false;
             VehicleDefinition definition = FindFirst(TruckKeys, null);
-            return TryCreateGroup(owner, "Truck", ordinal, new[] { definition }, new[] { position }, rotation, parent, out truck);
+            if (definition == null || !PlanNear(definition, anchor.ToLocalPosition(), parent, Quaternion.identity, TruckReach, out GlobalPosition position)) return false;
+            return TryCreateGroup(owner, "Truck", ordinal, new[] { definition }, new[] { position }, Quaternion.identity, parent, out truck);
         }
 
         internal bool TryCreateCenter(FactionHQ owner, int ordinal, GlobalPosition anchor, Airbase parent, out Unit center)
