@@ -48,9 +48,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public float CacheAt = float.NegativeInfinity;
             /// <summary>An AI faction queues its next ASAT no sooner than this (one every <see cref="AiAsatSpacingSeconds"/>).</summary>
             public float NextAiAsat;
+            /// <summary>[front, programme]: the quartermaster skips this automatic step until this mission second (it found no room; ruling R20).</summary>
+            public readonly float[,] BlockedUntil = new float[FrontRules.FrontCount, FrontRules.Programmes.Length];
         }
 
         private const float AiAsatSpacingSeconds = 1200f;
+        /// <summary>An automatic pool build that found no room (NO SPOT, NO SITE, NOT HELD) is not tried again by the quartermaster for this long.</summary>
+        private const float BlockedSeconds = 600f;
 
         private readonly Dictionary<FactionHQ, FactionFront> factions = new Dictionary<FactionHQ, FactionFront>();
         private readonly List<FactionFront> order = new List<FactionFront>(MaximumFactions);
@@ -291,8 +295,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// The quartermaster (organic fronts 4.6): a human front idle for 180 s with an empty queue climbs its ladder by one step at the automatic spot; a faction with no humans does so
-        /// whenever a front's queue is empty and, with the ladder complete, follows its doctrine (<see cref="FrontAi"/>: ASAT, ZERO-DAY, FOB). Owner 0 (the pool), never a human queue.
-        /// A step the service cannot place now (no held airbase) is skipped and asked again on the next 5 s tick.
+        /// whenever a front's queue is empty. Owner 0 (the pool), never a human queue. A step the service cannot place now (no held airbase) or that is backing off after finding no room
+        /// (<see cref="BlockedSeconds"/>) is not queued: a human front waits (it never jumps to a later step that needs this one), an AI front follows its doctrine instead
+        /// (<see cref="FrontAi.Doctrine"/>: ASAT, ZERO-DAY, FOB), as it does with the ladder complete.
         /// </summary>
         private void Quartermaster(FactionFront f, float now)
         {
@@ -302,13 +307,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 var front = (Front)i;
                 if (!f.Book.QuartermasterDue(front, now, humans)) continue;
                 QueuedCounts queued = f.Book.Queued(front);
-                ProgrammeId id; byte kind;
-                bool next = humans
-                    ? FrontLadder.Next(front, f.World, queued, out id, out kind)
-                    : FrontAi.Next(front, f.World, queued,
-                        front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _),
-                        front == Front.Space && now >= f.NextAiAsat && EnemyBirdUp(f.Owner), out id, out kind);
-                if (next && Queue(f, front, id, kind, false, 0f, 0f, false, now) == FrontOutcome.Queued && id == ProgrammeId.Asat) f.NextAiAsat = now + AiAsatSpacingSeconds;
+                if (FrontLadder.Next(front, f.World, queued, out ProgrammeId id, out byte kind) && now >= f.BlockedUntil[i, (int)id] &&
+                    Queue(f, front, id, kind, false, 0f, 0f, false, now) == FrontOutcome.Queued) continue;
+                if (humans) continue;
+                bool sam = front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _);
+                bool asat = front == Front.Space && now >= f.NextAiAsat && EnemyBirdUp(f.Owner);
+                if (FrontAi.Doctrine(front, f.World, queued, sam, asat, out id) && Queue(f, front, id, 0, false, 0f, 0f, false, now) == FrontOutcome.Queued && id == ProgrammeId.Asat)
+                    f.NextAiAsat = now + AiAsatSpacingSeconds;
             }
         }
 
@@ -361,6 +366,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!ok && failure == FrontOutcome.None) failure = FrontOutcome.Unavailable; // a refusal is never settled as DONE
             f.Book.Settle(e, ok ? FrontOutcome.None : failure, now);
+            // An automatic pool build that found no room would loop (fund, build, refund) every cycle: the quartermaster backs off that step for 10 minutes.
+            if (!ok && !e.HasPoint && e.Owner == 0 && (failure == FrontOutcome.NoSpot || failure == FrontOutcome.NoSite || failure == FrontOutcome.NotHeld))
+                f.BlockedUntil[(int)e.Front, (int)e.Id] = now + BlockedSeconds;
             if (ok)
             {
                 if (e.Id == ProgrammeId.LaunchSatellite) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
