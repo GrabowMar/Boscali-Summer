@@ -29,6 +29,9 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> SeaSprayEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
         public ConfigEntry<bool> CloudTemporalUpdate { get; }
+        public ConfigEntry<WeatherQuality> Quality { get; }
+        public ConfigEntry<float> CloudSteps { get; }
+        public ConfigEntry<float> CloudFarSteps { get; }
         public ConfigEntry<float> RainDensity { get; }
         public ConfigEntry<bool> CanopyRainEnabled { get; }
         public ConfigEntry<bool> CanopyShaderEnabled { get; }
@@ -127,6 +130,23 @@ namespace BoscaliSummer.Modules.Weather.Configuration
                 "With half-resolution clouds: march a quarter of the cloud pixels each frame and reproject " +
                 "the rest from the last frame (about four times cheaper again). Applies now.");
 
+            CloudSteps = config.Bind(section, "CloudSteps", 96f,
+                new ConfigDescription("Ray-march steps through near clouds. More = sharper, more detailed cloud; " +
+                    "fewer = softer and cheaper. Applies now.", new AcceptableValueRange<float>(24f, 96f)));
+
+            CloudFarSteps = config.Bind(section, "CloudFarSteps", 32f,
+                new ConfigDescription("Ray-march steps through distant clouds. More = crisper far cloud. Applies now.",
+                    new AcceptableValueRange<float>(8f, 64f)));
+
+            Quality = config.Bind(section, "Quality", WeatherQuality.High,
+                "Cloud quality tier: sets CloudSteps, CloudFarSteps, CloudHalfResolution and CloudTemporalUpdate together. " +
+                "Changing any of those by hand shows Custom. Applies now.");
+            Quality.SettingChanged += (_, __) => ApplyQuality();
+            CloudSteps.SettingChanged += (_, __) => SyncQuality();
+            CloudFarSteps.SettingChanged += (_, __) => SyncQuality();
+            CloudHalfResolution.SettingChanged += (_, __) => SyncQuality();
+            CloudTemporalUpdate.SettingChanged += (_, __) => SyncQuality();
+
             RainDensity = config.Bind(section, "RainDensity", 1.0f,
                 new ConfigDescription(
                     "Density multiplier for falling rain streaks. The 2500-particle budget stays fixed.",
@@ -162,5 +182,38 @@ namespace BoscaliSummer.Modules.Weather.Configuration
                 "Require holding Ctrl with the weather console key (Ctrl+O by default).");
 
         }
+
+        // LOW .. ULTRA in WeatherQuality order. HIGH is the 2026-10-26 default look; ULTRA marches every half-res texel each frame.
+        private static readonly (float Near, float Far, bool Half, bool Temporal)[] QualityTiers =
+        {
+            (48f, 16f, true, true),
+            (72f, 20f, true, true),
+            (96f, 32f, true, true),
+            (96f, 64f, true, false),
+        };
+        private bool applyingQuality;
+
+        private void ApplyQuality()
+        {
+            int i = (int)Quality.Value;
+            if (i >= QualityTiers.Length) return;   // Custom keeps the hand-set values
+            applyingQuality = true;
+            CloudSteps.Value = QualityTiers[i].Near;
+            CloudFarSteps.Value = QualityTiers[i].Far;
+            CloudHalfResolution.Value = QualityTiers[i].Half;
+            CloudTemporalUpdate.Value = QualityTiers[i].Temporal;
+            applyingQuality = false;
+        }
+
+        private void SyncQuality()
+        {
+            if (applyingQuality) return;
+            int match = System.Array.FindIndex(QualityTiers, t => Mathf.Approximately(t.Near, CloudSteps.Value) &&
+                Mathf.Approximately(t.Far, CloudFarSteps.Value) && t.Half == CloudHalfResolution.Value &&
+                t.Temporal == CloudTemporalUpdate.Value);
+            Quality.Value = match < 0 ? WeatherQuality.Custom : (WeatherQuality)match;
+        }
     }
+
+    internal enum WeatherQuality { Low, Medium, High, Ultra, Custom }
 }

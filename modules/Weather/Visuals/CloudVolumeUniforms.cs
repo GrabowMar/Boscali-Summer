@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>Lightning flash envelope, 0..1: lights the cloud cores the sun cannot reach.</summary>
         public float Flash;
         public Vector4 FlashA, FlashB;
-        public bool LowDetail;
+        public float NearSteps, FarSteps;
         public bool RainVisualsEnabled;
         public float DeltaTime;
     }
@@ -261,11 +261,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             material.SetFloat(PixelAngleId,
                 2f * Mathf.Tan(frame.FieldOfView * 0.5f * Mathf.Deg2Rad) / Mathf.Max(1, frame.PixelHeight));
-            // 2026-10-26 (user: put more resources into clouds): 96 near steps (the shader's cap) and 32 far. The dither is frozen per
+            // Steps come from SET > PERFORMANCE > CLOUD DETAIL (WeatherSettings.CloudSteps/CloudFarSteps; HIGH = 96 near, the shader's
+            // cap, and 32 far, the 2026-10-26 look; the shader clamps both to 4..96). The dither is frozen per
             // texel since 2026-10-14, so accumulation no longer supersamples the steps, and the noise footprint follows the step length:
             // shorter steps are directly sharper cloud.
-            material.SetFloat(StepsId, frame.LowDetail ? 72f : 96f);
-            material.SetFloat(FarStepsId, frame.LowDetail ? 20f : 32f);
+            material.SetFloat(StepsId, frame.NearSteps);
+            material.SetFloat(FarStepsId, frame.FarSteps);
         }
 
         internal static void ApplySpans(Material material, float mapHalf, float farHalf)

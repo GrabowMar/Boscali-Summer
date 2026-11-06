@@ -577,7 +577,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 Camera worldCamera = SceneSingleton<CameraStateManager>.i?.mainCamera;
                 flightClouds.Update(LevelInfo.i, Field, worldCamera,
                     weatherTime, settings.CloudHalfResolution.Value,
-                    settings.CloudTemporalUpdate.Value, lightning.FlashNow, lightning.FlashA, lightning.FlashB,
+                    settings.CloudTemporalUpdate.Value, settings.CloudSteps.Value, settings.CloudFarSteps.Value,
+                    lightning.FlashNow, lightning.FlashA, lightning.FlashB,
                     RainVisualsEnabled && (!forcedRainIntensity.HasValue || forcedRainIntensity.Value > .001f));
                 if (flightClouds.Active)
                 {

@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         internal void Update(LevelInfo level, WeatherField field, Camera camera,
-            float missionTime, bool wantHalfResolution, bool temporalUpdate,
+            float missionTime, bool wantHalfResolution, bool temporalUpdate, float nearSteps, float farSteps,
             float flash = 0f, Vector4 flashA = default, Vector4 flashB = default, bool rainVisualsEnabled = true)
         {
             if (Application.isBatchMode || level == null || field == null || !field.IsBuilt || camera == null)
@@ -237,7 +237,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Flash = flash,
                 FlashA = flashA,
                 FlashB = flashB,
-                LowDetail = Mathf.Clamp01(PlayerSettings.graphics.CloudDetail) < 0.5f,
+                NearSteps = nearSteps,
+                FarSteps = farSteps,
                 RainVisualsEnabled = RainCurtainsEnabled,
                 DeltaTime = Time.deltaTime,
             };

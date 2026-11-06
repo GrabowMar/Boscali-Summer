@@ -59,10 +59,29 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "REDUCED FLASHES",
                 "Suppress visible lightning and storm flashes; independently enabled storm audio remains available.",
                 context.Settings.Weather.ReducedFlashes);
-            context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
+            WeatherSettings weather = context.Settings.Weather;
+            ClientSettingToggle clouds = context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
                 "Volumetric clouds for the current weather state: fronts, cumulus and storm towers. " +
                 "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
-                context.Settings.Weather.CinematicCloudsEnabled, ClientPreset.Light);
+                weather.CinematicCloudsEnabled, ClientPreset.Light);
+            // SET > PERFORMANCE: one quality strip plus the four knobs it sets; touching a knob shows CUSTOM.
+            context.AddClientChoice("WEATHER QUALITY", "CLOUD QUALITY",
+                "LOW: soft clouds, cheapest. MEDIUM: a little softer than HIGH. HIGH: the default look. " +
+                "ULTRA: crisper far cloud and every cloud pixel redrawn each frame (about 4x the GPU cost of HIGH). " +
+                "CUSTOM: your own mix from CLOUD DETAIL below.",
+                weather.Quality, new[] { "LOW", "MEDIUM", "HIGH", "ULTRA", "CUSTOM" }, clouds);
+            ClientSettingToggle halfRes = context.AddClientSetting("CLOUD DETAIL", "HALF-RES CLOUDS",
+                "Draw clouds at half resolution and upscale (about 4x cheaper). Off draws every pixel at full resolution: " +
+                "sharpest edges, heaviest cost.", weather.CloudHalfResolution, null, clouds);
+            context.AddClientSetting("CLOUD DETAIL", "TEMPORAL CLOUDS",
+                "Redraw a quarter of the cloud pixels each frame and reuse the rest (about 4x cheaper again). " +
+                "Off redraws all of them: no smearing in fast turns.", weather.CloudTemporalUpdate, null, halfRes);
+            context.AddClientLevel("CLOUD DETAIL", "NEAR DETAIL",
+                "Ray-march steps through nearby cloud. More steps = sharper, more defined cloud; fewer = softer and cheaper. HIGH: 96.",
+                weather.CloudSteps, 24f, 96f, 8f, v => v.ToString("0"), clouds);
+            context.AddClientLevel("CLOUD DETAIL", "FAR DETAIL",
+                "Ray-march steps through distant cloud and the horizon. More steps = crisper far cloud. HIGH: 32.",
+                weather.CloudFarSteps, 8f, 64f, 4f, v => v.ToString("0"), clouds);
             context.AddClientSetting("SKY", "SUN SHAFTS",
                 "Beams of light around the sun, cut by clouds, terrain and aircraft. Client-local; applies now.",
                 context.Settings.Weather.SunShaftsEnabled, ClientPreset.Light);
@@ -80,7 +99,6 @@ namespace BoscaliSummer.Modules.Weather
                 "Spray behind aircraft flying low and fast over water. Client-local; applies now.",
                 context.Settings.Weather.SeaSprayEnabled);
 
-            WeatherSettings weather = context.Settings.Weather;
             context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)
                 .Toggle(1, weather.TapeMoves, "CHANGING WEATHER",
                     "Weather systems cross the map over mission time. Off holds the sky where it is.")

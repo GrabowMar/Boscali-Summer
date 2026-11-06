@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("WORLD FX", CWorld, AvIcon.Flame),
             ("COLOUR GRADE", CWorld, AvIcon.Filter),
             ("MISSIONS", CWorld, AvIcon.Flag),
+            ("WEATHER QUALITY", CPerf, AvIcon.Cloud),
+            ("CLOUD DETAIL", CPerf, AvIcon.Cloud),
             ("FRAME BUDGET", CPerf, AvIcon.Gauge),
             ("BASE GAME", CPerf, AvIcon.Settings),
             ("FAR UNITS", CPerf, AvIcon.Radar2),
