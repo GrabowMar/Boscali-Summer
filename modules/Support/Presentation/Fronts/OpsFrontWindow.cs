@@ -202,7 +202,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 columnRoots[i].gameObject.SetActive(i == front);
                 bars[i].Rect.gameObject.SetActive(i == front);
             }
-            if (shownFront != front) { shownFront = front; ShowTab(front, tabOf[front]); }
+            if (shownFront != front) { shownFront = front; Orbit?.EndPicks(); ShowTab(front, tabOf[front]); } // a SPACE map pick never waits behind another room
             rail.Paint(v);
             rooms[front]?.Paint(v);
             int want = rooms[front] != null ? rooms[front].TakeTab() : -1;
@@ -264,8 +264,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window.Hide(); // raises Closed -> OnWindowClosed hands the input back
         }
 
+        private OrbitRoom Orbit => rooms[(int)Front.Space] as OrbitRoom;
+
         private void OnWindowClosed()
         {
+            Orbit?.EndPicks(); // a reopened window starts with no pick armed
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
             GiveBackInput();

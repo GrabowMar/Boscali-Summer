@@ -256,6 +256,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>FEED › or a click on one of our birds on the map: select it, ask the feed for it, and show the DOWNLINK tab.</summary>
         private void ShowFeed(int kind)
         {
+            EndPicks(); // the column leaves SATELLITES: an armed pick would wait off screen
             Select(kind);
             if (selKind != kind) return;
             wantTab = 1;
@@ -265,6 +266,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void StartRelocate(int kind)
         {
             actions.Touch();
+            if (Enlarged) ToggleCamera(); // the proposal is a click on the map: it must be on screen
             if (!TryBird(kind, out OrbitTrackView b) || !b.Alive || !CanRelocate(kind)) return;
             selKind = kind;
             padPick = false;
@@ -281,6 +283,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             relocating = false; hasPending = false;
             Repaint();
         }
+
+        /// <summary>The window closed, switched rooms or the column jumped to DOWNLINK: both map picks end (nothing was sent).</summary>
+        internal void EndPicks() { padPick = false; padMiss = false; relocating = false; hasPending = false; }
 
         public bool CancelMode()
         {
@@ -1009,6 +1014,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H && !plate.Labels.Blocked(new Rect(p.x - 1f, p.y - 1f, 2f, 2f));
         }
 
+        /// <summary>
+        /// One frame of map input. A pan, zoom or inset move repaints only the map here and returns false: the column does not depend on the view, so it is not
+        /// repainted every frame of a drag. True only for a pick or a feed click, which change the column too.
+        /// </summary>
         public bool Tick(Vector2 mouse)
         {
             FrontMapView mv = plate.View;
@@ -1016,17 +1025,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             int zoomStep = mv.Zoom;
             if (Enlarged) { pressed = false; return false; } // the camera covers the map: no pan, zoom or placement under it
             bool changed = plate.Tick(mouse);
-            if (last == null) { pressed = false; return changed; }
+            if (last == null) { pressed = false; return false; }
             if (FrontPointer.Down(0))
             {
                 pressed = Local(mouse, out pressAt) && OnMap(pressAt);
                 pressCenter = center; pressZoom = zoomStep;
             }
             if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
-            if (!pressed || !FrontPointer.Up(0)) return changed;
+            if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
-            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > DragSlop * DragSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return changed;
+            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > DragSlop * DragSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
             Vector2 uv = mv.UV(p);
             if (padPick) { PickPad(uv); return true; }
             if (relocating)
@@ -1037,9 +1046,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 return true;
             }
             int kind = BirdAt(p); // no pick armed: a click on one of our birds opens its feed
-            if (kind < 0) return changed;
+            if (kind < 0) return MapOnly(changed);
             ShowFeed(kind);
             return true;
+        }
+
+        /// <summary>The view moved: the map repaints now, the window repaints nothing else.</summary>
+        private bool MapOnly(bool changed)
+        {
+            if (changed) PaintSituation(last);
+            return false;
         }
 
         // ---- Sensor paint --------------------------------------------------------------------------------------------
