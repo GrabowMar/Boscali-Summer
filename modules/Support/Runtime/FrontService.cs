@@ -297,7 +297,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// The quartermaster (organic fronts 4.6): a human front idle for 180 s with an empty queue climbs its ladder by one step at the automatic spot; a faction with no humans does so
         /// whenever a front's queue is empty. Owner 0 (the pool), never a human queue. A step the service cannot place now (no held airbase) or that is backing off after finding no room
         /// (<see cref="BlockedSeconds"/>) is not queued: a human front waits (it never jumps to a later step that needs this one), an AI front follows its doctrine instead
-        /// (<see cref="FrontAi.Doctrine"/>: ASAT, ZERO-DAY, FOB), as it does with the ladder complete.
+        /// (<see cref="FrontAi.Doctrine"/>: ASAT, ZERO-DAY, FOB), as it does with the ladder complete; a doctrine build backing off is skipped the same way.
         /// </summary>
         private void Quartermaster(FactionFront f, float now)
         {
@@ -312,7 +312,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (humans) continue;
                 bool sam = front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _);
                 bool asat = front == Front.Space && now >= f.NextAiAsat && EnemyBirdUp(f.Owner);
-                if (FrontAi.Doctrine(front, f.World, queued, sam, asat, out id) && Queue(f, front, id, 0, false, 0f, 0f, false, now) == FrontOutcome.Queued && id == ProgrammeId.Asat)
+                if (FrontAi.Doctrine(front, f.World, queued, sam, asat, out id) && now >= f.BlockedUntil[i, (int)id] &&
+                    Queue(f, front, id, 0, false, 0f, 0f, false, now) == FrontOutcome.Queued && id == ProgrammeId.Asat)
                     f.NextAiAsat = now + AiAsatSpacingSeconds;
             }
         }
