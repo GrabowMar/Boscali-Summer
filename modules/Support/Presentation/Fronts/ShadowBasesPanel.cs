@@ -107,15 +107,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontKit.Set(alloc, "YOUR ALLOCATION " + v.Allocation + " AP", RoomInk.Khaki);
             bases.SetMeta("CAMPS " + s.CampsUp + "/" + FrontRules.CampCap + " · TEAMS " + s.TeamsUp + "/" + FrontRules.TeamCap + (s.Fob.Up ? " · FOB UP" : ""), RoomInk.Gold.WithAlpha(0.8f));
 
-            // Camps: BUILD CAMP needs a free camp (the offer's refusal) and ground we hold to click. The FOB card follows them.
-            FrontOfferView camp = FrontPanels.OfferOf(v, ProgrammeId.Camp), fob = FrontPanels.OfferOf(v, ProgrammeId.Fob);
-            bool held = false;
-            foreach (MapAirbaseView a in v.Airbases) held |= a.Side == AirbaseSide.Own;
-            campWhy = !string.IsNullOrEmpty(camp.Refusal) ? camp.Refusal : held ? "" : FrontWords.Refusal(FrontOutcome.NoSite, Front.Sof);
-            fobWhy = !string.IsNullOrEmpty(fob.Refusal) ? fob.Refusal : s.Held.Count == 0 ? FrontWords.Refusal(FrontOutcome.NoHeldBuilding, Front.Sof) : "";
+            // Camps: BUILD CAMP needs a free camp (the offer's refusal) and ground we hold to click (Why, at the top of the paint). The FOB card follows them.
+            FrontOfferView camp = FrontPanels.OfferOf(v, ProgrammeId.Camp);
             FrontKit.Set(campHead, "CAMPS " + s.CampsUp + " / " + FrontRules.CampCap, RoomInk.Gold);
             buildCamp.Latched = pick == PickMode.Camp;
-            OpsKit.Enable(buildCamp, pick == PickMode.Camp || campWhy.Length == 0);
+            Call(buildCamp, campWhy.Length == 0);
             for (int i = 0; i < campCards.Length; i++) campCards[i].Paint(v);
             string hint = pick != PickMode.None ? PickWords(false)
                 : campWhy.Length > 0 ? "BUILD CAMP · " + campWhy
@@ -127,11 +123,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             int room = Math.Max(0, FrontRules.TeamsPerBase * (s.CampsUp + (s.Fob.Up ? 1 : 0)));
             FrontKit.Set(teamHead, "TEAMS " + s.TeamsUp + " / " + FrontRules.TeamCap, RoomInk.Gold);
             FrontKit.Set(teamNote, "TRAIN " + Mathf.RoundToInt(tr.Cost) + " · " + FrontKit.Clock(tr.BuildSeconds) + " · ROOM FOR " + Math.Min(room, FrontRules.TeamCap), Paper.BoardInk);
-            OpsKit.Enable(train, string.IsNullOrEmpty(tr.Refusal));
+            Call(train, string.IsNullOrEmpty(tr.Refusal));
             float y = TeamY + 30f;
             for (int i = 0; i < cards.Length; i++) y = i < s.Teams.Count ? cards[i].Paint(v, s.Teams[i], y) : cards[i].Hide(y);
+            // TRAIN's refusal (or the next step) right under the last card, where the eye already is.
             string why = !string.IsNullOrEmpty(tr.Refusal) ? "TRAIN TEAM · " + tr.Refusal
-                : s.Teams.Count == 0 ? "NO TEAM YET · TRAIN ONE: IT RAISES AT A CAMP WITH ROOM" : "PICK A TEAM, THEN SEND IT FROM TARGETS (OR CLICK MAP GROUND FOR RECON)";
+                : s.Teams.Count == 0 ? "NO TEAM YET · TRAIN ONE: IT RAISES AT A CAMP WITH ROOM" : "TO SEND ONE: PICK A TARGET ON TARGETS, OR CLICK OPEN MAP GROUND FOR RECON";
+            AvLay.Place(teamHint.rectTransform, CardX + 2f, Mathf.Min(y + 2f, TeamY + TeamH - 22f), bases.Width - 2f * CardX - 4f, 18f);
             FrontKit.Set(teamHint, FrontKit.Fit(teamHint, why, 10.5f), string.IsNullOrEmpty(tr.Refusal) ? RoomInk.Khaki : RoomInk.Gold);
 
             // Standing orders: a lock held by someone else disables them here (the host still judges).
@@ -144,6 +142,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontRail.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE", locked ? RoomInk.Gold : RoomInk.Khaki);
             FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontRail.Describe(Front.Sof, r.Directive).ToUpperInvariant(), 10.5f), RoomInk.FieldInk);
+        }
+
+        /// <summary>Why BUILD CAMP and PLACE FOB are refused now ("" when they may go): the ladder's refusal, else no airbase of ours / no held building to click.</summary>
+        private void Why(FrontRoomView v)
+        {
+            FrontOfferView camp = FrontPanels.OfferOf(v, ProgrammeId.Camp), fob = FrontPanels.OfferOf(v, ProgrammeId.Fob);
+            bool held = false;
+            foreach (MapAirbaseView a in v.Airbases) held |= a.Side == AirbaseSide.Own;
+            campWhy = !string.IsNullOrEmpty(camp.Refusal) ? camp.Refusal : held ? "" : FrontWords.Refusal(FrontOutcome.NoSite, Front.Sof);
+            fobWhy = !string.IsNullOrEmpty(fob.Refusal) ? fob.Refusal : v.Shadow.Held.Count == 0 ? FrontWords.Refusal(FrontOutcome.NoHeldBuilding, Front.Sof) : "";
+        }
+
+        /// <summary>A call to action: the Primary look while it may be pressed, the plain one while refused (a dark Primary keeps its bright edge and reads live).</summary>
+        private static void Call(AvControl c, bool on)
+        {
+            c.SetStyle(on ? AvButtonStyle.Primary : AvButtonStyle.Default);
+            OpsKit.Enable(c, on);
         }
 
         // ---- Map picks -----------------------------------------------------------------------------------------------
@@ -244,8 +259,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (!b.Ours) continue;
                     Vector2 p = P(f.U(b.X), f.V(b.Z));
                     float r = Mathf.Max(14f, SafeRadius(bases, b) / f.W * mv.Scale);
-                    g.Disc(p, r, k.WithAlpha(0.06f), 64);
-                    g.Ring(p, r, 1.8f, k.WithAlpha(0.95f), 72);
+                    g.Ring(p, r, 1.8f, k.WithAlpha(0.95f), 72); // no fill: the ring may span the theatre, the map under it stays readable
                     g.Ring(p, r + 4f, 1f, k.WithAlpha(0.4f), 72, 1f, 1f);
                 }
                 return;
@@ -379,7 +393,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else if (verb == 3)
                 {
                     OpsKit.Label(act, "PLACE FOB");
-                    OpsKit.Enable(act, room.pick == PickMode.Fob || room.fobWhy.Length == 0);
+                    OpsKit.Enable(act, room.fobWhy.Length == 0);
                     act.Latched = room.pick == PickMode.Fob;
                     act.Help = room.fobWhy.Length == 0 ? "Arms a pick on the map: click a building your teams hold (ringed, 1 km). Press again or Esc to cancel. Front funds pay, then it builds (3:00)." : room.fobWhy;
                 }
@@ -396,7 +410,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (dashed) g.Ring(pin, 5f, 1.4f, k, 16, 1f, 1f); else Hand.Pin(g, pin, 5f, Paper.TabFill(tone));
                 if (cross) FrontKit.Cross(g, pin, 6f, Paper.Red);
                 if (fill >= 0f) Hand.Gauge(g, 30f, 40.5f, w - 30f - 196f, 4f, fill, tone == AvState.Caution ? Paper.GaugeWarn : Paper.GaugeAmmo);
-                if (show) g.Rect(w - 8f - 181f, 21f, 182f, 22f, Paper.Hole);
+                if (show) HolePlate(g, w - 8f - 180f, 22f, 180f, 20f, act.Interactable);
                 g.Flush();
             }
 

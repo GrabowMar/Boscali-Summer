@@ -240,11 +240,30 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public int Id;
         public TargetKind Kind;
+        public AnchorSub Sub;
+        /// <summary>Its filter chip (ruling D-R1, <see cref="SofAim.Filter"/>): 1 SITES, 2 BUILDINGS, 3 NETWORK, 4 GROUND.</summary>
+        public int Filter;
         public float X, Y;
         public bool Exploit, Resisted, Selected;
-        public string Name;
-        /// <summary>The list row's second line: grid square plus what it is good for (BEST mission, EXPLOIT or RESISTED).</summary>
-        public string Detail;
+        /// <summary>"T-3 UPLINK", the grid square, and the row's tag: who is on it ("A-1 ON IT"), else EXPLOIT / RESISTED, else the mission it allows.</summary>
+        public string Name, Grid, Tag;
+        public AvState TagTone;
+    }
+
+    /// <summary>A team out in the field, for the TARGETS tab's strip: "A-1 SABRE › T-2 SABOTAGE" and "ON SITE 0:32 · EXP 38 %".</summary>
+    internal struct SofFieldView
+    {
+        public int Slot;
+        public string Left, Right;
+        public AvState Tone;
+    }
+
+    /// <summary>One team the SEND card can send: "A-1 · 3.2 KM" when it can go now, else why not ("B-1 · MOVING").</summary>
+    internal struct SofCrewView
+    {
+        public int Slot;
+        public bool CanGo;
+        public string Word, Help;
     }
 
     internal struct SofHeldView
@@ -255,12 +274,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Name;
     }
 
+    /// <summary>One mission on the SEND card, for the picked aim and the picked team: lit when the aim allows it (whoever goes), its price, odds and what it does (or what it needs).</summary>
     internal struct SofMissionView
     {
         public MissionKind Kind;
-        public string Name, Cost, Odds, Note;
-        /// <summary>Allowed: the selected team could be sent now. Current: best fit for the picked target.</summary>
-        public bool Allowed, Exploit, Current;
+        public string Name, Odds, Note;
+        public int Ap;
+        /// <summary>Valid: the aim takes this mission. Best: the one the card opens on.</summary>
+        public bool Valid, Exploit, Best;
     }
 
     internal sealed class ShadowRoomView
@@ -280,29 +301,42 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public readonly List<NetPoint> Enemies = new List<NetPoint>(4);
         /// <summary>One glyph per enemy: ? seen by our bird, ! detected near our sites, Q hunted by our QRF.</summary>
         public readonly List<string> EnemyMark = new List<string>(4);
-        /// <summary>The QRF card: one line, its tone, and whether SWEEP can roll now (its label carries the countdown or the refit).</summary>
+        /// <summary>HOSTILES NEAR US: how many, one line on the QRF, its tone, and whether SWEEP can roll now (its label carries the countdown or the refit).</summary>
+        public int Near;
         public string QrfLine = "", SweepLabel = "SWEEP";
         public AvState QrfTone = AvState.Inert;
         public bool CanSweep;
         public int TeamCap;
         public string TapLine = "";
+        /// <summary>The picked team: the one SEND sends (a new aim pre-picks the nearest that can go, spec 7.3) and the jacket TEAMS &amp; BASES clips.</summary>
         public int SelectedSlot = -1;
         public int SelectedTargetId;
-        public readonly List<SofMissionView> Missions = new List<SofMissionView>(5);
         public string Meta = "";
-        /// <summary>The operator's RECON point: a click on the room's own map (map u,v in 0..1, y down) and its id for <see cref="IFrontActions.TeamMission"/>.
-        /// Local state: the room writes it, the controller clears it once the order is sent.</summary>
-        public bool HasDraft;
-        public float DraftU, DraftV;
-        public int DraftId;
-        /// <summary>Why a pick was dropped (a team left the roster, a target left the list); the room clears it on the operator's next pick.</summary>
+        /// <summary>
+        /// The operator's area RECON point: a click on open map ground (map u,v in 0..1, y down) and its id for <see cref="IFrontActions.TeamMission"/>. It is the aim
+        /// while no target is picked (picking one drops it). Local state: the room writes it, CLEAR or a sent RECON clears it.
+        /// </summary>
+        public bool HasPoint;
+        public float PointU, PointV;
+        public int PointId;
+        /// <summary>Why a pick was dropped (a team left the roster, a target left the list or was reused); the room clears it on the operator's next pick.</summary>
         public string Reason = "";
 
-        /// <summary>The picked team in one line, and the one next step (or why the missions are dark) under the TARGETS tab's mission strip.</summary>
-        public string TeamLine = "", IssueNote = "";
-        public AvState IssueTone;
-        /// <summary>The picked target's file card: the tab word and four worded lines (kind, grid and best mission, who is tasked on it, what its tag means).</summary>
+        // The TARGETS tab (spec 7.3).
+        /// <summary>Teams out in the field, and what the strip says when none is.</summary>
+        public readonly List<SofFieldView> Field = new List<SofFieldView>(4);
+        public string FieldNote = "";
+        /// <summary>The SEND card of the aim (a picked target or the RECON point): its missions, the teams it can send, why the picked team cannot go now ("" when it can), and how it goes in.</summary>
+        public readonly List<SofMissionView> Missions = new List<SofMissionView>(5);
+        public readonly List<SofCrewView> Crew = new List<SofCrewView>(4);
+        public string SendWhy = "", GoIn = "", Helo = "";
+        /// <summary>The picked target's file: the tab word and four worded lines (kind, grid and best mission, who is tasked on it, what its tag means).</summary>
         public string FileTab = "", FileA = "", FileB = "", FileC = "", FileD = "";
+        /// <summary>The aim the last build saw (a target id or a point id), and the picked target's kind and place then: a new aim pre-picks a team, a reused id is dropped.</summary>
+        public int AimSeen, PickedId;
+        public TargetKind PickedKind;
+        public AnchorSub PickedSub;
+        public float PickedX, PickedZ;
 
         public const int MaxHistory = 8;
         public readonly List<FrontLogLine> History = new List<FrontLogLine>(MaxHistory);

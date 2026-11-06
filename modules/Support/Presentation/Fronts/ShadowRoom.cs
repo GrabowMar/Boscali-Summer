@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System;
-using System.Globalization;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Sof;
@@ -15,16 +14,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
     /// <summary>
     /// The SOF front's room (R5, spec 7), laid out as an operations board of paper. The map is the presence / infiltration view as an acetate overlay (grease-pencil
-    /// routes, china-marker target circles, hatched exposure areas, push-pin camps; camps, queued camps and FOB as ghosts with their timers, held buildings, revealed
-    /// targets and enemy teams) with the QRF note. The column: TEAMS &amp; BASES (camps, FOB, a personnel jacket per team with its live verbs, TRAIN, standing orders:
-    /// ShadowBasesPanel.cs) and TARGETS (an index card per mirrored target, the picked target's package and, until the tab is remade, a strip of the five missions for the
-    /// picked team). Two local map picks, one at a time: BUILD CAMP (ground we hold) and PLACE FOB (a held building); a miss says why and stays armed, Esc ends it, and
-    /// no marker takes a click meanwhile. Paints from <see cref="ShadowRoomView"/> only. Everything drawn in paper, stamps, pins and pencil is cosmetic flavour of
-    /// existing fields: it adds no reading and no input.
+    /// routes, china-marker target circles, hatched exposure areas, push-pin camps; queued camps and FOB as ghosts with their timers, held buildings, revealed
+    /// targets, enemy teams and the area RECON point). The column: TEAMS &amp; BASES (camps, FOB, a personnel jacket per team with its live verbs, TRAIN, standing
+    /// orders: ShadowBasesPanel.cs) and TARGETS (the field strip, filters, one list of index cards whose aim opens in place as its SEND card, HOSTILES NEAR US with
+    /// SWEEP: ShadowTargetsPanel.cs). Two local map picks, one at a time: BUILD CAMP (ground we hold) and PLACE FOB (a held building); a miss says why and stays
+    /// armed, Esc ends it, and no marker takes a click meanwhile. Open ground clicked with no pick armed is an area RECON point. Paints from
+    /// <see cref="ShadowRoomView"/> only. Everything drawn in paper, stamps, pins and pencil is cosmetic flavour of existing fields: it adds no reading and no input.
     /// </summary>
     internal sealed partial class ShadowRoom : IFrontRoom
     {
-        private const float TopH = 480f, ColW = 270f, FootX = 560f, FootRight = 190f;
+        private const float TopH = 480f, FootX = 560f, FootRight = 190f;
         private const int Cols = 12, Rows = 8, MaxTeams = 4, MaxTargets = SofWire.MaxTargets, MaxCamps = CampRules.MaxCamps, MaxGhosts = FrontRules.MaxQueue, MaxHeld = 4, MaxEnemies = 4,
             Missions = 5;
         private static readonly string[] OrderWord = { "PUSH", "HOLD", "EXFIL", "LIFT" };
@@ -37,16 +36,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 " m and carry it; carried, it rolls +20 odds on its next mission. Press again to stop waiting.",
         };
 
-        private static readonly IFormatProvider Inv = CultureInfo.InvariantCulture;
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
-        private float heroW, colX;
+        private float heroW;
         private FrontMapPlate plate;
 
-        private FrontBox situation, targets;
-        private FrontVector side, listG, fileMarks;
-        private RawImage filePaper, filePhoto;
-        private readonly RawImage[] rowThumb = new RawImage[MaxTargets];
+        private FrontBox situation;
         private FrontMap.AirbaseLayer airbases;
         private readonly TMP_Text[] teamLabels = new TMP_Text[MaxTeams], targetLabels = new TMP_Text[MaxTargets], campLabels = new TMP_Text[MaxCamps],
             ghostLabels = new TMP_Text[MaxGhosts], heldLabels = new TMP_Text[MaxHeld], enemyMarks = new TMP_Text[MaxEnemies];
@@ -61,27 +56,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // The team jackets on TEAMS & BASES.
         private readonly Card[] cards = new Card[MaxTeams];
 
-        // Target list.
-        private const float RowH = 26f, ListTop = 28f, FileMin = 87f, FileTabH = 15f, StripH = 62f;
-        private float fileY, fileH;
-        private readonly Image[] rowHit = new Image[MaxTargets];
-        private readonly int[] rowId = new int[MaxTargets];
-        private readonly TMP_Text[] rowName = new TMP_Text[MaxTargets], rowDetail = new TMP_Text[MaxTargets], rowTag = new TMP_Text[MaxTargets];
-        private TMP_Text fileTab, fileA, fileB, fileC, fileD, fileNote, listEmpty, listHint, stripTeam, stripNote;
-        private Stamp fileStamp;
-        private readonly AvControl[] mission = new AvControl[Missions];
-        private static readonly string ReconHint = "RECON A GROUND POINT · IT REVEALS " + (SofRules.ReconRadius / 1000f).ToString("0.#", Inv) + " KM FOR "
-            + FrontKit.Clock(SofRules.ReconRevealSeconds);
-
-        private int selectedSlot = -1, selectedTarget;
         private ShadowRoomView lastView;
         private FrontRoomView last;
         // A map click is a press and a release that stay together: a pan, a zoom or a drag in between does nothing.
         private bool pressed;
         private Vector2 pressAt, pressCenter;
         private int pressZoom;
-        private const float ClickSlop = 5f, MarkerClear = 22f; // 22 covers the corners of the 34x26 team and 30x30 target hit boxes, so one click never selects a marker and drafts a point
-        private readonly string[] helpShown = new string[Missions];
+        private const float ClickSlop = 5f, MarkerClear = 22f; // 22 covers the corners of the 34x26 team and 30x30 target hit boxes, so one click never selects a marker and sets a point
 
         public ShadowRoom(IFrontActions actions, FrontSkin skin)
         {
@@ -93,29 +74,23 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private void Do(Action a) { actions.Touch(); a(); }
 
-        /// <summary>Picks a team (local, never an order) and drops the note of an earlier cleared pick.</summary>
+        /// <summary>
+        /// Picks a team (local, never an order: the one SEND sends) and drops the note of an earlier cleared pick. From the map or a jacket it opens TEAMS &amp; BASES,
+        /// where its jacket is; while TARGETS shows, the column stays there (ruling D-R5) and the team becomes the SEND card's.
+        /// </summary>
         private void PickTeam(int slot)
         {
             if (lastView != null) lastView.Reason = "";
-            wantTab = 0; // a picked team opens TEAMS & BASES, where its jacket is
+            if (!targets.Rect.gameObject.activeSelf) wantTab = 0;
             actions.SelectTeam(slot);
         }
 
-        /// <summary>Picks a target by id, from the map or the list: the same call, and it replaces any RECON point.</summary>
+        /// <summary>Picks a target by id, from the map or the list: the same call, and it replaces any RECON point. A map click opens TARGETS, where its card is.</summary>
         private void PickTarget(int id)
         {
-            if (lastView != null) { lastView.HasDraft = false; lastView.Reason = ""; }
-            wantTab = TargetsTab; // a picked target opens TARGETS, where its missions are
+            if (lastView != null) { lastView.HasPoint = false; lastView.Reason = ""; }
+            wantTab = TargetsTab;
             actions.SelectTarget(id);
-        }
-
-        /// <summary>A mission button of the TARGETS strip: lit only when the picked team may go now on the picked target (or RECON point); one press, one order.</summary>
-        private void Send(int i)
-        {
-            if (lastView == null || selectedSlot < 0 || i >= lastView.Missions.Count || !lastView.Missions[i].Allowed) return;
-            lastView.Reason = "";
-            MissionKind kind = lastView.Missions[i].Kind;
-            actions.TeamMission(selectedSlot, (int)kind, MissionAim(kind));
         }
 
         /// <summary>The room's column panels in tab order; the window adds the FRONT tab after them.</summary>
@@ -132,10 +107,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
             heroW = w; mapH = h;
-            colX = w - 12f - ColW;
             BuildSituation(hero);
             BuildBases(column, cw, ch);
-            BuildTargets(column, 0f, 0f, cw, ch);
+            BuildTargets(column, cw, ch);
             columnTabs = new[] { new ColumnTab("TEAMS & BASES", AvIcon.UsersGroup, bases.Rect), new ColumnTab("TARGETS", AvIcon.Crosshair, targets.Rect) };
         }
 
@@ -441,20 +415,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        private Rect QrfCard => new Rect(colX - 6f, 29f, ColW + 12f, 40f);
-        private const float SweepW = 92f;
-        private AvControl sweep;
-        private TMP_Text qrfLine;
-
         private void BuildSituation(RectTransform hero)
         {
             situation = new FrontBox(hero, skin, "Shadow", 0f, 0f, heroW, mapH, "SOF SITUATION · PRESENCE AND INFILTRATION", AvIcon.Eye, FrontLook.Folder).Tagged("FILE 07-S");
             RectTransform b = situation.Rect;
             plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows);
             plate.Tint = RoomInk.Rgba(1f, 0.92f, 0.7f, 1f);
-            side = FrontVector.Add(b, "Side");   // overlay notes on the map
-            AvLay.Place(side.rectTransform, 0f, 0f, heroW, mapH);
-            plate.Labels.Fixed(QrfCard); // the one note left on the map: held buildings and teams are labelled where they stand
             airbases = new FrontMap.AirbaseLayer(b);
             for (int i = 0; i < MaxTeams; i++) teamLabels[i] = Pool(b, "TeamLabel" + i, 170f, 28f);
             for (int i = 0; i < MaxTargets; i++) targetLabels[i] = Pool(b, "TargetLabel" + i, 170f, 14f);
@@ -467,11 +433,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 enemyMarks[i].text = "?";
                 enemyMarks[i].gameObject.SetActive(false);
             }
-            qrfLine = FrontKit.Mono(b, "QrfLine", colX, 36f, ColW - SweepW - 6f, 26f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            sweep = Button(b, "SWEEP", colX + ColW - SweepW, 36f, SweepW, 26f, AvButtonStyle.Danger, () => Do(() => actions.Sweep()),
-                "Send a QRF after every hostile team detected near our sites: it reaches them " + (int)SofRules.SweepSeconds + " s after the press, costs " + SofRules.SweepCost +
-                " AP and hunts them for " + (int)SofRules.HuntSeconds + " s (their exposure climbs), then " + (int)SofRules.SweepCooldownSeconds + " s to refit.");
-            sweep.Interactable = false;
             for (int i = 0; i < MaxTeams; i++)
             {
                 int slot = i;
@@ -504,271 +465,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return t;
         }
 
-        // ---- Target list -------------------------------------------------------------------------------------------------
-
-        private void BuildTargets(RectTransform hero, float x, float y, float w, float h)
-        {
-            targets = new FrontBox(hero, skin, "Targets", x, y, w, h, "TARGET LIST", AvIcon.Crosshair, FrontLook.Folder).Tagged("FILE 07-T");
-            RectTransform b = targets.Rect;
-            listG = FrontVector.Add(b, "ListGfx");
-            AvLay.Place(listG.rectTransform, 0f, 0f, w, h);
-            for (int i = 0; i < MaxTargets; i++) rowThumb[i] = FrontArt.Fill(b, "ops_recon_ground", 0f, 0f, 1f, 1f, PrintTint); // each card's recon print
-            // The file's dossier sheet and recon print lie over the folder drawn in ListGfx; their marks (print border, crosshair, china marker, note rules) go on top.
-            filePaper = FrontArt.Fill(b, "ops_bg_dossier", 0f, 0f, 1f, 1f, Color.white);
-            filePhoto = FrontArt.Fill(b, "ops_recon_ground", 0f, 0f, 1f, 1f, PrintTint);
-            fileMarks = FrontVector.Add(b, "FileMarks");
-            AvLay.Place(fileMarks.rectTransform, 0f, 0f, w, h);
-            float cw = (w - 24f) / 2f;
-            for (int i = 0; i < MaxTargets; i++)
-            {
-                int slot = i;
-                float rx = 8f + (i % 2) * (cw + 8f), ry = ListTop + (i / 2) * 28f;
-                Image hit = FrontKit.Solid(b, "RowHit" + i, rx, ry, cw, RowH, Color.clear);
-                hit.raycastTarget = true;
-                AvHit.On(hit).Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) Do(() => PickTarget(rowId[slot])); };
-                hit.gameObject.SetActive(false);
-                rowHit[i] = hit;
-                rowName[i] = FrontKit.Mono(b, "RowName" + i, rx + 38f, ry, cw - 42f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-                rowDetail[i] = FrontKit.Mono(b, "RowDetail" + i, rx + 38f, ry + 14f, 50f, 12f, 10f, TextAlignmentOptions.MidlineLeft);
-                rowTag[i] = FrontKit.Mono(b, "RowTag" + i, rx + 88f, ry + 14f, cw - 92f, 12f, 10f, TextAlignmentOptions.MidlineRight, true);
-                rowName[i].gameObject.SetActive(false);
-                rowDetail[i].gameObject.SetActive(false);
-                rowTag[i].gameObject.SetActive(false);
-            }
-            fileTab = FrontKit.Mono(b, "FileTab", 14f, 0f, 92f, 15f, 10f, TextAlignmentOptions.Midline, true, 1f);
-            fileA = FrontKit.Mono(b, "FileA", 14f, 0f, w - 28f, 16f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
-            fileB = FrontKit.Mono(b, "FileB", 14f, 0f, w - 28f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            fileC = FrontKit.Mono(b, "FileC", 14f, 0f, w - 28f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            fileD = FrontKit.Mono(b, "FileD", 14f, 0f, w - 28f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
-            fileNote = FrontKit.Mono(b, "FileNote", 14f, 0f, w - 28f, 28f, 10f, TextAlignmentOptions.TopLeft);
-            fileNote.enableWordWrapping = true;
-            fileStamp = new Stamp(b, 0f, 0f, 92f, 22f, 6f);
-            // The empty list: a card tray with its label slip, and what would fill it.
-            listEmpty = FrontKit.Mono(b, "ListEmpty", 14f, ListTop + 70f, w - 28f, 18f, 12f, TextAlignmentOptions.Midline, true, 2f);
-            listHint = FrontKit.Mono(b, "ListHint", 14f, ListTop + 94f, w - 28f, 16f, 10.5f, TextAlignmentOptions.Midline);
-            listEmpty.text = "NO TARGETS REVEALED";
-            listEmpty.color = Paper.Pen;
-            // The mission strip under the file (until TARGETS is remade): the picked team, the five missions, the one next step.
-            float sy = h - 6f - StripH, bw = (w - 16f - 4f * 6f) / Missions;
-            stripTeam = FrontKit.Mono(b, "StripTeam", 10f, sy, w - 20f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            for (int i = 0; i < Missions; i++)
-            {
-                int slot = i;
-                mission[i] = Button(b, "MISSION", 8f + i * (bw + 6f), sy + 17f, bw, 22f, AvButtonStyle.Default, () => Do(() => Send(slot)), "");
-            }
-            stripNote = FrontKit.Mono(b, "StripNote", 10f, sy + 42f, w - 20f, 15f, 10.5f, TextAlignmentOptions.MidlineLeft);
-        }
-
-        /// <summary>Cosmetic flavour: a two-line analyst note per target kind, worded from the best mission of that kind (no reading of its own).</summary>
-        private static string AnalystNote(TargetKind kind, bool exploit, bool resisted)
-        {
-            string note = kind == TargetKind.Ground ? "PATROL ROUTE UNCONFIRMED. LASE FROM A RIDGE OR OBSERVE."
-                : kind == TargetKind.Anchor ? "HARDENED ANCHOR. SABOTAGE FROM THE FLANK, NOT THE ROAD."
-                : kind == TargetKind.Building ? "SEIZE AND HOLD. EXPECT A COUNTERATTACK WITHIN MINUTES."
-                : "NETWORK TAP POINT. KEEP THE TEAM QUIET AND ON SITE.";
-            return resisted ? "SPACE BEATS SOF HERE. LEAVE IT TO THE SATELLITES." : exploit ? note + " SOFT TARGET." : note;
-        }
-
-        private void PaintTargets(ShadowRoomView s)
-        {
-            targets.SetMeta(s.Targets.Count + " REVEALED", s.Targets.Count > 0 ? FrontKit.Tone(AvState.Danger) : AvInk.Dim);
-            FrontVector g = listG;
-            g.Clear();
-            fileMarks.Clear(); // the marks over every print: the cards' and the file's
-            int n = s.Targets.Count;
-            // A tray of at least four rows: the cards grow while the list is short, shrink as it fills, and the picked target's package takes what is left.
-            int rows = Math.Max(4, (n + 1) / 2);
-            float pitch = Mathf.Clamp(Mathf.Floor((targets.Height - ListTop - 6f - StripH - FileMin - 8f) / rows), 28f, 44f);
-            bool roomy = pitch >= 34f;
-            float ch = pitch - (roomy ? 4f : 1f), cw = (targets.Width - 24f) / 2f;
-            fileY = ListTop + rows * pitch + 2f;
-            fileH = targets.Height - 6f - StripH - fileY;
-            Color grease = Paper.Grease;
-            int clipAt = -1;
-            for (int i = 0; i < MaxTargets && i < rows * 2; i++)
-            {
-                float rx = 8f + (i % 2) * (cw + 8f), ry = ListTop + (i / 2) * pitch;
-                if (i >= n)
-                {
-                    g.Rect(rx, ry, cw, ch, Paper.Khaki.WithAlpha(0.08f)); // a tint (alpha under 0.2), not a ground
-                    Hand.DashRect(g, rx + 0.5f, ry + 0.5f, cw - 1f, ch - 1f, 1f, Paper.Khaki.WithAlpha(0.5f));
-                }
-            }
-            for (int i = 0; i < MaxTargets; i++)
-            {
-                bool on = i < n;
-                if (rowHit[i].gameObject.activeSelf != on) { rowHit[i].gameObject.SetActive(on); rowName[i].gameObject.SetActive(on); rowDetail[i].gameObject.SetActive(on); rowTag[i].gameObject.SetActive(on); }
-                if (!on) { if (rowThumb[i] != null) rowThumb[i].gameObject.SetActive(false); continue; }
-                SofTargetView t = s.Targets[i];
-                rowId[i] = t.Id;
-                float rx = 8f + (i % 2) * (cw + 8f), ry = ListTop + (i / 2) * pitch;
-                bool sel = t.Selected;
-                // An index card: shadow, cream stock, faint ruling under both lines, a red margin, a punched hole.
-                g.Rect(rx + 1.5f, ry + 2f, cw, ch, Paper.Shadow);
-                g.Rect(rx, ry, cw, ch, Paper.Card);
-                float ty = roomy ? ry + (ch - 28f) * 0.5f : ry + 0.5f;
-                if (roomy)
-                {
-                    g.Rect(rx + 3f, ty + 14.4f, cw - 6f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f)); // ruling under both lines: alpha under 0.2, a tint and not a ground
-                    g.Rect(rx + 3f, ty + 27.2f, cw - 6f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f));
-                }
-                g.Rect(rx + 48f, ry + 1f, 1f, ch - 2f, RoomInk.Rgba(0.78f, 0.25f, 0.2f, 0.3f));
-                g.Frame(rx, ry, cw, ch, sel ? 2f : 1f, sel ? Paper.Pen : Paper.CardEdge);
-                Hand.Hole(g, rx + 6.5f, ry + 6.5f, 2.3f);
-                AvLay.Place(rowHit[i].rectTransform, rx, ry, cw, ch);
-                float nw = cw - 56f, ly = ty + (roomy ? 14f : 13.5f);
-                AvLay.Place(rowName[i].rectTransform, rx + 52f, ty, nw, 14.5f);
-                AvLay.Place(rowDetail[i].rectTransform, rx + 52f, ly, 50f, 13f);
-                AvLay.Place(rowTag[i].rectTransform, rx + 102f, ly, cw - 106f, 13f);
-                // The target's recon print clipped to the card; without one, its kind glyph circled twice in china marker.
-                // A resisted target is struck through and its print faded; an exploitable one carries an amber dot.
-                RawImage thumb = rowThumb[i];
-                Texture2D print = thumb != null ? FrontArt.Get(PrintOf(t)) : null;
-                if (thumb != null && thumb.gameObject.activeSelf != (print != null)) thumb.gameObject.SetActive(print != null);
-                FrontVector mk = print != null ? fileMarks : g;
-                Vector2 gp = new Vector2(rx + 25f, ry + ch * 0.5f);
-                float ro = Mathf.Min(13f, ch * 0.5f - 1.5f);
-                if (print != null)
-                {
-                    thumb.texture = print;
-                    thumb.color = t.Resisted ? PrintTint.WithAlpha(0.45f) : PrintTint;
-                    FrontArt.Place(thumb, rx + 4f, ry + 3f, 42f, ch - 6f);
-                    mk.Frame(rx + 3f, ry + 2f, 44f, ch - 4f, 1f, Paper.PhotoPaper);
-                }
-                else
-                {
-                    Color mark = t.Resisted ? Paper.PenDim : grease;
-                    Hand.Circle(g, gp, ro, 1.8f, mark, t.Id * 5 + 1);
-                    Hand.Circle(g, gp, ro - 3.2f, 1.4f, mark, t.Id * 5 + 3);
-                    TargetGlyph(g, t.Kind, gp, 5f, Paper.Pen);
-                }
-                if (t.Resisted) mk.Line(gp + new Vector2(-12f, 9f), gp + new Vector2(12f, -9f), 1.8f, Paper.Grease);
-                if (t.Exploit) mk.Disc(new Vector2(rx + 41f, ry + 8f), 3f, Paper.Amber, 10);
-                if (sel) clipAt = i;
-                FrontKit.Set(rowName[i], C2Kit.FitTo(rowName[i], t.Name, nw), Paper.Pen);
-                // Detail is "D2 · LASE": the grid ref on the left, the best mission (or EXPLOIT / RESISTED) typed as a tag on the right.
-                int cut = t.Detail.IndexOf(" · ", StringComparison.Ordinal);
-                string grid = cut > 0 ? t.Detail.Substring(0, cut) : t.Detail, tag = cut > 0 ? t.Detail.Substring(cut + 3) : "";
-                FrontKit.Set(rowDetail[i], "GRID " + grid, Paper.PenDim);
-                FrontKit.Set(rowTag[i], C2Kit.FitTo(rowTag[i], tag, cw - 106f), t.Exploit ? Paper.Amber : t.Resisted ? Paper.PenDim : Paper.Blue);
-            }
-            if (clipAt >= 0)
-            {
-                float rx = 8f + (clipAt % 2) * (cw + 8f), ry = ListTop + (clipAt / 2) * pitch;
-                Hand.Clip(g, rx + cw - 9f, ry + 9f);
-            }
-
-            bool none = n == 0;
-            if (listEmpty.gameObject.activeSelf != none) { listEmpty.gameObject.SetActive(none); listHint.gameObject.SetActive(none); }
-            if (none)
-            {
-                float mid = ListTop + rows * pitch * 0.5f;
-                AvLay.Place(listEmpty.rectTransform, 14f, mid - 22f, targets.Width - 28f, 18f);
-                AvLay.Place(listHint.rectTransform, 14f, mid + 6f, targets.Width - 28f, 16f);
-                float sw = 224f;
-                g.Rect((targets.Width - sw) * 0.5f + 2f, mid - 26f, sw, 26f, Paper.Shadow);
-                g.Rect((targets.Width - sw) * 0.5f, mid - 28f, sw, 26f, Paper.Card);
-                g.Frame((targets.Width - sw) * 0.5f, mid - 28f, sw, 26f, 1f, Paper.CardEdge);
-                Hand.Pin(g, new Vector2((targets.Width - sw) * 0.5f + 10f, mid - 15f), 3.6f, Paper.Grease);
-                bool teamUp = false;
-                for (int i = 0; i < s.Teams.Count; i++) teamUp |= s.Teams[i].Present;
-                string hint = s.Active ? (teamUp ? ReconHint : "TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND")
-                    : s.Meta == FrontViews.NoCamp ? "NO CAMP YET · BUILD ONE ON TEAMS & BASES" : "WAITING FOR THE HOST";
-                FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, targets.Width - 28f), s.Active || hint.StartsWith("NO CAMP", StringComparison.Ordinal) ? FrontKit.Tone(AvState.Info) : AvInk.Dim);
-            }
-
-            PaintFile(g, s);
-            PaintStrip(g, s);
-            g.Flush();
-        }
-
-        /// <summary>The mission strip: the picked team, a button per mission (lit only when it can go now; its note is the help), and the one next step.</summary>
-        private void PaintStrip(FrontVector g, ShadowRoomView s)
-        {
-            float w = targets.Width, sy = targets.Height - 6f - StripH, bw = (w - 16f - 4f * 6f) / Missions;
-            FrontKit.Set(stripTeam, FrontKit.Fit(stripTeam, "SEND · " + (s.TeamLine.Length > 0 ? s.TeamLine : "NO TEAM PICKED"), 10.5f), RoomInk.Gold);
-            for (int i = 0; i < Missions; i++)
-            {
-                bool on = i < s.Missions.Count;
-                if (mission[i].Rect.gameObject.activeSelf != on) mission[i].Rect.gameObject.SetActive(on);
-                if (!on) continue;
-                SofMissionView m = s.Missions[i];
-                mission[i].Label = m.Name;
-                mission[i].Interactable = m.Allowed;
-                string help = m.Name + " · " + m.Cost + " · " + m.Odds + " · " + m.Note;
-                if (helpShown[i] != help) { helpShown[i] = help; mission[i].Help = help; }
-                g.Rect(8f + i * (bw + 6f) - 1f, sy + 16f, bw + 2f, 24f, Paper.Hole);
-            }
-            FrontKit.Set(stripNote, FrontKit.Fit(stripNote, s.IssueNote, 10.5f), s.IssueTone == AvState.Ready ? Own : s.IssueTone == AvState.Caution ? AvInk.State(AvState.Caution) : RoomInk.Khaki);
-        }
-
-        /// <summary>
-        /// The picked target's package: a manila folder with its tab, a reconnaissance photograph and the four typed lines. A short list leaves it room: the photograph grows,
-        /// the long lines go under it and a rubber stamp and an analyst note join in.
-        /// </summary>
-        private void PaintFile(FrontVector g, ShadowRoomView s)
-        {
-            float fx = 8f, fw = targets.Width - 16f, bodyY = fileY + FileTabH, bodyH = fileH - FileTabH;
-            bool filed = s.SelectedTargetId != 0 || s.HasDraft;
-            SofTargetView pick = default;
-            bool havePick = false;
-            for (int i = 0; i < s.Targets.Count; i++) if (s.Targets[i].Selected) { pick = s.Targets[i]; havePick = true; }
-            g.Rect(fx + 2f, bodyY + 2f, fw, bodyH, Paper.Shadow);
-            g.Rect(fx, bodyY, fw, bodyH, Paper.Folder);
-            g.Frame(fx, bodyY, fw, bodyH, 1f, Paper.FolderEdge);
-            Hand.Tab(g, fx + 8f, fileY, 96f, FileTabH + 1f, filed ? Paper.FolderHi : Paper.TabIdle, Paper.FolderEdge);
-            bool wide = bodyH >= 125f, big = bodyH >= 160f;
-            float pw = wide ? 112f : 58f, ph = wide ? 88f : Mathf.Min(bodyH - 14f, 46f);
-            var photo = new Rect(fx + 10f, bodyY + 8f, pw, ph);
-            FrontVector m = fileMarks; // cleared at the start of PaintTargets
-            if (filePaper != null) { FrontArt.Place(filePaper, fx, bodyY, fw, bodyH); m.Frame(fx, bodyY, fw, bodyH, 1f, Paper.FolderEdge); }
-            Texture2D print = havePick ? FrontArt.Get(PrintOf(pick)) : null;
-            bool printed = print != null && filePhoto != null;
-            if (filePhoto != null && filePhoto.gameObject.activeSelf != printed) filePhoto.gameObject.SetActive(printed);
-            if (printed) { filePhoto.texture = print; FrontArt.Place(filePhoto, photo.x, photo.y, photo.width, photo.height); }
-            Hand.Recon(m, photo, havePick ? pick.Id : 3, havePick ? pick.Kind : TargetKind.Ground, havePick, printed);
-            if (!havePick && filed) Hand.Circle(m, photo.center, Mathf.Min(13f, ph * 0.28f), 1.8f, Paper.Grease, 5); // a bare ground point: just the mark on a blank print
-            float tx = photo.xMax + 12f, tw = fx + fw - tx - 6f;
-            float cy = wide ? photo.yMax + 8f : bodyY + 37f, cx = wide ? fx + 12f : tx, cw = wide ? fw - 24f : tw;
-            AvLay.Place(fileTab.rectTransform, fx + 8f, fileY, 96f, FileTabH);
-            AvLay.Place(fileA.rectTransform, tx, bodyY + 6f, tw, 16f);
-            AvLay.Place(fileB.rectTransform, tx, bodyY + 22f, tw, 15f);
-            AvLay.Place(fileC.rectTransform, cx, cy, cw, 15f);
-            AvLay.Place(fileD.rectTransform, cx, cy + 15f, cw, 14f);
-            FrontKit.Set(fileTab, s.FileTab, Paper.Pen);
-            FrontKit.Set(fileA, C2Kit.FitTo(fileA, s.FileA, tw), filed ? Paper.Pen : Paper.PenDim);
-            FrontKit.Set(fileB, C2Kit.FitTo(fileB, s.FileB, tw), Paper.Blue);
-            FrontKit.Set(fileC, C2Kit.FitTo(fileC, s.FileC, cw), Paper.PenDim);
-            FrontKit.Set(fileD, C2Kit.FitTo(fileD, s.FileD, cw), Paper.Amber);
-            bool note = big && havePick;
-            if (fileNote.gameObject.activeSelf != note) fileNote.gameObject.SetActive(note);
-            if (note)
-            {
-                float ny = cy + 38f;
-                for (int i = 0; i < 3; i++) m.Rect(fx + 10f, ny + 12.5f + i * 13.5f, fw - 20f, 1f, RoomInk.Rgba(0.35f, 0.5f, 0.68f, 0.17f)); // ruled notes: alpha under 0.2, a tint and not a ground
-                AvLay.Place(fileNote.rectTransform, fx + 12f, ny, fw - 24f, 28f);
-                FrontKit.Set(fileNote, AnalystNote(pick.Kind, pick.Exploit, pick.Resisted), Paper.PenDim);
-            }
-            // A stamp on a package that is exploitable or resisted (the list tags carry the same words).
-            if (wide && havePick && (pick.Exploit || pick.Resisted))
-            {
-                fileStamp.Place(fx + fw - 108f, bodyY + 46f);
-                fileStamp.Set(pick.Resisted ? "RESISTED" : "EXPLOIT", pick.Resisted ? Paper.Red : Paper.Amber);
-            }
-            else fileStamp.Set("", Paper.Pen);
-            m.Flush();
-        }
-
-        private static readonly Color PrintTint = RoomInk.Rgb(0xFFF7E6); // a warm photographic print, not a screen
-
-        /// <summary>The recon print for a target: by kind, an anchor by the word in its name (the view carries no anchor sub-kind; cosmetic only).</summary>
-        private static string PrintOf(SofTargetView t)
-        {
-            string n = t.Name ?? "";
-            return "ops_recon_" + (t.Kind == TargetKind.Ground ? "ground" : t.Kind == TargetKind.Building ? "building" : t.Kind == TargetKind.Relay ? "relay"
-                : n.Contains("TRUCK") ? "ewtruck" : n.Contains("DATA") ? "datacenter" : n.Contains("CAMP") ? "camp" : "uplink");
-        }
-
         // ---- Kit ------------------------------------------------------------------------------------------------------
 
         /// <summary>Places a rect by its centre and tilts it (a stamp turns about its middle).</summary>
@@ -778,6 +474,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.anchoredPosition = new Vector2(x + w * 0.5f, -(y + h * 0.5f));
             rt.localRotation = Quaternion.Euler(0f, 0f, degrees);
+        }
+
+        /// <summary>
+        /// The dark plate a button on paper sits on (the kit's tints wash out on a folder): solid under a live one; under a dark one only a faint well in a dashed
+        /// edge, so a refused button never reads as one to press.
+        /// </summary>
+        private static void HolePlate(FrontVector g, float x, float y, float w, float h, bool live)
+        {
+            if (live) { g.Rect(x - 1f, y - 1f, w + 2f, h + 2f, Paper.Hole); return; }
+            g.Rect(x - 1f, y - 1f, w + 2f, h + 2f, Paper.Hole.WithAlpha(0.3f));
+            Hand.DashRect(g, x - 0.5f, y - 0.5f, w + 1f, h + 1f, 1f, Paper.PenDim);
         }
 
         private AvControl Button(RectTransform p, string label, float x, float y, float w, float h, AvButtonStyle style, Action click, string help)
@@ -797,22 +504,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             ShadowRoomView s = v.Shadow;
             last = v;
             lastView = s;
-            selectedSlot = s.SelectedSlot;
-            selectedTarget = s.SelectedTargetId;
-            if (pick == PickMode.Fob && s.Held.Count == 0) EndPicks(); // the last held building fell: nothing left to click
+            Why(v);
+            // A pick the ladder now refuses (the camps filled, the last held building fell) ends: nothing left to click.
+            if ((pick == PickMode.Camp && campWhy.Length > 0) || (pick == PickMode.Fob && fobWhy.Length > 0)) EndPicks();
             PaintSituation(v, s);
             PaintBases(v);
-            PaintTargets(s);
+            PaintTargets(v);
         }
 
         private Vector2 P(float x, float y) => plate.P(x, y);
 
-        /// <summary>RECON order target: the draft point's id when one is set, else the picked target.</summary>
-        private int MissionAim(MissionKind kind) => kind == MissionKind.Recon && lastView != null && lastView.HasDraft ? lastView.DraftId : selectedTarget;
-
         /// <summary>
-        /// One frame of input. A pan, zoom or inset move repaints only the map and returns false (the column does not depend on the view). True for a click that stayed
-        /// put on an unmoved map: the armed pick's (anywhere on the plate), else on open ground a RECON point. Markers take their clicks through their own hits.
+        /// One frame of input. A pan, zoom or inset move repaints only the map, a wheel over the target list only the list; both return false (the column does not
+        /// depend on the view). True for a click that stayed put on an unmoved map: the armed pick's (anywhere on the plate), else on open ground a RECON point.
+        /// Markers take their clicks through their own hits.
         /// </summary>
         public bool Tick(Vector2 mouse)
         {
@@ -821,6 +526,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;
             bool changed = plate.Tick(mouse);
+            float wheel = FrontPointer.Wheel;
+            if (Mathf.Abs(wheel) > 0.01f && targets.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(targets.Rect, mouse, null))
+            {
+                int to = Mathf.Clamp(listScroll + (wheel > 0f ? -1 : 1), 0, Math.Max(0, listCount - 1));
+                if (to != listScroll && (wheel > 0f || listBelow)) { listScroll = to; PaintTargets(last); }
+            }
             if (FrontPointer.Down(0)) { pressed = ToBox(mouse, out pressAt); pressCenter = center; pressZoom = zoomStep; }
             if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
@@ -829,12 +540,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 return MapOnly(changed);
             if (pick != PickMode.None)
             {
-                if (!mv.Visible(p, 0f) || QrfCard.Contains(p)) return MapOnly(changed); // the QRF note and SWEEP sit on the map: a press there is theirs
+                if (!mv.Visible(p, 0f)) return MapOnly(changed);
                 PickAt(mv.UV(p));
                 return true;
             }
             if (!OnGround(p)) return MapOnly(changed);
-            SetDraft(p);
+            SetPoint(p);
             return true;
         }
 
@@ -869,16 +580,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return true;
         }
 
-        private void SetDraft(Vector2 p)
+        /// <summary>Open ground clicked: the aim becomes an area RECON point there (spec 7.1), on TARGETS. It replaces a picked target (one aim at a time).</summary>
+        private void SetPoint(Vector2 p)
         {
-            Vector2 uv = plate.View.UV(p), span = BoscaliSummer.Core.Game.TheaterFrame.Resolve();
-            var frame = new MapFrame(span.x, span.y);
+            Vector2 uv = plate.View.UV(p);
+            MapFrame frame = FrontController.Frame();
             float u = Mathf.Clamp01(uv.x), v = Mathf.Clamp01(uv.y);
-            lastView.HasDraft = true; lastView.DraftU = u; lastView.DraftV = v; lastView.Reason = "";
-            lastView.DraftId = FrontViews.PointId(frame.X(u), frame.Z(v));
-            if (selectedTarget != 0) actions.SelectTarget(selectedTarget); // one aim at a time: the point replaces the picked target
-            wantTab = TargetsTab; // spec 7.1: open ground starts an area RECON on TARGETS
+            lastView.HasPoint = true; lastView.PointU = u; lastView.PointV = v; lastView.Reason = "";
+            lastView.PointId = FrontViews.PointId(frame.X(u), frame.Z(v));
+            wantTab = TargetsTab;
             actions.Touch();
+            actions.SelectTarget(0); // the explicit way to drop a target (ruling D-R5); the view is rebuilt for the point at once
         }
 
         private static Color Tone(AvState s) =>
@@ -965,10 +677,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 labels.Take(new Rect(p.x - 18f, p.y - 18f, 36f, 36f));
             }
 
-            // The RECON point the operator clicked.
-            if (s.HasDraft)
+            // The area RECON point the operator clicked.
+            if (s.HasPoint)
             {
-                Vector2 p = P(s.DraftU, s.DraftV);
+                Vector2 p = P(s.PointU, s.PointV);
                 g.Ring(p, 12f, 1.6f, AvInk.Select, 28);
                 FrontKit.Cross(g, p, 6f, AvInk.Select);
             }
@@ -1146,9 +858,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             plate.End();
 
             situation.SetMeta(s.Active ? up + " TEAMS OUT · " + s.Targets.Count + " TARGETS REVEALED · " + s.Enemies.Count + " ENEMY TEAMS" : s.Meta, s.Enemies.Count > 0 ? FrontKit.Tone(AvState.Danger) : dim);
-            side.Clear();
-            PaintSide(side, s, up);
-            side.Flush();
         }
 
         /// <summary>A team drawn at <paramref name="p"/> would sit on a target marker or on an earlier team's drawn point (their hits would overlap).</summary>
@@ -1157,23 +866,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int j = 0; j < team; j++) if (s.Teams[j].Present && Mathf.Abs(teamAt[j].x - p.x) < TeamStep && Mathf.Abs(teamAt[j].y - p.y) < 28f) return true;
             foreach (SofTargetView t in s.Targets) { Vector2 q = P(t.X, t.Y); if (Mathf.Abs(q.x - p.x) < 33f && Mathf.Abs(q.y - p.y) < 29f) return true; }
             return false;
-        }
-
-        /// <summary>A paper note pinned to the map: shadow, manila, a thin edge and a grease-red pin in the top corner.</summary>
-        private static void Note(FrontVector g, Rect r)
-        {
-            g.Rect(r.x + 3f, r.y + 3f, r.width, r.height, Paper.Shadow);
-            g.Rect(r.x, r.y, r.width, r.height, Paper.Folder);
-            g.Frame(r.x, r.y, r.width, r.height, 1f, Paper.FolderEdge);
-            Hand.Pin(g, new Vector2(r.xMax - 13f, r.y + 11f), 4.6f, Paper.Grease);
-        }
-
-        private void PaintSide(FrontVector g, ShadowRoomView s, int up)
-        {
-            Note(g, QrfCard);
-            FrontKit.Set(qrfLine, C2Kit.FitTo(qrfLine, string.IsNullOrEmpty(s.QrfLine) ? (s.Active ? "NO HOSTILES NEAR US" : "NO QRF · NO CAMP") : s.QrfLine, ColW - SweepW - 6f), s.QrfTone == AvState.Danger ? Paper.Red : Paper.PenDim);
-            sweep.Label = s.SweepLabel;
-            sweep.Interactable = s.CanSweep;
         }
 
         private static void TargetGlyph(FrontVector g, TargetKind kind, Vector2 p, float r, Color k)
@@ -1364,7 +1056,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (chip.Rect.gameObject.activeSelf != offer) chip.Rect.gameObject.SetActive(offer);
                     if (offer)
                     {
-                        g.Rect(VerbX - 1f, VerbY - 1f, ChipW + 2f, 24f, Paper.Hole);
+                        HolePlate(g, VerbX, VerbY, ChipW, 22f, fv.Allocation >= ap);
                         OpsKit.Label(chip, "CHIP IN · " + FrontRail.Pays(ap));
                         OpsKit.Enable(chip, fv.Allocation >= ap);
                     }
@@ -1394,8 +1086,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 // The verbs: dark plates under the switches (the kit's translucent tints would wash out on a folder), lit as the host would take them.
                 for (int i = 0; i < verbs.Length; i++)
                 {
-                    g.Rect(VerbX + i * (VerbW + VerbGap) - 1f, VerbY - 1f, VerbW + 2f, 24f, Paper.Hole);
-                    verbs[i].Interactable = (t.VerbOn & (1 << i)) != 0;
+                    bool on = (t.VerbOn & (1 << i)) != 0;
+                    HolePlate(g, VerbX + i * (VerbW + VerbGap), VerbY, VerbW, 22f, on);
+                    verbs[i].Interactable = on;
                     verbs[i].Latched = (t.VerbOnLatched & (1 << i)) != 0;
                 }
                 g.Flush();

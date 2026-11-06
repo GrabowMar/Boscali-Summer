@@ -1239,20 +1239,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>
         /// The SHADOW room (spec 7) from the SOF mirror (<paramref name="s"/>, null or unknown before the host speaks) and the SOF front row in <paramref name="v"/>:
         /// the TEAMS &amp; BASES tab (camps by host slot with the queued ones, the FOB, a card per team with its live verbs, each queued TRAIN row as a card), the map
-        /// (camps, ghosts, held buildings, targets, teams, enemies, the QRF) and the TARGETS tab (the list, the picked target's file, the picked team's missions).
+        /// (camps, ghosts, held buildings, targets, teams, enemies) and the TARGETS tab (teams in the field, the target list, the aim's SEND card, hostiles near us).
+        /// Picks follow ruling D-R5: a team or target that left, or a target id the host reused for another thing, is dropped with the reason, never swapped; a new
+        /// aim (target or RECON point) pre-picks the nearest team that can go (spec 7.3); a mirror that stops running drops every pick.
         /// </summary>
         public static void Shadow(FrontRoomView v, in FrontInputs c, SofStateData s, bool known, CyberStateData cyber, int selectedSlot, int selectedTarget)
         {
             ShadowRoomView r = v.Shadow;
             MapFrame frame = c.Frame;
             float now = c.Now;
-            r.Teams.Clear(); r.Targets.Clear(); r.Held.Clear(); r.Enemies.Clear(); r.EnemyMark.Clear(); r.Missions.Clear();
-            r.CanSweep = false; r.SweepLabel = "SWEEP"; r.QrfLine = ""; r.QrfTone = AvState.Inert;
+            r.Teams.Clear(); r.Targets.Clear(); r.Held.Clear(); r.Enemies.Clear(); r.EnemyMark.Clear(); r.Missions.Clear(); r.Crew.Clear(); r.Field.Clear();
+            r.CanSweep = false; r.SweepLabel = "SWEEP"; r.QrfLine = ""; r.QrfTone = AvState.Inert; r.Near = 0;
             bool active = known && s != null && s.Active;
             r.Active = active;
             r.SelectedSlot = -1; r.SelectedTargetId = 0;
             r.TapLine = "NO TAP RUNNING"; r.TeamCap = active ? s.TeamCap : 0; r.TeamsUp = 0;
-            r.TeamLine = ""; r.IssueNote = ""; r.IssueTone = AvState.Inert;
+            r.FieldNote = ""; r.SendWhy = ""; r.GoIn = ""; r.Helo = "";
             r.FileTab = r.FileA = r.FileB = r.FileC = r.FileD = "";
             if (!known) { r.History.Clear(); r.LastSeq = 0; }
             if (active) CampRules.Homes(s.Camps, s.Teams, homes);
@@ -1260,10 +1262,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Bases(v, c, active ? s : null);
             if (!active)
             {
+                // Bug 9: no pick and no RECON point outlives a mirror that stopped running (a blink before the host speaks keeps them: nothing is written back then).
                 r.Meta = known ? NoCamp : "WAITING FOR THE HOST";
-                r.Reason = "";
-                r.TeamLine = known ? "BUILD A CAMP, THEN TRAIN A TEAM ON TEAMS & BASES" : "";
-                r.FileTab = "NO FILE"; r.FileA = "NO TARGET";
+                r.Reason = ""; r.HasPoint = false; r.AimSeen = 0; r.PickedId = 0;
+                r.FieldNote = known ? "NO TEAM YET · BUILD A CAMP, THEN TRAIN ONE ON TEAMS & BASES" : "WAITING FOR THE HOST";
                 return;
             }
             foreach (SofHeldRow h in s.Held)
@@ -1278,26 +1280,53 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             // The other side: hostile teams near our sites and our QRF (protocol 42).
             bool rolling = s.SweepEndsAt > now, refit = !rolling && s.SweepReadyAt > now;
+            r.Near = near;
             r.CanSweep = near > 0 && !rolling && !refit;
-            r.SweepLabel = rolling ? "QRF " + (int)Math.Ceiling(s.SweepEndsAt - now) + " S" : refit ? "SWEEP " + FrontKit.Clock(s.SweepReadyAt - now) : "SWEEP";
-            // One short line (the card is 170 px wide): what the QRF is doing, else how many hostiles are near our sites.
-            r.QrfLine = rolling ? "QRF ROLLING · " + (int)Math.Ceiling(s.SweepEndsAt - now) + " S"
-                : hunting > 0 ? "QRF HUNTING " + hunting + " TEAM" + (hunting == 1 ? "" : "S")
-                : near > 0 ? near + " HOSTILE" + (near == 1 ? "" : "S") + " NEAR US" + (refit ? " · QRF " + FrontKit.Clock(s.SweepReadyAt - now) : "")
-                : refit ? "QRF REFIT · " + FrontKit.Clock(s.SweepReadyAt - now) : "NO HOSTILES NEAR US";
+            r.SweepLabel = rolling ? "QRF " + (int)Math.Ceiling(s.SweepEndsAt - now) + " S" : refit ? "SWEEP " + FrontKit.Clock(s.SweepReadyAt - now) : "SWEEP · " + SofRules.SweepCost + " AP";
+            r.QrfLine = rolling ? "QRF ROLLING · IT REACHES THEM IN " + (int)Math.Ceiling(s.SweepEndsAt - now) + " S"
+                : hunting > 0 ? "QRF HUNTING " + hunting + " TEAM" + (hunting == 1 ? "" : "S") + " · THEIR EXPOSURE CLIMBS"
+                : near > 0 ? "DETECTED WITHIN " + (int)(SofRules.DetectMetres / 1000f) + " KM OF OUR SITES" + (refit ? " · QRF REFITS " + FrontKit.Clock(s.SweepReadyAt - now) : " · SWEEP SENDS THE QRF")
+                : refit ? "QUIET · QRF REFITS " + FrontKit.Clock(s.SweepReadyAt - now) : "QUIET · SWEEP HUNTS ENEMY TEAMS NEAR YOUR CAMPS";
             r.QrfTone = near > 0 || hunting > 0 ? AvState.Danger : AvState.Inert;
 
-            // A picked team or target that left the snapshot is cleared with the reason, never swapped for another; only "nothing picked yet" (-1) takes the first team.
+            // Picks (ruling D-R5). A picked team or target that left the snapshot is cleared with the reason, never swapped for another; a target id the host reused
+            // (another kind, or far from where the pick last saw it: ids are recycled once a target is gone) is dropped too. Only "nothing picked yet" (-1) takes the first team.
             string gone = "";
             if (selectedSlot >= 0 && !s.Teams.Exists(t => t.Slot == selectedSlot)) { gone = SofRules.Callsign(selectedSlot) + " LEFT THE ROSTER"; selectedSlot = Gone; }
             else if (selectedSlot == -1 && s.Teams.Count > 0) selectedSlot = s.Teams[0].Slot;
-            if (selectedTarget != 0 && !s.Targets.Exists(t => t.Id == selectedTarget)) { gone += (gone.Length > 0 ? " · " : "") + "T-" + selectedTarget + " IS NO LONGER REVEALED"; selectedTarget = 0; }
+            SofTargetRow tgt = default;
+            bool haveTarget = false;
+            if (selectedTarget != 0)
+            {
+                foreach (SofTargetRow t in s.Targets) if (t.Id == selectedTarget) { tgt = t; haveTarget = true; break; }
+                if (!haveTarget) gone += (gone.Length > 0 ? " · " : "") + "T-" + selectedTarget + " IS NO LONGER REVEALED";
+                else if (r.PickedId == tgt.Id && (tgt.Kind != r.PickedKind || tgt.Sub != r.PickedSub
+                    || SofRules.Distance(tgt.X, tgt.Z, r.PickedX, r.PickedZ) > (tgt.Kind == TargetKind.Ground ? ReusedGroundMetres : ReusedSiteMetres)))
+                {
+                    gone += (gone.Length > 0 ? " · " : "") + "T-" + tgt.Id + " IS ANOTHER TARGET NOW";
+                    haveTarget = false;
+                }
+                if (!haveTarget) selectedTarget = 0;
+            }
+            if (haveTarget) { r.PickedId = tgt.Id; r.PickedKind = tgt.Kind; r.PickedSub = tgt.Sub; r.PickedX = tgt.X; r.PickedZ = tgt.Z; r.HasPoint = false; }
+            else r.PickedId = 0;
             if (gone.Length > 0) r.Reason = gone;
+            bool point = !haveTarget && r.HasPoint;
+            int aim = haveTarget ? tgt.Id : point ? r.PointId : 0;
+            float ax = haveTarget ? tgt.X : frame.X(r.PointU), az = haveTarget ? tgt.Z : frame.Z(r.PointV);
+            if (aim != r.AimSeen)
+            {
+                r.AimSeen = aim;
+                int pre = aim != 0 ? SofAim.Nearest(s.Teams, ax, az) : -1;
+                if (pre >= 0) selectedSlot = pre;
+            }
             r.SelectedSlot = selectedSlot; r.SelectedTargetId = selectedTarget;
 
-            // Teams by slot: every team on the roster, whatever the cap now (bug 7), and a queued TRAIN row in each free slot after them in queue order.
+            // Teams by slot: every team on the roster, whatever the cap now (bug 7), and a queued TRAIN row in each free slot after them in queue order. The ones out
+            // of camp also go in the TARGETS tab's field strip; every one not lost is a team the SEND card can pick.
             SofTeamRow cur = default;
             bool haveTeam = false, curLocked = false;
+            string readyList = "";
             int qi = 0;
             for (int slot = 0; slot < SofRules.MaxTeams; slot++)
             {
@@ -1335,60 +1364,80 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     VerbNote = locked ? "VIEW ONLY · " + SofPageWords.Control(t) : VerbNote(t, now),
                 });
                 if (slot == selectedSlot) { cur = t; haveTeam = true; curLocked = locked; }
+                string call = SofRules.Callsign(slot);
+                if (t.State == TeamState.Moving || t.State == TeamState.OnSite || t.State == TeamState.Returning || t.State == TeamState.Pinned)
+                    r.Field.Add(new SofFieldView
+                    {
+                        Slot = slot, Tone = tone,
+                        Left = call + " " + TeamCodename(slot) + " › " + (t.Mission == MissionKind.None ? "HOME" : (t.TargetId > 0 ? "T-" + t.TargetId + " " : "") + SofWords.Kind(t.Mission)),
+                        Right = (t.State == TeamState.Returning ? "EXFIL · " : t.State == TeamState.Pinned ? "PINNED · " : "") + TeamEta(t, now) + " · EXP " + t.Exposure + " %",
+                    });
+                bool go = SofAim.CanGo(t);
+                if (go) readyList += (readyList.Length > 0 ? ", " : "") + call;
+                if (t.State == TeamState.Lost || aim == 0) continue;
+                float d = SofRules.Distance(t.X, t.Z, ax, az);
+                string why = locked ? "CTRL " + t.Controller : t.State != TeamState.Ready ? SofWords.State(t.State) : "LOW AMMO";
+                r.Crew.Add(new SofCrewView
+                {
+                    Slot = slot, CanGo = go, Word = call + " · " + (go ? KmWord(d) : why),
+                    Help = go ? call + " can go now: " + KmWord(d) + " from the aim, about " + FrontKit.Clock(d / SofRules.SpeedMetresPerSecond) + " on foot." + (t.Carried ? " It rides a helicopter: +20 odds." : "")
+                        : call + " cannot go now: " + why.ToLowerInvariant() + ". Picking it shows why on SEND.",
+                });
             }
             Remember(r, s);
+            r.FieldNote = r.Field.Count > 0 ? "" : s.Teams.Count == 0 ? "NO TEAM YET · TRAIN ONE ON TEAMS & BASES"
+                : "NO TEAM OUT · " + (readyList.Length > 0 ? readyList + " READY TO GO" : "NONE READY NOW");
 
-            SofTargetRow tgt = default;
-            bool haveTarget = false;
             foreach (SofTargetRow t in s.Targets)
             {
                 if (r.Targets.Count >= SofWire.MaxTargets) break;
-                if (t.Id == selectedTarget) { tgt = t; haveTarget = true; }
+                string on = OnIt(s, t.Id);
                 r.Targets.Add(new SofTargetView
                 {
-                    Id = t.Id, Kind = t.Kind, X = frame.U(t.X), Y = frame.V(t.Z), Exploit = t.Exploit, Resisted = t.Resisted, Selected = t.Id == selectedTarget, Name = TargetName(t),
-                    Detail = OpsKit.Grid(t.X, t.Z) + " · " + (t.Resisted ? "RESISTED" : t.Exploit ? "EXPLOIT" : SofWords.Kind(BestMission(t)))
+                    Id = t.Id, Kind = t.Kind, Sub = t.Sub, Filter = SofAim.Filter(t.Kind, t.Sub), X = frame.U(t.X), Y = frame.V(t.Z), Exploit = t.Exploit, Resisted = t.Resisted,
+                    Selected = t.Id == selectedTarget, Name = TargetName(t), Grid = OpsKit.Grid(t.X, t.Z),
+                    Tag = on.Length > 0 ? on : t.Resisted ? "RESISTED" : (t.Exploit ? "EXPLOIT · " : "") + SofWords.Kind(BestMission(t)),
+                    TagTone = on.Length > 0 ? AvState.Ready : t.Resisted ? AvState.Inert : t.Exploit ? AvState.Caution : AvState.Info,
                 });
             }
 
-            // The TARGETS tab's mission strip (until the tab is remade): a mission is lit when the picked team may go now on the picked target (or RECON point); a press sends it.
-            bool ready = haveTeam && cur.State == TeamState.Ready;
-            bool lowAmmo = haveTeam && cur.Ammo < SofDesk.AmmoPerMission, canTake = ready && !curLocked && !lowAmmo;
-            foreach (MissionKind kind in Missions)
+            if (aim != 0)
             {
-                // RECON aims at a target or a ground point; the host gives it no EXPLOIT discount or boost. Odds are an estimate: zero armour, the team where it stands now.
-                bool recon = kind == MissionKind.Recon, atPoint = recon && r.HasDraft, exploit = !recon && haveTarget && tgt.Exploit, aimed = atPoint || haveTarget;
-                bool valid = recon ? aimed : haveTarget && SofRules.Valid(kind, tgt.Kind, tgt.Sub);
-                string odds = "--";
-                if (aimed && kind != MissionKind.Lase)
+                // The aim's SEND card (spec 7.3): every mission, lit when the aim takes it, priced, and with its odds for the picked team (an estimate: zero armour, the
+                // ring judged at the aim); why that team cannot go now ("" when it can: the room adds the price against the pilot's allocation); how it goes in (D-R2).
+                bool ring = cyber != null && cyber.Nodes.Exists(nd => nd.Held && SofRules.Distance(nd.X, nd.Z, ax, az) <= SofRules.RingBoostMetres);
+                foreach (MissionKind kind in Missions)
                 {
-                    float ox = haveTeam ? cur.X : atPoint ? frame.X(r.DraftU) : tgt.X, oz = haveTeam ? cur.Z : atPoint ? frame.Z(r.DraftV) : tgt.Z;
-                    bool ring = cyber != null && cyber.Nodes.Exists(nd => nd.Held && SofRules.Distance(nd.X, nd.Z, ox, oz) <= SofRules.RingBoostMetres);
-                    odds = "EST ~" + SofRules.Odds(haveTeam ? cur.Exposure : 0f, 0, haveTeam && (cur.Carried || cur.Insert == Insertion.Helicopter), exploit, ring) + " %";
+                    bool recon = kind == MissionKind.Recon, valid = recon || (haveTarget && SofRules.Valid(kind, tgt.Kind, tgt.Sub)), exploit = !recon && haveTarget && tgt.Exploit;
+                    r.Missions.Add(new SofMissionView
+                    {
+                        Kind = kind, Name = kind == MissionKind.Tap ? "TAP" : SofWords.Kind(kind), Ap = SofRules.CostOf(kind, exploit), Valid = valid, Exploit = exploit,
+                        Best = haveTarget ? kind == BestMission(tgt) : recon,
+                        Odds = !valid ? "" : kind == MissionKind.Lase ? "NO ROLL" : "EST ~" + SofRules.Odds(haveTeam ? cur.Exposure : 0f, 0, haveTeam && cur.Carried, exploit, ring) + " %",
+                        Note = valid ? Does(kind) : point ? "A MAP POINT TAKES ONLY RECON" : "NEEDS " + NeedWord(kind),
+                    });
                 }
-                else if (aimed) odds = "NO ROLL";
-                bool best = haveTarget && kind == BestMission(tgt);
-                r.Missions.Add(new SofMissionView
+                string call = haveTeam ? SofRules.Callsign(cur.Slot) : "";
+                int alt = SofAim.Nearest(s.Teams, ax, az);
+                string other = alt >= 0 && alt != selectedSlot ? " · " + SofRules.Callsign(alt) + " CAN GO: PICK IT ABOVE" : "";
+                bool ready = haveTeam && cur.State == TeamState.Ready;
+                r.SendWhy = !haveTeam ? (s.Teams.Count == 0 ? (r.CampsUp > 0 ? "NO TEAM YET · TRAIN ONE ON TEAMS & BASES" : "NO TEAM YET · BUILD A CAMP, THEN TRAIN ONE")
+                        : alt >= 0 ? "PICK A TEAM ABOVE" : "NO TEAM CAN GO NOW")
+                    : curLocked ? "VIEW ONLY · " + call + " IS COMMANDED BY " + cur.Controller + other
+                    : !ready ? call + " IS " + SofWords.State(cur.State) + (other.Length > 0 ? other : " · NO TEAM IS READY")
+                    : cur.Ammo + 0.01f < SofDesk.AmmoPerMission ? call + " NEEDS " + (int)SofDesk.AmmoPerMission + " % AMMO · IT REARMS AT CAMP" + other
+                    : "";
+                if (haveTeam)
                 {
-                    Kind = kind, Name = SofWords.Kind(kind), Cost = SofRules.CostOf(kind, exploit) + " AP", Odds = odds,
-                    Note = !haveTeam ? "NEEDS A TEAM" : curLocked ? "VIEW ONLY · " + SofPageWords.Control(cur) : !ready ? SofRules.Callsign(cur.Slot) + " IS " + SofWords.State(cur.State)
-                        : lowAmmo ? "NEEDS " + (int)SofDesk.AmmoPerMission + " % AMMO" : !aimed ? (recon ? "PICK TARGET OR POINT" : "PICK A TARGET")
-                        : valid ? (atPoint ? "AT THE MAP POINT" : best ? "BEST FIT" : "FITS THE TARGET") : "NEEDS " + NeedWord(kind),
-                    Allowed = canTake && valid, Exploit = exploit, Current = best
-                });
+                    float d = SofRules.Distance(cur.X, cur.Z, ax, az), sp = SofRules.SpeedMetresPerSecond;
+                    r.GoIn = cur.Carried ? "HELO · " + call + " RIDES A PILOT'S HELICOPTER · +20 ODDS"
+                        : "GROUND · " + KmWord(d) + " · ETA " + FrontKit.Clock(d / sp) + " · " + FrontKit.Clock(d / (sp * SofRules.PushSpeedFactor)) + " WITH PUSH";
+                    r.Helo = cur.Carried ? "THE PILOT FLIES IT IN" : cur.LiftWaiting ? "HELO ASKED · A PILOT LANDING BESIDE " + call + " CARRIES IT: +20 ODDS"
+                        : "HELO · LIFT ON TEAMS & BASES: A PILOT CARRIES IT, +20 ODDS";
+                }
             }
-            string call = haveTeam ? SofRules.Callsign(cur.Slot) : "";
-            if (haveTeam) r.TeamLine = call + " " + TeamCodename(cur.Slot) + " · " + SofWords.State(cur.State) + " · " + SofPageWords.Control(cur) + (curLocked ? " · VIEW ONLY" : "");
-            else r.TeamLine = s.Teams.Count == 0 ? (r.CampsUp > 0 ? "NO TEAM · TRAIN ONE ON TEAMS & BASES" : "NO TEAM · BUILD A CAMP, THEN TRAIN ONE") : "NO TEAM PICKED · CLICK ONE ON TEAMS & BASES";
-            if (r.Reason.Length > 0) { r.IssueNote = r.Reason; r.IssueTone = AvState.Caution; }
-            else if (!haveTeam) { r.IssueNote = "NEXT · PICK A TEAM ON TEAMS & BASES OR THE MAP"; r.IssueTone = AvState.Info; }
-            else if (curLocked) { r.IssueNote = "BLOCKED · " + call + " IS COMMANDED BY " + cur.Controller; r.IssueTone = AvState.Caution; }
-            else if (!ready) { r.IssueNote = "BLOCKED · " + call + " IS " + SofWords.State(cur.State); r.IssueTone = AvState.Caution; }
-            else if (lowAmmo) { r.IssueNote = "BLOCKED · " + call + " NEEDS " + (int)SofDesk.AmmoPerMission + " % AMMO"; r.IssueTone = AvState.Caution; }
-            else if (!haveTarget && !r.HasDraft) { r.IssueNote = "NEXT · PICK A TARGET, OR CLICK MAP GROUND FOR RECON"; r.IssueTone = AvState.Info; }
-            else { r.IssueNote = "READY · A LIT MISSION SENDS " + call + " AT ONCE"; r.IssueTone = AvState.Ready; }
 
-            // The picked target's file card.
+            // The picked target's file card, or the RECON point's.
             if (haveTarget)
             {
                 r.FileTab = "FILE T-" + tgt.Id;
@@ -1397,16 +1446,41 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 r.FileC = TaskedOn(s, tgt.Id);
                 r.FileD = tgt.Exploit ? "EXPLOIT · CUTS A TARGET MISSION'S COST" : tgt.Resisted ? "RESISTED · SPACE BEATS SOF" : "";
             }
-            else
+            else if (point)
             {
-                r.FileTab = r.HasDraft ? "RECON POINT" : "NO FILE";
-                r.FileA = r.HasDraft ? "GROUND POINT" : "NOTHING PICKED";
-                r.FileB = r.HasDraft ? "GRID " + OpsKit.Grid(frame.X(r.DraftU), frame.Z(r.DraftV)) : s.Targets.Count + " TARGETS REVEALED";
-                r.FileC = r.HasDraft ? "ONLY RECON TAKES A POINT" : s.Targets.Count > 0 ? "PICK A ROW OR A MARKER ON THE MAP" : "RECON GROUND TO REVEAL ONE";
+                r.FileTab = "RECON POINT";
+                r.FileA = "OPEN GROUND";
+                r.FileB = "GRID " + OpsKit.Grid(ax, az);
+                r.FileC = "ONLY RECON TAKES A POINT";
+                r.FileD = Does(MissionKind.Recon);
             }
 
             r.TapLine = s.TapUntil > now ? "TAP · " + s.TapIntrusions + " INTRUSIONS SHARED · " + FrontKit.Clock(s.TapUntil - now) : "NO TAP RUNNING";
             r.Meta = r.TeamsUp + " TEAMS OUT · " + s.Enemies.Count + " ENEMY TEAMS SEEN";
+        }
+
+        /// <summary>A target id kept by a pick moved this far since the last build: the host reused the id for another target (a contact drives, a site never moves).</summary>
+        private const float ReusedGroundMetres = 5000f, ReusedSiteMetres = 300f;
+
+        private static string KmWord(float metres) =>
+            (metres < 10000f ? (metres / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) : Mathf.RoundToInt(metres / 1000f).ToString(System.Globalization.CultureInfo.InvariantCulture)) + " KM";
+
+        /// <summary>What a mission does, in a few words (the SEND card's line under the missions).</summary>
+        private static string Does(MissionKind k) =>
+            k == MissionKind.Recon ? "REVEALS " + (SofRules.ReconRadius / 1000f).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " KM ROUND IT FOR " + FrontKit.Clock(SofRules.ReconRevealSeconds)
+            : k == MissionKind.Lase ? "MARKS IT FOR YOUR STRIKES UNTIL STOPPED"
+            : k == MissionKind.Sabotage ? "KNOCKS THE SITE OUT"
+            : k == MissionKind.Seize ? "HOLDS IT " + FrontKit.Clock(SofRules.HeldSeconds) + " · A FOB SPOT"
+            : "FEEDS CYBER THEIR NETWORK FOR " + FrontKit.Clock(SofRules.TapSeconds);
+
+        /// <summary>The list row's tag for a target a team of ours works: "A-1 ON IT", "A-1 +1 ON IT"; "" when none.</summary>
+        private static string OnIt(SofStateData s, int targetId)
+        {
+            string first = "";
+            int n = 0;
+            foreach (SofTeamRow t in s.Teams)
+                if (t.TargetId == targetId && t.Mission != MissionKind.None && t.State != TeamState.Lost) { if (n++ == 0) first = SofRules.Callsign(t.Slot); }
+            return n == 0 ? "" : first + (n > 1 ? " +" + (n - 1) : "") + " ON IT";
         }
 
         /// <summary>
@@ -1492,13 +1566,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         /// <summary>
         /// The verbs the host would take from this team now (bits: 1 PUSH, 2 HOLD, 4 EXFIL, 8 LIFT; SofDesk.Run's rules): PUSH while it marches, HOLD on the march or on
-        /// site, EXFIL on a mission or when it stands away from every camp and held building, LIFT while ready on the ground. Pinned, training, wounded and lost: none.
+        /// site, EXFIL on the march (home again, by the nearest base), on site or when it stands away from every camp and held building, LIFT while ready on the ground.
+        /// Pinned, training, wounded and lost: none.
         /// </summary>
         private static byte Verbs(SofStateData s, in SofTeamRow t)
         {
             bool moving = t.State == TeamState.Moving || t.State == TeamState.Returning;
             int on = (moving ? 1 : 0) | (moving || t.State == TeamState.OnSite ? 2 : 0) | (t.State == TeamState.Ready && !t.Carried ? 8 : 0);
-            if (!t.Carried && (t.State == TeamState.Moving || t.State == TeamState.OnSite || (t.State == TeamState.Ready && Away(s, t)))) on |= 4;
+            if (!t.Carried && (moving || t.State == TeamState.OnSite || (t.State == TeamState.Ready && Away(s, t)))) on |= 4;
             return (byte)on;
         }
 

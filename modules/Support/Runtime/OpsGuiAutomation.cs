@@ -208,6 +208,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (SofTeamView t in sv.Teams) teams += (teams.Length > 0 ? "," : "") + t.Callsign + " " + (t.Training ? "TRAINING" : t.State) + " v" + t.VerbOn + "/" + t.VerbOnLatched;
                 r["sofActive"] = sv.Active ? 1 : 0; r["sofCamps"] = sv.CampsUp; r["sofCampsQueued"] = campsQueued; r["sofGhosts"] = sv.Ghosts.Count; r["sofTeams"] = sv.TeamsUp;
                 r["sofCards"] = sv.Teams.Count; r["sofTeamList"] = teams; r["sofHeld"] = sv.Held.Count; r["sofFob"] = sv.Fob.State ?? "";
+                // TARGETS: the aim (a target id, -1 the RECON point, 0 none), the team SEND sends and why it cannot, the field strip, the hostiles near us.
+                r["sofTargets"] = sv.Targets.Count; r["sofAim"] = sv.SelectedTargetId != 0 ? sv.SelectedTargetId : sv.HasPoint ? -1 : 0; r["sofSendSlot"] = sv.SelectedSlot;
+                r["sofSendWhy"] = sv.SendWhy ?? ""; r["sofField"] = sv.Field.Count; r["sofCrew"] = sv.Crew.Count; r["sofNear"] = sv.Near; r["sofCanSweep"] = sv.CanSweep ? 1 : 0;
+                r["sofReason"] = sv.Reason ?? ""; r["sofMissions"] = sv.Missions.Count;
                 if (Field(window, "tabOf") is int[] tabs && (int)lv.Front < tabs.Length) r["tab"] = tabs[(int)lv.Front];
             }
             object room = Room(window);
@@ -221,6 +225,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["padPick"] = Bool(Field(room, "padPick"));
             if (Field(room, "pick") is System.Enum netPick) { r["netPick"] = System.Convert.ToInt32(netPick); r["pickMiss"] = Field(room, "pickMiss") as string ?? ""; } // 0 none, 1 DATA CENTER, 2 TRUCK, 3 RELOCATE
             if (Field(room, "filter") is System.Enum netFilter) { r["netFilter"] = System.Convert.ToInt32(netFilter); r["selOwn"] = Int(Field(room, "selOwn")); r["openNode"] = Int(Field(room, "lastOpen")); } // 0 ALL, 1 MINE, 2 ENEMY, 3 IN REACH
+            if (room is ShadowRoom)
+            {
+                r["sofFilter"] = Int(Field(room, "targetFilter")); r["sofCanSend"] = Bool(Field(room, "canSend")); r["sofListCount"] = Int(Field(room, "listCount")); // 0 ALL, 1 SITES .. 4 GROUND
+                if (Field(room, "sendKind") is System.Enum kind) r["sofKind"] = System.Convert.ToInt32(kind); // the mission SEND sends (MissionKind)
+            }
             if (Field(room, "plate") is FrontMapPlate plate)
             {
                 r["zoom"] = plate.View.Zoom; r["centerU"] = plate.View.Center.x; r["centerV"] = plate.View.Center.y;
@@ -250,12 +259,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             string at = Text(args, "at");
             if (at == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
-            if ((at == "base" || at == "foe" || at == "dc" || at == "truck" || at == "camp" || at == "held") && Field(window, "lastView") is FrontRoomView v)
+            if ((at == "base" || at == "foe" || at == "dc" || at == "truck" || at == "camp" || at == "held" || at == "target" || at == "team") && Field(window, "lastView") is FrontRoomView v)
             {
                 Vector2 p = new Vector2(-1f, -1f);
                 if (at == "base" || at == "foe") { foreach (MapAirbaseView a in v.Airbases) if (a.Side == (at == "base" ? AirbaseSide.Own : AirbaseSide.Enemy)) { p = new Vector2(a.U, a.V); break; } }
                 else if (at == "camp") { foreach (SofCampView c in v.Shadow.Camps) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.X, c.Y); break; } }
                 else if (at == "held") { if (v.Shadow.Held.Count > 0) p = new Vector2(v.Shadow.Held[0].X, v.Shadow.Held[0].Y); }
+                else if (at == "target") { if (v.Shadow.Targets.Count > 0) p = new Vector2(v.Shadow.Targets[0].X, v.Shadow.Targets[0].Y); }
+                else if (at == "team") { foreach (SofTeamView t in v.Shadow.Teams) if (t.Present) { p = new Vector2(t.X, t.Y); break; } }
                 else if (at == "dc") { foreach (InfraCenterView c in v.Network.Centers) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.U, c.V); break; } }
                 else foreach (InfraTruckView t in v.Network.Trucks) if (t.State == InfraState.Up || t.State == InfraState.Damaged) { p = new Vector2(t.U, t.V); break; }
                 if (p.x >= 0f)

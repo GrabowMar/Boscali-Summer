@@ -145,7 +145,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
             ShadowRoomView sof = view.Shadow;
-            sof.HasDraft = false; sof.Reason = "";
+            sof.HasPoint = false; sof.Reason = ""; sof.AimSeen = 0; sof.PickedId = 0;
             sof.History.Clear(); sof.LastSeq = 0;
             NetworkRoomView net = view.Network;
             net.History.Clear(); net.LastSeq = 0; // another faction's (or scene's) session log must not be prefixed to the new one's
@@ -230,7 +230,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     break;
                 default:
                     FrontViews.Shadow(view, c, manager.SofMirror.State, manager.SofMirror.Known, manager.CyberMirror.Known ? manager.CyberMirror.State : null, selectedTeam, selectedTarget);
-                    if (view.Shadow.Active) { selectedTeam = view.Shadow.SelectedSlot; selectedTarget = view.Shadow.SelectedTargetId; }
+                    // Bug 9: a mirror that stopped running drops the picks too; only a blink before the host speaks keeps them.
+                    if (manager.SofMirror.Known) { selectedTeam = view.Shadow.SelectedSlot; selectedTarget = view.Shadow.SelectedTargetId; }
                     break;
             }
         }
@@ -429,7 +430,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void SelectTeam(int slot) { selectedTeam = slot; nextRefresh = 0f; }
 
-        public void SelectTarget(int targetId) { selectedTarget = selectedTarget == targetId ? 0 : targetId; nextRefresh = 0f; }
+        /// <summary>
+        /// Ruling D-R5: a pick never toggles (the same id keeps it; 0 is the explicit CLEAR) and a different target within <see cref="PickGap"/> of the last change is
+        /// ignored, so a double event (a row and the marker under the same press) never flips the pick away.
+        /// </summary>
+        public void SelectTarget(int targetId)
+        {
+            nextRefresh = 0f;
+            if (targetId == selectedTarget) return;
+            if (targetId != 0 && Time.unscaledTime < nextPick) return;
+            nextPick = Time.unscaledTime + PickGap;
+            selectedTarget = targetId;
+        }
+
+        private const float PickGap = 0.25f;
+        private float nextPick;
 
         public void TeamOrder(int slot, int verb)
         {
@@ -455,7 +470,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             else if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
             else sent = Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK", SpaceCommandKind.SofMission, SofWords.Kind(kind));
-            if (sent) view.Shadow.HasDraft = false; // one press, one order: the RECON point goes with it
+            if (sent && kind == MissionKind.Recon && targetId < 0) view.Shadow.HasPoint = false; // the RECON point is spent with its order
         }
 
         /// <summary>An order names a team that must still be on the roster and not be commanded by another operator; a press never reaches a different team, and a vanished one drops the draft.</summary>
