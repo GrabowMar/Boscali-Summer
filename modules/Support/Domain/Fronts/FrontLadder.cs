@@ -71,6 +71,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             }
         }
 
+        /// <summary>
+        /// The pad slot the next queued LAUNCH PAD builds into, as the host picks it (SpaceService.FreeSlot): a never-built slot first, then the first destroyed one,
+        /// skipping slots an earlier queued pad took (bits in <paramref name="taken"/>, set here). -1 when none is left (a mirror running behind the queue).
+        /// </summary>
+        public static int PadSlot(int present, int down, ref int taken)
+        {
+            for (int s = 0; s < FrontRules.PadCap; s++) if ((present & (1 << s)) == 0 && (taken & (1 << s)) == 0) { taken |= 1 << s; return s; }
+            for (int s = 0; s < FrontRules.PadCap; s++) if ((down & (1 << s)) != 0 && (taken & (1 << s)) == 0) { taken |= 1 << s; return s; }
+            return -1;
+        }
+
         /// <summary>The prerequisite is live now (live counts only); infrastructure and operations are always ready.</summary>
         public static bool Ready(ProgrammeId id, in FrontWorld w)
         {

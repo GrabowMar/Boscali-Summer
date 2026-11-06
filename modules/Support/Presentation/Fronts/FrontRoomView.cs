@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
+using BoscaliSummer.Modules.Support.Runtime;
 using NOAvionics;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
@@ -35,6 +36,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// <summary>One rung of the front's perk ladder.</summary>
     internal struct FrontPerkView
     {
+        public SupportActionId Id;
         public int Rung;
         public string Name, Effect;
         /// <summary>TARGET OUTSIDE &lt;BIRD&gt; FOOTPRINT · RELOCATE while the aim is out of the needed satellite's footprint (empty otherwise).</summary>
@@ -88,6 +90,67 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Name, State;
         /// <summary>Where it stands ("GRID C4") and what losing it costs, already worded; empty in a hand-built fixture.</summary>
         public string Grid, Cost;
+    }
+
+    /// <summary>
+    /// One launch pad on the SATELLITES tab: standing or lost (the OPS mirror's sites), or building (a queued LAUNCH PAD row: Row, Progress and BuildLeft come from it,
+    /// and <see cref="FrontRoomView.Queue"/> carries the same Row with the funding / building split).
+    /// </summary>
+    internal struct PadView
+    {
+        /// <summary>0-based slot, the one the host builds into (an empty slot first, then the first destroyed one).</summary>
+        public int Slot;
+        /// <summary>PAD-1, PAD-2.</summary>
+        public string Name;
+        public bool Up, Building, Lost;
+        /// <summary>Map point (0..1, y down); -1 for a queued pad with automatic placement (no point yet).</summary>
+        public float U, V;
+        /// <summary>Where it stands: the airbase short name, a grid, or AUTO PLACE.</summary>
+        public string Place;
+        /// <summary>The birds an up pad links ("LINKS DARKSTAR, WATCHTOWER" / "LINKS NONE"); "" for a lost or building pad.</summary>
+        public string Links;
+        public ushort Row;
+        public float Progress;
+        public int BuildLeft;
+    }
+
+    /// <summary>One fleet card per bird kind (always three, by kind): its state, footprint coverage, the perk it enables, and the LAUNCH offer for that kind.</summary>
+    internal struct FleetCardView
+    {
+        public int Kind;
+        public string Callsign;
+        /// <summary>NOT LAUNCHED / ON STATION / BURNING m:ss / LOST / LAUNCHING m:ss (QUEUED · n % or WAITS FOR A PAD before the build starts).</summary>
+        public string State;
+        public AvState Tone;
+        /// <summary>On station (alive): RELOCATE and the feed apply; LAUNCH does not.</summary>
+        public bool Up;
+        /// <summary>Fuel 0..100 (0 when not up).</summary>
+        public float Fuel;
+        /// <summary>"COVERS FELDSPAR, OPAL" / "COVERS NOTHING" (airbases under the footprint); "" when not up.</summary>
+        public string Covers;
+        /// <summary>The perk this kind enables, READY or its lock reason ("SAT CAMERA READY", "OVERWATCH NEEDS SPACE SKILL 3").</summary>
+        public string Perk;
+        public bool CanRelocate;
+        public FrontOfferView Launch;
+    }
+
+    /// <summary>An enemy bird the OPS mirror carries (up and known only).</summary>
+    internal struct HostileBirdView
+    {
+        public int Kind;
+        /// <summary>OPTICAL / RADAR / KINETIC.</summary>
+        public string Word;
+        /// <summary>Its footprint covers at least one of our airbases.</summary>
+        public bool OverOwn;
+        /// <summary>The nearest of our airbases under its footprint ("" when none).</summary>
+        public string Nearest;
+    }
+
+    /// <summary>A queued build with a map point: a ghost on the plate with its label ("PAD-2 · OPAL · 1:12").</summary>
+    internal struct MapGhostView
+    {
+        public float U, V;
+        public string Label;
     }
 
     internal enum AirbaseSide : byte { Neutral, Own, Enemy }
@@ -146,6 +209,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>Airbases on the theatre plate (all three rooms draw them).</summary>
         public readonly List<MapAirbaseView> Airbases = new List<MapAirbaseView>(MaxAirbases);
         public const int MaxAirbases = 24;
+        // SATELLITES tab (FrontViews.Orbit).
+        public readonly List<PadView> Pads = new List<PadView>(FrontRules.PadCap);
+        public readonly List<FleetCardView> Fleet = new List<FleetCardView>(FrontRules.BirdCap);
+        public readonly List<HostileBirdView> Hostile = new List<HostileBirdView>(FrontRules.BirdCap);
+        public FrontOfferView Asat;
+        public readonly List<MapGhostView> Ghosts = new List<MapGhostView>(FrontRules.MaxQueue);
+        /// <summary>"GAP · CLIFFLINE NOT COVERED": the first of our airbases under no own footprint, or "".</summary>
+        public string CoverageGap = "";
+        /// <summary>Live pads, birds on station, and how many birds the live pads hold now (2 per pad, at most 3).</summary>
+        public int PadsUp, BirdsUp, BirdCap;
 
         // NETWORK and SHADOW payloads.
         public readonly NetworkRoomView Network = new NetworkRoomView();

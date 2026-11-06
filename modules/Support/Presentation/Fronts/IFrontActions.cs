@@ -12,8 +12,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal interface IFrontActions
     {
         void SetDirective(Front front, FrontDirective directive);
-        /// <summary>Queues a build with automatic placement (<paramref name="kind"/> = the satellite kind for a SATELLITE).</summary>
-        void Queue(Front front, ProgrammeId id, byte kind);
+        /// <summary>
+        /// Queues a build (<paramref name="kind"/> = the satellite kind for a SATELLITE): at the map point <paramref name="u"/>,<paramref name="v"/> (0..1, y down) when
+        /// <paramref name="hasPoint"/>, else with automatic placement. The host judges the place.
+        /// </summary>
+        void Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f);
         /// <summary>CHIP IN: allocation into one queued row, by the host's row id.</summary>
         void Donate(Front front, ushort row, int amount);
         /// <summary>Packs up one of our EW trucks (its anchor ordinal) and redeploys it at a map point; the host judges the 20 km data center reach.</summary>
@@ -37,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Touch();
         /// <summary>Asks for one of our satellites (a BirdKind) to burn to a new parked point (map u,v in 0..1). The host validates fuel and range.</summary>
         void RelocateBird(int birdKind, float u, float v);
-        /// <summary>The ORBIT room's requests: the existing satellite-feed action set.</summary>
+        /// <summary>The ORBIT room's requests: the satellite-feed action set (null without a feed). A bird picked on the SATELLITES tab or the map asks for its feed with <c>Orbit.SetSource(kind)</c>.</summary>
         ISpaceFeedActions Orbit { get; }
     }
 

@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     {
         public const int FrontCount = 3, MaxQueue = 4, TeamCap = 4, LogCapacity = 8;
         public const int PadCap = 2, BirdsPerPad = 2, BirdCap = 3, DataCenterCap = 2, TruckCap = 2, CampCap = 2, TeamsPerBase = 2;
-        public const float SeedFunds = 500f, MaxSeed = 2000f, BudgetCap = 1000f, QuartermasterIdleSeconds = 180f,
+        public const float SeedFunds = 500f, BudgetCap = 1000f, MaxSeed = BudgetCap, QuartermasterIdleSeconds = 180f,
             TruckReachMetres = 20000f, TruckPackSeconds = 45f, PadPickMetres = 8000f, FobPickMetres = 1000f;
         public const float DefaultShare = 0.03f, DefaultShareCap = 250f, MaxShareCap = 5000f,
             /// <summary>Programme funds one donated allocation point buys (a sortie's ~40 allocation then buys about half a minute of the faction's whole trickle).</summary>

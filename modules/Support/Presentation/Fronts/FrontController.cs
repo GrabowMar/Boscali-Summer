@@ -231,15 +231,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        private FrontInputs Inputs(float now)
+        private static MapFrame Frame()
         {
             Vector2 span = TheaterFrame.Resolve();
+            return new MapFrame(span.x, span.y);
+        }
+
+        private FrontInputs Inputs(float now)
+        {
             SpaceFeedMirror space = manager.SpaceMirror;
             OpsStateData ops = manager.OpsMirror.State;
             var c = new FrontInputs
             {
                 Allocation = (int)manager.LocalAllocation, Grades = manager.LocalGrades(), Now = now, CostScale = manager.Settings != null ? manager.Settings.ProgrammeCostScale.Value : 1f,
-                Utc = DateTime.UtcNow, Frame = new MapFrame(span.x, span.y), HasBird = hasBird,
+                Utc = DateTime.UtcNow, Frame = Frame(), HasBird = hasBird,
                 BirdsDown = manager.OpsMirror.Known ? ops.BirdsDown : (byte)0, BirdsLaunched = manager.OpsMirror.Known ? ops.BirdsLaunched : (byte)0,
                 EnemyBirdsDown = manager.OpsMirror.Known ? ops.EnemyBirdsDown : (byte)0, EnemyKnown = manager.OpsMirror.Known && ops.Active,
                 SpaceLinked = space.Known && space.State.Active, Family = space.State.Family,
@@ -370,10 +375,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Sent(front, manager.FrontSetDirective(front, directive), "NO HOST LINK", SpaceCommandKind.None, FrontRules.Name(directive) + " POSTURE");
         }
 
-        public void Queue(Front front, ProgrammeId id, byte kind)
+        public void Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontQueue(front, id, kind), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
+            MapFrame frame = Frame(); // the map uv the room picked, in world metres
+            Sent(front, manager.FrontQueue(front, id, kind, hasPoint, frame.X(u), frame.Z(v)), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
         }
 
         public void Donate(Front front, ushort row, int amount)
