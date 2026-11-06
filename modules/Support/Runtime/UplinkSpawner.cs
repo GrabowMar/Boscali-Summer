@@ -14,11 +14,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
         private readonly List<Unit> owned = new List<Unit>(MaximumOwned);
         private readonly List<Unit> pendingCleanup = new List<Unit>(MaximumOwned);
-        /// <summary>Each raised site's whole group (the site first, then its SAM and AAA), keyed by the site.</summary>
+        /// <summary>Each raised site's whole group (the site first, then its SAM and AAA), keyed by the site. A dead site's group stays here until slot reuse or scene reset removes it.</summary>
         private readonly Dictionary<Unit, List<Unit>> groups = new Dictionary<Unit, List<Unit>>();
-        private readonly List<Unit> lost = new List<Unit>(4);
         private int serial;
-        internal bool Owns(Unit unit) => unit != null && owned.Contains(unit);
+
+        internal bool Owns(Unit unit)
+        {
+            if (unit == null) return false;
+            if (owned.Contains(unit)) return true;
+            foreach (List<Unit> group in groups.Values) if (group.Contains(unit)) return true; // a dead pad's guards stay ours after the cap prune
+            return false;
+        }
 
         /// <summary>Removes a raised site's whole group (a rebuilt pad's wreck and guards). A unit that heads no group (a native carrier link) is never touched.</summary>
         internal void DiscardGroup(Unit site)
@@ -28,17 +34,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = group.Count - 1; i >= 0; i--) Remove(group[i]);
         }
 
-        /// <summary>A site that is gone or dead stops counting against the cap: its group leaves the owned list (the wreck and any surviving guard stay in the world).</summary>
+        /// <summary>
+        /// A site that is gone or dead stops counting against the cap: its units leave the owned list. The group entry stays (destroyed keys still look up by
+        /// instance id), so slot reuse (<see cref="DiscardGroup"/>) and scene reset still remove the wreck and any surviving guard.
+        /// </summary>
         private void PruneLost()
         {
-            foreach (var pair in groups) if (pair.Key == null || pair.Key.disabled) lost.Add(pair.Key);
-            for (int i = 0; i < lost.Count; i++)
-            {
-                List<Unit> group = groups[lost[i]];
-                groups.Remove(lost[i]);
-                for (int k = owned.Count - 1; k >= 0; k--) if (group.Contains(owned[k])) owned.RemoveAt(k);
-            }
-            lost.Clear();
+            foreach (var pair in groups)
+                if (pair.Key == null || pair.Key.disabled)
+                    for (int k = owned.Count - 1; k >= 0; k--) if (pair.Value.Contains(owned[k])) owned.RemoveAt(k);
         }
 
         internal bool TryPlan(GlobalPosition anchor, Airbase parent, out GlobalPosition[] positions,
@@ -108,6 +112,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         public void ResetForScene()
         {
+            foreach (List<Unit> group in groups.Values) for (int i = group.Count - 1; i >= 0; i--) Remove(group[i]); // pruned dead groups are not in owned
             for (int i = owned.Count - 1; i >= 0; i--) Remove(owned[i]);
             groups.Clear();
         }
