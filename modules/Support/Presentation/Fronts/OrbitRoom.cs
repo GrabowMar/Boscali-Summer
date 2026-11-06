@@ -1165,8 +1165,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The uplink sites: own ones as two-line cards (state, grid, what losing it costs), the revealed hostile ones as one line. Nothing is drawn for a site the mirror does not carry.</summary>
         private void PaintSites(FrontRoomView v)
         {
-            int own = 0, foe = 0, live = 0;
-            for (int i = 0; i < v.Sites.Count; i++) { if (v.Sites[i].Own) { own++; if (v.Sites[i].Live) live++; } else foe++; }
+            int foe = 0, live = 0;
+            for (int i = 0; i < v.Sites.Count; i++) { if (!v.Sites[i].Own) foe++; else if (v.Sites[i].Live) live++; }
             float y = SiteY0;
             int oi = 0, fi = 0;
             for (int i = 0; i < v.Sites.Count; i++)
@@ -1181,7 +1181,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             for (int i = oi; i < siteCards.Length; i++) siteCards[i].Hide();
             for (int i = fi; i < siteChips.Length; i++) siteChips[i].Hide();
-            FrontKit.Set(siteHeadOwn, "UPLINKS · " + (own == 0 ? "NONE" : live + "/" + own + " LIVE"), Own);
+            FrontKit.Set(siteHeadOwn, "PADS · " + live + "/" + Domain.Fronts.FrontRules.PadCap + " LIVE", Own);
             FrontKit.Set(siteHeadFoe, "HOSTILE · " + (foe == 0 ? "NONE REVEALED" : foe + " REVEALED"), AvInk.Hostile);
         }
 
@@ -1504,8 +1504,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     rail.color = AvInk.Muted;
                     glyph.color = AvInk.Muted;
                     FrontKit.Set(name, C2Orbit.BirdName(slot) + " · NO BIRD", Mc.Steel);
-                    FrontKit.Set(state, "DOWN", FrontKit.Tone(AvState.Danger));
-                    FrontKit.Set(spec, "QUEUE LAUNCH SATELLITE TO REPLACE IT", Mc.Steel);
+                    FrontKit.Set(state, "NOT LAUNCHED", FrontKit.Tone(AvState.Caution));
+                    FrontKit.Set(spec, "QUEUE A SATELLITE UNDER PROGRAMMES", Mc.Steel);
                     for (int i = 0; i < 4; i++) { lit[i] = Lamp.Off; words[i] = Subsystems[i] + " --"; }
                 }
                 else

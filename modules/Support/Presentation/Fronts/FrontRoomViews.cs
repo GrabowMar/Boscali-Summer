@@ -35,11 +35,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public AnchorKind Kind;
         public AnchorHealth Health;
+        /// <summary>A truck packing up to redeploy: offline, no reach.</summary>
+        public bool Packing;
         public float X, Y;
         /// <summary>Reach as a share of the map width (EW trucks only).</summary>
         public float Reach;
         public string Label;
-        public byte Rebuild;
         /// <summary>Seconds left on a trace lock (EW trucks only), 0 when free.</summary>
         public int LockLeft;
     }
@@ -104,7 +105,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public float X, Y;
         public AnchorHealth Health;
-        public byte Rebuild;
         public string Name;
     }
 

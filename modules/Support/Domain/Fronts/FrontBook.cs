@@ -158,20 +158,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         private static QueuedCounts Queued(FrontSide s, FrontProgrammeEntry except)
         {
             var q = new QueuedCounts();
-            foreach (FrontProgrammeEntry e in s.Queue)
-            {
-                if (e == except) continue;
-                switch (e.Id)
-                {
-                    case ProgrammeId.UplinkSite: q.Pads++; break;
-                    case ProgrammeId.LaunchSatellite: if (e.Kind < 8) q.Birds |= (byte)(1 << e.Kind); break;
-                    case ProgrammeId.DataCenter: q.DataCenters++; break;
-                    case ProgrammeId.EwTruck: q.Trucks++; break;
-                    case ProgrammeId.Camp: q.Camps++; break;
-                    case ProgrammeId.TrainTeam: q.Teams++; break;
-                    case ProgrammeId.Fob: q.Fobs++; break;
-                }
-            }
+            foreach (FrontProgrammeEntry e in s.Queue) if (e != except) FrontLadder.Add(ref q, e.Id, e.Kind);
             return q;
         }
 

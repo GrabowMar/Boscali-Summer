@@ -29,6 +29,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public static string Programme(ProgrammeId id) => FrontRules.Info(id).Name;
 
+        /// <summary>A queued or offered build: a satellite names its kind ("SATELLITE · OPTICAL").</summary>
+        public static string Programme(ProgrammeId id, byte kind) =>
+            id == ProgrammeId.LaunchSatellite && kind < 3 ? Programme(id) + " · " + Bird(kind) : Programme(id);
+
+        /// <summary>The verdict of a TRUCK MOVE (the host replies a front outcome).</summary>
+        public static string TruckMove(FrontOutcome code) =>
+            code == FrontOutcome.Ok ? "TRUCK PACKING UP · REDEPLOYS IN " + FrontRules.Clock(FrontRules.TruckPackSeconds)
+            : code == FrontOutcome.NoSite ? "THAT TRUCK IS NOT STANDING" : Outcome(code, Front.Cyber);
+
         public static string Refusal(FrontOutcome code, Front front)
         {
             switch (code)

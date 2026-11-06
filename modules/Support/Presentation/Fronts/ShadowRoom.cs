@@ -720,7 +720,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 bool teamUp = false;
                 for (int i = 0; i < s.Teams.Count; i++) teamUp |= s.Teams[i].Present;
                 string hint = s.Active ? (teamUp ? ReconHint : "TRAIN A TEAM, THEN RECON GROUND")
-                    : s.Meta == "NO CAMP STANDING" ? "NO CAMP YET · QUEUE A CAMP IN THE FRONT TAB'S PROGRAMMES" : "WAITING FOR THE HOST";
+                    : s.Meta == FrontViews.NoCamp ? "NO CAMP YET · QUEUE A CAMP IN THE FRONT TAB'S PROGRAMMES" : "WAITING FOR THE HOST";
                 FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, targets.Width - 28f), s.Active || hint.StartsWith("NO CAMP", StringComparison.Ordinal) ? FrontKit.Tone(AvState.Info) : AvInk.Dim);
             }
 
@@ -1232,7 +1232,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (!plate.Shown(P(c.X, c.Y), 12f)) { lt.gameObject.SetActive(false); continue; }
                 lt.gameObject.SetActive(true);
                 Color k = c.Health == AnchorHealth.Live ? own : c.Health == AnchorHealth.Damaged ? amber : danger;
-                lt.text = C2Kit.Tint("<b>" + c.Name + "</b>", k) + "\n" + C2Kit.Tint(c.Health == AnchorHealth.Down ? "DOWN · RESTORE " + c.Rebuild + " %" : c.Health == AnchorHealth.Damaged ? "DAMAGED" : "LIVE", dim);
+                lt.text = C2Kit.Tint("<b>" + c.Name + "</b>", k) + "\n" + C2Kit.Tint(c.Health == AnchorHealth.Down ? "DOWN" : c.Health == AnchorHealth.Damaged ? "DAMAGED" : "LIVE", dim);
                 lt.color = AvInk.Ink;
                 Tape(g, labels.Place(lt, P(c.X, c.Y), 14f, false), k);
             }
@@ -1380,7 +1380,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 gfx = FrontVector.Add(root, "Jacket");
                 AvLay.Place(gfx.rectTransform, 0f, 0f, w, FullH);
                 empty = FrontKit.Mono(root, "Empty", 12f, 0f, w - 24f, EmptyH, 10.5f, TextAlignmentOptions.MidlineLeft);
-                empty.text = "SLOT " + (slot + 1) + " · EMPTY · TRAIN TEAM IN PROGRAMMES";
+                empty.text = "SLOT " + (slot + 1) + " · EMPTY · QUEUE A TEAM IN PROGRAMMES";
                 empty.color = AvInk.Dim;
                 full = AvLay.Child(root, "Full");
                 AvLay.Place(full, 0f, 0f, w, FullH);
@@ -1421,7 +1421,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 flags.gameObject.SetActive(team); control.gameObject.SetActive(team); eta.gameObject.SetActive(team);
                 expKey.gameObject.SetActive(m != 0); expVal.gameObject.SetActive(team); ammoKey.gameObject.SetActive(m != 0); ammoVal.gameObject.SetActive(team);
                 caption.gameObject.SetActive(team); remark.gameObject.SetActive(team);
-                if (m == 2) mission.text = "NOT RAISED · TRAIN TEAM IN PROGRAMMES";
+                if (m == 2) mission.text = "NOT RAISED · QUEUE A TEAM IN PROGRAMMES";
             }
 
             /// <summary>Takes the slot out of the stack; returns the y the next card starts at.</summary>

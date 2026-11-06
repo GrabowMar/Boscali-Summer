@@ -572,7 +572,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (!plate.Shown(P(a.X, a.Y), 12f)) { lt.gameObject.SetActive(false); continue; }
                 lt.gameObject.SetActive(true);
                 Color k = a.Health == AnchorHealth.Live ? own : a.Health == AnchorHealth.Damaged ? amber : danger;
-                string state = a.Health == AnchorHealth.Down ? "DOWN · REBUILD " + a.Rebuild + " %"
+                string state = a.Health == AnchorHealth.Down ? "DOWN" : a.Packing ? "PACKING UP"
                     : a.LockLeft > 0 ? "TRACED · LOCKED " + FrontKit.Clock(a.LockLeft)
                     : (a.Health == AnchorHealth.Damaged ? "DAMAGED" : "LIVE") + (a.Reach > 0f ? " · REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "");
                 lt.text = C2Kit.Tint("<b>" + a.Label + "</b>", k) + "\n" + C2Kit.Tint(state, a.LockLeft > 0 ? danger : PhosDim);

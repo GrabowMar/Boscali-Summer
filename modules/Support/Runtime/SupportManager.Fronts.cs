@@ -6,7 +6,7 @@ using NuclearOption.Networking;
 namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
-    /// OPS FRONTS on the manager. Host side: the seam to the <see cref="FrontService"/>. Client side: the mirror of the local player's own faction's three fronts and the five verbs a window
+    /// OPS FRONTS on the manager. Host side: the seam to the <see cref="FrontService"/>. Client side: the mirror of the local player's own faction's three fronts and the verbs a window
     /// sends (a press is a request, never an effect; the verdict arrives through <see cref="SpaceReplied"/> like every SPACE reply and is worded with <see cref="FrontWords"/>).
     /// </summary>
     internal sealed partial class SupportManager
@@ -41,18 +41,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int FrontSetFocus(Front front, float x, float z) =>
             SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 0), SofCodes.PackPoint(x, z) });
 
-        /// <summary>Queue a programme on a front with automatic placement (protocol 44: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic) }).</summary>
-        internal int FrontQueue(Front front, ProgrammeId programme) =>
-            FrontRules.BelongsTo(front, programme) ? SendSpace(SpaceCommandKind.FrontQueue, 0, new[] { Pack(front, (int)programme) | (0 << 6), 0 }) : 0;
+        /// <summary>Queue a build on a front (protocol 44: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point or 0 for automatic placement }). <paramref name="kind"/> is the satellite kind.</summary>
+        internal int FrontQueue(Front front, ProgrammeId programme, byte kind = 0, bool hasPoint = false, float x = 0f, float z = 0f) =>
+            FrontRules.BelongsTo(front, programme) && kind <= 3
+                ? SendSpace(SpaceCommandKind.FrontQueue, 0, new[] { Pack(front, (int)programme | (kind << 4)), hasPoint ? SofCodes.PackPoint(x, z) : 0 }) : 0;
 
-        /// <summary>Donate allocation to the first queued row of a programme (the host takes only what the bar still needs and your balance allows). Sends nothing when the mirror has no such row.</summary>
-        internal int FrontDonate(Front front, ProgrammeId programme, int amount)
-        {
-            if (amount <= 0 || !FrontRules.BelongsTo(front, programme) || !frontMirror.Known) return 0;
-            foreach (FrontQueueRow q in frontMirror.State.Fronts[(int)front].Queue)
-                if (q.Id == programme) return SendSpace(SpaceCommandKind.FrontDonate, 0, new[] { Pack(front, q.Row), amount });
-            return 0;
-        }
+        /// <summary>Donate allocation to one queued row by its row id (the host takes only what the bar still needs and your balance allows).</summary>
+        internal int FrontDonate(Front front, ushort row, int amount) =>
+            amount > 0 && (int)front < FrontRules.FrontCount ? SendSpace(SpaceCommandKind.FrontDonate, 0, new[] { Pack(front, row), amount }) : 0;
+
+        /// <summary>Pack up one of the faction's EW trucks and redeploy it at a map point (the host judges the 20 km data center reach).</summary>
+        internal int MoveTruck(int truck, float x, float z) =>
+            truck >= 0 ? SendSpace(SpaceCommandKind.TruckMove, 0, new[] { truck, SofCodes.PackPoint(x, z) }) : 0;
 
         /// <summary>Burn one of the faction's satellites to a map point (u,v in 0..1); the host judges fuel and burn state.</summary>
         internal int RelocateBird(int bird, float u, float v) =>

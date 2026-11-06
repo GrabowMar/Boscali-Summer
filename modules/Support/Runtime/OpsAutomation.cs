@@ -35,8 +35,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return Readout(null);
         }
 
-        /// <summary>Send one verb: <c>hop</c> (first unheld CYBER node, 0 when none), <c>directive</c> (<c>front</c>, <c>directive</c> id), <c>queue</c> / <c>donate</c> (<c>front</c>, <c>programme</c>, <c>amount</c>),
-        /// <c>scan</c> (the RECON PASS perk: arm, then the map pick), <c>sync</c> (all mirrors). The verdict arrives as spoken words a frame or two later.</summary>
+        /// <summary>Send one verb: <c>hop</c> (first unheld CYBER node, 0 when none), <c>directive</c> (<c>front</c>, <c>directive</c> id), <c>queue</c> (<c>front</c>, <c>programme</c>, optional <c>kind</c>,
+        /// <c>x</c> and <c>z</c>), <c>donate</c> (<c>front</c>, <c>programme</c>, <c>amount</c>), <c>truckmove</c> (dev: <c>truck</c>, <c>x</c>, <c>z</c>), <c>scan</c> (the RECON PASS perk: arm, then the map pick),
+        /// <c>sync</c> (all mirrors). The verdict arrives as spoken words a frame or two later.</summary>
         public static Dictionary<string, object> Verb(Dictionary<string, object> args)
         {
             SupportManager m = SupportManager.Active;
@@ -58,13 +59,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "directive":
                     request = m.FrontSetDirective((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (FrontDirective)Mathf.Clamp((int)Number(args, "directive", 1f), 0, 6));
                     break;
-                case "queue":
-                    request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1));
+                case "queue": // optional kind (satellite) and a picked point when both x and z are given, else automatic placement
+                    request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
+                        (byte)Mathf.Clamp((int)Number(args, "kind", 0f), 0, 3), Has(args, "x") && Has(args, "z"), Number(args, "x", 0f), Number(args, "z", 0f));
                     break;
-                case "donate":
+                case "donate": // into the first queued row of the programme
                     spendMark = m.LocalAllocation;
-                    request = m.FrontDonate((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
-                        (int)Number(args, "amount", 25f));
+                    var donateFront = (Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2);
+                    var donateId = (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1);
+                    if (m.FrontMirror.Known)
+                        foreach (FrontQueueRow q in m.FrontMirror.State.Fronts[(int)donateFront].Queue)
+                            if (q.Id == donateId) { request = m.FrontDonate(donateFront, q.Row, (int)Number(args, "amount", 25f)); break; }
                     break;
                 case "sync":
                     m.FrontFeed.Want(true); m.CyberFeed.Want(true); m.SofFeed.Want(true); m.OpsFeed.Want(true);
@@ -102,6 +107,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     request = SofService.Active != null && GameManager.GetLocalPlayer(out Player tp) && tp != null ? (int)SofService.Active.TrainTeam(tp.HQ).Outcome : -2;
                     break;
                 case "relocate": request = Relocate(m, Mathf.Clamp((int)Number(args, "bird", 1f), 0, 2), Number(args, "range", 0f)); break; // own bird over an enemy mover (tests/ingame/ops-overwatch.json)
+                case "truckmove": request = m.MoveTruck((int)Number(args, "truck", 0f), Number(args, "x", 0f), Number(args, "z", 0f)); break; // TRUCK MOVE: the verdict lands in lastOutcome
 #endif
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
             }
@@ -263,7 +269,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (CyberAnchorRow a in s.Anchors)
             {
                 if (a.Kind != AnchorKind.EwTruck) continue;
-                if (a.Health != AnchorHealth.Down) trucks.Add(new EwSource(ordinal, a.X, a.Z, AnchorRules.Reach(a.Health)));
+                if (a.Health != AnchorHealth.Down && !a.Packing) trucks.Add(new EwSource(ordinal, a.X, a.Z, AnchorRules.Reach(a.Health)));
                 ordinal++;
             }
             if (have && mine.Held != null)
@@ -417,9 +423,42 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["cruiseLegs"] = cruiseLegs;
 #if !PUBLIC_RELEASE
             FollowReadout(m, r);
+            if (GameManager.GetLocalPlayer(out Player me) && me != null && me.HQ != null)
+            {
+                BuildReadout(me.HQ, "own", r);
+                var hqs = FactionRegistry.GetAllHQs();
+                if (hqs != null) foreach (FactionHQ hq in hqs) if (hq != null && hq != me.HQ) { BuildReadout(hq, "enemy", r); break; }
+            }
 #endif
             return r;
         }
+
+#if !PUBLIC_RELEASE
+        /// <summary>
+        /// Host: what a faction has built, read from the services (the organic-fronts acceptance sim): <c>Pads</c> live, <c>BirdsUp</c> / <c>BirdsLaunched</c> masks, <c>DataCenters</c> and
+        /// <c>Trucks</c> live (a packing truck is not), <c>Camps</c> live, <c>Teams</c> active, each under <paramref name="prefix"/>. A service with no record for the faction writes nothing.
+        /// </summary>
+        private static void BuildReadout(FactionHQ hq, string prefix, Dictionary<string, object> r)
+        {
+            SpaceService space = Find<SpaceService>();
+            if (space != null && space.TryGetStateCoarse(hq, out SpaceState s))
+            {
+                r[prefix + "Pads"] = s.LiveUplinkCount;
+                r[prefix + "BirdsUp"] = ~s.DownMask & ((1 << SpaceRules.BirdCount) - 1);
+                r[prefix + "BirdsLaunched"] = (int)s.LaunchedMask;
+            }
+            if (CyberService.Active != null && CyberService.Active.TryDesk(hq, out CyberDesk cd))
+            {
+                r[prefix + "DataCenters"] = cd.Anchors.LiveCount(AnchorKind.DataCenter);
+                r[prefix + "Trucks"] = cd.Anchors.LiveCount(AnchorKind.EwTruck);
+            }
+            if (SofService.Active != null && SofService.Active.TryDesk(hq, out SofDesk sd))
+            {
+                r[prefix + "Camps"] = sd.Camps.LiveCount();
+                r[prefix + "Teams"] = sd.ActiveCount;
+            }
+        }
+#endif
 
 #if !PUBLIC_RELEASE
         // ---- TEST ONLY: the OVERWATCH and STARFALL proofs (tests/ingame/ops-overwatch.json) ------------------------------------------------

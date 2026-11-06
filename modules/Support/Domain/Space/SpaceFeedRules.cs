@@ -204,13 +204,13 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             return float.IsFinite(areaX) && float.IsFinite(areaY) && areaX >= 0f && areaX <= 1f && areaY >= 0f && areaY <= 1f;
         }
 
-        /// <summary>The one status line under the picture: live MARK count (a confirm at twelve answers NO CONTACT by design), uplinks, family.</summary>
+        /// <summary>The one status line under the picture: live MARK count (a confirm at twelve answers NO CONTACT by design), live pads out of the cap, family.</summary>
         public static string StatusLine(SpaceFeedState s, bool known)
         {
             if (!known || s == null) return "NO HOST LINK · WAIT FOR THE MIRROR";
             if (!s.Active) return "NO SPACE LINK · FACTION HAS NO SATELLITES";
-            string uplinks = "UPLINKS " + s.UplinksLive + "/" + s.UplinksTotal;
-            if (s.Family == SpaceFamilyState.Dark) return "SPACE OFFLINE · " + uplinks + " · RESTORE A SITE";
+            string uplinks = "PADS " + s.UplinksLive + "/" + Fronts.FrontRules.PadCap;
+            if (s.Family == SpaceFamilyState.Dark) return "SPACE OFFLINE · " + uplinks + " · BUILD A PAD";
             return "MARKS " + s.LiveMarks + "/" + SpaceWire.MaxMarks + " · " + uplinks + " · SPACE " + (s.Family == SpaceFamilyState.Degraded ? "DEGRADED" : "NORMAL");
         }
 

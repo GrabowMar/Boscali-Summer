@@ -14,6 +14,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         private static int Bases(in FrontWorld w, in QueuedCounts q) => w.CampsLive + q.Camps + (w.FobUp || q.Fobs > 0 ? 1 : 0);
 
+        /// <summary>The lowest bird kind whose bit is clear in <paramref name="mask"/> (3 when all three are set).</summary>
+        public static byte FreeKind(int mask) { byte k = 0; while (k < 8 && (mask & (1 << k)) != 0) k++; return k; }
+
+        /// <summary>Counts one queued build as the ladder does (a satellite adds its kind bit).</summary>
+        public static void Add(ref QueuedCounts q, ProgrammeId id, byte kind)
+        {
+            switch (id)
+            {
+                case ProgrammeId.UplinkSite: q.Pads++; break;
+                case ProgrammeId.LaunchSatellite: if (kind < 8) q.Birds |= (byte)(1 << kind); break;
+                case ProgrammeId.DataCenter: q.DataCenters++; break;
+                case ProgrammeId.EwTruck: q.Trucks++; break;
+                case ProgrammeId.Camp: q.Camps++; break;
+                case ProgrammeId.TrainTeam: q.Teams++; break;
+                case ProgrammeId.Fob: q.Fobs++; break;
+            }
+        }
+
+        /// <summary>What a mirrored front queue already has coming (the client's side of <see cref="FrontBook.Queued"/>).</summary>
+        public static QueuedCounts Queued(System.Collections.Generic.List<FrontQueueRow> rows)
+        {
+            var q = new QueuedCounts();
+            foreach (FrontQueueRow r in rows) Add(ref q, r.Id, r.Kind);
+            return q;
+        }
+
         /// <summary>None when the build may be queued; otherwise the refusal naming its fix.</summary>
         public static FrontOutcome Check(Front f, ProgrammeId id, byte kind, in FrontWorld w, in QueuedCounts q)
         {
@@ -67,7 +93,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                     int up = w.BirdsUp | q.Birds, pads = w.PadsLive + q.Pads, birds = Bits(up);
                     if (birds < FrontRules.BirdCap && birds + 1 <= FrontRules.BirdsPerPad * pads)
                     {
-                        while ((up & (1 << kind)) != 0) kind++;
+                        kind = FreeKind(up);
                         id = ProgrammeId.LaunchSatellite; return true;
                     }
                     id = ProgrammeId.UplinkSite; return pads < FrontRules.PadCap;

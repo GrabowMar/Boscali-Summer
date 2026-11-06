@@ -276,15 +276,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             active.Paint(v, wait);
             for (int i = 0; i < Backlog; i++) backlog[i].Paint(i + 1 < queued ? (FrontQueueView?)v.Queue[i + 1] : null, v.Allocation);
             Layout(Mathf.Max(0, queued - 1));
-            FrontKit.Set(offerHint, "QUEUE ONE · FRONT FUNDS PAY FOR IT, THEN IT BUILDS", AvInk.Dim);
-            // A queued programme already has its row above: the list shows only what could still be queued, the ones that can be first.
+            FrontKit.Set(offerHint, "QUEUE ONE · PLACED FOR YOU · FRONT FUNDS PAY, THEN IT BUILDS", AvInk.Dim);
+            // Every build can be queued again (the ladder and the queue cap judge it): the ones that can be queued now come first.
             shownOffers.Clear();
-            foreach (FrontOfferView o in v.Offers) if (!o.Queued && string.IsNullOrEmpty(o.Refusal)) shownOffers.Add(o);
-            foreach (FrontOfferView o in v.Offers) if (!o.Queued && !string.IsNullOrEmpty(o.Refusal)) shownOffers.Add(o);
+            foreach (FrontOfferView o in v.Offers) if (string.IsNullOrEmpty(o.Refusal)) shownOffers.Add(o);
+            foreach (FrontOfferView o in v.Offers) if (!string.IsNullOrEmpty(o.Refusal)) shownOffers.Add(o);
             for (int i = 0; i < Offers; i++)
             {
                 FrontOfferView? o = i < shownOffers.Count ? (FrontOfferView?)shownOffers[i] : null;
-                offers[i].Paint(o, wait, o.HasValue ? Does(o.Value.Id, v) : "");
+                offers[i].Paint(o, wait, o.HasValue ? Does(o.Value.Id) : "");
             }
             offerHint.gameObject.SetActive(shownOffers.Count > 0);
 
@@ -328,7 +328,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 case Front.Space:
                     return d == FrontDirective.Recon ? "Radar and optical passes over the front; contacts reveal themselves."
                         : d == FrontDirective.Strike ? "Keeps the kinetic bird ready and marks high-value targets."
-                        : "Hardens uplinks, repairs them first and rephases to dodge ASAT.";
+                        : "Hardens the pads and rephases the satellites to dodge ASAT.";
                 case Front.Cyber:
                     return d == FrontDirective.Defend ? "Hunts intrusions and protects the data centers."
                         : d == FrontDirective.Balanced ? "Splits effort between hunting intrusions and probing SAM nodes."
@@ -342,24 +342,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         /// <summary>What superiority is made of on this front (FrontSuperiority.Compute's weights) and what +40 buys (POWER and the counter triangle).</summary>
         private static string SuperiorityHelp(Front f) =>
-            f == Front.Space ? "SUPERIORITY vs the strongest enemy: satellites up (40), uplink sites alive (30), jamming their satellites (30). Ahead, your perks hit harder; at +40 enemy SOF teams are easier to find."
+            f == Front.Space ? "SUPERIORITY vs the strongest enemy: satellites up (40), launch pads standing (30), jamming their satellites (30). Ahead, your perks hit harder; at +40 enemy SOF teams are easier to find."
             : f == Front.Cyber ? "SUPERIORITY vs the strongest enemy: their nodes you hold (50), your EW trucks and data centers alive (30), a lower trace than theirs (20). Ahead, your perks hit harder; at +40 enemy satellites recharge slower."
             : "SUPERIORITY vs the strongest enemy: teams in the field (40), buildings held (40), camps alive (20). Ahead, your perks hit harder; at +40 enemy hackers are traced faster.";
 
-        /// <summary>What a programme does for the faction, in one line.</summary>
-        private static string Does(ProgrammeId id, FrontRoomView v)
+        /// <summary>What a build does for the faction, in one line.</summary>
+        private static string Does(ProgrammeId id)
         {
             switch (id)
             {
-                case ProgrammeId.LaunchSatellite: return "REPLACES A LOST SATELLITE";
-                case ProgrammeId.UplinkSite: return "REBUILDS AN UPLINK SITE · ONLY WHEN ONE IS DOWN";
+                case ProgrammeId.UplinkSite: return "BUILDS A LAUNCH PAD AT A HELD AIRBASE · LINKS 2 SATELLITES";
+                case ProgrammeId.LaunchSatellite: return "LAUNCHES THIS SATELLITE FROM A PAD · UNLOCKS ITS PERKS";
                 case ProgrammeId.Asat: return "SHOOTS DOWN AN ENEMY SATELLITE";
-                case ProgrammeId.DataCenter: return "REBUILDS A DATA CENTER · ONLY WHEN ONE IS DOWN";
-                case ProgrammeId.EwTruck: return "REPLACES AN EW TRUCK (HACK ENTRY) · ONLY WHEN ONE IS LOST";
+                case ProgrammeId.DataCenter: return "BUILDS A DATA CENTER AT A HELD AIRBASE · RUNS 1 EW TRUCK";
+                case ProgrammeId.EwTruck: return "DEPLOYS AN EW TRUCK WITHIN 20 KM OF A DATA CENTER · HACK ENTRY";
                 case ProgrammeId.ZeroDay: return "BLINDS THE ENEMY NETWORK FOR A WHILE";
-                case ProgrammeId.TrainTeam: return "RAISES ONE MORE SOF TEAM";
-                case ProgrammeId.Camp: return "REBUILDS A SOF CAMP · ONLY WHEN ONE IS DOWN";
-                case ProgrammeId.Fob: return "FORWARD BASE FOR SOF TEAMS · NEEDS A HELD BUILDING";
+                case ProgrammeId.Camp: return "BUILDS A SOF CAMP ON GROUND YOU HOLD · ROOM FOR 2 TEAMS";
+                case ProgrammeId.TrainTeam: return "RAISES ONE SOF TEAM AT A CAMP WITH ROOM";
+                case ProgrammeId.Fob: return "FORWARD BASE ON A HELD BUILDING · ROOM FOR 2 MORE TEAMS";
                 default: return "";
             }
         }
@@ -396,7 +396,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 fundBar = new FrontBar(root, rail.skin, 12f, 40f, fw, 10f);
                 buildBar = new FrontBar(root, rail.skin, 20f + fw, 40f, bw, 10f);
                 next = FrontKit.Mono(root, "Next", 12f, 53f, width - 24f, 22f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                chip = rail.Button(root, Pays(Chip), 10f, 52f, width - 20f, 24f, () => { if (chipAp > 0) rail.actions.Donate(rail.front, cur.Id, chipAp); }, AvButtonStyle.Primary);
+                chip = rail.Button(root, Pays(Chip), 10f, 52f, width - 20f, 24f, () => { if (chipAp > 0) rail.actions.Donate(rail.front, cur.Row, chipAp); }, AvButtonStyle.Primary);
                 chip.Help = "Optional: speed it up with " + Chip + " of your allocation (less when the bar needs less). Front funds pay for it anyway.";
                 noteA = FrontKit.Mono(root, "NoteA", 12f, 8f, width - 24f, 22f, 12.5f, TextAlignmentOptions.MidlineLeft, true);
                 noteB = FrontKit.Mono(root, "NoteB", 12f, 36f, width - 24f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
@@ -469,7 +469,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 name = FrontKit.Mono(root, "Name", 28f, 0f, 190f, height, 11.5f, TextAlignmentOptions.MidlineLeft, true);
                 rowWidth = width; rowHeight = height;
                 state = FrontKit.Mono(root, "State", 222f, 0f, width - 222f - 146f, height, 10.5f, TextAlignmentOptions.MidlineRight);
-                fund = rail.Button(root, Pays(Chip), width - 142f, 0f, 138f, height, () => { if (chipAp > 0) rail.actions.Donate(rail.front, cur.Id, chipAp); }, AvButtonStyle.Default);
+                fund = rail.Button(root, Pays(Chip), width - 142f, 0f, 138f, height, () => { if (chipAp > 0) rail.actions.Donate(rail.front, cur.Row, chipAp); }, AvButtonStyle.Default);
                 fund.Help = "Optional: put up to " + Chip + " of your allocation into this waiting programme's funding bar.";
                 rail.skin.Add(() => frame.Paint(AvInk.Ground.WithAlpha(0.45f), AvInk.Hairline.WithAlpha(0.6f)));
             }
@@ -515,8 +515,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 cost = FrontKit.Mono(root, "Cost", 196f, 0f, 84f, 26f, 11.5f, TextAlignmentOptions.MidlineRight);
                 build = FrontKit.Mono(root, "Build", 284f, 0f, 44f, 26f, 11f, TextAlignmentOptions.MidlineRight);
                 why = FrontKit.Mono(root, "Why", 336f, 0f, width - 344f, 26f, 10.5f, TextAlignmentOptions.MidlineRight);
-                add = rail.Button(root, "QUEUE", width - 82f, 1f, 74f, 24f, () => rail.actions.Queue(rail.front, cur.Id), AvButtonStyle.Primary);
-                add.Help = "Queue this programme. Front funds pay for it automatically, then it builds; CHIP IN with your allocation to speed it up.";
+                add = rail.Button(root, "QUEUE", width - 82f, 1f, 74f, 24f, () => rail.actions.Queue(rail.front, cur.Id, cur.Kind), AvButtonStyle.Primary);
+                add.Help = "Queue this build; the host picks its place. Front funds pay for it automatically, then it builds; CHIP IN with your allocation to speed it up.";
                 rail.skin.Add(() => frame.Paint(AvInk.Ground.WithAlpha(0.4f), AvInk.Hairline.WithAlpha(0.6f)));
             }
 
@@ -543,14 +543,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (!o.HasValue) { root.gameObject.SetActive(false); return; }
                 root.gameObject.SetActive(true);
                 cur = o.Value;
-                bool ok = !cur.Queued && string.IsNullOrEmpty(cur.Refusal);
-                FrontKit.Set(name, cur.Name, cur.Queued ? AvInk.Dim : AvInk.Ink);
+                bool ok = string.IsNullOrEmpty(cur.Refusal);
+                FrontKit.Set(name, C2Kit.FitTo(name, cur.Name, name.rectTransform.rect.width), AvInk.Ink);
                 FrontKit.Set(cost, wait ? "—" : Mathf.RoundToInt(cur.Cost) + " FUNDS", AvInk.Dim);
                 FrontKit.Set(build, wait ? "—" : FrontKit.Clock(cur.BuildSeconds), AvInk.Dim);
                 add.Rect.gameObject.SetActive(ok);
-                string reason = cur.Queued ? "IN QUEUE" : cur.Refusal ?? "";
-                string said = ok ? (tall ? does : "") : reason;
-                FrontKit.Set(why, C2Kit.FitTo(why, said, why.rectTransform.rect.width), ok ? AvInk.Dim : cur.Queued ? FrontKit.Tone(AvState.Info) : FrontKit.Tone(AvState.Caution));
+                string said = ok ? (tall ? does : "") : cur.Refusal;
+                FrontKit.Set(why, C2Kit.FitTo(why, said, why.rectTransform.rect.width), ok ? AvInk.Dim : FrontKit.Tone(AvState.Caution));
             }
         }
 

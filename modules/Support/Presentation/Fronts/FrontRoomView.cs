@@ -9,6 +9,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct FrontQueueView
     {
         public ProgrammeId Id;
+        /// <summary>The host's row id: CHIP IN donates to this row.</summary>
+        public ushort Row;
         public string Name;
         public float Cost;
         /// <summary>Funding share 0..1 while the bar fills; build progress 0..1 once <see cref="Building"/>.</summary>
@@ -19,14 +21,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public int BuildTotal;
     }
 
-    /// <summary>A programme the front can queue (or why it cannot right now; empty Refusal means it can).</summary>
+    /// <summary>A build the front can queue with automatic placement (or why it cannot right now; empty Refusal means it can). Kind is the satellite kind a SATELLITE offer launches.</summary>
     internal struct FrontOfferView
     {
         public ProgrammeId Id;
+        public byte Kind;
         public string Name;
         public float Cost;
         public int BuildSeconds;
-        public bool Queued;
         public string Refusal;
     }
 

@@ -4,6 +4,7 @@ using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
+using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using BoscaliSummer.Modules.Support.Domain.Space;
 using BoscaliSummer.Modules.Support.Presentation.C2;
@@ -36,10 +37,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Faction, Callsign;
         public DateTime Utc;
         public MapFrame Frame;
-        /// <summary>Bit i set while the faction's satellite i is dead, and its rebuild percent (from the OPS mirror).</summary>
-        public byte BirdsDown;
-        public byte[] BirdPercent;
-        /// <summary>The strongest enemy's dead satellites (public: its launches and losses are visible); EnemyKnown is false before the OPS mirror arrives.</summary>
+        /// <summary>Bit i set while the faction's satellite i is not up (never launched or lost), and bit i set once it was launched this scene (from the OPS mirror).</summary>
+        public byte BirdsDown, BirdsLaunched;
+        /// <summary>The strongest enemy's satellites that are not up (never launched or lost: the mirror cannot tell which); EnemyKnown is false before the OPS mirror arrives.</summary>
         public byte EnemyBirdsDown;
         public bool EnemyKnown;
         /// <summary>Whether the faction owns satellite i.</summary>
@@ -53,8 +53,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public SpaceFamilyState Family;
         public int RadarSeconds;
         public bool RadarUnavailable;
-        public int Teams;
-        public bool HeldBuilding;
+        /// <summary>What the shown front has built as the mirrors tell it (<see cref="FrontViews.World"/>); WorldKnown false leaves the offer refusals to the host.</summary>
+        public FrontWorld World;
+        public bool WorldKnown;
         /// <summary>Airbases read from the game (null in tests that do not care).</summary>
         public IList<AirbaseFix> Airbases;
         /// <summary>The allocation price of a perk (the controller passes the manager's quote).</summary>
@@ -83,11 +84,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return id < 0 && SofCodes.TryUnpackPoint(-id - 1, out x, out z);
         }
 
+        /// <summary>Per front: its ladder (infrastructure, then the asset it carries), then its operation; each is queued with automatic placement.</summary>
         private static readonly ProgrammeId[][] OfferSet =
         {
-            new[] { ProgrammeId.LaunchSatellite, ProgrammeId.UplinkSite, ProgrammeId.Asat },
+            new[] { ProgrammeId.UplinkSite, ProgrammeId.LaunchSatellite, ProgrammeId.Asat },
             new[] { ProgrammeId.DataCenter, ProgrammeId.EwTruck, ProgrammeId.ZeroDay },
-            new[] { ProgrammeId.TrainTeam, ProgrammeId.Camp, ProgrammeId.Fob },
+            new[] { ProgrammeId.Camp, ProgrammeId.TrainTeam, ProgrammeId.Fob },
         };
 
         /// <summary>Airbase map marks: world metres onto the plate, a short upper-case name, capped so the label pool never overflows.</summary>
@@ -139,19 +141,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 int left = (int)Math.Max(0f, Math.Ceiling(q.BuildLeft - (building ? c.Now - stamp : 0f)));
                 v.Queue.Add(new FrontQueueView
                 {
-                    Id = q.Id, Name = FrontWords.Programme(q.Id), Cost = cost, Building = building, BuildLeft = left, BuildTotal = (int)build,
+                    Id = q.Id, Row = q.Row, Name = FrontWords.Programme(q.Id, q.Kind), Cost = cost, Building = building, BuildLeft = left, BuildTotal = (int)build,
                     Progress = building ? Mathf.Clamp01(1f - left / build) : q.Percent / 100f
                 });
             }
 
+            QueuedCounts queued = FrontLadder.Queued(row.Queue);
             foreach (ProgrammeId id in OfferSet[(int)f])
             {
-                bool queued = row.Queue.Exists(q => q.Id == id);
+                // A SATELLITE offer launches the lowest kind neither up nor queued (only the queue counts while the OPS mirror is unknown).
+                byte kind = id == ProgrammeId.LaunchSatellite ? FrontLadder.FreeKind((c.WorldKnown ? c.World.BirdsUp : 0) | queued.Birds) : (byte)0;
                 v.Offers.Add(new FrontOfferView
                 {
-                    Id = id, Name = FrontWords.Programme(id), Cost = FrontRules.Cost(id, c.CostScale),
-                    BuildSeconds = (int)FrontRules.BuildSeconds(id), Queued = queued,
-                    Refusal = queued ? "" : IsWaiting(row) ? "WAITING FOR THE HOST" : Refusal(f, id, known ? d : null, row, c)
+                    Id = id, Kind = kind, Name = FrontWords.Programme(id, kind), Cost = FrontRules.Cost(id, c.CostScale), BuildSeconds = (int)FrontRules.BuildSeconds(id),
+                    Refusal = IsWaiting(row) ? "WAITING FOR THE HOST" : Refusal(f, id, kind, row, queued, c)
                 });
             }
 
@@ -182,7 +185,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             int k = PerkBird(r.Id);
             if (k >= 0 && c.HasBird != null)
             {
-                if ((c.BirdsDown & (1 << k)) != 0) return "SATELLITE LOST · REBUILD " + (c.BirdPercent != null && k < c.BirdPercent.Length ? c.BirdPercent[k] : 0) + " %";
+                if ((c.BirdsDown & c.BirdsLaunched & (1 << k)) != 0) return "SATELLITE LOST · RELAUNCH IT";
                 if (!c.HasBird[k]) return "NO " + GeoSpace.Names[k] + " SATELLITE · LAUNCH ONE";
             }
             return price > c.Allocation ? "NEEDS " + price + " AP · YOU HAVE " + c.Allocation : "";
@@ -191,17 +194,36 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The local pilot's grade in a front's system (1 when the window passed none).</summary>
         internal static int GradeOf(in FrontInputs c, Front f) => c.Grades != null && (int)f < c.Grades.Length ? Math.Max(1, c.Grades[(int)f]) : 1;
 
-        /// <summary>The client's best reading of why a programme cannot be queued; the host judges again on the press.</summary>
-        public static string Refusal(Front f, ProgrammeId id, FrontStateData d, FrontRow row, in FrontInputs c)
+        /// <summary>The client's best reading of why a build cannot be queued (the ladder against the mirrored world and queue); "" when the world is unknown. The host judges again on the press.</summary>
+        public static string Refusal(Front f, ProgrammeId id, byte kind, FrontRow row, in QueuedCounts queued, in FrontInputs c)
         {
             if (row.Queue.Count >= FrontRules.MaxQueue) return FrontWords.Refusal(FrontOutcome.QueueFull, f);
-            switch (id)
+            return c.WorldKnown ? FrontWords.Refusal(FrontLadder.Check(f, id, kind, c.World, queued), f) : "";
+        }
+
+        /// <summary>
+        /// What a front has built, read from the mirrors the client has (null = not received): pads and birds from OPS, data centers and trucks from CYBER (a packing truck still holds
+        /// its data center, as on the host), camps, teams and held buildings from SOF, the FOB from its OPS row. False when the front's own mirror is missing.
+        /// </summary>
+        public static bool World(Front f, OpsStateData ops, CyberStateData cyber, SofStateData sof, float now, out FrontWorld w)
+        {
+            w = default;
+            if (ops != null)
             {
-                case ProgrammeId.LaunchSatellite: return c.BirdsDown == 0 ? FrontWords.Refusal(FrontOutcome.BirdsUp, f) : "";
-                case ProgrammeId.TrainTeam: return c.Teams >= FrontRules.TeamCap ? FrontWords.Refusal(FrontOutcome.TeamCap, f) : "";
-                case ProgrammeId.Fob: return c.HeldBuilding ? "" : FrontWords.Refusal(FrontOutcome.NoHeldBuilding, f);
-                default: return "";
+                foreach (OpsSiteRow s in ops.Sites) if (s.State == SiteState.Up) w.PadsLive++;
+                w.BirdsUp = (byte)(~ops.BirdsDown & ((1 << SpaceRules.BirdCount) - 1));
+                foreach (OpsRow r in ops.Rows) w.FobUp |= r.Domain == OpDomain.Sof && r.Kind == OpKind.Fob && r.State == OpState.Done && r.EndsAt > now;
             }
+            if (cyber != null)
+                foreach (CyberAnchorRow a in cyber.Anchors)
+                    if (a.Health != AnchorHealth.Down) { if (a.Kind == AnchorKind.DataCenter) w.DataCentersLive++; else w.TrucksLive++; }
+            if (sof != null)
+            {
+                foreach (SofCampRow cr in sof.Camps) if (cr.Health != AnchorHealth.Down) w.CampsLive++;
+                w.Teams = sof.Teams.Count;
+                w.HasHeldBuilding = sof.Held.Count > 0;
+            }
+            return f == Front.Space ? ops != null : f == Front.Cyber ? cyber != null : sof != null;
         }
 
         private static AvState LogTone(FrontLogCode code, int a)
@@ -299,23 +321,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Sites(v, c);
             for (int k = 0; k < Kinds.Length; k++)
             {
-                bool has = c.HasBird != null && c.HasBird[k], down = (c.BirdsDown & (1 << k)) != 0;
-                if (!has && !down) continue;
+                // A bird never launched is not in orbit (its card says NOT LAUNCHED); a launched one that is down stays on the plate as lost.
+                bool has = c.HasBird != null && c.HasBird[k], lost = (c.BirdsDown & c.BirdsLaunched & (1 << k)) != 0;
+                if (!has && !lost) continue;
                 OrbitTrackView b = Station(k, true, GeoOf(c.Geo, k, true), c, v);
                 string word = C2Orbit.BirdState(Kinds[k], c.SpaceLinked, has, c.Family, c.RadarSeconds, c.RadarUnavailable, out C2Tone tone);
                 AvState state = C2Kit.StateOf(tone);
-                if (down) { word = "LOST · REBUILD " + (c.BirdPercent != null ? c.BirdPercent[k] : 0) + " %"; state = AvState.Danger; }
-                b.Alive = has && !down; b.Overhead &= b.Alive; b.Callsign = Names[k]; b.State = word; b.Tone = state;
+                if (lost) { word = "LOST · RELAUNCH IT"; state = AvState.Danger; }
+                b.Alive = has && !lost; b.Overhead &= b.Alive; b.Callsign = Names[k]; b.State = word; b.Tone = state;
                 b.Orbit = "SLOT " + b.Slot + " · " + b.Catalog;
                 v.Birds.Add(b);
             }
             if (!c.EnemyKnown) return;
-            // The enemy constellation, mirrored alive or dead from the host's real bird state, parked the same way.
+            // The enemy constellation: only birds that are up (the mirror carries no launched mask for the enemy, so a down bit may be one never launched), parked the same way.
             for (int k = 0; k < Kinds.Length; k++)
             {
-                bool down = (c.EnemyBirdsDown & (1 << k)) != 0;
+                if ((c.EnemyBirdsDown & (1 << k)) != 0) continue;
                 OrbitTrackView b = Station(k, false, GeoOf(c.EnemyGeo, k, false), c, v);
-                b.Alive = !down; b.Overhead &= b.Alive; b.Callsign = "HOSTILE-" + (k + 1); b.State = down ? "DESTROYED" : "TRACKED"; b.Tone = down ? AvState.Inert : AvState.Danger;
+                b.Alive = true; b.Callsign = "HOSTILE-" + (k + 1); b.State = "TRACKED"; b.Tone = AvState.Danger;
                 b.Orbit = "SLOT " + b.Slot + " · " + b.Catalog;
                 v.Birds.Add(b);
             }
@@ -341,7 +364,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     X = c.Frame.U(s.X), Y = c.Frame.V(s.Z), Own = true, Live = live, Rebuilding = rebuilding, Name = SiteName(s.Slot),
                     State = live ? "LIVE" : rebuilding ? "REBUILDING" : "DESTROYED", Grid = "GRID " + OpsKit.Grid(s.X, s.Z),
                     Cost = live ? (up <= 1 ? "LAST SITE · LOSS DARKENS SPACE" : "LOSS DEGRADES SPACE")
-                        : rebuilding ? "SPACE " + space + " UNTIL REBUILT" : "SPACE " + space + " · QUEUE AN UPLINK SITE",
+                        : rebuilding ? "SPACE " + space + " UNTIL REBUILT" : "SPACE " + space + " · QUEUE A LAUNCH PAD",
                 });
             }
             for (int i = 0; foe != null && i < foe.Count && v.Sites.Count < 6; i++)
@@ -373,6 +396,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static string TruckTag(int ordinal) => "EW-" + (ordinal + 1);
 
         private static string Km(float metres) => (metres / 1000f).ToString("0.#", NetFmt);
+
+        /// <summary>The build that gives the room its reach: a data center first, then an EW truck within 20 km of it.</summary>
+        private static string NoTruck(bool dataCenter) => dataCenter ? "DEPLOY AN EW TRUCK UNDER PROGRAMMES" : "BUILD A DATA CENTER, THEN DEPLOY AN EW TRUCK";
+
+        /// <summary>The SHADOW room's meta and warning with no camp standing (the room keys its hint on it).</summary>
+        public const string NoCamp = "BUILD A CAMP";
 
         private static float Dist(float ax, float az, float bx, float bz)
         {
@@ -499,7 +528,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 n.Meta = known ? "NO EW ASSET STANDING" : "WAITING FOR THE HOST";
                 n.HopLine = "NO EW LINK · NOTHING TO HOP FROM";
-                n.Next = known ? "NO EW TRUCK STANDING · QUEUE OR REBUILD ONE UNDER PROGRAMMES TO REACH THE ENEMY NET" : "WAITING FOR THE HOST CYBER STATE · NOTHING TO SHOW YET";
+                n.Next = known ? NoTruck(false) : "WAITING FOR THE HOST CYBER STATE · NOTHING TO SHOW YET";
                 n.NextTone = known ? AvState.Caution : AvState.Inert;
                 n.Dossier.Next = n.Next; n.Dossier.NextTone = n.NextTone;
                 return;
@@ -508,19 +537,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             var trucks = new List<EwSource>(4);
             var lockUntil = new List<float>(4); // by truck ordinal
             int truckOrdinal = 0, centers = 0;
-            bool locked = false, anyDown = false, anyTruck = false;
+            bool locked = false, anyDown = false, anyTruck = false, packing = false;
             foreach (CyberAnchorRow a in s.Anchors)
             {
                 bool truck = a.Kind == AnchorKind.EwTruck;
                 int ordinal = truck ? truckOrdinal++ : centers++;
                 float reach = truck ? AnchorRules.Reach(a.Health) : 0f;
-                if (truck && a.Health != AnchorHealth.Down) trucks.Add(new EwSource(ordinal, a.X, a.Z, reach));
-                if (truck) { lockUntil.Add(a.LockUntil); anyTruck = true; }
+                if (truck && a.Health != AnchorHealth.Down && !a.Packing) trucks.Add(new EwSource(ordinal, a.X, a.Z, reach)); // a packing truck is offline (the host's rule)
+                if (truck) { lockUntil.Add(a.LockUntil); anyTruck = true; packing |= a.Packing; }
                 bool lockedNow = a.LockUntil > now;
                 locked |= lockedNow; anyDown |= a.Health == AnchorHealth.Down;
                 n.Anchors.Add(new NetAnchorView
                 {
-                    Kind = a.Kind, Health = a.Health, X = frame.U(a.X), Y = frame.V(a.Z), Reach = reach / frame.W, Rebuild = a.Rebuild,
+                    Kind = a.Kind, Health = a.Health, Packing = a.Packing, X = frame.U(a.X), Y = frame.V(a.Z), Reach = a.Packing ? 0f : reach / frame.W,
                     LockLeft = truck && lockedNow ? (int)Math.Ceiling(a.LockUntil - now) : 0,
                     Label = (truck ? "EW-" : "DC-") + (ordinal + 1)
                 });
@@ -598,7 +627,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else n.HopLine = "IDLE · NO HOP RUNNING"; // the dial already says NO INTRUSION
             n.Infocon = (byte)(locked ? 2 : anyDown ? 3 : 5);
             n.ThreatWord = locked ? "TRACED" : anyDown ? "DEGRADED" : "CALM";
-            n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · REBUILD IT FROM THE RAIL" : "NO LOSS ON OUR EW NET";
+            n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · BUILD ANOTHER UNDER PROGRAMMES" : "NO LOSS ON OUR EW NET";
             // The other side: enemy holds on our own network and our PURGE (protocol 42).
             int breached = s.Breaches.Count;
             bool purging = s.PurgeEndsAt > now, cooling = !purging && s.PurgeReadyAt > now;
@@ -620,7 +649,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else if (have && mine.Trace >= 85) { n.Next = "TRACE " + mine.Trace + " % · BURN OR DROP NOW"; n.NextTone = AvState.Danger; }
             else if (n.Hopping) { n.Next = "HOP UNDER WAY · LANDS IN " + n.HopLeft + " S, THEN HOP DEEPER OR BURN"; n.NextTone = AvState.Info; }
             else if (have) { n.Next = "HOLDING " + myHeld + " · BURN FOR A STRIKE PACKAGE OR DROP BEFORE THE TRACE FILLS"; n.NextTone = mine.Trace >= 50 ? AvState.Caution : AvState.Ready; }
-            else if (trucks.Count == 0 && anyTruck) { n.Next = "ALL EW TRUCKS DOWN · NO REACH · REBUILD ONE FROM THE RAIL"; n.NextTone = AvState.Danger; }
+            else if (trucks.Count == 0)
+            {
+                n.Next = packing ? "EW TRUCK PACKING UP · NO REACH UNTIL IT REDEPLOYS" : anyTruck ? "ALL EW TRUCKS DOWN · NO REACH · " + NoTruck(s.DataCenterUp) : NoTruck(s.DataCenterUp);
+                n.NextTone = anyTruck && !packing ? AvState.Danger : AvState.Caution;
+            }
             else if (freeTrucks == 0 && lockedTrucks > 0) { n.Next = lockedTag + " TRACED · LOCKED " + SpaceRules.Clock(lockedLeft) + " · NO HOP UNTIL IT IS FREE"; n.NextTone = AvState.Danger; }
             else if (s.Intrusions.Count >= s.IntrusionCap) { n.Next = s.Intrusions.Count + " SESSIONS RUNNING (CAP " + s.IntrusionCap + ") · WAIT FOR ONE TO END"; n.NextTone = AvState.Caution; }
             else if (s.HeldTotal >= CyberRules.MaxHeldPerFaction) { n.Next = "FACTION HOLDS " + s.HeldTotal + " / " + CyberRules.MaxHeldPerFaction + " NODES · A BURN OR DROP FREES ONE"; n.NextTone = AvState.Caution; }
@@ -683,7 +716,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else if (view.State != NetNodeState.InReach)
                 {
                     next = have ? "BLOCKED · OUT OF REACH OF YOUR HELD NODES (" + Km(CyberGraph.ChainReach) + " KM CHAIN) · HOP A NODE CLOSER FIRST"
-                        : trucks.Count == 0 ? "BLOCKED · NO LIVE EW TRUCK · REBUILD ONE FROM THE RAIL" : "BLOCKED · BEYOND EVERY LIVE EW TRUCK'S " + Km(maxRange) + " KM · PICK A NODE IN REACH";
+                        : trucks.Count == 0 ? "BLOCKED · NO LIVE EW TRUCK · " + NoTruck(s.DataCenterUp) : "BLOCKED · BEYOND EVERY LIVE EW TRUCK'S " + Km(maxRange) + " KM · PICK A NODE IN REACH";
                     nextTone = AvState.Caution;
                 }
                 else if (have && myHeld >= CyberRules.MaxHeldPerIntrusion) { next = "BLOCKED · YOUR SESSION HOLDS " + myHeld + " / " + CyberRules.MaxHeldPerIntrusion + " · BURN OR DROP ONE FIRST"; nextTone = AvState.Caution; }
@@ -882,15 +915,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!known) { r.History.Clear(); r.LastSeq = 0; }
             if (!active)
             {
-                r.Meta = known ? "NO CAMP STANDING" : "WAITING FOR THE HOST";
+                r.Meta = known ? NoCamp : "WAITING FOR THE HOST";
                 r.DraftMission = MissionKind.None; r.Reason = "";
                 r.WarnText = r.Meta;
-                r.TeamLine = known ? "BUILD A CAMP, THEN QUEUE TRAIN TEAM" : "";
+                r.TeamLine = known ? "BUILD A CAMP, THEN QUEUE A TEAM" : "";
                 r.FileTab = "NO FILE"; r.FileA = "NO TARGET";
                 return;
             }
+            bool campUp = false;
             foreach (SofCampRow c in s.Camps)
-                r.Camps.Add(new SofCampView { X = frame.U(c.X), Y = frame.V(c.Z), Health = c.Health, Rebuild = c.Rebuild, Name = "CAMP-" + (r.Camps.Count + 1) });
+            {
+                r.Camps.Add(new SofCampView { X = frame.U(c.X), Y = frame.V(c.Z), Health = c.Health, Name = "CAMP-" + (r.Camps.Count + 1) });
+                campUp |= c.Health != AnchorHealth.Down;
+            }
             foreach (SofHeldRow h in s.Held)
                 r.Held.Add(new SofHeldView { X = frame.U(h.X), Y = frame.V(h.Z), SecondsLeft = Math.Max(0f, h.Until - now), Name = "BUILDING #" + h.Id });
             int near = 0, hunting = 0;
@@ -959,7 +996,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (slot == selectedSlot) { cur = t; haveTeam = true; curLocked = locked; curTone = tone; }
             }
             if (alerts > 0) { r.WarnText = worstText + (alerts > 1 ? " · +" + (alerts - 1) + " MORE" : ""); r.WarnTone = worstRank >= 2 ? AvState.Danger : AvState.Caution; }
-            else if (s.Teams.Count == 0) r.WarnText = "NO TEAM RAISED";
+            else if (s.Teams.Count == 0) r.WarnText = campUp ? "NO TEAM RAISED" : NoCamp;
             else { r.WarnText = "ALL TEAMS CLEAR · NONE PINNED, LOST OR LOW ON AMMO"; r.WarnTone = AvState.Ready; }
             Remember(r, s);
 
@@ -1030,7 +1067,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 r.TeamLine = call + " " + TeamCodename(cur.Slot) + " · " + SofWords.State(cur.State) + " · " + SofPageWords.Control(cur) + (curLocked ? " · VIEW ONLY" : "");
                 r.TeamTone = curLocked ? AvState.Caution : curTone;
             }
-            else r.TeamLine = s.Teams.Count == 0 ? "NO TEAM RAISED · QUEUE TRAIN TEAM" : "NONE PICKED · CLICK A TEAM IN THE ROSTER";
+            else r.TeamLine = s.Teams.Count == 0 ? (campUp ? "NO TEAM RAISED · QUEUE A TEAM" : "NO TEAM · BUILD A CAMP, THEN QUEUE A TEAM") : "NONE PICKED · CLICK A TEAM IN THE ROSTER";
             if (haveTarget)
             {
                 r.AimLine = TargetName(tgt) + (tgt.Exploit ? " · EXPLOIT" : tgt.Resisted ? " · RESISTED" : "");

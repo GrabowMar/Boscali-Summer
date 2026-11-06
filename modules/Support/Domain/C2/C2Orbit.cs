@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.C2
@@ -37,12 +38,12 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
             return "READY";
         }
 
-        /// <summary>The constellation box meta: uplinks and family, or why there is no link.</summary>
-        public static string ConstellationMeta(bool known, bool active, int live, int total, SpaceFamilyState family)
+        /// <summary>The constellation box meta: live pads out of the pad cap and family, or why there is no link.</summary>
+        public static string ConstellationMeta(bool known, bool active, int live, SpaceFamilyState family)
         {
             if (!known) return "NO HOST LINK";
             if (!active) return "NO SPACE LINK";
-            return "UPLINKS " + live.ToString(CultureInfo.InvariantCulture) + "/" + total.ToString(CultureInfo.InvariantCulture) + " · " +
+            return "PADS " + live.ToString(CultureInfo.InvariantCulture) + "/" + FrontRules.PadCap.ToString(CultureInfo.InvariantCulture) + " · " +
                 (family == SpaceFamilyState.Normal ? "NORMAL" : family == SpaceFamilyState.Degraded ? "DEGRADED" : "OFFLINE");
         }
 

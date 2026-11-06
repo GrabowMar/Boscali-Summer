@@ -12,8 +12,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal interface IFrontActions
     {
         void SetDirective(Front front, FrontDirective directive);
-        void Queue(Front front, ProgrammeId id);
-        void Donate(Front front, ProgrammeId id, int amount);
+        /// <summary>Queues a build with automatic placement (<paramref name="kind"/> = the satellite kind for a SATELLITE).</summary>
+        void Queue(Front front, ProgrammeId id, byte kind);
+        /// <summary>CHIP IN: allocation into one queued row, by the host's row id.</summary>
+        void Donate(Front front, ushort row, int amount);
+        /// <summary>Packs up one of our EW trucks (its anchor ordinal) and redeploys it at a map point; the host judges the 20 km data center reach.</summary>
+        void MoveTruck(int truck, float x, float z);
         void SelectFront(Front front);
         // NETWORK room.
         void SelectNode(int nodeId);

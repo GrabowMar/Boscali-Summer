@@ -328,7 +328,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 string word = C2Orbit.BirdState(bird, linked, has, state.Family, radarSeconds, radarUnavailable, out C2Tone tone);
                 view.Birds[i] = new FeedBirdView { State = word, Tone = C2Kit.StateOf(tone) };
             }
-            view.ConstellationMeta = C2Orbit.ConstellationMeta(known, state.Active, state.UplinksLive, state.UplinksTotal, state.Family);
+            view.ConstellationMeta = C2Orbit.ConstellationMeta(known, state.Active, state.UplinksLive, state.Family);
         }
 
         private string StatusFor(SpaceFeedState state, bool known)
@@ -350,8 +350,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (imager != null) imager.Visible = false;
             if (sar != null) sar.Visible = false;
 
-            if (!known || !state.Active) { view.Refusal = "NEGATIVE: NO SPACE LINK — HOLD AN UPLINK SITE"; return; }
-            if (state.Family == SpaceFamilyState.Dark) { view.Refusal = "NEGATIVE: SPACE OFFLINE — RESTORE AN UPLINK SITE"; return; }
+            if (!known || !state.Active) { view.Refusal = "NEGATIVE: NO SPACE LINK — BUILD A LAUNCH PAD"; return; }
+            if (state.Family == SpaceFamilyState.Dark) { view.Refusal = "NEGATIVE: SPACE OFFLINE — BUILD A LAUNCH PAD"; return; }
             if (!GameManager.GetLocalPlayer(out Player player) || player == null || !manager.HasSpaceBird(player.HQ, draft.Source))
             {
                 view.Refusal = draft.Source == BirdKind.Optical

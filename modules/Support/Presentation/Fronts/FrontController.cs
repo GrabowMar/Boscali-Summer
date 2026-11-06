@@ -240,12 +240,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 Allocation = (int)manager.LocalAllocation, Grades = manager.LocalGrades(), Now = now, CostScale = manager.Settings != null ? manager.Settings.ProgrammeCostScale.Value : 1f,
                 Utc = DateTime.UtcNow, Frame = new MapFrame(span.x, span.y), HasBird = hasBird,
-                BirdsDown = manager.OpsMirror.Known ? ops.BirdsDown : (byte)0, BirdPercent = ops.BirdPercent, EnemyBirdsDown = manager.OpsMirror.Known ? ops.EnemyBirdsDown : (byte)0, EnemyKnown = manager.OpsMirror.Known && ops.Active,
+                BirdsDown = manager.OpsMirror.Known ? ops.BirdsDown : (byte)0, BirdsLaunched = manager.OpsMirror.Known ? ops.BirdsLaunched : (byte)0,
+                EnemyBirdsDown = manager.OpsMirror.Known ? ops.EnemyBirdsDown : (byte)0, EnemyKnown = manager.OpsMirror.Known && ops.Active,
                 SpaceLinked = space.Known && space.State.Active, Family = space.State.Family,
                 RadarSeconds = SpaceFeedRules.RadarReadySeconds(space.State.RadarReadyAt, now), RadarUnavailable = space.State.RadarReadyAt == SpaceWire.RadarUnavailable,
-                Teams = manager.SofMirror.Known ? manager.SofMirror.State.Teams.Count : 0, HeldBuilding = manager.SofMirror.Known && manager.SofMirror.State.Held.Count > 0,
                 Price = id => manager.Quote(id).Cost, Faction = "", Callsign = ""
             };
+            c.WorldKnown = FrontViews.World(current, manager.OpsMirror.Known && ops.Active ? ops : null, manager.CyberMirror.Known ? manager.CyberMirror.State : null,
+                manager.SofMirror.Known ? manager.SofMirror.State : null, now, out c.World);
             if (c.EnemyKnown)
             {
                 for (int k = 0; k < 3; k++) { geoOwn[k] = ops.Geo[k]; geoFoe[k] = ops.Geo[3 + k]; }
@@ -325,10 +327,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 nextRefresh = 0f;
                 return;
             }
-            if ((reply.Kind < SpaceCommandKind.FrontDirective || reply.Kind > SpaceCommandKind.FrontDonate) && reply.Kind != SpaceCommandKind.RelocateBird) return;
+            bool truck = reply.Kind == SpaceCommandKind.TruckMove;
+            if ((reply.Kind < SpaceCommandKind.FrontDirective || reply.Kind > SpaceCommandKind.FrontDonate) && reply.Kind != SpaceCommandKind.RelocateBird && !truck) return;
             pendingRequest = 0;
             var code = (FrontOutcome)reply.Outcome;
-            words = (reply.Replayed ? "EARLIER · " : "") + FrontWords.Outcome(code, pendingFront, reply.Detail, reply.Claimant, reply.Charged);
+            words = (reply.Replayed ? "EARLIER · " : "") + (truck ? FrontWords.TruckMove(code) : FrontWords.Outcome(code, pendingFront, reply.Detail, reply.Claimant, reply.Charged));
             wordsTone = FrontWords.Good(code) ? AvState.Ready : AvState.Danger;
             wordsAt = SupportManager.MissionNow();
             AvUiSound.Play(FrontWords.Good(code) ? AvUiCue.Confirm : AvUiCue.Caution);
@@ -367,16 +370,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Sent(front, manager.FrontSetDirective(front, directive), "NO HOST LINK", SpaceCommandKind.None, FrontRules.Name(directive) + " POSTURE");
         }
 
-        public void Queue(Front front, ProgrammeId id)
+        public void Queue(Front front, ProgrammeId id, byte kind)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontQueue(front, id), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontRules.Info(id).Name);
+            Sent(front, manager.FrontQueue(front, id, kind), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
         }
 
-        public void Donate(Front front, ProgrammeId id, int amount)
+        public void Donate(Front front, ushort row, int amount)
         {
             if (!Gate()) return;
-            Sent(front, manager.FrontDonate(front, id, amount), "NOTHING TO FUND", SpaceCommandKind.None, "CHIP IN " + amount + " AP");
+            Sent(front, manager.FrontDonate(front, row, amount), "NOTHING TO FUND", SpaceCommandKind.None, "CHIP IN " + amount + " AP");
+        }
+
+        public void MoveTruck(int truck, float x, float z)
+        {
+            if (Gate()) Sent(Front.Cyber, manager.MoveTruck(truck, x, z), "NO HOST LINK", SpaceCommandKind.None, "TRUCK MOVE");
         }
 
         public void SelectFront(Front front)
