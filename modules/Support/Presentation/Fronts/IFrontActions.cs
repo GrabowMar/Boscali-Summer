@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Hop(int nodeId);
         void Burn(int nodeId);
         void Drop(int nodeId);
+        /// <summary>Ends our whole session: every held node released, no package.</summary>
+        void DropAll();
         /// <summary>Purges every enemy hold on our own network (after a countdown; the host judges cost and cooldown).</summary>
         void Purge();
         // SHADOW room. Verbs: 0 PUSH, 1 HOLD, 2 EXFIL, 3 LIFT; missions are the MissionKind byte.

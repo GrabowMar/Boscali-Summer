@@ -595,7 +595,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static string Km(float metres) => (metres / 1000f).ToString("0.#", NetFmt);
 
         /// <summary>The build that gives the room its reach: a data center first, then an EW truck within 20 km of it.</summary>
-        private static string NoTruck(bool dataCenter) => dataCenter ? "DEPLOY AN EW TRUCK UNDER PROGRAMMES" : "BUILD A DATA CENTER, THEN DEPLOY AN EW TRUCK";
+        private static string NoTruck(bool dataCenter) => dataCenter ? "DEPLOY AN EW TRUCK ON INFRASTRUCTURE" : "BUILD A DATA CENTER, THEN DEPLOY AN EW TRUCK";
 
         /// <summary>The SHADOW room's meta and warning with no camp standing (the room keys its hint on it).</summary>
         public const string NoCamp = "BUILD A CAMP";
@@ -705,9 +705,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return "";
         }
 
-        public static void Network(NetworkRoomView n, CyberStateData s, bool known, in MapFrame frame, int selected, float now)
+        /// <summary>The NETWORK room from the CYBER mirror (<paramref name="s"/>, null or unknown before the host speaks) and the CYBER front row in <paramref name="v"/>.</summary>
+        public static void Network(FrontRoomView v, in FrontInputs c, CyberStateData s, bool known, int selected)
         {
+            NetworkRoomView n = v.Network;
+            MapFrame frame = c.Frame;
+            float now = c.Now;
             n.Nodes.Clear(); n.Anchors.Clear(); n.Roster.Clear();
+            Infrastructure(v, c, known ? s : null);
             n.MapKmW = frame.W / 1000f; n.MapKmH = frame.H / 1000f;
             bool active = known && s != null && s.Active;
             n.Active = active;
@@ -738,7 +743,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (CyberAnchorRow a in s.Anchors)
             {
                 bool truck = a.Kind == AnchorKind.EwTruck;
-                int ordinal = truck ? truckOrdinal++ : centers++;
+                int ordinal = truck ? truckOrdinal++ : centers++; // the host sends its slots in (kind, index) order: the ordinal of a kind is its slot
                 float reach = truck ? AnchorRules.Reach(a.Health) : 0f;
                 if (truck && a.Health != AnchorHealth.Down && !a.Packing) trucks.Add(new EwSource(ordinal, a.X, a.Z, reach)); // a packing truck is offline (the host's rule)
                 if (truck) { lockUntil.Add(a.LockUntil); anyTruck = true; packing |= a.Packing; }
@@ -748,7 +753,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 {
                     Kind = a.Kind, Health = a.Health, Packing = a.Packing, X = frame.U(a.X), Y = frame.V(a.Z), Reach = a.Packing ? 0f : reach / frame.W,
                     LockLeft = truck && lockedNow ? (int)Math.Ceiling(a.LockUntil - now) : 0,
-                    Label = (truck ? "EW-" : "DC-") + (ordinal + 1)
+                    Label = (truck ? "EW-" : "DC-") + (ordinal + 1), Slot = ordinal, Breached = !truck && a.Health != AnchorHealth.Down && Breached(s, a.X, a.Z)
                 });
             }
 
@@ -785,6 +790,17 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 {
                     Id = r.Id, Kind = r.Kind, X = frame.U(r.X), Y = frame.V(r.Z), State = st, HopPct = r.Hopping ? HopPercent(s, r.Id, now) : (byte)0,
                     FromNode = fromNode, FromAnchor = fromAnchor, Label = NodeLabel(r), Handle = NodeHandle(r.Kind, r.Id), Owner = owner, Reach = reachText
+                });
+            }
+            // Our own anchors as nodes after the enemy's: negative ids the room picks locally (a truck is no NodeKind; Kind only matters for a data center).
+            for (int i = 0; i < n.Anchors.Count; i++)
+            {
+                NetAnchorView a = n.Anchors[i];
+                n.Nodes.Add(new NetNodeView
+                {
+                    Id = NetworkRoomView.OwnId(a.Kind, a.Slot), Kind = NodeKind.DataCenter, X = a.X, Y = a.Y, State = NetNodeState.OutOfReach, FromNode = -1, FromAnchor = -1,
+                    Label = a.Label, Handle = a.Label.ToLowerInvariant() + ".local", Owner = "YOU", Reach = a.Reach > 0f ? "REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "",
+                    Own = true, AnchorAt = i, Breached = a.Breached
                 });
             }
 
@@ -824,7 +840,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else n.HopLine = "IDLE · NO HOP RUNNING"; // the dial already says NO INTRUSION
             n.Infocon = (byte)(locked ? 2 : anyDown ? 3 : 5);
             n.ThreatWord = locked ? "TRACED" : anyDown ? "DEGRADED" : "CALM";
-            n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · BUILD ANOTHER UNDER PROGRAMMES" : "NO LOSS ON OUR EW NET";
+            n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · BUILD ANOTHER ON INFRASTRUCTURE" : "NO LOSS ON OUR EW NET";
             // The other side: enemy holds on our own network and our PURGE (protocol 42).
             int breached = s.Breaches.Count;
             bool purging = s.PurgeEndsAt > now, cooling = !purging && s.PurgeReadyAt > now;
@@ -947,6 +963,124 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 n.Dossier.Next = "NO NODE PICKED · PICK ONE ON THE MAP OR IN THE LIST TO SEE ITS QUOTE";
                 n.Dossier.NextTone = AvState.Inert;
             }
+        }
+
+        // ---- INFRASTRUCTURE tab -----------------------------------------------------------------------------------------
+
+        /// <summary>A breach on our network lies this close to a data center of ours: it is that center (the wire carries the kind and our unit's spot, no owner id).</summary>
+        private const float BreachMatchMetres = 1500f;
+
+        private static bool Breached(CyberStateData s, float x, float z)
+        {
+            foreach (CyberBreachRow b in s.Breaches) if (b.Kind == NodeKind.DataCenter && Dist(b.X, b.Z, x, z) <= BreachMatchMetres) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// The INFRASTRUCTURE tab: the three CYBER offers; data centers and EW trucks by host slot (standing, packing or lost from the CYBER mirror, building from the
+        /// CYBER queue in the slot the host will build into, which takes over a lost card there); a map ghost for every queued center or truck with a point. A truck
+        /// card counts the enemy nodes its reach covers and the trace of the sessions it sources; a center card names the truck it runs (each standing truck takes
+        /// the nearest free standing center: the wire carries no pairing).
+        /// </summary>
+        private static void Infrastructure(FrontRoomView v, in FrontInputs c, CyberStateData s)
+        {
+            NetworkRoomView n = v.Network;
+            n.Centers.Clear(); n.Trucks.Clear(); n.Ghosts.Clear();
+            QueuedCounts queued = FrontLadder.Queued(v.Row.Queue);
+            n.BuildCenter = Offer(Front.Cyber, ProgrammeId.DataCenter, 0, v.Row, queued, c);
+            n.DeployTruck = Offer(Front.Cyber, ProgrammeId.EwTruck, 0, v.Row, queued, c);
+            n.ZeroDay = Offer(Front.Cyber, ProgrammeId.ZeroDay, 0, v.Row, queued, c);
+            MapFrame f = c.Frame;
+            int dcPresent = 0, dcDown = 0, dcTaken = 0, trPresent = 0, trDown = 0, trTaken = 0, dcN = 0, trN = 0;
+            for (int i = 0; s != null && i < s.Anchors.Count; i++)
+            {
+                CyberAnchorRow a = s.Anchors[i];
+                bool down = a.Health == AnchorHealth.Down;
+                if (a.Kind == AnchorKind.EwTruck) { trPresent |= 1 << trN; if (down) trDown |= 1 << trN; trN++; }
+                else { dcPresent |= 1 << dcN; if (down) dcDown |= 1 << dcN; dcN++; }
+            }
+            for (int i = 0; i < v.Queue.Count; i++)
+            {
+                FrontQueueRow q = v.Row.Queue[i];
+                if (q.Id != ProgrammeId.DataCenter && q.Id != ProgrammeId.EwTruck) continue;
+                bool truck = q.Id == ProgrammeId.EwTruck;
+                int slot = truck ? FrontLadder.AnchorSlot(trPresent, trDown, ref trTaken, FrontRules.TruckCap) : FrontLadder.AnchorSlot(dcPresent, dcDown, ref dcTaken, FrontRules.DataCenterCap);
+                if (slot < 0) continue;
+                FrontQueueView qv = v.Queue[i];
+                float u = q.HasPoint ? f.U(q.X) : -1f, vv = q.HasPoint ? f.V(q.Z) : -1f;
+                string clock = qv.Building ? FrontRules.Clock(qv.BuildLeft) : Pct(qv.Progress);
+                if (truck)
+                {
+                    var t = new InfraTruckView { Ordinal = slot, Name = TruckTag(slot), State = InfraState.Building, U = u, V = vv, Grid = q.HasPoint ? "GRID " + OpsKit.Grid(q.X, q.Z) : "AUTO PLACE",
+                        InReachWord = "", TraceWord = "", Row = qv.Row, Progress = qv.Progress, BuildLeft = qv.BuildLeft };
+                    n.Trucks.Add(t);
+                    if (q.HasPoint) n.Ghosts.Add(new MapGhostView { U = u, V = vv, Kind = (byte)AnchorKind.EwTruck, Label = t.Name + " · " + clock });
+                }
+                else
+                {
+                    var d = new InfraCenterView { Slot = slot, Name = "DC-" + (slot + 1), State = InfraState.Building, U = u, V = vv, Place = q.HasPoint ? PlaceOf(q.X, q.Z, c) : "AUTO PLACE",
+                        Runs = "", Effect = "", Row = qv.Row, Progress = qv.Progress, BuildLeft = qv.BuildLeft };
+                    n.Centers.Add(d);
+                    if (q.HasPoint) n.Ghosts.Add(new MapGhostView { U = u, V = vv, Kind = (byte)AnchorKind.DataCenter, Label = d.Name + " · " + d.Place + " · " + clock });
+                }
+            }
+            dcN = trN = 0;
+            string effect = "CUTS YOUR TRACE x" + CyberRules.DataCenterTraceFactor.ToString("0.0#", NetFmt);
+            for (int i = 0; s != null && i < s.Anchors.Count; i++)
+            {
+                CyberAnchorRow a = s.Anchors[i];
+                bool down = a.Health == AnchorHealth.Down;
+                InfraState st = down ? InfraState.Lost : a.Packing ? InfraState.Packing : a.Health == AnchorHealth.Damaged ? InfraState.Damaged : InfraState.Up;
+                if (a.Kind == AnchorKind.DataCenter)
+                {
+                    int slot = dcN++;
+                    if ((dcTaken & (1 << slot)) != 0) continue;
+                    n.Centers.Add(new InfraCenterView { Slot = slot, Name = "DC-" + (slot + 1), State = st, U = f.U(a.X), V = f.V(a.Z), Place = PlaceOf(a.X, a.Z, c), Runs = down ? "" : "IDLE",
+                        Effect = down ? "" : effect, Breached = !down && Breached(s, a.X, a.Z) });
+                    continue;
+                }
+                int ord = trN++;
+                if ((trTaken & (1 << ord)) != 0) continue;
+                float reach = down || a.Packing ? 0f : AnchorRules.Reach(a.Health);
+                int inReach = 0;
+                foreach (CyberNodeRow nd in s.Nodes) if (reach > 0f && CyberGraph.InReach(a.X, a.Z, nd.X, nd.Z, reach)) inReach++;
+                int trace = -1;
+                bool mine = false;
+                foreach (CyberIntrusionRow x in s.Intrusions) if (x.Truck == ord && x.Trace > trace) { trace = x.Trace; mine = x.Own; }
+                n.Trucks.Add(new InfraTruckView
+                {
+                    Ordinal = ord, Name = TruckTag(ord), State = st, U = f.U(a.X), V = f.V(a.Z), Grid = "GRID " + OpsKit.Grid(a.X, a.Z), InReach = inReach,
+                    InReachWord = reach <= 0f ? "OFFLINE · NO REACH" : inReach + " ENEMY NODE" + (inReach == 1 ? "" : "S") + " IN REACH · " + Km(reach) + " KM",
+                    Trace = Math.Max(0, trace) / 100f, TraceWord = trace < 0 ? "NO SESSION ON IT" : "TRACE " + trace + " % · " + (mine ? "YOUR SESSION" : "ALLY SESSION"),
+                    LockLeft = a.LockUntil > c.Now ? (int)Math.Ceiling(a.LockUntil - c.Now) : 0
+                });
+            }
+            n.Centers.Sort((a, b) => a.Slot.CompareTo(b.Slot));
+            n.Trucks.Sort((a, b) => a.Ordinal.CompareTo(b.Ordinal));
+            // Each standing truck runs off the nearest standing center not yet taken; the counts for the section heads.
+            n.CentersUp = n.TrucksUp = 0;
+            int pairedMask = 0;
+            for (int t = 0; t < n.Trucks.Count; t++)
+            {
+                InfraTruckView tv = n.Trucks[t];
+                if (tv.State == InfraState.Building || tv.State == InfraState.Lost) continue;
+                n.TrucksUp++;
+                int best = -1;
+                float bestD = float.MaxValue;
+                for (int d = 0; d < n.Centers.Count; d++)
+                {
+                    InfraCenterView cv = n.Centers[d];
+                    if ((pairedMask & (1 << d)) != 0 || (cv.State != InfraState.Up && cv.State != InfraState.Damaged)) continue;
+                    float du = (cv.U - tv.U) * f.W, dz = (cv.V - tv.V) * f.H, dd = du * du + dz * dz;
+                    if (dd < bestD) { bestD = dd; best = d; }
+                }
+                if (best < 0) continue;
+                pairedMask |= 1 << best;
+                InfraCenterView pc = n.Centers[best];
+                pc.Runs = "RUNS " + tv.Name;
+                n.Centers[best] = pc;
+            }
+            foreach (InfraCenterView cv in n.Centers) if (cv.State == InfraState.Up || cv.State == InfraState.Damaged) n.CentersUp++;
         }
 
         /// <summary>Keeps the faction's real events across refreshes (the mirror carries only the newest three), oldest first, stamped with their own sequence number.</summary>

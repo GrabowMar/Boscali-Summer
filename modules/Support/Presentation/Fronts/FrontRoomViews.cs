@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using NOAvionics;
 
@@ -29,6 +30,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Owner;
         /// <summary>The nearest reach source of the operator (own truck, or own held node once a session runs) and its distance ("EW-1 · 11.3 KM"); "" when none stands.</summary>
         public string Reach;
+        /// <summary>One of our own anchors shown as a node (<see cref="NetworkRoomView.OwnId"/>: a negative id, picked in the room only, never sent to the host); <see cref="AnchorAt"/> indexes <see cref="NetworkRoomView.Anchors"/>.</summary>
+        public bool Own;
+        public int AnchorAt;
+        /// <summary>An own node an enemy holds right now (a breach on our network matched by kind and position).</summary>
+        public bool Breached;
     }
 
     internal struct NetAnchorView
@@ -43,6 +49,58 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Label;
         /// <summary>Seconds left on a trace lock (EW trucks only), 0 when free.</summary>
         public int LockLeft;
+        /// <summary>The host's slot index of its kind (EW-1 is truck slot 0): what <see cref="IFrontActions.MoveTruck"/> names.</summary>
+        public int Slot;
+        public bool Breached;
+    }
+
+    /// <summary>Where one data center or EW truck stands on the INFRASTRUCTURE tab. Lost reads DOWN on a truck card.</summary>
+    internal enum InfraState : byte { Up, Damaged, Packing, Building, Lost }
+
+    /// <summary>
+    /// One data center card: standing, damaged or lost (the CYBER mirror's anchors), or building (a queued DATA CENTER row in the slot the host builds into:
+    /// Row, Progress and BuildLeft come from it; <see cref="FrontRoomView.Queue"/> carries the same Row with the funding / building split).
+    /// </summary>
+    internal struct InfraCenterView
+    {
+        /// <summary>The host's data center slot (DC-1 is slot 0).</summary>
+        public int Slot;
+        public string Name;
+        public InfraState State;
+        /// <summary>Map point (0..1, y down); -1 for a queued center with automatic placement.</summary>
+        public float U, V;
+        /// <summary>The airbase short name it stands by, a grid, or AUTO PLACE.</summary>
+        public string Place;
+        /// <summary>"RUNS EW-1" or "IDLE" while it stands ("" otherwise): the wire carries no pairing, each standing truck takes the nearest free center.</summary>
+        public string Runs;
+        /// <summary>What a standing center does for us ("CUTS YOUR TRACE x0.8"); "" otherwise.</summary>
+        public string Effect;
+        public bool Breached;
+        public ushort Row;
+        public float Progress;
+        public int BuildLeft;
+    }
+
+    /// <summary>One EW truck card: standing, packing up (RELOCATE), down, or building (a queued EW TRUCK row, like <see cref="InfraCenterView"/>).</summary>
+    internal struct InfraTruckView
+    {
+        /// <summary>The host's truck slot (EW-1 is 0): <see cref="IFrontActions.MoveTruck"/> takes it.</summary>
+        public int Ordinal;
+        public string Name;
+        public InfraState State;
+        public float U, V;
+        /// <summary>"GRID HI162", or AUTO PLACE for a queued truck with no point.</summary>
+        public string Grid;
+        /// <summary>Enemy nodes within its reach now ("4 ENEMY NODES IN REACH"); 0 while it is offline.</summary>
+        public int InReach;
+        public string InReachWord;
+        /// <summary>The highest trace of the sessions it sources (0..1) and its words ("TRACE 46 % · YOUR SESSION" / "NO SESSION ON IT").</summary>
+        public float Trace;
+        public string TraceWord;
+        public int LockLeft;
+        public ushort Row;
+        public float Progress;
+        public int BuildLeft;
     }
 
     /// <summary>The selected node's inspector: already-worded lines (the quote is the host's own: same rules, same numbers).</summary>
@@ -60,8 +118,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public bool Active;
         /// <summary>Theatre size in kilometres, so the room can link nodes within 12 km.</summary>
         public float MapKmW = 90f, MapKmH = 60f;
-        public readonly List<NetNodeView> Nodes = new List<NetNodeView>(16);
+        /// <summary>The enemy nodes the mirror carries, then our own anchors as nodes (<see cref="NetNodeView.Own"/>).</summary>
+        public readonly List<NetNodeView> Nodes = new List<NetNodeView>(CyberWire.MaxNodes + CyberWire.MaxAnchors);
         public readonly List<NetAnchorView> Anchors = new List<NetAnchorView>(4);
+        /// <summary>Own anchors take node ids below zero, by kind and slot (EW-1 -10, DC-1 -20): the room picks them, the host never hears of them.</summary>
+        public const int OwnTruckId = -10, OwnCenterId = -20;
+        public static int OwnId(AnchorKind kind, int slot) => (kind == AnchorKind.EwTruck ? OwnTruckId : OwnCenterId) - slot;
+        // INFRASTRUCTURE tab (FrontViews.Network).
+        public readonly List<InfraCenterView> Centers = new List<InfraCenterView>(FrontRules.DataCenterCap);
+        public readonly List<InfraTruckView> Trucks = new List<InfraTruckView>(FrontRules.TruckCap);
+        public FrontOfferView BuildCenter, DeployTruck, ZeroDay;
+        /// <summary>Queued data centers and trucks with a map point ("DC-2 · OPAL · 0:48", "EW-2 · 1:12"; Kind is the AnchorKind).</summary>
+        public readonly List<MapGhostView> Ghosts = new List<MapGhostView>(FrontRules.MaxQueue);
+        /// <summary>Standing data centers and trucks (a truck packing up still stands), for the section heads.</summary>
+        public int CentersUp, TrucksUp;
         // YOUR session.
         public bool HasIntrusion;
         public byte Trace;

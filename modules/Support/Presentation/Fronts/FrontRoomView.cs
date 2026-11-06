@@ -146,11 +146,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Nearest;
     }
 
-    /// <summary>A queued build with a map point: a ghost on the plate with its label ("PAD-2 · OPAL · 1:12").</summary>
+    /// <summary>A queued build with a map point: a ghost on the plate with its label ("PAD-2 · OPAL · 1:12"); Kind says what it builds where a room has more than one (CYBER: the AnchorKind).</summary>
     internal struct MapGhostView
     {
         public float U, V;
         public string Label;
+        public byte Kind;
     }
 
     internal enum AirbaseSide : byte { Neutral, Own, Enemy }

@@ -82,6 +82,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return -1;
         }
 
+        /// <summary>
+        /// The slot the next queued DATA CENTER or EW TRUCK builds into, as the host picks it (CyberService.FreeIndex): the first down slot, else the next new one,
+        /// skipping slots an earlier queued row took (bits in <paramref name="taken"/>, set here). -1 when none is left (a mirror running behind the queue).
+        /// </summary>
+        public static int AnchorSlot(int present, int down, ref int taken, int cap)
+        {
+            for (int s = 0; s < cap; s++) if ((down & (1 << s)) != 0 && (taken & (1 << s)) == 0) { taken |= 1 << s; return s; }
+            for (int s = 0; s < cap; s++) if ((present & (1 << s)) == 0 && (taken & (1 << s)) == 0) { taken |= 1 << s; return s; }
+            return -1;
+        }
+
         /// <summary>The prerequisite is live now (live counts only); infrastructure and operations are always ready.</summary>
         public static bool Ready(ProgrammeId id, in FrontWorld w)
         {

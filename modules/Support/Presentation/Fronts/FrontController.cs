@@ -219,7 +219,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (feed != null) view.Feed = feed.View;
                     break;
                 case Front.Cyber:
-                    FrontViews.Network(view.Network, manager.CyberMirror.State, manager.CyberMirror.Known, c.Frame, selectedNode, now);
+                    FrontViews.Network(view, c, manager.CyberMirror.State, manager.CyberMirror.Known, selectedNode);
                     if (view.Network.Active) selectedNode = view.Network.SelectedId; // a blink with no snapshot keeps the pick
                     if (pendingRequest != 0 && ((pendingKind >= SpaceCommandKind.CyberHop && pendingKind <= SpaceCommandKind.CyberDrop) || pendingKind == SpaceCommandKind.CyberPurge))
                     {
@@ -419,6 +419,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public void Hop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberHop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberHop, "HOP"); }
         public void Burn(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberBurn(nodeId), "NO HOST LINK", SpaceCommandKind.CyberBurn, "BURN"); }
         public void Drop(int nodeId) { if (nodeId > 0 && Gate()) Sent(Front.Cyber, manager.CyberDrop(nodeId), "NO HOST LINK", SpaceCommandKind.CyberDrop, "DROP"); }
+        /// <summary>The host reads a DROP of node 0 as the end of the whole session (every held node released, no package).</summary>
+        public void DropAll() { if (Gate()) Sent(Front.Cyber, manager.CyberDrop(0), "NO HOST LINK", SpaceCommandKind.CyberDrop, "DROP ALL"); }
         public void Purge() { if (Gate()) Sent(Front.Cyber, manager.CyberPurge(), "NO HOST LINK", SpaceCommandKind.CyberPurge, "PURGE"); }
         public void Sweep() { if (Gate()) Sent(Front.Sof, manager.SofSweep(), "NO HOST LINK", SpaceCommandKind.SofSweep, "SWEEP"); }
 

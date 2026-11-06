@@ -368,6 +368,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return -1;
         }
 
+        /// <summary>The enemy rows: they come first, our own anchors as nodes after them.</summary>
+        private static int Enemies(NetworkRoomView n)
+        {
+            int k = 0;
+            while (k < n.Nodes.Count && !n.Nodes[k].Own) k++;
+            return k;
+        }
+
         /// <summary>A link with a wide faint underlay and a bright core: phosphor on glass.</summary>
         private static void Glow(FrontVector g, Vector2 a, Vector2 b, Color k, float core)
         {
@@ -438,7 +446,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontVector g = plate.G;
             FrontLabels labels = plate.Labels;
             Color own = Own, amber = Amber, danger = TraceRed, key = HopInk, dim = OutInk;
-            int count = Math.Min(n.Nodes.Count, MaxNodes);
+            int count = Math.Min(Enemies(n), MaxNodes);
             Spread(n, count);
 
             // The glass: a teal-black tint over the satellite picture and a vignette. Every layer is under 0.2 alpha, so it reads as a tint.
@@ -1129,7 +1137,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             FrontVector g = listGlyph;
             g.Clear();
-            int count = Math.Min(n.Nodes.Count, MaxNodes), rows = 0, inReach = 0, held = 0;
+            int count = Math.Min(Enemies(n), MaxNodes), rows = 0, inReach = 0, held = 0;
             for (int pass = 0; pass < 5; pass++)
                 for (int i = 0; i < count; i++)
                     if (Rank(n.Nodes[i].State) == pass) order[rows++] = i;

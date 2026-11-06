@@ -6,6 +6,7 @@ using NOAvionics;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using static BoscaliSummer.Modules.Support.Presentation.Fronts.FrontPanels;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
@@ -88,42 +89,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static TMP_Text Head(RectTransform p, string name, float y, float secW) =>
             FrontKit.Mono(p, name, SecX + 10f, y + 5f, secW * 0.5f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
 
-        private static FrontOfferView OfferOf(FrontRoomView v, ProgrammeId id)
-        {
-            foreach (FrontOfferView o in v.Offers) if (o.Id == id) return o;
-            return new FrontOfferView { Id = id, Refusal = "WAITING FOR THE HOST" };
-        }
-
-        /// <summary>The queue row with the host's row id (v.Queue and v.Row.Queue share their order).</summary>
-        private static bool QueueRow(FrontRoomView v, ushort row, out FrontQueueView q)
-        {
-            foreach (FrontQueueView r in v.Queue) if (r.Row == row) { q = r; return true; }
-            q = default;
-            return false;
-        }
-
-        /// <summary>The queued LAUNCH of one bird kind.</summary>
-        private static bool LaunchRow(FrontRoomView v, int kind, out FrontQueueView q)
-        {
-            for (int i = 0; i < v.Queue.Count && i < v.Row.Queue.Count; i++)
-                if (v.Row.Queue[i].Id == ProgrammeId.LaunchSatellite && v.Row.Queue[i].Kind == kind) { q = v.Queue[i]; return true; }
-            q = default;
-            return false;
-        }
-
-        /// <summary>One CHIP IN for a queued row: up to 25 AP, never more than the funding bar still needs; 0 once it builds or is funded.</summary>
-        private static int ChipAp(in FrontQueueView q)
-        {
-            if (q.Building) return 0;
-            int total = Mathf.RoundToInt(q.Cost);
-            return FrontRail.ChipFor(total - Mathf.Min(total, Mathf.RoundToInt(q.Cost * q.Progress)));
-        }
-
-        private void Donate(ushort row)
-        {
-            actions.Touch();
-            if (last != null && QueueRow(last, row, out FrontQueueView q) && ChipAp(q) > 0) actions.Donate(Front.Space, row, ChipAp(q));
-        }
+        private void Donate(ushort row) => FrontPanels.Donate(actions, Front.Space, last, row);
 
         /// <summary>A fleet card's buttons, judged on the press: an up bird RELOCATE / FEED › (CONFIRM BURN / CANCEL while it relocates), a bird not up LAUNCH, a queued one CHIP IN.</summary>
         private void CardPress(int kind, int button)
