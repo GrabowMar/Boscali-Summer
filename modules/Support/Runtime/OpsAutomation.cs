@@ -379,7 +379,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["feedLink"] = f.Link;
                 r["feedPackets"] = f.Packets;
                 r["feedLook"] = f.HasLook ? 1 : 0;
-                r["feedLookU"] = f.LookU; r["feedLookV"] = f.LookV; r["feedLookKm"] = f.LookKm;
+                r["feedLookU"] = f.LookU; r["feedLookV"] = f.LookV; r["feedLookKm"] = f.LookKm; r["feedLookNote"] = f.LookNote ?? "";
+                Camera eye = Camera.main;
+                if (eye != null && f.HasLook) // how far the look is from the player's camera (the far-terrain question)
+                {
+                    MapFrame lf = FrontController.Frame();
+                    GlobalPosition at = eye.transform.position.ToGlobalPosition();
+                    r["feedLookFromEyeKm"] = Mathf.Sqrt(Mathf.Pow(lf.X(f.LookU) - at.x, 2f) + Mathf.Pow(lf.Z(f.LookV) - at.z, 2f)) / 1000f;
+                }
                 r["feedSelected"] = f.SelectedId; r["feedBrackets"] = f.Brackets.Count;
                 r["feedStrikeEta"] = f.Strike.Has ? f.Strike.Eta : -1f; r["feedStrikeHeld"] = f.Strike.Held ? 1 : 0; r["feedStrikeOn"] = f.Strike.OnPicture ? 1 : 0;
                 r["feedTelemetry"] = string.Join(" | ", f.Telemetry);

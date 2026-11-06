@@ -225,6 +225,38 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The block size (post pixels) a resolved picture keeps: 1 at link 4-5, 2 at 2-3, 4 at 1.</summary>
         public static int ResolveBands(int link) => 1 << ((5 - ClampLink(link)) / 2);
 
+        /// <summary>What a bird looks at when nothing is picked: 0 its nadir, 1 the nearest airbase in its footprint, 2 the nearest land, 3 the nadir over open water.</summary>
+        public const int LookNadir = 0, LookAirbase = 1, LookLand = 2, LookWater = 3;
+
+        /// <summary>
+        /// The default look of a bird nobody has pointed (world metres): the parked slots often sit over the theatre's inner sea, which images as a flat
+        /// sheet. The airbase nearest the nadir inside the footprint wins; else the nadir when it is land; else the nearest land on rings 1 km apart
+        /// (16 bearings from north), pushed 1.5 km further inland when that is still land inside the footprint; else the nadir over open water.
+        /// </summary>
+        public static (float X, float Z, int Kind) DefaultLook(float nadirX, float nadirZ, float radius, float[] airX, float[] airZ, int airN, Func<float, float, bool> land)
+        {
+            float best = float.MaxValue, bx = nadirX, bz = nadirZ;
+            for (int i = 0; airX != null && airZ != null && i < Math.Min(airN, Math.Min(airX.Length, airZ.Length)); i++)
+            {
+                float dx = airX[i] - nadirX, dz = airZ[i] - nadirZ, d = dx * dx + dz * dz;
+                if (d <= radius * radius && d < best) { best = d; bx = airX[i]; bz = airZ[i]; }
+            }
+            if (best < float.MaxValue) return (bx, bz, LookAirbase);
+            if (land == null || !float.IsFinite(radius) || radius <= 0f) return (nadirX, nadirZ, LookNadir);
+            if (land(nadirX, nadirZ)) return (nadirX, nadirZ, LookNadir);
+            const float Step = 1000f, Inland = 1500f;
+            for (float r = Step; r <= radius; r += Step)
+                for (int k = 0; k < 16; k++)
+                {
+                    double a = k * Math.PI / 8.0;
+                    float sx = (float)Math.Sin(a), sz = (float)Math.Cos(a), x = nadirX + sx * r, z = nadirZ + sz * r;
+                    if (!land(x, z)) continue;
+                    float ix = nadirX + sx * (r + Inland), iz = nadirZ + sz * (r + Inland);
+                    return r + Inland <= radius && land(ix, iz) ? (ix, iz, LookLand) : (x, z, LookLand);
+                }
+            return (nadirX, nadirZ, LookWater);
+        }
+
         /// <summary>The client's acquire sequence: a wide frame of the footprint, a slew into the look, then the resolve (seconds).</summary>
         public const float AcquireWide = 0.3f, AcquireSlew = 0.4f;
 

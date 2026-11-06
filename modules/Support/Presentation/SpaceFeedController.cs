@@ -57,6 +57,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private GlobalPosition sarTarget;
         private bool baselined;
 
+        // Why the look is where it is when nobody picked it (the burn-in says so); empty for a pick, a reveal, a STARE or a rod.
+        private string aimNote = "";
+
         // A fresh look (another bird or mode, a new pick) restarts the resolve counter and centres the pan.
         private int acquireKey;
         private float acquireAt;
@@ -379,6 +382,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.PostTexture = null;
             view.Refusal = "";
             view.HasLook = false;
+            view.LookNote = "";
             view.Strike = default;
             view.Brackets.Clear();
             for (int i = 0; i < view.Telemetry.Length; i++) view.Telemetry[i] = "";
@@ -412,7 +416,50 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 x += state.Contacts[i].X; z += state.Contacts[i].Z; n++;
             }
             if (n > 0) { aim = new GlobalPosition(x / n, 0f, z / n); return true; }
-            return TryNadir(bird, hq, now, out aim); // nothing picked yet: the bird looks straight down
+            return TryDefaultLook(bird, hq, now, out aim); // nothing picked yet: the ground under the bird
+        }
+
+        // The default look, cached per bird and parked point (a burn moves it): its search casts up to ~180 rays once.
+        private const float DefaultLookMove = 500f;
+        private BirdKind lookBird;
+        private float lookKeyX = float.NaN, lookKeyZ, lookX, lookZ;
+        private int lookKind;
+        private readonly float[] airX = new float[32], airZ = new float[32];
+        private static readonly Func<float, float, bool> IsLand = Land;
+
+        /// <summary>
+        /// Where a bird nobody pointed looks: the default slots sit over the theatre's inner sea, and a nadir over water images as a flat sheet. The
+        /// airbase nearest the nadir inside the footprint, else the nadir on land, else the nearest land (<see cref="SpaceFeedRules.DefaultLook"/>).
+        /// </summary>
+        private bool TryDefaultLook(BirdKind bird, FactionHQ hq, float now, out GlobalPosition aim)
+        {
+            if (!TryNadir(bird, hq, now, out GlobalPosition nadir)) { aim = default; return false; }
+            if (bird != lookBird || !(Mathf.Abs(nadir.x - lookKeyX) <= DefaultLookMove && Mathf.Abs(nadir.z - lookKeyZ) <= DefaultLookMove))
+            {
+                lookBird = bird; lookKeyX = nadir.x; lookKeyZ = nadir.z;
+                int n = 0;
+                if (FactionRegistry.airbaseLookup != null)
+                    foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+                    {
+                        if (n >= airX.Length || a == null || a.AttachedAirbase || a.UnitDestroyed()) continue;
+                        GlobalPosition p = (a.center != null ? a.center : a.transform).GlobalPosition();
+                        airX[n] = p.x; airZ[n] = p.z; n++;
+                    }
+                float radius = GeoSpace.Reach[(int)bird] * Fronts.FrontController.Frame().W;
+                (lookX, lookZ, lookKind) = SpaceFeedRules.DefaultLook(nadir.x, nadir.z, radius, airX, airZ, n, IsLand);
+            }
+            aimNote = lookKind == SpaceFeedRules.LookAirbase ? "NEAREST AIRBASE" : lookKind == SpaceFeedRules.LookLand ? "NEAREST LAND"
+                : lookKind == SpaceFeedRules.LookWater ? "NADIR · OPEN WATER" : "NADIR";
+            aim = new GlobalPosition(lookX, 0f, lookZ);
+            return true;
+        }
+
+        /// <summary>Ground above the sea where a ray from high above lands (the same static colliders the strikes' map point uses).</summary>
+        private static bool Land(float x, float z)
+        {
+            Vector3 local = new GlobalPosition(x, 0f, z).ToLocalPosition();
+            var origin = new Vector3(local.x, Datum.LocalSeaY + 8000f, local.z);
+            return Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 16000f, (int)PhysicsLayers.StaticsMask) && hit.point.y > Datum.LocalSeaY + 1f;
         }
 
         /// <summary>The ground point under one of our birds (its footprint centre), from the same geostationary slot the map draws.</summary>
@@ -450,9 +497,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool haveStrike = TryStrike(now, out ActiveStrikeInfo strike);
             GlobalPosition aim;
             bool aimed;
+            aimNote = "";
             if (!strikeView) aimed = TryAim(BirdKind.Optical, state, hq, now, out aim);
             else if (haveStrike) { aim = strike.Target; aimed = true; } // the newest own rod, held 8 s past its impact
-            else aimed = TryNadir(BirdKind.Kinetic, hq, now, out aim);
+            else aimed = TryDefaultLook(BirdKind.Kinetic, hq, now, out aim);
+            view.LookNote = aimNote;
             if (!aimed)
             {
                 view.Refusal = "NO CAMERA LOOK YET — FIRE SAT CAMERA AT THE MAP, OR WAIT FOR A REVEAL";

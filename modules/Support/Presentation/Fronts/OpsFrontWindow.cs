@@ -274,6 +274,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (Orbit == null) return;
             Orbit.EndPicks();
+            if (tabOf[(int)Front.Space] == OrbitRoom.DownlinkTab) Orbit.DownlinkOpened();
             if (lastView != null && lastView.Front == Front.Space) Orbit.Paint(lastView);
         }
 

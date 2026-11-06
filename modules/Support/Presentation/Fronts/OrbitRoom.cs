@@ -118,6 +118,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool dock = pane == docked;
             situation.Rect.gameObject.SetActive(dock); // the enlarged DOWNLINK lies over the map; the column tabs stay as they are
             enlarged.Box.Rect.gameObject.SetActive(!dock);
+            docked.Stub(!dock); // one live picture: the column's DOWNLINK stands down to "ON MAIN SCREEN · DOCK" meanwhile
             pane.Box.Tagged("INCO"); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
         }
 

@@ -95,6 +95,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             seenMode = f.Mode; seenSel = f.SelectedId; seenPkt = f.Packets;
         }
 
+        /// <summary>The DOWNLINK tab clicked by hand: a feed whose bird is not on station moves to the first one that is (a picture beats an empty panel).</summary>
+        internal void DownlinkOpened()
+        {
+            if (last == null || last.Feed == null || Feed == null) return;
+            int source = (int)last.Feed.Source;
+            if (source < last.Fleet.Count && last.Fleet[source].Up) return;
+            for (int k = 0; k < last.Fleet.Count; k++)
+                if (last.Fleet[k].Up) { Feed.SetSource((BirdKind)k); return; }
+        }
+
         /// <summary>A bird button: the map rings it too, and the feed switches to it (its own modes: EO for OPTICAL, SAR, STRIKE).</summary>
         private void PickBird(int kind)
         {
@@ -158,17 +168,18 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>One DOWNLINK pane (docked as the column tab, or enlarged over the map with its controls on a strip at the right).</summary>
         private sealed class DownlinkPane
         {
-            private const float Bar = 22f, HitHalf = 18f, Strip = 300f, CardH = 194f, LinkH = 58f, WellX = 124f, BlitEvery = 0.1f, SendEvery = 0.05f,
+            private const float Bar = 22f, HitHalf = 18f, Strip = 300f, Row = 28f, CardH = 240f, LinkH = 72f, WellX = 124f, BlitEvery = 0.1f, SendEvery = 0.05f,
                 ZoomStep = 1.35f, ZoomEase = 0.08f;
             private const int Coarse = 16, Bands = 8;
+            private static readonly string[] PktWords = new string[SpaceFeedRules.ResolvePackets + 1];
 
             private readonly OrbitRoom room;
             public readonly FrontBox Box;
             private readonly float pw, ph, cardX, cardY, cardW;
-            private readonly RectTransform pic, zoomer;
+            private readonly RectTransform body, stub, pic, zoomer;
             private readonly Image back;
             private readonly RawImage wideMap, baseImg, fineImg, insetMap;
-            private readonly FrontVector panel, standby, hud, fx;
+            private readonly FrontVector panel, standby, hud, fx, bar;
             private readonly FeedBracket[] boxes = new FeedBracket[SpaceFeedView.MaxBrackets];
             private readonly Vector2[] boxAt = new Vector2[SpaceFeedView.MaxBrackets];
             private readonly AvControl[] birds = new AvControl[3], modes = new AvControl[3];
@@ -179,7 +190,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             private readonly Rect inset;
 
             // What the layers show (Tick keeps it current every frame; Paint at the window's 5 Hz).
-            private int phase = 3, shownPkt = -1, fxPkt = -1, shownLink = -1;
+            private int phase = 3, shownPkt = -1, shownLink = -1, padsUp, barLink = -1, barPads = -1;
             private bool live, noBird, standbyDrawn, wasVisible, wideOk, zoomerFull = true;
             private float u0, v0, uw = 1f, vh = 1f, nextBlit, s0 = 1f;
             private Rect wideUv, zoomRect;
@@ -205,9 +216,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 this.room = room;
                 Box = new FrontBox(parent, room.skin, big ? "DownlinkBig" : "Downlink", 0f, 0f, w, h, "DOWNLINK · SENSOR STATION", AvIcon.Camera, FrontLook.Console).Tagged("INCO");
-                RectTransform b = Box.Rect;
+                // Everything lives in one body, so the docked pane can stand down to a stub while the enlarged one has the feed (one live picture at a time).
+                body = AvLay.Child(Box.Rect, "Body");
+                AvLay.Place(body, 0f, 0f, w, h);
+                RectTransform b = body;
                 pw = big ? w - 24f - Strip : w - 16f;
-                ph = big ? h - 36f : 460f;
+                ph = big ? h - 36f : 416f;
                 float px = 8f, py = big ? 28f : 88f, cx = big ? w - 8f - Strip : 8f, cw = big ? Strip : w - 16f;
                 panel = FrontVector.Add(b, "Panel");
                 AvLay.Place(panel.rectTransform, 0f, 0f, w, h);
@@ -232,7 +246,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     : FrontKit.Mono(b, "ZoomWord", zx, 58f, w - 8f - zx, 24f, 10.5f, TextAlignmentOptions.MidlineRight);
 
                 // The picture: ground, the wide frame's map, the zoomer (the coarse and the resolved layer), the test pattern, the inset, the burn-in layer,
-                // the boxes, the per-frame effects, the words. It clips everything it holds (the window's hit test does not clip: see PaintBoxes).
+                // the boxes, the per-frame effects, the packet bar (above the effects), the words. It clips everything it holds (the window's hit test does
+                // not clip: see PaintBoxes).
                 pic = AvLay.Child(b, "Picture");
                 AvLay.Place(pic, px, py, pw, ph);
                 pic.gameObject.AddComponent<RectMask2D>();
@@ -255,6 +270,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 hud = Vec(pic, "Hud", pw, ph);
                 for (int i = 0; i < boxes.Length; i++) boxes[i] = new FeedBracket(pic, i, id => room.Do(() => room.Feed.SelectEntry(id)));
                 fx = Vec(pic, "Fx", pw, ph);
+                bar = Vec(pic, "PacketBar", pw, ph);
                 tl = Line(pic, "Tl", 10.5f, true); tl2 = Line(pic, "Tl2", 10f, false);
                 tr = Line(pic, "Tr", 10.5f, true); tr2 = Line(pic, "Tr2", 10f, false);
                 bl = Line(pic, "Bl", 10.5f, true); bl2 = Line(pic, "Bl2", 10f, false);
@@ -266,45 +282,79 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 zCur = FrontKit.Mono(pic, "ZoomNow", 0f, 0f, 44f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
                 acqWord = FrontKit.Mono(pic, "Acquire", pw * 0.5f - 200f, 48f, 400f, 18f, 11.5f, TextAlignmentOptions.Midline, true, 2f);
                 strikeWord = FrontKit.Mono(pic, "Strike", 0f, 72f, 10f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
-                refusal = FrontKit.Mono(pic, "Refusal", 20f, ph * 0.5f - 12f, pw - 40f, 24f, 11.5f, TextAlignmentOptions.Midline, true);
+                refusal = Wrap(pic, "Refusal", 20f, ph * 0.5f - 24f, pw - 40f, 48f, 11.5f, TextAlignmentOptions.Center);
                 pktWord = FrontKit.Mono(pic, "Packets", 8f, ph - Bar + 2f, WellX - 12f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
                 linkWord = FrontKit.Mono(pic, "LinkWord", pw - 166f, ph - Bar + 2f, 160f, 18f, 10.5f, TextAlignmentOptions.MidlineRight);
 
-                // The lock card and the link, under the picture (docked) or on the strip (enlarged).
-                cardX = cx; cardY = big ? 206f : 556f; cardW = cw;
-                float cy = cardY;
+                // The lock card and the link, under the picture (docked) or on the strip (enlarged). Advice lines wrap to two lines rather than cut.
+                cardX = cx; cardY = big ? 206f : py + ph + 8f; cardW = cw;
+                float cy = cardY, tw = cw - 20f;
                 lockHead = FrontKit.Mono(b, "LockHead", cx + 10f, cy + 4f, cw * 0.5f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
                 lockAge = FrontKit.Mono(b, "LockAge", cx + cw * 0.4f, cy + 4f, cw * 0.6f - 10f, 18f, 10.5f, TextAlignmentOptions.MidlineRight);
-                lockWhat = FrontKit.Mono(b, "LockWhat", cx + 10f, cy + 26f, cw - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                lockThreat = FrontKit.Mono(b, "LockThreat", cx + 10f, cy + 44f, cw - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                lockStare = FrontKit.Mono(b, "LockStare", cx + 10f, cy + 62f, cw - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                send = Tool(b, "SEND TO TASKED", AvIcon.Target, cx + 8f, cy + 84f, cw - 16f, 40f, () => room.Do(() => room.Feed.SendToTasked()), "");
+                lockWhat = Wrap(b, "LockWhat", cx + 10f, cy + 24f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
+                lockThreat = Wrap(b, "LockThreat", cx + 10f, cy + 52f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
+                lockStare = Wrap(b, "LockStare", cx + 10f, cy + 80f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
+                send = Tool(b, "SEND TO TASKED", AvIcon.Target, cx + 8f, cy + 110f, cw - 16f, 40f, () => room.Do(() => room.Feed.SendToTasked()), "");
                 send.SetStyle(AvButtonStyle.Danger);
-                sendNote = FrontKit.Mono(b, "SendNote", cx + 10f, cy + 126f, cw - 20f, 14f, 10f, TextAlignmentOptions.Midline);
+                sendNote = Wrap(b, "SendNote", cx + 10f, cy + 152f, tw, 26f, 10f, TextAlignmentOptions.Top);
                 float hw = (cw - 24f) * 0.5f;
-                markSpot = Tool(b, "MARK SPOT", AvIcon.MapPin, cx + 8f, cy + 144f, hw, 24f, () => room.Do(() => room.Feed.Confirm()),
+                markSpot = Tool(b, "MARK SPOT", AvIcon.MapPin, cx + 8f, cy + 180f, hw, 24f, () => room.Do(() => room.Feed.Confirm()),
                     "MARK the locked target without posting it: it stays on every pilot's map as a fixed point after its reveal lapses.");
-                release = Tool(b, "RELEASE", AvIcon.LockOpen, cx + 16f + hw, cy + 144f, hw, 24f, () => room.Do(() => room.Feed.SelectEntry(0)), "Drop the lock: the camera stops following it.");
-                words = FrontKit.Mono(b, "Words", cx + 10f, cy + 172f, cw - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
+                release = Tool(b, "RELEASE", AvIcon.LockOpen, cx + 16f + hw, cy + 180f, hw, 24f, () => room.Do(() => room.Feed.SelectEntry(0)), "Drop the lock: the camera stops following it.");
+                words = Wrap(b, "Words", cx + 10f, cy + 208f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
                 float ly = cy + CardH + 8f;
                 TMP_Text linkHead = FrontKit.Mono(b, "LinkHead", cx + 10f, ly + 4f, cw * 0.3f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
                 linkHead.text = "LINK";
                 linkVal = FrontKit.Mono(b, "LinkVal", cx + cw * 0.25f, ly + 4f, cw * 0.75f - 10f, 18f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-                linkNote = FrontKit.Mono(b, "LinkNote", cx + 10f, ly + 38f, cw - 20f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
-                TMP_Text hint = big ? FrontKit.Mono(b, "Hint", cx + 2f, ly + LinkH + 10f, cw - 4f, 48f, 10.5f, TextAlignmentOptions.TopLeft)
-                    : FrontKit.Mono(b, "Hint", 8f, h - 30f, w - 16f, 16f, 10.5f, TextAlignmentOptions.Midline);
-                hint.enableWordWrapping = big;
+                linkNote = Wrap(b, "LinkNote", cx + 10f, ly + 38f, tw, Row, 10f, TextAlignmentOptions.TopLeft);
+                TMP_Text hint = big ? Wrap(b, "Hint", cx + 2f, ly + LinkH + 10f, cw - 4f, 48f, 10.5f, TextAlignmentOptions.TopLeft)
+                    : FrontKit.Mono(b, "Hint", 8f, h - 24f, w - 16f, 16f, 10.5f, TextAlignmentOptions.Midline);
                 hint.text = big ? "WHEEL ZOOM 1–16X · DRAG PANS INSIDE THE FOOTPRINT · CLICK A BOX LOCKS · DOCK OR ESC PUTS IT BACK IN THE COLUMN"
                     : "WHEEL ZOOM · DRAG PANS · CLICK A BOX LOCKS · ENLARGE FILLS THE ROOM";
+
+                // Docked only: the stub the column shows while the enlarged pane has the feed.
+                TMP_Text stubHead = null, stubLine = null;
+                if (!big)
+                {
+                    stub = AvLay.Child(Box.Rect, "Stub");
+                    AvLay.Place(stub, 0f, 0f, w, h);
+                    stubHead = FrontKit.Mono(stub, "StubHead", 16f, 40f, w - 32f, 20f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
+                    stubHead.text = "ON MAIN SCREEN · DOCK";
+                    stubLine = Wrap(stub, "StubLine", 16f, 64f, w - 32f, Row, 10.5f, TextAlignmentOptions.TopLeft);
+                    stubLine.text = "THE DOWNLINK FILLS THE ROOM OVER THE MAP · DOCK OR ESC BRINGS IT BACK HERE";
+                    Tool(stub, "DOCK", AvIcon.Minimize, 16f, 96f, 200f, 28f, room.ToggleCamera, "Dock the DOWNLINK back in the column (Esc does the same).");
+                    stub.gameObject.SetActive(false);
+                }
                 room.skin.Add(() =>
                 {
                     back.color = Mc.PlateInk;
                     hint.color = Mc.Steel; linkHead.color = Own; north.color = RoomInk.Engrave;
+                    if (stubHead != null) { stubHead.color = Own; stubLine.color = Mc.Steel; }
                     DrawPanel(Mathf.Max(1, shownLink));
                 });
             }
 
-            public bool Visible => Box.Rect.gameObject.activeInHierarchy;
+            /// <summary>On screen with its picture (a docked pane standing down to its stub is not: only one pane paints the feed).</summary>
+            public bool Visible => Box.Rect.gameObject.activeInHierarchy && body.gameObject.activeSelf;
+
+            /// <summary>Docked pane: the stub instead of the picture while the enlarged pane has the feed.</summary>
+            public void Stub(bool on)
+            {
+                if (stub == null) return;
+                if (body.gameObject.activeSelf == on) body.gameObject.SetActive(!on);
+                if (stub.gameObject.activeSelf != on) stub.gameObject.SetActive(on);
+            }
+
+            /// <summary>An advice line that wraps to its box (two lines) and steps down to the 10 px floor before it would spill: never cut.</summary>
+            private static TMP_Text Wrap(RectTransform p, string name, float x, float y, float w, float h, float size, TextAlignmentOptions align)
+            {
+                TMP_Text t = FrontKit.Mono(p, name, x, y, w, h, size, align);
+                t.enableWordWrapping = true;
+                t.enableAutoSizing = true;
+                t.fontSizeMin = AvTokens.FontMicro;
+                t.fontSizeMax = size;
+                return t;
+            }
 
             /// <summary>The picture's centre in screen pixels (the in-game GUI check aims its wheel and drag there).</summary>
             public Vector2 ScreenCentre => RectTransformUtility.WorldToScreenPoint(null, pic.TransformPoint(pic.rect.center));
@@ -416,9 +466,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 float k = 1f;
                 phase = live ? SpaceFeedRules.AcquirePhase(wall - room.acqAt, f.Link, Slow, out k) : 3;
                 bool changed = phase != was;
+                if (changed && phase == 0 && room.last != null)
+                {
+                    // A new sequence frames the footprint of the bird it is about now (a bird switch must not slew from the old one's).
+                    wideOk = FootView(room.last, f, pw, ph, out wideUv, out wideLook, out wideSize, out wideRadius);
+                    s0 = Mathf.Clamp(wideSize.x, 0.12f, 1f);
+                }
                 Texture src = live ? f.Image : null;
                 bool blit = force || changed || wall >= nextBlit;
                 if (blit) nextBlit = wall + BlitEvery;
+                // The resolve ends in the link's final block (ResolveBands): a weak link stays blockier by design (ruling D2), it never sharpens to 1 on its own.
                 // IR and LOW LIGHT come out of the post in the link's blocks already; EO, SAR and STRIKE get them here.
                 Texture end = src == null || src == f.PostTexture ? src : room.fine.Of(src, SpaceFeedRules.ResolveBands(f.Link), blit);
                 Texture start = src != null && phase < 3 ? room.coarse.Of(src, Coarse, blit) : null;
@@ -466,18 +523,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (room.last != null) PaintBoxes(f); // the boxes wait for the resolve
                 }
                 int pkt = !live || phase < 2 ? 0 : phase == 2 ? Mathf.RoundToInt(k * SpaceFeedRules.ResolvePackets) : f.Packets;
-                if (pkt != shownPkt) { shownPkt = pkt; FrontKit.Set(pktWord, "PKT " + pkt + " / " + f.PacketsTotal, pkt >= f.PacketsTotal ? Mc.Go : RoomInk.Engrave); }
-                if (phase < 3 || changed || pkt != fxPkt) DrawFx(f, k, pkt);
+                if (pkt != shownPkt) { shownPkt = pkt; FrontKit.Set(pktWord, PktWord(pkt, f.PacketsTotal), pkt >= f.PacketsTotal ? Mc.Go : RoomInk.Engrave); DrawBar(f); }
+                if (phase < 3 || changed) DrawFx(k);
             }
 
-            /// <summary>The effects layer: the packet bar's fill, and while the sequence runs the wide frame, the slew's streaks or the resolve's scan line.</summary>
-            private void DrawFx(SpaceFeedView f, float k, int pkt)
+            /// <summary>"PKT n / 256", built once per count (the counter runs every frame of a resolve).</summary>
+            private static string PktWord(int n, int total)
             {
-                fxPkt = pkt;
+                if (total != SpaceFeedRules.ResolvePackets || n < 0 || n > total) return "PKT " + n + " / " + total;
+                return PktWords[n] ??= "PKT " + n + " / " + total;
+            }
+
+            /// <summary>The effects layer while the sequence runs: the wide frame, the slew's streaks or the resolve's scan line (the packet bar draws above it).</summary>
+            private void DrawFx(float k)
+            {
                 fx.Clear();
-                float y = ph - Bar, frac = Mathf.Clamp01(pkt / (float)Mathf.Max(1, f.PacketsTotal));
-                if (frac > 0f) fx.Rect(WellX + 1f, y + 9f, (pw - WellX - 236f - 2f) * frac, 4f, frac >= 1f ? Mc.Go : Own);
-                if (live && phase <= 1) Wide(phase == 0 ? 1f : 1f - k, k);
+                if (live && phase <= 1 && wideOk) Wide(phase == 0 ? 1f : 1f - k, k);
                 if (live && phase == 1) Streaks(k);
                 if (live && phase == 2)
                 {
@@ -536,7 +597,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 SpaceFeedView f = v.Feed;
                 if (f == null) return;
-                // Birds on station. A feed whose bird is not up moves to one that is (a picture beats an empty panel).
+                // Birds on station (a feed whose bird is not up moves to one that is when the tab is opened: OrbitRoom.DownlinkOpened, never from a paint).
                 int firstUp = -1;
                 bool sourceUp = false;
                 for (int k = 0; k < birds.Length; k++)
@@ -550,8 +611,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     Help(birds[k], up ? "Show " + name + "'s picture (" + C2Orbit.BirdName((BirdKind)k) + ")." : name + " is not on station: launch it on SATELLITES.");
                 }
                 noBird = firstUp < 0;
-                if (!sourceUp && firstUp >= 0) room.Feed?.SetSource((BirdKind)firstUp);
-                who = FrontViews.BirdCallsign((int)f.Source);
+                who =FrontViews.BirdCallsign((int)f.Source);
 
                 DownlinkMode[] list = f.Source == BirdKind.Radar ? RadarModes : f.Source == BirdKind.Kinetic ? KineticModes : OpticalModes;
                 for (int i = 0; i < modes.Length; i++)
@@ -571,7 +631,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
                 live = !noBird && HasPicture(f);
                 string why = noBird ? "NO BIRD ON STATION · LAUNCH ONE ON SATELLITES" : live ? "" : f.Refusal.Length > 0 ? f.Refusal : "NO PICTURE YET · STAND BY";
-                FrontKit.Set(refusal, why.Length > 0 ? FrontKit.Fit(refusal, why, 11.5f) : "", noBird ? Mc.Steel : FrontKit.Tone(AvState.Caution));
+                FrontKit.Set(refusal, why, noBird ? Mc.Steel : FrontKit.Tone(AvState.Caution));
                 DrawStandby(!live);
                 Crop(f);
                 float zoom = easing ? zoomShown : f.Zoom;
@@ -596,8 +656,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 PaintBoxes(f);
                 hud.Clear();
                 PaintBurn(v, f);
-                bool on2 = live;
-                if (north.gameObject.activeSelf != on2) north.gameObject.SetActive(on2);
+                if (north.gameObject.activeSelf != live) north.gameObject.SetActive(live);
                 if (live)
                 {
                     Crosshair(f);
@@ -608,8 +667,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else { zTop.text = ""; zBot.text = ""; zCur.text = ""; }
                 Strike(f);
                 if (insetOk) Inset(il, isz, ir);
-                PacketBar(v, f);
                 hud.Flush();
+                padsUp = v.PadsUp;
+                DrawBar(f);
                 PaintLink(v, f);
                 Animate(f, Time.unscaledTime, true);
             }
@@ -699,7 +759,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 }
                 float yb = ph - Bar - 40f;
                 Burn(bl, "LOOK " + Km(f.LookKm) + " × " + Km(f.LookKm / Mathf.Max(0.1f, f.ImageAspect)) + " KM", ink, 8f, yb, 10.5f, false);
-                Burn(bl2, "GRID " + grid, dim, 8f, yb + 18f, 10f, false);
+                Burn(bl2, "GRID " + grid + (string.IsNullOrEmpty(f.LookNote) ? "" : " · " + f.LookNote), dim, 8f, yb + 18f, 10f, false); // why the look sits there when nobody pointed it
                 Burn(br, f.Telemetry[3], ink, pw - 8f, yb, 10.5f, true);
                 Burn(br2, f.Telemetry[4], dim, pw - 8f, yb + 18f, 10f, true);
             }
@@ -796,7 +856,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (!live || f.Mode != DownlinkMode.Strike) { if (strikeWord.text.Length > 0) strikeWord.text = ""; return; }
                 FeedStrikeView s = f.Strike;
                 Color red = Mc.NoGo;
-                string word = !s.Has ? "NO ROD IN FLIGHT · WATCHING THE KINETIC NADIR" : s.Held ? "HOLD · IMPACT" : "ROD INBOUND · IMPACT IN " + FrontKit.Clock(s.Eta);
+                string word = !s.Has ? "NO ROD IN FLIGHT · WATCHING THE FOOTPRINT" : s.Held ? "HOLD · IMPACT" : "ROD INBOUND · IMPACT IN " + FrontKit.Clock(s.Eta);
                 if (s.Has && s.OnPicture && SpaceFeedRules.CropPoint(s.U, s.V, u0, v0, uw, vh, out float ax, out float ay))
                 {
                     Vector2 c = new Vector2(ax * pw, (1f - ay) * ph);
@@ -837,19 +897,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 hud.Frame(lp.x - lw * 0.5f, lp.y - lh * 0.5f, lw, lh, 1.5f, amber);
             }
 
-            private void PacketBar(FrontRoomView v, SpaceFeedView f)
+            /// <summary>The packet bar on its own layer above the effects (the wide frame and the streaks never run over it): well, fill, link meter, words.</summary>
+            private void DrawBar(SpaceFeedView f)
             {
-                float y = ph - Bar, ww = pw - WellX - 236f, sx = pw - 228f;
-                hud.Rect(0f, y, pw, Bar, RoomInk.Plate.WithAlpha(0.9f));
-                hud.Rect(0f, y, pw, 1f, RoomInk.Bezel.WithAlpha(0.8f));
-                hud.Rect(WellX, y + 8f, ww, 6f, Mc.PlateInk);
-                hud.Frame(WellX, y + 8f, ww, 6f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
+                float y = ph - Bar, ww = pw - WellX - 236f, sx = pw - 228f, frac = Mathf.Clamp01(Mathf.Max(0, shownPkt) / (float)Mathf.Max(1, f.PacketsTotal));
+                bar.Clear();
+                bar.Rect(0f, y, pw, Bar, RoomInk.Plate.WithAlpha(0.9f));
+                bar.Rect(0f, y, pw, 1f, RoomInk.Bezel.WithAlpha(0.8f));
+                bar.Rect(WellX, y + 8f, ww, 6f, Mc.PlateInk);
+                bar.Frame(WellX, y + 8f, ww, 6f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
+                if (frac > 0f) bar.Rect(WellX + 1f, y + 9f, (ww - 2f) * frac, 4f, frac >= 1f ? Mc.Go : Own);
                 for (int i = 0; i < 5; i++)
                 {
-                    hud.Rect(sx + i * 12f, y + 7f, 10f, 8f, i < f.Link ? LinkInk(f.Link) : Mc.PlateInk);
-                    hud.Frame(sx + i * 12f, y + 7f, 10f, 8f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
+                    bar.Rect(sx + i * 12f, y + 7f, 10f, 8f, i < f.Link ? LinkInk(f.Link) : Mc.PlateInk);
+                    bar.Frame(sx + i * 12f, y + 7f, 10f, 8f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
                 }
-                FrontKit.Set(linkWord, "LINK " + f.Link + "/5 · PADS " + v.PadsUp + "/" + FrontRules.PadCap, LinkInk(f.Link));
+                bar.Flush();
+                if (f.Link != barLink || padsUp != barPads)
+                {
+                    barLink = f.Link; barPads = padsUp;
+                    FrontKit.Set(linkWord, "LINK " + f.Link + "/5 · PADS " + padsUp + "/" + FrontRules.PadCap, LinkInk(f.Link));
+                }
             }
 
             private void PaintLock(FrontRoomView v, SpaceFeedView f)
@@ -884,28 +952,28 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (f.SendCount > 0) stare = f.SendCount + (f.SendCount == 1 ? " MARK HELD" : " MARKS HELD") + " · SEND TO TASKED POSTS " + (f.SendCount == 1 ? "IT" : "THEM");
                 }
                 FrontKit.Set(lockAge, age, steel);
-                FrontKit.Set(lockWhat, FrontKit.Fit(lockWhat, what, 10.5f), whatInk);
-                FrontKit.Set(lockThreat, FrontKit.Fit(lockThreat, threat, 10.5f), RoomInk.Telemetry);
-                FrontKit.Set(lockStare, FrontKit.Fit(lockStare, stare, 10.5f), stareInk);
+                FrontKit.Set(lockWhat, what, whatInk); // advice rows wrap to two lines, never cut
+                FrontKit.Set(lockThreat, threat, RoomInk.Telemetry);
+                FrontKit.Set(lockStare, stare, stareInk);
                 bool chain = b.Has && !b.Marked && !b.FixedPoint;
                 OpsKit.Enable(send, f.CanConfirm || f.CanSend);
                 Help(send, chain ? "One press: MARK the lock, then post it to TASKED as a strike any pilot can claim." : f.CanSend ? f.SendHelp : f.ConfirmHelp);
-                string note = chain ? "ONE PRESS: MARK IT, THEN A STRIKE POST ANY PILOT CAN CLAIM"
+                string note = chain ? "ONE PRESS: MARK IT, THEN POST A STRIKE ANY PILOT CAN CLAIM"
                     : f.CanSend ? "POSTS " + f.SendCount + (f.SendCount == 1 ? " MARK" : " MARKS") + " AS ONE STRIKE ANY PILOT CAN CLAIM" : "LOCK A BOX FIRST";
-                FrontKit.Set(sendNote, FrontKit.Fit(sendNote, note, 10f), f.CanConfirm || f.CanSend ? RoomInk.Engrave : steel);
+                FrontKit.Set(sendNote, note, f.CanConfirm || f.CanSend ? RoomInk.Engrave : steel);
                 OpsKit.Label(markSpot, f.ConfirmFull ? "MARKS FULL" : "MARK SPOT");
                 OpsKit.Enable(markSpot, f.CanConfirm);
                 OpsKit.Enable(release, f.SelectedId > 0);
-                FrontKit.Set(words, FrontKit.Fit(words, f.Words ?? "", 10.5f), FrontKit.Tone(f.WordsTone));
+                FrontKit.Set(words, f.Words ?? "", FrontKit.Tone(f.WordsTone));
             }
 
             private void PaintLink(FrontRoomView v, SpaceFeedView f)
             {
                 if (f.Link != shownLink) { shownLink = f.Link; DrawPanel(shownLink); }
                 FrontKit.Set(linkVal, "QUALITY " + f.Link + " / 5 · PADS " + v.PadsUp + " / " + FrontRules.PadCap + " UP", LinkInk(f.Link));
-                string note = f.Link >= 5 ? "TWO PADS: THE FASTEST, SHARPEST PICTURE" : v.PadsUp >= 1 ? "ONE PAD: SLOWER, BLOCKIER PICTURE · A SECOND PAD SHARPENS IT"
-                    : "NO PAD: THE SLOWEST, BLOCKIEST PICTURE";
-                FrontKit.Set(linkNote, FrontKit.Fit(linkNote, note, 10f), Mc.Steel);
+                string note = f.Link >= 5 ? "2 PADS: FASTEST, SHARPEST PICTURE" : v.PadsUp >= 1 ? "1 PAD: SLOWER, BLOCKIER · 2ND PAD SHARPENS"
+                    : "NO PAD: SLOWEST, BLOCKIEST PICTURE";
+                FrontKit.Set(linkNote, note, Mc.Steel);
             }
 
             /// <summary>The lock card's and the link's slabs, and the link's five segments.</summary>
