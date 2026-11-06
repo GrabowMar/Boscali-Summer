@@ -114,6 +114,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     feed.SetMode((DownlinkMode)Mathf.Clamp((int)Number(args, "mode", 0f), 0, (int)DownlinkMode.Strike));
                     if (Has(args, "zoom")) feed.SetZoom(Number(args, "zoom", 1f));
                     if (Has(args, "slow")) OrbitRoom.AcquireSlow = Number(args, "slow", 1f); // the acquire sequence this many times longer (1..20), so a capture lands inside a step
+                    string pick = Text(args, "select"); // lock the faction's first MARK or reveal, as a click on its box would
+                    var sm = m.SpaceMirror.State;
+                    if (pick == "mark" && sm.Marks.Count > 0) feed.SelectEntry(sm.Marks[0].Id);
+                    else if (pick == "contact" && sm.Contacts.Count > 0) feed.SelectEntry(sm.Contacts[0].Id);
                     request = -1;
                     break;
 #endif

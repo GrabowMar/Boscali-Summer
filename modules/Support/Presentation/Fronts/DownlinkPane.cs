@@ -869,7 +869,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     }
                     FrontKit.Set(lockHead, (b.FixedPoint ? "MARK · " : "LOCK · ") + C2Orbit.TrackId(b.Id), b.FixedPoint ? RoomInk.Telemetry : red);
                     age = b.FixedPoint ? "HELD " + FrontKit.Clock(Mathf.Max(0f, b.Left)) + " MORE" : "REVEALED " + FrontKit.Clock(Mathf.Max(0f, SpaceContacts.RevealSeconds - b.Left)) + " AGO";
-                    what = b.Title + (b.Percent > 0 && b.Percent <= 100 ? " " + b.Percent + " %" : "") + (b.Moving ? " · MOVING" : "") + (b.Marked ? " · MARKED" : "") + " · GRID " + b.Grid;
+                    what = b.Title + (b.Percent > 0 && b.Percent <= 100 ? " " + b.Percent + " %" : "") + (b.Moving ? " · MOVING" : "") + (b.Marked && !b.FixedPoint ? " · MARKED" : "") + " · GRID " + b.Grid;
                     whatInk = b.FixedPoint ? RoomInk.Engrave : FeedInk.Class(b.Class);
                     threat = Nearest(v, b.X, b.Z, out string name, out float km)
                         ? (b.Class == ProbableClass.Friendly ? "NEAR " : "THREATENS ") + name + " · " + Km(km) + " KM" : "NO HELD AIRBASE ON THE MAP";
