@@ -11,10 +11,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public byte BirdsUp;
         public int DataCentersLive, TrucksLive, CampsLive, Teams;
         public bool HasHeldBuilding, FobUp;
-        // retired with OPS organic fronts Task 8
-        public int BirdsDown;
-        // retired with OPS organic fronts Task 8
-        public int Uplinks, UplinkMax, DataCenters, DataCenterMax, Trucks, TruckMax, Camps, CampMax;
     }
 
     internal enum DonateStatus : byte { Ok, NotQueued, InvalidAmount }
@@ -137,9 +133,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         public DonateResult Donate(Front f, ushort row, float amount) => Donate(Find(sides[(int)f], row), amount);
 
-        // compat for FrontService until Task 8 moves it to rows: donates to the first row of that programme
-        public DonateResult Donate(Front f, ProgrammeId id, float amount) => Donate(Find(sides[(int)f], id), amount);
-
         private static DonateResult Donate(FrontProgrammeEntry e, float amount)
         {
             if (!float.IsFinite(amount) || amount <= 0f) return new DonateResult(DonateStatus.InvalidAmount, 0f);
@@ -151,14 +144,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
 
         // ---- Queue ----------------------------------------------------------------------------
 
-        /// <summary>Why the programme cannot be queued now ("" when it can). Every refusal names its fix.</summary>
-        public string Refusal(Front f, ProgrammeId id, in FrontWorld w) => FrontWords.Refusal(RefusalCode(f, id, w), f);
-
-        /// <summary>The same verdict as a wire code (None when the programme can be queued).</summary>
-        public FrontOutcome RefusalCode(Front f, ProgrammeId id, in FrontWorld w)
+        /// <summary>The book's verdict on queueing this build now, as a wire code (None when <see cref="Enqueue"/> would take it): queue room, the ladder, the satellite kind.</summary>
+        public FrontOutcome RefusalCode(Front f, ProgrammeId id, byte kind, in FrontWorld w)
         {
             if (sides[(int)f].Queue.Count >= FrontRules.MaxQueue) return FrontOutcome.QueueFull;
-            return FrontLadder.Check(f, id, 0, w, Queued(f));
+            FrontOutcome r = FrontLadder.Check(f, id, kind, w, Queued(f));
+            return r == FrontOutcome.None && id == ProgrammeId.LaunchSatellite && kind > 2 ? FrontOutcome.KindUp : r;
         }
 
         /// <summary>What this side already has queued (started or not), as the ladder counts it.</summary>
@@ -187,11 +178,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// <summary>Queues a programme (None) or says why not. <paramref name="human"/> restarts the quartermaster's idle clock.</summary>
         public FrontOutcome Enqueue(Front f, ProgrammeId id, byte kind, bool hasPoint, float x, float z, byte owner, bool human, in FrontWorld w, float now)
         {
-            FrontSide s = sides[(int)f];
-            if (s.Queue.Count >= FrontRules.MaxQueue) return FrontOutcome.QueueFull;
-            FrontOutcome r = FrontLadder.Check(f, id, kind, w, Queued(f));
-            if (r == FrontOutcome.None && id == ProgrammeId.LaunchSatellite && kind > 2) r = FrontOutcome.KindUp;
+            FrontOutcome r = RefusalCode(f, id, kind, w);
             if (r != FrontOutcome.None) return r;
+            FrontSide s = sides[(int)f];
             s.Queue.Add(new FrontProgrammeEntry
             {
                 Id = id, Cost = FrontRules.Cost(id, CostScale), Build = FrontRules.BuildSeconds(id), Row = nextRow, Kind = kind, Owner = owner,
@@ -201,14 +190,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             if (human) LastHumanQueue[(int)f] = now;
             AddLog(s, FrontLogCode.Queued, (int)id, 0, now);
             return FrontOutcome.None;
-        }
-
-        /// <summary>AI / test entry: no placement, faction pool, not a human.</summary>
-        public bool Queue(Front f, ProgrammeId id, in FrontWorld w, float now, out string reason)
-        {
-            FrontOutcome r = Enqueue(f, id, 0, false, 0f, 0f, 0, false, w, now);
-            reason = r == FrontOutcome.None ? "" : FrontWords.Refusal(r, f);
-            return r == FrontOutcome.None;
         }
 
         /// <summary>Human factions: the quartermaster steps in only after a quiet spell with an empty queue. AI factions: whenever the queue is empty.</summary>
@@ -371,12 +352,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         private static FrontProgrammeEntry Find(FrontSide s, ushort row)
         {
             for (int i = 0; i < s.Queue.Count; i++) if (s.Queue[i].Row == row) return s.Queue[i];
-            return null;
-        }
-
-        private static FrontProgrammeEntry Find(FrontSide s, ProgrammeId id)
-        {
-            for (int i = 0; i < s.Queue.Count; i++) if (s.Queue[i].Id == id) return s.Queue[i];
             return null;
         }
 

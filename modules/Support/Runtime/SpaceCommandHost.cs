@@ -131,7 +131,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontQueue:
                 case SpaceCommandKind.FrontDonate:
                 case SpaceCommandKind.RelocateBird:
-                case SpaceCommandKind.TruckMove: // Task 8 routes the host action; until then FrontService answers Unavailable
+                case SpaceCommandKind.TruckMove: // FrontService hands it to CYBER (MoveTruck) and replies the FrontOutcome
                     // The faction comes from the transport, never from the message; a lock names who holds it in the claimant slot.
                     FrontResult fronted = ports.Front(player, c);
                     return new SpaceReply(protocol, c.Kind, c.RequestId, (byte)fronted.Outcome, 0, fronted.Charged, fronted.Detail, false, SpaceWire.Clean(fronted.By, SpaceReply.MaxClaimant));

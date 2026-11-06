@@ -45,6 +45,9 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 .Number(14, settings.PerkPriceScale, "PERK PRICES",
                     "Scales every perk price in allocation. 1.0 charges the rung table (4 / 6 / 10 / 16 / 30).",
                     0.05f, v => v.ToString("0.00") + "x")
+                .Number(25, settings.FrontSeed, "FRONT SEED",
+                    "Funds each front starts a mission with. 500 pays a first pad and satellite.",
+                    50f, v => v.ToString("0") + " FUNDS")
                 .Number(22, settings.FrontShare, "FRONT SHARE",
                     "The share of each faction's funds that flows into its three fronts every minute. 0 % leaves fronts to donations only.",
                     0.005f, v => AvNum.Percent(v, 1))
