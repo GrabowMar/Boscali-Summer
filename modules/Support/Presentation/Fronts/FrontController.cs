@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private static readonly string[] Resting =
         {
             "BUILD PAD > click a held airbase. LAUNCH a satellite on its card. FEED › or a click on a bird opens its DOWNLINK: click a box, then SEND TO TASKED. Esc closes.",
-            "Click a node in reach > HOP. Hold it to blind the SAMs, or BURN it for a strike package. PURGE clears intruders. Esc closes.",
+            "BUILD DATA CENTER > click a held airbase. DEPLOY TRUCK > click near it. On NODES: a node in reach > HOP, then hold it or BURN it. Esc closes.",
             "Pick a team > pick a target (or click the map for RECON) > click a mission to send it. SWEEP hunts intruders. Esc closes.",
         };
 

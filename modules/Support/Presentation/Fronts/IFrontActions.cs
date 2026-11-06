@@ -69,5 +69,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         bool Tick(UnityEngine.Vector2 mouse);
         /// <summary>Esc: ends a local mode the room is in (a relocation proposal) and returns true, so the window stays open; false when there is nothing to end.</summary>
         bool CancelMode();
+        /// <summary>The window closed, switched rooms or left the room's first tab: every armed map pick ends (nothing was sent).</summary>
+        void EndPicks();
     }
 }

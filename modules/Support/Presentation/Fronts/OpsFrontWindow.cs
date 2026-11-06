@@ -97,7 +97,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // Front switch in the title bar: the domain and its room, so the two names stay connected.
             string[] names = { "SPACE · ORBIT", "CYBER · NETWORK", "SOF · SHADOW" };
             string[] help = { "The SPACE front's room: satellites, ground tracks and the live camera.",
-                "The CYBER front's room: the enemy node graph, your intrusion's trace, a node inspector, node list and session log.", "The SOF front's room: teams, camps and the infiltration map." };
+                "The CYBER front's room: your data centers and EW trucks, the enemy node graph and the nodes you hop.", "The SOF front's room: teams, camps and the infiltration map." };
             float tw = 150f, tabX = (WindowWidth - (3f * tw + 12f)) * 0.5f, tabEnd = tabX + 3f * tw + 12f;
             // The front's callsign header sits right of the switch: net callsign, readiness rung and superiority band.
             headRight = FrontKit.Mono(r, "HeadRight", tabEnd + 16f, 0f, WindowWidth - 44f - tabEnd - 16f, TitleH, 11f, TextAlignmentOptions.MidlineRight, true, 1f);
@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
                 int room = i;
-                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); if (room == (int)Front.Space && k != 0) LeaveSatellites(); });
+                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); if (k != 0) LeaveFirstTab(room); });
                 bars[i].SetAccent(i == (int)Front.Space ? RoomInk.Ice : i == (int)Front.Cyber ? RoomInk.Phosphor : RoomInk.Gold);
                 bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
                 skin.Add(bars[i].Restyle);
@@ -202,7 +202,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 columnRoots[i].gameObject.SetActive(i == front);
                 bars[i].Rect.gameObject.SetActive(i == front);
             }
-            if (shownFront != front) { shownFront = front; Orbit?.EndPicks(); ShowTab(front, tabOf[front]); } // a SPACE map pick never waits behind another room
+            if (shownFront != front) { shownFront = front; EndPicks(); ShowTab(front, tabOf[front]); } // a map pick never waits behind another room
             rail.Paint(v);
             rooms[front]?.Paint(v);
             int want = rooms[front] != null ? rooms[front].TakeTab() : -1;
@@ -269,18 +269,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
         internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && (tabOf[shownFront] == OrbitRoom.DownlinkTab || Orbit.Enlarged);
 
-        /// <summary>A hand click on DOWNLINK or FRONT: an armed SPACE map pick ends like it does for FEED › (it would wait off screen), and the map drops its rings now.</summary>
-        private void LeaveSatellites()
+        /// <summary>A hand click on a room's later tab: an armed map pick of its first tab ends (it would wait off screen) and the map drops its rings now.</summary>
+        private void LeaveFirstTab(int room)
         {
-            if (Orbit == null) return;
-            Orbit.EndPicks();
-            if (tabOf[(int)Front.Space] == OrbitRoom.DownlinkTab) Orbit.DownlinkOpened();
-            if (lastView != null && lastView.Front == Front.Space) Orbit.Paint(lastView);
+            rooms[room].EndPicks();
+            if (room == (int)Front.Space && Orbit != null && tabOf[room] == OrbitRoom.DownlinkTab) Orbit.DownlinkOpened();
+            if (lastView != null && (int)lastView.Front == room) rooms[room].Paint(lastView);
         }
+
+        private void EndPicks() { foreach (IFrontRoom room in rooms) room?.EndPicks(); }
 
         private void OnWindowClosed()
         {
-            Orbit?.EndPicks(); // a reopened window starts with no pick armed
+            EndPicks(); // a reopened window starts with no pick armed
             Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);

@@ -1000,6 +1000,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public bool CancelMode() => false; // a draft lives on the view, Esc closes as before
 
+        public void EndPicks() { } // no map pick here (a RECON draft is a plain click)
+
         public bool Tick(Vector2 mouse)
         {
             bool changed = plate.Tick(mouse);

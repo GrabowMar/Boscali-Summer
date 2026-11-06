@@ -256,12 +256,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontKit.Set(budgetValue, wait ? "—" : r.Budget + " FUNDS", wait ? AvInk.Dim : AvInk.Ink);
             FrontKit.Set(allocValue, v.Allocation + " AP", AvInk.Ink);
 
-            // SPACE's standing orders live on its SATELLITES tab: the rail drops STRATEGY there and lifts the boxes under it (phase E finishes FRONT for every room).
-            bool space = front == Front.Space;
-            if (directive.Rect.gameObject.activeSelf == space)
+            // SPACE's and CYBER's standing orders live on their first tab: the rail drops STRATEGY there and lifts the boxes under it (phase E finishes FRONT for every room).
+            bool moved = front != Front.Sof;
+            if (directive.Rect.gameObject.activeSelf == moved)
             {
-                directive.Rect.gameObject.SetActive(!space);
-                float lift = space ? DirectiveH + Gap : 0f;
+                directive.Rect.gameObject.SetActive(!moved);
+                float lift = moved ? DirectiveH + Gap : 0f;
                 AvLay.Place(programmes.Rect, railX, programmesY - lift, w, programmesH);
                 AvLay.Place(perks.Rect, railX, perksY - lift, w, perksH);
             }

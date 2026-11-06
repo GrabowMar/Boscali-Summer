@@ -263,7 +263,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>The window closed, switched rooms or the column jumped to DOWNLINK: both map picks end (nothing was sent).</summary>
-        internal void EndPicks() { padPick = false; padMiss = false; relocating = false; hasPending = false; }
+        public void EndPicks() { padPick = false; padMiss = false; relocating = false; hasPending = false; }
 
         public bool CancelMode()
         {

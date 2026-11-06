@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using NOAvionics;
 using TMPro;
@@ -11,16 +12,20 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
     /// <summary>
-    /// The CYBER front's room (R4, an Uplink-style intrusion terminal). Top: the theatre node graph under a BOUNCE CHAIN strip (your route as
-    /// linked chips, the trace crawling back along it), beside YOUR session (trace dial, hop countdown, held pips, the faction's network, INFOCON,
-    /// key). Bottom: the selected node's inspector as a remote-host login (HOP / BURN / DROP) and the node list as an `ls -l` (no session log:
-    /// the window footer carries the latest answer). Paints from <see cref="NetworkRoomView"/> only; every flavour line (addresses, banners, permission bits, hex dump) is
-    /// derived from existing fields and never read as data.
+    /// The CYBER front's room (R4, an Uplink-style intrusion terminal). The map is the theatre node graph under a BOUNCE CHAIN strip (your route as linked
+    /// chips, the trace crawling back along it): every node is a hex, ours (data centers, EW trucks) cyan with their reach rings, queued ones as dashed ghosts
+    /// with their timers, a breach into one of ours flagged. The column has two tabs: INFRASTRUCTURE (data centers, trucks, standing orders:
+    /// NetworkInfraPanel.cs) and NODES (the node list as an `ls -l` with the picked node's inspector under it: HOP / BURN / DROP / PURGE). Three local map
+    /// picks, one at a time: BUILD DATA CENTER (within 8 km of a held land airbase), DEPLOY TRUCK (within 20 km of a standing or queued data center) and
+    /// RELOCATE (within 20 km of a standing data center); a miss says why and stays armed, Esc ends it, and no node takes a click meanwhile. Paints from
+    /// <see cref="NetworkRoomView"/> only; every flavour line (addresses, banners, permission bits) is derived from existing fields and never read as data.
     /// </summary>
-    internal sealed class NetworkRoom : IFrontRoom
+    internal sealed partial class NetworkRoom : IFrontRoom
     {
-        private const float PurgeW = 96f, TopH = 540f, Gap = 8f, LinkKm = 12f, InspW = 540f, RowH = 24f, ListY = 42f, StripH = 34f, Adv = 6.3f;
-        private const int Cols = 12, Rows = 8, MaxNodes = 16, MaxAnchors = 4, MaxHops = 3, ListRows = 12, MaxChips = 8, DosRows = 6;
+        private const float TopH = 540f, LinkKm = 12f, RowH = 24f, ListY = 42f, StripH = 34f, Adv = 6.3f, InspY = 350f, DragSlop = 6f, FootX = 560f, FootRight = 190f;
+        private const int Cols = 12, Rows = 8, MaxHops = 3, ListRows = 12, MaxChips = 8, DosRows = 6;
+        /// <summary>Enemy nodes then our own anchors; then the ghost points (queued builds and a relocating truck's destination) share the spread.</summary>
+        private const int MaxNodes = CyberWire.MaxNodes + CyberWire.MaxAnchors, MaxGhosts = FrontRules.MaxQueue + 1, MaxPts = MaxNodes + MaxGhosts;
         private static readonly string[] KindName = { "RADAR", "SAM C2", "RELAY", "UPLINK", "DATA CENTER" };
 
         // The terminal's own fixed inks (a different console in a different room: they sit on top of the pilot's scheme). Keep text on them at 4.5:1 over the glass.
@@ -31,19 +36,39 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private readonly IFrontActions actions;
         private readonly FrontSkin skin;
-        private float heroW, colX, colW;
+        private float heroW;
         private FrontMapPlate plate;
 
         private FrontBox graph, inspector, list;
-        private FrontVector side, routeVec, inspGlyph, listGlyph;
+        private FrontVector routeVec, inspGlyph, listGlyph;
         private FrontMap.AirbaseLayer airbases;
-        private readonly TMP_Text[] nodeLabels = new TMP_Text[MaxNodes], anchorLabels = new TMP_Text[MaxAnchors], hopLabels = new TMP_Text[MaxHops];
+        private readonly TMP_Text[] nodeLabels = new TMP_Text[MaxNodes], hopLabels = new TMP_Text[MaxHops], ghostLabels = new TMP_Text[MaxGhosts];
+        private TMP_Text footLabel;
         private readonly Image[] nodeHits = new Image[MaxNodes];
         private readonly int[] hitIds = new int[MaxNodes];
-        // Node screen points for one paint: true map points, and the drawn ones (installations sharing a spot fanned apart) with their cluster.
-        private readonly Vector2[] nodeTrue = new Vector2[MaxNodes], nodeAt = new Vector2[MaxNodes];
-        private readonly int[] nodeCluster = new int[MaxNodes];
+        // Screen points for one paint (nodes, then ghosts): true map points, and the drawn ones (things sharing a spot fanned apart) with their cluster.
+        private readonly Vector2[] nodeTrue = new Vector2[MaxPts], nodeAt = new Vector2[MaxPts];
+        private readonly int[] nodeCluster = new int[MaxPts];
         private const float StackGap = 22f;
+        // The ghost points of one paint: queued builds with a point, and a packing truck's destination (room memory).
+        private readonly Vector2[] ghostUv = new Vector2[MaxGhosts], ghostFrom = new Vector2[MaxGhosts];
+        private readonly string[] ghostWord = new string[MaxGhosts];
+        private readonly byte[] ghostKind = new byte[MaxGhosts];
+
+        // The three local map picks (one at a time) and what a miss said; the room's own pick of one of our anchors (a negative node id, never sent).
+        private enum PickMode : byte { None, Center, Truck, Relocate }
+        private PickMode pick;
+        private string pickMiss = "";
+        private int moveTruck = -1, selOwn;
+        private FrontRoomView last;
+        private readonly List<Vector2> rings = new List<Vector2>(FrontRoomView.MaxAirbases);
+        // A map pick is a press and a release that stay together: a pan, a zoom or a drag in between places nothing.
+        private bool pressed;
+        private Vector2 pressAt, pressCenter;
+        private int pressZoom;
+        // RELOCATE memory per truck slot (the mirror says only PACKING): when this room first saw it packing, when it sent the move and where to.
+        private readonly float[] packSince = { -1f, -1f, -1f, -1f }, movedAt = { -100f, -100f, -100f, -100f };
+        private readonly Vector2[] packTo = new Vector2[4];
 
         // The bounce chain strip over the top of the graph.
         private readonly TMP_Text[] chipText = new TMP_Text[MaxChips];
@@ -55,12 +80,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int chipCount, chainAnchor;
         private bool chainPreview;
 
-        // Session column (right of the map).
-        private TMP_Text traceHead, opTag, traceValue, traceWord, traceLo, traceHi, hopLine, estLine, nextLine, heldHead, heldVal, facHead, threatHead, threatWord, threatNote, keyHead;
-        private readonly TMP_Text[] facKey = new TMP_Text[4], facVal = new TMP_Text[4], infocon = new TMP_Text[5], keyText = new TMP_Text[6];
-        private FrontBar hopBar;
-
-        // Inspector.
+        // Inspector (under the node list on NODES until that tab is rebuilt).
         private TMP_Text dosTitle, dosHandle, dosStamp, dosNext, bannerA, bannerB;
         private readonly TMP_Text[] dosKey = new TMP_Text[DosRows], dosVal = new TMP_Text[DosRows];
         private readonly float[] dosTop = new float[DosRows], dosHigh = new float[DosRows];
@@ -98,35 +118,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int wantTab = -1;
         private float mapH = TopH;
 
+        /// <summary>The NODES column tab's index (INFRASTRUCTURE is 0).</summary>
+        private const int NodesTab = 1;
+
         public void Build(RectTransform hero, float w, float h, RectTransform column, float cw, float ch)
         {
-            heroW = w; mapH = h; sessW = cw; sessH = ch;
-            colX = 16f; colW = cw - 2f * colX; // the session block's left edge and width inside its own tab
-            session = new FrontBox(column, skin, "Session", 0f, 0f, cw, ch, "SESSION · TRACE AND NETWORK", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty4");
-            sessBody = session.Rect;
+            heroW = w; mapH = h;
             BuildGraph(hero);
-            BuildInspector(column, 0f, 0f, cw, ch);
+            BuildInfra(column, cw, ch);
             BuildList(column, 0f, 0f, cw, ch);
-            columnTabs = new[]
-            {
-                new ColumnTab("NODE", AvIcon.ListDetails, inspector.Rect), new ColumnTab("NODES", AvIcon.Link, list.Rect),
-                new ColumnTab("SESSION", AvIcon.ShieldLock, session.Rect)
-            };
+            BuildInspector(list.Rect, 6f, InspY, cw - 12f, ch - InspY - 6f); // HOP / BURN / DROP / PURGE stay one click from the list
+            columnTabs = new[] { new ColumnTab("INFRASTRUCTURE", AvIcon.Database, infra.Rect), new ColumnTab("NODES", AvIcon.Link, list.Rect) };
         }
 
-        private FrontBox session;
-        private RectTransform sessBody;
-        private float InfStep => (colW + 5f) / 5f; // five INFOCON blocks, 5 px apart, across the block
-        private float sessW, sessH;
-
-        // ---- Graph and session column ------------------------------------------------------------------------------------
-
-        private TMP_Text Head(RectTransform b, string name, float x, float y, float w, string text)
-        {
-            TMP_Text t = FrontKit.Mono(b, name, x, y, w, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            t.text = text;
-            return t;
-        }
+        // ---- Graph ---------------------------------------------------------------------------------------------------------
 
         /// <summary>A wrapping mono block (two or three lines) pinned to the top-left of its rect.</summary>
         private static TMP_Text Wrapped(RectTransform p, string name, float x, float y, float w, float h, float size, bool strong = false)
@@ -144,23 +149,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             graph = new FrontBox(hero, skin, "Network", 0f, 0f, heroW, mapH, "CYBER SITUATION · THEATRE NODE GRAPH", AvIcon.ShieldLock, FrontLook.Terminal).Tagged("tty1");
             RectTransform b = graph.Rect;
-            // The plate fills the box body left of the session column (which therefore never covers a node) and clips its own vector layer.
-            plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows); // the whole room is map: the session lives in its column tab
+            // The plate fills the box body and clips its own vector layer: the whole room is map, the column carries the rest.
+            plate = new FrontMapPlate(b, skin, heroW, mapH, Cols, Rows);
             plate.Tint = RoomInk.Rgba(0.6f, 0.88f, 1f, 1f);
             plate.Labels.Fixed(new Rect(plate.X, plate.Y, plate.W, StripH));   // the bounce chain strip sits over the top of the map: labels give way to it
             plate.TopInset = StripH;                                           // and the grid names and ruler start under it
-            side = FrontVector.Add(sessBody, "Side"); // the session tab's dial, pips, blocks and key swatches
-            AvLay.Place(side.rectTransform, 0f, 0f, sessW, sessH);
             airbases = new FrontMap.AirbaseLayer(b);
             for (int i = 0; i < MaxNodes; i++)
             {
                 nodeLabels[i] = FrontKit.Mono(b, "NodeLabel" + i, 0f, 0f, 150f, 28f, 10.5f, TextAlignmentOptions.TopLeft);
                 nodeLabels[i].gameObject.SetActive(false);
             }
-            for (int i = 0; i < MaxAnchors; i++)
+            for (int i = 0; i < MaxGhosts; i++)
             {
-                anchorLabels[i] = FrontKit.Mono(b, "AnchorLabel" + i, 0f, 0f, 150f, 28f, 10.5f, TextAlignmentOptions.TopLeft);
-                anchorLabels[i].gameObject.SetActive(false);
+                ghostLabels[i] = FrontKit.Mono(b, "GhostLabel" + i, 0f, 0f, 200f, 14f, 10f, TextAlignmentOptions.TopLeft);
+                ghostLabels[i].gameObject.SetActive(false);
             }
             for (int i = 0; i < MaxHops; i++)
             {
@@ -172,11 +175,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 int slot = i;
                 Image hit = FrontKit.Solid(b, "NodeHit" + i, 0f, 0f, 30f, 30f, Color.clear);
                 hit.raycastTarget = true;
-                // a picked node opens the NODE tab
-                AvHit.On(hit).Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) Do(() => { wantTab = 0; actions.SelectNode(hitIds[slot]); }); };
+                // An enemy node opens NODES on it; one of ours lights its INFRASTRUCTURE card (a room-local pick: the host never hears of it).
+                AvHit.On(hit).Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) Do(() => PickNode(hitIds[slot])); };
                 hit.gameObject.SetActive(false);
                 nodeHits[i] = hit;
             }
+            // The foot of the plate, right of the cursor readout: what the armed pick wants, or why the last click missed.
+            footLabel = FrontKit.Mono(b, "FootLabel", plate.X + FootX, plate.Y + plate.H - 20f, plate.W - FootX - FootRight, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
 
             // The bounce chain: a glass strip across the top of the map. Its vector layer sits above every map label; the chips' words above it.
             routeVec = FrontVector.Add(b, "Route");
@@ -192,58 +197,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             routeHead = FrontKit.Mono(b, "RouteHead", plate.X + plate.W - 226f, plate.Y + 2f, 216f, 15f, 12f, TextAlignmentOptions.MidlineRight, true, 0.5f);
             routeMeta = FrontKit.Mono(b, "RouteMeta", plate.X + 400f, plate.Y + 2f, 200f, 20f, 10.5f, TextAlignmentOptions.MidlineLeft);
             routeSub = FrontKit.Mono(b, "RouteSub", plate.X + plate.W - 226f, plate.Y + 17f, 216f, 15f, 10.5f, TextAlignmentOptions.MidlineRight);
-
-            // YOUR session.
-            traceHead = Head(sessBody, "TraceHead", colX, 30f, 130f, "// YOUR TRACE");
-            opTag = FrontKit.Mono(sessBody, "OpTag", colX + 134f, 30f, colW - 134f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true, 1f);
-            traceValue = FrontKit.Mono(sessBody, "TraceValue", colX + colW * 0.5f - 65f, 84f, 130f, 34f, 26f, TextAlignmentOptions.Midline, true);
-            traceWord = FrontKit.Mono(sessBody, "TraceWord", colX, 126f, colW, 24f, 16f, TextAlignmentOptions.Midline, true, 2f);
-            traceLo = FrontKit.Mono(sessBody, "TraceLo", colX + colW * 0.5f - 129f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineLeft); // the dial's ends, not the block's
-            traceHi = FrontKit.Mono(sessBody, "TraceHi", colX + colW * 0.5f + 89f, 106f, 40f, 14f, 10f, TextAlignmentOptions.MidlineRight);
-            traceLo.text = "0"; traceHi.text = "100";
-            hopLine = FrontKit.Mono(sessBody, "HopLine", colX, 154f, colW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            hopBar = new FrontBar(sessBody, skin, colX, 173f, colW, 8f);
-            estLine = FrontKit.Mono(sessBody, "EstLine", colX, 184f, colW, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            nextLine = Wrapped(sessBody, "NextLine", colX + 9f, 205f, colW - 9f, 42f, 10.5f, true);
-            heldHead = FrontKit.Mono(sessBody, "HeldHead", colX, 258f, 96f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
-            heldHead.text = "// HELD";
-            heldVal = FrontKit.Mono(sessBody, "HeldVal", colX + colW - 60f, 258f, 60f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
-
-            // The FACTION's network (a separate line: its total is never divided by your cap).
-            facHead = Head(sessBody, "FacHead", colX, 284f, colW, "// FACTION NETWORK");
-            string[] fk = { "NODES HELD", "SESSIONS", "EW TRUCKS", "DATA CENTER" };
-            for (int i = 0; i < 4; i++)
-            {
-                facKey[i] = FrontKit.Mono(sessBody, "FacKey" + i, colX, 302f + i * 18f, 110f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                facKey[i].text = fk[i];
-                facVal[i] = FrontKit.Mono(sessBody, "FacVal" + i, colX + 110f, 302f + i * 18f, colW - 110f, 16f, 10.5f, TextAlignmentOptions.MidlineRight, true);
-            }
-            threatHead = Head(sessBody, "ThreatHead", colX, 380f, colW, "// NETWORK THREAT · INFOCON");
-            for (int i = 0; i < 5; i++)
-            {
-                infocon[i] = FrontKit.Mono(sessBody, "Infocon" + i, colX + i * InfStep, 398f, InfStep - 5f, 22f, 14f, TextAlignmentOptions.Midline, true);
-                infocon[i].text = (5 - i).ToString();
-            }
-            threatWord = FrontKit.Mono(sessBody, "ThreatWord", colX, 422f, colW - PurgeW - 6f, 18f, 12.5f, TextAlignmentOptions.MidlineLeft, true, 1.5f);
-            threatNote = FrontKit.Mono(sessBody, "ThreatNote", colX, 440f, colW - PurgeW - 6f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            purge = Button(sessBody, "PURGE", colX + colW - PurgeW, 420f, PurgeW, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
-                "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
-                (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.");
-            purge.Interactable = false;
-            keyHead = Head(sessBody, "KeyHead", colX, 464f, colW, "// KEY");
-            string[] words = { "HELD", "HOPPING", "IN REACH", "OUT OF REACH", "TRACED", "OWN ANCHOR" };
-            for (int i = 0; i < 6; i++)
-            {
-                keyText[i] = FrontKit.Mono(sessBody, "Key" + i, colX + 26f + (i / 3) * colW * 0.5f, 482f + (i % 3) * 16f, 100f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
-                keyText[i].text = words[i];
-            }
-            skin.Add(() =>
-            {
-                traceHead.color = PhosDim; heldHead.color = PhosDim; facHead.color = PhosDim; threatHead.color = PhosDim; keyHead.color = PhosDim;
-                traceLo.color = PhosDim; traceHi.color = PhosDim; routeTag.color = PhosDim;
-                foreach (TMP_Text t in facKey) t.color = PhosDim;
-                foreach (TMP_Text t in keyText) t.color = PhosDim;
-            });
+            skin.Add(() => routeTag.color = PhosDim);
         }
 
         // ---- Inspector and node list ---------------------------------------------------------------------------
@@ -267,12 +221,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 dosVal[i] = Wrapped(b, "DosVal" + i, 88f, 108f, w - 98f, 16f, 10.5f);
             }
             dosNext = Wrapped(b, "DosNext", 22f, 268f, w - 32f, 30f, 10.5f, true);
-            float bw = (w - 16f - 12f) / 3f, byy = h - 44f;
+            float bw = (w - 16f - 18f) / 4f, byy = h - 44f;
             hop = Button(b, "HOP", 8f, byy, bw, AvButtonStyle.Primary, () => Do(() => actions.Hop(selected)), "Pick a node first.");
             burn = Button(b, "BURN", 14f + bw, byy, bw, AvButtonStyle.Danger, () => Do(() => actions.Burn(selected)),
                 "Burn this node: post its strike package once and release the node. Your other held nodes stay. Only a node your own session holds.");
             drop = Button(b, "DROP", 20f + 2f * bw, byy, bw, AvButtonStyle.Default, () => Do(() => actions.Drop(selected)),
                 "Let go of this node without a package. Your other held nodes stay; with none left the session ends. Only a node your own session holds.");
+            purge = Button(b, "PURGE", 26f + 3f * bw, byy, bw, AvButtonStyle.Danger, () => Do(() => actions.Purge()),
+                "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
+                (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.");
+            purge.Interactable = false;
             skin.Add(() => { foreach (TMP_Text t in dosKey) t.color = PhosDim; });
         }
 
@@ -323,23 +281,78 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             skin.Add(() => { foreach (TMP_Text t in listHead) t.color = PhosDim; listMore.color = PhosDim; });
         }
 
-        /// <summary>A list click: selects exactly like a map click, and brings the node into view when the map is not showing it.</summary>
+        /// <summary>A list click: selects exactly like a map click (the inspector sits under the list), and brings the node into view when the map is not showing it.</summary>
         private void Pick(int id)
         {
             if (id != selected) locateId = id;
-            wantTab = 0; // the list pick opens the node's inspector
             actions.SelectNode(id);
+        }
+
+        /// <summary>A node clicked on the map (never while a pick is armed: the hits are off then). One of ours is a room-local pick that lights its card.</summary>
+        private void PickNode(int id)
+        {
+            if (id >= 0) { wantTab = NodesTab; actions.SelectNode(id); return; }
+            selOwn = selOwn == id ? 0 : id;
+            wantTab = 0;
+            Repaint();
+        }
+
+        /// <summary>The own pick or a map pick changed: the map and the INFRASTRUCTURE tab both show it.</summary>
+        private void Repaint()
+        {
+            if (last == null) return;
+            PaintGraph(last, last.Network);
+            PaintInfra(last);
         }
 
         // ---- Paint -----------------------------------------------------------------------------------------------------
 
         public void Paint(FrontRoomView v)
         {
+            last = v;
             NetworkRoomView n = v.Network;
             selected = n.SelectedId;
+            Remember(v);
             PaintGraph(v, n);
+            PaintInfra(v);
             PaintInspector(v, n);
             PaintList(n);
+        }
+
+        /// <summary>The room's memory against a new view: when each truck was first seen packing; an own pick whose anchor left, or a RELOCATE whose truck cannot move now, ends.</summary>
+        private void Remember(FrontRoomView v)
+        {
+            NetworkRoomView n = v.Network;
+            for (int s = 0; s < packSince.Length; s++)
+            {
+                bool packing = false;
+                foreach (InfraTruckView t in n.Trucks) packing |= t.Ordinal == s && t.State == InfraState.Packing;
+                if (!packing) packSince[s] = -1f;
+                else if (packSince[s] < 0f) packSince[s] = v.Now;
+            }
+            if (selOwn != 0 && IndexOf(n.Nodes, selOwn) < 0) selOwn = 0;
+            if (pick == PickMode.Relocate && !Movable(n, moveTruck)) EndPicks();
+        }
+
+        private static bool Movable(NetworkRoomView n, int ordinal)
+        {
+            foreach (InfraTruckView t in n.Trucks) if (t.Ordinal == ordinal) return t.State == InfraState.Up || t.State == InfraState.Damaged;
+            return false;
+        }
+
+        /// <summary>Seconds a packing truck has left as this room counts them (from when it first saw it packing: the mirror carries no clock), or -1.</summary>
+        private int PackLeft(int ordinal, float now) =>
+            ordinal >= 0 && ordinal < packSince.Length && packSince[ordinal] >= 0f ? Mathf.Max(0, Mathf.CeilToInt(FrontRules.TruckPackSeconds - (now - packSince[ordinal]))) : -1;
+
+        /// <summary>Where a packing truck redeploys: known only when this room sent its RELOCATE just before it started packing.</summary>
+        private bool PackDest(int ordinal, out Vector2 uv)
+        {
+            uv = default;
+            if (ordinal < 0 || ordinal >= packSince.Length || packSince[ordinal] < 0f) return false;
+            float lag = packSince[ordinal] - movedAt[ordinal];
+            if (lag < -1f || lag > 10f) return false;
+            uv = packTo[ordinal];
+            return true;
         }
 
         private Vector2 P(float x, float y) => plate.P(x, y);
@@ -403,23 +416,29 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>
-        /// The nodes' screen points for this paint. Installations that share a spot (closer than <see cref="StackGap"/> on screen) are fanned onto a small
-        /// ring around their common point, so each keeps its own glyph, label and click; the glyph pass draws a tick back to the true point.
+        /// The screen points of this paint: the nodes (ours after the enemy's), then the ghost points. Things that share a spot (closer than
+        /// <see cref="StackGap"/> on screen) are fanned onto a small ring around their common point, so each keeps its own glyph, label and click; the glyph
+        /// pass draws a tick back to the true point.
         /// </summary>
-        private void Spread(NetworkRoomView n, int count)
+        private void Spread(NetworkRoomView n, int count, int ghosts)
         {
-            for (int i = 0; i < count; i++) { nodeTrue[i] = nodeAt[i] = P(n.Nodes[i].X, n.Nodes[i].Y); nodeCluster[i] = -1; }
-            for (int i = 0; i < count; i++)
+            int total = count + ghosts;
+            for (int i = 0; i < total; i++)
+            {
+                nodeTrue[i] = nodeAt[i] = i < count ? P(n.Nodes[i].X, n.Nodes[i].Y) : P(ghostUv[i - count].x, ghostUv[i - count].y);
+                nodeCluster[i] = -1;
+            }
+            for (int i = 0; i < total; i++)
             {
                 if (nodeCluster[i] >= 0) continue;
                 int m = 0;
                 Vector2 mid = Vector2.zero;
-                for (int j = i; j < count; j++)
+                for (int j = i; j < total; j++)
                     if (nodeCluster[j] < 0 && (nodeTrue[j] - nodeTrue[i]).sqrMagnitude < StackGap * StackGap) { nodeCluster[j] = i; mid += nodeTrue[j]; m++; }
                 if (m < 2) continue;
                 mid /= m;
                 float r = StackGap * (m == 2 ? 0.55f : 0.75f);
-                for (int j = i, k = 0; j < count; j++)
+                for (int j = i, k = 0; j < total; j++)
                 {
                     if (nodeCluster[j] != i) continue;
                     float a = Mathf.PI * (2f * k++ / m - (m == 2 ? 0f : 0.5f));
@@ -428,12 +447,39 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
+        /// <summary>The ghost points of this paint: every queued center or truck with a point, then a packing truck's destination (this room's memory) with its road.</summary>
+        private int Ghosts(FrontRoomView v)
+        {
+            NetworkRoomView n = v.Network;
+            int k = 0;
+            for (int i = 0; i < n.Ghosts.Count && k < MaxGhosts; i++, k++)
+            {
+                ghostUv[k] = new Vector2(n.Ghosts[i].U, n.Ghosts[i].V); ghostWord[k] = n.Ghosts[i].Label; ghostKind[k] = n.Ghosts[i].Kind; ghostFrom[k] = new Vector2(-1f, -1f);
+            }
+            foreach (InfraTruckView t in n.Trucks)
+            {
+                if (k >= MaxGhosts || t.State != InfraState.Packing || !PackDest(t.Ordinal, out Vector2 to)) continue;
+                ghostUv[k] = to; ghostKind[k] = (byte)AnchorKind.EwTruck; ghostFrom[k] = new Vector2(t.U, t.V);
+                ghostWord[k++] = t.Name + " · REDEPLOYS ~" + FrontKit.Clock(Mathf.Max(0, PackLeft(t.Ordinal, v.Now)));
+            }
+            return k;
+        }
+
+        /// <summary>The drawn point of own anchor <paramref name="t"/> (its node row follows the enemy rows, one per anchor, in anchor order).</summary>
+        private Vector2 AnchorPoint(NetworkRoomView n, int t, int enemies, int count) => enemies + t < count ? nodeAt[enemies + t] : P(n.Anchors[t].X, n.Anchors[t].Y);
+
+        /// <summary>Our anchor's ink: cyan standing, amber damaged or packing up, trace red down (the word and the shape say the same).</summary>
+        private static Color OwnInk(in NetAnchorView a) =>
+            a.Health == AnchorHealth.Down ? TraceRed : a.Health == AnchorHealth.Damaged || a.Packing ? Amber : Phos;
+
         private void PaintGraph(FrontRoomView v, NetworkRoomView n)
         {
             FrontMapView mv = plate.View;
+            // Centre on our own anchors, else on our airbases (where the first data center goes), else on the enemy's nodes; a pan or zoom takes over.
             Vector2 sum = Vector2.zero;
             int na = 0;
             for (int i = 0; i < n.Anchors.Count; i++) { sum += new Vector2(n.Anchors[i].X, n.Anchors[i].Y); na++; }
+            if (na == 0) for (int i = 0; i < v.Airbases.Count; i++) if (v.Airbases[i].Side == AirbaseSide.Own) { sum += new Vector2(v.Airbases[i].U, v.Airbases[i].V); na++; }
             if (na == 0) for (int i = 0; i < n.Nodes.Count; i++) { sum += new Vector2(n.Nodes[i].X, n.Nodes[i].Y); na++; }
             if (na > 0) mv.AutoCenter(sum / na);
             if (locateId != 0)
@@ -446,8 +492,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             FrontVector g = plate.G;
             FrontLabels labels = plate.Labels;
             Color own = Own, amber = Amber, danger = TraceRed, key = HopInk, dim = OutInk;
-            int count = Math.Min(Enemies(n), MaxNodes);
-            Spread(n, count);
+            int count = Math.Min(n.Nodes.Count, MaxNodes), enemies = Math.Min(Enemies(n), count), ghosts = Ghosts(v);
+            Spread(n, count, ghosts);
+            if (pick != PickMode.None) labels.Take(new Rect(plate.X + FootX, plate.Y + plate.H - 24f, plate.W - FootX - FootRight, 24f)); // the foot words
 
             // The glass: a teal-black tint over the satellite picture and a vignette. Every layer is under 0.2 alpha, so it reads as a tint.
             float px = mv.X, py = mv.Y, pw = mv.W, ph = mv.H;
@@ -460,12 +507,24 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             g.Grad(px, py, pw, e * 0.55f, v0, v0, v1, v1);
             g.Grad(px, py + ph - e * 0.55f, pw, e * 0.55f, v1, v1, v0, v0);
 
-
             FrontMap.AirbaseLayer.Glyphs(g, v.Airbases, P);
 
-            // Edges: nearby nodes first, then the reach of every node you can hop to (from the source the host would hop from), then the intrusions' own paths on top.
-            for (int i = 0; i < count; i++)
-                for (int j = i + 1; j < count; j++)
+            // The armed pick's rings: where a click is legal (held land airbases, 8 km; standing data centers, and for DEPLOY TRUCK the queued ones, 20 km).
+            if (pick != PickMode.None)
+            {
+                float r = Mathf.Max(10f, RingMetres(pick) / FrontController.Frame().W * mv.Scale);
+                foreach (Vector2 c in Rings(v, pick))
+                {
+                    Vector2 p = P(c.x, c.y);
+                    g.Disc(p, r, own.WithAlpha(0.1f), 48);
+                    g.Ring(p, r, 1.8f, own.WithAlpha(0.95f), 64);
+                    g.Ring(p, r + 4f, 1f, own.WithAlpha(0.4f), 64, 1f, 1f);
+                }
+            }
+
+            // Edges between enemy nodes: nearby ones first, then the reach of every node you can hop to (from the source the host would hop from), then the intrusions' own paths on top.
+            for (int i = 0; i < enemies; i++)
+                for (int j = i + 1; j < enemies; j++)
                 {
                     NetNodeView a = n.Nodes[i], b = n.Nodes[j];
                     float km = new Vector2((a.X - b.X) * n.MapKmW, (a.Y - b.Y) * n.MapKmH).magnitude;
@@ -475,27 +534,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     else if (burned) g.Dashed(nodeAt[i], nodeAt[j], 1.1f, danger.WithAlpha(0.55f), 4f, 4f);
                     else g.Line(nodeAt[i], nodeAt[j], 1f, dim.WithAlpha(0.42f));
                 }
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < enemies; i++)
             {
                 NetNodeView nd = n.Nodes[i];
                 if (nd.State != NetNodeState.InReach) continue;
                 Vector2 to = nodeAt[i], from;
                 int s = nd.FromNode >= 0 ? IndexOf(n.Nodes, nd.FromNode) : -1;
                 if (s >= 0) from = s < count ? nodeAt[s] : P(n.Nodes[s].X, n.Nodes[s].Y);
-                else if (nd.FromAnchor >= 0 && nd.FromAnchor < n.Anchors.Count) from = P(n.Anchors[nd.FromAnchor].X, n.Anchors[nd.FromAnchor].Y);
+                else if (nd.FromAnchor >= 0 && nd.FromAnchor < n.Anchors.Count) from = AnchorPoint(n, nd.FromAnchor, enemies, count);
                 else continue;
-                bool pick = nd.Id == n.SelectedId;
-                g.Dashed(from, to, pick ? 2f : 1.1f, pick ? AvInk.Select : amber.WithAlpha(0.6f), 4f, 4f);
+                bool picked = nd.Id == n.SelectedId;
+                g.Dashed(from, to, picked ? 2f : 1.1f, picked ? AvInk.Select : amber.WithAlpha(0.6f), 4f, 4f);
             }
             int hl = 0;
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < enemies; i++)
             {
                 NetNodeView nd = n.Nodes[i];
                 if (nd.State != NetNodeState.Held && nd.State != NetNodeState.Hopping) continue;
                 Vector2 to = nodeAt[i], from;
                 int s = nd.FromNode >= 0 ? IndexOf(n.Nodes, nd.FromNode) : -1;
                 if (s >= 0) from = s < count ? nodeAt[s] : P(n.Nodes[s].X, n.Nodes[s].Y);
-                else if (nd.FromAnchor >= 0 && nd.FromAnchor < n.Anchors.Count) from = P(n.Anchors[nd.FromAnchor].X, n.Anchors[nd.FromAnchor].Y);
+                else if (nd.FromAnchor >= 0 && nd.FromAnchor < n.Anchors.Count) from = AnchorPoint(n, nd.FromAnchor, enemies, count);
                 else continue;
                 if (nd.State == NetNodeState.Held)
                 {
@@ -529,30 +588,31 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             for (int i = hl; i < MaxHops; i++) hopLabels[i].gameObject.SetActive(false);
 
-            // Glyphs.
-            for (int t = 0; t < n.Anchors.Count && t < MaxAnchors; t++)
+            // Our trucks' reach rings (a packing or down truck has none: offline); an armed pick's rings stand alone.
+            for (int t = 0; pick == PickMode.None && t < n.Anchors.Count; t++)
             {
                 NetAnchorView a = n.Anchors[t];
-                Vector2 p = P(a.X, a.Y);
-                Color k = a.Health == AnchorHealth.Live ? own : a.Health == AnchorHealth.Damaged ? amber : danger;
-                if (a.Kind == AnchorKind.EwTruck && a.Reach > 0f)
-                {
-                    g.Disc(p, a.Reach * mv.Scale, k.WithAlpha(a.Health == AnchorHealth.Down ? 0.015f : 0.03f), 64);
-                    g.Ring(p, a.Reach * mv.Scale, 1.2f, k.WithAlpha(a.Health == AnchorHealth.Down ? 0.2f : 0.6f), 72, 1f, 1f);
-                }
-                g.Disc(p, 13f, AvInk.Ground.WithAlpha(0.9f), 20);
-                if (a.Kind == AnchorKind.EwTruck) Truck(g, p, k);
-                else
-                {
-                    g.Frame(p.x - 11f, p.y - 11f, 22f, 22f, 1.4f, k);
-                    g.Frame(p.x - 8f, p.y - 8f, 16f, 16f, 1.2f, k);
-                    for (int r = -1; r <= 1; r += 2) g.Line(p + new Vector2(-4f, r * 3f), p + new Vector2(4f, r * 3f), 1.4f, k);
-                }
-                if (a.Health == AnchorHealth.Down) FrontKit.Cross(g, p, 9f, danger);
-                if (a.LockLeft > 0) g.Ring(p, 16f, 1.4f, danger.WithAlpha(0.9f), 24, 1f, 1f);
+                if (a.Kind != AnchorKind.EwTruck || a.Reach <= 0f) continue;
+                Vector2 p = AnchorPoint(n, t, enemies, count);
+                Color k = OwnInk(a);
+                g.Disc(p, a.Reach * mv.Scale, k.WithAlpha(0.03f), 64);
+                g.Ring(p, a.Reach * mv.Scale, 1.2f, k.WithAlpha(0.6f), 72, 1f, 1f);
+            }
+
+            // Queued builds and a packing truck's destination: dashed hexes (a packing truck's road dashed to its ghost).
+            for (int i = 0; i < ghosts; i++)
+            {
+                Vector2 p = nodeAt[count + i];
+                if (ghostFrom[i].x >= 0f) g.Dashed(P(ghostFrom[i].x, ghostFrom[i].y), p, 1.4f, amber.WithAlpha(0.8f), 6f, 4f);
+                g.Disc(p, 13f, Glass.WithAlpha(0.6f), 6);
+                DashedHex(g, p, 13f, own.WithAlpha(0.85f));
+                if (ghostKind[i] == (byte)AnchorKind.EwTruck) Truck(g, p, own.WithAlpha(0.55f));
+                else Glyph(g, NodeKind.DataCenter, p, 8f, own.WithAlpha(0.55f), 1.2f);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
-            for (int i = 0; i < count; i++)
+
+            // Enemy nodes.
+            for (int i = 0; i < enemies; i++)
             {
                 NetNodeView nd = n.Nodes[i];
                 Vector2 p = nodeAt[i];
@@ -571,55 +631,94 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (nd.Id == n.SelectedId) FrontKit.Brackets(g, p, 18f, AvInk.Select);
                 labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
-            // The EW trucks and the data center name themselves first: the session starts from them.
-            for (int t = 0; t < MaxAnchors; t++)
-            {
-                TMP_Text lt = anchorLabels[t];
-                if (t >= n.Anchors.Count) { lt.gameObject.SetActive(false); continue; }
-                NetAnchorView a = n.Anchors[t];
-                if (!plate.Shown(P(a.X, a.Y), 12f)) { lt.gameObject.SetActive(false); continue; }
-                lt.gameObject.SetActive(true);
-                Color k = a.Health == AnchorHealth.Live ? own : a.Health == AnchorHealth.Damaged ? amber : danger;
-                string state = a.Health == AnchorHealth.Down ? "DOWN" : a.Packing ? "PACKING UP"
-                    : a.LockLeft > 0 ? "TRACED · LOCKED " + FrontKit.Clock(a.LockLeft)
-                    : (a.Health == AnchorHealth.Damaged ? "DAMAGED" : "LIVE") + (a.Reach > 0f ? " · REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "");
-                lt.text = C2Kit.Tint("<b>" + a.Label + "</b>", k) + "\n" + C2Kit.Tint(state, a.LockLeft > 0 ? danger : PhosDim);
-                lt.color = Bright;
-                FrontMap.Plate(g, labels.Place(lt, P(a.X, a.Y), 16f, false));
-            }
-            for (int i = 0; i < count; i++)
+            // Our own nodes: a bright hex with the truck or data center inside; packing dashed, down crossed, a trace lock ringed red, a breach flagged.
+            for (int i = enemies; i < count; i++)
             {
                 NetNodeView nd = n.Nodes[i];
+                NetAnchorView a = n.Anchors[nd.AnchorAt];
                 Vector2 p = nodeAt[i];
-                TMP_Text t = nodeLabels[i];
-                if (!plate.Shown(p, 12f)) { t.gameObject.SetActive(false); nodeHits[i].gameObject.SetActive(false); continue; }
-                t.gameObject.SetActive(true);
-                Color k = NodeInk(nd);
-                bool live = nd.State == NetNodeState.Held || nd.State == NetNodeState.Hopping;
-                t.text = C2Kit.Tint("<b>" + nd.Label + "</b> · " + KindName[(int)nd.Kind], nd.State == NetNodeState.OutOfReach ? dim : k) + "\n" + C2Kit.Tint(StateWord(nd), live ? k : dim);
-                t.color = Bright;
-                // The picked node and the nodes in play are always named; the others take a clear spot or stay unlabelled (the node list names every one).
-                Rect spot = labels.Place(t, p, 16f, false, !(live || nd.Id == n.SelectedId));
-                if (spot.width <= 0f) t.gameObject.SetActive(false); else FrontMap.Plate(g, spot);
-                Image hit = nodeHits[i];
-                hit.gameObject.SetActive(true);
-                hitIds[i] = nd.Id;
-                AvLay.Place(hit.rectTransform, p.x - 15f, p.y - 15f, 30f, 30f);
+                Color k = OwnInk(a);
+                if ((p - nodeTrue[i]).sqrMagnitude > 4f) { g.Line(nodeTrue[i], p, 1f, k.WithAlpha(0.5f)); g.Disc(nodeTrue[i], 2f, k.WithAlpha(0.8f), 8); }
+                g.Disc(p, 16f, k.WithAlpha(0.1f), 24);
+                g.Disc(p, 13f, Glass, 6);
+                if (a.Packing) DashedHex(g, p, 13f, k); else Hex(g, p, 13f, k, 1.8f);
+                if (a.Kind == AnchorKind.EwTruck) Truck(g, p, k); else Glyph(g, NodeKind.DataCenter, p, 8f, k, 1.4f);
+                if (a.Health == AnchorHealth.Down) FrontKit.Cross(g, p, 9f, danger);
+                if (a.LockLeft > 0) g.Ring(p, 17f, 1.4f, danger.WithAlpha(0.9f), 24, 1f, 1f);
+                if (nd.Breached) Flag(g, p + new Vector2(11f, -8f), 16f, danger); // top right of the hex
+                if (nd.Id == selOwn || pick == PickMode.Relocate && a.Kind == AnchorKind.EwTruck && a.Slot == moveTruck) FrontKit.Brackets(g, p, 18f, AvInk.Select);
+                labels.Take(new Rect(p.x - 14f, p.y - 14f, 28f, 28f));
             }
+
+            // Words: ours name themselves first (the session starts from them), then the enemy's where there is room (the node list names every one).
+            bool hits = pick == PickMode.None; // an armed pick owns the click: no node takes one
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = pass == 0 ? enemies : 0; i < (pass == 0 ? count : enemies); i++)
+                {
+                    NetNodeView nd = n.Nodes[i];
+                    Vector2 p = nodeAt[i];
+                    TMP_Text t = nodeLabels[i];
+                    Image hit = nodeHits[i];
+                    if (!plate.Shown(p, 12f)) { t.gameObject.SetActive(false); hit.gameObject.SetActive(false); continue; }
+                    t.gameObject.SetActive(true);
+                    bool optional;
+                    if (nd.Own)
+                    {
+                        NetAnchorView a = n.Anchors[nd.AnchorAt];
+                        Color k = OwnInk(a);
+                        int left = a.Packing ? PackLeft(a.Slot, v.Now) : -1;
+                        string state = a.Health == AnchorHealth.Down ? "DOWN" : a.Packing ? "PACKING UP" + (left >= 0 ? " · ~" + FrontKit.Clock(left) : "")
+                            : a.LockLeft > 0 ? "TRACED · LOCKED " + FrontKit.Clock(a.LockLeft)
+                            : (a.Health == AnchorHealth.Damaged ? "DAMAGED" : "LIVE") + (a.Reach > 0f ? " · REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "");
+                        if (nd.Breached) state = "BREACHED · " + state;
+                        t.text = C2Kit.Tint("<b>" + a.Label + "</b> · " + (a.Kind == AnchorKind.EwTruck ? "EW TRUCK" : "DATA CENTER"), k) + "\n"
+                            + C2Kit.Tint(state, nd.Breached || a.LockLeft > 0 || a.Health == AnchorHealth.Down ? danger : PhosDim);
+                        optional = false;
+                    }
+                    else
+                    {
+                        Color k = NodeInk(nd);
+                        bool live = nd.State == NetNodeState.Held || nd.State == NetNodeState.Hopping;
+                        t.text = C2Kit.Tint("<b>" + nd.Label + "</b> · " + KindName[(int)nd.Kind], nd.State == NetNodeState.OutOfReach ? dim : k) + "\n" + C2Kit.Tint(StateWord(nd), live ? k : dim);
+                        optional = !(live || nd.Id == n.SelectedId); // the picked node and the nodes in play are always named; the others take a clear spot or stay unlabelled
+                    }
+                    t.color = Bright;
+                    Rect spot = labels.Place(t, p, 16f, false, optional);
+                    if (spot.width <= 0f) t.gameObject.SetActive(false); else FrontMap.Plate(g, spot);
+                    if (hit.gameObject.activeSelf != hits) hit.gameObject.SetActive(hits);
+                    hitIds[i] = nd.Id;
+                    AvLay.Place(hit.rectTransform, p.x - 15f, p.y - 15f, 30f, 30f);
+                }
             for (int i = count; i < MaxNodes; i++) { nodeLabels[i].gameObject.SetActive(false); nodeHits[i].gameObject.SetActive(false); }
+            // Ghost words: "DC-2 · OPAL · 0:48" where there is room.
+            int gw = 0;
+            for (int i = 0; i < ghosts && gw < ghostLabels.Length; i++)
+            {
+                Vector2 p = nodeAt[count + i];
+                if (!plate.Shown(p, 16f)) continue;
+                TMP_Text t = ghostLabels[gw];
+                t.gameObject.SetActive(true);
+                FrontKit.Set(t, ghostWord[i], ghostFrom[i].x >= 0f ? amber : own);
+                Rect spot = labels.Place(t, p, 16f, true, true);
+                if (spot.width <= 0f) { t.gameObject.SetActive(false); continue; }
+                FrontMap.Plate(g, spot);
+                gw++;
+            }
+            for (int i = gw; i < ghostLabels.Length; i++) ghostLabels[i].gameObject.SetActive(false);
             airbases.Names(g, v.Airbases, P, mv, (t, a) => labels.Place(t, a, 9f, true, true));
 
+            // The foot: what the armed pick wants, or why the last click missed.
+            footLabel.gameObject.SetActive(pick != PickMode.None);
+            if (pick != PickMode.None) FrontKit.Set(footLabel, FrontKit.Fit(footLabel, PickWords(true), 10.5f), pickMiss.Length > 0 ? danger : amber);
+
             int inReach = 0, held = 0;
-            for (int i = 0; i < count; i++) { if (n.Nodes[i].State == NetNodeState.InReach) inReach++; if (n.Nodes[i].State == NetNodeState.Held) held++; }
-            for (int i = 0; i < n.Anchors.Count; i++) plate.Dot(n.Anchors[i].X, n.Anchors[i].Y, own);
-            for (int i = 0; i < count; i++) plate.Dot(n.Nodes[i].X, n.Nodes[i].Y, NodeInk(n.Nodes[i]));
+            for (int i = 0; i < enemies; i++) { if (n.Nodes[i].State == NetNodeState.InReach) inReach++; if (n.Nodes[i].State == NetNodeState.Held) held++; }
+            for (int i = 0; i < n.Anchors.Count; i++) plate.Dot(n.Anchors[i].X, n.Anchors[i].Y, OwnInk(n.Anchors[i]));
+            for (int i = 0; i < enemies; i++) plate.Dot(n.Nodes[i].X, n.Nodes[i].Y, NodeInk(n.Nodes[i]));
             plate.End();
 
-            side.Clear();
-            PaintSession(side, n);
-            side.Flush();
             PaintRoute(v, n);
-            graph.SetMeta(n.Active ? count + " NODES MAPPED · " + inReach + " IN REACH · " + held + " HELD" : n.Meta, held > 0 ? Phos : PhosDim);
+            graph.SetMeta(n.Active ? (count - enemies) + " MINE · " + enemies + " ENEMY · " + inReach + " IN REACH · " + held + " HELD" : n.Meta, held > 0 ? Phos : PhosDim);
         }
 
         // ---- Bounce chain ------------------------------------------------------------------------------------------------
@@ -827,154 +926,157 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        public bool CancelMode() => false; // no local mode here
+        // ---- Map picks -----------------------------------------------------------------------------------------------
 
+        /// <summary>BUILD DATA CENTER, DEPLOY TRUCK or a truck's RELOCATE: arms that pick (the same press again disarms it; one pick at a time).</summary>
+        private void Arm(PickMode mode, int truck = -1)
+        {
+            actions.Touch();
+            bool same = pick == mode && (mode != PickMode.Relocate || moveTruck == truck);
+            pick = same ? PickMode.None : mode;
+            moveTruck = truck;
+            pickMiss = "";
+            Repaint();
+        }
+
+        /// <summary>The window closed, switched rooms or left INFRASTRUCTURE: the armed pick ends (nothing was sent).</summary>
+        public void EndPicks() { pick = PickMode.None; pickMiss = ""; }
+
+        public bool CancelMode()
+        {
+            if (pick == PickMode.None) return false;
+            actions.Touch();
+            EndPicks();
+            return true;
+        }
+
+        private static float RingMetres(PickMode mode) => mode == PickMode.Center ? FrontRules.PadPickMetres : FrontRules.TruckReachMetres;
+
+        /// <summary>The centres a pick's rings stand on: held land airbases (DATA CENTER), else standing data centers, with the queued ones that have a point for DEPLOY TRUCK.</summary>
+        private List<Vector2> Rings(FrontRoomView v, PickMode mode)
+        {
+            rings.Clear();
+            if (mode == PickMode.Center)
+            {
+                foreach (MapAirbaseView a in v.Airbases) if (a.Side == AirbaseSide.Own) rings.Add(new Vector2(a.U, a.V));
+                return rings;
+            }
+            foreach (InfraCenterView c in v.Network.Centers)
+                if (c.U >= 0f && (c.State == InfraState.Up || c.State == InfraState.Damaged || mode == PickMode.Truck && c.State == InfraState.Building)) rings.Add(new Vector2(c.U, c.V));
+            return rings;
+        }
+
+        /// <summary>What the armed pick wants (or why the last click missed), short for the map's foot or long for the INFRASTRUCTURE hint.</summary>
+        private string PickWords(bool foot)
+        {
+            if (pickMiss.Length > 0) return pickMiss + " · CLICK INSIDE A RING" + (foot ? "" : " ON THE MAP") + " · ESC CANCELS";
+            string what = pick == PickMode.Center ? "BUILD DATA CENTER" : pick == PickMode.Truck ? "DEPLOY TRUCK" : "RELOCATE EW-" + (moveTruck + 1);
+            string where = pick == PickMode.Center ? "8 KM OF A HELD AIRBASE" : pick == PickMode.Truck ? "20 KM OF A DATA CENTER" : "20 KM OF A LIVE DATA CENTER";
+            return what + " · CLICK WITHIN " + where + (foot ? "" : " (RINGED ON THE MAP)") + " · ESC CANCELS";
+        }
+
+        /// <summary>
+        /// The armed pick's click: inside a ring it queues the build at the point (or sends the truck's RELOCATE there) and disarms; anywhere else it says why and
+        /// stays armed. The host judges the place again.
+        /// </summary>
+        private void PickAt(Vector2 uv)
+        {
+            actions.Touch();
+            MapFrame f = FrontController.Frame();
+            float reach = RingMetres(pick);
+            bool inside = false;
+            foreach (Vector2 c in Rings(last, pick))
+            {
+                float dx = (uv.x - c.x) * f.W, dz = (uv.y - c.y) * f.H;
+                if (dx * dx + dz * dz <= reach * reach) { inside = true; break; }
+            }
+            if (!inside) { pickMiss = FrontWords.Refusal(pick == PickMode.Center ? FrontOutcome.NotHeld : FrontOutcome.TooFar, Front.Cyber); return; }
+            PickMode was = pick;
+            EndPicks();
+            if (was == PickMode.Center) actions.Queue(Front.Cyber, ProgrammeId.DataCenter, 0, true, uv.x, uv.y);
+            else if (was == PickMode.Truck) actions.Queue(Front.Cyber, ProgrammeId.EwTruck, 0, true, uv.x, uv.y);
+            else
+            {
+                if (moveTruck >= 0 && moveTruck < packTo.Length) { packTo[moveTruck] = uv; movedAt[moveTruck] = last.Now; }
+                actions.MoveTruck(moveTruck, f.X(uv.x), f.Z(uv.y));
+            }
+        }
+
+        private bool Local(Vector2 mouse, out Vector2 p)
+        {
+            p = default;
+            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(graph.Rect, mouse, null, out Vector2 lp)) return false;
+            p = new Vector2(lp.x - graph.Rect.rect.xMin, graph.Rect.rect.yMax - lp.y);
+            return true;
+        }
+
+        /// <summary>On the map plate under the route strip. A word or glyph under the click does not matter: a pick never misses in silence.</summary>
+        private bool OnMap(Vector2 p)
+        {
+            FrontMapView mv = plate.View;
+            return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y + StripH && p.y <= mv.Y + mv.H;
+        }
+
+        /// <summary>
+        /// One frame of input. A pan, zoom or inset move repaints only the map and a wheel over the node list only the list; both return false (the column does not
+        /// depend on the view). True only for a pick's click, which changes the column too. Node clicks arrive through their own hits.
+        /// </summary>
         public bool Tick(Vector2 mouse)
         {
+            if (last == null) { pressed = false; return false; }
+            FrontMapView mv = plate.View;
+            Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
+            int zoomStep = mv.Zoom;
             bool changed = plate.Tick(mouse);
             float wheel = FrontPointer.Wheel;
             if (Mathf.Abs(wheel) > 0.01f && list.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(list.Rect, mouse, null))
             {
                 int to = Mathf.Clamp(scroll + (wheel > 0f ? -1 : 1), 0, Math.Max(0, listCount - ListRows));
-                if (to != scroll) { scroll = to; changed = true; }
+                if (to != scroll) { scroll = to; PaintList(last.Network); }
             }
-            return changed;
+            if (FrontPointer.Down(0))
+            {
+                pressed = pick != PickMode.None && Local(mouse, out pressAt) && OnMap(pressAt);
+                pressCenter = center; pressZoom = zoomStep;
+            }
+            if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
+            if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
+            pressed = false;
+            // Only a click that stayed put on an unmoved, unzoomed map picks anything.
+            if (pick == PickMode.None || !Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > DragSlop * DragSlop || mv.Zoom != pressZoom ||
+                (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
+            PickAt(mv.UV(p));
+            return true;
         }
 
-        private void PaintSession(FrontVector g, NetworkRoomView n)
+        /// <summary>The view moved: the map repaints now, the window repaints nothing else.</summary>
+        private bool MapOnly(bool changed)
         {
-            float w = colW;
-            // The column is its own pane of glass beside the map: a faint wash and a phosphor edge.
-            g.Rect(colX - 5f, FrontKit.HeaderH + 2f, w + 11f, sessH - FrontKit.HeaderH - 4f, Phos.WithAlpha(0.025f));
-            g.Rect(colX - 6f, FrontKit.HeaderH + 2f, 1.2f, sessH - FrontKit.HeaderH - 4f, PhosDim.WithAlpha(0.5f));
-            // Trace gauge: a half dial of ticks, lit up to the trace, coloured by zone.
-            Vector2 c = new Vector2(colX + w * 0.5f, 118f);
-            const float r = 70f;
-            float trace = n.HasIntrusion ? n.Trace : 0f;
-            const int ticks = 36;
-            for (int i = 0; i < ticks; i++)
-            {
-                float a = Mathf.PI + Mathf.PI * (i + 0.5f) / ticks, pct = (i + 0.5f) / ticks * 100f;
-                Vector2 d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                bool lit = n.HasIntrusion && pct <= trace;
-                g.Line(c + d * (r - 14f), c + d * r, 4f, lit ? Zone(pct) : Faint.WithAlpha(0.55f));
-            }
-            Vector2 pa = c + new Vector2(-r - 4f, 0f);
-            for (int i = 1; i <= 60; i++)
-            {
-                float a = Mathf.PI + Mathf.PI * i / 60f;
-                Vector2 pb = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * (r + 4f);
-                g.Line(pa, pb, 1f, PhosDim.WithAlpha(0.6f));
-                pa = pb;
-            }
-            // Zone marks on the rim: where the trace turns amber and red.
-            for (int q = 0; q < 2; q++)
-            {
-                float a = Mathf.PI + Mathf.PI * (q == 0 ? 0.25f : 0.60f);
-                Vector2 d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-                g.Line(c + d * (r + 4f), c + d * (r + 9f), 1.4f, q == 0 ? Amber : TraceRed);
-            }
-            float na = Mathf.PI + Mathf.PI * Mathf.Clamp01(trace / 100f);
-            Vector2 nd = new Vector2(Mathf.Cos(na), Mathf.Sin(na));
-            Color zone = n.HasIntrusion ? Zone(trace) : OutInk;
-            g.Disc(c, 40f, zone.WithAlpha(0.05f), 28);
-            g.Line(c + nd * 22f, c + nd * (r - 18f), 2f, zone);
-            g.Disc(c, 3.5f, zone, 14);
-            string word = !n.Active ? "NO LINK" : !n.HasIntrusion ? "NO INTRUSION" : n.Stale ? "STALE" : trace < 25f ? "CLEAN" : trace < 60f ? "WARM" : trace < 85f ? "HOT" : "BURN NOW";
-            FrontKit.Set(opTag, n.Operator.Length > 0 ? "OP " + n.Operator : "", Bright);
-            FrontKit.Set(traceValue, n.HasIntrusion ? n.Trace + " %" : "--", n.HasIntrusion ? zone : PhosDim);
-            FrontKit.Set(traceWord, word, n.HasIntrusion && !n.Stale ? zone : n.Stale ? TraceRed : PhosDim);
-            if (n.HasIntrusion && (trace >= 85f || n.Stale)) g.Frame(colX + 50f, 126f, w - 100f, 24f, 1.6f, n.Stale ? TraceRed : zone);
+            if (changed) PaintGraph(last, last.Network);
+            return false;
+        }
 
-            // The hop in flight: its countdown and a bar that fills as the hop lands.
-            FrontKit.Set(hopLine, Fit(hopLine, n.HopLine, w), n.Hopping ? HopInk : PhosDim);
-            hopBar.Show(n.Hopping);
-            if (n.Hopping) hopBar.Set(n.HopFraction, HopInk);
-            FrontKit.Set(estLine, !n.HasIntrusion ? "TRACE STARTS WHEN YOU HOP" : n.EstTraceSeconds >= 0 ? "EST. TRACED IN ~" + FrontKit.Clock(n.EstTraceSeconds) + " AT THIS RATE" : "NOTHING CLIMBS THE TRACE RIGHT NOW", PhosDim);
-            FrontKit.Set(nextLine, n.Next, Tone(n.NextTone));
-            if (n.Next.Length > 0) g.Rect(colX, 205f, 3f, 38f, Tone(n.NextTone));
-            g.Dashed(new Vector2(colX, 250f), new Vector2(colX + w, 250f), 1f, Faint.WithAlpha(0.8f), 3f, 3f);
-
-            // YOUR held nodes: pips (filled held, dashed the hop in flight, hollow free) and the count against the per-intrusion cap.
-            int cap = CyberRules.MaxHeldPerIntrusion;
-            for (int i = 0; i < cap; i++)
-            {
-                float px = colX + 100f + i * 30f;
-                bool held = i < n.YourHeld, hopping = i == n.YourHeld && n.Hopping;
-                if (held) { g.Rect(px, 262f, 26f, 11f, Own.WithAlpha(0.45f)); g.Frame(px, 262f, 26f, 11f, 1.2f, Own); }
-                else if (hopping) { g.Dashed(new Vector2(px, 262f), new Vector2(px + 26f, 262f), 1.2f, HopInk, 4f, 3f); g.Dashed(new Vector2(px, 273f), new Vector2(px + 26f, 273f), 1.2f, HopInk, 4f, 3f); g.Line(new Vector2(px, 262f), new Vector2(px, 273f), 1.2f, HopInk); g.Line(new Vector2(px + 26f, 262f), new Vector2(px + 26f, 273f), 1.2f, HopInk); }
-                else g.Frame(px, 262f, 26f, 11f, 1f, Faint);
-            }
-            FrontKit.Set(heldVal, n.YourHeld + " / " + cap, n.YourHeld > 0 ? Phos : PhosDim);
-
-            // The FACTION's network, as `key ...... value` lines.
-            int trucksUp = 0, trucks = 0, dc = 0, dcUp = 0;
-            for (int i = 0; i < n.Anchors.Count; i++)
-            {
-                NetAnchorView a = n.Anchors[i];
-                if (a.Kind == AnchorKind.EwTruck) { trucks++; if (a.Health != AnchorHealth.Down) trucksUp++; }
-                else { dc++; if (a.Health != AnchorHealth.Down) dcUp++; }
-            }
-            int fcap = CyberRules.MaxHeldPerFaction;
-            string[] fv =
-            {
-                n.Active ? n.HeldTotal + " / " + fcap : "—",
-                n.Active ? n.Sessions + " / " + n.IntrusionCap + " RUNNING" : "—",
-                n.Active ? trucksUp + " / " + trucks + " UP" : "—",
-                !n.Active ? "—" : dc == 0 ? "NONE BUILT" : dcUp > 0 ? "UP" : "DOWN"
-            };
-            Color[] fc =
-            {
-                n.HeldTotal >= fcap ? Amber : n.HeldTotal > 0 ? Phos : PhosDim,
-                n.Active && n.Sessions >= n.IntrusionCap ? Amber : Bright,
-                trucksUp == trucks && trucks > 0 ? Phos : Amber,
-                dcUp > 0 ? Phos : dc == 0 ? PhosDim : TraceRed
-            };
-            for (int i = 0; i < 4; i++)
-            {
-                FrontKit.Set(facVal[i], fv[i], fc[i]);
-                float x0 = colX + facKey[i].text.Length * (Adv + 0f) + 5f, x1 = colX + w - fv[i].Length * Adv - 5f;
-                Leader(g, x0, x1, 302f + i * 18f + 11f, Faint.WithAlpha(0.85f));
-            }
-            g.Dashed(new Vector2(colX, 376f), new Vector2(colX + w, 376f), 1f, Faint.WithAlpha(0.8f), 3f, 3f);
-
-            // Threat to our own network: five blocks, lit from calm (5) down to the current level.
-            byte level = (byte)Mathf.Clamp(n.Infocon, 1, 5);
-            Color tone = level >= 4 ? Phos : level == 3 ? Amber : TraceRed;
-            for (int i = 0; i < 5; i++)
-            {
-                int lv = 5 - i;
-                bool lit = lv >= level;
-                float bx = colX + i * InfStep;
-                g.Rect(bx, 398f, InfStep - 5f, 22f, lit ? tone.WithAlpha(0.28f) : Glass);
-                g.Frame(bx, 398f, InfStep - 5f, 22f, 1.2f, lit ? tone : Faint);
-                FrontKit.Set(infocon[i], lv.ToString(), lit ? Bright : OutInk);
-            }
-            FrontKit.Set(threatWord, "INFOCON " + level + " · " + n.ThreatWord, tone);
-            FrontKit.Set(threatNote, Fit(threatNote, n.ThreatNote, w - PurgeW - 6f), n.Breaches > 0 ? Amber : PhosDim);
-            purge.Label = n.PurgeLabel;
-            purge.Interactable = n.CanPurge;
-            g.Dashed(new Vector2(colX, 462f), new Vector2(colX + w, 462f), 1f, Faint.WithAlpha(0.8f), 3f, 3f);
-
-            // Key swatches.
-            Color[] ink = { Own, HopInk, Amber, OutInk, TraceRed, Own };
+        /// <summary>A hex outline in dashes: a ghost, or one of our trucks packing up.</summary>
+        private static void DashedHex(FrontVector g, Vector2 p, float r, Color k)
+        {
             for (int i = 0; i < 6; i++)
             {
-                Vector2 p = new Vector2(colX + 12f + (i / 3) * colW * 0.5f, 490f + (i % 3) * 16f);
-                if (i == 0) { g.Line(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 2.2f, ink[i]); g.Disc(p, 3.5f, ink[i], 10); }
-                else if (i == 1) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 2f, ink[i], 4f, 3f);
-                else if (i == 2) g.Dashed(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 1.2f, ink[i], 3f, 3f);
-                else if (i == 3) g.Line(p + new Vector2(-8f, 0f), p + new Vector2(8f, 0f), 1f, ink[i].WithAlpha(0.5f));
-                else if (i == 4) FrontKit.Cross(g, p, 5f, ink[i]);
-                else { g.Ring(p, 7f, 1.2f, ink[i].WithAlpha(0.7f), 18, 1f, 1f); g.Disc(p, 2.5f, ink[i], 8); }
+                float a0 = Mathf.PI / 3f * i, a1 = Mathf.PI / 3f * (i + 1);
+                g.Dashed(p + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * r, p + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * r, 1.6f, k, 3f, 2f);
             }
+        }
+
+        /// <summary>A breach flag: a pole of height <paramref name="h"/> standing on <paramref name="foot"/> and a pennant at its top (the word BREACHED rides the label).</summary>
+        private static void Flag(FrontVector g, Vector2 foot, float h, Color k)
+        {
+            Vector2 top = foot + new Vector2(0f, -h);
+            g.Line(foot, top, 1.4f, k);
+            g.Tri(top, top + new Vector2(h * 0.7f, h * 0.25f), top + new Vector2(0f, h * 0.5f), k);
         }
 
         /// <summary>Truncates to the width only when the text could overflow it (7.5 px a mono glyph is the ceiling at 10.5 px), so a repaint measures few strings.</summary>
         private static string Fit(TMP_Text t, string s, float width) => s.Length * 7.5f <= width ? s : C2Kit.FitTo(t, s, width);
 
-        /// <summary>The trace gauge's zones: phosphor while clean, amber while warm, trace red once it is hot.</summary>
-        private static Color Zone(float pct) => pct < 25f ? Phos : pct < 60f ? Amber : TraceRed;
 
         private static void Hex(FrontVector g, Vector2 p, float r, Color k, float w)
         {

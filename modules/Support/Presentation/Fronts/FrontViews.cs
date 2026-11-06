@@ -1025,7 +1025,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 }
             }
             dcN = trN = 0;
-            string effect = "CUTS YOUR TRACE x" + CyberRules.DataCenterTraceFactor.ToString("0.0#", NetFmt);
+            string effect = "CUTS YOUR TRACE ×" + CyberRules.DataCenterTraceFactor.ToString("0.0#", NetFmt);
             for (int i = 0; s != null && i < s.Anchors.Count; i++)
             {
                 CyberAnchorRow a = s.Anchors[i];

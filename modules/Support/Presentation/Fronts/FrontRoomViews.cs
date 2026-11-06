@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Place;
         /// <summary>"RUNS EW-1" or "IDLE" while it stands ("" otherwise): the wire carries no pairing, each standing truck takes the nearest free center.</summary>
         public string Runs;
-        /// <summary>What a standing center does for us ("CUTS YOUR TRACE x0.8"); "" otherwise.</summary>
+        /// <summary>What a standing center does for us ("CUTS YOUR TRACE ×0.8"); "" otherwise.</summary>
         public string Effect;
         public bool Breached;
         public ushort Row;

@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch (what)
             {
                 case "press": return Press(fronts, window, (Text(args, "label") ?? "").ToUpperInvariant(), (int)Number(args, "nth", 0f));
-                case "map": return MapClick(fronts, window, Number(args, "u", 0.5f), Number(args, "v", 0.5f));
+                case "map": { Vector2 at = Aim(window, args); return MapClick(fronts, window, at.x, at.y); }
                 case "drag": { Vector2 at = Aim(window, args); return Drag(fronts, window, at.x, at.y, Number(args, "du", 0.1f), Number(args, "dv", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600)); }
                 case "wheel": { Vector2 at = Aim(window, args); return Wheel(fronts, window, at.x, at.y, Number(args, "delta", 1f)); }
                 case "pic": return Picture(fronts, window, Number(args, "wheel", 0f), Number(args, "dx", 0f), Number(args, "dy", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600));
@@ -188,6 +188,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["birdsMoving"] = moving;
                 for (int i = 0; i < lv.Shares.Length; i++) r["share" + i] = lv.Shares[i];
                 r["queue"] = lv.Queue.Count;
+                NetworkRoomView nw = lv.Network;
+                int packing = 0;
+                string grids = "";
+                foreach (InfraTruckView t in nw.Trucks) { if (t.State == InfraState.Packing) packing++; grids += (grids.Length > 0 ? "," : "") + t.Name + " " + t.State + " " + t.Grid + " " + t.U.ToString("0.0000") + "/" + t.V.ToString("0.0000"); }
+                r["trucks"] = grids;
+                r["centersUp"] = nw.CentersUp; r["trucksUp"] = nw.TrucksUp; r["trucksPacking"] = packing; r["netGhosts"] = nw.Ghosts.Count;
             }
             object room = Room(window);
             if (room == null) return r;
@@ -198,6 +204,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));
             r["padPick"] = Bool(Field(room, "padPick"));
+            if (Field(room, "pick") is System.Enum netPick) { r["netPick"] = System.Convert.ToInt32(netPick); r["pickMiss"] = Field(room, "pickMiss") as string ?? ""; } // 0 none, 1 DATA CENTER, 2 TRUCK, 3 RELOCATE
             if (Field(room, "plate") is FrontMapPlate plate)
             {
                 r["zoom"] = plate.View.Zoom; r["centerU"] = plate.View.Center.x; r["centerV"] = plate.View.Center.y;
@@ -218,10 +225,26 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return rooms[(int)v.Front];
         }
 
-        /// <summary>The map point a gesture aims at: <c>u</c>, <c>v</c>, or with <c>at: "center"</c> the middle of the current view (always on screen, whatever the zoom and pan).</summary>
+        /// <summary>
+        /// The map point a gesture aims at: <c>u</c>, <c>v</c>; with <c>at: "center"</c> the middle of the current view (always on screen, whatever the zoom and pan);
+        /// with <c>at: "base"</c> our first held airbase, <c>at: "dc"</c> / <c>"truck"</c> our first standing data center / EW truck, each moved <c>east_km</c> / <c>north_km</c> on the ground.
+        /// </summary>
         private static Vector2 Aim(OpsFrontWindow window, Dictionary<string, object> args)
         {
-            if (Text(args, "at") == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
+            string at = Text(args, "at");
+            if (at == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
+            if ((at == "base" || at == "dc" || at == "truck") && Field(window, "lastView") is FrontRoomView v)
+            {
+                Vector2 p = new Vector2(-1f, -1f);
+                if (at == "base") { foreach (MapAirbaseView a in v.Airbases) if (a.Side == AirbaseSide.Own) { p = new Vector2(a.U, a.V); break; } }
+                else if (at == "dc") { foreach (InfraCenterView c in v.Network.Centers) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.U, c.V); break; } }
+                else foreach (InfraTruckView t in v.Network.Trucks) if (t.State == InfraState.Up || t.State == InfraState.Damaged) { p = new Vector2(t.U, t.V); break; }
+                if (p.x >= 0f)
+                {
+                    MapFrame f = FrontController.Frame();
+                    return p + new Vector2(Number(args, "east_km", 0f) * 1000f / f.W, -Number(args, "north_km", 0f) * 1000f / f.H);
+                }
+            }
             return new Vector2(Number(args, "u", 0.5f), Number(args, "v", 0.5f));
         }
 
