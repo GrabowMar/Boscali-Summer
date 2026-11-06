@@ -321,9 +321,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        private static readonly string[] SiteNames = { "ALPHA", "BRAVO" };
-
-        internal static string SiteName(int slot) => "UPLINK " + SiteNames[Math.Min(Math.Max(slot, 0), SiteNames.Length - 1)];
+        internal static string SiteName(int slot) => "PAD-" + (Math.Min(Math.Max(slot, 0), FrontRules.PadCap - 1) + 1);
 
         /// <summary>The uplink markers: the faction's own sites (OPS mirror) with their standing and what losing each costs, then the enemy sites the CYBER fog reveals. No site, no marker: nothing is invented.</summary>
         private static void Sites(FrontRoomView v, in FrontInputs c)

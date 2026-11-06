@@ -317,8 +317,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 switch (e.Id)
                 {
-                    case ProgrammeId.LaunchSatellite: ok = space != null && space.TryLaunchBird(owner, out bird); failure = FrontOutcome.BirdsUp; break;
-                    case ProgrammeId.UplinkSite: ok = space != null && space.TryRebuildUplink(owner); failure = f.World.Uplinks >= f.World.UplinkMax ? FrontOutcome.UplinksMax : FrontOutcome.NoSite; break;
+                    case ProgrammeId.LaunchSatellite: bird = (BirdKind)e.Kind; ok = space != null && space.TryLaunchBird(owner, bird); failure = FrontOutcome.BirdsUp; break;
+                    case ProgrammeId.UplinkSite:
+                        FrontOutcome padWhy = FrontOutcome.Unavailable;
+                        ok = space != null && space.TryBuildPad(owner, e.HasPoint, e.X, e.Z, out padWhy); failure = padWhy;
+                        break;
                     case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); failure = FrontOutcome.DataCentersMax; break;
                     case ProgrammeId.EwTruck: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.EwTruck); failure = FrontOutcome.TrucksMax; break;
                     case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); failure = f.World.Camps >= f.World.CampMax ? FrontOutcome.CampsMax : FrontOutcome.NoSite; break;

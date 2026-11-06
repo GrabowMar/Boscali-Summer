@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private sealed class FactionSpace
         {
             public SpaceState State;
+            /// <summary>One entry per pad slot: the raised site (or the carrier hosting the pad), null while the slot was never built.</summary>
             public Unit[] Links;
             public float[] Baseline;
             /// <summary>Where each site was raised, in world metres: a destroyed site keeps its place on the ORBIT room.</summary>
@@ -29,22 +30,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public TaskedDesk Tasked;
             /// <summary>Callsigns of the humans whose posts this faction shows, so a poll does not look every one up again.</summary>
             public readonly Dictionary<ulong, string> Labels = new Dictionary<ulong, string>();
-            /// <summary>Last mission second a dead bird's rebuild bar was funded (M6a: an ASAT strike kills a bird).</summary>
-            public float BirdFundedAt;
         }
         private struct IntentEntry { public string Words; public float NextAt; }
         private readonly struct Candidate
         {
-            public readonly GlobalPosition Anchor, Position;
+            public readonly GlobalPosition Anchor;
             public readonly Airbase Parent;
             public readonly float RearScore;
-            public Candidate(GlobalPosition anchor, GlobalPosition position, Airbase parent, float score)
-            { Anchor = anchor; Position = position; Parent = parent; RearScore = score; }
+            public Candidate(GlobalPosition anchor, Airbase parent, float score) { Anchor = anchor; Parent = parent; RearScore = score; }
         }
 
         private readonly Dictionary<FactionHQ, FactionSpace> factions = new Dictionary<FactionHQ, FactionSpace>();
-        private readonly Dictionary<FactionHQ, float> nextAttempt = new Dictionary<FactionHQ, float>();
-        private System.Collections.IEnumerator establishing;
+        /// <summary>Scratch for pad placement: the held land airbases and carriers, and the Airbase or Ship each one stands for.</summary>
+        private readonly List<FrontPlacement.Base> heldBases = new List<FrontPlacement.Base>(MaximumBases);
+        private readonly List<Component> heldSites = new List<Component>(MaximumBases);
         private readonly UplinkSpawner spawner = new UplinkSpawner();
         private readonly SpaceWatchOfficer watch = new SpaceWatchOfficer();
         private readonly Dictionary<FactionHQ, IntentEntry> intents = new Dictionary<FactionHQ, IntentEntry>();
@@ -75,10 +74,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             watch.ResetForScene();
             intents.Clear();
             factions.Clear();
-            nextAttempt.Clear();
-            establishing = null;
             tickGate.Reset();
-            scanCapLogged = false;
             spawner.ResetForScene();
         }
         private void OnDestroy() => ResetForScene();
@@ -130,56 +126,156 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// Host: the faction's own uplink sites for the OPERATIONS mirror, read from the 1 Hz state the tick keeps (never a re-sample): the place each was raised, and whether it stands, is
-        /// destroyed, or is destroyed with the UPLINK SITE programme queued or building. Enemy sites are never listed here (a revealed one is a CYBER node).
+        /// destroyed, or is destroyed with the LAUNCH PAD programme queued or building. A slot never built is not listed. Enemy sites are never listed here (a revealed one is a CYBER node).
         /// </summary>
         internal void CopySites(FactionHQ owner, List<OpsSiteRow> into)
         {
             if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return;
-            bool rebuilding = manager != null && manager.Fronts != null && manager.Fronts.HasProgramme(owner, ProgrammeId.UplinkSite);
+            // A queued pad goes to an empty slot first: only with every slot built does it replace the first destroyed one.
+            bool rebuilding = faction.State.UplinkCount == faction.Links.Length &&
+                manager != null && manager.Fronts != null && manager.Fronts.HasProgramme(owner, ProgrammeId.UplinkSite);
             for (int i = 0; i < faction.Links.Length && into.Count < OpsWire.MaxSites; i++)
             {
+                if (!faction.State.PadPresent(i)) continue;
                 bool down = faction.State.UplinkDown(i);
                 into.Add(new OpsSiteRow { Slot = (byte)i, State = !down ? SiteState.Up : rebuilding ? SiteState.Rebuilding : SiteState.Down, X = faction.SiteX[i], Z = faction.SiteZ[i] });
-                if (down) rebuilding = false; // one programme raises one site: the first dead one (TryRebuildUplink); a second dead site is only destroyed
+                if (down) rebuilding = false; // one programme raises one pad: the first destroyed one (TryBuildPad); a second destroyed pad is only destroyed
             }
         }
 
         // ---- OPS FRONTS programme effects (host) ----------------------------------------------------
 
-        /// <summary>LAUNCH SATELLITE finished: the lowest dead bird is on station. False (nothing changed) when none is down.</summary>
-        internal bool TryLaunchBird(FactionHQ owner, out BirdKind bird)
+        /// <summary>
+        /// Host: can this kind go up now? The ladder's LAUNCH rule on the live pads and birds (not what is queued): the kind is not up, a pad stands and links
+        /// one more bird. Unavailable for a faction without a SPACE or a kind out of range.
+        /// </summary>
+        internal FrontOutcome CheckLaunch(FactionHQ owner, BirdKind kind)
         {
-            bird = BirdKind.Optical;
-            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return false;
-            int restored = faction.State.RestoreBird();
-            if (restored < 0) return false;
-            bird = (BirdKind)restored;
-            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + bird + " bird launched by its programme and on station.");
+            if ((byte)kind >= SpaceRules.BirdCount || !TryGetState(owner, out SpaceState s)) return FrontOutcome.Unavailable;
+            var live = new FrontWorld { PadsLive = s.LiveUplinkCount, BirdsUp = (byte)(~s.DownMask & ((1 << SpaceRules.BirdCount) - 1)) };
+            return FrontLadder.Check(Front.Space, ProgrammeId.LaunchSatellite, (byte)kind, live, default);
+        }
+
+        /// <summary>LAUNCH SATELLITE finished: that kind is on station at its home point with a full tank. False (nothing changed) when <see cref="CheckLaunch"/> refuses.</summary>
+        internal bool TryLaunchBird(FactionHQ owner, BirdKind kind)
+        {
+            if (CheckLaunch(owner, kind) != FrontOutcome.None || !factions[owner].State.Launch(kind)) return false;
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + kind + " bird launched and on station.");
             return true;
         }
 
-        /// <summary>UPLINK SITE finished: a real uplink site is raised on a rear spot of a held airbase and takes the place of the first dead one. False when none is dead or no legal spot exists.</summary>
-        internal bool TryRebuildUplink(FactionHQ owner)
+        /// <summary>
+        /// Host: can a pad be built (at the picked point when <paramref name="hasPoint"/>)? A slot must be free (never built or destroyed); a picked point must lie
+        /// within <see cref="FrontRules.PadPickMetres"/> of a held airbase or own carrier; without a point any held airbase or carrier will do. Spawns nothing.
+        /// </summary>
+        internal FrontOutcome CheckPad(FactionHQ owner, bool hasPoint, float x, float z)
         {
-            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction) || FactionRegistry.airbaseLookup == null) return false;
-            int slot = -1;
-            for (int i = 0; i < faction.Links.Length && slot < 0; i++) if (UplinkSpawner.Down(faction.Links[i], owner)) slot = i;
-            if (slot < 0) return false;
+            if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return FrontOutcome.Unavailable;
+            Refresh(owner, faction, SupportManager.MissionNow());
+            if (FreeSlot(faction) < 0) return FrontOutcome.UplinksMax;
+            CollectHeld(owner, faction);
+            if (hasPoint) return FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: true) >= 0 ? FrontOutcome.None : FrontOutcome.NotHeld;
+            return heldBases.Count > 0 ? FrontOutcome.None : FrontOutcome.NoSite;
+        }
+
+        /// <summary>
+        /// LAUNCH PAD finished: a real site is raised at the picked airbase (any legal ground around it, rear or not), or the picked carrier itself hosts the pad.
+        /// Without a point: the deepest rear spot around the held airbases, else a carrier, else ground near a unit's start. The pad takes the first slot never
+        /// built, else the first destroyed one (whose wreck the spawner removes). False with the refusal in <paramref name="why"/>.
+        /// </summary>
+        internal bool TryBuildPad(FactionHQ owner, bool hasPoint, float x, float z, out FrontOutcome why)
+        {
+            why = CheckPad(owner, hasPoint, x, z);
+            if (why != FrontOutcome.None) return false;
+            FactionSpace faction = factions[owner];
+            int slot = FreeSlot(faction);
+            spawner.DiscardGroup(faction.Links[slot]); // only a group the spawner raised; a native carrier link is never destroyed
             float diagonal = TheaterFrame.Resolve().magnitude;
-            int inspected = 0;
-            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            Unit made = null;
+            if (hasPoint)
             {
-                if (++inspected > 128) break;
-                if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
-                if (!TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot) ||
-                    !spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out Unit made)) continue;
-                faction.Links[slot] = made;
-                faction.Baseline[slot] = UplinkSpawner.Health(made);
-                Locate(faction, slot);
-                Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " uplink " + slot + " raised again by its programme.");
-                return true;
+                Component site = heldSites[FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: true)];
+                if (site is Ship carrier) made = carrier;
+                else if (site is Airbase airbase && TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot, requireRear: false))
+                    spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out made);
             }
-            return false;
+            else made = RearSite(owner, slot, diagonal);
+            if (made == null) { why = FrontOutcome.NoSpot; return false; }
+            faction.Links[slot] = made;
+            faction.Baseline[slot] = UplinkSpawner.Health(made);
+            Locate(faction, slot);
+            faction.State.PlacePad(slot);
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " PAD-" + (slot + 1) + (made is Ship ? " built aboard " + made.name
+                : " built at " + Mathf.RoundToInt(faction.SiteX[slot]) + ", " + Mathf.RoundToInt(faction.SiteZ[slot])) + ".");
+            return true;
+        }
+
+        /// <summary>The slot a new pad takes: the first never built, else the first destroyed; -1 when both stand.</summary>
+        private static int FreeSlot(FactionSpace faction)
+        {
+            for (int i = 0; i < faction.Links.Length; i++) if (!faction.State.PadPresent(i)) return i;
+            for (int i = 0; i < faction.Links.Length; i++) if (faction.State.UplinkDown(i)) return i;
+            return -1;
+        }
+
+        /// <summary>Fills the held-base scratch: held land airbases, then own carriers afloat (ruling R6: a carrier is a pad host) that are not already a standing pad.</summary>
+        private void CollectHeld(FactionHQ owner, FactionSpace faction)
+        {
+            heldBases.Clear(); heldSites.Clear();
+            if (FactionRegistry.airbaseLookup != null)
+            {
+                int inspected = 0;
+                foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+                {
+                    if (++inspected > 128 || heldSites.Count >= MaximumBases) break;
+                    if (a == null || a.disabled || a.AttachedAirbase || a.CurrentHQ != owner || a.center == null) continue;
+                    GlobalPosition p = a.center.position.ToGlobalPosition();
+                    heldBases.Add(new FrontPlacement.Base(heldSites.Count, (float)p.x, (float)p.z, true, false, true));
+                    heldSites.Add(a);
+                }
+            }
+            List<Unit> units = UnitRegistry.allUnits;
+            for (int i = 0; units != null && i < units.Count && i < MaximumScanUnits && heldSites.Count < MaximumBases; i++)
+            {
+                if (!(units[i] is Ship ship) || ship.disabled || ship.NetworkHQ != owner || ship.GetAirbase() == null ||
+                    UplinkSpawner.Down(ship, owner) || Array.IndexOf(faction.Links, ship) >= 0) continue;
+                GlobalPosition p = ship.transform.position.ToGlobalPosition();
+                heldBases.Add(new FrontPlacement.Base(heldSites.Count, (float)p.x, (float)p.z, true, true, false));
+                heldSites.Add(ship);
+            }
+        }
+
+        /// <summary>
+        /// No picked point: one site on the deepest rear spot found around the held airbases (one legal spot per base), else the first own carrier, else ground near
+        /// one of the faction's unit start positions. Null when none takes. Reads the scratch <see cref="CollectHeld"/> just filled.
+        /// </summary>
+        // ponytail: one synchronous search (up to 16 bases x 36 ring points) at programme completion; step it across frames if a hitch shows.
+        private Unit RearSite(FactionHQ owner, int slot, float diagonal)
+        {
+            var legal = new List<Candidate>(MaximumBases);
+            for (int i = 0; i < heldSites.Count; i++)
+                if (heldSites[i] is Airbase airbase && TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot)) legal.Add(spot);
+            while (legal.Count > 0)
+            {
+                int best = 0;
+                for (int i = 1; i < legal.Count; i++) if (legal[i].RearScore > legal[best].RearScore) best = i;
+                if (spawner.TryCreate(owner, slot, legal[best].Anchor, legal[best].Parent, out Unit made)) return made;
+                legal.RemoveAt(best);
+            }
+            for (int i = 0; i < heldSites.Count; i++) if (heldSites[i] is Ship carrier) return carrier;
+            List<Unit> units = UnitRegistry.allUnits;
+            // Native stored spawn origins are only candidates; terrain/mission/ownership rules still apply.
+            for (int i = 0, origins = 0; units != null && i < units.Count && i < MaximumScanUnits && origins < 16; i++)
+            {
+                Unit unit = units[i];
+                if (unit == null || unit.disabled || unit.NetworkHQ != owner) continue;
+                origins++;
+                Vector3 origin = unit.startPosition.ToLocalPosition();
+                if (unit is Aircraft) origin.y = Datum.LocalSeaY + 100f;
+                if (GroundPlacement.DryGround(origin, out _) && TryAround(owner, origin, null, diagonal, out Candidate field) &&
+                    spawner.TryCreate(owner, slot, field.Anchor, field.Parent, out Unit made)) return made;
+            }
+            return null;
         }
 
         /// <summary>The parts WATCH OFFICER OVERLORD works one faction through. False until the faction has a SPACE.</summary>
@@ -506,8 +602,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     Plugin.Logger?.LogWarning("[Support.Space] Mirror poll failed: " + e.Message);
                 }
             }
-            // Site search is the old ~10 ms lump: one airbase or one fallback origin per frame instead of all at once.
-            if (establishing != null && !establishing.MoveNext()) establishing = null;
             if (!tickGate.Due(now, 1f, 0f)) return;   // 1 Hz slot 0 (table in HighCommandManager)
             spawner.RetryCleanup();
             // CYBER BIRD JAM: an enemy intrusion that holds our UPLINK node (or a fired BIRD JAM package) slows every bird task.
@@ -519,36 +613,31 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null) continue;
-                if (factions.TryGetValue(hq, out FactionSpace faction)) { Refresh(hq, faction, now); RebuildBirds(hq, faction, now); continue; }
-                if (establishing != null) continue;
-                if (factions.Count >= MaximumFactions || nextAttempt.Count >= MaximumFactions && !nextAttempt.ContainsKey(hq)) continue;
-                if (nextAttempt.TryGetValue(hq, out float retry) && now < retry) continue;
-                nextAttempt[hq] = now + 30f;
-                establishing = Establish(hq); // stepped one slice per frame by Update
-                break; // Expensive initial world sampling is limited to one faction per mission second.
+                if (!factions.TryGetValue(hq, out FactionSpace faction))
+                {
+                    if (factions.Count >= MaximumFactions) continue;
+                    faction = Open(hq);
+                }
+                Refresh(hq, faction, now);
             }
         }
 
         /// <summary>
-        /// Space spec 5.2: a bird an ASAT strike killed returns through a 400-unit restore bar (a plain timer in S0, funded by the front budget from S1)
-        /// and then a 6 minute build. The pure <see cref="SpaceState"/> owns the clock; this only pays the bar and says when a bird is back.
+        /// Every faction has a SPACE from its first tick (CYBER BURN packages, SOF posts and OVERLORD use its TASKED desk): no pad, no satellite, nothing on
+        /// station until a LAUNCH PAD and a LAUNCH SATELLITE build put them there.
         /// </summary>
-        private void RebuildBirds(FactionHQ owner, FactionSpace faction, float now)
+        private FactionSpace Open(FactionHQ owner)
         {
-            byte down = faction.State.DownMask;
-            if (down == 0) { faction.BirdFundedAt = now; return; }
-            float dt = Mathf.Clamp(now - faction.BirdFundedAt, 0f, 5f);
-            faction.BirdFundedAt = now;
-            for (int i = 0; i < SpaceRules.BirdCount; i++)
-            {
-                if ((down & (1 << i)) == 0) continue;
-                var bar = faction.State.BirdBar((BirdKind)i);
-                if (bar.Complete) continue;
-                bar.Fund(manager.BirdRebuildFunding(owner, dt));
-            }
-            byte back = faction.State.TickBirds(now);
-            for (int i = 0; i < SpaceRules.BirdCount; i++)
-                if ((back & (1 << i)) != 0) Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + " " + (BirdKind)i + " bird rebuilt and back on station.");
+            int pads = FrontRules.PadCap;
+            var links = new Unit[pads];
+            var faction = new FactionSpace { State = new SpaceState(pads), Links = links, Baseline = new float[pads], SiteX = new float[pads], SiteZ = new float[pads],
+                View = Array.AsReadOnly(links), Observations = new SpaceObservations(owner) };
+            faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
+            SeedGeo(owner, faction.State);
+            factions.Add(owner, faction);
+            SubscribeTasked(owner, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(owner, player, request, result));
+            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + ": SPACE open, no pad and no satellite until built.");
+            return faction;
         }
 
         private static void Refresh(FactionHQ owner, FactionSpace faction, float now)
@@ -556,93 +645,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
             faction.Observations?.Tick(now);
             for (int i = 0; i < faction.Links.Length; i++)
             {
+                if (!faction.State.PadPresent(i)) continue; // a slot never built has no site to read
                 Unit link = faction.Links[i];
                 float health = faction.Baseline[i] > 0f ? Mathf.Clamp01(UplinkSpawner.Health(link) / faction.Baseline[i]) : 0f;
                 faction.State.SetUplink(i, health, UplinkSpawner.Down(link, owner), now);
             }
-        }
-
-        private bool scanCapLogged;
-        private void NoteScanCap(int count)
-        {
-            if (scanCapLogged) return;
-            scanCapLogged = true; // reset with the scene's service state
-            Plugin.Logger?.LogWarning("[Support.Space] Uplink site search saw " + count + " units; only the first " + MaximumScanUnits + " are considered.");
-        }
-
-        private System.Collections.IEnumerator Establish(FactionHQ owner)
-        {
-            int generation = Generation;
-            FactionSpace faction = null;
-            if (UnitRegistry.allUnits != null && UnitRegistry.allUnits.Count > MaximumScanUnits) NoteScanCap(UnitRegistry.allUnits.Count);
-            var legal = new List<Candidate>(UplinkPlacement.MaxCandidates);
-            Vector2 span = TheaterFrame.Resolve();
-            if (FactionRegistry.airbaseLookup != null)
-            {
-                int inspected = 0, heldBases = 0;
-                var snapshot = new List<Airbase>(FactionRegistry.airbaseLookup.Values); // the lookup may change between frames
-                foreach (Airbase airbase in snapshot)
-                {
-                    if (++inspected > 128 || heldBases >= MaximumBases) break;
-                    if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
-                    heldBases++;
-                    CollectAround(owner, airbase.center.position, airbase, span.magnitude, legal, 8);
-                    yield return null;
-                    if (generation != Generation) yield break;
-                }
-            }
-            var links = new List<Unit>(2);
-            if (legal.Count > 0)
-            {
-                var choices = new UplinkCandidate[legal.Count];
-                for (int i = 0; i < choices.Length; i++)
-                    choices[i] = new UplinkCandidate(i, legal[i].Position.x, legal[i].Position.z, legal[i].RearScore);
-                if (UplinkPlacement.TryPair(choices, span.magnitude, out int a, out int b))
-                {
-                    Create(owner, legal[a], links);
-                    Create(owner, legal[b], links);
-                }
-                else
-                {
-                    int best = 0;
-                    for (int i = 1; i < legal.Count; i++) if (legal[i].RearScore > legal[best].RearScore) best = i;
-                    Create(owner, legal[best], links); // No sampled spaced pair: one real site, never a phantom second.
-                }
-            }
-            if (links.Count == 0) BorrowAfloat(owner, span.magnitude, links);
-            if (links.Count == 0 && UnitRegistry.allUnits != null)
-            {
-                // Native stored spawn origins are only candidates; terrain/mission/ownership rules still apply.
-                int origins = 0;
-                for (int i = 0; i < UnitRegistry.allUnits.Count && i < MaximumScanUnits && origins < 16; i++)
-                {
-                    Unit unit = UnitRegistry.allUnits[i];
-                    if (unit == null || unit.disabled || unit.NetworkHQ != owner) continue;
-                    origins++;
-                    Vector3 origin = unit.startPosition.ToLocalPosition();
-                    if (unit is Aircraft) origin.y = Datum.LocalSeaY + 100f;
-                    if (!GroundPlacement.DryGround(origin, out _) || !TryAround(owner, origin, null, span.magnitude, out Candidate field)) continue;
-                    Create(owner, field, links);
-                    if (links.Count > 0) break;
-                    yield return null;
-                    if (generation != Generation) yield break;
-                }
-            }
-            if (links.Count == 0) yield break;
-            var array = links.ToArray();
-            var baseline = new float[array.Length];
-            for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
-            faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
-                SiteX = new float[array.Length], SiteZ = new float[array.Length], View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
-            for (int i = 0; i < array.Length; i++) { faction.State.PlacePad(i); Locate(faction, i); } // shim until organic fronts Task 5
-            foreach (BirdKind kind in new[] { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic }) faction.State.Launch(kind); // shim until organic fronts Task 5
-            faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
-            SeedGeo(owner, faction.State);
-            if (owner == null || factions.ContainsKey(owner)) yield break;
-            factions.Add(owner, faction);
-            SubscribeTasked(owner, (player, request, result) => manager?.SpaceNet?.OnTaskedResolved(owner, player, request, result));
-            Plugin.Logger?.LogInfo("[Support.Space] " + owner.name + ": " + faction.Links.Length +
-                " native uplink(s), OPTICAL / RADAR / KINETIC ready.");
         }
 
         /// <summary>Parks the faction's three birds over its side of the front: own airbase centroid shifted toward the enemy's.</summary>
@@ -676,21 +683,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return why;
         }
 
-        private void Create(FactionHQ owner, in Candidate candidate, List<Unit> links)
-        {
-            if (spawner.TryCreate(owner, links.Count, candidate.Anchor, candidate.Parent, out Unit link)) links.Add(link);
-        }
-
-        private bool TryAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal, out Candidate candidate)
+        /// <param name="requireRear">False for a player-picked base: any legal ground around it, scored 0 (no deep-rear refusal).</param>
+        private bool TryAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal, out Candidate candidate, bool requireRear = true)
         {
             var found = new List<Candidate>(1);
-            CollectAround(owner, origin, parent, diagonal, found, 1);
+            CollectAround(owner, origin, parent, diagonal, found, 1, requireRear);
             candidate = found.Count > 0 ? found[0] : default;
             return found.Count > 0;
         }
 
         private void CollectAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal,
-            List<Candidate> candidates, int limit)
+            List<Candidate> candidates, int limit, bool requireRear)
         {
             int start = candidates.Count;
             float exclusion = Mathf.Clamp(500f * Mathf.Clamp(diagonal / 150000f, 0.4f, 2.5f), 250f, 1000f);
@@ -701,9 +704,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (candidates.Count - start >= limit || candidates.Count >= UplinkPlacement.MaxCandidates) return;
                     float angle = (step * 5 % 12) * Mathf.PI / 6f;
                     Vector3 desired = origin + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (radius + ring * 240f);
-                    if (!RearScore(owner, desired, diagonal, out float rear) ||
-                        !spawner.TryPlan(desired.ToGlobalPosition(), parent, out GlobalPosition[] points, out _)) continue;
-                    candidates.Add(new Candidate(desired.ToGlobalPosition(), points[0], parent, rear));
+                    float rear = 0f;
+                    if ((requireRear && !RearScore(owner, desired, diagonal, out rear)) ||
+                        !spawner.TryPlan(desired.ToGlobalPosition(), parent, out _, out _)) continue;
+                    candidates.Add(new Candidate(desired.ToGlobalPosition(), parent, rear));
                 }
         }
 
@@ -733,21 +737,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             score = nearest;
             // Startup/no-territory fallback: bounded objective-distance proxy, not measured front distance.
             return nearest * 0.5f <= Mathf.Max(40000f, diagonal * 0.25f);
-        }
-
-        private static void BorrowAfloat(FactionHQ owner, float diagonal, List<Unit> links)
-        {
-            List<Unit> units = UnitRegistry.allUnits;
-            if (units == null) return;
-            // Carrier first, then escort. Borrow the actual armed unit, following native movement/death/ownership.
-            for (int pass = 0; pass < 2 && links.Count < 2; pass++)
-                for (int i = 0; i < units.Count && i < MaximumScanUnits && links.Count < 2; i++)
-                {
-                    if (!(units[i] is Ship ship) || ship.disabled || ship.NetworkHQ != owner || links.Contains(ship) ||
-                        (ship.GetAirbase() != null) != (pass == 0) || UplinkSpawner.Down(ship, owner)) continue;
-                    if (links.Count > 0 && Vector3.Distance(links[0].transform.position, ship.transform.position) < diagonal * 0.25f) continue;
-                    links.Add(ship); // Not added to spawner.owned: teardown never destroys a native carrier/escort.
-                }
         }
     }
 }

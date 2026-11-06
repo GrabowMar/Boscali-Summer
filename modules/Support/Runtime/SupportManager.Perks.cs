@@ -72,9 +72,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Bar progress a SOF camp's rebuild gains over <paramref name="seconds"/> (see <see cref="EwTruckRebuildFunding"/>).</summary>
         internal float CampRebuildFunding(FactionHQ owner, float seconds) => RebuildFunding(owner, Domain.Fronts.ProgrammeId.Camp, seconds);
 
-        /// <summary>Bar progress a dead satellite's rebuild gains over <paramref name="seconds"/> (see <see cref="EwTruckRebuildFunding"/>).</summary>
-        internal float BirdRebuildFunding(FactionHQ owner, float seconds) => RebuildFunding(owner, Domain.Fronts.ProgrammeId.LaunchSatellite, seconds);
-
         private float RebuildFunding(FactionHQ owner, Domain.Fronts.ProgrammeId programme, float seconds) =>
             frontService != null && frontService.Running && frontService.HasProgramme(owner, programme) ? 0f : AnchorRules.TimerProgress(seconds);
     }

@@ -31,12 +31,12 @@ namespace BoscaliSummer.Modules.Support.Domain.Calls
     {
         /// <summary>
         /// The state word as a 21 px perk row has room for it (one line, 20 characters): a long gate is shortened (LOW ALLOC · NEED 10 AP loses the NEED,
-        /// NO SATELLITE · REBUILD IT keeps its first half). The pinned strip words the same state whole.
+        /// NO SATELLITE · LAUNCH ONE keeps its first half). The pinned strip words the same state whole.
         /// </summary>
         public static string RowWord(string word)
         {
             if (string.IsNullOrEmpty(word) || word.Length <= 20) return word ?? "";
-            return word.Replace(" · REBUILD IT", "").Replace("NEED ", "");
+            return word.Replace(" · LAUNCH ONE", "").Replace("NEED ", "");
         }
 
         /// <param name="lockedReason">Empty when nothing blocks the perk, else the words of the gate (e.g. <c>NEEDS SPACE SKILL 4</c>).</param>

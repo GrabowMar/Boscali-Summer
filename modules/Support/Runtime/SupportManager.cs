@@ -477,7 +477,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
             if (!IsAuthorised(def)) return CallGate.LockWord(row);
-            if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
+            if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · LAUNCH ONE";
             return "";
         }
 

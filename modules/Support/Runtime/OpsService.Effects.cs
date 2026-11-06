@@ -266,17 +266,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return space != null && space.TryGetStateCoarse(fl.Victim, out SpaceState s) && s.HasBird((BirdKind)fl.Bird) && s.Geo((BirdKind)fl.Bird).DepartAt >= fl.LaunchedAt;
         }
 
-        /// <summary>The viewer's own dead satellites with their rebuild progress, its own uplink sites, and every faction's ASAT in flight (a smoke column and a rising light all clients play from this row).</summary>
+        /// <summary>The viewer's own satellites (down, ever launched), its own pads, and every faction's ASAT in flight (a smoke column and a rising light all clients play from this row). No bird rebuilds itself: BirdPercent stays 0.</summary>
         partial void FillBirdsAndFlights(FactionHQ viewer, float now, OpsStateData into)
         {
             into.Sites.Clear();
-            if (space != null) space.CopySites(viewer, into.Sites); // the viewer's own uplink sites: where they stand and how
+            if (space != null) space.CopySites(viewer, into.Sites); // the viewer's own pads: where they stand and how
             if (space != null && space.TryGetStateCoarse(viewer, out SpaceState state))
             {
                 into.BirdsDown = state.DownMask;
+                into.BirdsLaunched = state.LaunchedMask;
                 for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[i] = state.Geo((BirdKind)i);
-                for (int i = 0; i < SpaceRules.BirdCount; i++)
-                    if (state.BirdDown((BirdKind)i)) into.BirdPercent[i] = (byte)Mathf.Clamp(state.RebuildPercent((BirdKind)i, now), 0, 100);
             }
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs != null)

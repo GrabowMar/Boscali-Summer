@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -34,8 +33,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         private readonly BirdSlot[] birds = new BirdSlot[SpaceRules.BirdCount];
         private readonly float[] cooldownUntil = new float[SpaceRules.TaskCount];
         private readonly bool[] dead = { true, true, true };
-        private readonly float[] buildEndsAt = new float[SpaceRules.BirdCount];
-        private readonly RebuildBar[] bars = { new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal) };
         private readonly GeoBird[] geo = { new GeoBird(0.40f, 0.50f, 100f), new GeoBird(0.50f, 0.50f, 100f), new GeoBird(0.60f, 0.50f, 100f) };
         private readonly float[] homeU = { 0.40f, 0.50f, 0.60f }, homeV = { 0.50f, 0.50f, 0.50f };
         private float allDownAt = float.PositiveInfinity;
@@ -88,7 +85,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             }
         }
 
-        /// <summary>The bird is up: it exists and an ASAT strike has not killed it (a dead bird is back after its rebuild bar and build time).</summary>
+        /// <summary>The bird is up: it was launched and an ASAT strike has not killed it (a dead bird stays dead until a LAUNCH build relaunches it).</summary>
         public bool HasBird(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && !dead[(byte)bird];
 
         public bool BirdDown(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && dead[(byte)bird];
@@ -104,7 +101,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if ((byte)bird >= SpaceRules.BirdCount || !dead[(byte)bird]) return false;
             int i = (byte)bird;
-            dead[i] = false; launched[i] = true; buildEndsAt[i] = 0f; bars[i].Reset(); birds[i] = default; Reset(i);
+            dead[i] = false; launched[i] = true; birds[i] = default; Reset(i);
             return true;
         }
 
@@ -138,56 +135,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             get { byte m = 0; for (int i = 0; i < dead.Length; i++) if (dead[i]) m |= (byte)(1 << i); return m; }
         }
 
-        /// <summary>The restore bar of a dead bird (auto-funded by the host from HQ FUND, like an anchor).</summary>
-        public RebuildBar BirdBar(BirdKind bird) => bars[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
-
-        /// <summary>0..100: how far a dead bird's rebuild has come (the bar first, then the build clock). 0 for a living bird.</summary>
-        public int RebuildPercent(BirdKind bird, float now)
-        {
-            if (!BirdDown(bird)) return 0;
-            int i = (byte)bird;
-            if (buildEndsAt[i] > 0f) return 50 + (int)Math.Clamp(50f * (1f - (buildEndsAt[i] - now) / SpaceRules.BirdBuildSeconds), 0f, 50f);
-            return (int)Math.Min(49f, Math.Floor(bars[i].Fraction * 50f));
-        }
-
-        /// <summary>An ASAT strike hit this bird. Its tasks stop (an in-flight reservation is voided) until the rebuild bar and the build finish. False when it was already dead.</summary>
+        /// <summary>An ASAT strike hit this bird. Its tasks stop (an in-flight reservation is voided) until a LAUNCH build relaunches it. False when it was already dead.</summary>
         public bool KillBird(BirdKind bird, float now)
         {
             if ((byte)bird >= SpaceRules.BirdCount || dead[(byte)bird] || !SpaceRules.MissionTime(now)) return false;
             int i = (byte)bird;
-            dead[i] = true; buildEndsAt[i] = 0f; bars[i].Reset();
+            dead[i] = true;
             birds[i] = default;
             return true;
-        }
-
-        /// <summary>OPS FRONTS S1b: a LAUNCH SATELLITE programme finished (its own build time has run): the lowest dead bird is on station at once. Returns it, or -1 when none is down.</summary>
-        public int RestoreBird()
-        {
-            for (int i = 0; i < dead.Length; i++)
-            {
-                if (!dead[i]) continue;
-                dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
-                return i;
-            }
-            return -1;
-        }
-
-        /// <summary>Starts the build once a dead bird's bar is full and finishes it after 6 minutes. Returns the mask of birds restored by this call.</summary>
-        public byte TickBirds(float now)
-        {
-            byte restored = 0;
-            if (!SpaceRules.MissionTime(now)) return restored;
-            for (int i = 0; i < dead.Length; i++)
-            {
-                if (!dead[i]) continue;
-                if (buildEndsAt[i] <= 0f && bars[i].Complete) buildEndsAt[i] = now + SpaceRules.BirdBuildSeconds;
-                if (buildEndsAt[i] > 0f && now >= buildEndsAt[i])
-                {
-                    dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
-                    restored |= (byte)(1 << i);
-                }
-            }
-            return restored;
         }
 
         public void SetUplink(int index, float nativeHealthFraction, bool isDown, float now)

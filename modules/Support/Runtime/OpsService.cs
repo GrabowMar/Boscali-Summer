@@ -242,7 +242,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         internal bool FillState(Player viewer, OpsStateData into)
         {
-            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 0;
+            into.Active = false; into.CyberOps = false; into.SofOps = false; into.BirdsDown = 0; into.EnemyBirdsDown = 0; into.BirdsLaunched = 0;
             Array.Clear(into.BirdPercent, 0, into.BirdPercent.Length);
             Array.Clear(into.Geo, 0, into.Geo.Length);
             into.Rows.Clear(); into.Pings.Clear(); into.Events.Clear(); into.Flights.Clear(); into.Log.Clear();
