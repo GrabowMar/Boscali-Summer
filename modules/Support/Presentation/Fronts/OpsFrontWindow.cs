@@ -335,6 +335,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (mouseDisabledByUs || (device != null && !device.enabled)) Pointer(mouse);
                 IFrontRoom room = lastView != null ? rooms[(int)lastView.Front] : null;
                 if (room != null && room.Tick(mouse)) room.Paint(lastView);
+                int want = room != null ? room.TakeTab() : -1; // a map pick opens its tab this frame, not at the next refresh
+                if (want >= 0 && want != tabOf[shownFront]) ShowTab(shownFront, want);
             }
             catch (Exception e)
             {

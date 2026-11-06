@@ -143,7 +143,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void CardClick(int ownId, float u, float v)
         {
             actions.Touch();
-            if (ownId != 0) selOwn = ownId;
+            if (ownId != 0)
+            {
+                selOwn = ownId;
+                handPicked = true;
+                if (filter == NodeFilter.Enemy || filter == NodeFilter.Reach) filter = NodeFilter.All; // NODES opens on it too
+            }
             if (u >= 0f) plate.View.CenterOn(new Vector2(u, v));
             Repaint();
         }

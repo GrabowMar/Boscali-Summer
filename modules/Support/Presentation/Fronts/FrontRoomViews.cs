@@ -30,6 +30,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Owner;
         /// <summary>The nearest reach source of the operator (own truck, or own held node once a session runs) and its distance ("EW-1 · 11.3 KM"); "" when none stands.</summary>
         public string Reach;
+        /// <summary>Kilometres to that source, -1 with none standing.</summary>
+        public float SourceKm;
+        /// <summary>Where it stands: the nearest airbase's short name, else its grid.</summary>
+        public string Place;
+        /// <summary>Hops a session needs to reach it (<see cref="CyberGraph.Hops"/>): 1 in reach now, n through n-1 nodes on the way, 0 no route.</summary>
+        public int Hops;
         /// <summary>One of our own anchors shown as a node (<see cref="NetworkRoomView.OwnId"/>: a negative id, picked in the room only, never sent to the host); <see cref="AnchorAt"/> indexes <see cref="NetworkRoomView.Anchors"/>.</summary>
         public bool Own;
         public int AnchorAt;

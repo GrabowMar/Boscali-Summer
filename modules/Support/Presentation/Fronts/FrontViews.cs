@@ -771,10 +771,19 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < myHeld; i++)
                 if (TryNode(s, mine.Held[i], out CyberNodeRow chainRow)) mineNodes.Add(new CyberNode(chainRow.Id, chainRow.Kind, chainRow.X, chainRow.Z, 0u, 0f, 0));
 
+            // How many hops each node is away, by the host's reach rule (a running session hops on from its own held nodes only).
+            int nodeCount = s.Nodes.Count;
+            var graph = new List<CyberNode>(nodeCount);
+            var busy = new bool[nodeCount];
+            var hops = new int[nodeCount];
+            for (int i = 0; i < nodeCount; i++) { CyberNodeRow r = s.Nodes[i]; graph.Add(new CyberNode(r.Id, r.Kind, r.X, r.Z, 0u, 0f, 0)); busy[i] = r.Held || r.Hopping; }
+            CyberGraph.Hops(graph, have ? null : trucks, have ? mineNodes : null, busy, Math.Max(1, CyberRules.MaxHeldPerIntrusion - myHeld), hops);
+
             int inReachCount = 0;
-            foreach (CyberNodeRow r in s.Nodes)
+            for (int ni = 0; ni < nodeCount; ni++)
             {
-                var cn = new CyberNode(r.Id, r.Kind, r.X, r.Z, 0u, 0f, 0);
+                CyberNodeRow r = s.Nodes[ni];
+                CyberNode cn = graph[ni];
                 int viaTruck = -1, viaNode = 0;
                 // Same rule as the host: a running session hops on from its own held nodes only; with none, from a truck in reach.
                 bool reach = have ? CyberGraph.Reachable(cn, null, mineNodes, out viaTruck, out viaNode) : CyberGraph.Reachable(cn, trucks, null, out viaTruck, out viaNode);
@@ -785,11 +794,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else if (reach) { fromNode = viaNode != 0 ? viaNode : -1; fromAnchor = viaTruck >= 0 ? TruckAnchor(n.Anchors, viaTruck) : -1; }
                 string owner = r.Held ? (have && mine.Held != null && Array.IndexOf(mine.Held, r.Id) >= 0 ? "YOU" : HolderOf(s, r.Id)) : r.Hopping ? HopperOf(s, r.Id) : "";
                 if (owner.Length == 0 && (r.Held || r.Hopping)) owner = "ALLY";
-                string reachText = Nearest(trucks, mineNodes, have, r.X, r.Z, r.Id, out string srcTag, out float srcDist, out float _) ? srcTag + " · " + Km(srcDist) + " KM" : "";
+                bool src = Nearest(trucks, mineNodes, have, r.X, r.Z, r.Id, out string srcTag, out float srcDist, out float _);
                 n.Nodes.Add(new NetNodeView
                 {
                     Id = r.Id, Kind = r.Kind, X = frame.U(r.X), Y = frame.V(r.Z), State = st, HopPct = r.Hopping ? HopPercent(s, r.Id, now) : (byte)0,
-                    FromNode = fromNode, FromAnchor = fromAnchor, Label = NodeLabel(r), Handle = NodeHandle(r.Kind, r.Id), Owner = owner, Reach = reachText
+                    FromNode = fromNode, FromAnchor = fromAnchor, Label = NodeLabel(r), Handle = NodeHandle(r.Kind, r.Id), Owner = owner,
+                    Reach = src ? srcTag + " · " + Km(srcDist) + " KM" : "", SourceKm = src ? srcDist / 1000f : -1f, Place = PlaceOf(r.X, r.Z, c), Hops = hops[ni]
                 });
             }
             // Our own anchors as nodes after the enemy's: negative ids the room picks locally. The node vocabulary (a wire enum) has no truck: an EW truck reads as
@@ -801,17 +811,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 {
                     Id = NetworkRoomView.OwnId(a.Kind, a.Slot), Kind = a.Kind == AnchorKind.EwTruck ? NodeKind.Relay : NodeKind.DataCenter, X = a.X, Y = a.Y, State = NetNodeState.OutOfReach, FromNode = -1, FromAnchor = -1,
                     Label = a.Label, Handle = a.Label.ToLowerInvariant() + ".local", Owner = "YOU", Reach = a.Reach > 0f ? "REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "",
+                    SourceKm = -1f, Place = a.Kind == AnchorKind.EwTruck ? "GRID " + OpsKit.Grid(frame.X(a.X), frame.Z(a.Y)) : PlaceOf(frame.X(a.X), frame.Z(a.Y), c),
                     Own = true, AnchorAt = i, Breached = a.Breached
                 });
             }
 
-            // The pick: kept while the node stays in the net; a vanished one is cleared (never swapped for another); the first time, the best node to start from.
+            // The pick: kept while the node stays in the net; a vanished one is cleared (never swapped for another). The first pick is the room's (it knows its filter).
             if (selected > 0 && !s.Nodes.Exists(q => q.Id == selected)) selected = Gone;
-            else if (selected == 0 && s.Nodes.Count > 0)
-            {
-                selected = s.Nodes[0].Id;
-                for (int i = 0; i < n.Nodes.Count; i++) if (n.Nodes[i].State == NetNodeState.InReach) { selected = n.Nodes[i].Id; break; }
-            }
             n.SelectedId = selected;
 
             // YOUR trace, the hop in flight and the estimate (rules only: no counter-pressure is mirrored).

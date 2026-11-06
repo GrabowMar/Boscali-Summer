@@ -49,6 +49,24 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             return viaTruck >= 0 || viaNode != 0;
         }
 
+        /// <summary>
+        /// The hops a session needs to reach each of <paramref name="nodes"/>: 1 = reachable now (<see cref="Reachable"/> from <paramref name="trucks"/> or <paramref name="held"/>),
+        /// k = through k-1 nodes on the way, each within <see cref="ChainReach"/> of the next; 0 = no route within <paramref name="maxHops"/>. A <paramref name="busy"/> node
+        /// (held or being hopped) is no stop and gets 0.
+        /// </summary>
+        public static void Hops(IReadOnlyList<CyberNode> nodes, IReadOnlyList<EwSource> trucks, IReadOnlyList<CyberNode> held, bool[] busy, int maxHops, int[] into)
+        {
+            int n = nodes.Count;
+            for (int i = 0; i < n; i++) into[i] = !busy[i] && Reachable(nodes[i], trucks, held, out _, out _) ? 1 : 0;
+            for (int d = 1; d < maxHops; d++)
+                for (int i = 0; i < n; i++)
+                {
+                    if (into[i] != d) continue;
+                    for (int j = 0; j < n; j++)
+                        if (into[j] == 0 && !busy[j] && InReach(nodes[i].X, nodes[i].Z, nodes[j].X, nodes[j].Z, ChainReach)) into[j] = d + 1;
+                }
+        }
+
         /// <summary>Closest-to-the-front first, ties by id; every id in <paramref name="keep"/> (held nodes) survives the cap.</summary>
         public static int Select(IReadOnlyList<CyberNode> candidates, HashSet<int> keep, int cap, List<CyberNode> into)
         {

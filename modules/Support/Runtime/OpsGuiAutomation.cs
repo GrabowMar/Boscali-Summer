@@ -194,6 +194,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (InfraTruckView t in nw.Trucks) { if (t.State == InfraState.Packing) packing++; grids += (grids.Length > 0 ? "," : "") + t.Name + " " + t.State + " " + t.Grid + " " + t.U.ToString("0.0000") + "/" + t.V.ToString("0.0000"); }
                 r["trucks"] = grids;
                 r["centersUp"] = nw.CentersUp; r["trucksUp"] = nw.TrucksUp; r["trucksPacking"] = packing; r["netGhosts"] = nw.Ghosts.Count;
+                int own = 0, inReach = 0;
+                foreach (NetNodeView nd in nw.Nodes) { if (nd.Own) own++; else if (nd.State == NetNodeState.InReach) inReach++; }
+                r["netNodes"] = nw.Nodes.Count; r["netOwn"] = own; r["netInReach"] = inReach; r["netSession"] = nw.HasIntrusion ? 1 : 0; r["netHeld"] = nw.YourHeld;
+                r["netHopping"] = nw.Hopping ? 1 : 0; r["netBreaches"] = nw.Breaches; r["netCanHop"] = nw.CanHop ? 1 : 0; r["netNext"] = nw.Dossier.Next ?? "";
+                // 1 a session runs; 2 nothing in reach to hop and the picked enemy node (if any) says why it is blocked; 0 a node in reach but no session
+                r["hopCase"] = nw.HasIntrusion ? 1 : inReach == 0 && (nw.SelectedId <= 0 || (nw.Dossier.Next ?? "").StartsWith("BLOCKED", System.StringComparison.Ordinal)) ? 2 : 0;
+                r["netEnemy"] = nw.Nodes.Count - own;
+                if (Field(window, "tabOf") is int[] tabs && (int)lv.Front < tabs.Length) r["tab"] = tabs[(int)lv.Front];
             }
             object room = Room(window);
             if (room == null) return r;
@@ -205,6 +213,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["hasPending"] = Bool(Field(room, "hasPending"));
             r["padPick"] = Bool(Field(room, "padPick"));
             if (Field(room, "pick") is System.Enum netPick) { r["netPick"] = System.Convert.ToInt32(netPick); r["pickMiss"] = Field(room, "pickMiss") as string ?? ""; } // 0 none, 1 DATA CENTER, 2 TRUCK, 3 RELOCATE
+            if (Field(room, "filter") is System.Enum netFilter) { r["netFilter"] = System.Convert.ToInt32(netFilter); r["selOwn"] = Int(Field(room, "selOwn")); r["openNode"] = Int(Field(room, "lastOpen")); } // 0 ALL, 1 MINE, 2 ENEMY, 3 IN REACH
             if (Field(room, "plate") is FrontMapPlate plate)
             {
                 r["zoom"] = plate.View.Zoom; r["centerU"] = plate.View.Center.x; r["centerV"] = plate.View.Center.y;
