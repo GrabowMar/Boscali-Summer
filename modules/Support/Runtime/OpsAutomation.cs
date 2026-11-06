@@ -369,6 +369,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["feedZoom"] = f.Zoom;
                 r["feedImage"] = f.Image != null ? 1 : 0;
                 r["feedPost"] = f.PostTexture != null ? 1 : 0;
+                r["feedPostMs"] = feed.PostPassMs;
                 r["feedRefusal"] = f.Refusal;
                 r["feedLink"] = f.Link;
                 r["feedPackets"] = f.Packets;

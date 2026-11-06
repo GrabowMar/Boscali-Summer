@@ -94,6 +94,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>The DOWNLINK is on screen: its view is current (a hidden feed's words are stale).</summary>
         internal bool Shown => visible;
 
+        /// <summary>Main-thread milliseconds of the IR / LOW LIGHT post's last pass (-1 before the first): the dev readout reports it.</summary>
+        internal float PostPassMs => post != null ? post.PassMs : -1f;
+
         /// <summary>The SPACE room shows DOWNLINK (column tab or enlarged; FrontController follows the window): the feed lease is held, the imager renders and the view is rebuilt.</summary>
         internal void SetVisible(bool on)
         {
@@ -297,7 +300,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.Mode = draft.Mode;
             view.Zoom = draft.Zoom;
             view.ZoomEnabled = draft.Source != BirdKind.Radar;
-            view.Link = SpaceFeedRules.LinkQuality(state.UplinksLive, state.UplinksTotal, state.Family == SpaceFamilyState.Degraded); // no jam flag reaches the client: degraded stands in
+            // No jam flag reaches the client yet; Degraded only means a pad is down, which the live count already charges.
+            view.Link = SpaceFeedRules.LinkQuality(state.UplinksLive, state.UplinksTotal, false);
             Acquire(Time.unscaledTime);
 
             FillThreat();
@@ -618,7 +622,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void AdvanceChain(float now)
         {
             if (chainTrack == 0 || markRequest != 0) return; // still waiting for the verdict
-            if (MarkedId(chainTrack)) { chainTrack = 0; Send(); return; }
+            if (MarkedId(chainTrack)) { int lead = chainTrack; chainTrack = 0; SendMarks(lead); return; } // the press's target leads the package
             if (now - chainAt > RequestTimeout * 2f) { chainTrack = 0; Say("NEGATIVE: MARK NOT ON THE BOARD — PRESS SEND AGAIN", AvState.Danger, AvUiCue.Caution); }
         }
 
@@ -772,7 +776,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// </summary>
         private void Changed()
         {
-            if (!visible) draft.Close(SupportManager.MissionNow());
+            if (!visible)
+            {
+                float now = SupportManager.MissionNow();
+                if (!draft.CanRestore(now)) { DownlinkMode mode = draft.Mode; draft.Clear(); draft.Mode = mode; } // a stale draft starts fresh, with the bird just picked
+                draft.Close(now);
+            }
             dirty = true;
         }
 
@@ -804,7 +813,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (markRequest != 0) { chainTrack = markTrack; chainAt = SupportManager.MissionNow(); }
                 return;
             }
-            if (manager.SpaceMirror.State.Marks.Count == 0) { Say("NEGATIVE: SELECT A TARGET FIRST", AvState.Danger, AvUiCue.Caution); return; }
+            if (manager.SpaceMirror.State.Marks.Count == 0) { Say("NEGATIVE: NOTHING TO TRANSMIT — SELECT A TARGET", AvState.Danger, AvUiCue.Caution); return; }
             Send();
         }
 
@@ -821,11 +830,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Say("MARK SENT — STAND BY FOR THE HOST", AvState.Info, AvUiCue.Press);
         }
 
-        public void Send()
+        public void Send() => SendMarks(draft.Selected);
+
+        /// <summary>TRANSMIT the live marks (at most six), <paramref name="lead"/> first when it is one of them.</summary>
+        private void SendMarks(int lead)
         {
             if (manager == null || sendRequest != 0) return;
             var marks = manager.SpaceMirror.State.Marks;
-            int n = SpaceFeedEntries.SendIds(marks, draft.Selected, sendIds);
+            int n = SpaceFeedEntries.SendIds(marks, lead, sendIds);
             if (n == 0) return;
             var ids = new int[n];
             Array.Copy(sendIds, ids, n);

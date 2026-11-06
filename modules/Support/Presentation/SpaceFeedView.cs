@@ -82,7 +82,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         /// <summary>The look box on the theatre map (u, v, width in km); HasLook false while nothing is imaged.</summary>
         public bool HasLook;
         public float LookU, LookV, LookKm;
-        /// <summary>Link quality 1..5 (live pads, one less while degraded) and the resolve counter of the picture on screen.</summary>
+        /// <summary>Link quality 1..5 from the live pads (the jam step waits for a client-side jam signal) and the resolve counter of the picture on screen.</summary>
         public int Link = 1, Packets, PacketsTotal = SpaceFeedRules.ResolvePackets;
         /// <summary>Burn-in lines, in order: GSD, SLANT, ELEV, SUN with shadow direction, cloud word ("" when not known).</summary>
         public readonly string[] Telemetry = { "", "", "", "", "" };
