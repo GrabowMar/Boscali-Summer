@@ -382,8 +382,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 v.Hostile.Add(new HostileBirdView { Kind = (int)b.Kind, Word = GeoSpace.Names[(int)b.Kind], OverOwn = near.Length > 0, Nearest = near });
             }
             v.CoverageGap = "";
-            foreach (MapAirbaseView a in v.Airbases)
+            // A gap needs a bird up and a known world: before the mirrors arrive, or with no satellite at all, every base would read as a false gap.
+            for (int i = 0; v.BirdsUp > 0 && (c.SpaceLinked || c.WorldKnown) && i < v.Airbases.Count; i++)
             {
+                MapAirbaseView a = v.Airbases[i];
                 if (a.Side != AirbaseSide.Own || UnderOwn(v, a)) continue;
                 v.CoverageGap = "GAP · " + a.Name + " NOT COVERED";
                 break;
