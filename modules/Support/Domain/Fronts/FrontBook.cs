@@ -6,9 +6,15 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     /// <summary>What the host sees of the world when a programme is queued or finished. Counts are the faction's own.</summary>
     internal struct FrontWorld
     {
+        public int PadsLive;
+        /// <summary>Bit per bird kind (0 optical, 1 radar, 2 kinetic) on station.</summary>
+        public byte BirdsUp;
+        public int DataCentersLive, TrucksLive, CampsLive, Teams;
+        public bool HasHeldBuilding, FobUp;
+        // retired with OPS organic fronts Task 8
         public int BirdsDown;
-        public int Uplinks, UplinkMax, DataCenters, DataCenterMax, Trucks, TruckMax, Camps, CampMax, Teams;
-        public bool HasHeldBuilding;
+        // retired with OPS organic fronts Task 8
+        public int Uplinks, UplinkMax, DataCenters, DataCenterMax, Trucks, TruckMax, Camps, CampMax;
     }
 
     internal enum DonateStatus : byte { Ok, NotQueued, InvalidAmount }

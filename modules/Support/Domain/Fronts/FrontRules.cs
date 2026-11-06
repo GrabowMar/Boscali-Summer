@@ -13,6 +13,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         Readiness = 0, LaunchSatellite = 1, UplinkSite = 2, Asat = 3, DataCenter = 4, EwTruck = 5, ZeroDay = 6, TrainTeam = 7, Camp = 8, Fob = 9
     }
 
+    /// <summary>The ladder tier of a programme: infrastructure is built first, assets need it, operations need neither.</summary>
+    internal enum BuildClass : byte { Infrastructure, Asset, Operation }
+
     internal readonly struct FrontProgramme
     {
         public readonly ProgrammeId Id;
@@ -29,6 +32,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     internal static class FrontRules
     {
         public const int FrontCount = 3, MaxQueue = 4, TeamCap = 4, LogCapacity = 8;
+        public const int PadCap = 2, BirdsPerPad = 2, BirdCap = 3, DataCenterCap = 2, TruckCap = 2, CampCap = 2, TeamsPerBase = 2;
+        public const float SeedFunds = 500f, MaxSeed = 2000f, BudgetCap = 1000f, QuartermasterIdleSeconds = 180f,
+            TruckReachMetres = 20000f, TruckPackSeconds = 45f, PadPickMetres = 8000f, FobPickMetres = 1000f;
         public const float DefaultShare = 0.03f, DefaultShareCap = 250f, MaxShareCap = 5000f,
             /// <summary>Programme funds one donated allocation point buys (a sortie's ~40 allocation then buys about half a minute of the faction's whole trickle).</summary>
             DonateRate = 3f, MaxShare = 0.10f, ShareIntervalSeconds = 60f, LockSeconds = 60f;
@@ -39,16 +45,23 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public static readonly FrontProgramme[] Programmes =
         {
             new FrontProgramme(ProgrammeId.Readiness, null, "READINESS", 0f, 0f, "RETIRED"),
-            new FrontProgramme(ProgrammeId.LaunchSatellite, Front.Space, "LAUNCH SATELLITE", 300f, 240f, "A SATELLITE DOWN"),
-            new FrontProgramme(ProgrammeId.UplinkSite, Front.Space, "UPLINK SITE", 200f, 180f, "AN UPLINK BELOW MAX"),
+            new FrontProgramme(ProgrammeId.LaunchSatellite, Front.Space, "SATELLITE", 300f, 90f, "A FREE PAD SLOT AND A KIND NOT UP"),
+            new FrontProgramme(ProgrammeId.UplinkSite, Front.Space, "LAUNCH PAD", 200f, 120f, "A PAD BELOW MAX"),
             new FrontProgramme(ProgrammeId.Asat, Front.Space, "ASAT", 900f, 180f, ""),
-            new FrontProgramme(ProgrammeId.DataCenter, Front.Cyber, "DATA CENTER", 250f, 180f, "A DATA CENTER BELOW MAX"),
-            new FrontProgramme(ProgrammeId.EwTruck, Front.Cyber, "EW TRUCK", 120f, 120f, "A TRUCK BELOW MAX"),
+            new FrontProgramme(ProgrammeId.DataCenter, Front.Cyber, "DATA CENTER", 250f, 120f, "A DATA CENTER BELOW MAX"),
+            new FrontProgramme(ProgrammeId.EwTruck, Front.Cyber, "EW TRUCK", 120f, 90f, "A DATA CENTER WITH NO TRUCK"),
             new FrontProgramme(ProgrammeId.ZeroDay, Front.Cyber, "ZERO-DAY", 600f, 180f, ""),
-            new FrontProgramme(ProgrammeId.TrainTeam, Front.Sof, "TRAIN TEAM", 120f, 120f, "FEWER THAN 4 TEAMS"),
-            new FrontProgramme(ProgrammeId.Camp, Front.Sof, "CAMP", 150f, 180f, "A CAMP BELOW MAX"),
+            new FrontProgramme(ProgrammeId.TrainTeam, Front.Sof, "TEAM", 120f, 90f, "A CAMP OR FOB WITH ROOM"),
+            new FrontProgramme(ProgrammeId.Camp, Front.Sof, "CAMP", 150f, 120f, "A CAMP BELOW MAX"),
             new FrontProgramme(ProgrammeId.Fob, Front.Sof, "FOB", 700f, 180f, "A HELD BUILDING"),
         };
+
+        public static BuildClass Class(ProgrammeId id) =>
+            id == ProgrammeId.UplinkSite || id == ProgrammeId.DataCenter || id == ProgrammeId.Camp || id == ProgrammeId.Fob ? BuildClass.Infrastructure :
+            id == ProgrammeId.LaunchSatellite || id == ProgrammeId.EwTruck || id == ProgrammeId.TrainTeam ? BuildClass.Asset : BuildClass.Operation;
+
+        /// <summary>On the ladder: infrastructure or asset, the FOB excepted (it is a one-off the ladder never walks to).</summary>
+        public static bool IsLadder(ProgrammeId id) => Class(id) != BuildClass.Operation && id != ProgrammeId.Fob;
 
         public static FrontProgramme Info(ProgrammeId id) => Programmes[(int)id];
 
