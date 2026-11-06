@@ -164,8 +164,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             return system;
         }
 
-        /// <summary>The shared smoke puff material with a band texture: soft across the ribbon, even along it.</summary>
-        private static Material Material()
+        /// <summary>The shared smoke puff material with a band texture: soft across the ribbon, even along it (also the wingtip vapour's).</summary>
+        internal static Material Material()
         {
             if (material != null) return material;
             Material puff = SmokeFx.Puff;

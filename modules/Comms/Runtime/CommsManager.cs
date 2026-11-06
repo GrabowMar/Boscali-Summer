@@ -8,6 +8,7 @@ using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Ui;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -44,7 +45,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         public const string PickerOwner = "boscali.comms";
         private const string HudChannel = "comms";
 
-        private const float ClickSlopPixels = 6f;
         private const float ShapeMinimumPixels = 6f;
         private const float PenStepPixels = 3f;
         private const float EraseRadiusPixels = 16f;
@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
         // The hold key counts only while COM is up (UpdateInput clears it otherwise), so Shift-drag boxes elsewhere.
         bool IMapBoxInput.BlocksBoxSelection => CommsInput.Typing() ||
-            CommsInput.DrawToolArmed || CommsInput.GestureActive ||
+            CommsInput.GestureActive ||
             (CommsInput.DrawHoldKey != KeyCode.None && Input.GetKey(CommsInput.DrawHoldKey));
 
         /// <summary>Set by the COM panel: the screen is up over the big map. Map marks are made only then.</summary>
@@ -90,6 +90,8 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private bool pressTracked;
         private Vector2 pressScreen;
         private bool gesture;
+        /// <summary>The button the stroke under way follows: right for an armed tool, left for hold-to-draw.</summary>
+        private int gestureButton;
         private CommsTool gestureTool;
         private Vector2 lastPenScreen;
         private float anchorX, anchorZ, currentX, currentZ;
@@ -152,7 +154,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             pressTracked = false;
             Tool = CommsTool.None;
             MapPicker.Disarm(PickerOwner);
-            CommsInput.DrawToolArmed = false;
             CommsInput.GestureActive = false;
             HasMeasure = false;
             HighlightUntil = 0f;
@@ -168,7 +169,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         private void OnDestroy()
         {
             MapPicker.Disarm(PickerOwner);
-            CommsInput.DrawToolArmed = false;
             CommsInput.GestureActive = false;
             CommsInput.DrawHoldKey = KeyCode.None;
         }
@@ -446,13 +446,11 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                 CancelGesture();
                 pressTracked = false;
                 if (Tool != CommsTool.None) SetTool(CommsTool.None);
-                CommsInput.DrawToolArmed = false;
                 return;
             }
 
             // Another owner may have taken the map picker from under an armed tool.
             if (Tool != CommsTool.None && !MapPicker.IsOwner(PickerOwner)) Tool = CommsTool.None;
-            CommsInput.DrawToolArmed = IsDrawTool(Tool);
 
             if (CommsInput.Typing())
             {
@@ -461,7 +459,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
                 return;
             }
 
-            if (Input.GetKeyDown(KeyCode.Escape) && (Tool != CommsTool.None || gesture))
+            if (MapTool.CancelPressed() && (Tool != CommsTool.None || gesture))
             {
                 CancelGesture();
                 SetTool(CommsTool.None);
@@ -470,30 +468,39 @@ namespace BoscaliSummer.Modules.Comms.Runtime
 
             if (gesture)
             {
-                if (Input.GetMouseButton(0)) ContinueGesture(map);
+                if (Input.GetMouseButton(gestureButton)) ContinueGesture(map);
                 else FinishGesture(map);
                 return;
             }
 
-            if (Input.GetMouseButtonDown(0))
+            // Hold-to-draw: the hold key and a left drag is a pen stroke with no draw tool armed (the left drag otherwise pans).
+            KeyCode hold = settings.DrawHoldKey.Value;
+            if (Input.GetMouseButtonDown(0) && !IsDrawTool(Tool) && hold != KeyCode.None && Input.GetKey(hold) && !PickerHeldByOther() &&
+                TryCursor(map, out float hx, out float hz))
+            {
+                pressTracked = false;
+                pressScreen = Input.mousePosition;
+                gestureButton = 0;
+                BeginGesture(CommsTool.Pen, hx, hz);
+                return;
+            }
+
+            // An armed tool takes the right button, like every armed map tool (rule B): a click places, a drag draws.
+            if (Input.GetMouseButtonDown(MapTool.Button) && Tool != CommsTool.None)
             {
                 pressTracked = false;
                 if (!TryCursor(map, out float x, out float z)) return;
                 pressTracked = true;
                 pressScreen = Input.mousePosition;
-
-                KeyCode hold = settings.DrawHoldKey.Value;
-                bool holdDraw = hold != KeyCode.None && Input.GetKey(hold) && !PickerHeldByOther();
-                CommsTool tool = holdDraw && !IsDrawTool(Tool) ? CommsTool.Pen : Tool;
-                if (IsDrawTool(tool)) BeginGesture(tool, x, z);
+                gestureButton = MapTool.Button;
+                if (IsDrawTool(Tool)) BeginGesture(Tool, x, z);
                 return;
             }
 
-            if (pressTracked && Input.GetMouseButtonUp(0))
+            if (pressTracked && Input.GetMouseButtonUp(MapTool.Button))
             {
                 pressTracked = false;
-                Vector2 release = Input.mousePosition;
-                if ((release - pressScreen).sqrMagnitude > ClickSlopPixels * ClickSlopPixels) return;
+                if (!MapTool.IsClick(pressScreen, Input.mousePosition)) return;
                 if (TryCursor(map, out float x, out float z)) PointAction(map, x, z, now);
             }
         }
@@ -686,18 +693,16 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             {
                 Tool = CommsTool.None;
                 MapPicker.Disarm(PickerOwner);
-                CommsInput.DrawToolArmed = false;
                 return;
             }
             if (tool == Tool) return;
-            if (!MapPicker.TryArm(PickerOwner, MapPicker.GestureLeft, Prompt(tool)))
+            if (!MapPicker.TryArm(PickerOwner, MapPicker.GestureRight, Prompt(tool)))
             {
                 client.SetNotice("THE MAP IS BUSY WITH ANOTHER ORDER — FINISH OR CANCEL IT", true, Time.unscaledTime);
                 return;
             }
             Tool = tool;
             if (tool != CommsTool.Measure) HasMeasure = false;
-            CommsInput.DrawToolArmed = IsDrawTool(tool);
         }
 
         /// <summary>What the status strip says while a tool is armed.</summary>
@@ -705,15 +710,15 @@ namespace BoscaliSummer.Modules.Comms.Runtime
         {
             switch (tool)
             {
-                case CommsTool.Ping: return "PING · CLICK THE MAP · " + CommsCatalog.Pings[Mathf.Clamp(PingKind, 0, CommsCatalog.Pings.Length - 1)].Code + " · ESC ENDS";
-                case CommsTool.Pen: return "PEN · DRAG ON THE MAP · ESC ENDS";
-                case CommsTool.Line: return "LINE · DRAG FROM START TO END";
-                case CommsTool.Arrow: return "ARROW · DRAG FROM TAIL TO TIP";
-                case CommsTool.Circle: return "CIRCLE · DRAG FROM CENTRE TO EDGE";
-                case CommsTool.Box: return "BOX · DRAG CORNER TO CORNER";
-                case CommsTool.Label: return "LABEL · CLICK THE MAP TO PLACE \"" + CommsText.Clean(LabelText, CommsText.MaxLabel) + "\"";
-                case CommsTool.Eraser: return IsHost ? "ERASE · CLICK ANY MARK" : "ERASE · CLICK ONE OF YOUR MARKS";
-                case CommsTool.Measure: return "MEASURE · DRAG FOR RANGE AND BEARING (ONLY YOU SEE IT)";
+                case CommsTool.Ping: return "PING · RIGHT-CLICK THE MAP · " + CommsCatalog.Pings[Mathf.Clamp(PingKind, 0, CommsCatalog.Pings.Length - 1)].Code;
+                case CommsTool.Pen: return "PEN · RIGHT-DRAG ON THE MAP";
+                case CommsTool.Line: return "LINE · RIGHT-DRAG FROM START TO END";
+                case CommsTool.Arrow: return "ARROW · RIGHT-DRAG FROM TAIL TO TIP";
+                case CommsTool.Circle: return "CIRCLE · RIGHT-DRAG FROM CENTRE TO EDGE";
+                case CommsTool.Box: return "BOX · RIGHT-DRAG CORNER TO CORNER";
+                case CommsTool.Label: return "LABEL · RIGHT-CLICK THE MAP TO PLACE \"" + CommsText.Clean(LabelText, CommsText.MaxLabel) + "\"";
+                case CommsTool.Eraser: return IsHost ? "ERASE · RIGHT-CLICK ANY MARK" : "ERASE · RIGHT-CLICK ONE OF YOUR MARKS";
+                case CommsTool.Measure: return "MEASURE · RIGHT-DRAG FOR RANGE AND BEARING (ONLY YOU SEE IT)";
                 default: return null;
             }
         }

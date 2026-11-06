@@ -8,8 +8,8 @@ using BoscaliSummer.Modules.Wing.Runtime;
 
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>The order results the HUD strip's ack chip and BEHAVIOUR › SORTIE show (spec 2026-10-04 §4.1 AckFeed). Only the
-    /// player's own orders: plan steps and behaviour rules would flood the chip.</summary>
+    /// <summary>The order results the HUD strip's ack chip shows (spec 2026-10-04 §4.1 AckFeed). Only the player's own orders: plan
+    /// steps and behaviour rules would flood the chip.</summary>
     internal static class WingAcks
     {
         public static readonly AckFeed Feed = new AckFeed();

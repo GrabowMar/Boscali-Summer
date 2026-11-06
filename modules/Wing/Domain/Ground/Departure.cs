@@ -32,15 +32,20 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// says (wing-taxi sweeps 2026-10-18/19). A fully fuelled SFB-81 (25 t of fuel; the game's own AI flies it at 40 %) does not rotate on its
     /// wheels and rolls about 1.9 km to 93-95 m/s: from highwaystrip1/2, airstrip_city2 and desert1 (834-1306 m) it ran off the end. The
     /// game's takeoffDistance cannot tell (1200 m for the SFB-81 and the KR-67 alike, and a KR-67 flies from 834 m). A known limit by the
-    /// user's ruling 2026-10-19: launch fuel stays at 100 %, and SUPPLY says so.</summary>
+    /// user's ruling 2026-10-19: launch fuel stays at 100 % by default, and SUPPLY says so for the fuel it has chosen.</summary>
     internal static class TakeoffRuns
     {
         public static float FullFuelMetres(string unitName) => unitName == "SFB-81 Darkreach" ? 1900f : 0f;
 
-        /// <summary>The runway is shorter than the type needs at full fuel (false when nothing is known of the type).</summary>
-        public static bool Short(string unitName, float runwayMetres)
+        /// <summary>The run at <paramref name="fuelPercent"/> (0: nothing is known of the type). ponytail: it scales with the fuel
+        /// fraction, which fits the two points known (100 % rolls about 1.9 km, the AI's 40 % lifts off from 834 m); recalibrate with a sweep
+        /// if a 50 or 75 % launch proves otherwise.</summary>
+        public static float NeedMetres(string unitName, int fuelPercent) => FullFuelMetres(unitName) * Math.Min(100, Math.Max(0, fuelPercent)) / 100f;
+
+        /// <summary>The runway is shorter than the type needs at that fuel (false when nothing is known of the type).</summary>
+        public static bool Short(string unitName, float runwayMetres, int fuelPercent)
         {
-            float need = FullFuelMetres(unitName);
+            float need = NeedMetres(unitName, fuelPercent);
             return need > 0f && runwayMetres > 0f && runwayMetres < need;
         }
     }

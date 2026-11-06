@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static void ApplyKey(KeyCode key, int slot)
         {
-            if (key == KeyCode.None || !Input.GetKeyDown(key)) return;
+            if (!BoscaliSummer.Core.Game.ForeignMods.KeyDown(key)) return;   // Ctrl/Alt chords belong to other mods (NoAtmoFX moved to Ctrl+F10)
             string name = TargetPresetRuntime.QuickSlotName(slot);
             if (name.Length == 0) return;
             TargetPresetRuntime.TryApplyByName(SceneSingleton<TargetListSelector>.i, name);

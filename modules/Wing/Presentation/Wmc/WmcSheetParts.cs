@@ -9,7 +9,7 @@ using BoscaliSummer.Modules.Wing.Domain.Pure;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // The "one sheet" parts SUPPLY and LOADOUT share (spec 2026-10-04 §SUPPLY × LOADOUT): dense 24–26 px rows, header bars that carry
-    // their own controls, wrapping chip rows, a strip block for INBOUND / ADOPT / HANGAR, a station map and a store picker. Built from
+    // their own controls, wrapping chip rows, a strip block for INBOUND / ADOPT / the fields, a station map and a store picker. Built from
     // AvPart + AvFrame/AvText/AvLay (kit gaps); every text box is sized from its text so nothing clips or shrinks below the floor.
 
     /// <summary>Small helpers the sheet parts share.</summary>
@@ -130,26 +130,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>A row of chips that wraps: a left key, a choice chip per option (one latched) and fixed action chips after them
-    /// (EDIT ›, NEW, COPY, DELETE). Chip widths come from their labels; a line that would overrun starts the next.</summary>
+    /// <summary>A row of chips that wraps: a choice chip per option (one latched) and fixed action chips after them (EDIT ›). Chip
+    /// widths come from their labels; a line that would overrun starts the next.</summary>
     internal sealed class WmcChipRow : AvPart
     {
-        private const float H = 24f, Pitch = 26f, KeyW = 62f, Gap = 2f;
-        private readonly TMP_Text key;
+        private const float H = 24f, Pitch = 26f, Gap = 2f;
         private readonly AvControl[] choices, actions;
         private readonly float[] widths, xs, actionExtra;
         private readonly int[] lines;
-        private readonly bool hasKey;
 
-        public WmcChipRow(RectTransform parent, string keyText, int maxChoices, Action<int> pick, params AvControl.Spec[] actionSpecs)
+        public WmcChipRow(RectTransform parent, int maxChoices, Action<int> pick, params AvControl.Spec[] actionSpecs)
         {
-            Rect = AvLay.Child(parent, "ChipRow " + keyText);
-            hasKey = !string.IsNullOrEmpty(keyText);
-            if (hasKey)
-            {
-                key = WmcSheet.Text(Rect, "Key", AvTextRole.Micro);
-                key.text = keyText;
-            }
+            Rect = AvLay.Child(parent, "ChipRow");
             choices = new AvControl[maxChoices];
             for (int i = 0; i < maxChoices; i++)
             {
@@ -198,12 +190,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 AvControl c = i < choices.Length ? choices[i] : actions[i - choices.Length];
                 if (!c.gameObject.activeSelf) continue;
-                widths[n] = Mathf.Min(width - (hasKey ? KeyW : 0f), WmcSheet.ChipW(c.Label) + (i >= choices.Length ? actionExtra[i - choices.Length] : 0f));
+                widths[n] = Mathf.Min(width, WmcSheet.ChipW(c.Label) + (i >= choices.Length ? actionExtra[i - choices.Length] : 0f));
                 n++;
             }
-            int used = ChipFlow.Place(widths, n, hasKey ? KeyW : 0f, width, Gap, xs, lines);
+            int used = ChipFlow.Place(widths, n, 0f, width, Gap, xs, lines);
             if (!place) return used;
-            if (hasKey) AvLay.Place(key.rectTransform, 0f, 0f, KeyW - 4f, H);
             n = 0;
             for (int i = 0; i < choices.Length + actions.Length; i++)
             {
@@ -225,202 +216,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public override void Restyle()
         {
-            if (key != null) key.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             if (choices == null) return;
             foreach (AvControl c in choices) c.Restyle();
             foreach (AvControl c in actions) c.Restyle();
         }
     }
 
-    /// <summary>SUPPLY's airframe list as one-line rows (silhouette, code, name, price, reason or READY): pooled, each rebound only
-    /// when its key changes, one inert line that says why when the list is empty. Paging lives in the header bar above it.</summary>
-    internal sealed class WmcAirRows : AvPart
-    {
-        private sealed class Row
-        {
-            public RectTransform Root;
-            public AvFrame Frame;
-            public Image Rail, Icon;
-            public TMP_Text Code, Name, Price, Reason;
-            public string CodeFull, NameFull, PriceFull, ReasonFull, Level = "";
-            public int Key = int.MinValue;
-            public bool Selected, Enabled = true, Hover, Shown;
-            public AvState State = AvState.Inert;
-        }
-
-        private readonly Row[] rows;
-        private readonly TMP_Text emptyText;
-        private bool empty;
-        private float width;
-
-        public WmcAirRows(RectTransform parent, WmcControls ids, int count, string prefix, Action<int> pick)
-        {
-            Rect = AvLay.Child(parent, "AirRows");
-            rows = new Row[count];
-            for (int i = 0; i < count; i++)
-            {
-                rows[i] = Build(i, pick);
-                ids.Add(prefix + i, rows[i].Root);
-            }
-            emptyText = AvText.Make(Rect, "EmptyText", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
-            emptyText.gameObject.SetActive(false);
-            Restyle();
-        }
-
-        public int PerPage => rows.Length;
-
-        private Row Build(int slot, Action<int> pick)
-        {
-            var r = new Row { Root = AvLay.Child(Rect, "Row" + slot) };
-            r.Frame = WmcDraw.FillFrame(r.Root);
-            r.Rail = AvLay.Solid(r.Root, "Rail", Color.clear);
-            r.Icon = AvLay.Solid(r.Root, "Icon", Color.white);
-            r.Icon.preserveAspect = true;
-            r.Code = WmcSheet.Text(r.Root, "Code", AvTextRole.Label);
-            r.Name = WmcSheet.Text(r.Root, "Name", AvTextRole.ProseSmall);
-            r.Price = WmcSheet.Text(r.Root, "Price", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
-            r.Reason = WmcSheet.Text(r.Root, "Reason", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
-            AvHit hit = AvHit.On(r.Frame);
-            hit.Hover = h => { r.Hover = h; Paint(r); };
-            hit.Click = e => pick(slot);
-            r.Root.gameObject.SetActive(false);
-            return r;
-        }
-
-        public bool NeedsBind(int slot, int key)
-        {
-            Row r = rows[slot];
-            if (r.Key == key && r.Shown) return false;
-            r.Key = key;
-            return true;
-        }
-
-        /// <summary><paramref name="level"/> colours the reason ("ok", "warn", "bad"); <paramref name="railClass"/> the rail.</summary>
-        public void Bind(int slot, Sprite icon, string code, string name, string price, string reason, string level, string railClass,
-            bool selected, bool enabled, string tip)
-        {
-            Row r = rows[slot];
-            if (!r.Shown)
-            {
-                r.Shown = true;
-                r.Root.gameObject.SetActive(true);
-            }
-            r.Icon.sprite = icon;
-            r.Icon.enabled = icon != null;
-            r.CodeFull = code;
-            r.NameFull = name;
-            r.PriceFull = price;
-            r.ReasonFull = reason;
-            r.Level = level ?? "";
-            r.State = WmcState.Of(railClass);
-            r.Selected = selected;
-            r.Enabled = enabled;
-            AvHit hit = r.Frame.GetComponent<AvHit>();
-            if (hit != null) hit.Interactable = enabled;
-            AvHelpTip.Attach(r.Frame.gameObject, tip);
-            Fit(r);
-            Paint(r);
-            Changed();
-        }
-
-        public void Hide(int slot)
-        {
-            Row r = rows[slot];
-            r.Key = int.MinValue;
-            if (!r.Shown) return;
-            r.Shown = false;
-            r.Root.gameObject.SetActive(false);
-            Changed();
-        }
-
-        /// <summary>One inert line over an empty list saying why; null hides it.</summary>
-        public void ShowEmpty(string text)
-        {
-            bool on = text != null;
-            if (on) AvText.Set(emptyText, text);
-            if (on == empty) return;
-            empty = on;
-            emptyText.gameObject.SetActive(on);
-            Changed();
-        }
-
-        private int ShownCount()
-        {
-            int n = 0;
-            foreach (Row r in rows)
-                if (r.Shown) n++;
-            return n;
-        }
-
-        public override float Measure(float w)
-        {
-            if (empty) return Mathf.Max(WmcSheet.RowH, AvText.Height(emptyText, w - 16f) + 10f);
-            int n = ShownCount();
-            return n == 0 ? 0f : n * (WmcSheet.RowH + WmcSheet.RowGap) - WmcSheet.RowGap;
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            width = s.W;
-            AvLay.Place(emptyText.rectTransform, 8f, 5f, Mathf.Max(0f, s.W - 16f), AvText.Height(emptyText, s.W - 16f));
-            int at = 0;
-            foreach (Row r in rows)
-            {
-                if (!r.Shown) continue;
-                AvLay.Place(r.Root, 0f, at * (WmcSheet.RowH + WmcSheet.RowGap), s.W, WmcSheet.RowH);
-                at++;
-                Fit(r);
-            }
-        }
-
-        private void Fit(Row r)
-        {
-            float w = width > 0f ? width : 400f;
-            const float priceW = 66f;
-            AvText.Set(r.Code, r.CodeFull);
-            float codeW = Mathf.Clamp(AvText.Width(r.Code) + 4f, 46f, 90f);
-            float x = 32f;
-            AvLay.Place(r.Rail.rectTransform, 0f, 0f, 3f, WmcSheet.RowH);
-            AvLay.Place(r.Icon.rectTransform, 8f, (WmcSheet.RowH - 18f) * 0.5f, 18f, 18f);
-            AvLay.Place(r.Code.rectTransform, x, 0f, codeW, WmcSheet.RowH);
-            float nameX = x + codeW + 6f, right = w - 8f;
-            WmcSheet.SetFit(r.Reason, r.ReasonFull, 120f);
-            float rw = Mathf.Clamp(AvText.Width(r.Reason) + 4f, 30f, 120f);
-            AvLay.Place(r.Reason.rectTransform, right - rw, 0f, rw, WmcSheet.RowH);
-            right -= rw + 8f;
-            AvText.Set(r.Price, r.PriceFull);
-            float pw = Mathf.Clamp(AvText.Width(r.Price) + 4f, 20f, priceW + 24f);
-            AvLay.Place(r.Price.rectTransform, right - pw, 0f, pw, WmcSheet.RowH);
-            right -= pw + 8f;
-            float nw = Mathf.Max(0f, right - nameX);
-            WmcSheet.SetFit(r.Name, r.NameFull, nw);
-            AvLay.Place(r.Name.rectTransform, nameX, 0f, nw, WmcSheet.RowH);
-        }
-
-        private void Paint(Row r)
-        {
-            WmcSheet.PaintRow(r.Frame, r.Rail, r.State, !r.Enabled ? "disabled" : r.Selected ? "armed" : r.Hover ? "hover" : null);
-            r.Frame.Bracket = r.Selected ? 6f : 0f;
-            r.Frame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent);
-            r.Frame.SetVerticesDirty();
-            r.Code.color = !r.Enabled ? AvTheme.Disabled : AvInk.Ink;
-            r.Name.color = AvInk.Dim;
-            r.Price.color = AvInk.Ink;
-            r.Reason.color = r.Level.Length == 0 ? AvInk.Dim : WmcSheet.Level(r.Level);
-            r.Icon.color = r.Selected ? Color.white : r.Enabled ? AvTheme.Friendly : AvTheme.Dim;
-        }
-
-        public override void Restyle()
-        {
-            if (rows == null) return;
-            foreach (Row r in rows) Paint(r);
-            emptyText.color = AvInk.Dim;
-        }
-    }
-
     /// <summary>Slim strips for what is on the way or ready to take: a state tag, a bold word, a dim line, an optional progress bar, a
-    /// number, and up to a few buttons on the right. SUPPLY's INBOUND rows, ADOPT row and HANGAR row are one of these each.</summary>
+    /// number, and up to a few buttons on the right. SUPPLY's INBOUND rows, ADOPT row and field rows are these.</summary>
     internal sealed class WmcStripBlock : AvPart
     {
         private sealed class Strip
@@ -486,10 +289,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public int Capacity => strips.Length;
 
         public AvControl Button(int row, int k) => strips[row].Buttons[k];
-
-        public AvControl PagerPrev => pagerPrev;
-
-        public AvControl PagerNext => pagerNext;
 
         /// <summary>Shows the pager line when there is more than one page; <paramref name="range"/> is its centre word.</summary>
         public void SetPaging(int page, int pages, string range)
@@ -646,19 +445,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>One row: a key, an optional icon or swatch, a pick word and its position, and ◂ ▸ (LOADOUT's AIRFRAME and LIVERY).
+    /// <summary>One row: a key, an optional icon, a pick word and its position, and ◂ ▸ (LOADOUT's AIRFRAME and LIVERY).
     /// With <c>splitArrows</c> the arrows flank the word (◂ word ▸); without, they follow it.</summary>
     internal sealed class WmcPickRow : AvPart
     {
         private const float KeyW = 66f, ArrowW = 34f, H = 26f;
         private readonly TMP_Text key, pick, pos;
         private readonly AvFrame frame;
-        private readonly Image icon, swatch;
+        private readonly Image icon;
         private readonly bool splitArrows;
         private string pickFull = "", posFull = "";
         private float width;
 
-        public WmcPickRow(RectTransform parent, string keyText, bool splitArrows, Action<int> step, string help)
+        public WmcPickRow(RectTransform parent, string keyText, bool splitArrows, Action<int> step)
         {
             Rect = AvLay.Child(parent, "PickRow " + keyText);
             this.splitArrows = splitArrows;
@@ -668,12 +467,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             icon = AvLay.Solid(Rect, "Icon", Color.white);
             icon.preserveAspect = true;
             icon.enabled = false;
-            swatch = AvLay.Solid(Rect, "Swatch", Color.clear);
-            swatch.enabled = false;
             pick = WmcSheet.Text(Rect, "Pick", AvTextRole.Label);
             pos = WmcSheet.Text(Rect, "Pos", AvTextRole.DataSmall);
-            Prev = WmcSheet.Chevron(Rect, () => step(-1), true, help);
-            Next = WmcSheet.Chevron(Rect, () => step(1), false, help);
+            Prev = WmcSheet.Chevron(Rect, () => step(-1), true, null);
+            Next = WmcSheet.Chevron(Rect, () => step(1), false, null);
             Restyle();
         }
 
@@ -681,15 +478,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public AvControl Next { get; }
 
-        /// <summary><paramref name="swatchColor"/> (alpha 0 for none) and <paramref name="sprite"/> (null for none) lead the word.</summary>
-        public void Set(string word, string position, Sprite sprite, Color swatchColor)
+        /// <summary><paramref name="sprite"/> (null for none) leads the word.</summary>
+        public void Set(string word, string position, Sprite sprite)
         {
             pickFull = word ?? "";
             posFull = position ?? "";
             icon.sprite = sprite;
             icon.enabled = sprite != null;
-            swatch.color = swatchColor;
-            swatch.enabled = swatchColor.a > 0f;
             Fit();
         }
 
@@ -726,11 +521,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(icon.rectTransform, tx, 3f, 20f, 20f);
                 tx += 26f;
             }
-            if (swatch.enabled)
-            {
-                AvLay.Place(swatch.rectTransform, tx, 6f, 26f, 14f);
-                tx += 32f;
-            }
             AvText.Set(pos, posFull);
             float pw = posFull.Length == 0 ? 0f : AvText.Width(pos) + 4f;
             float avail = Mathf.Max(0f, x + boxW - 8f - tx - (pw > 0f ? pw + 6f : 0f));
@@ -760,11 +550,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     }
 
     /// <summary>LOADOUT's HARDPOINTS: a small top-view station map (the airframe's outline and numbered station boxes) beside the station
-    /// table (the number, the store or what blocks it or EMPTY, its mass, link/split on a pair's sides and ✕ to clear). The map and the table select together.</summary>
+    /// table (the number, the store or what blocks it or EMPTY, link/split on a pair's sides and ✕ to clear). The map and the table select together.</summary>
     internal sealed class WmcStationBoard : AvPart
     {
         public const int MaxStations = 24, RowsPerPage = 8;
-        private const float BoxSize = 16f, RowMin = 22f, RowGap = 2f, Clear = 24f, MassW = 54f, NumW = 20f;
+        private const float BoxSize = 16f, RowMin = 22f, RowGap = 2f, Clear = 24f, NumW = 20f;
 
         // The generic top view (x right, y down), the mockup's outline.
         private static readonly float[] OutlineX = { 0, 7, 11, 14, 96, 100, 16, 15, 46, 46, 12, 8, -8, -12, -46, -46, -15, -16, -100, -96, -14, -11, -7 };
@@ -775,9 +565,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public RectTransform Root;
             public AvFrame Frame;
             public Image Rail;
-            public TMP_Text Num, Store, Mass;
+            public TMP_Text Num, Store;
             public AvControl Clear, Link;
-            public string StoreFull, MassFull, StateClass = "inert";
+            public string StoreFull, StateClass = "inert";
             public bool Shown, CanClear, Enabled = true, Hover;
         }
 
@@ -799,7 +589,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly string[] states = new string[MaxStations];
         private readonly int[] pylons = new int[MaxStations];
         private readonly bool[] mirrored = new bool[MaxStations];
-        private readonly string[] stationStore = new string[MaxStations], stationMass = new string[MaxStations];
+        private readonly string[] stationStore = new string[MaxStations];
         private readonly bool[] canClear = new bool[MaxStations], enabled = new bool[MaxStations];
         /// <summary>0 not a pair side, 1 linked, 2 split.</summary>
         private readonly int[] linkState = new int[MaxStations];
@@ -807,7 +597,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int count, page, selected = -1;
         private float mapW, mapH;
 
-        public WmcStationBoard(RectTransform parent, WmcControls ids, Action<int> onSelect, Action<int> onClear, Action<int> onPage,
+        public WmcStationBoard(RectTransform parent, Action<int> onSelect, Action<int> onClear, Action<int> onPage,
             Action<int> onLink)
         {
             Rect = AvLay.Child(parent, "StationBoard");
@@ -834,7 +624,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 r.Rail = AvLay.Solid(r.Root, "Rail", Color.clear);
                 r.Num = WmcSheet.Text(r.Root, "Num", AvTextRole.DataSmall, TextAlignmentOptions.Center);
                 r.Store = AvText.Make(r.Root, "Store", AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft, true);
-                r.Mass = WmcSheet.Text(r.Root, "Mass", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 r.Clear = AvControl.Make(r.Root, new AvControl.Spec("", () => onClear(page * RowsPerPage + slot), AvButtonStyle.Quiet, AvIcon.X));
                 r.Clear.Help = "Empty this station.";
                 r.Link = AvControl.Make(r.Root, new AvControl.Spec("", () => onLink(page * RowsPerPage + slot), AvButtonStyle.Quiet, AvIcon.Link));
@@ -843,15 +632,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 hit.Click = e => select(page * RowsPerPage + slot);
                 r.Root.gameObject.SetActive(false);
                 rows[i] = r;
-                ids.Add("lo.hp" + i, r.Root);
-                ids.Add("lo.hp" + i + ".clear", r.Clear);
-                ids.Add("lo.hp" + i + ".link", r.Link);
             }
             prev = WmcSheet.Chevron(Rect, () => onPage(-1), true, "Previous stations");
             next = WmcSheet.Chevron(Rect, () => onPage(1), false, "Next stations");
             range = WmcSheet.Text(Rect, "Range", AvTextRole.DataSmall, TextAlignmentOptions.Center);
-            ids.Add("lo.hp.prev", prev);
-            ids.Add("lo.hp.next", next);
             Restyle();
         }
 
@@ -868,7 +652,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 pylons[i] = pylonCounts != null && i < pylonCounts.Count ? pylonCounts[i] : 1;
                 mirrored[i] = withPrev != null && i < withPrev.Count && withPrev[i];
                 if (stationStore[i] == null) stationStore[i] = "";
-                if (stationMass[i] == null) stationMass[i] = "";
                 if (states[i] == null) states[i] = "inert";
             }
             page = Mathf.Clamp(page, 0, Pages - 1);
@@ -889,11 +672,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>One station's words. <paramref name="stateClass"/> is "ready" (flies), "caution" (a store that will not fly),
         /// "inert" (empty or blocked).</summary>
-        public void Bind(int station, string store, string mass, string stateClass, bool clearable, bool canPick, string tip, int link = 0)
+        public void Bind(int station, string store, string stateClass, bool clearable, bool canPick, string tip, int link = 0)
         {
             if (station < 0 || station >= MaxStations) return;
             stationStore[station] = store ?? "";
-            stationMass[station] = mass ?? "";
             states[station] = stateClass;
             canClear[station] = clearable;
             enabled[station] = canPick;
@@ -918,13 +700,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }
                 if (!on) continue;
                 r.StoreFull = stationStore[st];
-                r.MassFull = stationMass[st];
                 r.StateClass = states[st];
                 r.CanClear = canClear[st];
                 r.Enabled = enabled[st];
                 AvText.Set(r.Num, (st + 1).ToString());
                 AvText.Set(r.Store, r.StoreFull);
-                AvText.Set(r.Mass, r.MassFull);
                 r.Clear.gameObject.SetActive(r.CanClear);
                 r.Clear.Interactable = true;
                 r.Link.gameObject.SetActive(linkState[st] != 0);
@@ -953,7 +733,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private float RowHeight(Row r, float w) => Mathf.Max(RowMin, AvText.Height(r.Store, StoreW(w)) + 8f);
 
-        private float StoreW(float w) => Mathf.Max(40f, w - 3f - NumW - MassW - 2f * Clear - 16f);
+        private float StoreW(float w) => Mathf.Max(40f, w - 3f - NumW - 2f * Clear - 16f);
 
         private float TableWidth(float w) => w - Mathf.Clamp(w * 0.31f, 112f, 150f) - 6f;
 
@@ -992,7 +772,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(r.Rail.rectTransform, 0f, 0f, 3f, h);
                 AvLay.Place(r.Num.rectTransform, 5f, 0f, NumW, h);
                 AvLay.Place(r.Store.rectTransform, 5f + NumW + 2f, 0f, StoreW(tw), h);
-                AvLay.Place(r.Mass.rectTransform, tw - 2f * Clear - MassW - 8f, 0f, MassW, h);
                 AvLay.Place(r.Link.Rect, tw - 2f * Clear - 6f, (h - 22f) * 0.5f, Clear, 22f);
                 AvLay.Place(r.Clear.Rect, tw - Clear - 4f, (h - 22f) * 0.5f, Clear, 22f);
                 y += h + RowGap;
@@ -1066,7 +845,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (sel) r.Rail.color = AvStyleHost.FuiColor("select", AvTheme.Accent);
             r.Num.color = sel ? AvStyleHost.FuiColor("select", AvTheme.Accent) : AvInk.Dim;
             r.Store.color = !r.Enabled ? AvTheme.Disabled : AvInk.Ink;
-            r.Mass.color = AvInk.Dim;
             r.Clear.Restyle();
             r.Link.Restyle();
         }
@@ -1083,7 +861,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     }
 
     /// <summary>LOADOUT's store picker, kept open under the stations: a head naming the station and what it holds, then every store the
-    /// station can carry as a two-column grid of cells (name, verdict word, mass). A blocked store reads its verdict and cannot be picked.
+    /// station can carry as a two-column grid of cells (name, verdict word). Only stores that can be fitted are listed.
     /// A pager in the head turns the pages of a long list.</summary>
     internal sealed class WmcStorePicker : AvPart
     {
@@ -1095,9 +873,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public RectTransform Root;
             public AvFrame Frame;
             public Image Rail;
-            public TMP_Text Name, Verdict, Mass;
-            public string NameFull, VerdictFull, MassFull, Level = "";
-            public bool Selected, Pickable = true, Hover, Shown;
+            public TMP_Text Name, Verdict;
+            public string NameFull, VerdictFull, Level = "";
+            public bool Selected, Hover, Shown;
         }
 
         private readonly Cell[] cells = new Cell[PerPage];
@@ -1107,7 +885,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int shown, page, total;
         private float width;
 
-        public WmcStorePicker(RectTransform parent, WmcControls ids, Action<int> pick, Action<int> turn)
+        public WmcStorePicker(RectTransform parent, Action<int> pick, Action<int> turn)
         {
             Rect = AvLay.Child(parent, "StorePicker");
             head = WmcSheet.Text(Rect, "Head", AvTextRole.Label);
@@ -1116,8 +894,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             noteBody.gameObject.SetActive(false);
             prev = WmcSheet.Chevron(Rect, () => turn(-1), true, "Previous stores");
             next = WmcSheet.Chevron(Rect, () => turn(1), false, "Next stores");
-            ids.Add("lo.stores.prev", prev);
-            ids.Add("lo.stores.next", next);
             for (int i = 0; i < PerPage; i++)
             {
                 int slot = i;
@@ -1126,13 +902,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 c.Rail = AvLay.Solid(c.Root, "Rail", Color.clear);
                 c.Name = WmcSheet.Text(c.Root, "Name", AvTextRole.ProseSmall);
                 c.Verdict = WmcSheet.Text(c.Root, "Verdict", AvTextRole.Micro);
-                c.Mass = WmcSheet.Text(c.Root, "Mass", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 AvHit hit = AvHit.On(c.Frame);
                 hit.Hover = h => { c.Hover = h; Paint(c); };
                 hit.Click = e => pick(page * PerPage + slot);
                 c.Root.gameObject.SetActive(false);
                 cells[i] = c;
-                ids.Add("lo.store" + i, c.Root);
             }
             Restyle();
         }
@@ -1180,17 +954,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary><paramref name="level"/> colours the verdict ("ok", "warn", "bad", "" for dim).</summary>
-        public void Bind(int slot, string name, string verdict, string mass, string level, bool selected, bool pickable, string tip)
+        public void Bind(int slot, string name, string verdict, string level, bool selected, string tip)
         {
             Cell c = cells[slot];
             c.NameFull = name;
             c.VerdictFull = verdict;
-            c.MassFull = mass;
             c.Level = level ?? "";
             c.Selected = selected;
-            c.Pickable = pickable;
-            AvHit hit = c.Frame.GetComponent<AvHit>();
-            if (hit != null) hit.Interactable = pickable;
             AvHelpTip.Attach(c.Frame.gameObject, tip);
             FitCell(c);
             Paint(c);
@@ -1241,11 +1011,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             float w = width > 0f ? (width - CellGap) * 0.5f : 200f;
             AvLay.Place(c.Rail.rectTransform, 0f, 0f, 2f, CellH);
-            AvText.Set(c.Mass, c.MassFull);
-            float mw = c.MassFull != null && c.MassFull.Length > 0 ? AvText.Width(c.Mass) + 4f : 0f;
-            AvLay.Place(c.Mass.rectTransform, w - 6f - mw, 1f, mw, 18f);
-            WmcSheet.SetFit(c.Name, c.NameFull, w - 20f - mw);
-            AvLay.Place(c.Name.rectTransform, 8f, 1f, Mathf.Max(0f, w - 20f - mw), 18f);
+            WmcSheet.SetFit(c.Name, c.NameFull, w - 20f);
+            AvLay.Place(c.Name.rectTransform, 8f, 1f, Mathf.Max(0f, w - 20f), 18f);
             WmcSheet.SetFit(c.Verdict, c.VerdictFull, w - 14f);
             AvLay.Place(c.Verdict.rectTransform, 8f, 18f, Mathf.Max(0f, w - 14f), 15f);
         }
@@ -1253,13 +1020,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void Paint(Cell c)
         {
             WmcSheet.PaintRow(c.Frame, c.Rail, c.Level == "ok" ? AvState.Ready : c.Level.Length > 0 ? AvState.Caution : AvState.Inert,
-                !c.Pickable ? "disabled" : c.Selected ? "armed" : c.Hover ? "hover" : null);
+                c.Selected ? "armed" : c.Hover ? "hover" : null);
             c.Frame.Bracket = c.Selected ? 6f : 0f;
             c.Frame.BracketColor = AvStyleHost.FuiColor("select", AvTheme.Accent);
             c.Frame.SetVerticesDirty();
-            c.Name.color = !c.Pickable ? AvTheme.Disabled : AvInk.Ink;
+            c.Name.color = AvInk.Ink;
             c.Verdict.color = c.Level.Length == 0 ? AvInk.Dim : WmcSheet.Level(c.Level);
-            c.Mass.color = AvInk.Dim;
         }
 
         public override void Restyle()

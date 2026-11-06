@@ -31,9 +31,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
             /// <summary>Loaded store mass for fitted-weight display (per pylon).</summary>
             public float Mass;
 
-            /// <summary>The game's rules (R5): event-only, nuclear, strategic, not from a ship (mount.info, as WeaponChecker reads);
+            /// <summary>The game's rules (R5): event-only, nuclear, strategic (mount.info, as WeaponChecker reads);
             /// what it is for the summary; the asset name mission restrictions use.</summary>
-            public bool Disabled, EventContent, Nuclear, Strategic, ShipRearm, Jammer, Bomb, Gun;
+            public bool Disabled, EventContent, Nuclear, Strategic, Jammer, Bomb, Gun;
             public string AssetName;
 
             public bool Armed => AntiAir > 0f || AntiSurface > 0f || AntiMissile > 0f;
@@ -51,12 +51,12 @@ namespace BoscaliSummer.Modules.Wing.Domain
             public readonly bool Cargo;
             /// <summary>This build has the store (false: a saved key it cannot resolve).</summary>
             public readonly bool Known;
-            public readonly bool Disabled, EventContent, Nuclear, Strategic, ShipRearm;
+            public readonly bool Disabled, EventContent, Nuclear, Strategic;
             public readonly StoreKind Kind;
             public readonly string AssetName;
 
             public StoreOption(string key, string label, int ammo, float mass, float antiAir, float antiSurface, bool cargo,
-                bool known = true, bool eventContent = false, bool nuclear = false, bool strategic = false, bool shipRearm = false,
+                bool known = true, bool eventContent = false, bool nuclear = false, bool strategic = false,
                 StoreKind kind = StoreKind.None, string assetName = null, bool disabled = false)
             {
                 Key = key;
@@ -70,7 +70,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 EventContent = eventContent;
                 Nuclear = nuclear;
                 Strategic = strategic;
-                ShipRearm = shipRearm;
                 Kind = kind;
                 AssetName = assetName;
                 Disabled = disabled;
@@ -79,7 +78,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             public bool IsEmpty => string.IsNullOrEmpty(Key);
 
             /// <summary>The set's store for the fit summary.</summary>
-            public StoreFacts Facts => new StoreFacts { HasKey = !IsEmpty, Known = Known && !IsEmpty, Kind = Kind, Mass = Mass, Ammo = Ammo };
+            public StoreFacts Facts => new StoreFacts { Known = Known && !IsEmpty, Kind = Kind, Mass = Mass, Ammo = Ammo };
         }
 
         /// <summary>Cached hardpoint data for one airframe.</summary>
@@ -159,18 +158,19 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>A store option as StoreRules reads it (restricted by the faction's list of asset names; blocked is the station's).</summary>
-        public static MountFacts FactsOf(in StoreOption o, int pylons, FactionHQ hq) => new MountFacts
+        public static MountFacts FactsOf(in StoreOption o, FactionHQ hq) => new MountFacts
         {
             Known = o.Known && !o.IsEmpty, OnStation = o.Known, Disabled = o.Disabled, EventContent = o.EventContent,
             Restricted = hq != null && hq.restrictedWeapons != null && o.AssetName != null && hq.restrictedWeapons.Contains(o.AssetName),
-            Nuclear = o.Nuclear, Strategic = o.Strategic, ShipRearm = o.ShipRearm, Pylons = pylons, Ammo = o.Ammo,
+            Nuclear = o.Nuclear, Strategic = o.Strategic,
         };
 
-        /// <summary>The store keys of the airframe's standard loadout (the game's player-start preset): LOADOUT's NEW starts from them, so
-        /// an internal gun, radome or tail hook is never dropped by a new template (review R5).</summary>
+        /// <summary>The store keys of the airframe's standard loadout (the game's player-start preset): LOADOUT shows them until the custom
+        /// loadout is first changed, and the custom loadout starts from them, so an internal gun, radome or tail hook is never dropped
+        /// (review R5).</summary>
         public static void StandardKeys(AircraftDefinition definition, List<string> into) => KeysOf(GameStartLoadout(definition), into);
 
-        /// <summary>The store keys an aircraft carries (Members' template check).</summary>
+        /// <summary>The store keys an aircraft carries (Members' custom-loadout check).</summary>
         public static void KeysOf(Loadout loadout, List<string> into)
         {
             into.Clear();
@@ -190,7 +190,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         private static StoreOption Project(MountInfo info) =>
             new StoreOption(info.Key, info.Label, info.Ammo, info.Mass, info.AntiAir, info.AntiSurface, info.Cargo, true, info.EventContent,
-                info.Nuclear, info.Strategic, info.ShipRearm, KindOf(info), info.AssetName, info.Disabled);
+                info.Nuclear, info.Strategic, KindOf(info), info.AssetName, info.Disabled);
 
         /// <summary>What a store is for the summary and the role (LoadoutSummary.KindOf: a gun's rounds never count as AAM or AGM).</summary>
         private static StoreKind KindOf(MountInfo i) =>
@@ -240,7 +240,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
             if (anyUnknown)
                 WingLog.Verbose(
-                    "[Loadout] a saved template for " + SafeName(definition) +
+                    "[Loadout] the saved loadout for " + SafeName(definition) +
                     " names stores this build does not have; those pylons launch empty.");
 
             if (blocked > 0)
@@ -253,7 +253,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>Apply native exclusion rules authoritatively before spawn, including stale or
-        /// hand-edited templates. Repeat clearing until the remaining fit is stable.</summary>
+        /// hand-edited loadouts. Repeat clearing until the remaining fit is stable.</summary>
         private static int ClearBlockedMounts(AircraftDefinition definition, Profile profile,
                                               List<WeaponMount> weapons)
         {
@@ -321,7 +321,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         // Loadout construction.
 
-        /// <summary>A chosen fit (YOUR LOADOUT or a template) passes the game's own mount checks before it spawns (review R4a:
+        /// <summary>A chosen fit (YOUR LOADOUT or the custom loadout) passes the game's own mount checks before it spawns (review R4a:
         /// the player's selection menu vets a fit, a requisition must too): event content and mission-restricted stores,
         /// ship-rearm stores off a carrier, stores the pylon does not take or a neighbour blocks, and nuclear stores against the
         /// mission's permission, the player's rank and the field's warheads. A failing pylon launches empty; returns how many.</summary>
@@ -357,7 +357,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>A fresh loadout for a CallSpec fit: AUTO (null) is null — the game arms it; YOUR LOADOUT is a copy of the player's
-        /// own; a template is built from its keys (null when it no longer exists, so the game arms it instead).</summary>
+        /// own; the custom loadout is built from its keys (null when it no longer exists, so the game arms it instead).</summary>
         public static Loadout Build(AircraftDefinition definition, string fit)
         {
             if (fit == null) return null;
@@ -462,7 +462,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 {
                     WeaponMount mount = available[j];
 
-                    // Null means an empty station. Switched-off stores and event content are kept and marked (R5: a template holding one
+                    // Null means an empty station. Switched-off stores and event content are kept and marked (R5: a loadout holding one
                     // reads SWITCHED OFF or EVENT ONLY, not NOT INSTALLED; the launch's Vet strips them; OptionsFor leaves them out).
                     if (mount == null) continue;
 
@@ -592,7 +592,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 info.Nuclear = mount.info.nuclear;
                 info.Strategic = mount.info.strategic;
-                info.ShipRearm = mount.info.rearmShip;
             }
 
             // Read ordinary weapon data directly; inspect stations for multi-weapon mounts and fallback

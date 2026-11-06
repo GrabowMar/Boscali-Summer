@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
         };
     }
 
-    /// <summary>The stances the player can pick (six slots, wing key + 1-6) and the order → default-stance map.
+    /// <summary>The stances the player can pick (six slots, wing key + 1-6; a stance sits in at most one).
     /// Built-ins come from the caller and are never read from or written to the file.</summary>
     internal sealed class StanceBook
     {
@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
 
         private readonly List<Stance> all = new List<Stance>();
         private readonly string[] slots = new string[Slots];
-        private readonly Dictionary<string, string> defaults = new Dictionary<string, string>(StringComparer.Ordinal);
 
         public IReadOnlyList<Stance> All => all;
 
@@ -44,9 +43,11 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
 
         public Stance Slot(int i) => i < 0 || i >= Slots ? null : Find(slots[i]);
 
+        /// <summary>Puts the stance in the slot; the slot it sat in before is left empty (one stance, one key).</summary>
         public bool Assign(int slot, string id)
         {
             if (slot < 0 || slot >= Slots || Find(id) == null) return false;
+            for (int i = 0; i < Slots; i++) if (slots[i] == id) slots[i] = null;
             slots[slot] = id;
             return true;
         }
@@ -65,22 +66,10 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             if (s == null || s.BuiltIn) return false;
             all.Remove(s);
             for (int i = 0; i < Slots; i++) if (slots[i] == id) slots[i] = null;
-            var drop = new List<string>();
-            foreach (KeyValuePair<string, string> kv in defaults) if (kv.Value == id) drop.Add(kv.Key);
-            foreach (string k in drop) defaults.Remove(k);
             return true;
         }
 
-        public string DefaultFor(string orderKey) => orderKey != null && defaults.TryGetValue(orderKey, out string id) ? id : null;
-
-        public void SetDefault(string orderKey, string id)
-        {
-            if (string.IsNullOrEmpty(orderKey)) return;
-            if (Find(id) == null) defaults.Remove(orderKey);
-            else defaults[orderKey] = id;
-        }
-
-        /// <summary>User stances, the six slots and the defaults, as a small hand-written JSON object.</summary>
+        /// <summary>User stances and the six slots, as a small hand-written JSON object.</summary>
         public string ToJson()
         {
             var sb = new StringBuilder();
@@ -99,15 +88,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             }
             sb.Append("],\"slots\":[");
             for (int i = 0; i < Slots; i++) sb.Append(i == 0 ? "" : ",").Append(slots[i] == null ? "null" : Q(slots[i]));
-            sb.Append("],\"defaults\":{");
-            first = true;
-            foreach (KeyValuePair<string, string> kv in defaults)
-            {
-                if (!first) sb.Append(',');
-                first = false;
-                sb.Append(Q(kv.Key)).Append(':').Append(Q(kv.Value));
-            }
-            return sb.Append("}}").ToString();
+            return sb.Append("]}").ToString();
         }
 
         public static StanceBook FromJson(string json, IReadOnlyList<Stance> builtIns, List<string> errors)
@@ -143,10 +124,13 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
                     if (!b.Add(s)) errors?.Add("stance " + s.Id + ": duplicate, empty or over " + MaxStances);
                 }
             if (root.TryGetValue("slots", out object sl) && sl is List<object> sll)
+            {
+                // An old file may have one stance on two keys: the first key keeps it. (Its "defaults", DEFAULT FOR, is not read.)
+                var placed = new HashSet<string>();
+                Array.Clear(b.slots, 0, Slots);   // the file's slots are the whole truth: an emptied built-in key stays empty
                 for (int i = 0; i < Slots && i < sll.Count; i++)
-                    if (sll[i] is string sid && b.Find(sid) != null) b.slots[i] = sid;
-            if (root.TryGetValue("defaults", out object df) && df is Dictionary<string, object> dd)
-                foreach (KeyValuePair<string, object> kv in dd) if (kv.Value is string v) b.SetDefault(kv.Key, v);
+                    if (sll[i] is string sid && placed.Add(sid)) b.Assign(i, sid);
+            }
             return b;
         }
 

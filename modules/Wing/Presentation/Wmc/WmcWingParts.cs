@@ -172,7 +172,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int shown;
         private bool none;
 
-        public WingPilotList(RectTransform parent, int perPage, Action<int> click, WmcControls ids)
+        public WingPilotList(RectTransform parent, int perPage, Action<int> click)
         {
             Rect = AvLay.Child(parent, "PilotList");
             string[] labels = { "CALLSIGN", "NAME", "K", "SRT", "STATUS" };
@@ -185,7 +185,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 rows[i] = new WingPilotRow(Rect, i, click);
                 rows[i].Rect.gameObject.SetActive(false);
-                ids.Add("wing.pilot" + i, rows[i]);
             }
             empty = new AvRow(Rect);
             empty.Set("", "", "", AvState.Inert);
@@ -259,7 +258,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public readonly AvControl Recruit, Studio;
 
-        public WingRosterFoot(RectTransform parent, WmcControls ids, Action<int> turn, Action recruit, Action studio)
+        public WingRosterFoot(RectTransform parent, Action<int> turn, Action recruit, Action studio)
         {
             Rect = AvLay.Child(parent, "RosterFoot");
             prev = AvControl.Make(Rect, new AvControl.Spec("", () => turn(-1), AvButtonStyle.Quiet, AvIcon.ChevronLeft));
@@ -267,10 +266,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             label = AvText.Make(Rect, "Pages", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
             Recruit = AvControl.Make(Rect, new AvControl.Spec("RECRUIT", recruit, AvButtonStyle.Default, AvIcon.Plus));
             Studio = AvControl.Make(Rect, new AvControl.Spec("STUDIO", studio, AvButtonStyle.Quiet, AvIcon.Pencil));
-            ids.Add("wing.pilots.prev", prev);
-            ids.Add("wing.pilots.next", next);
-            ids.Add("wing.recruit", Recruit);
-            ids.Add("wing.studio", Studio);
             Recruit.Help = SquadronWords.RecruitTip;
             Studio.Help = SquadronWords.StudioTip;
             Set(0, 1);
@@ -326,15 +321,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>One PERKS badge: a star (earned) or a lock (not yet), the perk's name, a short line, and for a perk the game does not wire in
-    /// 1.0 its own warn-coloured word; hovering shows the whole description in the footer. Locked ones name the XP that earns them.</summary>
+    /// <summary>One PERKS badge: a star (earned) or a lock (not yet), the perk's name and a short line, warn-coloured with its own word while
+    /// progression is off; hovering shows the whole description in the footer. Locked ones name the XP that earns them.</summary>
     internal sealed class WingPerkCard : AvPart
     {
         private const float PadX = 8f, PadY = 6f, MinH = 46f, IconW = 20f;
         private readonly AvFrame frame;
         private readonly Image rail;
         private readonly TMP_Text badge, title, line, mark;
-        private bool locked, inactive;
+        private bool locked, off;
         private string railClass = "inert";
 
         public WingPerkCard(RectTransform parent, int index)
@@ -356,13 +351,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             bool grew = line.text != card.Line;
             AvText.Set(title, card.Title);
-            // The not-active word is the mark; an active perk keeps its line.
-            AvText.Set(line, card.Inactive ? "" : PerkCards.Badge(card.Line, 46));
-            AvText.Set(mark, card.Inactive ? "NOT ACTIVE IN 1.0" : off && card.Owned ? "PROGRESSION OFF" : "");
+            AvText.Set(line, PerkCards.Badge(card.Line, 46));
+            AvText.Set(mark, off && card.Owned ? "PROGRESSION OFF" : "");
             AvIcons.Set(badge, card.Locked ? AvIcon.Lock : AvIcon.Star, 14f);
             locked = card.Locked;
-            inactive = card.Inactive || off;
-            railClass = card.Locked ? "inert" : inactive ? "warn" : "live";
+            this.off = off;
+            railClass = card.Locked ? "inert" : off ? "warn" : "live";
             AvHelpTip.Attach(frame.gameObject, card.Tip);
             Restyle();
             return grew;
@@ -396,7 +390,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvStyle r = AvStyleHost.FuiStyle("row");
             WmcDraw.PaintRow(frame, r);
             rail.color = WmcState.Color(railClass);
-            badge.color = locked ? AvInk.Dim : inactive ? WmcState.Color("warn") : WmcState.Color("live");
+            badge.color = locked ? AvInk.Dim : off ? WmcState.Color("warn") : WmcState.Color("live");
             title.color = locked ? AvInk.Dim : AvInk.Ink;
             line.color = AvInk.Dim;
             mark.color = WmcState.Color("warn");
@@ -474,7 +468,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>INSPECT's member chips (one per aircraft, in slot order) and CENTER.</summary>
+    /// <summary>AIRCRAFT's member chips (one per aircraft, in slot order) and CENTER.</summary>
     internal sealed class InspectChips : AvPart
     {
         private const float ChipW = 40f, ChipH = 28f;
@@ -482,7 +476,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public readonly AvControl Center;
 
-        public InspectChips(RectTransform parent, WmcControls ids, int count, Action<int> pick, Action center)
+        public InspectChips(RectTransform parent, int count, Action<int> pick, Action center)
         {
             Rect = AvLay.Child(parent, "InspectChips");
             chips = new AvControl[count];
@@ -491,11 +485,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 int k = i;
                 chips[i] = AvControl.Make(Rect, new AvControl.Spec("", () => pick(k)));
                 chips[i].gameObject.SetActive(false);
-                ids.Add("insp.m" + i, chips[i]);
             }
             Center = AvControl.Make(Rect, new AvControl.Spec("CENTER", center, AvButtonStyle.Default, AvIcon.CurrentLocation));
             Center.Help = "Centre the map on this aircraft (the view stays there until you move it or press FIT).";
-            ids.Add("insp.center", Center);
             Restyle();
         }
 

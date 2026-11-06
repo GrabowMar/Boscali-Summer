@@ -11,7 +11,9 @@ namespace NOAvionics
         private readonly TMP_Text icon, title, caption;
         private readonly Image rule, cap;
         private bool twoLines;
-        private float captionH = Line;
+        private bool placed;
+        private AvSlot lastSlot;
+        private float titleH = Line, captionH = Line, captionW;
 
         public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText = null)
         {
@@ -27,26 +29,37 @@ namespace NOAvionics
             Restyle();
         }
 
-        public void SetCaption(string c) { if (caption.text == (c ?? "")) return; caption.text = c ?? ""; Changed(); }
+        public void SetCaption(string c)
+        {
+            if (!AvText.Set(caption, c)) return;
+            // The flow only re-places parts whose height changes; inline captions also change their column width.
+            if (placed) { Measure(lastSlot.W); Place(lastSlot); }
+            Changed();
+        }
 
         public override float Measure(float width)
         {
-            float need = 22f + AvText.Width(title) + 12f + AvText.Width(caption);
-            twoLines = caption.text.Length > 0 && need > width;
-            if (!twoLines) return Line + 1f;
-            // A second-line caption wraps under the title instead of running past the panel edge.
-            caption.enableWordWrapping = true;
-            captionH = Mathf.Max(Line, AvText.Height(caption, width - 22f) + 4f);
-            return Line + captionH + 1f;
+            float inner = Mathf.Max(1f, width - 22f), titleW = AvText.Width(title);
+            captionW = AvText.Width(caption);
+            title.enableWordWrapping = titleW > inner || title.text.IndexOf('\n') >= 0;
+            titleH = title.enableWordWrapping ? Mathf.Max(Line, AvText.Height(title, inner) + 4f) : Line;
+            twoLines = caption.text.Length > 0 && (titleH > Line || caption.text.IndexOf('\n') >= 0 || 22f + titleW + 12f + captionW > width);
+            caption.enableWordWrapping = twoLines;
+            captionH = twoLines ? Mathf.Max(Line, AvText.Height(caption, inner) + 4f) : Line;
+            return titleH + (twoLines ? captionH : 0f) + 1f;
         }
 
         public override void Place(AvSlot slot)
         {
             base.Place(slot);
+            lastSlot = slot; placed = true;
             AvLay.Place(icon.rectTransform, 0f, 3f, 16f, 16f);
-            AvLay.Place(title.rectTransform, 22f, 0f, slot.W - 22f, Line);
+            float titleW = slot.W - 22f - (!twoLines && caption.text.Length > 0 ? captionW + 12f : 0f);
+            AvLay.Place(title.rectTransform, 22f, 0f, Mathf.Max(0f, titleW), titleH);
+            title.alignment = titleH > Line ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineLeft;
             caption.enableWordWrapping = twoLines;
-            AvLay.Place(caption.rectTransform, twoLines ? 22f : 0f, twoLines ? Line : 0f, twoLines ? slot.W - 22f : slot.W, twoLines ? captionH : Line);
+            AvLay.Place(caption.rectTransform, twoLines ? 22f : slot.W - captionW, twoLines ? titleH : 0f,
+                twoLines ? Mathf.Max(0f, slot.W - 22f) : captionW, twoLines ? captionH : Line);
             caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
             AvLay.Place(cap.rectTransform, 0f, slot.H - 1.5f, 22f, 1.5f);

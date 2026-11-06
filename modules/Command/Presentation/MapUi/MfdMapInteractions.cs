@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Command.Domain;
 using TMPro;
 using UnityEngine;
@@ -12,75 +13,80 @@ using Object = UnityEngine.Object;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// Map-only RTS affordances. Native DynamicMap still owns contacts and selection; this
-    /// surface never creates a unit order or reads an unobserved unit position.
+    /// The big map's own gestures, rule B (2026-10-29). The left button selects and pans, armed tool or not: a click adds or drops
+    /// a contact, empty ground does nothing (issue #34), Shift-drag box-adds and Ctrl-drag box-drops. The right button goes to the
+    /// first claim: an armed tool places, a WMC wingman selection moves, a friendly commandable selection takes the game's own
+    /// waypoint, and only then the context card opens. While any tool but WMC's is armed this class holds the pause key (Esc
+    /// cancels the tool) and shows the one armed banner. Native DynamicMap still owns contacts and selection; this surface never
+    /// builds a unit order of its own or reads an unobserved unit position.
     /// </summary>
     internal static class MfdMapInteractions
     {
-        private const float DragSlop = 6f;
         private const float ContactRadius = 18f;
         private const int MaximumScannedIcons = 2048;
         private const int MaximumSelected = 128;
-        private const float MenuWidth = 284f;
-        private const float HeadHeight = 26f;
-        private const float RowHeight = 17f;
-        private const float KeyWidth = 76f;
-        private const float ActionHeight = 28f;
-        private const float ActionGap = 3f;
+        private const float BannerWidth = 470f, BannerHeight = 40f;
 
         private static readonly List<Unit> candidates = new List<Unit>(MaximumSelected);
-        private static readonly List<MapMenuAction> actions = new List<MapMenuAction>(8);
-        private static readonly List<MapMenuRow> rows = new List<MapMenuRow>(10), wingRows = new List<MapMenuRow>(4);
+        private static readonly List<MapMenuAction> actions = new List<MapMenuAction>(16);
+        private static readonly List<MapMenuRow> rows = new List<MapMenuRow>(12), wingRows = new List<MapMenuRow>(4);
 
         private static RectTransform box;
-        private static RectTransform menu;
         /// <summary>The dropped range mark: a map close keeps it, a scene reset forgets it.</summary>
         private static GlobalPosition? mark;
         private static RectTransform markGlyph;
+        private static RectTransform banner;
+        private static TMP_Text bannerWhat;
+        private static string bannerPrompt;
         private static bool boxPress;
         private static bool boxDragged;
+        private static MapBoxMode boxMode;
         private static Vector2 boxStart;
         private static int boxReleaseFrame = -1;
-        private static int iconClickFrame = -1;
-        /// <summary>Frame of a bare-map release still waiting to learn whether an icon took it; -1 for none.</summary>
-        private static int clearFrame = -1;
         private static bool rightPress;
         private static Vector2 rightStart;
-        private static bool leftPress;
-        private static Vector2 leftStart;
+        private const string PauseOwner = "command.map";
+        private static bool pauseHeld;
         private static string feedback;
         private static float feedbackUntil;
+        /// <summary>The card group the next <see cref="Add"/> files its action under.</summary>
+        private static string group;
 
         internal static string Feedback => Time.unscaledTime < feedbackUntil ? feedback : null;
 
-        internal static bool ContainsMenu(Vector2 screen) => MapUiPointer.Contains(menu, screen);
+        internal static bool ContainsMenu(Vector2 screen) => MapContextCard.Contains(screen);
 
-        /// <summary>Another map control (an STR tag or card) took this click: stamp the frame and drop the press so the release does not clear the selection.</summary>
-        internal static void ConsumeClick()
+        /// <summary>Another map control (an STR tag or card) took this click: the context menu goes.</summary>
+        internal static void ConsumeClick() => HideMenu();
+
+        /// <summary>Who this frame's right click belongs to (rule B).</summary>
+        internal static MapRightClick RightRule(DynamicMap map) => MapClickRules.RightClick(MapPicker.IsBusy,
+            ModuleServices.TryGet(out IMapWingMenu wing) && wing.TakesRightClick, NativeCommands(map));
+
+        /// <summary>The game's own right-click waypoint condition (DynamicMap.MapControls): the first selected icon is a friendly unit
+        /// that takes orders, outside the editor.</summary>
+        private static bool NativeCommands(DynamicMap map)
         {
-            iconClickFrame = Time.frameCount;
-            leftPress = false;
-            HideMenu();
+            if (map == null || map.selectedIcons == null || map.selectedIcons.Count == 0 || GameManager.gameState == GameState.Editor)
+                return false;
+            return map.selectedIcons[0] is UnitMapIcon icon && icon.unit != null && !icon.unit.disabled && icon.unit is ICommandable &&
+                DynamicMap.GetFactionMode(icon.unit.NetworkHQ, false) == FactionMode.Friendly;
         }
 
-        /// <summary>Suppress the native immediate RMB waypoint and the native Ctrl-drag pan.</summary>
+        /// <summary>Lets the native right-click waypoint through only for a commandable selection (rule B); suppresses the native
+        /// Ctrl-drag pan under a selection box.</summary>
         internal static bool BlockNativeControls(DynamicMap map)
         {
             if (map == null || !DynamicMap.mapMaximized || map.mapBackground == null) return false;
-            if (Input.GetMouseButtonDown(1)) return true;
-            // STR's DRAW owns the left button: the native sheet must not pan under the arrow being drawn.
-            if (StrMapOverlay.DrawArmed && !MapUiPointer.OverControls() &&
-                (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0) || Input.GetMouseButtonUp(0))) return true;
+            if (Input.GetMouseButtonDown(1)) return RightRule(map) != MapRightClick.Native;
             if (boxPress && (Input.GetMouseButton(0) || Input.GetMouseButtonUp(0))) return true;
             return (Input.GetMouseButton(0) || Input.GetMouseButtonDown(0)) && BoxDrag() &&
                 !BoxBlocked() && !MapUiPointer.OverControls() &&
                 map.TryGetCursorCoordinates(out _);
         }
 
-        internal static bool BlockIconClick() => DynamicMap.mapMaximized && (StrMapOverlay.DrawArmed ||
-            (boxPress && (boxDragged ||
-                ((Vector2)Input.mousePosition - boxStart).sqrMagnitude >= DragSlop * DragSlop)) ||
-             boxReleaseFrame == Time.frameCount);
+        internal static bool BlockIconClick() => DynamicMap.mapMaximized &&
+            ((boxPress && (boxDragged || !MapTool.IsClick(boxStart, Input.mousePosition))) || boxReleaseFrame == Time.frameCount);
 
         /// <summary>Use the native map's additive selection without its single-contact camera follow.</summary>
         internal static bool HandleUnitClick(UnitMapIcon icon, bool pointerEvent = false)
@@ -97,7 +103,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return true;
             ConsumeClick();
             // CLICK ADDS builds the selection: a click adds the contact, or drops it if already in.
-            // CLICK ONE replaces it; Shift or Ctrl still adds. Empty ground clears.
+            // CLICK REPLACES makes it the only one; Shift or Ctrl still adds. Empty ground does nothing, as in vanilla (issue #34).
             bool selected = map.selectedIcons.Contains(icon);
             if (Plugin.Settings?.Command?.MapClickAdds?.Value != false || ShiftHeld() || ControlHeld())
             {
@@ -110,7 +116,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ClearSelection(map);
                 if (!only) Select(map, icon.unit);
             }
-            Echo((map.selectedIcons?.Count ?? 0) + " TRACKS SELECTED  /  CLICK EMPTY MAP TO CLEAR");
+            Echo((map.selectedIcons?.Count ?? 0) + " TRACKS SELECTED");
             return true;
         }
 
@@ -138,31 +144,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Restore();
                 return;
             }
+            HoldPause();
             DrawMark(map);
-            // The input module may hand the icon its click on the release frame or the one after, so a
-            // bare-map release waits out both before it is allowed to clear.
-            if (clearFrame >= 0 && Time.frameCount > clearFrame + 1)
+            DrawBanner(map);
+            MapSelectionDeck.Tick(map);
+            // An armed tool owns the right button: the card goes and no right press is latched for it.
+            if (MapPicker.IsBusy)
             {
-                if (iconClickFrame < clearFrame)
-                {
-                    ClearSelection(map);
-                    Echo("SELECTION CLEARED  /  RIGHT CLICK FOR MAP ACTIONS");
-                }
-                clearFrame = -1;
-            }
-            if (BoxBlocked())
-            {
-                CancelBox();
                 HideMenu();
-                if (MapPicker.IsBusy) rightPress = false;
-                leftPress = false;
+                rightPress = false;
             }
-            if (Input.GetKeyDown(KeyCode.Escape))
+            if (BoxBlocked()) CancelBox();
+            if (MapTool.CancelPressed())
             {
                 CancelBox();
                 HideMenu();
                 rightPress = false;
-                leftPress = false;
                 return;
             }
 
@@ -171,8 +168,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bool onMenu = ContainsMenu(Input.mousePosition);
                 if (!onMenu) HideMenu();
                 rightStart = Input.mousePosition;
-                // Latch ownership on press: Support can disarm during its release Update.
-                rightPress = !onMenu && !MapPicker.IsBusy &&
+                // Latch the claim on press: an armed tool can disarm during its own release Update.
+                rightPress = !onMenu && RightRule(map) == MapRightClick.Card &&
                     !MapUiPointer.OverControls() &&
                     MapUiPointer.Contains(map.mapBackground.rectTransform, rightStart);
             }
@@ -180,240 +177,233 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 GlobalPosition point = default;
                 bool open = rightPress && !MapPicker.IsBusy && !ReliefNavigator.BlockContextClick() &&
-                    ((Vector2)Input.mousePosition - rightStart).sqrMagnitude < DragSlop * DragSlop &&
+                    MapTool.IsClick(rightStart, Input.mousePosition) &&
                     !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out point);
                 rightPress = false;
-                if (open) ShowMenu(map, point);
+                if (open) ShowMenu(map, point, Input.mousePosition);
             }
 
             if (Input.GetMouseButtonDown(0))
             {
-                bool onMenu = ContainsMenu(Input.mousePosition);
-                if (menu != null && !onMenu) HideMenu();
-                boxPress = BoxDrag() && !BoxBlocked() && !MapUiPointer.OverControls() &&
-                    !Typing() && map.TryGetCursorCoordinates(out _);
+                if (!ContainsMenu(Input.mousePosition)) HideMenu();
+                boxMode = BoxModeNow();
+                boxPress = boxMode != MapBoxMode.None && !BoxBlocked() && !MapUiPointer.OverControls() &&
+                    !MapTool.Typing() && map.TryGetCursorCoordinates(out _);
                 boxDragged = false;
                 if (boxPress) boxStart = Input.mousePosition;
-                leftStart = Input.mousePosition;
-                leftPress = !boxPress && !onMenu && !BoxDrag() && !BoxBlocked() &&
-                    !Typing() && !MapUiPointer.OverControls() &&
-                    MapUiPointer.Contains(map.mapBackground.rectTransform, leftStart);
-            }
-            if (Input.GetMouseButtonUp(0) && !boxPress)
-            {
-                bool open = leftPress && !BoxBlocked() && !ReliefNavigator.BlockContextClick() &&
-                    ((Vector2)Input.mousePosition - leftStart).sqrMagnitude < DragSlop * DragSlop &&
-                    !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out _);
-                leftPress = false;
-                // Decide later: the UI may deliver this release's icon click after this tick, and
-                // clearing now would empty the selection just before that click adds to it.
-                clearFrame = open && !ShiftHeld() ? Time.frameCount : -1;
             }
             if (!boxPress) return;
-            if (!BoxDrag() || BoxBlocked() || MapUiPointer.OverControls() ||
-                !map.TryGetCursorCoordinates(out _))
+            if (MapUiPointer.OverControls() || !map.TryGetCursorCoordinates(out _))
             {
                 CancelBox();
                 return;
             }
             Vector2 current = Input.mousePosition;
-            if ((current - boxStart).sqrMagnitude >= DragSlop * DragSlop) boxDragged = true;
+            if (!MapTool.IsClick(boxStart, current)) boxDragged = true;
             if (Input.GetMouseButtonUp(0))
             {
-                if (boxDragged && map.TryGetCursorCoordinates(out _))
+                if (boxDragged)
                 {
                     SelectBox(map, new Rect(Mathf.Min(boxStart.x, current.x),
                         Mathf.Min(boxStart.y, current.y), Mathf.Abs(current.x - boxStart.x),
-                        Mathf.Abs(current.y - boxStart.y)), true);
+                        Mathf.Abs(current.y - boxStart.y)), boxMode);
                     boxReleaseFrame = Time.frameCount;
                 }
                 CancelBox();
             }
-            else if (boxDragged) DrawBox(map.maximizedMapCanvas, boxStart, current);
+            else if (boxDragged) DrawBox(map.maximizedMapCanvas, boxStart, current, boxMode);
         }
 
-        private static void SelectBox(DynamicMap map, Rect region, bool add)
+        private static void SelectBox(DynamicMap map, Rect region, MapBoxMode mode)
         {
             candidates.Clear();
             if (map.mapIcons == null) return;
             GameManager.GetLocalAircraft(out Aircraft localAircraft);
+            MapBoxSide side = Plugin.Settings?.Command?.MapBoxSide?.Value ?? MapBoxSide.All;
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
             for (int i = 0; i < limit; i++)
             {
                 if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon)) continue;
-                if (!MapClickRules.BoxTakes(Plugin.Settings?.Command?.MapBoxSide?.Value ?? MapBoxSide.All, icon.unit.NetworkHQ != null, icon.unit.NetworkHQ == map.HQ)) continue;
+                if (!MapClickRules.BoxTakes(side, icon.unit.NetworkHQ != null, icon.unit.NetworkHQ == map.HQ)) continue;
                 Vector2 screen = IconScreen(icon);
                 if (!region.Contains(screen) ||
                     !MapUiPointer.Contains(map.mapBackground.rectTransform, screen)) continue;
                 if (candidates.Count < MaximumSelected) candidates.Add(icon.unit);
             }
-            if (!add) ClearSelection(map);
-            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
-            Echo(candidates.Count > 0 ? $"{candidates.Count} TRACKS SELECTED" : "SELECTION CLEARED");
+            int changed = 0;
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                bool held = IsSelected(map, candidates[i]);
+                if (mode == MapBoxMode.Drop && held) { Deselect(map, candidates[i]); changed++; }
+                else if (mode == MapBoxMode.Add && !held) { Select(map, candidates[i]); changed++; }
+            }
+            Echo(mode == MapBoxMode.Drop ? changed + " TRACKS DROPPED" : changed + " TRACKS ADDED");
         }
 
-        private static void ShowMenu(DynamicMap map, GlobalPosition ground)
+        // ---- the context card (rule B: a right click nobody claims) ----
+
+        /// <summary>Test seam (MapInputAutomation): the card a right click at this screen point over this ground would open.</summary>
+        internal static void OpenCardForTest(DynamicMap map, Vector2 screen, GlobalPosition ground) => ShowMenu(map, ground, screen);
+
+        /// <summary>Read-back for the automation hook: what the map's input surface shows now.</summary>
+        internal static bool BannerShown => banner != null && banner.gameObject.activeInHierarchy;
+        internal static bool PauseHeld => pauseHeld;
+
+        /// <summary>The selection box being dragged now, if any (the cursor follows it).</summary>
+        internal static MapBoxMode BoxDragging => boxPress && boxDragged ? boxMode : MapBoxMode.None;
+
+        /// <summary>The pickable contact under this screen point, as a click would take it.</summary>
+        internal static UnitMapIcon HoverContact(DynamicMap map, Vector2 screen) => ContactAt(map, screen);
+
+        private static void ShowMenu(DynamicMap map, GlobalPosition ground, Vector2 click)
         {
             HideMenu();
-            Canvas canvas = map.maximizedMapCanvas;
-            RectTransform parent = canvas.transform as RectTransform;
+            RectTransform parent = map.maximizedMapCanvas.transform as RectTransform;
             if (parent == null) return;
-            UnitMapIcon contact = ContactAt(map, Input.mousePosition);
-            AirbaseMapIcon airbase = contact == null ? AirbaseAt(map, Input.mousePosition) : null;
-            Vector2 click = Input.mousePosition;
+            UnitMapIcon contact = ContactAt(map, click);
+            AirbaseMapIcon airbase = contact == null ? AirbaseAt(map, click) : null;
             int nearby = CountNearby(map, click);
             int selected = map.selectedIcons?.Count ?? 0;
+            bool hasWing = airbase == null && ModuleServices.TryGet(out IMapWingMenu _);
             actions.Clear();
+            wingRows.Clear();
+
             if (contact != null)
             {
                 Unit unit = contact.unit;
-                Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
-                Add("SELECT ONLY", AvIcon.Target, () => SelectTrack(map, unit, false), true);
+                group = "SELECT";
+                Add("SELECT ONLY THIS", AvIcon.Target, () => SelectTrack(map, unit, false));
                 // The line says what the click will do, not both things it might.
-                bool held = selected > 0 && TrySelectedUnit(map, unit);
+                bool held = selected > 0 && IsSelected(map, unit);
                 Add(held ? "DROP FROM SELECTION" : "ADD TO SELECTION", held ? AvIcon.Minus : AvIcon.Plus,
                     () => SelectTrack(map, unit, true));
-                if (nearby > 1)
-                    Add("SELECT STACK  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
-                Add("SELECT ALL OF THIS TYPE", AvIcon.Filter, () => SelectVisibleType(map, unit));
+                int same = CountVisibleType(map, unit);
+                if (same > 1) Add("ALL OF THIS TYPE  ·  " + same, AvIcon.Filter, () => SelectVisibleType(map, unit));
+                if (nearby > 1) Add("THE STACK HERE  ·  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
+                AddClear(map, selected);
+                if (hasWing) FillWing(unit, ground);
             }
             else if (airbase != null)
             {
                 AirbaseMapIcon target = airbase;
-                Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
+                group = "SELECT";
                 Add("SELECT BASE", AvIcon.Runway, () =>
                 {
                     ClearSelection(map);
                     if (target != null && target.airbase != null) map.SelectIcon(target.airbase);
-                    HideMenu();
-                }, true);
+                });
+                AddClear(map, selected);
             }
+            else
+            {
+                // Bare ground: where the wing should go is the likeliest question, so it leads.
+                if (hasWing) FillWing(null, ground);
+                group = "SELECT";
+                if (nearby > 0) Add("NEARBY TRACKS  ·  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
+                AddClear(map, selected);
+            }
+
+            group = "MAP";
+            if (contact != null || airbase != null) Add("FRAME", AvIcon.Focus2, () => Focus(ground, true), true);
             else
             {
                 Add("CENTER", AvIcon.CurrentLocation, () => Focus(ground, false), true);
                 Add("ZOOM IN", AvIcon.Maximize, () => Focus(ground, true), true);
-                if (nearby > 1)
-                    Add("SELECT NEARBY  /  " + nearby, AvIcon.Stack2, () => SelectNearby(map, click));
-            }
-            // The wing's orders for this click: Wing owns and runs them, the card only presses.
-            wingRows.Clear();
-            if (airbase == null && ModuleServices.TryGet(out IMapWingMenu wing))
-            {
-                int first = actions.Count;
-                wing.Fill(contact != null ? contact.unit : null, ground, wingRows, actions);
-                for (int i = first; i < actions.Count; i++)
-                {
-                    MapMenuAction a = actions[i];
-                    Action run = a.Invoke;
-                    a.Invoke = () =>
-                    {
-                        HideMenu();
-                        run?.Invoke();
-                    };
-                    actions[i] = a;
-                }
             }
             // The world camera is the player's only while they fly nothing (the vanilla icon-click rule).
             if (!GameManager.GetLocalAircraft(out Aircraft flown) || flown == null || flown.disabled)
             {
                 Unit goTo = contact != null ? contact.unit : null;
-                Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground));
-            }
-            // The landing zone stands until moved or cleared: every HALO stick and glider this
-            // pilot releases aims at it (Urban Combat owns the zone and its host sync).
-            bool zoned = TryZone(out _);
-            if (ModuleServices.TryGet(out ILandingZone _) && GameManager.GetLocalAircraft(out Aircraft _))
-            {
-                Add(zoned ? "MOVE LANDING ZONE" : "SET LANDING ZONE", AvIcon.Parachute, () => SetLandingZone(ground), zoned);
-                if (zoned) Add("CLEAR LANDING ZONE", AvIcon.Eraser, () => SetLandingZone(null), true);
+                Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground), true);
             }
             bool marked = mark.HasValue;
-            Add(marked ? "MOVE MARK" : "DROP RANGE MARK HERE", AvIcon.Ruler2, () => SetMark(ground), marked);
+            Add(marked ? "MOVE MARK" : "RANGE MARK", AvIcon.Ruler2, () => SetMark(ground), true);
             if (marked) Add("CLEAR MARK", AvIcon.Eraser, () => SetMark(null), true);
+            // The landing zone stands until moved or cleared: every HALO stick and glider this
+            // pilot releases aims at it (Urban Combat owns the zone and its host sync).
+            if (ModuleServices.TryGet(out ILandingZone _) && GameManager.GetLocalAircraft(out Aircraft _))
+            {
+                bool zoned = TryZone(out _);
+                Add(zoned ? "MOVE LZ" : "LANDING ZONE", AvIcon.Parachute, () => SetLandingZone(ground), true);
+                if (zoned) Add("CLEAR LZ", AvIcon.Eraser, () => SetLandingZone(null), true);
+            }
             Add("COPY FIX", AvIcon.Copy, () =>
             {
                 GUIUtility.systemCopyBuffer = "X " + AvNum.Fixed(ground.x, 0) + "  Z " + AvNum.Fixed(ground.z, 0);
-                HideMenu();
                 Echo("GROUND FIX COPIED");
-            }, selected > 0);
-            if (selected > 0)
-                Add("CLEAR SEL  /  " + selected, AvIcon.Trash, () =>
-                {
-                    ClearSelection(map);
-                    HideMenu();
-                    Echo("SELECTION CLEARED");
-                }, true);
-            int lines = 0;
-            for (int i = 0; i < actions.Count; i++, lines++)
-                if (Paired(i)) i++;
+            }, true);
+
             Color tone = MapContextRead.Fill(map, ground, mark, rows);
-            // A wingman's own rows lead the card: that is what the click was about.
+            string title, kind;
+            if (contact != null)
+            {
+                title = FirstLine(contact.GetInfoText());
+                FactionMode side = DynamicMap.GetFactionMode(contact.unit.NetworkHQ, false);
+                kind = side == FactionMode.Enemy ? "HOSTILE TRACK" : side == FactionMode.Friendly ? "OWN TRACK" : "TRACK";
+                tone = side == FactionMode.Enemy ? AvStyleHost.FuiColor("danger", AvTheme.Alert)
+                    : side == FactionMode.Friendly ? AvStyleHost.FuiColor("friendly", AvTheme.Friendly) : AvStyleHost.FuiColor("muted", AvTheme.Dim);
+            }
+            else if (airbase != null)
+            {
+                title = FirstLine(airbase.GetInfoText());
+                kind = "AIRBASE";
+            }
+            else
+            {
+                title = "GROUND FIX";
+                kind = TakeRow("FIX") ?? "";
+            }
+            // A wingman's own rows lead the facts: that is what the click was about.
             rows.InsertRange(0, wingRows);
-            float body = HeadHeight + rows.Count * RowHeight + 8f;
-            float height = body + lines * (ActionHeight + ActionGap) + 5f;
-            var go = new GameObject("NOAvionics.MapContext", typeof(RectTransform));
-            menu = go.GetComponent<RectTransform>();
-            menu.SetParent(parent, false);
-            menu.anchorMin = menu.anchorMax = Vector2.zero;
-            menu.pivot = new Vector2(0f, 1f);
-            menu.sizeDelta = new Vector2(MenuWidth, height);
-            if (ToCanvas(parent, Input.mousePosition, out Vector2 at))
-                menu.anchoredPosition = new Vector2(Mathf.Clamp(at.x + 10f, 6f,
-                    parent.rect.width - MenuWidth - 6f),
-                    Mathf.Clamp(at.y - 10f, height + 6f, parent.rect.height - 6f));
-            MfdChromeLay.Panel(menu, "Back", new Rect(0f, 0f, MenuWidth, height),
-                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(0.97f),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame), AvChamfer.Diagonal(6f));
-            // The rail down the fix card carries the holder's colour; the GROUND row says it in words.
-            MfdChromeLay.Rule(menu, "Tone", new Rect(1f, -8f, 3f, body - 14f), tone);
-            string title = contact != null ? FirstLine(contact.GetInfoText()) :
-                airbase != null ? FirstLine(airbase.GetInfoText()) : "GROUND FIX";
-            // Rects are top-anchored with y already assigned directly: rows go down with negative y.
-            TMP_Text titleText = AvText.Make(menu, "Title", AvTextRole.Head, title, TextAlignmentOptions.MidlineLeft);
-            MfdChromeLay.Place(titleText.rectTransform, new Rect(12f, -5f, MenuWidth - 20f, 18f));
-            titleText.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
-            AvText.Fit(titleText, false);
-            Color key = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
-            for (int i = 0; i < rows.Count; i++)
-            {
-                float top = -(HeadHeight + i * RowHeight);
-                TMP_Text keyText = AvText.Make(menu, "Key " + rows[i].Key, AvTextRole.Micro, rows[i].Key,
-                    TextAlignmentOptions.MidlineLeft);
-                MfdChromeLay.Place(keyText.rectTransform, new Rect(12f, top, KeyWidth, RowHeight));
-                keyText.color = key;
-                AvText.Fit(keyText, false);
-                TMP_Text valueText = AvText.Make(menu, "Value " + rows[i].Key, AvTextRole.DataSmall, rows[i].Value,
-                    TextAlignmentOptions.MidlineLeft);
-                MfdChromeLay.Place(valueText.rectTransform,
-                    new Rect(12f + KeyWidth, top, MenuWidth - 20f - KeyWidth, RowHeight));
-                valueText.color = rows[i].Tone;
-                AvText.Fit(valueText, false);
-            }
-            MfdChromeLay.Rule(menu, "Split", new Rect(8f, -(body - 4f), MenuWidth - 16f, 1f),
-                AvStyleHost.FuiColor("hairline", AvTheme.Hairline));
-            float y = body;
-            for (int i = 0; i < actions.Count; i++, y += ActionHeight + ActionGap)
-            {
-                bool pair = Paired(i);
-                float width = pair ? (MenuWidth - 16f - ActionGap) * .5f : MenuWidth - 16f;
-                PlaceAction(actions[i], 8f, y, width);
-                if (pair) PlaceAction(actions[++i], 8f + width + ActionGap, y, width);
-            }
-            menu.SetAsLastSibling();
+            MapContextCard.Show(parent, click, title, kind, tone, rows, actions);
         }
 
+        /// <summary>Files an action under the current <see cref="group"/>; pressing it closes the card first.</summary>
         private static void Add(string label, AvIcon icon, Action invoke, bool half = false) =>
-            actions.Add(new MapMenuAction { Label = label, Icon = icon, Invoke = invoke, Half = half });
+            actions.Add(new MapMenuAction { Label = label, Group = group, Icon = icon, Invoke = Closing(invoke), Half = half });
 
-        private static bool Paired(int index) =>
-            actions[index].Half && index + 1 < actions.Count && actions[index + 1].Half;
-
-        private static void PlaceAction(MapMenuAction action, float x, float y, float width)
+        private static Action Closing(Action invoke) => () =>
         {
-            AvControl button = AvControl.Make(menu,
-                new AvControl.Spec(action.Label, action.Invoke, AvButtonStyle.Default, action.Icon));
-            MfdChromeLay.Place(button.Rect, new Rect(x, -y, width, ActionHeight));
-            button.SingleLine();
+            HideMenu();
+            invoke?.Invoke();
+        };
+
+        private static void AddClear(DynamicMap map, int selected)
+        {
+            if (selected <= 0) return;
+            Add("CLEAR SELECTION  ·  " + selected, AvIcon.Trash, () =>
+            {
+                ClearSelection(map);
+                Echo("SELECTION CLEARED");
+            });
+        }
+
+        /// <summary>The wing's orders for this click: Wing owns and runs them, the card only presses.</summary>
+        private static void FillWing(Unit clicked, GlobalPosition ground)
+        {
+            if (!ModuleServices.TryGet(out IMapWingMenu wing)) return;
+            int first = actions.Count;
+            wing.Fill(clicked, ground, wingRows, actions);
+            for (int i = first; i < actions.Count; i++)
+            {
+                MapMenuAction a = actions[i];
+                a.Invoke = Closing(a.Invoke);
+                if (string.IsNullOrEmpty(a.Group)) a.Group = "WING";
+                actions[i] = a;
+            }
+        }
+
+        /// <summary>Removes the row with this key and returns its value (the ground fix goes in the card's head instead).</summary>
+        private static string TakeRow(string key)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].Key != key) continue;
+                string value = rows[i].Value;
+                rows.RemoveAt(i);
+                return value;
+            }
+            return null;
         }
 
         /// <summary>"274° / 38.2 KM": compass bearing and flat range from one map point to another.</summary>
@@ -437,14 +427,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (point.HasValue) zone.SetLocal(point.Value);
                 else zone.ClearLocal();
             }
-            HideMenu();
             Echo(point.HasValue ? "LANDING ZONE SET  /  PARATROOPERS AND GLIDERS AIM THERE" : "LANDING ZONE CLEARED");
         }
 
         private static void SetMark(GlobalPosition? point)
         {
             mark = point;
-            HideMenu();
             Echo(point.HasValue ? "RANGE MARK SET  /  CURSOR LINE READS FROM IT" : "RANGE MARK CLEARED");
         }
 
@@ -469,6 +457,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 TMP_Text glyph = AvIcons.Make(viewport, AvIcon.Crosshair, 22f,
                     AvStyleHost.FuiColor("select", AvTheme.Accent));
                 glyph.name = "NOAvionics.MapMark";
+                glyph.raycastTarget = false;
                 markGlyph = glyph.rectTransform;
                 markGlyph.sizeDelta = new Vector2(26f, 26f);
             }
@@ -476,10 +465,80 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             markGlyph.localPosition = new Vector3(local.x, local.y, 0f);
         }
 
+        // ---- armed tools: the one banner and the pause key ----
+
+        /// <summary>Esc cancels an armed tool or closes the card and must not also pause the game: the key is held while either is
+        /// up (WMC holds it for its own tools) through Core's shared <see cref="PauseKey"/>, which gives it back as it was found.</summary>
+        private static void HoldPause()
+        {
+            pauseHeld = !Application.isBatchMode &&
+                ((MapPicker.IsBusy && !MapPicker.IsOwner(MapPicker.WingPoint)) || MapContextCard.Visible);
+            PauseKey.Hold(PauseOwner, pauseHeld);
+        }
+
+        private static void ReleasePause()
+        {
+            pauseHeld = false;
+            PauseKey.Hold(PauseOwner, false);
+        }
+
+        /// <summary>Whatever panel armed it, an armed tool reads the same at the top of the map: what it places, then how.</summary>
+        private static void DrawBanner(DynamicMap map)
+        {
+            string prompt = MapPicker.IsBusy ? MapPicker.Prompt : null;
+            RectTransform viewport = map.mapBackground.rectTransform;
+            if (string.IsNullOrEmpty(prompt))
+            {
+                if (banner != null && banner.gameObject.activeSelf) banner.gameObject.SetActive(false);
+                return;
+            }
+            if (banner == null || banner.parent != viewport) BuildBanner(viewport);
+            // On top when it appears, not every frame: the deck and the view bar keep their own places beside it.
+            if (!banner.gameObject.activeSelf)
+            {
+                banner.gameObject.SetActive(true);
+                banner.SetAsLastSibling();
+            }
+            // Bottom centre: the top edge belongs to the STR plate and the selection deck (2026-10-29 sim capture).
+            banner.anchoredPosition = new Vector2(Mathf.Max(8f, (viewport.rect.width - BannerWidth) * .5f), 14f + BannerHeight);
+            if (prompt == bannerPrompt) return;
+            bannerPrompt = prompt;
+            bannerWhat.text = prompt.ToUpperInvariant();
+        }
+
+        private static void BuildBanner(RectTransform viewport)
+        {
+            if (banner != null) Object.Destroy(banner.gameObject);
+            var go = new GameObject("NOAvionics.MapToolBanner", typeof(RectTransform));
+            banner = go.GetComponent<RectTransform>();
+            banner.SetParent(viewport, false);
+            banner.anchorMin = banner.anchorMax = new Vector2(0f, 0f);
+            banner.pivot = new Vector2(0f, 1f);
+            banner.sizeDelta = new Vector2(BannerWidth, BannerHeight);
+            Color caution = AvStyleHost.FuiColor("caution", AvTheme.Warning);
+            AvFrame back = MfdChromeLay.Panel(banner, "Back", new Rect(0f, 0f, BannerWidth, BannerHeight),
+                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.94f), caution, AvChamfer.Diagonal(5f));
+            back.raycastTarget = false;
+            MfdChromeLay.Rule(banner, "Rail", new Rect(1f, -5f, 3f, BannerHeight - 10f), caution).raycastTarget = false;
+            bannerWhat = AvText.Make(banner, "What", AvTextRole.Head, "", TextAlignmentOptions.Center);
+            MfdChromeLay.Place(bannerWhat.rectTransform, new Rect(10f, -3f, BannerWidth - 20f, 19f));
+            bannerWhat.color = caution;
+            bannerWhat.raycastTarget = false;
+            AvText.Fit(bannerWhat, false);
+            TMP_Text how = AvText.Make(banner, "How", AvTextRole.Micro,
+                "RIGHT CLICK PLACES  ·  ESC CANCELS  ·  LEFT BUTTON STILL PANS AND SELECTS", TextAlignmentOptions.Center);
+            MfdChromeLay.Place(how.rectTransform, new Rect(10f, -23f, BannerWidth - 20f, 13f));
+            how.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
+            how.raycastTarget = false;
+            AvText.Fit(how, false);
+            bannerPrompt = null;
+        }
+
+        // ---- the actions ----
+
         private static void Focus(GlobalPosition ground, bool zoom)
         {
             ReliefNavigator.Focus(ground, zoom);
-            HideMenu();
             Echo(zoom ? "AREA FRAMED" : "VIEW CENTERED");
         }
 
@@ -487,7 +546,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// whose fix is not accurate gets the ground point: the camera must not reveal where it really is.</summary>
         private static void GoTo(Unit unit, GlobalPosition ground)
         {
-            HideMenu();
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             if (cameras == null) return;
             if (unit != null && !unit.disabled && (!GameManager.GetLocalHQ(out FactionHQ hq) ||
@@ -508,10 +566,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void SelectTrack(DynamicMap map, Unit unit, bool add)
         {
-            HideMenu();
             if (map == null || unit == null || unit.disabled || Excluded(unit)) return;
             if (GameManager.GetLocalAircraft(out Aircraft localAircraft) && unit == localAircraft) return;
-            if (add && TrySelectedUnit(map, unit)) Deselect(map, unit);
+            if (add && IsSelected(map, unit)) Deselect(map, unit);
             else
             {
                 if (!add) ClearSelection(map);
@@ -520,31 +577,72 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Echo($"{map.selectedIcons?.Count ?? 0} TRACKS SELECTED");
         }
 
-        private static bool TrySelectedUnit(DynamicMap map, Unit unit)
+        /// <summary>The selection deck's FRAME: centres the view on what is selected, at the positions the local faction knows.</summary>
+        internal static void FrameSelection()
         {
-            foreach (MapIcon icon in map.selectedIcons)
-                if (icon is UnitMapIcon selected && selected.unit == unit) return true;
-            return false;
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null || map.selectedIcons == null) return;
+            GameManager.GetLocalHQ(out FactionHQ hq);
+            float x = 0f, z = 0f;
+            int n = 0;
+            for (int i = 0; i < map.selectedIcons.Count; i++)
+            {
+                if (!(map.selectedIcons[i] is UnitMapIcon icon) || icon.unit == null || icon.unit.disabled) continue;
+                GlobalPosition at;
+                if (hq == null || icon.unit.NetworkHQ == hq) at = icon.unit.GlobalPosition();
+                else if (!hq.TryGetKnownPosition(icon.unit, out at)) continue;
+                x += at.x;
+                z += at.z;
+                n++;
+            }
+            if (n == 0 || !MapFocus.To(x / n, z / n, n == 1)) return;
+            Echo(n == 1 ? "VIEW ON THE TRACK" : "VIEW ON " + n + " TRACKS");
+        }
+
+        /// <summary>The selection deck's SAME TYPE: every visible contact of the first selected one's type and side.</summary>
+        internal static void SelectSameType()
+        {
+            DynamicMap map = SceneSingleton<DynamicMap>.i;
+            if (map == null || map.selectedIcons == null) return;
+            for (int i = 0; i < map.selectedIcons.Count; i++)
+            {
+                if (!(map.selectedIcons[i] is UnitMapIcon icon) || icon.unit == null) continue;
+                SelectVisibleType(map, icon.unit);
+                return;
+            }
         }
 
         private static void SelectVisibleType(DynamicMap map, Unit exemplar)
         {
-            HideMenu();
             if (map == null || exemplar == null || exemplar.definition == null || map.mapIcons == null) return;
             candidates.Clear();
+            CollectVisibleType(map, exemplar);
+            ClearSelection(map);
+            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
+            Echo($"{candidates.Count} TRACKS SELECTED");
+        }
+
+        private static int CountVisibleType(DynamicMap map, Unit exemplar)
+        {
+            if (map == null || exemplar == null || exemplar.definition == null || map.mapIcons == null) return 0;
+            candidates.Clear();
+            CollectVisibleType(map, exemplar);
+            int count = candidates.Count;
+            candidates.Clear();
+            return count;
+        }
+
+        private static void CollectVisibleType(DynamicMap map, Unit exemplar)
+        {
             GameManager.GetLocalAircraft(out Aircraft localAircraft);
             int limit = Mathf.Min(map.mapIcons.Count, MaximumScannedIcons);
-            for (int i = 0; i < limit; i++)
+            for (int i = 0; i < limit && candidates.Count < MaximumSelected; i++)
             {
                 if (!Pickable(map.mapIcons[i], localAircraft, out UnitMapIcon icon) ||
                     icon.unit.definition != exemplar.definition ||
                     icon.unit.NetworkHQ != exemplar.NetworkHQ) continue;
-                if (!MapUiPointer.Contains(map.mapBackground.rectTransform, IconScreen(icon))) continue;
-                if (candidates.Count < MaximumSelected) candidates.Add(icon.unit);
+                if (MapUiPointer.Contains(map.mapBackground.rectTransform, IconScreen(icon))) candidates.Add(icon.unit);
             }
-            ClearSelection(map);
-            for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
-            Echo($"{candidates.Count} TRACKS SELECTED");
         }
 
         private static int CountNearby(DynamicMap map, Vector2 screen)
@@ -577,7 +675,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             ClearSelection(map);
             for (int i = 0; i < candidates.Count; i++) Select(map, candidates[i]);
-            HideMenu();
             Echo(candidates.Count + " NEARBY TRACKS SELECTED");
         }
 
@@ -641,7 +738,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return selector != null && selector.CheckExclusions(unit);
         }
 
-        private static void DrawBox(Canvas canvas, Vector2 start, Vector2 end)
+        private static void DrawBox(Canvas canvas, Vector2 start, Vector2 end, MapBoxMode mode)
         {
             RectTransform parent = canvas.transform as RectTransform;
             if (parent == null || !ToCanvas(parent, start, out Vector2 a) ||
@@ -656,8 +753,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 frame.Chamfer = AvChamfer.All(0f);
                 frame.Stroke = 1.5f;
                 frame.raycastTarget = false;
-                frame.Paint(AvStyleHost.FuiColor("info", AvTheme.RailInfo).WithAlpha(.13f),
-                    AvStyleHost.FuiColor("select", AvTheme.Accent));
+                // A dropping box wears the caution ink, so the drag says which way it works before the release.
+                if (mode == MapBoxMode.Drop)
+                    frame.Paint(AvStyleHost.FuiColor("caution", AvTheme.Warning).WithAlpha(.1f), AvStyleHost.FuiColor("caution", AvTheme.Warning));
+                else
+                    frame.Paint(AvStyleHost.FuiColor("info", AvTheme.RailInfo).WithAlpha(.13f), AvStyleHost.FuiColor("select", AvTheme.Accent));
             }
             box.anchoredPosition = Vector2.Min(a, b);
             box.sizeDelta = new Vector2(Mathf.Abs(a.x - b.x), Mathf.Abs(a.y - b.y));
@@ -686,12 +786,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return text.Substring(0, Mathf.Min(end, 31));
         }
 
-        /// <summary>
-        /// A left drag draws a selection box instead of panning. Shift or Ctrl asks for it; with the
-        /// DRAG tool set to BOX it is the other way round, and the modifier pans.
-        /// </summary>
-        internal static bool BoxDrag() => (ControlHeld() || ShiftHeld()) !=
-            (Plugin.Settings?.Command?.MapLeftDragBox?.Value == true);
+        /// <summary>What this left drag does: the one answer for the box, the relief grab and the native pan guard.</summary>
+        internal static MapBoxMode BoxModeNow() => MapClickRules.BoxMode(ControlHeld(), ShiftHeld(),
+            Plugin.Settings?.Command?.MapLeftDragBox?.Value == true);
+
+        /// <summary>A left drag draws a selection box instead of panning.</summary>
+        internal static bool BoxDrag() => BoxModeNow() != MapBoxMode.None;
 
         // ---- selection: the one door every map gesture goes through ----
 
@@ -735,7 +835,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             map.UnselectAll();
         }
 
-        /// <summary>The CLEAR tool on the map corner.</summary>
+        /// <summary>The deck's CLEAR.</summary>
         internal static void ClearSelectionTool()
         {
             DynamicMap map = SceneSingleton<DynamicMap>.i;
@@ -743,22 +843,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ClearSelection(map);
             Echo("SELECTION CLEARED");
         }
+
         internal static bool ControlHeld() => Input.GetKey(KeyCode.LeftControl) ||
             Input.GetKey(KeyCode.RightControl);
         internal static bool ShiftHeld() => Input.GetKey(KeyCode.LeftShift) ||
             Input.GetKey(KeyCode.RightShift);
-        private static bool BoxBlocked() => MapPicker.IsBusy ||
-            (ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection);
-        private static void Echo(string value)
+
+        /// <summary>A panel's own left-drag (COM hold-to-draw) has the left button: no box, no icon click.</summary>
+        private static bool BoxBlocked() => ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
+
+        internal static void Echo(string value)
         {
             feedback = value;
             feedbackUntil = Time.unscaledTime + 2f;
         }
-        internal static bool Typing()
-        {
-            GameObject selected = EventSystem.current?.currentSelectedGameObject;
-            return selected != null && selected.GetComponent<TMP_InputField>() != null;
-        }
+
+        internal static bool Typing() => MapTool.Typing();
 
         private static void CancelBox()
         {
@@ -768,31 +868,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             box = null;
         }
 
-        private static void HideMenu()
-        {
-            if (menu != null) Object.Destroy(menu.gameObject);
-            menu = null;
-        }
+        private static void HideMenu() => MapContextCard.Hide();
 
-        /// <summary>Scene reset: everything <see cref="Restore"/> drops, and the range mark with it.</summary>
+        /// <summary>Scene reset: everything <see cref="Restore"/> drops, the pooled card and the banner, and the range mark.</summary>
         internal static void Reset()
         {
             Restore();
+            MapContextCard.Destroy();
+            if (banner != null) Object.Destroy(banner.gameObject);
+            banner = null;
+            bannerWhat = null;
+            bannerPrompt = null;
+            MapSelectionDeck.Reset();
             mark = null;
         }
 
+        /// <summary>Map closed: gestures end, the card hides (kept for the next open), the pause key goes back.</summary>
         internal static void Restore()
         {
             CancelBox();
             HideMenu();
+            ReleasePause();
+            MapSelectionDeck.Hide();
+            if (banner != null) banner.gameObject.SetActive(false);
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;
             rows.Clear();
             wingRows.Clear();
             rightPress = false;
-            leftPress = false;
             boxReleaseFrame = -1;
-            iconClickFrame = clearFrame = -1;
             candidates.Clear();
             actions.Clear();
             feedback = null;

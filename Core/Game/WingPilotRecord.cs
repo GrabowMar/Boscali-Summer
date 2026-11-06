@@ -21,5 +21,6 @@ namespace BoscaliSummer.Core.Game
         public int Uniform;
         public int Accessory;
         public int Backdrop;
+        public UnityEngine.Sprite File;
     }
 }

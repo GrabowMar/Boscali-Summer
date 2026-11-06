@@ -2,15 +2,15 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>What a plan step does (spec WMC rebuild §PLAN; the tools of PLAN › ELEMENTS).</summary>
+    /// <summary>What a plan step does (spec WMC rebuild §PLAN). ORDERS' queue makes Move, Orbit, Cap, Sweep, Land and Cargo steps.</summary>
     internal enum PlanKind : byte { Move, Route, Orbit, Cap, Sweep, Attack, Land, Cargo, Rtb, Refit, FormUp }
 
-    /// <summary>When a step starts: with EXECUTE (NOW is the same once executed), T+ seconds after it, or AFTER another lane's step
-    /// (+ a delay). A step never starts before the one before it in its lane is done.</summary>
-    internal enum PlanStart : byte { Now, Exec, TPlus, After }
+    /// <summary>When a step starts: with EXECUTE, T+ seconds after it, or AFTER another lane's step (+ a delay). A step never
+    /// starts before the one before it in its lane is done.</summary>
+    internal enum PlanStart : byte { Exec, TPlus, After }
 
-    /// <summary>When a step ends: its task completed (ARRIVE), after seconds (TIME), at bingo, Winchester, or its targets down.</summary>
-    internal enum PlanEnd : byte { Arrive, Time, Bingo, Winchester, TargetsDown }
+    /// <summary>When a step ends: its task completed (ARRIVE), after seconds (TIME), at bingo, or Winchester.</summary>
+    internal enum PlanEnd : byte { Arrive, Time, Bingo, Winchester }
 
     internal sealed class PlanStep
     {
@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public Waypoint[] Points = new Waypoint[0];
         /// <summary>CAP and SWEEP: the guarded radius, m (0: the order's default).</summary>
         public float Radius;
-        /// <summary>ATTACK: the targets' ids (never saved: a saved plan picks them again).</summary>
+        /// <summary>ATTACK: the targets' ids.</summary>
         public uint[] Targets = new uint[0];
         public PlanStart Start = PlanStart.Exec;
         /// <summary>T+: seconds after EXECUTE; AFTER: seconds after the other step is done.</summary>
@@ -76,8 +76,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     }
                     if (p.End == PlanEnd.Arrive && (p.Kind == PlanKind.Orbit || p.Kind == PlanKind.Cap || p.Kind == PlanKind.Sweep))
                         errors.Add(name + "never arrives: end it by time, bingo or Winchester");
-                    if (p.End == PlanEnd.TargetsDown && (p.Kind != PlanKind.Attack || (p.Targets?.Length ?? 0) == 0))
-                        errors.Add(name + "ends on targets down but has no targets");
                     if ((p.Kind == PlanKind.Cap || p.Kind == PlanKind.Sweep) && p.Radius > 0f &&
                         (p.Radius < AreaGuard.MinRadius || p.Radius > AreaGuard.MaxRadius))
                         errors.Add(name + "radius 2 to 40 km");

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -12,7 +11,6 @@ namespace NOAvionics
     [RequireComponent(typeof(Graphic))]
     public sealed class AvFx : BaseMeshEffect
     {
-        private static readonly List<UIVertex> Verts = new List<UIVertex>(256);
         private AvFxKind kind;
         private float start, intensity = 1f, param;
         private int revision = -1;
@@ -63,15 +61,15 @@ namespace NOAvionics
             AvFxKind effective = AvFxPacking.Resolve(kind, AvFxDriver.Tier, AvFxDriver.ReducedMotion);
             Rect r = ((RectTransform)transform).rect;
             float aspect = AvFxPacking.Aspect(r.width, r.height);
-            Verts.Clear(); vh.GetUIVertexStream(Verts);
-            for (int i = 0; i < Verts.Count; i++)
+            // Only the UV channels change: retain shared vertices and the original index buffer.
+            UIVertex v = default;
+            for (int i = 0; i < vh.currentVertCount; i++)
             {
-                UIVertex v = Verts[i];
+                vh.PopulateUIVertex(ref v, i);
                 v.uv1 = new Vector4(AvFxPacking.U(v.position.x, r.xMin, r.width), AvFxPacking.V(v.position.y, r.yMin, r.height), aspect, 0f);
                 v.uv2 = new Vector4((float)effective, start, intensity, param);
-                Verts[i] = v;
+                vh.SetUIVertex(v, i);
             }
-            vh.Clear(); vh.AddUIVertexTriangleStream(Verts);
         }
     }
 }

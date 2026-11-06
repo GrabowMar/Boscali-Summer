@@ -77,12 +77,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fx.Options[1].Help = "LITE: keep the scan and shine effects, drop the heavier passes.";
             fx.Options[2].Help = "FULL: every panel effect the scheme defines.";
             flow.Ticker.Add(page, AvTickRate.Slow, fx.Refresh);
-            AvCellGrid motion = flow.Grid(3);
-            ToggleCell(flow, motion, page, "REDUCED MOTION", "Snap every panel animation to its end state, WMC included.",
+            ToggleCell(flow, page, "REDUCED MOTION", "Snap every panel animation to its end state, WMC included.",
                 () => settings.AvionicsReducedMotion.Value, v => settings.AvionicsReducedMotion.Value = v);
-            ToggleCell(flow, motion, page, "BLUR BEHIND", "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).",
+            ToggleCell(flow, page, "BLUR BEHIND", "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).",
                 () => settings.AvionicsBlurBehind.Value, v => settings.AvionicsBlurBehind.Value = v);
-            ToggleCell(flow, motion, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
+            ToggleCell(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
                 () => settings.DisplayAutoLight.Value, v => { settings.DisplayEffects.Value = true; settings.DisplayAutoLight.Value = v; });
             var tone = flow.Add(new SetRingRow(flow.Content));
             PercentRing(flow, tone, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
@@ -146,17 +145,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<string> needExpanded = () => "Turn on expanded layout first.";
 
             flow.Section(AvIcon.Map2, "MAP CONSOLE", "LAYOUT · TERRAIN · TICKER");
-            AvCellGrid switches = flow.Grid(2);
-            ToggleCell(flow, switches, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
+            ToggleCell(flow, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
                 () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
-            ToggleCell(flow, switches, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
+            ToggleCell(flow, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
                 () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v, expanded, needExpanded);
-            ToggleCell(flow, switches, page, "3D RELIEF",
+            ToggleCell(flow, page, "3D RELIEF",
                 "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
                 () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
                 () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
                 () => "Turn on expanded layout and terrain image first.");
-            ToggleCell(flow, switches, page, "NEWS TICKER", "Show theater dispatches above the map.",
+            ToggleCell(flow, page, "NEWS TICKER", "Show theater dispatches above the map.",
                 () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v, expanded, needExpanded);
 
             var levels = flow.Add(new SetRingRow(flow.Content));
@@ -177,15 +175,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<bool> relief = () => expanded() && settings.MapRelief3D.Value && settings.MapTerrainImage.Value;
             Func<string> needRelief = () => "Turn on 3D RELIEF first.";
             flow.Section(AvIcon.Target, "CONTACTS & MOUSE", "SYMBOLS · 3D RELIEF CONTROLS");
-            AvCellGrid contacts = flow.Grid(2);
-            ToggleCell(flow, contacts, page, "MAP SYMBOLS", "Contacts as solid symbols, one silhouette per platform class, tinted by side. OFF: the game's icons.",
+            ToggleCell(flow, page, "MAP SYMBOLS", "Contacts as solid symbols, one silhouette per platform class, tinted by side. OFF: the game's icons.",
                 () => settings.MapSymbology.Value, v => settings.MapSymbology.Value = v, expanded, needExpanded);
-            ToggleCell(flow, contacts, page, "3D MINIATURES", "A small low-poly model stands on the relief for each contact instead of its flat symbol.",
+            ToggleCell(flow, page, "3D MINIATURES", "A small low-poly model stands on the relief for each contact instead of its flat symbol.",
                 () => settings.MapMinis3D.Value, v => settings.MapMinis3D.Value = v,
                 () => relief() && settings.MapSymbology.Value, () => relief() ? "Turn on MAP SYMBOLS first." : needRelief());
-            ToggleCell(flow, contacts, page, "RIGHT-DRAG TURNS", "Hold the right button and drag to turn and tilt the relief. A plain right click still opens the menu.",
+            ToggleCell(flow, page, "TACTICAL CURSOR", "A themed cursor; on the map it shows what a click would do: select, drop, box, pan, turn, place or move. OFF: the system arrow.",
+                () => settings.MapCursor.Value, v => settings.MapCursor.Value = v);
+            ToggleCell(flow, page, "RIGHT-DRAG TURNS", "Hold the right button and drag to turn and tilt the relief. A plain right click still opens the menu.",
                 () => settings.MapRightDragTurns.Value, v => settings.MapRightDragTurns.Value = v, relief, needRelief);
-            ToggleCell(flow, contacts, page, "DOUBLE-CLICK ZOOM", "A double click on the ground centres and zooms in there.",
+            ToggleCell(flow, page, "DOUBLE-CLICK ZOOM", "A double click on the ground centres and zooms in there.",
                 () => settings.MapDoubleClickZoom.Value, v => settings.MapDoubleClickZoom.Value = v, relief, needRelief);
             var mouse = flow.Add(new SetRingRow(flow.Content));
             EntryRing(flow, mouse, page, "TURN SPEED", settings.MapTurnSensitivity, .25f, 4f, .25f, v => AvNum.Fixed(v, 2) + "x",
@@ -266,7 +265,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             BuildVisorRows(flow, page);
             BuildBoardRows(flow, page, CHud);
             flow.Section(AvIcon.Target, "TARGETING", "TGT QUICK SLOTS");
-            ToggleCell(flow, flow.Grid(1), page, "RADIAL PRESETS",
+            ToggleCell(flow, page, "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
             BuildKeyRows(flow);

@@ -1,23 +1,25 @@
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
-    // DRAW: the pilot's own offensive, HOI4 style. The plate's DRAW button takes the shared map picker; a press on the map is the jump-off (the
-    // host snaps it to the nearest front), the drag shows the arrow, the release on the objective sends it. A click without a drag keeps DRAW
-    // armed; Esc, DRAW again or closing the map cancels. While armed the native pan, the relief grab and icon clicks stand aside.
+    // DRAW: the pilot's own offensive, HOI4 style. The plate's DRAW button takes the shared map picker; like every armed map tool it uses the
+    // right button (rule B): a right press on the map is the jump-off (the host snaps it to the nearest front), the drag shows the arrow, the
+    // release on the objective sends it. A click without a drag keeps DRAW armed; Esc, DRAW again or closing the map cancels. The left
+    // button keeps panning and selecting; Command holds the pause key while it is armed.
     internal sealed partial class StrMapOverlay
     {
         internal const string DrawOwner = "boscali.str.draw";
-        private const string DrawPrompt = "DRAW: PRESS ON A FRONT, DRAG TO THE OBJECTIVE, RELEASE \u00b7 ESC CANCELS";
-        private const float DrawSlopPixels = 12f, DrawNoteSeconds = 6f;
+        private const string DrawPrompt = "DRAW \u00b7 RIGHT-DRAG FROM A FRONT TO THE OBJECTIVE";
+        private const float DrawNoteSeconds = 6f;
 
         /// <summary>True while DRAW holds the map.</summary>
         internal static bool DrawArmed => MapPicker.IsOwner(DrawOwner);
 
-        private bool drawHeld, drawPauseHeld;
+        private bool drawHeld;
         private int drawArmedFrame;
         private Vector2 drawDownScreen;
         private float drawSX, drawSZ, drawEX, drawEZ, drawNoteUntil = -1f, drawFactor;
@@ -30,7 +32,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             IStrHub hub = Hub;
             StrAct gate = StrGate.DrawGate(hub?.Current);
             if (!gate.Allowed) { DrawSay(gate.Text, DrawNoteSeconds); return gate; }
-            if (!MapPicker.TryArm(DrawOwner, MapPicker.GestureLeft, DrawPrompt))
+            if (!MapPicker.TryArm(DrawOwner, MapPicker.GestureRight, DrawPrompt))
             {
                 DrawSay("THE MAP IS BUSY WITH ANOTHER PICK", DrawNoteSeconds);
                 return new StrAct(StrWhy.Pending, "THE MAP IS BUSY WITH ANOTHER PICK");
@@ -38,7 +40,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!hub.Ui.ShowOperation) hub.SetLayer(StrLayers.Operation, true);   // the arrow is drawn on the operation layer
             drawArmedFrame = Time.frameCount;
             drawHeld = false;
-            if (!drawPauseHeld && !Application.isBatchMode) { GameplayUI.AllowPauseKeybind = false; drawPauseHeld = true; }   // Esc cancels instead of pausing
             DrawSay(DrawPrompt, float.PositiveInfinity);
             return new StrAct(StrWhy.None, "", true);
         }
@@ -48,7 +49,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             drawHeld = false;
             MapPicker.Disarm(DrawOwner);
-            if (drawPauseHeld) { GameplayUI.AllowPauseKeybind = true; drawPauseHeld = false; }
             DrawSay(why, string.IsNullOrEmpty(why) ? 0f : DrawNoteSeconds);
         }
 
@@ -68,11 +68,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!DrawArmed)
             {
                 drawHeld = false;
-                if (drawPauseHeld) { GameplayUI.AllowPauseKeybind = true; drawPauseHeld = false; }
                 return;
             }
             if (Time.frameCount <= drawArmedFrame + 1 || Application.isBatchMode) return;   // the click on DRAW is not the press
-            if (!drawHeld && Input.GetMouseButtonDown(0) && !MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out GlobalPosition at))
+            if (!drawHeld && Input.GetMouseButtonDown(MapTool.Button) && !MapTool.Typing() && map.TryGetCursorCoordinates(out GlobalPosition at))
             {
                 drawHeld = true;
                 drawDownScreen = Input.mousePosition;
@@ -80,9 +79,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             if (!drawHeld) return;
             if (map.TryGetCursorCoordinates(out GlobalPosition cursor)) { drawEX = cursor.x; drawEZ = cursor.z; }
-            if (Input.GetMouseButton(0) && !Input.GetMouseButtonUp(0)) return;
+            if (Input.GetMouseButton(MapTool.Button) && !Input.GetMouseButtonUp(MapTool.Button)) return;
             drawHeld = false;
-            if (((Vector2)Input.mousePosition - drawDownScreen).sqrMagnitude < DrawSlopPixels * DrawSlopPixels)
+            if (MapTool.IsClick(drawDownScreen, Input.mousePosition))
             {
                 DrawSay(DrawPrompt, float.PositiveInfinity);   // a click, not a drag: stay armed
                 return;

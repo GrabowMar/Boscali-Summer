@@ -17,8 +17,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (flying) return PilotStatus.Flying;
             return reserved ? PilotStatus.Inbound : PilotStatus.Free;
         }
-
-        /// <summary>Out of action for this mission: the LOST tile counts these.</summary>
-        public static bool Lost(PilotStatus s) => s >= PilotStatus.Downed;
     }
 }

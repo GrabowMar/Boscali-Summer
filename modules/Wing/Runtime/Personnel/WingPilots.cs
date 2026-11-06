@@ -316,9 +316,17 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         }
 
 
-        /// <summary>Recruit a pilot into the ground roster.</summary>
+        /// <summary>RECRUIT stops here (the portrait cache holds 256 looks: a roster far past this blanks them).</summary>
+        public const int MaxRoster = 48;
+
+        /// <summary>Recruit a pilot into the ground roster; null (and a toast) when the squadron is full.</summary>
         public static WingPilot RecruitManual()
         {
+            if (roster.Count >= MaxRoster)
+            {
+                WingToast.Show("The squadron keeps " + MaxRoster + " pilots at most.");
+                return null;
+            }
             WingPilot pilot = Create();
             if (pilot != null && selectedPilot == null) selectedPilot = pilot;
             return pilot;

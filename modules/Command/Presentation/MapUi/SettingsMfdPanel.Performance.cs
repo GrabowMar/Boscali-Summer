@@ -50,6 +50,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 preset.Options[2].Help = "FAST: all optional visuals off, panel effects off, LOD and shadow caps on, units past 15 km not drawn. Sound and motion are left alone.";
                 flow.Ticker.Add(page, AvTickRate.Slow, preset.Refresh);
                 BuildBoardRows(flow, page, CPerf);
+                BuildCostRows(flow, page, CCockpit, AvIcon.WaveSine, "COCKPIT COST");
+                BuildCostRows(flow, page, CWorld, AvIcon.CloudRain, "WORLD COST");
+
+                flow.Section(AvIcon.Bolt, "PANEL COST", "SAME SWITCHES AS PANELS");
+                var fx = flow.Add(new AvSegmented(flow.Content, "PANEL FX", new[] { "OFF", "LITE", "FULL" },
+                    () => (int)settings.AvionicsFxTier.Value, i =>
+                    {
+                        settings.AvionicsFxTier.Value = (AvFxTier)i;
+                        Echo("PANEL FX — " + settings.AvionicsFxTier.Value.ToString().ToUpperInvariant());
+                        Changed();
+                    }));
+                fx.Options[0].Help = "OFF: no panel animation or glass effects at all. Cheapest.";
+                fx.Options[1].Help = "LITE: keep the scan and shine effects, drop the heavier passes.";
+                fx.Options[2].Help = "FULL: every panel effect the scheme defines.";
+                flow.Ticker.Add(page, AvTickRate.Slow, fx.Refresh);
+                ToggleCell(flow, page, "BLUR BEHIND", "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).",
+                    () => settings.AvionicsBlurBehind.Value, v => settings.AvionicsBlurBehind.Value = v);
             }
 
             // Command's own budget: how often the map's sector grid is rebuilt.
@@ -98,6 +115,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 chart.SetSeries(frameMs, frameCount, AvNum.Fixed(low, 1), AvNum.Fixed(peak, 1), AvNum.Fixed(ms, 1) + " MS");
             }
             flow.Ticker.Add(page, AvTickRate.Fast, Sample);
+        }
+
+        /// <summary>
+        /// Every switch on <paramref name="tab"/> that a preset moves, i.e. every one with a frame cost, mirrored here so
+        /// PERF shows everything the presets touch. Same config entries, so both pages always agree.
+        /// </summary>
+        private void BuildCostRows(AvFlow flow, int page, int tab, AvIcon icon, string title)
+        {
+            bool any = false;
+            foreach (ClientSetting row in clientSettings.Rows)
+            {
+                if (!(row is ClientSettingToggle t) || t.Presets == null || ClientTabOf(t.Section) != tab) continue;
+                if (!any) flow.Section(icon, title, "SAME SWITCHES AS " + title.Substring(0, title.IndexOf(' ')));
+                any = true;
+                ToggleCell(flow, page, t.Label, t.Help, () => t.Value, t.Set, () => t.Available, () => t.Reason);
+            }
         }
     }
 }

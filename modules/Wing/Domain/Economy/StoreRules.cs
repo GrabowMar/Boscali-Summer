@@ -3,7 +3,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>Why a store can or cannot fly from a station (the game's WeaponChecker rules, in its order).</summary>
     internal enum StoreVerdict : byte
     {
-        Ok, Missing, NotOnStation, Disabled, EventOnly, Restricted, Blocked, NuclearNotYet, NuclearRank, NotFromShip, Warheads,
+        Ok, Missing, NotOnStation, Disabled, EventOnly, Restricted, Blocked, NuclearNotYet, NuclearRank,
     }
 
     /// <summary>One store option as the game describes it.</summary>
@@ -11,8 +11,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         /// <summary>This build knows the store; the station can carry it.</summary>
         public bool Known, OnStation;
-        public bool Disabled, EventContent, Restricted, Blocked, Nuclear, Strategic, ShipRearm;
-        public int Pylons, Ammo;
+        public bool Disabled, EventContent, Restricted, Blocked, Nuclear, Strategic;
     }
 
     /// <summary>What the mission allows now (all replicated to clients).</summary>
@@ -23,10 +22,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public int Rank;
     }
 
-    /// <summary>What may be fitted, checked three times with one set of words (research loadout-rules §4): at edit time on LOADOUT (the
-    /// build, the mission, the faction and the rank), and at quote and launch time with the field too (not from a ship, and warheads
-    /// counted over the whole fit in station order, as the game's own menu counts them). A nuclear store before escalation or below the
-    /// rank can still be fitted — a template is a preset and both change in a mission — but launches empty until they clear.</summary>
+    /// <summary>What may be fitted, checked at edit time on LOADOUT (the build, the mission, the faction and the rank) and again at launch
+    /// (<see cref="WingLoadoutCatalog.Vet"/>, with the field too: not from a ship, and warheads counted over the whole fit in station order,
+    /// as the game's own menu counts them). A nuclear store before escalation or below the rank can still be fitted — a custom loadout is
+    /// a preset and both change in a mission — but launches empty until they clear.</summary>
     internal static class StoreRules
     {
         public static StoreVerdict Check(in MountFacts m, in MissionFacts mission)
@@ -50,7 +49,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return StoreVerdict.Ok;
         }
 
-        /// <summary>May be fitted on a template.</summary>
+        /// <summary>May be fitted on a custom loadout.</summary>
         public static bool Pickable(StoreVerdict v) =>
             v == StoreVerdict.Ok || v == StoreVerdict.NuclearNotYet || v == StoreVerdict.NuclearRank;
 

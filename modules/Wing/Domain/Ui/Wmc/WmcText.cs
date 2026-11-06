@@ -26,13 +26,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
             float.IsNaN(fraction) ? Unknown : ((int)Math.Round(fraction * 100f)).ToString(CultureInfo.InvariantCulture) + "%";
 
         /// <summary>At most <paramref name="max"/> characters: cut where a word ends inside, else hard, never with "…"; a
-        /// dangling separator is dropped.</summary>
+        /// dangling separator is dropped, and so is a bracket the cut left open ("CANNON (500" reads "CANNON").</summary>
         public static string Cut(string s, int max)
         {
             if (string.IsNullOrEmpty(s) || max <= 0) return "";
             if (s.Length <= max) return s;
             int cut = s.LastIndexOf(' ', max);
-            return (cut > 0 ? s.Substring(0, cut) : s.Substring(0, max)).TrimEnd(' ', '·');
+            string t = cut > 0 ? s.Substring(0, cut) : s.Substring(0, max);
+            int open = t.LastIndexOf('(');
+            if (open > 0 && t.IndexOf(')', open) < 0) t = t.Substring(0, open);
+            return t.TrimEnd(' ', '·');
         }
     }
 }

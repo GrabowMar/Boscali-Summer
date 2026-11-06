@@ -12,23 +12,22 @@ using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Right-click orders on the maximized map (spec WMC program §5): an armed mode claims the map through
+    /// <summary>Right-click orders on the maximized map (spec WMC program §5, rule B 2026-10-29): an armed mode claims the map through
     /// <see cref="MapPicker"/> and places its order for the WMC scope; with no mode and wingmen selected a right-click is
-    /// MOVE. Every order goes through <see cref="WingOrders.Run"/>.</summary>
+    /// MOVE. A selection holds no picker (another panel's tool may still arm and then comes first); the map's card stays shut
+    /// through <see cref="TakesRightClick"/>. Every order goes through <see cref="WingOrders.Run"/>.</summary>
     internal sealed class WmcMapInput
     {
         private static WmcMapInput active;
         private readonly MapGesture gesture = new MapGesture();
         private readonly List<uint> targets = new List<uint>(WingOrder.MaxUnits);
-        private bool pressed, heldForMove, pressOnMap;
+        private bool pressed, pressOnMap, canOrder;
         private GlobalPosition pressAt;
         private int selected;
+        // The scope the map's banner names: a new scope while armed re-arms with the new words.
+        private string armedScope;
 
         public MapMode Mode { get; private set; }
-        /// <summary>The PLAN tool armed (spec bezel v2 §6): its right-clicks place no order.</summary>
-        public PlanTool Tool { get; private set; }
-        /// <summary>The lane a tool adds to, in words (the cue and the status line).</summary>
-        public string ToolLane = "A";
 
         /// <summary>A CAP or SWEEP right-drag under way: its centre and radius (the overlay's live ring).</summary>
         public bool Dragging { get; private set; }
@@ -36,15 +35,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public float DragZ { get; private set; }
         public float DragRadius { get; private set; }
 
-        private bool Armed => Mode != MapMode.Off || Tool != PlanTool.Off;
-        private bool Area => MapOrders.IsArea(Mode) || Tool == PlanTool.Cap || Tool == PlanTool.Sweep;
+        private bool Armed => Mode != MapMode.Off;
+        private bool Area => MapOrders.IsArea(Mode);
 
         /// <summary>An accepted order was placed at a point (the overlay pings it).</summary>
         public event Action<GlobalPosition> Placed;
 
         public WmcMapInput() => active = this;
 
-        public string Prompt(string scope) => Tool != PlanTool.Off ? PlanWords.ToolCue(Tool, ToolLane) : MapOrders.Prompt(Mode, scope);
+        public string Prompt(string scope) => MapOrders.Prompt(Mode, scope);
 
         /// <summary>Arms a mode for the next right-clicks; says why when it cannot.</summary>
         public bool Arm(WmcContext c, MapMode mode)
@@ -70,8 +69,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 return false;
             }
             Mode = mode;
-            Tool = PlanTool.Off;
-            heldForMove = false;
+            armedScope = c.ScopeLabel;
             gesture.Clear();
             pressed = false;
             targets.Clear();
@@ -82,9 +80,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Disarm()
         {
             Mode = MapMode.Off;
-            Tool = PlanTool.Off;
             Dragging = false;
-            heldForMove = false;
             MapPicker.Disarm(MapPicker.WingPoint);
             gesture.Clear();
             pressed = false;
@@ -99,22 +95,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             PauseKeyHold.Set(KeyHold.Map, Armed);
         }
 
-        /// <summary>With nothing armed and wingmen selected on a COMMAND tab, a right-click is WMC's MOVE: WMC holds the map picker
-        /// while that is so, so a companion's right-click menu does not open on the same click (spec bezel v2 §6).</summary>
-        private void HoldForMove(bool want, string scope)
+        /// <summary>With nothing armed and wingmen selected on a COMMAND tab, a right-click is WMC's MOVE (spec bezel v2 §6): the map's
+        /// right-click card stays shut and the relief does not orbit on it. Another panel's armed tool comes first.</summary>
+        public static bool TakesRightClick
         {
-            if (Armed) return;
-            if (want && !heldForMove)
+            get
             {
-                if (OtherOwner() || !MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, MapOrders.Prompt(MapMode.Move, scope ?? "WING"))) return;
-                heldForMove = true;
-                Publish();
-            }
-            else if (!want && heldForMove)
-            {
-                heldForMove = false;
-                MapPicker.Disarm(MapPicker.WingPoint);
-                Publish();
+                WmcMapInput m = active;
+                return m != null && !m.Armed && m.selected > 0 && m.canOrder && DynamicMap.mapMaximized && !MapPicker.IsBusy &&
+                    WmcPanel.Instance != null && WmcPanel.Instance.Visible;
             }
         }
 
@@ -125,23 +114,30 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // the COMMAND scope row); elsewhere the right-click stays the game's.
             bool command = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
             selected = c != null && command ? c.Selection.Count : 0;
-            if (!visible)
+            // ADD (the QUEUE toggle) belongs to ORDERS: left on elsewhere, every right-click would queue silently.
+            if (c != null && c.Queue && (WmcPanel.Instance == null || !WmcPanel.Instance.OrdersShowing)) c.Queue = false;
+            canOrder = c != null && c.CanOrder;
+            // The panel gone or the map closed: an armed tool ends with it (every map tool does, rule B).
+            if (!visible || (Armed && !DynamicMap.mapMaximized))
             {
                 if (Armed) Disarm();
-                HoldForMove(false, null);
                 pressed = false;
                 return;
             }
-            // A PLAN tool belongs to PLAN › ELEMENTS: leaving it disarms the tool (an order mode stays armed across tabs).
-            if (Tool != PlanTool.Off && WmcPanel.Instance != null && !WmcPanel.Instance.PlanShowing) Disarm();
-            HoldForMove(selected > 0 && DynamicMap.mapMaximized && c != null && c.CanOrder, c?.ScopeLabel);
             if (Armed && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
             {
                 Disarm();
                 WingToast.Show("Map tool cancelled");
                 return;
             }
-            if (!MapOrders.Consumes(Armed, selected > 0, OtherOwner()))
+            // The order goes to the scope picked now (a table row after arming), so the map's banner names it too.
+            if (Armed && c != null && !string.Equals(armedScope, c.ScopeLabel, StringComparison.Ordinal))
+            {
+                armedScope = c.ScopeLabel;
+                MapPicker.TryArm(MapPicker.WingPoint, MapPicker.GestureRight, MapOrders.Prompt(Mode, armedScope));
+            }
+            // A selection claims the right button only where it can order (a client's could not, and the card must then open).
+            if (!MapOrders.Consumes(Armed, selected > 0 && canOrder, OtherOwner()))
             {
                 pressed = false;
                 Dragging = false;
@@ -180,11 +176,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Place(c, point, unit, shift);
         }
 
-        /// <summary>Places what the current mode or PLAN tool (or a plain MOVE for a selection) does at <paramref name="point"/>;
-        /// <paramref name="radius"/> is a CAP or SWEEP's (0: the tool's or the order's default).</summary>
+        /// <summary>Places what the current mode (or a plain MOVE for a selection) does at <paramref name="point"/>;
+        /// <paramref name="radius"/> is a CAP or SWEEP's (0: the order's default).</summary>
         public void Place(WmcContext c, GlobalPosition point, Unit unit, bool shift, float radius = 0f)
         {
-            if (Tool != PlanTool.Off) return;
             MapPointer pointer = unit == null || unit.disabled ? MapPointer.Empty
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
             MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);
@@ -213,8 +208,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private WingOrder Build(WmcContext c, MapClick click, GlobalPosition point, Unit unit, float radius)
         {
             Waypoint at = Waypoint.At(point.x, point.z);
-            at.Altitude = c.Draft.Altitude;
-            at.Speed = c.Draft.Speed;
             switch (click)
             {
                 case MapClick.Orbit: return WingOrder.Tasked(WingTask.Orbit(at), c.Scope);
@@ -286,7 +279,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcMapInput m = active;
             if (m == null || !DynamicMap.mapMaximized || WmcPanel.Instance == null || !WmcPanel.Instance.Visible) return false;
             if (!Input.GetMouseButton(1) && !Input.GetMouseButtonDown(1) && !Input.GetMouseButtonUp(1)) return false;
-            return MapOrders.Consumes(m.Armed, m.selected > 0, OtherOwner());
+            return MapOrders.Consumes(m.Armed, m.selected > 0 && m.canOrder, OtherOwner());
         }
     }
 

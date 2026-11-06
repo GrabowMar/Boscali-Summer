@@ -18,20 +18,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
     /// 5 Hz. The header is the wing's title, a FUNDS chip beside it, and three vitals chips (FUEL MIN · AMMO MIN · THREAT) on every
     /// tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
-    /// <see cref="AvFlow"/>.
-    /// Control ids answer through <see cref="WmcControls"/>.</summary>
+    /// <see cref="AvFlow"/>.</summary>
     internal sealed class WmcPanel : IWingService
     {
         public static WmcPanel Instance { get; private set; }
         public string Name => "WMC";
 
-        private readonly WmcControls controls = new WmcControls();
         private readonly WmcContext context = new WmcContext();
         private readonly WmcMapOverlay overlay = new WmcMapOverlay();
         private readonly int[] headerKeys = { -1, -1, -1, -1, -1 };
         private IWmcPage[] pages;
         private WmcTactical tactical;
-        private WmcPlan plan;
+        private WmcBehaviour behaviour;
         private WmcSupply supply;
         private WmcLoadout loadout;
         private WmcWing wingPage;
@@ -60,13 +58,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// FORM's and OPTIONS' only; ROUTE's right-click draws).</summary>
         public bool CommandShowing => Visible && shell != null
             && ((shell.CurrentPage == WmcTabs.Tactical && tactical != null && tactical.Sub != WmcTactical.SubRoute)
-                || (shell.CurrentPage == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubOptions));
-        /// <summary>BEHAVIOUR › PLAN is showing: its map tools stay armed only here.</summary>
-        public bool PlanShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Behaviour && plan != null && plan.Sub == WmcPlan.SubPlan;
+                || (shell.CurrentPage == WmcTabs.Behaviour && behaviour != null));
+        /// <summary>TACTICAL › ORDERS is showing: the QUEUE toggle stays on only here.</summary>
+        public bool OrdersShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Tactical && tactical != null && tactical.Sub == WmcTactical.SubOrders;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
-        public WmcPlan Plan => plan;
-        public WmcLoadout Loadout => loadout;
+        public WmcTactical Tactical => tactical;
         public WmcWing WingPage => wingPage;
 
         public void Activate()
@@ -93,7 +90,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // R5: a text field lets go after Enter, and never keeps the keyboard once the panel is out of sight.
             WmcNameField.TickAll();
             bool visible = Visible;
-            if (wasVisible && !visible) WmcNameField.BlurAny();
+            if (wasVisible && !visible)
+            {
+                WmcNameField.BlurAny();
+                tactical?.CloseWindows();
+            }
             wasVisible = visible;
             bool enabled = !gaveUp && WingSettings.Instance.ShowWmc.Value && CoreGameAccess.MfdAvailable;
             if (!enabled)
@@ -141,19 +142,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             nextRefresh = 0f;
         }
 
-        /// <summary>INSPECT on this aircraft (INSPECT › on a row, a log line, automation); it never changes who orders go to.</summary>
-        public void Inspect(uint id)
-        {
-            if (wingPage == null || id == 0u) return;
-            wingPage.InspectPage.Focus(id);
-            Show(WmcTabs.Wing);
-            wingPage.ShowSubNamed("INSPECT");
-            Refresh();
-        }
-
         private void Reset()
         {
             WmcNameField.BlurAny();
+            tactical?.CloseWindows(true);
             BezelRegistry.Release(BezelRegistry.Wmc);
             if (root != null) UnityEngine.Object.Destroy(root);
             root = null;
@@ -166,16 +158,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             hosts = null;
             pages = null;
             tactical = null;
-            plan = null;
+            behaviour = null;
             supply = null;
             loadout = null;
             wingPage = null;
             shownPage = -1;
+            shownGuide = null;
+            pageFaults.Clear();
+            wasVisible = false;
             statusAlert = statusPrompt = statusAmbient = null;
             fitButton = null;
             fitStep = -1;
             for (int i = 0; i < headerKeys.Length; i++) headerKeys[i] = -1;
-            controls.Clear();
             context.Selection.Clear();
             context.Map.Disarm();
             PauseKeyHold.ReleaseAll();
@@ -208,7 +202,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 screen = Build(template, buttons[slot], out _);
                 if (screen == null)
                 {
-                    BezelRegistry.Release(BezelRegistry.Wmc);
+                    Fail("the bezel button has no label or highlight");
                     return;
                 }
                 if (!MfdBezel.Bind(mfd, buttons, screens, slot, left, screen))
@@ -237,9 +231,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void Fail(string reason)
         {
+            Reset(); // drops the half-built root (its click plate would stay on screen) and the bezel claim
             gaveUp = true;
-            BezelRegistry.Release(BezelRegistry.Wmc);
-            screen = null;
             WingLog.Logger.LogWarning("[WMC] could not install the panel (" + reason + "). The radial menu still gives the orders; the WMC hotkey says why it cannot open.");
         }
 
@@ -248,6 +241,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private MFDScreen Build(MFDScreen template, Button bezel, out float height)
         {
+            // Before anything is built: a bezel without them can never take the screen.
+            TextMeshProUGUI label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
+            Image highlight = MfdPanelInstaller.FindHighlight(bezel);
+            height = 0f;
+            if (label == null || highlight == null) return null;
+
             // The console draws its own frame; the invisible plate only keeps clicks off the map beneath.
             RectTransform rootRect = MfdPanelInstaller.MakeRoot(template, "Wmc", false, true, out root, out height);
 
@@ -271,14 +270,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildFitButton();
 
             // Every page is a kit v2 flow page: it builds into the shell's flow for its tab.
-            tactical = new WmcTactical(controls);
-            plan = new WmcPlan(controls);
-            supply = new WmcSupply(controls);
-            loadout = new WmcLoadout(controls);
-            wingPage = new WmcWing(controls);
+            tactical = new WmcTactical();
+            behaviour = new WmcBehaviour();
+            supply = new WmcSupply();
+            loadout = new WmcLoadout();
+            wingPage = new WmcWing();
             pages = new IWmcPage[]
             {
-                tactical, plan, supply,
+                tactical, behaviour, supply,
                 loadout, wingPage,
             };
             hosts = new RectTransform[pages.Length];
@@ -296,14 +295,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.shortName = "WMC";
             s.displayPanel = contentObject;
             s.aircraftOnly = false;
-            s.label = bezel != null ? bezel.GetComponentInChildren<TextMeshProUGUI>(true) : null;
-            s.highlight = MfdPanelInstaller.FindHighlight(bezel);
-            if (s.label == null || s.highlight == null)
-            {
-                UnityEngine.Object.Destroy(root);
-                root = null;
-                return null;
-            }
+            s.label = label;
+            s.highlight = highlight;
             AvDisplayGlass.Attach(content);
             shell.SetPage(WmcTabs.Tactical);
             return s;
@@ -365,6 +358,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             WmcNameField.BlurAny();
             AvPopup.CloseAny();
+            tactical?.CloseWindows();
             nextRefresh = 0f;
         }
 
@@ -427,13 +421,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private string[] shownGuide;
 
-        /// <summary>The bay cover's how-to lines for the sub-page on screen (<see cref="GuideWords"/>).</summary>
+        /// <summary>The footer's how-to lines (standing orders) for the sub-page on screen (<see cref="GuideWords"/>).</summary>
         private static string[] GuideFor(IWmcPage p)
         {
             switch (p)
             {
                 case WmcTactical t: return t.Sub == WmcTactical.SubFormation ? GuideWords.Formation : t.Sub == WmcTactical.SubRoute ? GuideWords.Route : GuideWords.Orders;
-                case WmcPlan b: return b.Sub == WmcPlan.SubSortie ? GuideWords.Sortie : GuideWords.Stances;
+                case WmcBehaviour _: return GuideWords.Behaviour;
                 case WmcSupply _: return GuideWords.Supply;
                 case WmcLoadout _: return GuideWords.Loadout;
                 case WmcWing w: return w.Sub == WmcWing.SubStudio ? GuideWords.Studio : w.Sub == WmcWing.SubAircraft ? GuideWords.Aircraft : GuideWords.Roster;
@@ -467,7 +461,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
             float funds = player != null && !context.Client ? player.Allocation : float.NaN;
             bool sandbox = WingSettings.Instance.SandboxFreeCalls.Value;
-            if (Changed(4, (float.IsNaN(funds) ? -1 : (int)funds) * 4 + (sandbox ? 2 : 0) + (context.Client ? 1 : 0)))
+            if (Changed(4, (float.IsNaN(funds) ? -1 : Mathf.RoundToInt(funds * 10f)) * 4 + (sandbox ? 2 : 0) + (context.Client ? 1 : 0)))
                 fundsChip?.Set(WmcHeader.Funds(funds, sandbox, context.Client, out string s3), StateOf(s3));
         }
 

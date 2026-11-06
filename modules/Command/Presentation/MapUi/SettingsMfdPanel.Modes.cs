@@ -57,7 +57,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     (AvIcon.Target, "HUD"),
                     (AvIcon.WaveSine, "COCKPIT"),
                     (AvIcon.CloudRain, "WORLD"),
-                    (AvIcon.Gauge, "PERF"));
+                    (AvIcon.Gauge, "PERF"),
+                    (AvIcon.Link, "COMPAT"));
                 TabHelp.Apply(tabs,
                     "How every MFD panel looks: colour scheme, screen finish, panel motion and sound, and which screens the bezel offers.",
                     "Map console layout, terrain, contacts, mouse handling, backdrop and the news ticker, with a layout schematic.",
@@ -65,13 +66,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "What you feel in the cockpit: head motion, shakes, glare, visor, pilot body and cockpit sound.",
                     "What the world looks like on this machine: sky, rain, sea, world effects, colour grade and mission pictures.",
                     "One-click quality presets, client work budgets and a live frame-time trace. " +
-                    "Maintenance clears cache or restores factory settings; factory reset requires a game restart.");
+                    "Maintenance clears cache or restores factory settings; factory reset requires a game restart.",
+                    "Sharing the game with NoAtmoFX and Kelly's Client Effects: who draws the sky, the rain and the effects both have, and key clashes.");
                 BuildPanelsPage(c.Page(CPanels), CPanels);
                 BuildMapPage(c.Page(CMap), CMap);
                 BuildHudPage(c.Page(CHud), CHud);
                 BuildBoardPage(c.Page(CCockpit), CCockpit, "COCKPIT");
                 BuildBoardPage(c.Page(CWorld), CWorld, "WORLD");
                 BuildPerformancePage(c.Page(CPerf), CPerf);
+                BuildBoardPage(c.Page(CCompat), CCompat, "COMPAT");
             }
 
             ApplyOrders(c, server);

@@ -70,8 +70,17 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Uniform = look.Uniform,
                 Accessory = look.Accessory,
                 Backdrop = look.Backdrop,
+                File = PilotPortrait.FromFile(r.Callsign),
             };
             return true;
+        }
+
+        public string[] SavedPilotCallsigns()
+        {
+            var records = WingSavedPilots.Store.Records;
+            var names = new string[records.Count];
+            for (int i = 0; i < names.Length; i++) names[i] = records[i].Callsign;
+            return names;
         }
 
         public bool OpenPilotStudio()

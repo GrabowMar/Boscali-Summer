@@ -1,5 +1,55 @@
 # Changelog
 
+## Unreleased
+
+- **AR approach tunnel** (SET > COCKPIT > COCKPIT VISUALS): on final, the helmet draws green frames on the 3 degree
+  glide path down to the runway ahead. They are world-locked but drawn on the helmet layer, so the instrument panel never
+  hides them on a nose-high approach. Uses the AIRFIELD LIGHTS runways.
+- **Blast light in the cockpit**: a nearby explosion throws an orange flash into the pit from its side, and the visor's
+  auto-dimming glass snaps dark for a moment.
+- **Master caution glow**: while a missile is inbound, the warning lamps wash the cockpit red, pulsing twice a second.
+  It reuses the blast-flash light (one light, off the rest of the time).
+- **Gliding tab rail**: the select rail under console tabs slides to the new tab instead of jumping (off under reduced motion).
+
+- **SET > COMPAT and a Compatibility module** for players who also run NoAtmoFX or Kelly's Client Effects. Rows unlock
+  when the other mod is installed:
+  - **NoAtmoFX**: its volumetric clouds take the sky, and Boscali's clouds, sun shafts, lightning and thunder stand down
+    while its clouds are on. Its clouds follow Boscali's weather where you fly. RAIN picks who draws rain and canopy rain.
+  - **Kelly's Client Effects**: OVERLAPS picks who draws contrails, dust wake, bullet cracks, airfield lights and the
+    missile boom. The other side's copy is switched off. Its core, weather and cockpit parts already step aside for Boscali.
+  - **Key clashes**: NoAtmoFX's F10 cloud toggle no longer fires with TGT PRESET 3, and its F8 test blast no longer fires
+    with the camera mark. They move to Ctrl+F10 and Alt+F8. Boscali's keys ignore Ctrl and Alt chords, so Kelly's Ctrl+F8
+    panel no longer marks the camera.
+- **Airfield lights** (SET > WORLD > WORLD FX): at night, runway and blue taxiway edges, and a threshold bar that is
+  green at the end you land on and red at the far one. The end you approach also gets an approach bar with a running
+  flasher and a four-box PAPI glide-path guide (two white, two red on a 3 degree path). The tower carries a
+  white-white-green beacon.
+- **City lights**: lit windows and sodium street lamps on every town, fading in at dusk. A destroyed building goes dark.
+- **Vapour**: in humid air, a vapour cone blooms round an aircraft near Mach 1, and the wingtips trail white vapour in
+  hard turns (above about 3 G).
+- **Missile boom**: a supersonic missile passing close by cracks as its shock cone sweeps over you.
+- **Canopy frost** (SET > COCKPIT > COCKPIT VISUALS): cloud or precipitation below freezing rimes the canopy from the
+  frame inward. It melts in warmer air.
+- **No more "bay intentionally left blank"**: the equipment-bay cover that filled every short MFD page (big console
+  stencil, data plate, barcode) is gone. The room a page leaves now shows the console ground: a dark tactical map plate, topographic
+  contours and registration marks (a generated texture, tinted by each colour scheme) and a faint graticule that keeps below the page's content.
+- **Footer help strip**: hovering a control now shows a TIP tag, the control's name and its help; idle, the status line is
+  followed by the page's standing orders (SOP), one at a time, turning over every 8 s with pips showing which one. The
+  strip runs on its own canvas, so the clock and hover help no longer redraw the whole console.
+- **Tactical frames**: buttons, tabs, cards and gauges carry reticle corners (visible at rest, bright on hover) and a
+  short slash inside each cut corner; the hover tip lights an info-tinted band with a rail and corner marks.
+- **Button fixes**: a button's selected/primary rail no longer pokes out past its cut corner, and a button can no
+  longer lose its whole frame when the UI effect shader is unusable (it falls back to the plain UI material).
+- **MFD rail keys**: the selected key's highlight is now a slim strip inside the key (it used to run past the key's cut
+  corner and look taller than the key), and it shows at half strength on hover.
+- **Map clicks keep your targets** ([#34](https://github.com/GrabowMar/Boscali-Summer/issues/34)): a left click on
+  empty ground on the expanded map no longer clears the selection and the target list. The CLEAR button on the
+  selection deck and the C-menu's CLEAR ALL TARGETS still empty it.
+- **Formation rows stay put** ([#33](https://github.com/GrabowMar/Boscali-Summer/issues/33)): the MEMBERS rows on the
+  WMC Formation page no longer jump to the top of the page, under the tabs.
+- **Upright wing labels on the minimap** ([#32](https://github.com/GrabowMar/Boscali-Summer/issues/32)): the
+  wingman labels no longer turn with the heading-up minimap; they read level above the marker.
+
 ## 0.2.12 — update
 
 - **Centre combat alerts**: urgent warnings now show where the pilot is looking, not only in the TAC BOARD corner.

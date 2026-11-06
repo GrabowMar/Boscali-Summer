@@ -1,6 +1,6 @@
 namespace BoscaliSummer.Modules.Wing.Domain.Pure
 {
-    /// <summary>Chip rows that wrap (SUPPLY's FIT chips, LOADOUT's TEMPLATE chips): chips of given widths placed left to right from
+    /// <summary>Chip rows that wrap (SUPPLY's FIT chips): chips of given widths placed left to right from
     /// <c>startX</c>, a chip that would pass <c>width</c> starting the next line.</summary>
     internal static class ChipFlow
     {

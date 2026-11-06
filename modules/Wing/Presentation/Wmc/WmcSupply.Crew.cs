@@ -89,7 +89,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             adoptBlock.SetShown(false);
             adoptButton = adoptBlock.Button(0, 0);
             adoptButton.Help = "Take command of the friendly AI selected on the map: press twice, the cost is shown.";
-            ids.Add("sup.adopt", adoptButton);
         }
 
         /// <summary>Friendly AI selected on the map that can join (host only) and what they cost; the faction's others that
@@ -112,7 +111,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 if (recruits.Count >= room || recruits.Count >= WingOrder.MaxUnits) why = "the wing is full";
                 else if (w.CanRecruit(a, out why))
                 {
-                    CallQuote q = WingAdoption.Quote(a);
+                    // Each is checked against what the ones before it leave, not the whole allocation.
+                    CallQuote q = WingAdoption.Quote(a, adoptCost);
                     if (q.Allowed)
                     {
                         recruits.Add(a);
@@ -213,11 +213,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildPilot(AvFlow f)
         {
-            pilotHead = f.Add(new WmcHeadBar(f.Content, AvIcon.User, "1 · " + SupplyWords.PilotTitle));
+            pilotHead = f.Add(new WmcHeadBar(f.Content, AvIcon.User, "2 · " + SupplyWords.PilotTitle));
             // The card is not a click target (0.9 critique: a dead card click); only its arrows act.
             pilotCard = f.Add(new WmcPilotCard(f.Content, StepPilot));
-            ids.Add("sup.pilot.prev", pilotCard.Prev);
-            ids.Add("sup.pilot.next", pilotCard.Next);
             SetStepper(true, PilotTip);
         }
 

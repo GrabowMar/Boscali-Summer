@@ -11,10 +11,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         Toughness, Commando, NotchExpert, FastLearner, QuickDraw, Standoff,
         // Merged & Special
         Countermeasures, Ghost, Talented,
-        // 16 New Tactical Combat Skills
-        Marksman, Snapshot, LeadPursuit, HeadOnJoust, EnergyFighter,
-        ApexHunter, Bombardier, SalvoSpecialist, WildWeasel, TargetMaster,
-        WingmanInstinct, CombatSpread, TerrainHugger, BreakTurn, EarlyWarning, Burnthrough
+        // Tactical Combat Skills (every one has an effect; a perk the game's own AI would override is not offered)
+        Snapshot, HeadOnJoust, EnergyFighter, ApexHunter, SalvoSpecialist, TargetMaster,
+        WingmanInstinct, TerrainHugger, BreakTurn, EarlyWarning
     }
 
     /// <summary>Engine-free progression and survival balance. Each promotion grants one unique perk, with
@@ -47,8 +46,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static void GrantThroughRank(List<PilotPerk> owned, WingRank rank, Func<int, int> random)
         {
-            int desired = DesiredPerkCount(owned, rank);
-            while (owned.Count < desired)
+            // Read again each draw: TALENTED, once drawn, adds its slots to this same call.
+            while (owned.Count < DesiredPerkCount(owned, rank))
             {
                 var available = new List<PilotPerk>();
                 for (int i = 0; i < Count; i++)
@@ -84,22 +83,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case PilotPerk.Countermeasures: return "COUNTERMEASURES";
                 case PilotPerk.Ghost: return "GHOST";
                 case PilotPerk.Talented: return "TALENTED";
-                case PilotPerk.Marksman: return "MARKSMAN";
                 case PilotPerk.Snapshot: return "SNAPSHOT";
-                case PilotPerk.LeadPursuit: return "LEAD PURSUIT";
                 case PilotPerk.HeadOnJoust: return "HEAD-ON JOUST";
                 case PilotPerk.EnergyFighter: return "ENERGY FIGHTER";
                 case PilotPerk.ApexHunter: return "APEX HUNTER";
-                case PilotPerk.Bombardier: return "BOMBARDIER";
                 case PilotPerk.SalvoSpecialist: return "SALVO SPECIALIST";
-                case PilotPerk.WildWeasel: return "WILD WEASEL";
                 case PilotPerk.TargetMaster: return "TARGET MASTER";
                 case PilotPerk.WingmanInstinct: return "WINGMAN INSTINCT";
-                case PilotPerk.CombatSpread: return "COMBAT SPREAD";
                 case PilotPerk.TerrainHugger: return "TERRAIN HUGGER";
                 case PilotPerk.BreakTurn: return "BREAK TURN";
                 case PilotPerk.EarlyWarning: return "EARLY WARNING";
-                case PilotPerk.Burnthrough: return "BURNTHROUGH";
                 default: return "UNKNOWN";
             }
         }
@@ -117,22 +110,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case PilotPerk.Countermeasures: return "Halves dispenser burst intervals and doubles ECM jamming intensity.";
                 case PilotPerk.Ghost: return "35% guidance disruption chance against all incoming guided missiles (ARH, SARH, and IR seekers).";
                 case PilotPerk.Talented: return "Natural aviation prodigy. Grants 3 additional skill slots, immediately unlocking extra abilities.";
-                case PilotPerk.Marksman: return "Not active in 1.0 yet: cannon engagements are flown by the game's combat AI.";
                 case PilotPerk.Snapshot: return "40% wider off-boresight tolerance for standing fire and Splash from formation.";
-                case PilotPerk.LeadPursuit: return "Not active in 1.0 yet: dogfights are flown by the game's combat AI.";
                 case PilotPerk.HeadOnJoust: return "Standing fire and Splash launch from 25% farther when the target closes head-on faster than 350 m/s.";
                 case PilotPerk.EnergyFighter: return "Preserves airspeed above corner speed in sustained maneuvers, trading altitude to prevent dogfight stalls.";
                 case PilotPerk.ApexHunter: return "Radar missiles in standing fire and Splash launch from 40% farther above 4,000 m; a little more aggressive flying.";
-                case PilotPerk.Bombardier: return "Not active in 1.0 yet: bombing runs are flown by the game's combat AI.";
                 case PilotPerk.SalvoSpecialist: return "Splash also fires from a second missile type in reach (up to two missiles).";
-                case PilotPerk.WildWeasel: return "Not active in 1.0 yet: target choice in a fight is the game's combat AI's.";
                 case PilotPerk.TargetMaster: return "Holds an attack order's target 50% longer through a short loss (a target saturated with missiles in flight).";
                 case PilotPerk.WingmanInstinct: return "30% faster rejoin acceleration and 25% tighter station-keeping in escort formations.";
-                case PilotPerk.CombatSpread: return "Not active in 1.0 yet: the formation's spacing is set for the whole wing.";
                 case PilotPerk.TerrainHugger: return "25 m lower pull-up margin and low-level bank limit (the formation's height stays the wing's).";
                 case PilotPerk.BreakTurn: return "Reacts at once to a missile inside 2,500 m while flying with the wing.";
                 case PilotPerk.EarlyWarning: return "Reacts 1.5 seconds sooner to an incoming missile while flying with the wing.";
-                case PilotPerk.Burnthrough: return "Not active in 1.0 yet: radar locks are the game's own.";
                 default: return "Unknown perk.";
             }
         }

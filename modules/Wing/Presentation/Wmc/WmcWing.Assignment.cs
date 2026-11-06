@@ -25,20 +25,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         /// <summary>The bar, rebuilt only when what it says changed: the roster, the pilot, its member's duty, its launch's phase, the
-        /// helicopter going, the search's second, the ask, the funds, or whether a helicopter can go.</summary>
+        /// helicopter going, the search's second, the ask, the funds, or whether a helicopter can go. The caller shows the card only with
+        /// a pilot.</summary>
         private void RefreshAssignment()
         {
-            WingPilot p = client ? null : inspected;
+            WingPilot p = inspected;
             int at = IndexOf(p);
             PilotStatus s = at >= 0 ? status[at] : PilotStatus.Free;
-            WingMember m = p != null && s == PilotStatus.Flying ? WmcPilots.MemberOf(p, wing) : null;
+            WingMember m = s == PilotStatus.Flying ? WmcPilots.MemberOf(p, wing) : null;
             int row = m != null ? WingRows.IndexOf(last.Rows, last.Count, m.Aircraft.persistentID.Id) : -1;
             InboundRow launch = default;
             bool isInbound = (s == PilotStatus.Flying || s == PilotStatus.Inbound) && FindLaunch(p, out launch);
-            float left = s == PilotStatus.LocalSar ? WingSearchAndRescue.LocalRecoveryRemaining(p) : -1f;
-            float cost = p != null && (s == PilotStatus.Downed || s == PilotStatus.Missing) ? WingSearchAndRescue.LocalCost(p) : -1f;
+            float left = at >= 0 ? localLeft[at] : -1f;
+            float cost = s == PilotStatus.Downed || s == PilotStatus.Missing ? WingSearchAndRescue.LocalCost(p) : -1f;
             float funds = cost > 0f && GameManager.GetLocalPlayer(out Player player) && player != null ? player.Allocation : 0f;
-            bool asking = p != null && localGate.IsArmed(p.Callsign, Time.unscaledTime);
+            bool asking = localGate.IsArmed(p.Callsign, Time.unscaledTime);
             // AIR SAR's own check (the helicopter, the survivor on land) moves without the roster: asked every refresh while it matters.
             string air = null;
             PilotDismounted survivor = s == PilotStatus.Downed ? WingSearchAndRescue.SurvivorOf(p) : null;
@@ -47,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int key;
             unchecked
             {
-                key = scanVersion * 31 + at * 7 + (client ? 3 : 0) + (asking ? 5 : 0) + (int)(funds * 10f) * 13 + (int)(cost * 10f) * 17
+                key = scanVersion * 31 + at * 7 + (asking ? 5 : 0) + (int)(funds * 10f) * 13 + (int)(cost * 10f) * 17
                     + (left >= 0f ? (int)left + 1 : 0) * 19 + (airCan ? 23 : 0) + (air != null ? air.GetHashCode() : 0)
                     + (row >= 0 ? last.Rows[row].Duty * 29 + last.Rows[row].Behaviour * 37 + last.Rows[row].Flags * 41 + last.Rows[row].Element * 43 : 0)
                     + (isInbound ? (int)launch.Phase * 47 + 1 : 0);
@@ -55,16 +56,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (key == barKey) return;
             barKey = key;
             relayout = true;
-            if (p == null)
-            {
-                assign.SetText(client ? SquadronWords.ClientWhy : SquadronWords.NoFocus, "");
-                assign.SetRail("inert");
-                SetIcon(null);
-                airWhy = localWhy = client ? SquadronWords.ClientWhy : SquadronWords.NoFocus;
-                SetSar(assignAir, SquadronWords.AirLabel(0), false, false, airWhy);
-                SetSar(assignLocal, SquadronWords.LocalLabel(false, null), false, false, localWhy);
-                return;
-            }
             bool next = ReferenceEquals(p, upcoming);
             assign.SetRail(SquadronWords.Rail(s, next));
             AircraftDefinition current = m != null ? m.Aircraft.definition : isInbound ? launch.Type : null;

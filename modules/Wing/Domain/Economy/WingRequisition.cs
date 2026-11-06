@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         // ---- the draft
 
-        /// <summary>Null: AUTO (the game arms it); <see cref="CallSpec.YourLoadout"/>; else a LOADOUT template id.</summary>
+        /// <summary>Null: AUTO (the game arms it); <see cref="CallSpec.YourLoadout"/>; else the airframe's custom loadout (its record id).</summary>
         public static string FitOf(AircraftDefinition definition) =>
             definition != null && fits.TryGetValue(definition, out string fit) ? fit : null;
 
@@ -62,26 +62,26 @@ namespace BoscaliSummer.Modules.Wing.Domain
             else fits[definition] = fit;
         }
 
-        /// <summary>Every airframe's fit that names template <paramref name="id"/> goes back to AUTO; true when one did.</summary>
-        public static bool DropFit(string id)
+        /// <summary>The aircraft that requisitions: the player's (the anchor stands in under automation); with none, the HUD's own, so a
+        /// client or a grounded host still reads the lists.</summary>
+        public static Aircraft CallerOf(WingService w, bool client)
         {
-            dropScratch.Clear();
-            foreach (KeyValuePair<AircraftDefinition, string> kv in fits)
-                if (kv.Value == id) dropScratch.Add(kv.Key);
-            foreach (AircraftDefinition d in dropScratch) fits.Remove(d);
-            return dropScratch.Count > 0;
+            Aircraft caller = w == null || client ? null : w.Player != null ? w.Player : w.Leader;
+            if (caller != null) return caller;
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            return hud != null ? hud.aircraft : null;
         }
 
-        /// <summary>Fits naming templates that no longer exist go back to AUTO (SUPPLY coming into view; review of R4b).</summary>
-        public static void PurgeDeadFits()
+        /// <summary>The airframe nothing has picked yet: the quick call's own (Wing/CallAirframe, else the caller's type) when SUPPLY lists
+        /// it, so REQUISITION is two clicks.</summary>
+        public static void SelectDefault(Aircraft caller)
         {
-            dropScratch.Clear();
-            foreach (KeyValuePair<AircraftDefinition, string> kv in fits)
-                if (kv.Value != CallSpec.YourLoadout && !WingLoadoutTemplates.Exists(kv.Value)) dropScratch.Add(kv.Key);
-            foreach (AircraftDefinition d in dropScratch) fits.Remove(d);
+            if (Selected != null || caller == null || Catalogue.Count == 0) return;
+            string want = WingSettings.Instance.CallAirframe.Value?.Trim();
+            foreach (AircraftDefinition d in Catalogue)
+                if (!string.IsNullOrEmpty(want) && string.Equals(d.unitName, want, System.StringComparison.OrdinalIgnoreCase)) Selected = d;
+            if (Selected == null && Catalogue.Contains(caller.definition)) Selected = caller.definition;
         }
-
-        private static readonly List<AircraftDefinition> dropScratch = new List<AircraftDefinition>();
 
         public static string KeyOf(Airbase a) => a.SavedAirbase != null && !string.IsNullOrEmpty(a.SavedAirbase.UniqueName) ? a.SavedAirbase.UniqueName : a.name;
 
@@ -99,6 +99,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         // ---- lists
 
+        /// <summary>The caller's faction, else the local player's: LOADOUT and SUPPLY list airframes before a sortie too.</summary>
+        public static FactionHQ HqOf(Aircraft caller) =>
+            caller != null ? caller.NetworkHQ : GameManager.GetLocalHQ(out FactionHQ local) ? local : null;
+
         /// <summary>Refills the catalogue and the field list at most once every <see cref="ListSeconds"/> (or now with
         /// <paramref name="force"/>). ponytail: FindObjectsOfType allocates once a refill, only while SUPPLY shows or an order runs.</summary>
         public static void RefreshLists(Aircraft caller, bool force = false)
@@ -110,7 +114,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Catalogue.Clear();
             Encyclopedia enc = Encyclopedia.i;
             if (enc == null || enc.aircraft == null) return;
-            FactionHQ hq = caller != null ? caller.NetworkHQ : null;
+            FactionHQ hq = HqOf(caller);
             bool sandbox = WingSettings.Instance.SandboxFreeCalls.Value;
             foreach (AircraftDefinition d in enc.aircraft)
                 if (d != null && ShopRules.Listed(For(d, hq), sandbox)) Catalogue.Add(d);
@@ -122,7 +126,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         {
             WingService wing = WingService.Instance;
             GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
-            FactionHQ hq = caller != null ? caller.NetworkHQ : null;
+            FactionHQ hq = HqOf(caller);
             var w = new ShopWing
             {
                 // No aircraft yet: the host still runs SUPPLY (NotFlying says why), only a client is a client.
@@ -162,7 +166,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 Jet = kind == 1,
                 Declared = hq != null && hq.AircraftSupply != null && hq.AircraftSupply.ContainsKey(d),
                 FactionStock = hq != null ? hq.GetUnitSupply(d) : 0,
-                Held = WingSupplyReserve.CountOf(d),
             };
             foreach (Airbase f in Fields)
                 if (f != null && IsOn(f) && !(a.Jet && f.AttachedAirbase)) a.BasesForClass++;
@@ -215,9 +218,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>A field's row status: OFF, NO JETS (a carrier for a jet), SHORT (its departure runway is shorter than the airframe
-        /// needs at full fuel, <see cref="TakeoffRuns"/>), READY (a hangar can spawn it), else APRON (a service-point spawn).</summary>
+        /// needs at the chosen fuel, <see cref="TakeoffRuns"/>), READY (a hangar can spawn it), else APRON (a service-point spawn).</summary>
         public static string Status(Airbase f, AircraftDefinition d) =>
-            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "NO JETS" : d != null && TakeoffRuns.Short(d.unitName, RunwayOf(f)) ? "SHORT"
+            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "NO JETS" : d != null && TakeoffRuns.Short(d.unitName, RunwayOf(f), FuelPercent) ? "SHORT"
             : d != null && HangarReady(f, d) ? "READY" : "APRON";
 
         /// <summary>The length of the runway Wing departs from there (the first usable for takeoff, as FieldTraffic picks it); 0: none.</summary>
@@ -265,8 +268,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return hq.AIAircraftLimit + enemies * hq.addAIPerEnemyPlayer - friends * hq.reduceAIPerFriendlyPlayer;
         }
 
+        /// <summary>The landing state the game flies the pilot's class with (planes the jet one, helicopters and tiltwings the
+        /// helo one — as <c>NativeLandingBridge.Begin</c> picks); null when the pilot has none to go home with.</summary>
+        private static PilotBaseState LandingStateFor(Pilot p) =>
+            p.pilotType == Pilot.PilotType.Plane ? p.AILandingState
+            : p.pilotType == Pilot.PilotType.Helo || p.pilotType == Pilot.PilotType.Tiltwing ? p.AIHeloLandingState
+            : null;
+
         /// <summary>RTB ONE: the faction's AI aircraft nearest one of its fields that may be sent home — never a wingman, the
-        /// leader, a player, a launch of ours, a dead or ejected pilot, one on the ground or one already landing.</summary>
+        /// leader, a player, a launch of ours, a dead or ejected pilot, one on the ground, one already landing or one with no
+        /// landing state for its class.</summary>
         public static Aircraft RtbCandidate(FactionHQ hq)
         {
             // A reused list: SUPPLY snapshots at 5 Hz, and RTB ONE over the limit asks every time.
@@ -287,7 +298,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (a.disabled || a.NetworkHQ != hq || a.Player != null || landing || a.radarAlt < 10f ||
                     (wing != null && (wing.IsMember(a) || ReferenceEquals(wing.Leader, a))) ||
                     (SpawnService.Instance != null && SpawnService.Instance.IsPending(a)) ||
-                    p == null || p.dead || p.ejected) continue;
+                    p == null || p.dead || p.ejected || LandingStateFor(p) == null) continue;
                 Vector3 at = a.transform.position;
                 float d = float.MaxValue;
                 foreach (Airbase f in own)
@@ -327,7 +338,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     {
                         Aircraft a = RtbCandidate(hq);
                         Pilot p = a != null ? a.pilots[0] : null;
-                        PilotBaseState landing = p != null ? (PilotBaseState)p.AILandingState ?? p.AIHeloLandingState : null;
+                        PilotBaseState landing = p != null ? LandingStateFor(p) : null;
                         if (landing == null) break;
                         p.SwitchState(landing);
                         last = a.definition != null ? a.definition.unitName : a.unitName;

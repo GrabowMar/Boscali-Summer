@@ -175,8 +175,8 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "Wingmen call new enemy aircraft within 40 km with bearing, range, altitude and aspect from you. Scout Ahead " +
                 "reports ground contacts either way.", null, new ConfigurationManagerAttributes { Order = 78 }));
             LoadoutTemplates = c.Bind("Loadout", "SavedTemplates", "", new ConfigDescription(
-                "Saved per-pylon loadout templates (airframe|id|name|store keys; records separated by semicolons). " +
-                "Clear it to delete every template.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));
+                "Saved per-pylon custom loadouts, one per airframe (airframe|id|name|store keys; records separated by semicolons). " +
+                "Clear it to delete every custom loadout.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 60 }));
             LoadoutLiveries = c.Bind("Loadout", "Liveries", "", new ConfigDescription(
                 "The livery each airframe's wingmen wear (airframe|token; B = built in, A = app-data skin, W = workshop item). " +
                 "Clear it for every faction's standard livery.", null, new ConfigurationManagerAttributes { IsAdvanced = true, Order = 59 }));

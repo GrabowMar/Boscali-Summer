@@ -45,9 +45,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (!IsCurrent(id)) return;
             string bio = PilotText.Bio(text);
+            bioField.SetText(bio);
             if (bio == (draft.Background ?? "")) return;
             draft.Background = bio;
-            bioField.SetText(bio);
             Edited();
         }
 

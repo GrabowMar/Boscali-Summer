@@ -36,46 +36,25 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             assignLocal = actions[1];
             releaseButton = actions[2];
             releaseButton.Help = SquadronWords.ReleaseTip;
-            ids.Add("wing.airsar", assignAir);
-            ids.Add("wing.localsar", assignLocal);
-            ids.Add("wing.release", releaseButton);
         }
 
-        /// <summary>The selected pilot's file, rebuilt only when the roster, the pilot, RELEASE's ask or a local search's second changed.</summary>
+        /// <summary>The selected pilot's file (the caller shows it only with a pilot), rebuilt only when the roster, the pilot, RELEASE's ask
+        /// or a local search's second changed.</summary>
         private void RefreshFile()
         {
-            WingPilot p = client ? null : inspected;
+            WingPilot p = inspected;
             int at = IndexOf(p);
             PilotStatus s = at >= 0 ? status[at] : PilotStatus.Free;
-            bool asking = p != null && releaseGate.IsArmed(p.Callsign, Time.unscaledTime);
+            bool asking = releaseGate.IsArmed(p.Callsign, Time.unscaledTime);
             int key;
             unchecked
             {
-                key = scanVersion * 31 + at * 7 + (client ? 3 : 0) + (asking ? 5 : 0) + (at >= 0 && localLeft[at] >= 0f ? (int)localLeft[at] * 13 + 1 : 0);
+                key = scanVersion * 31 + at * 7 + (asking ? 5 : 0) + (at >= 0 && localLeft[at] >= 0f ? (int)localLeft[at] * 13 + 1 : 0);
             }
             if (key == fileKey) return;
             fileKey = key;
             relayout = true;
             fileTop.SetPilot(p);
-            if (p == null)
-            {
-                face.Tab = SquadronWords.FileTitle;
-                face.Callsign = client ? WmcText.Unknown : "NO PILOT";
-                face.Name = client ? SquadronWords.ClientWhy : SquadronWords.NoFocus;
-                face.RankLine = "";
-                face.Stats = "";
-                face.Radio = "";
-                face.Stamp = WmcText.Unknown;
-                face.Rail = "inert";
-                face.RibbonHelp = "";
-                face.Rank = WingRank.Rookie;
-                face.Xp = 0f;
-                face.Dim = true;
-                face.RibbonCount = 0;
-                fileTop.Show(face);
-                SetRelease(false, false, client ? SquadronWords.ClientWhy : SquadronWords.NoFocus);
-                return;
-            }
             bool next = ReferenceEquals(p, upcoming);
             face.Tab = SquadronWords.FileTitle + " · " + PersonnelFile.Number(p.Callsign, p.Name);
             face.Callsign = "\"" + WmcText.Cut(p.Callsign, PilotPick.CallsignChars) + "\"";
@@ -136,7 +115,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         // ---------------------------------------------------------------- PERKS: four badges
 
-        private static readonly PilotPerk[] NoPerks = new PilotPerk[0];
         private AvSection perksSection;
         private readonly WingPerkCard[] perks = new WingPerkCard[PerkCards.Slots];
         private int perksKey = int.MinValue;
@@ -152,26 +130,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>The selected pilot's perks in order, the ones not active in 1.0 marked, locked slots naming the rank and XP that earn
-        /// them, and "+n MORE" on the fourth card past four (PerkCards).</summary>
+        /// <summary>The selected pilot's perks in order, locked slots naming the rank and XP that earn them, and "+n MORE" on the fourth card
+        /// past four (PerkCards). The caller shows the card only with a pilot.</summary>
         private void RefreshPerks()
         {
-            WingPilot p = client ? null : inspected;
+            WingPilot p = inspected;
             bool off = !WingSettings.Instance.PilotProgression.Value || WingSettings.Instance.RankEffect.Value <= 0f;
             int key;
             unchecked
             {
-                key = scanVersion * 31 + IndexOf(p) * 7 + (off ? 3 : 0) + (client ? 5 : 0);
+                key = scanVersion * 31 + IndexOf(p) * 7 + (off ? 3 : 0);
             }
             if (key == perksKey) return;
             perksKey = key;
-            WingRank rank = p != null ? p.Rank : WingRank.Rookie;
-            perksSection.SetCaption(p == null ? WmcText.Unknown : PerkCards.Head(p.Perks.Count, rank, p.Lost, off));
-            for (int i = 0; i < perks.Length; i++)
-            {
-                PerkCard card = PerkCards.For(i, p != null ? p.Perks : (System.Collections.Generic.IReadOnlyList<PilotPerk>)NoPerks);
-                perks[i].Set(card, off);
-            }
+            perksSection.SetCaption(PerkCards.Head(p.Perks.Count, p.Rank, p.Lost, off));
+            for (int i = 0; i < perks.Length; i++) perks[i].Set(PerkCards.For(i, p.Perks), off);
             relayout = true;
         }
     }

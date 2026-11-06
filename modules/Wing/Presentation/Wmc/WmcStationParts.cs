@@ -20,14 +20,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public float HeadingDeg;
         /// <summary>Members are listed (rows); HavePos: their positions are known too (the host's), so the plan view can draw them.</summary>
         public bool HaveLive, HavePos;
+        /// <summary>The frame's origin is the player (drawn "YOU"), not the element's lead or an anchor ("LEAD").</summary>
+        public bool LeadIsYou = true;
         public int Count;
         /// <summary>Per member: the seat's number ("#2"), its slot index in the shape, its offset from the element's lead in the lead's
-        /// frame (right and aft, metres), its phase, slot error (m), closure (m/s) and whether it is in the scope.</summary>
+        /// frame (right and aft, metres), its phase, slot error (m) and whether it is in the scope.</summary>
         public readonly string[] Who = new string[Max];
         public readonly int[] Slot = new int[Max];
         public readonly float[] Right = new float[Max], Aft = new float[Max], ErrorM = new float[Max];
         public readonly byte[] Phase = new byte[Max];
-        public readonly sbyte[] Closure = new sbyte[Max];
         public readonly bool[] Picked = new bool[Max];
 
         public void Reset()
@@ -35,6 +36,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Shape = null;
             HaveLive = false;
             HavePos = false;
+            LeadIsYou = true;
             Count = 0;
         }
     }
@@ -226,7 +228,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // The leader.
             AvStrokes.Fill(b, cx - 4f, h - cy - 4f, 8f, 8f, Rg(ink));
             leaderWord.gameObject.SetActive(true);
-            AvText.Set(leaderWord, "YOU");
+            AvText.Set(leaderWord, d.LeadIsYou ? "YOU" : "LEAD");
             leaderWord.color = ink;
             AvLay.Place(leaderWord.rectTransform, cx + 8f, cy - 20f, 40f, 18f);
             vector.Commit();
@@ -251,17 +253,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
     }
 
-    /// <summary>FORMATION's member rows (mockup .row.ok): number, slot, error, a bar of how far off, closure and the phase word. The rail
-    /// is ready in the slot, caution while joining and danger behind.</summary>
+    /// <summary>FORMATION's member rows (mockup .row.ok): number, slot, error in metres and the phase word. The rail is ready in the
+    /// slot, caution while joining and danger behind.</summary>
     internal sealed class WmcStationRows : AvPart
     {
         private const float RowH = 26f, Gap = 2f, Pad = 8f;
-        private const float WhoW = 26f, SlotW = 52f, ErrW = 52f, ClosureW = 56f, WordW = 62f;
+        private const float WhoW = 26f, SlotW = 52f, ErrW = 64f;
         private sealed class Row
         {
             public AvFrame Frame;
-            public Image Rail, Track, Fill;
-            public TMP_Text Who, Slot, Err, Closure, Word;
+            public Image Rail;
+            public TMP_Text Who, Slot, Err, Word;
         }
 
         private readonly Row[] rows = new Row[StationData.Max];
@@ -276,12 +278,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 r.Frame = AvFrame.Add(Rect, "Row" + i, default(AvChamfer));
                 r.Frame.raycastTarget = false;
                 r.Rail = AvLay.Solid(Rect, "Rail" + i, Color.clear);
-                r.Track = AvLay.Solid(Rect, "Track" + i, Color.clear);
-                r.Fill = AvLay.Solid(Rect, "Fill" + i, Color.clear);
                 r.Who = T("Who" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft);
                 r.Slot = T("Slot" + i, AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
                 r.Err = T("Err" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
-                r.Closure = T("Closure" + i, AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 r.Word = T("Word" + i, AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
                 rows[i] = r;
                 SetShown(r, false);
@@ -296,12 +295,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (r.Frame.gameObject.activeSelf == on) return;
             r.Frame.gameObject.SetActive(on);
             r.Rail.gameObject.SetActive(on);
-            r.Track.gameObject.SetActive(on);
-            r.Fill.gameObject.SetActive(on);
             r.Who.gameObject.SetActive(on);
             r.Slot.gameObject.SetActive(on);
             r.Err.gameObject.SetActive(on);
-            r.Closure.gameObject.SetActive(on);
             r.Word.gameObject.SetActive(on);
         }
 
@@ -321,19 +317,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(r.Slot.rectTransform, x, y, SlotW, RowH);
                 x += SlotW + 4f;
                 AvLay.Place(r.Err.rectTransform, x, y, ErrW, RowH);
-                x += ErrW + 8f;
-                float tail = ClosureW + 6f + WordW + Pad;
-                float barW = Math.Max(20f, s.W - x - tail);
-                AvLay.Place(r.Track.rectTransform, x, y + (RowH - 5f) * 0.5f, barW, 5f);
-                AvLay.Place(r.Fill.rectTransform, x, y + (RowH - 5f) * 0.5f, barW * fill[i], 5f);
-                x += barW + 6f;
-                AvLay.Place(r.Closure.rectTransform, x, y, ClosureW, RowH);
-                x += ClosureW + 6f;
+                x += ErrW + 12f;
                 AvLay.Place(r.Word.rectTransform, x, y, s.W - x - Pad + 2f, RowH);
             }
         }
-
-        private readonly float[] fill = new float[StationData.Max];
 
         /// <summary>One row per member in the scope's element, in slot order.</summary>
         public void Show(StationData d)
@@ -351,40 +338,27 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvText.Set(r.Who, d.Who[i]);
                 AvText.Set(r.Slot, "SLOT " + (d.Slot[i] + 1));
                 AvText.Set(r.Err, StationBoard.ErrorText(d.ErrorM[i]));
-                AvText.Set(r.Closure, StationBoard.Signed(d.Closure[i]) + " m/s");
                 AvText.Set(r.Word, StationMath.Word(phase));
                 r.Rail.color = c;
-                r.Fill.color = c;
                 r.Word.color = phase == StationPhase.InSlot ? key : c;
-                r.Closure.color = d.Closure[i] < 0 && phase != StationPhase.InSlot ? WmcState.Color("caution") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 r.Err.color = phase == StationPhase.InSlot ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : c;
-                // The bar is the slot error against a 150 m scale (past it, full).
-                fill[i] = Mathf.Clamp01(d.ErrorM[i] / 150f);
             }
-            if (n != shown)
-            {
-                shown = n;
-                Changed();
-            }
-            else if (Rect != null && shown > 0)
-            {
-                Place(new AvSlot(0f, 0f, Rect.rect.width, Rect.rect.height));
-            }
+            // The rows sit in the block by their number alone: the flow places them when the count (so the height) moves.
+            if (n == shown) return;
+            shown = n;
+            Changed();
         }
 
         public override void Restyle()
         {
             AvStyle row = AvStyleHost.FuiStyle("row");
             Color back = AvStyleHost.Resolve(row.Background, AvTheme.SurfaceInert);
-            Color track = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.8f);
             Color name = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             foreach (Row r in rows)
             {
                 r.Frame.Paint(back, Color.clear);
-                r.Track.color = track;
                 r.Who.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 r.Slot.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-                r.Closure.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
                 r.Err.color = name;
             }
         }

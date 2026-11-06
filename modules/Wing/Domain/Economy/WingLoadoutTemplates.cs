@@ -5,21 +5,28 @@ using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>LOADOUT's saved templates and liveries (spec WMC rebuild §LOADOUT), kept in the BepInEx config across missions: templates
-    /// per airframe by stable id (names through <see cref="TemplateNames"/>, five per airframe), and one livery per airframe saved as a
-    /// token (<see cref="LiveryChoice"/>) and resolved per faction at each spawn — the saved one while the faction still offers it, else
+    /// <summary>LOADOUT's custom loadouts and liveries (spec WMC rebuild §LOADOUT), kept in the BepInEx config across missions: one custom
+    /// loadout per airframe, a record with a stable id (the config still holds the old several-templates-per-airframe list: the first
+    /// saved for an airframe is the custom loadout; the others drop at the next save), and one livery per airframe saved as a token
+    /// (<see cref="LiveryChoice"/>) and resolved per faction at each spawn — the saved one while the faction still offers it, else
     /// the faction's own random livery, as the game's AI wears. <see cref="Revision"/> moves on every change.</summary>
     internal static class WingLoadoutTemplates
     {
+        /// <summary>The name a custom loadout is saved under (the record keeps the old config format).</summary>
+        private const string CustomName = "CUSTOM";
+
         private static readonly List<LoadoutTemplateRecord> records = new List<LoadoutTemplateRecord>();
-        private static readonly List<LoadoutTemplateRecord> scratch = new List<LoadoutTemplateRecord>();
-        private static readonly List<string> names = new List<string>();
         private static readonly List<(LiveryKey key, string label)> nativeScratch = new List<(LiveryKey, string)>();
         private static readonly List<LiveryOption> spawnScratch = new List<LiveryOption>();
         private static Dictionary<string, string> liveries = new Dictionary<string, string>();
         private static bool loaded;
 
-        public static int MaxPerAirframe => TemplateNames.PerAirframe;
+        /// <summary>The saved livery's key per airframe and faction (found: the faction still offers it), so a launch does not rescan
+        /// the skin folders; cleared when <see cref="Revision"/> moves and past <see cref="SavedLiveryCeiling"/> entries.</summary>
+        private static readonly Dictionary<(AircraftDefinition, Faction), (bool found, LiveryKey key)> savedLiveries =
+            new Dictionary<(AircraftDefinition, Faction), (bool, LiveryKey)>();
+        private static int savedLiveriesRevision = -1;
+        private const int SavedLiveryCeiling = 64;
 
         /// <summary>Moves on every saved change (templates and liveries): pages rebuild only when it does.</summary>
         public static int Revision { get; private set; }
@@ -79,7 +86,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             else liveries[key] = token;
             try
             {
-                // A sim run keeps its liveries and templates in memory: the player's .cfg is not the scenario's (audit 2026-09-28).
+                // A sim run keeps its liveries and loadouts in memory: the player's .cfg is not the scenario's (audit 2026-09-28).
                 if (!WingConfig.SimRun) WingSettings.Instance.LoadoutLiveries.Value = LiveryChoice.Encode(liveries);
             }
             catch (Exception e)
@@ -97,9 +104,24 @@ namespace BoscaliSummer.Modules.Wing.Domain
             string token = LiveryTokenOf(definition);
             if (token != null && faction != null)
             {
-                Liveries(definition, faction, spawnScratch);
-                foreach (LiveryOption o in spawnScratch)
-                    if (o.Token == token) return o.Key;
+                if (savedLiveriesRevision != Revision || savedLiveries.Count >= SavedLiveryCeiling)
+                {
+                    savedLiveries.Clear();
+                    savedLiveriesRevision = Revision;
+                }
+                var at = (definition, faction);
+                if (!savedLiveries.TryGetValue(at, out (bool found, LiveryKey key) hit))
+                {
+                    Liveries(definition, faction, spawnScratch);
+                    foreach (LiveryOption o in spawnScratch)
+                        if (o.Token == token)
+                        {
+                            hit = (true, o.Key);
+                            break;
+                        }
+                    savedLiveries[at] = hit;
+                }
+                if (hit.found) return hit.key;
             }
             AircraftParameters p = definition != null ? definition.aircraftParameters : null;
             return p != null && faction != null ? new LiveryKey(p.GetRandomLiveryForFaction(faction)) : default;
@@ -116,11 +138,13 @@ namespace BoscaliSummer.Modules.Wing.Domain
             {
                 records.Clear();
                 records.AddRange(LoadoutTemplateCodec.Decode(WingSettings.Instance.LoadoutTemplates.Value));
+                var seen = new HashSet<string>();
+                records.RemoveAll(r => !seen.Add(r.AirframeKey));
             }
             catch (Exception e)
             {
                 records.Clear();
-                WingLog.Logger.LogWarning("[Loadout] saved templates could not be read and have been ignored: " + e.Message);
+                WingLog.Logger.LogWarning("[Loadout] saved loadouts could not be read and have been ignored: " + e.Message);
             }
             try
             {
@@ -141,34 +165,22 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
             catch (Exception e)
             {
-                WingLog.Logger.LogWarning("[Loadout] templates could not be saved: " + e.Message);
+                WingLog.Logger.LogWarning("[Loadout] loadouts could not be saved: " + e.Message);
             }
             Revision++;
         }
 
         // ---- queries
 
-        /// <summary>This airframe's templates in creation order (a shared list: read it at once, never keep it).</summary>
-        public static IReadOnlyList<LoadoutTemplateRecord> For(AircraftDefinition definition)
-        {
-            EnsureLoaded();
-            scratch.Clear();
-            string key = KeyOf(definition);
-            if (key == null) return scratch;
-            foreach (LoadoutTemplateRecord r in records)
-                if (r.AirframeKey == key) scratch.Add(r);
-            return scratch;
-        }
-
-        public static int CountFor(AircraftDefinition definition)
+        /// <summary>The airframe's custom loadout, or null when it has none.</summary>
+        public static LoadoutTemplateRecord CustomFor(AircraftDefinition definition)
         {
             EnsureLoaded();
             string key = KeyOf(definition);
-            int count = 0;
-            if (key == null) return 0;
+            if (key == null) return null;
             foreach (LoadoutTemplateRecord r in records)
-                if (r.AirframeKey == key) count++;
-            return count;
+                if (r.AirframeKey == key) return r;
+            return null;
         }
 
         public static LoadoutTemplateRecord ById(string id)
@@ -180,63 +192,19 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return null;
         }
 
-        /// <summary>A template's name, or "DELETED TEMPLATE" for an id that outlived it.</summary>
-        public static string NameOf(string id)
-        {
-            LoadoutTemplateRecord record = ById(id);
-            return record != null && !string.IsNullOrEmpty(record.Name) ? record.Name : "DELETED TEMPLATE";
-        }
-
-        public static bool Exists(string id) => ById(id) != null;
-
         // ---- editing
 
-        /// <summary>A new template (null at the limit or for an airframe without a key); a blank name takes the first free
-        /// TEMPLATE n, a taken one the next free number.</summary>
-        public static LoadoutTemplateRecord Create(AircraftDefinition definition, string name, IEnumerable<string> mountKeys)
+        /// <summary>The airframe's custom loadout, started from <paramref name="mountKeys"/> when it has none (null for an airframe without a
+        /// key).</summary>
+        public static LoadoutTemplateRecord Start(AircraftDefinition definition, IEnumerable<string> mountKeys)
         {
-            EnsureLoaded();
+            LoadoutTemplateRecord have = CustomFor(definition);
             string key = KeyOf(definition);
-            if (key == null || CountFor(definition) >= MaxPerAirframe) return null;
-            NamesOf(key, null);
-            string clean = TemplateNames.Clean(name) ?? TemplateNames.NextDefault(names);
-            var record = new LoadoutTemplateRecord(NewId(), key, TemplateNames.Unique(clean, names), mountKeys);
+            if (have != null || key == null) return have;
+            var record = new LoadoutTemplateRecord(NewId(), key, CustomName, mountKeys);
             records.Add(record);
             Save();
             return record;
-        }
-
-        /// <summary>A copy under a new id and the next free "NAME n" (null at the limit).</summary>
-        public static LoadoutTemplateRecord Duplicate(LoadoutTemplateRecord source)
-        {
-            EnsureLoaded();
-            if (source == null) return null;
-            NamesOf(source.AirframeKey, null);
-            if (names.Count >= MaxPerAirframe) return null;
-            LoadoutTemplateRecord copy = source.Copy(NewId(), TemplateNames.Unique(source.Name ?? "TEMPLATE", names));
-            records.Add(copy);
-            Save();
-            return copy;
-        }
-
-        public static void Delete(LoadoutTemplateRecord record)
-        {
-            EnsureLoaded();
-            if (record != null && records.Remove(record)) Save();
-        }
-
-        /// <summary>Renames by what was typed (cleaned; a blank keeps the name; a taken one is numbered); false when nothing changed.</summary>
-        public static bool Rename(LoadoutTemplateRecord record, string typed)
-        {
-            EnsureLoaded();
-            string clean = TemplateNames.Clean(typed);
-            if (record == null || clean == null) return false;
-            NamesOf(record.AirframeKey, record);
-            string name = TemplateNames.Unique(clean, names);
-            if (name == record.Name) return false;
-            record.Name = name;
-            Save();
-            return true;
         }
 
         /// <summary>Writes every set's store at once (a station pick writes its pair and empties the stations it blocks).</summary>
@@ -252,17 +220,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             Save();
         }
 
-        private static void NamesOf(string airframe, LoadoutTemplateRecord except)
-        {
-            names.Clear();
-            foreach (LoadoutTemplateRecord r in records)
-                if (r.AirframeKey == airframe && !ReferenceEquals(r, except) && r.Name != null) names.Add(r.Name);
-        }
-
         private static string KeyOf(AircraftDefinition definition) =>
             definition != null && !string.IsNullOrEmpty(definition.jsonKey) ? definition.jsonKey : null;
 
-        /// <summary>A stable id independent of the editable name, so SUPPLY's fit survives a rename.</summary>
+        /// <summary>A stable id, so SUPPLY's CUSTOM fit names the record.</summary>
         private static string NewId()
         {
             for (int attempt = 0; attempt < 64; attempt++)

@@ -37,8 +37,9 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
     /// <summary>TACTICAL's order grid (spec FUI §TACTICAL): six labelled rows with a category rail; an order
     /// that needs a point or an enemy latches and arms the map, the rest act at once (the scope's, or the wing's for CLEAR 6, ESCORT,
-    /// CALL, BOGEY and DISMISS). With helicopters in scope SUPPORT becomes TAKE OFF · RESCUE · LAND · CARGO (RTB stays on every
-    /// member row). Under it the REACT row flies the five maneuvers; BREAK therefore reads DISENGAGE.</summary>
+    /// CALL, BOGEY and DISMISS). With only helicopters in scope SUPPORT becomes TAKE OFF · RESCUE · LAND · CARGO; a mixed scope keeps
+    /// RTB · REFIT, and LAND and CARGO wait for a helicopter in scope. Under it the REACT row flies the five maneuvers; BREAK therefore
+    /// reads DISENGAGE.</summary>
     internal static class OrderGrid
     {
         public const int Rows = 6, Columns = 4;
@@ -105,7 +106,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         private static readonly GridCell ClearSix = new GridCell(GridOrder.ClearSix, "clearsix", "CLEAR 6", GridInput.Now, MapMode.Off,
             "A wingman engages the air threat on your six.");
         private static readonly GridCell Patrol = new GridCell(GridOrder.Patrol, "patrol", "PATROL", GridInput.Now, MapMode.Off,
-            "Patrol back and forth through where the scope is now.");
+            "Patrol back and forth 10 km either side of you, along your heading.");
         private static readonly GridCell Escort = new GridCell(GridOrder.Escort, "escort", "ESCORT", GridInput.Now, MapMode.Off,
             "The wing escorts you: close cover, engaging what threatens you.");
         private static readonly GridCell Call = new GridCell(GridOrder.Call, "call", "CALL", GridInput.Now, MapMode.Off,
@@ -140,13 +141,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static GridCell At(int row, int column, bool helos) => (helos ? Helos : Jets)[row * Columns + column];
 
-        /// <summary>Why the cell cannot be pressed now, or null.</summary>
-        public static string Why(in GridCell cell, bool canOrder, int members, bool scoped)
+        /// <summary>Why the cell cannot be pressed now, or null. <paramref name="helos"/>: a helicopter is in scope (LAND and CARGO
+        /// need one); a caller that cannot tell leaves it true.</summary>
+        public static string Why(in GridCell cell, bool canOrder, int members, bool scoped, bool helos = true)
         {
             if (!cell.Built) return cell.Pending;
             if (!canOrder) return "Orders are host only for now";
             if (members == 0 && cell.Order != GridOrder.Call) return "No wingmen: call or recruit some first";
             if (cell.Order == GridOrder.Detach && !scoped) return "Select the wingmen to detach";
+            if ((cell.Order == GridOrder.Land || cell.Order == GridOrder.Cargo) && !helos) return "No helicopters in scope";
             return null;
         }
 

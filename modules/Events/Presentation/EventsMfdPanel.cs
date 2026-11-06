@@ -181,7 +181,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDispatchPage(AvFlow p)
         {
-            // The live dispatch. A quiet theater shows one standby row and leaves the page to the bay cover.
+            // The live dispatch. A quiet theater shows one standby row and leaves the rest to the console ground.
             hero = p.Add(new EventHeroPart(p.Content));
             hero.BindCalm("STANDING BY FOR DIRECTOR REPORT");
 
@@ -441,7 +441,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 tiles[i].SetCount(records);
             }
             archiveSection.SetCaption(AvNum.Thousands(held) + " RECORDS HELD");
-            // A filed case shows its 16:9 poster; an empty file stays one row and the bay cover takes the rest.
+            // A filed case shows its 16:9 poster; an empty file stays one row over the console ground.
             bool wide = file != null;
             if (deskCase.Wide != wide)
             {

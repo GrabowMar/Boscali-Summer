@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
@@ -17,60 +18,36 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public static bool OverControls(Vector2 screenPoint)
         {
-            if (MissionContractWindow.BlocksMap) return true;
+            // A full-screen window (OPS front, Met Office, UAV terminal, cinematic console) or the radial menu takes the game's own
+            // mouse while it is up: the map is under it everywhere, so no map click, pick or card goes through it.
+            if (WindowHoldsMouse()) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
             if (MfdLogPanel.ContainsScreenPoint(screenPoint)) return true;
-            if (OverFloating(screenPoint)) return true;
+            if (MapControlRects.Contains(screenPoint)) return true;
+            if (MapSelectionDeck.Contains(screenPoint)) return true;
             if (MfdMapOrbitControls.Contains(screenPoint)) return true;
             if (MfdMapInteractions.ContainsMenu(screenPoint)) return true;
+            // STR tags are many and pooled, so they answer for themselves instead of registering.
+            if (StrMapOverlay.Active != null && StrMapOverlay.Active.ContainsTag(screenPoint)) return true;
             return MfdRail.TryGetRail(out RectTransform rail) && Contains(rail, screenPoint);
         }
 
-        // Floating map chrome (the STR card, the layer plate, the legend strip) registers its rect once, so wheel, drag and
-        // clicks over it stay off the map behind it. At most Capacity rects; a destroyed one is dropped on the way.
-        private const int Capacity = 8;
-        private static readonly RectTransform[] floating = new RectTransform[Capacity];
-        private static int floatingCount;
+        // Floating map chrome (the STR card, the layer plate, the legend strip) registers its rect once, in Core's
+        // MapControlRects so other modules' chrome (the event dispatch alert) can too.
+        internal static void Register(RectTransform rect) => MapControlRects.Register(rect);
 
-        internal static void Register(RectTransform rect)
-        {
-            if (rect == null) return;
-            for (int i = 0; i < floatingCount; i++) if (ReferenceEquals(floating[i], rect)) return;
-            if (floatingCount < Capacity) floating[floatingCount++] = rect;
-        }
-
-        internal static void Unregister(RectTransform rect)
-        {
-            for (int i = 0; i < floatingCount; i++)
-            {
-                if (!ReferenceEquals(floating[i], rect)) continue;
-                RemoveAt(i);
-                return;
-            }
-        }
+        internal static void Unregister(RectTransform rect) => MapControlRects.Unregister(rect);
 
         /// <summary>Scene reset: forget every registered rect.</summary>
-        internal static void ResetFloating()
-        {
-            for (int i = 0; i < floatingCount; i++) floating[i] = null;
-            floatingCount = 0;
-        }
+        internal static void ResetFloating() => MapControlRects.Reset();
 
-        private static bool OverFloating(Vector2 screenPoint)
+        /// <summary>The Rewired mouse is off: every big window and the radial menu turn it off while open, and the map cannot be
+        /// worked without it anyway.</summary>
+        internal static bool WindowHoldsMouse()
         {
-            for (int i = floatingCount - 1; i >= 0; i--)
-            {
-                RectTransform rect = floating[i];
-                if (rect == null) { RemoveAt(i); continue; }           // destroyed: Unity's null check
-                if (rect.gameObject.activeInHierarchy && Contains(rect, screenPoint)) return true;
-            }
-            return false;
-        }
-
-        private static void RemoveAt(int index)
-        {
-            floating[index] = floating[--floatingCount];
-            floating[floatingCount] = null;
+            if (!Rewired.ReInput.isReady || Rewired.ReInput.controllers == null) return false;
+            Rewired.Mouse mouse = Rewired.ReInput.controllers.Mouse;
+            return mouse != null && !mouse.enabled;
         }
 
         /// <summary>The camera that projects screen points on this canvas (none for an overlay canvas).</summary>

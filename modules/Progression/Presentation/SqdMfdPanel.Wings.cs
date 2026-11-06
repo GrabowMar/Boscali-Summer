@@ -126,7 +126,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
             wingsThreat.Set(threatValues, count == 0 ? "NO WINGS" : active + "/" + count + " ACTIVE", active > 0 ? AvState.Caution : AvState.Inert);
             bool any = count > 0;
-            wingsThreat.SetShown(any);   // an empty chart is a 300 px grid that says nothing: the bay cover and its orders take the page instead
+            wingsThreat.SetShown(any);   // an empty chart is a 300 px grid that says nothing: the console ground shows instead
             wingsTotalTile.Set(AvNum.Thousands(count));
             wingsActiveTile.Set(AvNum.Thousands(active), active > 0 ? AvState.Caution : AvState.Inert);
             wingsAliveTile.Set(AvNum.Thousands(alive), alive > 0 ? AvState.Caution : AvState.Inert);

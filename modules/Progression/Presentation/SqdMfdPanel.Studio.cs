@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private SqdQuote studioMessageText;
         private AvNote studioBlazon, studioContrast;
         private AvStepper[] studioLayers;
-        private AvStepper studioArt, studioPaint;
+        private AvStepper studioArt, studioPaint, studioFlyAs;
         private AvPortrait studioEmblem;
         private AvField studioSquadronField;
         private SqdProofStrip studioProofs;
@@ -64,7 +64,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessageText = null;
             studioBlazon = studioContrast = null;
             studioLayers = null;
-            studioArt = studioPaint = null;
+            studioArt = studioPaint = studioFlyAs = null;
             studioEmblem = null;
             studioSquadronField = null;
             studioProofs = null;
@@ -138,12 +138,16 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 p.Row(studioKneeboardArt, studioKneeboard);
             }
 
-            p.Section(AvIcon.UsersGroup, "CUSTOM PILOTS", "WING COMMAND");
+            p.Section(AvIcon.UsersGroup, "YOUR PILOT", "WHO THIS DOSSIER SHOWS");
+            studioFlyAs = p.Add(new AvStepper(p.Content, "FLY AS",
+                () => string.IsNullOrEmpty(settings.PilotProfile.Value) ? "SQUADRON RECORD" : settings.PilotProfile.Value.ToUpperInvariant(),
+                () => StepFlyAs(-1), () => StepFlyAs(1)));
+            StepperHelp(studioFlyAs, "saved pilot to fly as (SQUADRON RECORD shows the host's generated pilot)");
             studioLauncher = p.Add(new SqdEmptyCard(p.Content, AvIcon.Pencil, "PILOTS ARE EDITED IN WING COMMAND",
                 "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots.",
                 "OPEN WMC STUDIO", OpenWmcStudio, AvIcon.Pencil));
 
-            // No grow: the note is the last line of the job sheet, and what the page leaves below it is the bay cover's.
+            // No grow: the note is the last line of the job sheet; below it the console ground shows.
             studioMessageText = p.Add(new SqdQuote(p.Content, "SHOP NOTE"));
             studioMessageText.Set(StudioQuietLine);
         }
@@ -178,7 +182,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioContrast.Set(emblem.Legible ? "CONTRAST OK · READS AT DISTANCE" : "CONTRAST LOW · MARK MAY NOT READ",
                 emblem.Legible ? AvState.Ready : AvState.Caution);
             for (int i = 0; i < studioLayers.Length; i++) studioLayers[i].Refresh();
-            studioArt.Refresh(); studioPaint.Refresh();
+            studioArt.Refresh(); studioPaint.Refresh(); studioFlyAs.Refresh();
             for (int i = 0; i < ProofCount; i++) studioProofs.Set(i, proofCanvases[i].Draw(proofDesigns[i]));
             if (studioKneeboard != null && kneeboardGallery != null)
             {
@@ -201,6 +205,23 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             if (WingLink.OpenPilotStudio()) NextMessage("Opening the Wing Command pilot studio.", StudioTone.Ok);
             else NextMessage("Wing Command could not open the pilot studio.", StudioTone.Warn);
+            nextRefresh = 0f;
+        }
+
+        /// <summary>FLY AS: the squadron record, then each saved pilot in studio order.</summary>
+        private void StepFlyAs(int direction)
+        {
+            string[] pilots = WingLink.SavedPilotCallsigns();
+            if (pilots.Length == 0)
+            {
+                NextMessage("No saved pilots yet: write one in the Wing Command studio.", StudioTone.Warn);
+                return;
+            }
+            int at = Array.FindIndex(pilots, c => string.Equals(c, settings.PilotProfile.Value, StringComparison.OrdinalIgnoreCase)) + 1;
+            int count = pilots.Length + 1;
+            at = ((at + direction) % count + count) % count;
+            settings.PilotProfile.Value = at == 0 ? string.Empty : pilots[at - 1];
+            NextMessage(at == 0 ? "You fly as the squadron record." : "You fly as " + pilots[at - 1] + ".", StudioTone.Ok);
             nextRefresh = 0f;
         }
 

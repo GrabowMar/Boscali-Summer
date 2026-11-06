@@ -9,15 +9,16 @@ namespace NOAvionics
     /// <summary>List row: state rail · name / sub (wraps) · mono value · up to 3 trailing controls.</summary>
     public sealed class AvRow : AvPart
     {
-        private const float PadX = 10f, PadY = 6f, ValueW = 88f, TrailW = 56f;
+        private const float PadX = 10f, PadY = 6f, ValueW = 88f, TrailW = 56f, ColumnGap = 8f;
         private readonly AvFrame frame;
         private readonly Image rail;
         private readonly TMP_Text name, sub, value;
+        private readonly AvHit hit;
         private RawImage badge;
         private const float BadgeW = 22f;
         private readonly List<AvControl> trailing = new List<AvControl>(3);
         private AvState state = AvState.Info;
-        private bool hover, armed, interactable = true;
+        private bool hover, armed, badgeSlot, interactable = true;
         private AvSlot lastSlot;
         private bool placed;
         private int styledLook = -1, styledGen = -1, styledTrailing = -1;
@@ -33,7 +34,7 @@ namespace NOAvionics
             AvText.Fit(value, false); // the value column is fixed: long words shrink, never spill
             if (onClick != null)
             {
-                AvHit hit = AvHit.On(frame);
+                hit = AvHit.On(frame);
                 hit.Hover = h => { hover = h; Restyle(); };
                 hit.Click = e => onClick();
             }
@@ -41,10 +42,14 @@ namespace NOAvionics
         }
 
         /// <summary>Hover help shown in the console footer.</summary>
-        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value); } }
+        public string Help { set { frame.raycastTarget = true; AvHelpTip.Attach(frame.gameObject, value, name); } }
 
-        public bool Armed { get => armed; set { armed = value; Restyle(); } }
-        public bool Interactable { get => interactable; set { interactable = value; Restyle(); } }
+        public bool Armed { get => armed; set { if (armed == value) return; armed = value; Restyle(); } }
+        public bool Interactable
+        {
+            get => interactable;
+            set { if (interactable == value) return; interactable = value; if (hit != null) hit.Interactable = value; Restyle(); }
+        }
 
         public void Set(string n, string s, string v, AvState st = AvState.Info)
         {
@@ -70,49 +75,109 @@ namespace NOAvionics
             if (trailing.Count >= 3) return null;
             AvControl c = AvControl.Make(Rect, spec);
             trailing.Add(c);
+            LayoutChanged();
             return c;
         }
 
         private float BadgeSpace => BadgeSlot || (badge != null && badge.enabled) ? BadgeW + 6f : 0f;
 
         /// <summary>Reserve the badge slot even without an image, so mixed rows align their names.</summary>
-        public bool BadgeSlot { get; set; }
+        public bool BadgeSlot
+        {
+            get => badgeSlot;
+            set { if (badgeSlot == value) return; float before = BadgeSpace; badgeSlot = value; if (before != BadgeSpace) LayoutChanged(); }
+        }
 
         /// <summary>Optional small image before the name (station logos, portraits). Null hides it.</summary>
         public void SetBadge(Texture texture)
         {
-            if (texture == null) { if (badge != null) badge.enabled = false; return; }
-            if (badge == null)
+            float before = BadgeSpace;
+            bool appears = texture != null && (badge == null || !badge.enabled);
+            if (texture != null && badge == null)
             {
                 badge = new GameObject("Badge", typeof(RectTransform), typeof(CanvasRenderer)).AddComponent<RawImage>();
                 badge.transform.SetParent(Rect, false);
                 badge.raycastTarget = false;
             }
-            badge.texture = texture; badge.enabled = true;
+            if (badge != null) { badge.texture = texture; badge.enabled = texture != null; }
+            if (before != BadgeSpace) LayoutChanged();
+            else if (appears && placed) Place(lastSlot);
         }
 
-        private float TextWidth(float width) => width - 2f * PadX - 4f - BadgeSpace - (value.text.Length > 0 ? ValueW : 0f) - trailing.Count * (TrailW + 4f);
+        private void LayoutChanged()
+        {
+            if (placed) Place(lastSlot);
+            Changed();
+        }
+
+        private float InlineTextWidth(float width) => width - 2f * PadX - 4f - BadgeSpace -
+            (value.text.Length > 0 ? ValueW + ColumnGap : trailing.Count > 0 ? ColumnGap : 0f) - InlineActionsWidth;
+
+        private static float TrailingWidth(AvControl control) => Mathf.Max(TrailW, control.PreferredWidth);
+
+        private float InlineActionsWidth
+        {
+            get { float width = 0f; foreach (AvControl control in trailing) width += TrailingWidth(control) + 4f; return width; }
+        }
+
+        private bool Stacked(float width) => trailing.Count > 0 && InlineTextWidth(width) < 80f;
+
+        private float TextWidth(float width) => Mathf.Max(1f, Stacked(width)
+            ? width - 2f * PadX - 4f - BadgeSpace - (value.text.Length > 0 ? ValueW + ColumnGap : 0f)
+            : InlineTextWidth(width));
+
+        private float MainHeight(float textWidth)
+        {
+            float h = AvText.Height(name, textWidth) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, textWidth) : 0f);
+            if (value.text.Length > 0) h = Mathf.Max(h, AvText.Height(value, ValueW));
+            return Mathf.Max(h, BadgeSpace > 0f ? BadgeW : 0f);
+        }
+
+        private float ActionWidth(float width) => AvFlowMath.ColumnWidth(Mathf.Max(0f, width - 2f * PadX - 4f), trailing.Count, 4f);
+
+        private float ActionsHeight(float width, bool stacked)
+        {
+            float h = 24f;
+            foreach (AvControl control in trailing) h = Mathf.Max(h, control.PreferredHeight(stacked ? width : TrailingWidth(control)));
+            return trailing.Count > 0 ? h : 0f;
+        }
 
         public override float Measure(float width)
         {
-            float w = TextWidth(width);
-            float h = PadY + AvText.Height(name, w) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, w) : 0f) + PadY;
-            return Mathf.Max(AvGridTokens.Row, h);
+            bool stacked = Stacked(width);
+            float main = MainHeight(TextWidth(width)), actions = ActionsHeight(ActionWidth(width), stacked);
+            float h = stacked ? main + ColumnGap + actions : Mathf.Max(main, actions);
+            return Mathf.Max(AvGridTokens.Row, h + 2f * PadY);
         }
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             lastSlot = s; placed = true;
-            float w = TextWidth(s.W), nh = AvText.Height(name, w);
+            bool stacked = Stacked(s.W);
+            float w = TextWidth(s.W), nh = AvText.Height(name, w), main = MainHeight(w);
+            float actionW = ActionWidth(s.W), actionH = ActionsHeight(actionW, stacked);
             AvLay.Place(rail.rectTransform, 0f, 0f, 2f, s.H);
             float x0 = PadX + 4f + BadgeSpace;
-            if (badge != null && badge.enabled) AvLay.Place(badge.rectTransform, PadX + 4f, (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
+            if (badge != null && badge.enabled) AvLay.Place(badge.rectTransform, PadX + 4f,
+                stacked ? PadY + (main - BadgeW) * 0.5f : (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
             AvLay.Place(name.rectTransform, x0, PadY, w, nh);
             AvLay.Place(sub.rectTransform, x0, PadY + nh + 2f, w, AvText.Height(sub, w));
             float x = s.W - PadX;
-            for (int i = trailing.Count - 1; i >= 0; i--) { x -= TrailW; AvLay.Place(trailing[i].Rect, x, (s.H - 24f) * 0.5f, TrailW, 24f); x -= 4f; }
-            if (value.text.Length > 0) AvLay.Place(value.rectTransform, x - ValueW, PadY, ValueW, 18f);
+            if (stacked)
+            {
+                for (int i = 0; i < trailing.Count; i++) AvLay.Place(trailing[i].Rect,
+                    PadX + 4f + i * (actionW + 4f), PadY + main + ColumnGap, actionW, actionH);
+            }
+            else
+            {
+                for (int i = trailing.Count - 1; i >= 0; i--)
+                {
+                    float controlW = TrailingWidth(trailing[i]);
+                    x -= controlW; AvLay.Place(trailing[i].Rect, x, (s.H - actionH) * 0.5f, controlW, actionH); x -= 4f;
+                }
+            }
+            if (value.text.Length > 0) AvLay.Place(value.rectTransform, x - ValueW, PadY, ValueW, AvText.Height(value, ValueW));
         }
 
         public override void Restyle()
@@ -126,9 +191,9 @@ namespace NOAvionics
             frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
                 r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
-            name.color = !interactable ? AvTheme.Disabled : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-            sub.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            value.color = AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
+            name.color = !interactable ? AvInk.Muted : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
+            sub.color = !interactable ? AvInk.Muted : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
+            value.color = !interactable ? AvInk.Muted : AvStyleHost.FuiInk("row-value " + AvStates.Class(state), AvTheme.TextPrimary);
             foreach (AvControl c in trailing) c.Restyle();
         }
     }

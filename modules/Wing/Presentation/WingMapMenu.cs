@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// </summary>
     internal sealed class WingMapMenu : IMapWingMenu
     {
+        public bool TakesRightClick => WmcMapInput.TakesRightClick;
+
         public void Fill(Unit clicked, GlobalPosition ground, List<MapMenuRow> rows, List<MapMenuAction> actions)
         {
             WingService w = WingService.Instance;
@@ -24,6 +26,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 int element = w.ElementOf(member);
                 string badge = ElementRoster.Letter(element) + member.Number;
+                group = "WING · " + badge;
                 string call = WingPilotRoster.Of(member)?.Callsign;
                 rows.Add(new MapMenuRow
                 {
@@ -38,30 +41,34 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 });
                 if (!member.Sendable) return;
                 WingScope one = WingScope.OfMembers(member.Aircraft.persistentID.Id);
-                Add(actions, badge + " FORM UP", AvIcon.Formation, () => WingCommands.FormUp(one), true);
-                Add(actions, badge + " ENGAGE", AvIcon.Swords, () => WingCommands.Engage(one), true);
-                Add(actions, badge + " BREAK", AvIcon.ArrowBackUp, () => WingCommands.Disengage(one), true);
-                Add(actions, badge + " RTB", AvIcon.Runway, () => WingCommands.Rtb(one), true);
+                Add(actions, "FORM UP", AvIcon.Formation, () => WingCommands.FormUp(one), true);
+                Add(actions, "ENGAGE", AvIcon.Swords, () => WingCommands.Engage(one), true);
+                Add(actions, "BREAK", AvIcon.ArrowBackUp, () => WingCommands.Disengage(one), true);
+                Add(actions, "RTB", AvIcon.Runway, () => WingCommands.Rtb(one), true);
                 return;
             }
 
             Scope(out WingScope scope, out string who);
+            group = "WING · " + who;
             if (clicked != null)
             {
                 if (!Hostile(clicked)) return;
                 uint id = clicked.persistentID.Id;
-                Add(actions, "ATTACK  /  " + who, AvIcon.Target,
+                Add(actions, "ATTACK THIS TRACK", AvIcon.Target,
                     () => WingOrders.Run(new WingOrder { Kind = OrderKind.Attack, Units = new[] { id }, Scope = scope }));
                 return;
             }
-            // The wing keeps its own height (NaN): a map click says where, not how high.
+            // The wing keeps its own height (NaN), as WMC's own right-click MOVE does: a map click says where, not how high.
             Waypoint at = Waypoint.At(ground.x, ground.z);
-            Add(actions, "GO HERE  /  " + who, AvIcon.MapPin, () => WingOrders.Run(WingOrder.Tasked(WingTask.Move(at), scope)));
-            Add(actions, "ORBIT HERE  /  " + who, AvIcon.Refresh, () => WingOrders.Run(WingOrder.Tasked(WingTask.Orbit(at), scope)));
+            Add(actions, "MOVE HERE", AvIcon.MapPin, () => WingOrders.Run(WingOrder.Tasked(WingTask.Move(at), scope)), true);
+            Add(actions, "ORBIT HERE", AvIcon.Refresh, () => WingOrders.Run(WingOrder.Tasked(WingTask.Orbit(at), scope)), true);
         }
 
+        // The card's group label for the actions being added (one Fill at a time, on the main thread).
+        private static string group;
+
         private static void Add(List<MapMenuAction> actions, string label, AvIcon icon, System.Action invoke, bool half = false) =>
-            actions.Add(new MapMenuAction { Label = label, Icon = icon, Invoke = invoke, Half = half });
+            actions.Add(new MapMenuAction { Label = label, Group = group, Icon = icon, Invoke = invoke, Half = half });
 
         /// <summary>The WMC selection while WMC is open and has one, else the whole wing.</summary>
         private static void Scope(out WingScope scope, out string who)

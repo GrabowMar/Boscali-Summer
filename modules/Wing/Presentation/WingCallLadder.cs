@@ -151,13 +151,20 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         // ------------------------------------------------------------------- the lists
 
+        /// <summary>The helo swap, as the command card's: only when every live wingman is a helicopter or tiltwing (a mixed wing
+        /// keeps RTB and REFIT).</summary>
         private static bool Helos()
         {
             WingService w = WingService.Instance;
             if (w == null) return false;
+            bool any = false;
             foreach (WingMember m in w.Members)
-                if (!m.Released && (object)m.Aircraft != null && m.Profile != null && m.Profile.Class != AirframeClass.FixedWing) return true;
-            return false;
+            {
+                if (m.Released || (object)m.Aircraft == null) continue;
+                if (m.Profile == null || m.Profile.Class == AirframeClass.FixedWing) return false;
+                any = true;
+            }
+            return any;
         }
 
         private static GridCell CellAt(int index) =>
@@ -282,8 +289,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
         }
 
-        /// <summary>MAP CLICK: opens the map when it is not, makes the ladder's WHO the WMC's selection and arms the order's map
-        /// mode, so the next right-click places it as TACTICAL's grid would.</summary>
+        /// <summary>MAP CLICK: opens the map (and the WMC screen) when it is not showing, makes the ladder's WHO the WMC's selection
+        /// and arms the order's map mode, so the next right-click places it as TACTICAL's grid would.</summary>
         private static void ArmMap(GridCell cell, WingScope scope)
         {
             WmcPanel panel = WmcPanel.Instance;
@@ -292,7 +299,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 WingToast.Show("Wing Command is not ready");
                 return;
             }
-            if (!DynamicMap.mapMaximized) panel.Open();
+            if (!DynamicMap.mapMaximized || !panel.Visible) panel.Open();
             panel.FillContext();
             WmcContext c = panel.Context;
             WingService w = WingService.Instance;

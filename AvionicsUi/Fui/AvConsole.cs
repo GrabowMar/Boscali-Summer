@@ -30,7 +30,8 @@ namespace NOAvionics
         private AvChip[] chips = new AvChip[0];
         private AvMetric[] metrics = new AvMetric[0];
         private AvTabBar tabs;
-        private readonly AvBayPlate bay;
+        private readonly RawImage groundArt;
+        private readonly AvGroundGraphic graticule;
         private readonly string[][] orders;
         private readonly TMP_Text bootText;
         private readonly string id;
@@ -61,7 +62,20 @@ namespace NOAvionics
 
             frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(10f));
             AvLay.Fill(frame.rectTransform);
-            AvBundle.Engraving(Root, 0.035f);
+            // Ground: display glass (one shared texture, tinted per scheme) inside the frame, under everything else.
+            Texture2D glass = AvBundle.Ground;
+            if (glass != null)
+            {
+                var groundGo = new GameObject("Ground", typeof(RectTransform), typeof(CanvasRenderer));
+                groundGo.transform.SetParent(Root, false);
+                AvLay.Fill((RectTransform)groundGo.transform, 1f);
+                groundArt = groundGo.AddComponent<RawImage>();
+                groundArt.texture = glass;
+                groundArt.raycastTarget = false;
+                // Crop to the console's aspect, centred, never stretched: the circuit traces frame every edge.
+                float art = (float)glass.width / glass.height, box = w / Mathf.Max(1f, h);
+                groundArt.uvRect = box > art ? new Rect(0f, .5f - art / box * .5f, 1f, art / box) : new Rect(.5f - box / art * .5f, 0f, box / art, 1f);
+            }
             headerBack = AvLay.Solid(Root, "Header", Color.clear);
             idPlate = AvLay.Solid(Root, "IdPlate", Color.clear);
             AvSurfaceGradient.Apply(headerBack, Color.white, new Color(.65f, .71f, .74f, 1f));
@@ -69,7 +83,7 @@ namespace NOAvionics
             idText = AvText.Make(Root, "Id", AvTextRole.Head, id, TextAlignmentOptions.Center);
             titleText = AvText.Make(Root, "Title", AvTextRole.Head, title);
             titleText.fontSize = 15f;
-            titleText.characterSpacing = 7f;
+            titleText.characterSpacing = 5f;
             AvText.Fit(titleText, false);
             pageIndex = AvText.Make(Root, "PageIndex", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
             baseTitle = title;
@@ -79,7 +93,11 @@ namespace NOAvionics
             AvLay.Nest(live, false);
 
             bodyRect = AvLay.Child(Root, "Body");
-            bay = new AvBayPlate(bodyRect, this.id);   // first child: pages draw over it
+            var gridGo = new GameObject("Graticule", typeof(RectTransform), typeof(CanvasRenderer));
+            gridGo.transform.SetParent(bodyRect, false);   // first child: pages draw over it
+            AvLay.Fill((RectTransform)gridGo.transform);
+            graticule = gridGo.AddComponent<AvGroundGraphic>();
+            graticule.raycastTarget = false;
             scrollView = new AvScrollView(bodyRect, false);
             viewport = scrollView.Viewport;
 
@@ -105,11 +123,13 @@ namespace NOAvionics
             decor.raycastTarget = false;
 
             Footer = new AvFooter(Root);
+            // Its own canvas: the clock and hover help change the strip every second, and that must not rebatch the whole console.
+            AvLay.Nest(Footer.Rect, false);
             Root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             Ticker.Register(Footer);
             Ticker.Frame = Animate;
             Ticker.Add(-1, AvTickRate.Slow, Footer.Tick);
-            Ticker.Add(-1, AvTickRate.Slow, SeatBay);
+            Ticker.Add(-1, AvTickRate.Slow, SeatGround);
             Ticker.Add(-1, AvTickRate.Fast, Unpark);
             Ticker.Shown = Wake;
             if (Application.isPlaying && PageCount > 1) { all.Add(this); AvFxDriver.EnsureRunning(); }
@@ -149,6 +169,7 @@ namespace NOAvionics
         public AvTabBar Tabs(params (AvIcon icon, string label)[] items)
         {
             tabs = new AvTabBar(Root, items, SetPage);
+            tabs.HeightChanged += Layout;
             Ticker.Register(tabs);
             Layout();
             return tabs;
@@ -157,15 +178,14 @@ namespace NOAvionics
         public AvFlow Page(int index) => flows[Mathf.Clamp(index, 0, PageCount - 1)];
 
         /// <summary>
-        /// Standing orders for a page: two to four short usage notes in the unit's own voice. They print on the bay
-        /// cover that fills the page when its content ends above the footer, most important first (the cover
-        /// drops trailing lines that do not fit).
+        /// Standing orders for a page: two to four short usage notes in the unit's own voice, most important first. The footer
+        /// shows them one at a time under the status line while that page is up (see <see cref="AvFooter.SetOrders"/>).
         /// </summary>
         public void Orders(int page, params string[] lines)
         {
             if (page < 0 || page >= PageCount) return;
             orders[page] = lines;
-            SeatBay();
+            if (page == CurrentPage) Footer.SetOrders(lines);
         }
 
         public void SetPage(int index)
@@ -186,11 +206,18 @@ namespace NOAvionics
                              PageCount.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
             bool changed = CurrentPage != index;
             CurrentPage = index;
-            if (changed) { StartScan(); PageChanged?.Invoke(index); }
+            if (changed) { StartScan(); Footer.SetOrders(orders[index]); PageChanged?.Invoke(index); }
             // Flush deferred layout after page callbacks, including a same-page reopen.
             flows[CurrentPage].Relayout();
+            scrollView.Scroll.StopMovement();
             scrollView.Scroll.verticalNormalizedPosition = 1f;
-            SeatBay();
+            SeatGround();
+        }
+
+        // The graticule keeps to the room under the current page's last part (a float compare; the mesh rebuilds only on a change).
+        private void SeatGround()
+        {
+            if (CurrentPage >= 0) graticule.Top = flows[CurrentPage].ContentHeight;
         }
 
         public void Finish()
@@ -200,23 +227,14 @@ namespace NOAvionics
             SetPage(CurrentPage < 0 ? 0 : CurrentPage);
         }
 
-        // The bay cover takes whatever the current page leaves between its last part and the footer.
-        private void SeatBay()
-        {
-            if (CurrentPage < 0) return;
-            float content = flows[CurrentPage].ContentHeight;
-            // The placed body, not the height Layout chose: a console may shrink its body to dock a bar under it (MIS).
-            bay.Set(AvGridTokens.Pad, content, width - 2f * AvGridTokens.Pad - AvGridTokens.Gutter,
-                bodyRect.sizeDelta.y - content - AvGridTokens.Pad, CurrentPage, orders[CurrentPage]);
-        }
-
         private void Layout()
         {
             float pad = AvGridTokens.Pad, y = 0f, inner = width - 2f * pad;
             AvLay.Place(headerBack.rectTransform, 0f, 0f, width, AvGridTokens.Header);
             AvLay.Place(idPlate.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
             AvLay.Place(idText.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
-            AvLay.Place(titleText.rectTransform, 66f, 0f, width - 66f - 116f, AvGridTokens.Header);
+            serial.enabled = width >= 360f;
+            AvLay.Place(titleText.rectTransform, 66f, 0f, Mathf.Max(0f, width - 66f - (serial.enabled ? 116f : 60f)), AvGridTokens.Header);
             AvLay.Place(serial.rectTransform, width - 116f, 0f, 54f, AvGridTokens.Header);
             decor.RulerTop = AvGridTokens.Header; decor.SetVerticesDirty();
             AvLay.Place(pageIndex.rectTransform, width - 60f, 0f, 56f, AvGridTokens.Header);
@@ -345,8 +363,7 @@ namespace NOAvionics
         private void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("console");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Ground), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
-            AvStyle h = AvStyleHost.FuiStyle("header");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Ground), AvStyleHost.Resolve(c.Border, AvTheme.Frame));            AvStyle h = AvStyleHost.FuiStyle("header");
             headerBack.color = AvStyleHost.Resolve(h.Background, AvTheme.Surface);
             AvStyle p = AvStyleHost.FuiStyle("id-plate");
             idPlate.color = AvStyleHost.Resolve(p.Background, AvTheme.SurfaceRaised);
@@ -356,7 +373,8 @@ namespace NOAvionics
             decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
             bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
-            bay.Restyle();
+            if (groundArt != null) groundArt.color = AvStyleHost.FuiInk("console-ground", AvTheme.TextPrimary.WithAlpha(0.12f));
+            graticule.color = AvStyleHost.FuiFill("console-ground", AvTheme.Hairline.WithAlpha(0.3f));
             scrollView.Restyle();
         }
     }

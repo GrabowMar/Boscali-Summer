@@ -30,7 +30,7 @@ namespace NOAvionics
         public string Help
         {
             get => tip != null ? tip.Text : null;
-            set { Graphic.raycastTarget = !string.IsNullOrEmpty(value); tip = AvHelpTip.Attach(Graphic.gameObject, value); }
+            set { Graphic.raycastTarget = !string.IsNullOrEmpty(value); tip = AvHelpTip.Attach(Graphic.gameObject, value, Key); }
         }
         private AvHelpTip tip;
 

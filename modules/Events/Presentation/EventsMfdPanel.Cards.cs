@@ -17,8 +17,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
     ///
     /// <para><see cref="EventHeroPart"/> is the live dispatch: the poster with its tier tag, the event name, one
     /// effect line, the plain-words consequence and the scripted beats (the countdown is the LEFT metric tile).
-    /// A quiet theater shows one standby row instead, and leaves the rest of the page to the bay cover and its
-    /// standing orders. Every state it can show (ENDING, a scripted beat
+    /// A quiet theater shows one standby row instead, and leaves the rest of the page to the console ground (its
+    /// standing orders turn over in the footer). Every state it can show (ENDING, a scripted beat
     /// firing, a cancelled beat) carries a word as well as a colour (R1). <see cref="EventCaseFilePart"/>
     /// is the same poster-plus-copy shape, sized for the DESK page's current-or-last case file.</para>
     ///

@@ -26,7 +26,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float HalfWidth = 1f;
         private const int TickEvery = 12;
         private const int VoteSegments = 8;
-        private const float StripeOffset = 1.7f, StripeHalf = 1.3f, ToothHalf = 4.5f, ToothReach = 8f;
+        private const float StripeOffset = 1.7f, StripeHalf = 1.3f;
+        // Teeth are world-anchored: sized and spaced in metres, so they grow as the camera closes in and shrink as it pulls
+        // back (near teeth bigger than far ones on a tilted relief), clamped so they never vanish or swamp the map.
+        private const float ToothWorld = 200f, ToothSpacingWorld = 520f, ToothMinPx = 2.5f, ToothMaxPx = 8f;
 
         private static readonly Color32 Casing = new Color32(4, 10, 14, 205);
         private static readonly Color32 CoolGlow = new Color32(70, 190, 220, 80);
@@ -34,7 +37,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly Color32 TickInk = new Color32(150, 220, 235, 190);
         private static readonly Color32 OwnStripe = Alpha(TacticalSectorGrid.FriendlyTint, 235);
         private static readonly Color32 TheirStripe = Alpha(TacticalSectorGrid.HostileTint, 235);
-        private static readonly Color32 HotTooth = new Color32(255, 176, 64, 245);
+        private static readonly Color32 OwnTooth = Alpha(TacticalSectorGrid.FriendlyTint, 255);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
         internal static readonly Color32 Ink = new Color32(228, 241, 245, 245);
@@ -48,6 +51,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly Vector2[] projected = new Vector2[FrontlineTraceLimits.MaximumPoints];
         private readonly Vector2[] stations = new Vector2[MaximumSamples];
         private readonly Vector2[] shifted = new Vector2[MaximumSamples];
+        // Map pixels per world metre at each station (the projection's local scale, perspective included).
+        private readonly float[] pixelsPerMetre = new float[MaximumSamples];
         // +1: our ground lies left of the trace's direction, -1: right, 0: no clear side.
         private readonly int[] ourSide = new int[MaximumTraces];
 
@@ -222,7 +227,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private int SampleTrace(int offset, int count, float density, int written)
         {
             int start = written;
-            float travel = 0f;
+            float travel = 0f, scaleHere = 0f;
 
             for (int p = offset; p + 1 < offset + count && written < MaximumSamples; p++)
             {
@@ -231,10 +236,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Vector2 delta = b - a;
                 float segment = delta.magnitude;
                 if (segment < 0.01f) continue;
+                float wx = points[p + 1].X - points[p].X, wz = points[p + 1].Z - points[p].Z;
+                float world = Mathf.Sqrt(wx * wx + wz * wz);
+                if (world > 1f) scaleHere = segment / world;
 
                 float at = travel;
                 while (at < segment && written < MaximumSamples)
                 {
+                    pixelsPerMetre[written] = scaleHere;
                     stations[written++] = a + delta * (at / segment);
                     at += density;
                 }
@@ -243,7 +252,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Vector2 end = projected[offset + count - 1];
             if (written < MaximumSamples && (written == start ||
                 (end - stations[written - 1]).sqrMagnitude > .01f))
+            {
+                pixelsPerMetre[written] = scaleHere;
                 stations[written++] = end;
+            }
             return written;
         }
 
@@ -262,7 +274,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (count < 2) continue;
                 int ticks = (count - 2) / TickEvery + 1;
                 if (vh.currentVertCount + count * MapStroke.RibbonVertices * 4 +
-                    ticks * MapStroke.SegmentVertices > MaximumVertices) return;
+                    Mathf.Max(ticks * MapStroke.SegmentVertices, count * 6) > MaximumVertices) return;
 
                 bool hot = pressures[order[t]] >= .35f;
                 int side = ourSide[order[t]];
@@ -286,16 +298,36 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, OwnStripe);
                 Shift(start, end, -side * StripeOffset);
                 MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, TheirStripe);
-                // Teeth: small triangles standing on their stripe and pointing into their ground.
-                Color32 tooth = hot ? HotTooth : OwnStripe;
-                for (int i = start + TickEvery / 2; i + 1 < end; i += TickEvery)
-                {
-                    Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
-                    Vector2 into = new Vector2(along.y, -along.x) * side;   // right of travel when ours is left
-                    Vector2 foot = stations[i] + into * StripeOffset;
-                    Triangle(vh, (foot - along * ToothHalf) * toLocal, (foot + along * ToothHalf) * toLocal,
-                        (foot + into * ToothReach) * toLocal, tooth);
-                }
+                // Teeth wear our own colour (HOI4: your line pressing into theirs); heat shows in the glow, not as a second ink.
+                Teeth(vh, start, end, side, OwnTooth, toLocal);
+            }
+        }
+
+        /// <summary>
+        /// Teeth: cased triangles standing on their stripe and pointing into their ground, one every
+        /// <see cref="ToothSpacingWorld"/> metres of front, each sized from the projection's scale where it stands.
+        /// </summary>
+        private void Teeth(VertexHelper vh, int start, int end, int side, Color32 tooth, float toLocal)
+        {
+            float walked = 0f, next = ToothSpacingWorld * .5f;
+            for (int i = start + 1; i + 1 < end; i++)
+            {
+                float scaleHere = pixelsPerMetre[i];
+                if (!(scaleHere > 1e-6f)) continue;
+                walked += (stations[i] - stations[i - 1]).magnitude / scaleHere;
+                if (walked < next) continue;
+
+                float reach = Mathf.Clamp(ToothWorld * scaleHere, ToothMinPx, ToothMaxPx);
+                // A clamped tooth keeps at least two and a half of its own lengths of air between neighbours.
+                next = walked + Mathf.Max(ToothSpacingWorld, reach * 2.5f / scaleHere);
+                Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
+                Vector2 into = new Vector2(along.y, -along.x) * side;   // right of travel when ours is left
+                Vector2 foot = stations[i] + into * (StripeOffset + StripeHalf * .5f);
+                float half = reach * .5f;
+                Triangle(vh, (foot - along * (half + .9f) - into * .5f) * toLocal, (foot + along * (half + .9f) - into * .5f) * toLocal,
+                    (foot + into * (reach + 1.2f)) * toLocal, Casing);
+                Triangle(vh, (foot - along * half) * toLocal, (foot + along * half) * toLocal,
+                    (foot + into * reach) * toLocal, tooth);
             }
         }
 

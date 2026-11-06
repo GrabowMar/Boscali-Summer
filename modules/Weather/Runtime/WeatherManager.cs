@@ -32,7 +32,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     {
         private WeatherSettings settings;
         private bool? captureRainVisuals;
-        private bool RainVisualsEnabled => captureRainVisuals ?? (settings != null && settings.RainVisualsEnabled.Value);
+        // NoAtmoFX draws rain and canopy rain when SET > COMPAT hands rain over.
+        private bool RainVisualsEnabled => captureRainVisuals ??
+            (settings != null && settings.RainVisualsEnabled.Value && !BoscaliSummer.Core.Game.ForeignMods.RainYielded);
+        // NoAtmoFX draws the sky when SET > COMPAT hands it over: our clouds, sun shafts and bolts stand down (rain audio stays).
+        private static bool SkyYielded => BoscaliSummer.Core.Game.ForeignMods.SkyYielded;
         internal void SetCaptureRainVisuals(bool? enabled) => captureRainVisuals = enabled;
         private bool? captureDarkNights;
         private bool DarkNightsEnabled => captureDarkNights ?? (settings == null || settings.DarkNightsEnabled.Value);
@@ -565,8 +569,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             else { environmentSnapshot = default; TeardownRainSystems(); atmosphere.Restore(); HighAltitudeSky.Clear(); sunDisc.Release(); }
             if (!Application.isBatchMode && settings != null && settings.Enabled.Value) heatHaze.Update(Time.unscaledTime);
             else heatHaze.Restore();
-            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value, viewTransmission);
-            bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value;
+            sunShafts.Tick(LevelInfo.i, view, liveWeather && settings.SunShaftsEnabled.Value && !SkyYielded, viewTransmission);
+            bool wantClouds = liveWeather && settings.CinematicCloudsEnabled.Value && !SkyYielded;
             if (wantClouds)
             {
                 flightClouds ??= new WeatherVolumeDressing(logger);
@@ -776,10 +780,11 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             else phenomena.Reset();
 
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
-            if (settings.LightningEnabled.Value || settings.RainAudioEnabled.Value)
+            bool bolts = settings.LightningEnabled.Value && !SkyYielded, thunder = settings.RainAudioEnabled.Value && !SkyYielded;
+            if (bolts || thunder)
                 lightning.Tick(Field, missionTime, cloudPosition, currentCam,
-                    settings.ReducedFlashes.Value || !settings.LightningEnabled.Value,
-                    settings.RainAudioEnabled.Value, isCockpit);
+                    settings.ReducedFlashes.Value || !bolts,
+                    thunder, isCockpit);
             else lightning.Reset();
 
             float cloudMist = RainVisualsEnabled ? cloudMoisture * rainExposure : 0f;

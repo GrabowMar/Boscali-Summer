@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public int Count;
         /// <summary>The first aircraft's pilot (null: the roster's upcoming pilot); refused by name when not free.</summary>
         public WingPilot Pilot;
-        /// <summary>A LOADOUT template id; with <see cref="OwnLoadout"/> false and no template, the game's AUTO pick.</summary>
+        /// <summary>The custom LOADOUT's record id; with <see cref="OwnLoadout"/> false and no id, the game's AUTO pick.</summary>
         public string Template;
         public bool OwnLoadout;
         /// <summary>(0, 1]; 0: full.</summary>
@@ -126,11 +126,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public void Deactivate() => Clear();
 
-        public void Tick(float dt)
-        {
-            // The HANGAR store follows the local player's faction (spec WMC rebuild §SUPPLY).
-            WingSupplyReserve.Tick();
-        }
+        public void Tick(float dt) { }
 
         public void FixedTick(float dt)
         {
@@ -363,8 +359,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 WingPilot pilot = null;
                 try
                 {
-                    int held = sandbox ? 0 : WingSupplyReserve.CountOf(definition);
-                    CallQuote quote = WingLedger.Quote(definition, hq, true, sandbox, r.Price, held);
+                    CallQuote quote = WingLedger.Quote(definition, hq, true, sandbox, r.Price);
                     if (!quote.Allowed)
                     {
                         refused = quote.Reason;
@@ -392,7 +387,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     GroundLaunch launch = airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel, livery) : null;
                     if (launch == null)
                     {
-                        quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price, held);
+                        quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price);
                         launch = FromServicePoint(airbase, definition, traffic, hq, player, loadout, fuel, livery,
                             ProfileReader.ClassOf(template) == AirframeClass.FixedWing);
                     }
@@ -402,10 +397,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                         break;
                     }
                     bool viaHangar = launch.Hangar != null;
-                    // A stored airframe is used up only now the spawn went ahead; a hangar drew one from the faction for it,
-                    // which goes back (so does a sandbox hangar's draw: the sandbox never moves the faction's stock).
-                    if (held > 0) WingSupplyReserve.TakeForLaunch(definition);
-                    if (viaHangar && (held > 0 || sandbox) && hq != null) hq.ModifyUnitSupply(definition, 1);
+                    // A sandbox hangar's draw goes back: the sandbox never moves the faction's stock.
+                    if (viaHangar && sandbox && hq != null) hq.ModifyUnitSupply(definition, 1);
                     launch.Charge = WingLedger.Take(quote, hq, definition, viaHangar, sandbox);
                     launch.Pilot = pilot;
                     launch.Field = airbase;
@@ -563,11 +556,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             for (int i = groundPending.Count - 1; i >= 0; i--)
             {
                 GroundLaunch g = groundPending[i];
-                if (g.Aircraft == null)
+                // Never seen (a true null): an aircraft destroyed after it appeared is a destroyed object, handled below as spent.
+                if ((object)g.Aircraft == null)
                 {
                     GameObject spawned = g.Hangar != null ? GameAccess.GetHangarSpawnedObject(g.Hangar) : null;
-                    if (spawned != null && !ReferenceEquals(spawned, g.Before)) g.Aircraft = spawned.GetComponent<Aircraft>();
-                    if (g.Aircraft == null)
+                    Aircraft found = spawned != null && !ReferenceEquals(spawned, g.Before) ? spawned.GetComponent<Aircraft>() : null;
+                    if (found != null) g.Aircraft = found;
+                    if ((object)g.Aircraft == null)
                     {
                         if (Time.time - g.Since > HangarSpawnTimeoutSeconds)
                         {

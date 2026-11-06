@@ -21,22 +21,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             this.withPrev = withPrev ?? new bool[Sets];
             this.pylons = pylons ?? new int[Sets];
             this.precludes = precludes ?? new int[Sets][];
-            for (int s = 0; s < Sets; s++)
-            {
-                Pylons += s < this.pylons.Length ? Math.Max(0, this.pylons[s]) : 0;
-            }
         }
 
         public int Sets { get; }
         public int Stations => Sets;
-        public int Pylons { get; }
-
-        public int First(int st) => st;
-
-        /// <summary>One past the station's last set.</summary>
-        public int End(int st) => st + 1;
-
-        public int StationOf(int set) => set;
 
         public bool MirrorsPrevious(int st) => st > 0 && st < withPrev.Length && withPrev[st];
 
@@ -45,34 +33,23 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public int PylonsAt(int set) => set < pylons.Length ? Math.Max(0, pylons[set]) : 0;
 
-        public int PylonsOf(int st)
-        {
-            int n = 0;
-            for (int s = First(st); s < End(st); s++) n += PylonsAt(s);
-            return n;
-        }
-
         /// <summary>The native set name, including LEFT/RIGHT, else "STATION n".</summary>
         public string Name(int st)
         {
-            int s = First(st);
-            string n = (Get(names, s) ?? "").Trim();
+            string n = (Get(names, st) ?? "").Trim();
             return n.Length > 0 ? n : "STATION " + (st + 1);
         }
 
-        public string KeyOf(IReadOnlyList<string> keys, int st)
-        {
-            int s = First(st);
-            return keys != null && s < keys.Count ? keys[s] : null;
-        }
+        public string KeyOf(IReadOnlyList<string> keys, int st) => keys != null && st < keys.Count ? keys[st] : null;
 
         /// <summary>Fits <paramref name="key"/> on this station and empties the stations it blocks; returns how many it
-        /// emptied, or −1 (and changes nothing) when the station is itself blocked.</summary>
-        public int Pick(List<string> keys, int st, string key)
+        /// emptied, or −1 (and changes nothing) when the station is itself blocked. <paramref name="known"/> is the key list the
+        /// block test reads (a page that leaves unknown stores out passes the same list it shows); null reads <paramref name="keys"/>.</summary>
+        public int Pick(List<string> keys, int st, string key, IReadOnlyList<string> known = null)
         {
             Normalize(keys);
-            if (BlockedBy(keys, st) >= 0) return -1;
-            for (int s = First(st); s < End(st); s++) keys[s] = key;
+            if (BlockedBy(known ?? keys, st) >= 0) return -1;
+            keys[st] = key;
             if (string.IsNullOrEmpty(key)) return 0;
             int emptied = 0;
             for (int o = 0; o < Stations; o++)
@@ -87,20 +64,16 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public void Clear(List<string> keys, int st)
         {
             Normalize(keys);
-            for (int s = First(st); s < End(st); s++) keys[s] = null;
+            keys[st] = null;
         }
 
         /// <summary>The station whose store keeps this one empty, or −1.</summary>
         public int BlockedBy(IReadOnlyList<string> keys, int st)
         {
-            if (keys == null) return -1;
-            for (int s = First(st); s < End(st); s++)
-            {
-                int[] p = Get(precludes, s);
-                if (p == null) continue;
-                foreach (int j in p)
-                    if (j >= 0 && j < keys.Count && j < Sets && StationOf(j) != st && !string.IsNullOrEmpty(keys[j])) return StationOf(j);
-            }
+            int[] p = keys != null ? Get(precludes, st) : null;
+            if (p == null) return -1;
+            foreach (int j in p)
+                if (j >= 0 && j < keys.Count && j < Sets && j != st && !string.IsNullOrEmpty(keys[j])) return j;
             return -1;
         }
 
@@ -145,13 +118,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>Whether any set of station <paramref name="blocked"/> lists a set of station <paramref name="by"/>.</summary>
         private bool Precludes(int blocked, int by)
         {
-            for (int s = First(blocked); s < End(blocked); s++)
-            {
-                int[] p = Get(precludes, s);
-                if (p == null) continue;
-                foreach (int j in p)
-                    if (j >= 0 && j < Sets && StationOf(j) == by) return true;
-            }
+            int[] p = Get(precludes, blocked);
+            if (p == null) return false;
+            foreach (int j in p)
+                if (j == by && j >= 0 && j < Sets) return true;
             return false;
         }
 

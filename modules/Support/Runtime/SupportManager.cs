@@ -408,7 +408,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
             if (anyArmed)
             {
-                if (Input.GetKeyDown(KeyCode.Escape))
+                // Stays armed when the map closes: every perk arms through this pick and a pod or a team laser can still aim it.
+                if (Core.Ui.MapTool.CancelPressed())
                 {
                     CancelArmed();
                     return;

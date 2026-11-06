@@ -40,8 +40,14 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>Ambient kept under a cloud deck: a full overcast overhead takes 55 % (start value for the capped native conditions, tuned on the bench; spec 8.1).</summary>
         public static float ShadeAmbient(float shade) => 1f - 0.55f * Scalar.Clamp01(shade);
 
-        /// <summary>Extra low haze under a cloud deck: up to twice as thick.</summary>
-        public static float ShadeFog(float shade) => 1f + 1.0f * Scalar.Clamp01(shade);
+        /// <summary>Extra low haze under a cloud deck: up to 2.6 times as thick (2026-11-05: twice read as a clear day under a grey lid).</summary>
+        public static float ShadeFog(float shade) => 1f + 1.6f * Scalar.Clamp01(shade);
+
+        /// <summary>Haze floor under rain and deck (fog density), so a mission that starts with thin or zero fog still hazes when the weather turns.</summary>
+        public static float HazeFloor(float rain, float shade) => 0.00012f * Scalar.Clamp01(rain) + 0.00015f * Scalar.Clamp01(shade);
+
+        /// <summary>How far the ambient gradients are pulled to grey under a full deck: overcast light has no blue sky in it.</summary>
+        public const float ShadeAmbientGrey = 0.65f;
 
         /// <summary>
         /// True when a value read back equals the one we last wrote (float re-read noise

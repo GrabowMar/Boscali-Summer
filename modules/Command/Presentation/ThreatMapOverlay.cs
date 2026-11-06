@@ -14,18 +14,26 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// <summary>Range rings of the hovered map unit, drawn on the relief. The stock tooltip draws its
     /// weapon and sensor circles on the flat sheet, which the relief pins and hides, so they land in the
     /// wrong place there: while the relief draws, those circles are switched off and the same two ranges
-    /// are drawn as projected vector rings instead (solid: sensor reach, dashed: weapon reach).</summary>
+    /// are drawn as projected vector rings instead (solid: sensor reach, dashed: weapon reach).
+    /// Own-side nuclear exclusion zones get the same treatment: the stock circle sprite sits on the flat
+    /// sheet, so on the relief it is hidden and the zone is drawn here as a heavy projected ring.</summary>
     internal sealed class ThreatMapOverlay : MonoBehaviour, ISceneService
     {
-        private const int MaxEmitters = 1;
+        private const int MaxZones = 8;
+        private const int MaxEmitters = 1 + MaxZones;
         private const float MinimumDrawableRadius = 1f;
 
-        /// <summary>One unit's two ranges, kept from the range pass to the bake.</summary>
+        /// <summary>The stock exclusion circles (<c>DynamicMap.DisplayExclusionZone</c>), hidden while the relief draws.</summary>
+        private static readonly System.Collections.Generic.List<GameObject> nativeZones = new System.Collections.Generic.List<GameObject>(4);
+        private static bool nativeZonesHidden;
+
+        /// <summary>One unit's two ranges (or one exclusion zone), kept from the range pass to the bake.</summary>
         private struct Sample
         {
             public Vector3 Position;
             public float RadarRadius;
             public float OpticalRadius;
+            public float ZoneRadius;
         }
 
         private static readonly AccessTools.FieldRef<DynamicMap, MapToolTip> ToolTipRef =
@@ -67,6 +75,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             dynamicMap = null;
             HoverSensorKm = 0f;
             initialized = false;
+            nativeZones.Clear();
+            nativeZonesHidden = false;
             TheaterFrame.Invalidate();
         }
 
@@ -90,7 +100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
             // The flat map's own circles are right; only the relief needs the replacement.
             bool relief = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
-            bool shown = settings.ThreatHeat.Value && DynamicMap.mapMaximized && relief;
+            bool shown = DynamicMap.mapMaximized && relief;
             SetShown(shown);
             if (!shown) return;
 
@@ -103,7 +113,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         /// (they are the ones sized to one unit before scaling); switch them off after it.</summary>
         private void LateUpdate()
         {
-            if (root == null || !root.activeSelf) return;
+            if (root == null || !root.activeSelf || !settings.ThreatHeat.Value) return;
             MapToolTip tip = ToolTipRef(dynamicMap);
             if (tip == null) return;
             HideRangeCircle(Circle1Ref(tip));
@@ -131,8 +141,25 @@ namespace BoscaliSummer.Modules.Command.Presentation
             initialized = true;
         }
 
+        internal static void AddNativeZone(GameObject circle)
+        {
+            if (circle == null) return;
+            nativeZones.RemoveAll(zone => zone == null);
+            nativeZones.Add(circle);
+            if (nativeZonesHidden) circle.SetActive(false);
+        }
+
+        private static void HideNativeZones(bool hide)
+        {
+            if (nativeZonesHidden == hide) return;
+            nativeZonesHidden = hide;
+            nativeZones.RemoveAll(zone => zone == null);
+            foreach (GameObject zone in nativeZones) zone.SetActive(!hide);
+        }
+
         private void SetShown(bool visible)
         {
+            HideNativeZones(visible);
             if (!visible) HoverSensorKm = 0f;
             if (root == null || root.activeSelf == visible) return;
             root.SetActive(visible);
@@ -148,7 +175,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Unit unit = tip != null && tip.isActiveAndEnabled && HoverRef(tip) is UnitMapIcon icon ? icon.unit : null;
             // The stock tooltip shows an aircraft's rings to its own side only, and none for a missile.
             FactionHQ hq = dynamicMap.HQ;
-            if (unit != null && !unit.disabled && !(unit is Missile) &&
+            if (settings.ThreatHeat.Value && unit != null && !unit.disabled && !(unit is Missile) &&
                 (!(unit is Aircraft) || hq == null || unit.NetworkHQ == hq) && MapUiAccess.TryPosition(unit, dynamicMap.HQ, out Vector3 position))
             {
                 float sensor = SensorRange(unit), weapon = WeaponRange(unit);
@@ -159,6 +186,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     HoverSensorKm = sensor * 0.001f;
                 }
             }
+            // The stock map shows a zone only to the side that launched it, for as long as the weapon lives.
+            if (hq != null)
+                foreach (NuclearOption.ExclusionZone zone in hq.GetExclusionZones())
+                {
+                    if (used >= MaxEmitters) break;
+                    if (!UnitRegistry.TryGetUnit(zone.sourceId, out Unit source) || source == null || source.disabled) continue;
+                    samples[used++] = new Sample { Position = zone.position.AsVector3(), ZoneRadius = zone.radius };
+                }
             if (graphic != null)
                 graphic.SetSource(samples, used, dynamicMap, settings != null ? settings.OverlayOpacity.Value : .65f);
         }
@@ -213,7 +248,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 count = length; map = owner; opacity = Mathf.Clamp01(alpha);
                 for (int i = 0; i < count; i++)
                 {
-                    changed |= sites[i].Position != source[i].Position ||
+                    changed |= sites[i].Position != source[i].Position || sites[i].ZoneRadius != source[i].ZoneRadius ||
                         sites[i].RadarRadius != source[i].RadarRadius || sites[i].OpticalRadius != source[i].OpticalRadius;
                     sites[i] = source[i];
                 }
@@ -245,6 +280,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 for (int i = 0; i < count; i++)
                 {
                     Sample site = sites[i];
+                    if (site.ZoneRadius > 0f)
+                    {
+                        // Heavier than a sensor ring, with a dashed inner ring so it reads as an area, not a range.
+                        Ring(vh, site.Position, site.ZoneRadius, false, radar, projection, active, scale, 2.2f);
+                        Ring(vh, site.Position, site.ZoneRadius * .92f, true, radar, projection, active, scale);
+                        continue;
+                    }
                     Ring(vh, site.Position, site.RadarRadius, false, radar, projection, active, scale);
                     Ring(vh, site.Position, site.OpticalRadius, true, optical, projection, active, scale);
                     if (Project(site.Position.x, site.Position.z, projection, active, out Vector2 at))
@@ -260,7 +302,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             }
 
             private void Ring(VertexHelper vh, Vector3 centre, float radius, bool dashed, Color ink,
-                IMapProjection projection, bool active, float scale)
+                IMapProjection projection, bool active, float scale, float width = 1f)
             {
                 if (!float.IsFinite(radius) || radius < MinimumDrawableRadius) return;
                 // Screen-space chord error below a fraction of a pixel at normal map scales.
@@ -275,7 +317,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     if (visible) points[run++] = point * scale;
                     if (!visible || i == segments || dashed && i % 4 == 3)
                     {
-                        MapStroke.Ribbon(vh, points, 0, run, 1f/scale, .7f, 1f, ink);
+                        MapStroke.Ribbon(vh, points, 0, run, 1f/scale, .7f * width, 1f, ink);
                         run = 0;
                     }
                 }
@@ -291,6 +333,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 point = new Vector2(x * map.mapDisplayFactor, z * map.mapDisplayFactor);
                 return float.IsFinite(point.x) && float.IsFinite(point.y);
             }
+        }
+    }
+
+    [HarmonyPatch(typeof(DynamicMap), nameof(DynamicMap.DisplayExclusionZone))]
+    internal static class ExclusionZoneCirclePatch
+    {
+        // The game instantiates the circle as the icon layer's last child and keeps no reference to it.
+        [HarmonyPostfix]
+        private static void Postfix(DynamicMap __instance)
+        {
+            Transform layer = __instance.iconLayer != null ? __instance.iconLayer.transform : null;
+            if (layer != null && layer.childCount > 0) ThreatMapOverlay.AddNativeZone(layer.GetChild(layer.childCount - 1).gameObject);
         }
     }
 }

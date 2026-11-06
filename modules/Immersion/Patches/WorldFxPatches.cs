@@ -34,6 +34,12 @@ namespace BoscaliSummer.Modules.Immersion.Patches
 
         private static void Postfix(AudioSource ___audioSource, AudioLowPassFilter ___filter)
         {
+            // The blast's light: the cockpit flash and the visor's auto-darkening read it (cockpit view only).
+            if (ImmersionManager.IsCockpitActive && ___audioSource != null)
+            {
+                Camera eye = SceneSingleton<CameraStateManager>.i?.mainCamera;
+                if (eye != null) Visuals.ExplosionFlash.Report(___audioSource.transform.position, eye.transform.position);
+            }
             if (!WorldFx.MuffleArmed || !ImmersionManager.IsCockpitActive || ___audioSource == null || ___filter == null) return;
             ___audioSource.bypassEffects = false;
             ___filter.cutoffFrequency = Mathf.Min(___filter.cutoffFrequency, CanopyCutoffHz);

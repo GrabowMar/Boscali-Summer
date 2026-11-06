@@ -1,6 +1,6 @@
 namespace BoscaliSummer.Modules.Wing.Domain.Pure
 {
-    /// <summary>One order result as the HUD chip and SORTIE's event list show it.</summary>
+    /// <summary>One order result as the HUD chip shows it.</summary>
     internal struct AckLine
     {
         public float Time;
@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Wing.Domain.Pure
             : (Who + " UNABLE · " + (string.IsNullOrEmpty(Reason) ? "REFUSED" : Reason.ToUpperInvariant())).Trim();
     }
 
-    /// <summary>Order results for the HUD ack chip and BEHAVIOUR › SORTIE's events (user ruling 2026-10-04). A bounded ring:
+    /// <summary>Order results for the HUD ack chip (user ruling 2026-10-04). A bounded ring:
     /// the newest <see cref="Capacity"/> are kept; a chip shows for <see cref="ChipSeconds"/>, at most <see cref="MaxChips"/>.</summary>
     internal sealed class AckFeed
     {

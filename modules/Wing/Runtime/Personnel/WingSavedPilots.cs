@@ -45,26 +45,30 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 problems.Add(e.Message);
                 unreadable = true;
             }
-            // Review R7: a file that cannot be read is kept aside before anything writes over it; if it cannot be kept, nothing writes.
+            store = SavedPilotStore.FromJson(json, problems);
+            // Review R7: a file that cannot be read, or that loads short of what it holds (too many pilots, a duplicate callsign), is
+            // kept aside before anything writes over it; if it cannot be kept, nothing writes.
             locked = false;
             Problem = null;
-            if (unreadable || SavedPilotStore.Unreadable(json))
+            if (unreadable || problems.Count > 0)
             {
+                bool partial = !unreadable && !SavedPilotStore.Unreadable(json);
                 string kept = FilePath + ".bad";
                 try
                 {
                     File.Copy(FilePath, kept, overwrite: true);
-                    Problem = Path.GetFileName(FilePath) + " could not be read: kept as " + Path.GetFileName(kept) + "; SAVE starts a new file";
+                    Problem = Path.GetFileName(FilePath) + (partial ? " loaded with problems: the original is kept as " + Path.GetFileName(kept)
+                        : " could not be read: kept as " + Path.GetFileName(kept) + "; SAVE starts a new file");
                 }
                 catch (Exception e)
                 {
                     locked = true;
-                    Problem = Path.GetFileName(FilePath) + " could not be read or kept aside: saving is off until it is fixed";
+                    Problem = Path.GetFileName(FilePath) + (partial ? " loaded with problems and could not be kept aside" : " could not be read or kept aside")
+                        + ": saving is off until it is fixed";
                     problems.Add(e.Message);
                 }
                 WingLog.Logger.LogWarning("[Pilots] " + Problem);
             }
-            store = SavedPilotStore.FromJson(json, problems);
             foreach (string p in problems) WingLog.Logger.LogWarning("[Pilots] " + Path.GetFileName(FilePath) + ": " + p);
             WingPilotRoster.SavedTaken = c => store != null && store.Find(c) != null;
             tallied = false;
@@ -96,6 +100,12 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             CustomPilotRecord saved = s.Find(target);
             if (live != null && saved != null) WingPilotRoster.UpdateIdentity(live, saved);
+            if (original != null && target != null && !string.Equals(original, target, StringComparison.OrdinalIgnoreCase))
+            {
+                // A rename carries the PNG portrait and the player's pick along with the callsign.
+                MovePortrait(original, target);
+                if (IsMe(original)) SetMe(target);
+            }
             WingPilotRoster.Touch();
             return true;
         }
@@ -203,6 +213,121 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
         }
 
+        // ---------------------------------------------------------------- the player's pilot (the SQD dossier's profile)
+
+        /// <summary>Progression's [Squadron] PilotProfile: the saved pilot the player flies as (the SQD dossier shows it). Set by
+        /// WingModule; null when the config is not there.</summary>
+        public static BepInEx.Configuration.ConfigEntry<string> Me;
+
+        public static bool IsMe(string callsign) =>
+            Me != null && !string.IsNullOrEmpty(callsign) && string.Equals(Me.Value, callsign, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The player flies as <paramref name="callsign"/> (null or empty: the host's squadron record).</summary>
+        public static void SetMe(string callsign)
+        {
+            if (Me != null) Me.Value = callsign ?? "";
+        }
+
+        // ---------------------------------------------------------------- PNG portraits (Pilots/Portraits/<CALLSIGN>.png)
+
+        public static string PortraitFolder => Path.Combine(Folder, "Portraits");
+
+        public static string PortraitPath(string callsign) => Path.Combine(PortraitFolder, PilotText.Callsign(callsign) + ".png");
+
+        public static bool HasPortraitFile(string callsign)
+        {
+            try { return !string.IsNullOrEmpty(callsign) && File.Exists(PortraitPath(callsign)); }
+            catch (Exception) { return false; }
+        }
+
+        /// <summary>LOAD PNG: an image file becomes the pilot's portrait (cropped to 4:5, 256x320). The source is only read.</summary>
+        public static bool LoadPortrait(string callsign, string source, out string why)
+        {
+            why = null;
+            try
+            {
+                var info = new FileInfo(source);
+                if (!info.Exists || info.Length > 32L * 1024 * 1024)
+                {
+                    why = "Pick a PNG or JPG under 32 MB.";
+                    return false;
+                }
+                byte[] png = PilotPortrait.ToPortraitPng(File.ReadAllBytes(source));
+                if (png == null)
+                {
+                    why = Path.GetFileName(source) + " is not a PNG or JPG image.";
+                    return false;
+                }
+                Directory.CreateDirectory(PortraitFolder);
+                File.WriteAllBytes(PortraitPath(callsign), png);
+                PilotPortrait.Recheck(callsign);
+                return true;
+            }
+            catch (Exception e)
+            {
+                why = "Could not read " + Path.GetFileName(source) + ": " + e.Message;
+                return false;
+            }
+        }
+
+        /// <summary>SAVE PNG: the portrait as shown (the PNG on file, else the generated look) written to <paramref name="target"/>.</summary>
+        public static bool SavePortrait(string callsign, PortraitSelection look, string target, out string why)
+        {
+            why = null;
+            try
+            {
+                byte[] png = HasPortraitFile(callsign) ? File.ReadAllBytes(PortraitPath(callsign)) : PilotPortrait.SelectionPng(look);
+                if (png == null)
+                {
+                    why = "The portrait could not be drawn.";
+                    return false;
+                }
+                File.WriteAllBytes(target, png);
+                return true;
+            }
+            catch (Exception e)
+            {
+                why = "Could not write " + Path.GetFileName(target) + ": " + e.Message;
+                return false;
+            }
+        }
+
+        /// <summary>CLEAR PNG: back to the generated look. The file is kept aside as .png.old (one level of undo).</summary>
+        public static bool ClearPortrait(string callsign)
+        {
+            try
+            {
+                string path = PortraitPath(callsign);
+                if (!File.Exists(path)) return false;
+                string old = path + ".old";
+                if (File.Exists(old)) File.Delete(old);
+                File.Move(path, old);
+                PilotPortrait.Recheck(callsign);
+                return true;
+            }
+            catch (Exception e)
+            {
+                WingLog.Logger.LogWarning("[Pilots] could not clear the portrait of " + callsign + ": " + e.Message);
+                return false;
+            }
+        }
+
+        private static void MovePortrait(string from, string to)
+        {
+            try
+            {
+                string a = PortraitPath(from), b = PortraitPath(to);
+                if (!File.Exists(a) || File.Exists(b)) return;
+                File.Move(a, b);
+                PilotPortrait.Recheck(from);
+                PilotPortrait.Recheck(to);
+            }
+            catch (Exception e)
+            {
+                WingLog.Logger.LogWarning("[Pilots] could not carry the portrait of " + from + " to " + to + ": " + e.Message);
+            }
+        }
+
         /// <summary>A callsign flying this mission unsaved (other than <paramref name="self"/>): a save or import must not take it.</summary>
         private static bool LiveUnsaved(string callsign, WingPilot self)
         {
@@ -219,6 +344,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             bool ok = AtomicFile.WriteAllText(FilePath, Store.ToJson(), out string error);
             if (!ok) WingLog.Logger.LogWarning("[Pilots] could not write " + Path.GetFileName(FilePath) + ": " + error);
+            else Problem = null;
             return ok;
         }
     }

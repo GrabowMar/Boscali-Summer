@@ -10,11 +10,10 @@ using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL › FORMATION, the Station Board (spec 2026-10-04 §4.2; mockup board/formation.html #a): a plan view of the scope
-    /// element's slots with an error ring each and its members live, four measured numbers (IN SLOT, SLOT RMS, STATION, MIN SEP), one row
-    /// per member (slot, error, closure, phase), a strip of favourite shapes with ALL SHAPES › (a window of drawn shape cards by family),
-    /// a spacing stepper over the shape's own range and a stack row in metres. The scope is the wing table's. The numbers come from what
-    /// the snapshot carries (<see cref="SnapshotMember"/>.Err10, Closure, Phase), so a client reads the rows too; the plan view and the
-    /// shapes are the host's. The maneuvers are ORDERS' REACT row.</summary>
+    /// element's slots with an error ring each and its members live, one row per member (slot, error, phase), a strip of favourite
+    /// shapes with ALL SHAPES › (a window of drawn shape cards by family), a spacing stepper over the shape's own range and a stack row
+    /// in metres. The scope is the wing table's. The rows come from what the snapshot carries (<see cref="SnapshotMember"/>.Err10,
+    /// Phase), so a client reads them too; the plan view and the shapes are the host's. The maneuvers are ORDERS' REACT row.</summary>
     internal sealed class WmcForm : IWmcPage
     {
         private const int MaxShapes = 12, MaxFamilies = 4, Favourites = 5;
@@ -23,12 +22,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly string[] StackWords = { "+30", "+10", "LEVEL", "-10", "-30" };
         private static readonly string[] StackTexts = { "Going up thirty metres", "Going up ten metres", "Level with you", "Going down ten metres", "Going down thirty metres" };
 
-        private readonly WmcControls ids;
         private AvFlow flow;
         private WmcContext last;
         private AvSection stationSection, shapeSection, spacingSection;
         private WmcPlanCard planCard;
-        private AvMetric mInSlot, mRms, mStation, mSep;
         private WmcStationRows memberRows;
         private AvSection memberSection;
         private WmcShapeCells favourites;
@@ -39,19 +36,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly List<FormationDefinition> shapes = new List<FormationDefinition>();
         private readonly List<FormationDefinition> favourite = new List<FormationDefinition>(Favourites);
         private readonly List<string> families = new List<string>();
-        private readonly byte[] phases = new byte[StationData.Max], errs = new byte[StationData.Max];
-        private readonly float[] px = new float[StationData.Max + 1], pz = new float[StationData.Max + 1];
         private readonly float[] presets = { FormationCatalog.Close, FormationCatalog.Standard, FormationCatalog.Open, FormationCatalog.Spread };
-        private readonly string[] shapeIds = new string[MaxShapes];
         private FormationDefinition shownShape;
         private string captionShown, memberCaptionShown, spacingCaptionShown;
         private int shapesKey = int.MinValue, stackShown = -1;
         private ShapeWindow window;
-
-        public WmcForm(WmcControls controls)
-        {
-            ids = controls;
-        }
 
         public string Hint => "Shapes are the scope element's; spacing and stack are the whole wing's.";
 
@@ -62,13 +51,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             flow = pageFlow;
             stationSection = flow.Section(AvIcon.LayersSubtract, "STATION", "");
             planCard = flow.Add(new WmcPlanCard(flow.Content));
-            mInSlot = new AvMetric(flow.Content, "IN SLOT");
-            mRms = new AvMetric(flow.Content, "SLOT RMS");
-            mStation = new AvMetric(flow.Content, "STATION");
-            mSep = new AvMetric(flow.Content, "MIN SEP");
-            flow.Row(mInSlot, mRms, mStation, mSep);
 
-            memberSection = flow.Section(AvIcon.Stack2, "MEMBERS", "ERROR · CLOSURE · STATE");
+            memberSection = flow.Section(AvIcon.Stack2, "MEMBERS", "ERROR · STATE");
             memberRows = flow.Add(new WmcStationRows(flow.Content));
 
             shapeSection = flow.Section(AvIcon.LayersSubtract, "SHAPE", "FAVOURITES");
@@ -76,36 +60,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < Favourites; i++)
             {
                 favourites[i].Help = "Fly this shape with the scope's element.";
-                ids.Add("form.fav" + i, favourites[i]);
             }
             allShapes = flow.Buttons(new AvControl.Spec("ALL SHAPES ›", OpenShapes, AvButtonStyle.Default, AvIcon.LayersSubtract)).Controls[0];
             allShapes.Help = "Every shape that suits the wing, by family, drawn: pick one and apply it.";
-            ids.Add("form.shapes", allShapes);
-            ids.Add("form.shapes.open", allShapes);
-            // The 0.9 family and shape buttons: a family's first shape, and the current family's shapes in order.
-            for (int i = 0; i < MaxFamilies; i++)
-            {
-                int k = i;
-                ids.Add("form.family" + i, () => PickFamily(k), () => k < families.Count);
-            }
-            for (int i = 0; i < MaxShapes; i++)
-            {
-                int k = i;
-                ids.Add("form.shape" + i, () => PickShape(k), () => shapeIds[k] != null);
-            }
 
             spacingSection = flow.Section(AvIcon.LayersSubtract, "SPACING", "WHOLE WING");
             spacingRow = flow.Add(new WmcSpacingRow(flow.Content, () => StepSpacing(-1), () => StepSpacing(1)));
             spacingRow.Minus.Help = "Close the formation up to the next closer spacing.";
             spacingRow.Plus.Help = "Open the formation out to the next wider spacing.";
-            ids.Add("form.spacing-", spacingRow.Minus);
-            ids.Add("form.spacing+", spacingRow.Plus);
-            string[] spacingTips = { "CLOSE: 40 m between slots.", "STANDARD: 80 m between slots.", "OPEN: 160 m between slots.", "SPREAD: 350 m between slots." };
-            for (int i = 0; i < spacingTips.Length; i++)
-            {
-                int k = i;
-                ids.Add("form.spacing" + i, () => WmcPostureActions.Spacing(last, k), () => true);
-            }
 
             var stackSpecs = new AvControl.Spec[StackWords.Length];
             for (int i = 0; i < stackSpecs.Length; i++)
@@ -117,12 +79,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < StackWords.Length; i++)
             {
                 stackRow.Controls[i].Help = "The wing flies " + (StackMetres[i] > 0f ? AvNum.Fixed(StackMetres[i], 0) + " m above you." : StackMetres[i] < 0f ? AvNum.Fixed(-StackMetres[i], 0) + " m below you." : "level with you.");
-                ids.Add("form.stack" + StackWords[i].ToLowerInvariant(), stackRow.Controls[i]);
             }
-            // The 0.9 stack words: high, level, low are the two outer steps and level.
-            ids.Add("form.high", stackRow.Controls[0]);
-            ids.Add("form.level", stackRow.Controls[2]);
-            ids.Add("form.low", stackRow.Controls[4]);
         }
 
         public void Shown(WmcContext c)
@@ -133,22 +90,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             last = c;
             RefreshFormation(c);
-        }
-
-        private void PickFamily(int i)
-        {
-            if (i >= families.Count) return;
-            WmcUi.Order(last, () =>
-            {
-                FormationDefinition first = shapes.Find(d => d.Family == families[i]);
-                if (first != null) WingOrders.Run(new WingOrder { Kind = OrderKind.SetShape, Text = first.Id, Scope = last.Scope });
-            });
-        }
-
-        private void PickShape(int i)
-        {
-            if (i < 0 || i >= MaxShapes) return;
-            WmcPostureActions.Shape(last, shapeIds[i]);
         }
 
         private void PickFavourite(int i)
@@ -164,16 +105,17 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcUi.Order(last, () => WingCommands.Stack(metres, what));
         }
 
-        /// <summary>The next closer (<paramref name="dir"/> -1) or wider (+1) spacing preset that fits the shape's range.</summary>
+        /// <summary>The next closer (<paramref name="dir"/> -1) or wider (+1) spacing preset that fits the shape's range and moves the
+        /// spacing shown (the preset is the wing's, the shown metres are clamped to the shape's range).</summary>
         private void StepSpacing(int dir)
         {
             WingService w = last?.Wing;
             FormationSelection sel = w?.Selection;
             if (sel == null || last.Client) return;
             FormationDefinition shape = w.ShapeOf(last.ScopeElement) ?? sel.Current;
-            int now = (int)sel.Spacing;
-            for (int k = now + dir; k >= 0 && k < presets.Length; k += dir)
-                if (presets[k] >= shape.SpacingMin - 0.5f && presets[k] <= shape.SpacingMax + 0.5f)
+            float shown = shape.ClampSpacing(FormationSelection.Metres(sel.Spacing));
+            for (int k = (int)sel.Spacing + dir; k >= 0 && k < presets.Length; k += dir)
+                if (presets[k] >= shape.SpacingMin - 0.5f && presets[k] <= shape.SpacingMax + 0.5f && (presets[k] - shown) * dir > 0.5f)
                 {
                     WmcPostureActions.Spacing(last, k);
                     return;
@@ -235,7 +177,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 data.Who[at] = WingRows.Number(m.Slot);
                 data.Phase[at] = m.Phase;
                 data.ErrorM[at] = StationMath.Error(m.Err10);
-                data.Closure[at] = m.Closure;
                 data.Picked[at] = c.Selection.Contains(m.Id);
                 data.Right[at] = data.Aft[at] = 0f;
                 ids3[at] = m.Id;
@@ -243,8 +184,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             data.Count = n;
             data.HaveLive = n > 0;
             if (w == null || n == 0 || shape == null) return;
-            if (!LeaderFrame(w, e, out Vec3 at0, out float heading)) return;
+            if (!LeaderFrame(w, e, out Vec3 at0, out float heading, out bool you)) return;
             data.HeadingDeg = heading;
+            data.LeadIsYou = you;
             data.HavePos = true;
             Vec3 fwd = Vec3.FromHeading(heading), right = new Vec3(fwd.Z, 0f, -fwd.X);
             for (int i = 0; i < n; i++)
@@ -269,47 +211,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             data.Who[to] = data.Who[from];
             data.Phase[to] = data.Phase[from];
             data.ErrorM[to] = data.ErrorM[from];
-            data.Closure[to] = data.Closure[from];
             data.Picked[to] = data.Picked[from];
             ids3[to] = ids3[from];
         }
 
-        /// <summary>Draws and lists <paramref name="d"/>: the plan view, the four numbers, the member rows (also the offline preview's
-        /// entry: it fills <see cref="StationData"/> by hand).</summary>
+        /// <summary>Draws and lists <paramref name="d"/>: the plan view, the member rows (also the offline preview's entry: it fills
+        /// <see cref="StationData"/> by hand).</summary>
         internal void Show(WmcContext c, StationData d, bool host, int e)
         {
             string note = host ? null : c != null && c.Client ? "Formation is the host's" : "NO WING";
             planCard.Show(d, note);
-            int n = d.Count;
-            for (int i = 0; i < n; i++)
-            {
-                phases[i] = d.Phase[i];
-                errs[i] = StationMath.QuantiseError(d.ErrorM[i]);
-            }
-            int inSlot = StationBoard.InSlot(phases, n);
-            float rms = StationBoard.Rms(errs, n);
-            mInSlot.Set(n > 0 ? AvNum.Fixed(inSlot, 0) : "—", n > 0 ? "/" + AvNum.Fixed(n, 0) : "", n > 0 ? (float)inSlot / n : 0f,
-                n == 0 ? AvState.Inert : inSlot == n ? AvState.Ready : AvState.Info);
-            mRms.Set(rms >= 0f ? AvNum.Fixed(rms, 0) : "—", rms >= 0f ? "m" : "", rms >= 0f ? Mathf.Clamp01(rms / 100f) : 0f,
-                rms < 0f ? AvState.Inert : rms <= StationMath.InSlotMetres ? AvState.Ready : AvState.Info);
-            int pct = StationBoard.Percent(inSlot, n);
-            float fraction = host && c.Wing != null ? c.Wing.Metrics.Snapshot(c.Wing.MissionTime).StationFraction : -1f;
-            if (fraction >= 0f) pct = Mathf.RoundToInt(fraction * 100f);
-            mStation.Set(n > 0 ? AvNum.Fixed(pct, 0) : "—", n > 0 ? "%" : "", n > 0 ? pct / 100f : 0f, n == 0 ? AvState.Inert : pct >= 75 ? AvState.Ready : AvState.Info);
-            float sep = -1f;
-            if (d.HavePos)
-            {
-                // The leader at the origin, each member at its offset from it (right is x, aft is -z).
-                px[0] = pz[0] = 0f;
-                for (int i = 0; i < n; i++)
-                {
-                    px[i + 1] = d.Right[i];
-                    pz[i + 1] = -d.Aft[i];
-                }
-                sep = StationBoard.MinSeparation(px, pz, n + 1);
-            }
-            mSep.Set(sep >= 0f ? AvNum.Fixed(sep, 0) : "—", sep >= 0f ? "m" : "", sep >= 0f ? Mathf.Clamp01(sep / 200f) : 0f,
-                sep < 0f ? AvState.Inert : sep < 30f ? AvState.Info : AvState.Ready);
             memberRows.Show(d);
 
             string stationCaption = d.Shape != null ? d.Shape.Name.ToUpperInvariant() + " · " + AvNum.Fixed(d.Spacing, 0) + " M · "
@@ -319,7 +230,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 captionShown = stationCaption;
                 stationSection.SetCaption(stationCaption);
             }
-            string memberCaption = n == 0 ? "NO MEMBERS" : "ELEMENT " + ElementRoster.Letter(e) + " · ERROR · CLOSURE · STATE";
+            string memberCaption = d.Count == 0 ? "NO MEMBERS" : "ELEMENT " + ElementRoster.Letter(e) + " · ERROR · STATE";
             if (memberCaption != memberCaptionShown)
             {
                 memberCaptionShown = memberCaption;
@@ -335,7 +246,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 }
                 spacingRow.Show(d.Shape.SpacingMin, d.Shape.SpacingMax, d.Spacing, presets);
             }
-            flow.RequestRelayout();
         }
 
         private static string StackWord(float stack) => Mathf.Abs(stack) < 0.5f ? "LEVEL" : (stack > 0f ? "+" : "") + AvNum.Fixed(stack, 0) + " M";
@@ -347,7 +257,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             shownShape = null;
             favourite.Clear();
             favourites.SetShown(0);
-            for (int i = 0; i < MaxShapes; i++) shapeIds[i] = null;
             families.Clear();
             shapeSection.SetCaption("HOST ONLY");
             flow.RequestRelayout();
@@ -355,21 +264,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void RefreshShapes(FormationSelection sel, FormationDefinition current)
         {
-            // The suitable list follows the wing's shape use (jet, rotary, escort): the wing's own shape names it.
-            int key = (current.Id?.GetHashCode() ?? 0) * 31 + (sel.Current?.Id?.GetHashCode() ?? 0);
+            // The suitable list follows the wing's shape use (jet, rotary, escort): the wing's own shape names it. The caption names
+            // the scope element, so a new element with the same shape redraws it too.
+            int key = ((current.Id?.GetHashCode() ?? 0) * 31 + (sel.Current?.Id?.GetHashCode() ?? 0)) * 31 + last.ScopeElement;
             if (key == shapesKey) return;
             shapesKey = key;
             shownShape = current;
             sel.Suitable(shapes);
             FormationSelection.Families(shapes, families);
             SetFavourites(current);
-            int n = 0;
-            for (int i = 0; i < MaxShapes; i++) shapeIds[i] = null;
-            foreach (FormationDefinition d in shapes)
-            {
-                if (d.Family != current.Family || n >= MaxShapes) continue;
-                shapeIds[n++] = d.Id;
-            }
             shapeSection.SetCaption("FAVOURITES · ELEMENT " + ElementRoster.Letter(last.ScopeElement));
             if (window != null && window.Visible) window.Fill(shapes, families, current);
             flow.RequestRelayout();
@@ -414,10 +317,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (window == null)
             {
                 Canvas root = flow.Content.GetComponentInParent<Canvas>();
-                window = new ShapeWindow(root != null ? root.rootCanvas.transform : flow.Content, ids, PickFromWindow);
+                window = new ShapeWindow(root != null ? root.rootCanvas.transform : flow.Content, PickFromWindow);
             }
             window.Fill(list, familyList, current);
             window.Show();
+        }
+
+        /// <summary>Closes the ALL SHAPES window (the formation page left the screen, or the panel hid) and, with
+        /// <paramref name="drop"/>, destroys it (the panel reset). It hangs off the root canvas, so nothing else takes it down.</summary>
+        public void CloseShapes(bool drop = false)
+        {
+            if (window == null) return;
+            window.Close(drop);
+            if (drop) window = null;
         }
 
         private void PickFromWindow(string id)
@@ -426,15 +338,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcPostureActions.Shape(last, id);
         }
 
-        private static bool LeaderFrame(WingService w, int e, out Vec3 at, out float heading)
+        /// <summary>The frame the plan view is drawn in; <paramref name="you"/>: it is the player's own (else the element's lead).</summary>
+        private static bool LeaderFrame(WingService w, int e, out Vec3 at, out float heading, out bool you)
         {
             at = Vec3.Zero;
             heading = 0f;
+            you = false;
             // Review R2 I2: A forms on its task lead while it has a task, else on its anchor (FORM ON / ESCORT) or you.
             if (e == 0 && !w.Planner.Active)
             {
                 Unit u = w.LeaderUnit != null ? w.LeaderUnit : w.Player;
                 if (u == null) return false;
+                you = ReferenceEquals(u, w.Player);
                 at = u.GlobalPosition().ToVec3();
                 Vector3 f = u.transform.forward;
                 heading = Vec3.HeadingDeg(new Vec3(f.x, 0f, f.z));
@@ -452,7 +367,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private sealed class ShapeWindow
         {
             private readonly AvWindow window;
-            private readonly WmcControls ids;
             private readonly System.Action<string> apply;
             private readonly WmcButtonGrid familyTabs;
             private readonly WmcShapeCells cards;
@@ -465,28 +379,29 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             public bool Visible => window.Visible;
 
-            public ShapeWindow(Transform root, WmcControls controls, System.Action<string> applied)
+            public ShapeWindow(Transform root, System.Action<string> applied)
             {
-                ids = controls;
                 apply = applied;
                 window = AvWindow.Build(root, "wmc-shapes", "FORMATION / ALL SHAPES", 440f, 560f, 220);
                 AvFlow body = window.Body;
                 title = body.Section(AvIcon.LayersSubtract, "FAMILY", "");
                 familyTabs = body.Add(new WmcButtonGrid(body.Content, MaxFamilies, MaxFamilies, i => new AvControl.Spec("", () => PickFamilyTab(i))));
-                for (int i = 0; i < MaxFamilies; i++) ids.Add("form.shapes.family" + i, familyTabs[i]);
                 body.Section(AvIcon.LayersSubtract, "SHAPES", "TAP A CARD");
                 cards = body.Add(new WmcShapeCells(body.Content, 3, MaxShapes, 84f, i => () => PickCard(i)));
-                for (int i = 0; i < MaxShapes; i++) ids.Add("form.shapes.card" + i, cards[i]);
                 AvControl[] buttons = body.Buttons(new AvControl.Spec("APPLY", Apply, AvButtonStyle.Primary, AvIcon.CircleCheck),
                     new AvControl.Spec("CLOSE", window.Hide, AvButtonStyle.Quiet)).Controls;
                 applyButton = buttons[0];
                 applyButton.Help = "Fly the picked shape with the scope's element.";
                 buttons[1].Help = "Close this window.";
-                ids.Add("form.shapes.apply", applyButton);
-                ids.Add("form.shapes.close", buttons[1]);
             }
 
             public void Show() => window.Show();
+
+            public void Close(bool drop)
+            {
+                if (window.Visible) window.Hide();
+                if (drop) Object.Destroy(window.Root.gameObject);
+            }
 
             public void Fill(List<FormationDefinition> list, List<string> familyList, FormationDefinition now)
             {

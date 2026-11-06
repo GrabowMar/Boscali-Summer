@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.QoL.Runtime
         {
             TryGet(out _);
             if (settings != null && !InputFieldChecker.InsideInputField && !GameplayUI.GameIsPaused &&
-                Input.GetKeyDown(settings.MarkCameraKey.Value)) Capture();
+                BoscaliSummer.Core.Game.ForeignMods.KeyDown(settings.MarkCameraKey.Value)) Capture();
         }
 
         public bool Capture()

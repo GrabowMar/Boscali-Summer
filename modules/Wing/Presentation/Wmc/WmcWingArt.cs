@@ -8,7 +8,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>A top-left, y-down drawing surface over one kit <see cref="AvQuadBuffer"/> (the kit's meshes are bottom-left, y-up):
-    /// the squadron insignia, rank chevrons, ribbons, the barcode and the aircraft outline are all drawn with it. No texture, no font.</summary>
+    /// the squadron insignia, rank chevrons, ribbons and the barcode are all drawn with it. No texture, no font.</summary>
     internal readonly struct WingInk
     {
         private static readonly float[] Xs = new float[48], Ys = new float[48];
@@ -138,38 +138,5 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             image.enabled = sprite != null;
             return sprite != null;
         }
-    }
-
-    /// <summary>A generic top-view aircraft outline in unit space (x −1..1 across the wings, y 1 nose … −1 tail), mirrored about the spine.
-    /// The AIRCRAFT page's damage map draws the real parts over it; the outline is only a drawing.</summary>
-    internal static class WingSilhouette
-    {
-        private static readonly float[] HalfX = { 0f, 0.07f, 0.1f, 0.11f, 0.88f, 0.88f, 0.14f, 0.12f, 0.4f, 0.4f, 0.08f, 0f };
-        private static readonly float[] HalfY = { 1f, 0.78f, 0.4f, 0.16f, -0.12f, -0.3f, -0.36f, -0.62f, -0.8f, -0.92f, -0.9f, -0.94f };
-
-        public static void Draw(in WingInk ink, float x, float y, float w, float h, Color c)
-        {
-            int half = HalfX.Length;
-            var xs = new float[half * 2 - 2];
-            var ys = new float[half * 2 - 2];
-            float cx = x + w * 0.5f, cy = y + h * 0.5f, sx = w * 0.5f, sy = h * 0.5f;
-            int n = 0;
-            for (int i = 0; i < half; i++)
-            {
-                xs[n] = cx + HalfX[i] * sx;
-                ys[n++] = cy - HalfY[i] * sy;
-            }
-            for (int i = half - 2; i >= 1; i--)
-            {
-                xs[n] = cx - HalfX[i] * sx;
-                ys[n++] = cy - HalfY[i] * sy;
-            }
-            ink.Poly(xs, ys, n, true, 1.2f, c);
-        }
-
-        /// <summary>A part's place on the drawing: <paramref name="px"/> is its sideways offset over the widest, <paramref name="pz"/> its length
-        /// offset over the longest, both −1..1 (nose positive).</summary>
-        public static Vector2 Place(float x, float y, float w, float h, float px, float pz) =>
-            new Vector2(x + w * 0.5f + px * w * 0.44f, y + h * 0.5f - pz * h * 0.47f);
     }
 }

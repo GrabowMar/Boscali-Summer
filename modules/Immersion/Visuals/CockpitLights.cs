@@ -17,8 +17,16 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static readonly Color FloodColour = new Color(1f, 0.74f, 0.48f);
         private const float FloodPeak = 0.35f, FloodRange = 1.4f, FloodAngle = 95f;
 
+        private static readonly Color FlashColour = new Color(1f, 0.62f, 0.3f), CautionColour = new Color(1f, 0.08f, 0.04f);
+        // The master caution glow sits low in front of the pilot, where the warning lamps are.
+        private static readonly Vector3 CautionOffset = new Vector3(0f, -0.35f, 0.7f);
+        private const float CautionPeak = 0.9f;
+        private MissileWarning warning;
+        private Aircraft warnedFor;   // the component lookup runs only when the aircraft changes, by day too
+        private const float FlashPeak = 2.2f, FlashRange = 4f;
+
         private Aircraft bound;
-        private Light flood;
+        private Light flood, flash;
         private float flicker, level = 1f;
 
         public float Intensity { get; private set; }
@@ -29,9 +37,32 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             // Off with the sun up; full from about 7 degrees below the horizon (the Weather dark-nights ramp).
             float night = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(-0.12f, 0f, sunHeight));
-            if (!enabled || aircraft == null || camera == null || night <= 0.001f) { Release(); return; }
+            float burst = ExplosionFlash.Level(Time.time);
+            // Master caution: a missile inbound pulses the pit red at 2 Hz. One list-count read; the game keeps the list.
+            if (aircraft != warnedFor) { warnedFor = aircraft; warning = aircraft != null ? aircraft.GetComponent<MissileWarning>() : null; }
+            bool inbound = warning != null && warning.knownMissiles != null && warning.knownMissiles.Count > 0;
+            if (!enabled || aircraft == null || camera == null || (night <= 0.001f && burst <= 0.001f && !inbound)) { Release(); return; }
             if (aircraft != bound) Bind(aircraft, camera);
             if (flood == null) { Release(); return; }
+            // The one extra light does both jobs: a nearby blast from its side wins over the caution glow.
+            float caution = inbound ? CautionPeak * (0.55f + 0.45f * Mathf.Sin(Time.time * Mathf.PI * 4f)) : 0f;
+            float blast = FlashPeak * burst;
+            flash.enabled = blast > 0.001f || caution > 0.001f;
+            if (flash.enabled)
+            {
+                if (blast >= caution)
+                {
+                    Vector3 toward = ExplosionFlash.At - camera.transform.position;
+                    flash.transform.position = camera.transform.position + (toward.sqrMagnitude > 1f ? toward.normalized : Vector3.up) * 1.6f;
+                    flash.color = FlashColour;
+                }
+                else
+                {
+                    flash.transform.localPosition = aircraft.transform.InverseTransformPoint(camera.transform.position) + CautionOffset;
+                    flash.color = CautionColour;
+                }
+                flash.intensity = Mathf.Max(blast, caution) * Mathf.Lerp(0.45f, 1f, night);
+            }
             // The pilot dims the pit for the goggles over about half a second, and brings it back the same way.
             bool goggles = GameAccess.TryGetNightVisionState(out _, out bool nvg) && nvg;
             level = Mathf.MoveTowards(level, goggles ? 0f : 1f, dt * 2f);
@@ -52,7 +83,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         public void Release()
         {
             if (flood != null) Object.Destroy(flood.gameObject);
-            flood = null;
+            if (flash != null) Object.Destroy(flash.gameObject);
+            flood = flash = null;
             bound = null;
             flicker = 0f;
             level = 1f;
@@ -78,6 +110,41 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             flood.intensity = 0f;
             flood.shadows = LightShadows.None;
             flood.renderMode = LightRenderMode.ForcePixel;
+            var burst = new GameObject("BoscaliCockpitFlash");
+            burst.transform.SetParent(frame, false);
+            flash = burst.AddComponent<Light>();
+            flash.type = LightType.Point;
+            flash.color = FlashColour;
+            flash.range = FlashRange;
+            flash.shadows = LightShadows.None;
+            flash.renderMode = LightRenderMode.ForcePixel;
+            flash.enabled = false;
         }
+    }
+
+    /// <summary>
+    /// The last nearby blast seen from the cockpit (2026-11-06), fed by the explosion audio patch: where it was and how hard it hit
+    /// the eye. The cockpit flash light and the visor's auto-darkening read it; it decays in about half a second.
+    /// </summary>
+    internal static class ExplosionFlash
+    {
+        private const float Reach = 1800f, Decay = 0.18f;
+        private static float strength, time = -10f;
+
+        internal static Vector3 At { get; private set; }
+
+        internal static void Report(Vector3 position, Vector3 eye)
+        {
+            float d = Vector3.Distance(position, eye);
+            if (d >= Reach) return;
+            float s = (1f - d / Reach) * (1f - d / Reach);
+            if (s < Level(Time.time)) return;   // a weaker blast never replaces a fresher, stronger one
+            strength = s;
+            time = Time.time;
+            At = position;
+        }
+
+        /// <summary>0..1 now: the blast's strength, decaying over about half a second.</summary>
+        internal static float Level(float now) => now < time ? 0f : strength * Mathf.Exp(-(now - time) / Decay);
     }
 }

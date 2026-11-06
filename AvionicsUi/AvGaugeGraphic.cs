@@ -11,6 +11,7 @@ namespace NOAvionics
         public AvGaugeShape Shape;
         public int Segments = 10;
         public float SegmentGap = 2f;
+        public bool ValueMarker;
         public Color Track = new Color(1f, 1f, 1f, 0.15f), FillColor = Color.white, FillEnd = Color.white;
         private float value;
 
@@ -46,6 +47,11 @@ namespace NOAvionics
                         Quad(vh, x, r.yMin, x + w, r.yMax, c, c);
                     }
                     break;
+            }
+            if (ValueMarker && r.width >= 2f)
+            {
+                float x = Mathf.Lerp(r.xMin + 1f, r.xMax - 1f, value);
+                Quad(vh, x - 1f, r.yMin - 3f, x + 1f, r.yMax + 3f, FillEnd, FillEnd);
             }
         }
 

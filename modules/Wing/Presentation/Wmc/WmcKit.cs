@@ -92,8 +92,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     }
 
     /// <summary>The widgets WMC pages share that the NOAvionics toolkit does not have (spec WMC rebuild §widget kit), built
-    /// from kit v2 primitives (<see cref="WmcDraw"/>) — WC never edits the toolkit. Pages use kit v2 parts and
-    /// <see cref="WmcControls"/> (see <see cref="IWmcPage"/>).</summary>
+    /// from kit v2 primitives (<see cref="WmcDraw"/>) — WC never edits the toolkit. Pages use kit v2 parts
+    /// (see <see cref="IWmcPage"/>).</summary>
     internal static class WmcKit
     {
 

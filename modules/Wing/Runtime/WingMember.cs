@@ -8,8 +8,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public readonly Aircraft Aircraft;
         public readonly Pilot Pilot;
         public readonly FormationPilot Brain;
-        /// <summary>INSPECT's WHY: what has held this aircraft back, from its pipeline's binding report (I1).</summary>
-        public readonly WhyText Why = new WhyText();
         /// <summary>ECM (A2): the aircraft's jammer, and until when it jams (NaN: it does not).</summary>
         public readonly RadarJammerPulser Jammer = new RadarJammerPulser();
         public float JamUntil = float.NaN;

@@ -159,8 +159,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public void OnPointerClick(PointerEventData e)
         {
             if (e.button != PointerEventData.InputButton.Left || Owner == null) return;
-            // An armed Support or Wing pick owns the next click; a drag that ends on a tag is a drag, not a click.
-            if (MapPicker.IsBusy || MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return;
+            // Armed tools take the right button (rule B), so a left click still selects; a drag that ends on a tag is a drag, not a click.
+            if (MfdMapInteractions.BlockIconClick() || ReliefNavigator.BlockIconClick()) return;
             MfdMapInteractions.ConsumeClick();
             Owner.Hub?.Select(Id, true);
         }

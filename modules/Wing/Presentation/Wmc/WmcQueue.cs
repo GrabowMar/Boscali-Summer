@@ -4,7 +4,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>ORDERS' queue (spec 2026-10-04 §4.2): a map order placed with shift held (or the QUEUE toggle on) is appended as a
     /// <see cref="PlanStep"/> to the scope's element lane in the wing plan, instead of replacing the element's task. The plan runs from
-    /// ORDERS' RUN (or BEHAVIOUR › PLAN's EXECUTE).</summary>
+    /// ORDERS' RUN (or BEHAVIOUR › SORTIE's EXECUTE).</summary>
     internal static class WmcQueue
     {
         /// <summary>The plan step a map click makes (move, orbit, CAP, SWEEP, land, cargo); attack and route keep shift's own meaning.</summary>
@@ -37,8 +37,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 return;
             }
             Waypoint at = Waypoint.At(point.x, point.z);
-            at.Altitude = c.Draft.Altitude;
-            at.Speed = c.Draft.Speed;
             // Review fix: a drag-sized radius outside the guard's range made the queued plan fail at RUN; 0 keeps the order's default.
             float r = (kind == PlanKind.Cap || kind == PlanKind.Sweep) && radius > 0f ? AreaGuard.Clamp(radius) : 0f;
             var step = new PlanStep { Kind = kind, Points = new[] { at }, Radius = r };

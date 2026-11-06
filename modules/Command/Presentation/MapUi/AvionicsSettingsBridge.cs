@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             settings.AvionicsCustomGlassTint.SettingChanged += OnChanged;
             settings.DisplayLife.SettingChanged += OnChanged;
             AvFxDriver.GlitchSource = ReadGlitch;
-            AvAmbient.Maker = "BOSCALI AVIONICS WORKS";
             AvAmbient.Status = ReadStatus;
             Apply();
         }

@@ -36,7 +36,7 @@ namespace NOAvionics
             get
             {
                 if (Tier == AvFxTier.Off) return null;
-                if (fx != null && fx.shader == null) fx = null; // bundle unloaded (tests); never happens in game
+                if (fx != null && !Usable(fx.shader)) fx = null; // bundle unloaded (tests): Unity hands back its error shader, not null
                 if (fx == null)
                 {
                     Shader s = AvBundle.Shader("NOA/UI/Fx");
@@ -48,11 +48,13 @@ namespace NOAvionics
             }
         }
 
+        private static bool Usable(Shader s) => s != null && s.isSupported && s.name != "Hidden/InternalErrorShader";
+
         public static Material GlassMaterial
         {
             get
             {
-                if (glass != null && glass.shader == null) glass = null;
+                if (glass != null && !Usable(glass.shader)) glass = null;
                 if (glass == null)
                 {
                     // Glass2 (avionics-fx.bundle) adds the live signal; the first-generation finish stays the fallback.

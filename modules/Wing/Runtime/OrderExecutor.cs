@@ -489,10 +489,19 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 : OrderResult.Refused("No wingman can go: no friendly field");
         }
 
+        /// <summary>Why a bare call found no field: no base is ON, or none that is ON can launch this class (SUPPLY's NO BASE).</summary>
+        private static string NoFieldWhy()
+        {
+            foreach (Airbase f in WingRequisition.Fields)
+                if (f != null && WingRequisition.IsOn(f)) return ShopRules.Blocker(new ShopQuote { Tile = TileBlock.NoBase }, default, default);
+            return ShopRules.WingReason(WingBlock.NoBaseOn, default);
+        }
+
         /// <summary>Wingmen always launch from a field (spec M3 §3). A requisition (spec WMC rebuild §SUPPLY) names its airframe,
-        /// field, pilot, fit and fuel, each resolved or refused by name; a radial call keeps its own choices (the configured
-        /// airframe or your type, the picked or nearest field, the next pilot, the game's loadout, a full tank). Both pass the
-        /// same <see cref="ShopRules"/> as SUPPLY's card, on a fresh snapshot, and answer from what really launched.</summary>
+        /// field, pilot, fit and fuel, each resolved or refused by name; a bare call (the hotkey, TACTICAL CALL) flies SUPPLY's draft: its
+        /// airframe when one is picked and offered (else the configured airframe or your type), that airframe's fit, its fuel and a field
+        /// by SUPPLY's base rules, with the next pilot. Both pass the same <see cref="ShopRules"/> as SUPPLY's card, on a fresh snapshot,
+        /// and answer from what really launched.</summary>
         private static OrderResult Call(WingService w, WingOrder o)
         {
             if (SpawnService.Instance == null) return OrderResult.Refused("Wing Command is not ready");
@@ -500,11 +509,21 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             Aircraft caller = w.Player != null ? w.Player : w.Leader;
             if (caller == null) return OrderResult.Refused("Not flying");
             CallSpec c = o.Call;
-            AircraftDefinition type = c.Airframe != null ? WingRequisition.FindAirframe(c.Airframe) : WingCommands.CallAirframe() ?? caller.definition;
-            if (type == null) return OrderResult.Refused("No such airframe: " + c.Airframe);
             WingRequisition.RefreshLists(caller, force: true);
-            Airbase field = c.Field != null ? WingRequisition.FindField(c.Field) : w.FieldFor(caller, type);
-            if (field == null) return OrderResult.Refused(c.Field != null ? "No such friendly field: " + c.Field : "No friendly field to launch from");
+            bool draft = c.Airframe == null && c.Field == null && c.Pilot == null && c.Fit == null && c.Fuel <= 0f;
+            AircraftDefinition drafted = draft && WingRequisition.Selected != null && WingRequisition.Catalogue.Contains(WingRequisition.Selected)
+                ? WingRequisition.Selected : null;
+            AircraftDefinition type = drafted ?? (c.Airframe != null ? WingRequisition.FindAirframe(c.Airframe) : WingCommands.CallAirframe() ?? caller.definition);
+            if (type == null) return OrderResult.Refused("No such airframe: " + c.Airframe);
+            if (draft)
+            {
+                c.Fit = WingRequisition.FitOf(type);
+                c.Fuel = WingRequisition.FuelPercent / 100f;
+            }
+            Airbase field = c.Field != null ? WingRequisition.FindField(c.Field) : draft ? WingRequisition.PickField(caller, type) : w.FieldFor(caller, type);
+            if (field == null)
+                return OrderResult.Refused(c.Field != null ? "No such friendly field: " + c.Field
+                    : draft && WingRequisition.Fields.Count > 0 ? NoFieldWhy() : "No friendly field to launch from");
             WingPilot pilot = null;
             if (c.Pilot != null && (pilot = WingPilotRoster.FindByCallsign(c.Pilot)) == null)
                 return OrderResult.Refused("No pilot " + c.Pilot + " on the roster");

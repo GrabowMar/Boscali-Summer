@@ -23,8 +23,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public static WingChatter Instance { get; private set; }
 
         public string Name => "Radio";
-        /// <summary>What went on air, stamped on the wing's mission clock (the WMC log merges it with the wing's events).</summary>
-        public ChatterLog Log { get; } = new ChatterLog();
         public ContactWatch Contacts { get; } = new ContactWatch();
 
         private readonly Dictionary<int, ChatterSpeaker> speakers = new Dictionary<int, ChatterSpeaker>();
@@ -57,7 +55,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             WingPilotRoster.Killed -= OnKill;
             WingPilotRoster.Killed += OnKill;
             speakers.Clear();
-            Log.Clear();
             Contacts.Clear();
             pendingKey = null;
             ring = WingService.Instance?.Events;
@@ -116,8 +113,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         private void OnAired(ChatterAired line)
         {
-            line.Time = WingService.Instance?.MissionTime ?? 0f;
-            Log.Push(line);
             // The contact call that was waiting is on air: the next one may be chosen.
             if (pendingKey != null && line.Event == pendingEvent) pendingKey = null;
         }

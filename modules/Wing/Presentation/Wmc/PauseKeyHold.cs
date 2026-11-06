@@ -5,12 +5,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The game's pause key, held off while a WMC text field has the keyboard or a map order is armed (spec bezel v2 §6: Esc
     /// cancels those instead of pausing the game), through one <see cref="KeyHold"/> so the two never restore it under each other.
-    /// The value the player had is put back when the last holder lets go; while held it is asserted every frame (the game turns it
-    /// back on when a menu closes).</summary>
+    /// The key itself goes through Core's <c>PauseKey</c> under one owner, shared with the map's own tools; while held it is
+    /// asserted every frame (the game turns it back on when a menu closes).</summary>
     internal static class PauseKeyHold
     {
+        private const string Owner = "wing.wmc";
         private static readonly KeyHold hold = new KeyHold();
-        private static bool applied, was;
 
         public static void Set(int owner, bool on, bool now = false)
         {
@@ -28,21 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Every frame (WmcPanel.Tick).</summary>
         public static void Tick() => Apply();
 
-        private static void Apply()
-        {
-            if (hold.Held(Time.frameCount))
-            {
-                if (!applied)
-                {
-                    was = GameplayUI.AllowPauseKeybind;
-                    applied = true;
-                }
-                GameplayUI.AllowPauseKeybind = false;
-                return;
-            }
-            if (!applied) return;
-            applied = false;
-            GameplayUI.AllowPauseKeybind = was;
-        }
+        // The saving and putting back is Core's shared PauseKey, so WMC and the map's own tools never restore it under each other.
+        private static void Apply() => Core.Ui.PauseKey.Hold(Owner, hold.Held(Time.frameCount));
     }
 }

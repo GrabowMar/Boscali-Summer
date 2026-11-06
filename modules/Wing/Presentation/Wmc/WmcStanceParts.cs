@@ -41,8 +41,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             public AvFrame Frame;
             public Image Rail;
-            public TMP_Text Hint, Tag, Name, Detail;
-            public bool On, Edited, Hover, Filled;
+            public TMP_Text Hint, Name, Detail;
+            public bool On, Hover, Filled;
         }
 
         private readonly Slot[] slots;
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int shown;
 
         /// <summary><paramref name="isBook"/>: BEHAVIOUR's stance book — <paramref name="count"/> plates of which the first
-        /// <see cref="SetShown"/> take room, each with its own hint and a tag under it (<see cref="SetHint"/>), no slim row.</summary>
+        /// <see cref="SetShown"/> take room, each with its own hint (<see cref="SetHint"/>), no slim row.</summary>
         public WmcStanceSlots(RectTransform parent, Action<int> picked, Action<int, AvHit> bind, int count = Count, bool isBook = false)
         {
             Rect = AvLay.Child(parent, "StanceSlots");
@@ -71,15 +71,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 s.Rail = AvLay.Solid(Rect, "SlotRail" + i, Color.clear);
                 s.Hint = Text("Hint" + i, AvTextRole.DataSmall, TextAlignmentOptions.TopLeft);
                 s.Hint.text = "W+" + (i + 1);
-                s.Tag = Text("Tag" + i, AvTextRole.DataSmall, TextAlignmentOptions.TopLeft);
                 s.Name = Text("Name" + i, AvTextRole.Label, TextAlignmentOptions.TopLeft);
                 s.Detail = Text("Detail" + i, AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft);
                 slots[i] = s;
             }
             Restyle();
         }
-
-        public Transform Target(int i) => slots[i].Frame.transform;
 
         public void SetHelp(int i, string tip) => AvHelpTip.Attach(slots[i].Frame.gameObject, tip);
 
@@ -104,18 +101,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < slots.Length; i++)
             {
                 Slot s = slots[i];
-                foreach (Component part in new Component[] { s.Frame, s.Rail, s.Hint, s.Tag, s.Name, s.Detail })
+                foreach (Component part in new Component[] { s.Frame, s.Rail, s.Hint, s.Name, s.Detail })
                     if (part.gameObject.activeSelf != (i < n)) part.gameObject.SetActive(i < n);
             }
             return true;
         }
 
-        /// <summary>Plate <paramref name="i"/>'s key column: the hint ("W+2", or nothing) and the tag under it (who flies it).</summary>
-        public void SetHint(int i, string hint, string tag)
-        {
-            AvText.Set(slots[i].Hint, hint);
-            AvText.Set(slots[i].Tag, tag);
-        }
+        /// <summary>Plate <paramref name="i"/>'s key column: the hint ("W+2", or nothing).</summary>
+        public void SetHint(int i, string hint) => AvText.Set(slots[i].Hint, hint);
 
         public override void Place(AvSlot s)
         {
@@ -130,24 +123,21 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(c.Frame.rectTransform, x, y, w, h);
                 AvLay.Place(c.Rail.rectTransform, x, y, 2f, h);
                 AvLay.Place(c.Hint.rectTransform, x + 6f, y + 2f, 34f, 18f);
-                AvLay.Place(c.Tag.rectTransform, x + 6f, y + 20f, 34f, 18f);
                 if (!book && c.Name.gameObject.activeSelf == slim) c.Name.gameObject.SetActive(!slim);
                 AvLay.Place(c.Name.rectTransform, x + 42f, y + 2f, w - 46f, 18f);
                 AvLay.Place(c.Detail.rectTransform, x + 42f, y + (slim ? 2f : 20f), w - 46f, 18f);
             }
         }
 
-        /// <summary>Slot <paramref name="i"/>: its stance's name and settings, whether it is the one flown (<paramref name="on"/>) and
-        /// whether the scope has changed settings from it.</summary>
-        public void Set(int i, string name, string detail, bool filled, bool on, bool edited)
+        /// <summary>Slot <paramref name="i"/>: its stance's name and settings, and whether it is the one flown (<paramref name="on"/>).</summary>
+        public void Set(int i, string name, string detail, bool filled, bool on)
         {
             Slot s = slots[i];
-            AvText.Set(s.Name, filled ? name + (on && edited ? " *" : "") : "—");
+            AvText.Set(s.Name, filled ? name : "—");
             AvText.Set(s.Detail, detail);
-            if (s.On == on && s.Edited == edited && s.Filled == filled) return;
+            if (s.On == on && s.Filled == filled) return;
             bool slim = SlimRow;
             s.On = on;
-            s.Edited = edited;
             s.Filled = filled;
             Style(s);
             if (slim != SlimRow) Changed();
@@ -155,15 +145,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void Style(Slot s)
         {
-            Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo), caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
+            Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             Color accent = AvStyleHost.FuiColor("select", AvTheme.Accent);
             Color surface = AvStyleHost.FuiColor("surface", AvTheme.Surface);
-            Color back = s.On ? Color.Lerp(surface, s.Edited ? caution : accent, 0.16f) : s.Hover ? Color.Lerp(surface, Color.white, 0.07f) : surface;
-            Color border = s.On ? (s.Edited ? caution : accent) : AvStyleHost.FuiColor("frame", AvTheme.Frame);
+            Color back = s.On ? Color.Lerp(surface, accent, 0.16f) : s.Hover ? Color.Lerp(surface, Color.white, 0.07f) : surface;
+            Color border = s.On ? accent : AvStyleHost.FuiColor("frame", AvTheme.Frame);
             s.Frame.Paint(back, border);
-            s.Rail.color = s.On ? (s.Edited ? caution : accent) : Color.clear;
+            s.Rail.color = s.On ? accent : Color.clear;
             s.Hint.color = key;
-            s.Tag.color = AvStyleHost.FuiColor("ready", AvTheme.RailReady);
             s.Name.color = s.Filled ? AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             s.Detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
         }
@@ -230,99 +219,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             label.color = edited ? AvStyleHost.FuiColor("caution", AvTheme.RailCaution) : AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             foreach (AvControl o in options) o.Restyle();
-        }
-    }
-
-    /// <summary>The FINE-TUNE box's frame (mockup .tune): a sunken card the header, the status line and the four rows sit in. Folded by
-    /// default to its header and status so the command card sits higher; it opens itself while the scope differs from its stance.</summary>
-    internal sealed class WmcTuneBox : AvPart
-    {
-        private const float Pad = 6f, HeadH = 24f, StatusH = 18f, RowH = 26f, Gap = 2f;
-        private readonly AvFrame frame;
-        private readonly TMP_Text title, status;
-        public readonly AvControl Reset, Save, Edit, Fold;
-        public readonly WmcTuneRow[] Rows;
-        private readonly Action folded;
-        private bool edited, userOpen;
-
-        private bool Open => userOpen || edited;
-
-        public WmcTuneBox(RectTransform parent, Action reset, Action save, Action edit, WmcTuneRow[] rows, Action relayout)
-        {
-            folded = relayout;
-            Rect = AvLay.Child(parent, "TuneBox");
-            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(8f));
-            title = WmcSheet.Text(Rect, "Title", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "FINE-TUNE");
-            status = WmcSheet.Text(Rect, "Status", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
-            Reset = AvControl.Make(Rect, new AvControl.Spec("RESET", reset, AvButtonStyle.Quiet));
-            Save = AvControl.Make(Rect, new AvControl.Spec("SAVE AS…", save, AvButtonStyle.Quiet));
-            Edit = AvControl.Make(Rect, new AvControl.Spec("EDIT ›", edit, AvButtonStyle.Quiet));
-            Fold = AvControl.Make(Rect, new AvControl.Spec("FINE-TUNE", ToggleFold, AvButtonStyle.Quiet, AvIcon.ChevronRight));
-            Fold.Help = "Show or hide the four combat settings.";
-            foreach (AvControl b in new[] { Reset, Save, Edit, Fold }) b.SingleLine();
-            title.gameObject.SetActive(false);
-            Rows = rows;
-            foreach (WmcTuneRow r in rows) r.Rect.SetParent(Rect, false);
-            ShowRows();
-            Restyle();
-        }
-
-        public override float Measure(float width) => Pad + HeadH + StatusH + (Open ? Rows.Length * (RowH + Gap) - Gap : 0f) + Pad;
-
-        private void ToggleFold()
-        {
-            userOpen = !Open;
-            ShowRows();
-            folded?.Invoke();
-        }
-
-        private void ShowRows()
-        {
-            bool open = Open;
-            foreach (WmcTuneRow r in Rows) r.Rect.gameObject.SetActive(open);
-            Fold.SetIcon(open ? AvIcon.ChevronDown : AvIcon.ChevronRight);
-        }
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float w = s.W - 2f * Pad, y = Pad;
-            float bw = 60f, sw = 78f;
-            AvLay.Place(Fold.Rect, Pad, y + 2f, 104f, HeadH - 4f);
-            AvLay.Place(Edit.Rect, s.W - Pad - bw, y + 2f, bw, HeadH - 4f);
-            AvLay.Place(Save.Rect, s.W - Pad - bw - 3f - sw, y + 2f, sw, HeadH - 4f);
-            AvLay.Place(Reset.Rect, s.W - Pad - bw - 3f - sw - 3f - bw, y + 2f, bw, HeadH - 4f);
-            y += HeadH;
-            AvLay.Place(status.rectTransform, Pad + 2f, y, w - 4f, StatusH);
-            y += StatusH;
-            if (!Open) return;
-            foreach (WmcTuneRow r in Rows)
-            {
-                r.Place(new AvSlot(Pad, y, w, RowH));
-                y += RowH + Gap;
-            }
-        }
-
-        public void SetStatus(string text, bool isEdited)
-        {
-            AvText.Set(status, text);
-            if (edited == isEdited) return;
-            edited = isEdited;
-            ShowRows();
-            Restyle();
-        }
-
-        public override void Restyle()
-        {
-            AvStyle c = AvStyleHost.FuiStyle("card inert");
-            frame.Paint(AvStyleHost.FuiColor("ground", AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
-            title.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
-            status.color = edited ? AvStyleHost.FuiColor("caution", AvTheme.RailCaution) : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            Reset.Restyle();
-            Save.Restyle();
-            Edit.Restyle();
-            Fold.Restyle();
-            if (Rows != null) foreach (WmcTuneRow r in Rows) r.Restyle();
         }
     }
 }

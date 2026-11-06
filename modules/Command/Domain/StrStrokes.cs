@@ -195,23 +195,27 @@ namespace BoscaliSummer.Modules.Command.Domain
             float tipX = xs[n - 1], tipY = ys[n - 1];
             bool ok = true;
             float plx = 0f, ply = 0f, prx = 0f, pry = 0f, l0x = 0f, l0y = 0f, r0x = 0f, r0y = 0f;
+            Rgba pInk = fill;
             for (int k = 0; k < m; k++)
             {
                 int a = Math.Max(0, k - 1), c = Math.Min(m - 1, k + 1);
                 float tx = bodyX[c] - bodyX[a], ty = bodyY[c] - bodyY[a], tl = Len(tx, ty);
                 if (tl < 1e-6f) { tx = tipX - bodyX[0]; ty = tipY - bodyY[0]; tl = Len(tx, ty); }
                 if (tl < 1e-6f) return ok;
-                float half = tail + (neck - tail) * (neckAt > 1e-6f ? bodyS[k] / neckAt : 1f);
+                float along = neckAt > 1e-6f ? bodyS[k] / neckAt : 1f;
+                float half = tail + (neck - tail) * along;
+                // The body firms up toward the head, so the push reads as a direction even without the chevrons.
+                var ink = new Rgba(fill.R, fill.G, fill.B, fill.A * (0.5f + 0.5f * along));
                 float nx = -ty / tl * half, ny = tx / tl * half;
                 float lx = bodyX[k] + nx, ly = bodyY[k] + ny, rx = bodyX[k] - nx, ry = bodyY[k] - ny;
                 if (k == 0) { l0x = lx; l0y = ly; r0x = rx; r0y = ry; }
                 else
                 {
-                    ok &= b.Add(plx, ply, lx, ly, rx, ry, prx, pry, fill, fill, fill, fill);
+                    ok &= b.Add(plx, ply, lx, ly, rx, ry, prx, pry, pInk, ink, ink, pInk);
                     ok &= AvStrokes.Line(b, plx, ply, lx, ly, width, line);
                     ok &= AvStrokes.Line(b, prx, pry, rx, ry, width, line);
                 }
-                plx = lx; ply = ly; prx = rx; pry = ry;
+                plx = lx; ply = ly; prx = rx; pry = ry; pInk = ink;
             }
 
             // The head: a triangle from the neck to the tip, its base square to the last stretch.

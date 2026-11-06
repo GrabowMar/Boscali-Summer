@@ -127,4 +127,42 @@ namespace NOAvionics
             AvMesh.Quad(vh, cx - 0.5f, cy - 4f, cx + 0.5f, cy + 4f, c);
         }
     }
+
+    /// <summary>
+    /// The console body's graticule: faint registration crosses on a fixed pitch (every fourth one larger) in whatever part of the
+    /// body the current page leaves empty, so it reads as a powered display, not a gap. The grid is fixed to the body, so rows
+    /// only appear or vanish as content grows; the mesh is rebuilt only when the body is resized or <see cref="Top"/> moves.
+    /// </summary>
+    public sealed class AvGroundGraphic : MaskableGraphic
+    {
+        private const float Pitch = 32f, Arm = 2.5f, Inset = 12f, Clear = 10f;
+        private float top;
+
+        /// <summary>Height of the current page's content from the body top; no cross is drawn above it (plus a small clearance).</summary>
+        public float Top
+        {
+            get => top;
+            set { if (Mathf.Abs(value - top) < 0.5f) return; top = value; SetVerticesDirty(); }
+        }
+
+        protected override void OnPopulateMesh(VertexHelper vh)
+        {
+            vh.Clear();
+            Rect r = GetPixelAdjustedRect();
+            if (r.width < 2f * Inset || r.height < 2f * Inset) return;
+            Color minor = color, major = color;
+            major.a = Mathf.Min(1f, major.a * 1.8f);
+            int cols = Mathf.FloorToInt((r.width - 2f * Inset) / Pitch), rows = Mathf.FloorToInt((r.height - 2f * Inset) / Pitch);
+            float x0 = Mathf.Round(r.center.x - cols * Pitch * 0.5f), y0 = Mathf.Round(r.yMax - Inset), floor = r.yMax - top - Clear;
+            for (int j = 0; j <= rows; j++)
+                for (int i = 0; i <= cols && y0 - j * Pitch + 4f <= floor; i++)
+                {
+                    bool big = i % 4 == 0 && j % 4 == 0;
+                    float a = big ? 4f : Arm, x = x0 + i * Pitch, y = y0 - j * Pitch;
+                    Color c = big ? major : minor;
+                    AvMesh.Quad(vh, x - a, y - 0.5f, x + a, y + 0.5f, c);
+                    AvMesh.Quad(vh, x - 0.5f, y - a, x + 0.5f, y + a, c);
+                }
+        }
+    }
 }

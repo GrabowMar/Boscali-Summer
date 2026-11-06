@@ -6,7 +6,7 @@ using BoscaliSummer.Core.Storage;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>The load, keep-<c>.bad</c> and save steps the player's JSON files under the data root share (plans, routes, stances);
+    /// <summary>The load, keep-<c>.bad</c> and save steps the player's JSON files under the data root share (plans, stances);
     /// each store keeps its own parsing and its own rule for when a damaged file is kept aside. Writes go through <see cref="AtomicFile"/>.</summary>
     internal static class WmcUserFile
     {

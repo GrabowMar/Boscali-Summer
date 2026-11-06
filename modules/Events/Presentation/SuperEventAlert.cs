@@ -386,6 +386,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             compactPanel = Panel("MfdDispatchBrief", screen, Top, width, CompactHeight, out compactGroup);
             compactPanel.anchoredPosition = new Vector2(layoutOffset - (layoutWidth - width) * .5f, -Top);
+            // Over the big map both plates are map controls: a click, drag or armed pick on them stays off the map behind.
+            BoscaliSummer.Core.Ui.MapControlRects.Register(expandedPanel);
+            BoscaliSummer.Core.Ui.MapControlRects.Register(compactPanel);
             AvFrame frame = AvFrame.Add(compactPanel, "Frame", AvChamfer.Diagonal(4f));
             AvLay.Fill(frame.rectTransform);
             frame.Paint(ground, danger.WithAlpha(0.65f));

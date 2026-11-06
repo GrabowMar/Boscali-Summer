@@ -13,11 +13,13 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     {
         private static readonly HashSet<PersistentID> paidAircraft = new HashSet<PersistentID>();
 
-        public static CallQuote Quote(Aircraft aircraft)
+        /// <param name="committed">What the aircraft quoted before this one in the same press cost: each is checked against the balance
+        /// they leave, not the whole allocation.</param>
+        public static CallQuote Quote(Aircraft aircraft, float committed = 0f)
         {
             GameManager.GetLocalPlayer(out Player player);
             return CallCost.Recruit(aircraft != null && aircraft.definition != null ? aircraft.definition.value : 0f,
-                WingSettings.Instance.RecruitmentCostRate.Value, player != null ? player.Allocation : 0f,
+                WingSettings.Instance.RecruitmentCostRate.Value, (player != null ? player.Allocation : 0f) - committed,
                 WingSettings.Instance.SandboxFreeCalls.Value, aircraft != null && paidAircraft.Contains(aircraft.persistentID));
         }
 

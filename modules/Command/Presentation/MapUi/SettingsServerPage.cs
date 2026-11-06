@@ -247,9 +247,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Caption();
                 flow.Ticker.Add(page, AvTickRate.Slow, Caption);
 
-                // Toggles become a two-up grid of icon cells (name + LED + ON/OFF, sentence on hover), levels
+                // Toggles become thin switch bars (name + ON/OFF + slide track, sentence on hover), levels
                 // that print a percentage become dials, and every other stepper keeps a +/- row.
-                AvCellGrid grid = null;
                 SetRingRow dials = null;
                 int dialCount = 0;
                 for (int r = 0; r < view.Rows.Count; r++)
@@ -257,20 +256,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     HostSettingView row = view.Rows[r];
                     if (row.Kind == HostSettingKind.Toggle)
                     {
-                        grid = grid ?? flow.Grid(2);
                         dials = null;
-                        ServerToggleCell(flow, grid, page, view, row);
+                        ServerToggleCell(flow, page, view, row);
                     }
                     else if (TryPercent(row.ValueText, out _))
                     {
-                        grid = null;
                         if (dials == null || dialCount >= 3) { dials = flow.Add(new SetRingRow(flow.Content)); dialCount = 0; }
                         dialCount++;
                         ServerLevelRing(flow, dials, page, view, row);
                     }
                     else
                     {
-                        grid = null;
                         dials = null;
                         Stepper(flow, page, row.Label, () => row.ValueText,
                             d => view.Step(row.Id, d),
@@ -309,16 +305,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
 
-        private void ServerToggleCell(AvFlow flow, AvCellGrid grid, int page, IHostSettingsView view, HostSettingView row)
+        private void ServerToggleCell(AvFlow flow, int page, IHostSettingsView view, HostSettingView row)
         {
-            AvCell cell = null;
-            cell = grid.Toggle(row.Label, "", () => row.Value, v =>
+            SetToggleBar cell = null;
+            cell = flow.Add(new SetToggleBar(flow.Content, row.Label, () => row.Value, v =>
             {
                 if (!RowInteractive(row)) return;
                 view.Toggle(row.Id);
                 Echo(row.Label + " \u2014 " + (row.Value ? "ON" : "OFF"));
                 Changed();
-            });
+            }));
             void Refresh()
             {
                 cell.Interactable = RowInteractive(row);

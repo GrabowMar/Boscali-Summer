@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public StepState State(int lane, int step) => state[lane, step];
 
-        /// <summary>When the step first went out, s after EXECUTE (NaN: not yet) — the TIMELINE's actual.</summary>
+        /// <summary>When the step first went out, s after EXECUTE (NaN: not yet); WingAiProof's report reads it.</summary>
         public float StartedAt(int lane, int step) => startedAt[lane, step] - execAt;
 
         /// <summary>When the step was done or passed over, s after EXECUTE (NaN: not yet).</summary>
@@ -174,7 +174,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case PlanEnd.Time: return elapsed >= p.EndSeconds;
                 case PlanEnd.Bingo: return f.Bingo;
                 case PlanEnd.Winchester: return f.Winchester;
-                case PlanEnd.TargetsDown: return f.TargetsDown;
                 default: return f.TaskDone;
             }
         }

@@ -61,6 +61,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static bool Flying => fly;
         /// <summary>An orbit drag (held wheel, or Alt + left) is under way.</summary>
         internal static bool Turning => drag == Drag.Orbit;
+        /// <summary>A grab-the-ground pan drag is under way.</summary>
+        internal static bool Grabbing => drag == Drag.Grab;
 
         /// <summary>A grab drag, or its release frame, must not also click the icon beneath it.</summary>
         internal static bool BlockIconClick() => drag == Drag.Grab || drag == Drag.Orbit ||
@@ -96,9 +98,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Press(rig, 2, true, mouse, vx, vy);
                 }
                 // The right button orbits again, as it did before: it is the one held-button drag every
-                // mouse reports. A right click without travel still opens the map menu, and an armed
-                // call-in keeps the button to itself.
-                else if (Input.GetMouseButtonDown(1) && !NOAvionics.MapPicker.IsBusy &&
+                // mouse reports. A right click without travel still opens the map menu; a right button
+                // claimed by an armed tool or a commanding selection (rule B) is not an orbit.
+                else if (Input.GetMouseButtonDown(1) &&
+                    MfdMapInteractions.RightRule(SceneSingleton<DynamicMap>.i) == MapRightClick.Card &&
                     Plugin.Settings?.Command?.MapRightDragTurns?.Value != false)
                     Press(rig, 1, true, mouse, vx, vy);
             }
@@ -361,8 +364,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Shift or Ctrl hands a left drag to the selection box.</summary>
         private static bool BoxHeld() => MfdMapInteractions.BoxDrag();
 
-        private static bool LeftDragClaimed() => StrMapOverlay.DrawArmed ||
-            ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
+        /// <summary>A panel's own left drag (COM hold-to-draw). Armed tools take the right button (rule B), so they leave the grab alone.</summary>
+        private static bool LeftDragClaimed() => ModuleServices.TryGet(out IMapBoxInput input) && input.BlocksBoxSelection;
 
         /// <summary>Map closed: drop gestures and easing, keep the view.</summary>
         internal static void Release()

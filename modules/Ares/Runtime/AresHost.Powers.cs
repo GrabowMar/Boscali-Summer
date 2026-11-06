@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         }
 
         public string ArmStrike() =>
-            Arm("STRIKE", "STRIKE " + MunitionName + " (" + Patterns[Pattern] + "): click the target. Esc cancels.", false, (at, heading) => StrikeAt(at));
+            Arm("STRIKE", "STRIKE " + MunitionName + " (" + Patterns[Pattern] + "): right-click the target.", false, (at, heading) => StrikeAt(at));
 
         /// <summary>Drops or flies the chosen munition onto a point for the SPAWN side (its warhead, its kill credit to no one).</summary>
         public string StrikeAt(GlobalPosition at)
@@ -181,7 +181,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         }
 
         public string ArmCast() =>
-            Arm("CAST", "CAST " + OpsNames[OpsAction] + " FREE: click the target. Esc cancels.", false, (at, heading) => CastAt(at));
+            Arm("CAST", "CAST " + OpsNames[OpsAction] + " FREE: right-click the target.", false, (at, heading) => CastAt(at));
 
         /// <summary>The OPS action at a point, free: BYPASS REQS and NO OPS COOLDOWN switch on first (and stay on, shown on CHEATS).</summary>
         public string CastAt(GlobalPosition at)
@@ -194,7 +194,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             return Say(OpsNames[OpsAction] + ": " + (string.IsNullOrEmpty(status) ? "requested." : status));
         }
 
-        public string ArmFire() => Arm("FIRE", "FIRE: click where it should burn. Esc cancels.", false, (at, heading) => FireAt(at));
+        public string ArmFire() => Arm("FIRE", "FIRE: right-click where it should burn.", false, (at, heading) => FireAt(at));
 
         /// <summary>A fire at the point and four more around it, 40 m out.</summary>
         public string FireAt(GlobalPosition at)
@@ -210,7 +210,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             return Say(lit > 0 ? "FIRE: " + lit + " site(s) burning." : "Nothing caught (water, fires off or the fire limit).");
         }
 
-        public string ArmLevel() => Arm("LEVEL", "LEVEL: click the centre; every building within 200 m falls. Esc cancels.", false, (at, heading) => LevelAt(at));
+        public string ArmLevel() => Arm("LEVEL", "LEVEL: right-click the centre; every building within 200 m falls.", false, (at, heading) => LevelAt(at));
 
         /// <summary>Every map building and network building within 200 m destroyed (one scene search per click).</summary>
         public string LevelAt(GlobalPosition at)

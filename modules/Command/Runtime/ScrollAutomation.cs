@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 {
                     if (key.Entry.Code != code || key.Screen == null) continue;
                     if (!key.Screen.isActive) key.Source.onClick.Invoke();
+                    // "page": show that page of every open console (SET COMPAT is client page 6) instead of the longest.
+                    int page = (int)Number(args, "page", -1);
+                    if (page >= 0) return new Dictionary<string, object> { ["ok"] = true, ["code"] = code, ["shown"] = ShowPage(page) };
                     float overflow = ShowLongestPage();
                     if (overflow > 0f) return new Dictionary<string, object> { ["ok"] = true, ["code"] = code, ["overflow"] = overflow };
                 }
@@ -91,6 +94,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ["movingFrames"] = moving, ["monotonic"] = monotonic,
                 ["samples"] = string.Join(",", samples.ConvertAll(v => v.ToString("0.0"))),
             };
+        }
+
+        private static int ShowPage(int page)
+        {
+            var all = (IList)typeof(AvConsole).GetField("all", BindingFlags.NonPublic | BindingFlags.Static).GetValue(null);
+            int shown = 0;
+            foreach (AvConsole c in all)
+                if (c.Root != null && c.Root.gameObject.activeInHierarchy && page < c.PageCount) { c.SetPage(page); shown++; }
+            return shown;
         }
 
         // Shows the page that overflows its viewport most on every open console; returns that overflow in px.

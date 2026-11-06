@@ -48,8 +48,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The faction's supply lists the type (even at none left).</summary>
         public bool Declared;
         public int FactionStock;
-        /// <summary>Airframes of the type kept in the HANGAR store.</summary>
-        public int Held;
         /// <summary>ON bases this class can launch from (a jet: no carrier).</summary>
         public int BasesForClass;
     }
@@ -65,7 +63,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public WingBlock Wing;
         public TileBlock Tile;
         public float Price;
-        public bool OverLimit, FromHeld;
+        public bool OverLimit;
 
         public bool Allowed => Wing == WingBlock.None && Tile == TileBlock.None;
     }
@@ -78,7 +76,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static float SurchargeMultiplier = 3f;
 
         public static bool Listed(in ShopAirframe a, bool sandbox) =>
-            !a.Restricted && !a.Vtol && !a.Placeholder && (sandbox || a.Declared || a.Held > 0);
+            !a.Restricted && !a.Vtol && !a.Placeholder && (sandbox || a.Declared);
 
         /// <summary>The game deploys no more AI once its count reaches the limit (FactionHQ.DeployAIAircraft): neither do we
         /// without the mode's price.</summary>
@@ -97,12 +95,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static ShopQuote Quote(in ShopWing w, in ShopAirframe a)
         {
-            // Review R4a: the sandbox never takes a stored airframe (SpawnService launches it from the faction as ever).
-            var q = new ShopQuote { Wing = WingBlocker(w), OverLimit = OverCap(w), FromHeld = !w.Sandbox && a.Held > 0 };
+            var q = new ShopQuote { Wing = WingBlocker(w), OverLimit = OverCap(w) };
             if (q.Wing == WingBlock.None && !Listed(a, w.Sandbox)) q.Wing = WingBlock.NotOffered;
             q.Price = w.Sandbox ? 0f : a.Value * (q.OverLimit && w.Mode == OverLimitMode.Surcharge ? SurchargeMultiplier : 1f);
             if (a.RankRequired > w.PlayerRank) q.Tile = TileBlock.Rank;
-            else if (!w.Sandbox && a.FactionStock + a.Held <= 0) q.Tile = TileBlock.NoStock;
+            else if (!w.Sandbox && a.FactionStock <= 0) q.Tile = TileBlock.NoStock;
             else if (a.BasesForClass <= 0) q.Tile = TileBlock.NoBase;
             else if (w.Funds < q.Price) q.Tile = TileBlock.Funds;
             return q;
@@ -144,8 +141,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return picked >= 0 ? picked : nearest;
         }
 
-        public static int NextFuel(int percent) => percent == 25 ? 50 : percent == 50 ? 75 : percent == 75 ? 100 : percent == 100 ? 25 : 100;
-
         // ---- words
 
         public static string WingReason(WingBlock b, in ShopWing w)
@@ -174,7 +169,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case TileBlock.NoStock: return "NO STOCK";
                 case TileBlock.NoBase: return "NO BASE";
                 case TileBlock.Funds: return "NEED " + Credits.Text(q.Price);
-                default: return sandbox ? "FREE · SANDBOX" : Credits.Price(q.Price) + " · " + N(a.FactionStock + a.Held) + " LEFT";
+                default: return sandbox ? "FREE · SANDBOX" : Credits.Price(q.Price) + " · " + N(a.FactionStock) + " LEFT";
             }
         }
 
@@ -232,25 +227,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                     return "OVER LIMIT (" + Cap(w) + ") · " + (w.Sandbox ? "SANDBOX, NO ×" : "×")
                         + SurchargeMultiplier.ToString("0.#", CultureInfo.InvariantCulture) + (w.Sandbox ? "" : " COST");
             }
-        }
-
-        // ---- the HANGAR store (user decision 2026-09-25)
-
-        /// <summary>Why STORE cannot take one now; the sandbox never launches from the HANGAR, so it stores nothing (review R4b).</summary>
-        public static string StoreBlock(bool host, bool faction, bool sandbox, int count, int capacity, int factionStock)
-        {
-            if (!host) return "Host only";
-            if (!faction) return "No faction";
-            if (sandbox) return "The sandbox never uses the HANGAR";
-            if (count >= capacity) return "The hangar is full (" + N(count) + "/" + N(capacity) + ") · return one first";
-            return factionStock <= 0 ? "None left in the faction's stock" : null;
-        }
-
-        public static string ReturnBlock(bool host, bool faction, int stored)
-        {
-            if (!host) return "Host only";
-            if (!faction) return "No faction";
-            return stored <= 0 ? "None of this type is in the hangar" : null;
         }
 
         private static int Limit(in ShopWing w) => (int)Math.Ceiling(w.FactionAiLimit);

@@ -133,9 +133,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
             CancelPendingLoad();
             State = Transport.Loading;
-            AudioType audioType = string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase)
-                ? AudioType.WAV
-                : AudioType.OGGVORBIS;
+            AudioType audioType =
+                string.Equals(extension, ".wav", StringComparison.OrdinalIgnoreCase) ? AudioType.WAV :
+                string.Equals(extension, ".mp3", StringComparison.OrdinalIgnoreCase) ? AudioType.MPEG :
+                AudioType.OGGVORBIS;
 
             try
             {

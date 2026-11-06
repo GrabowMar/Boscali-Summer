@@ -10,17 +10,15 @@ namespace BoscaliSummer.Modules.Wing.Domain
     internal struct PerkCard
     {
         public string Title, Line, Tip;
-        public bool Owned, Locked, Inactive;
+        public bool Owned, Locked;
     }
 
     /// <summary>The dossier's PERKS 2×2 (spec WMC rebuild §WING; critique §8.5): owned perks in order with a short line (the full description
-    /// in the tooltip), the ones not wired in 1.0 marked, locked slots naming the rank and XP that earn them (slot n opens at rank n, or at
+    /// in the tooltip), locked slots naming the rank and XP that earn them (slot n opens at rank n, or at
     /// once with Talented), and a fourth card that lists the rest by name when a pilot has more than four.</summary>
     internal static class PerkCards
     {
         public const int LineChars = 64, Slots = 4;
-
-        public static bool Active(PilotPerk p) => !PilotPerks.Description(p).StartsWith("Not active", StringComparison.Ordinal);
 
         /// <summary>The description's first sentence, cut at a word to fit two card lines.</summary>
         public static string Short(PilotPerk p)
@@ -29,8 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             int end = d.IndexOf(". ", StringComparison.Ordinal);
             if (end < 0 && d.EndsWith(".", StringComparison.Ordinal)) end = d.Length - 1;
             string first = end > 0 ? d.Substring(0, end) : d;
-            int colon = first.IndexOf(": ", StringComparison.Ordinal);
-            if (!Active(p) && colon > 0) first = first.Substring(0, colon);
             return WmcText.Cut(first, LineChars);
         }
 
@@ -60,7 +56,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 PilotPerk p = owned[slot];
                 return new PerkCard
                 {
-                    Title = PilotPerks.Name(p).ToUpperInvariant(), Line = Short(p), Tip = PilotPerks.Description(p), Owned = true, Inactive = !Active(p),
+                    Title = PilotPerks.Name(p).ToUpperInvariant(), Line = Short(p), Tip = PilotPerks.Description(p), Owned = true,
                 };
             }
             bool talented = owned != null && Contains(owned, PilotPerk.Talented);

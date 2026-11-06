@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
 
-        /// <summary>Standing orders for every SET page; they print on the bay cover under a short page.</summary>
+        /// <summary>Standing orders for every SET page; the console footer shows them one at a time.</summary>
         private static void ApplyOrders(AvConsole c, bool server)
         {
             if (server)
@@ -90,6 +90,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             c.Orders(CWorld,
                 "World looks are drawn on this machine only; the host's weather is the same.",
                 "PERF presets also set the costly looks on this page.");
+            c.Orders(CCompat,
+                "Rows unlock when the other mod is installed.",
+                "Each effect has one owner: the other side's copy is switched off.",
+                "Changes write the other mod's own config file.");
             c.Orders(CPerf,
                 "Watch FRAME TIME while you change a budget.",
                 "A preset is a starting point: tune single switches after it.",

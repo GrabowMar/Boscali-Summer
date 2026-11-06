@@ -5,32 +5,27 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // SUPPLY step ④ LAUNCH BASE: NEAREST or ANY FIELD in the header, and the friendly fields a page at a time (only the ON button
+    // SUPPLY step ④ LAUNCH BASE: a LAUNCH FROM row (NEAREST or ANY FIELD), and the friendly fields a page at a time (only the ON button
     // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / NO JETS / SHORT (runway too short for the
-    // airframe at full fuel) and ON / OFF.
+    // airframe at the chosen fuel) and ON / OFF.
     internal sealed partial class WmcSupply
     {
-        private AvControl nearest, anyField;
+        private WmcTuneRow modeRow;
         private WmcHeadBar baseHead;
         private WmcStripBlock baseList;
         private WmcLines baseEmpty;
         private int basePage, baseChipKey = -1, baseKey = int.MinValue;
         private int modeKey = -1;
+        /// <summary>The field each row shows, bound at refresh (the list refills and re-sorts by distance): a click acts on what was shown.</summary>
+        private readonly Airbase[] baseDef = new Airbase[BezelLayout.BaseRows];
 
         private void BuildBase(AvFlow f)
         {
-            baseHead = f.Add(new WmcHeadBar(f.Content, AvIcon.BuildingBank, "4 · " + SupplyWords.BaseTitle,
-                new AvControl.Spec("NEAREST", () => SetMode(LaunchMode.Nearest), AvButtonStyle.Default),
-                new AvControl.Spec("ANY FIELD", () => SetMode(LaunchMode.Any), AvButtonStyle.Default)));
-            nearest = baseHead.Control(0);
-            anyField = baseHead.Control(1);
-            ids.Add("sup.base.nearest", nearest);
-            ids.Add("sup.base.any", anyField);
-            baseList = f.Add(new WmcStripBlock(f.Content, "Fields", BezelLayout.BaseRows, TurnBases, (row, k) => ToggleBase(basePage * BezelLayout.BaseRows + row),
+            baseHead = f.Add(new WmcHeadBar(f.Content, AvIcon.BuildingBank, "4 · " + SupplyWords.BaseTitle));
+            modeRow = f.Add(new WmcTuneRow(f.Content, "LAUNCH FROM", new[] { "NEAREST", "ANY FIELD" },
+                i => SetMode(i == 0 ? LaunchMode.Nearest : LaunchMode.Any)));
+            baseList = f.Add(new WmcStripBlock(f.Content, "Fields", BezelLayout.BaseRows, TurnBases, (row, k) => ToggleBase(row),
                 new AvControl.Spec("ON", null, AvButtonStyle.Default)));
-            ids.Add("sup.bases.prev", baseList.PagerPrev);
-            ids.Add("sup.bases.next", baseList.PagerNext);
-            for (int i = 0; i < BezelLayout.BaseRows; i++) ids.Add("sup.base" + i, baseList.Button(i, 0));
             baseEmpty = f.Add(new WmcLines(f.Content, 1));
         }
 
@@ -39,11 +34,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private void RefreshBase()
         {
             List<Airbase> fields = WingRequisition.Fields;
-            nearest.Latched = WingRequisition.Mode == LaunchMode.Nearest;
-            anyField.Latched = WingRequisition.Mode == LaunchMode.Any;
+            modeRow.Show(WingRequisition.Mode == LaunchMode.Nearest ? 0 : 1, -1, false);
             if ((client ? 1 : 0) != modeKey)
             {
                 modeKey = client ? 1 : 0;
+                AvControl nearest = modeRow.Options[0], anyField = modeRow.Options[1];
                 nearest.Interactable = !client;
                 anyField.Interactable = !client;
                 nearest.Help = client ? ClientWhy : "Launch from the field picked on the radial when it is ON, else the nearest ON field.";
@@ -62,7 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     string status = selected == null ? (isOn ? "ON" : "OFF") : WingRequisition.Status(f, selected);
                     key = key * 31 + f.GetHashCode() + (isOn ? 3 : 0) + (ReferenceEquals(f, field) ? 5 : 0) + (status != null ? status.GetHashCode() * 7 : 0)
                         + (selected != null ? 11 : 0);
-                    if (caller != null) key += (int)((f.transform.position - caller.transform.position).magnitude / 1000f) * 13;
+                    if (caller != null) key += Mathf.RoundToInt((f.transform.position - caller.transform.position).magnitude / 1000f) * 13;
                 }
             }
             int chip = on * 1000 + fields.Count;
@@ -79,8 +74,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             int first = basePage * per;
             for (int s = 0; s < per; s++)
             {
-                if (first + s >= fields.Count) baseList.Hide(s);
-                else BindBase(s, fields[first + s]);
+                Airbase f = first + s < fields.Count ? fields[first + s] : null;
+                baseDef[s] = f;
+                if (f == null) baseList.Hide(s);
+                else BindBase(s, f);
             }
             baseList.SetPaging(basePage, pages, (first + 1) + "–" + Mathf.Min(fields.Count, first + per) + " OF " + fields.Count);
             relayout = true;
@@ -124,10 +121,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcPanel.Instance?.Refresh();
         }
 
-        private void ToggleBase(int item)
+        private void ToggleBase(int slot)
         {
-            List<Airbase> fields = WingRequisition.Fields;
-            Airbase f = item >= 0 && item < fields.Count ? fields[item] : null;
+            Airbase f = slot >= 0 && slot < baseDef.Length ? baseDef[slot] : null;
             if (client || f == null) return;
             WingRequisition.SetOn(f, !WingRequisition.IsOn(f));
             WmcPanel.Instance?.Refresh();

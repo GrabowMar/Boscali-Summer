@@ -312,7 +312,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 : manager.IsEngaged && !manager.IsPaused ? AvState.Ready
                 : hasChannels ? AvState.Info : AvState.Inert;
             tunePart.Set(dial.FrequencyText, dial.UnitText, modeLine, name, programme, trackLine, receiverState, receiverChipState);
-            // With nothing on file the scope has nothing to show: it folds to its minimum and the bay cover takes the room.
+            // With nothing on file the scope has nothing to show: it folds to its minimum and the console ground shows below.
             if (scopeGrows != hasChannels)
             {
                 scopeGrows = hasChannels;
@@ -646,7 +646,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             }
             deckEq.Set(eqLevels, live ? "ON" : manager.DeckPaused ? "PAUSED" : "IDLE", live ? AvState.Ready : AvState.Inert);
             // The meter and the position bar need something loaded; an idle meter stays a thin strip (the room goes to the list
-            // or to the bay cover) and only a playing one takes the leftover height.
+            // or stays console ground) and only a playing one takes the leftover height.
             bool loaded = hasFolders && trackCount > 0;
             deckEq.SetShown(loaded);
             deckBar.SetShown(loaded);

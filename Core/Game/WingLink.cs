@@ -145,6 +145,14 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailSquad(error); return false; }
         }
 
+        /// <summary>The saved pilots' callsigns (empty when Wing is off).</summary>
+        public static string[] SavedPilotCallsigns()
+        {
+            if (!ResolveSquad()) return Array.Empty<string>();
+            try { return squad.SavedPilotCallsigns() ?? Array.Empty<string>(); }
+            catch (Exception error) { FailSquad(error); return Array.Empty<string>(); }
+        }
+
         /// <summary>Open the WMC SQUADRON > STUDIO page, where saved pilots are edited.</summary>
         public static bool OpenPilotStudio()
         {
@@ -241,6 +249,7 @@ namespace BoscaliSummer.Core.Game
             Uniform = view.Uniform,
             Accessory = view.Accessory,
             Backdrop = view.Backdrop,
+            File = view.File,
         };
     }
 }

@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>REQUISITION, on the card.</summary>
         public AvControl Button { get; }
 
-        /// <summary>The next-call figures beside the button (price, funds after, crew).</summary>
+        /// <summary>The next-call figures beside the button (funds after, what is left).</summary>
         public void SetMeta(string text)
         {
             AvText.Set(meta, text);
@@ -190,94 +190,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 : blockerLevel.Length > 0 ? WmcUi.LevelColor(blockerLevel) : line.color;
             chip.Restyle();
             if (Button != null) Button.Restyle();
-        }
-    }
-
-    /// <summary>LOADOUT's build card: the airframe's icon, the template it edits and its state chip, the build summary, and a tape of
-    /// how many stations are fitted. Not a click target.</summary>
-    internal sealed class WmcBuildCard : AvPart
-    {
-        private const float Pad = 8f, ChipW = 96f, TopH = 22f, TapeH = 6f;
-        private readonly AvFrame frame;
-        private readonly Image rail, icon, track, fill;
-        private readonly AvChip chip;
-        private readonly TMP_Text title, chain;
-        private AvState state = AvState.Inert;
-        private string tapeState = "inert", railState = "inert";
-        private float tape;
-
-        public WmcBuildCard(RectTransform parent)
-        {
-            Rect = AvLay.Child(parent, "BuildCard");
-            frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(6f));
-            rail = AvLay.Solid(Rect, "Rail", Color.clear);
-            icon = AvLay.Solid(Rect, "Icon", Color.white);
-            icon.preserveAspect = true;
-            icon.enabled = false;
-            chip = new AvChip(Rect);
-            title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
-            chain = AvText.Make(Rect, "Chain", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
-            track = AvLay.Solid(Rect, "TapeTrack", Color.clear);
-            fill = AvLay.Solid(Rect, "TapeFill", Color.clear);
-            Restyle();
-        }
-
-        /// <summary>The title and chain as shown (automation reads them).</summary>
-        public string Title => title.text;
-
-        /// <summary><paramref name="stateClass"/> colours the chip and the tape, <paramref name="railClass"/> the rail (a pending delete
-        /// asks in caution).</summary>
-        public void Set(string titleText, string chainText, string word, string stateClass, string railClass, Sprite sprite, float tapeFraction)
-        {
-            if (title.text != (titleText ?? "")) title.text = titleText ?? "";
-            if (chain.text != (chainText ?? "")) chain.text = chainText ?? "";
-            chip.Set(word, WmcState.Of(stateClass));
-            icon.sprite = sprite;
-            icon.enabled = sprite != null;
-            tape = Mathf.Clamp01(tapeFraction);
-            state = WmcState.Of(stateClass);
-            tapeState = stateClass;
-            railState = railClass;
-            Restyle();
-            PlaceTape();
-        }
-
-        // The text starts at the pad when there is no airframe icon to stand beside.
-        private float TextX => icon.enabled ? Pad + 44f : Pad + 4f;
-
-        private float ChainW(float width) => Mathf.Max(1f, width - TextX - Pad);
-
-        public override float Measure(float width) => Pad + TopH + 2f + Mathf.Max(AvText.Height(chain, ChainW(width)), 15f) + 6f + TapeH + Pad;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            AvLay.Place(rail.rectTransform, 0f, 0f, 3f, s.H);
-            AvLay.Place(icon.rectTransform, Pad + 2f, Pad, 36f, 26f);
-            chip.Place(new AvSlot(s.W - Pad - ChipW, Pad, ChipW, AvGridTokens.ChipStrip));
-            AvLay.Place(title.rectTransform, TextX, Pad, Mathf.Max(0f, s.W - TextX - ChipW - 2f * Pad), TopH);
-            float ch = Mathf.Max(AvText.Height(chain, ChainW(s.W)), 15f);
-            AvLay.Place(chain.rectTransform, TextX, Pad + TopH + 2f, ChainW(s.W), ch);
-            AvLay.Place(track.rectTransform, TextX, Pad + TopH + 2f + ch + 6f, ChainW(s.W), TapeH);
-            PlaceTape();
-        }
-
-        private void PlaceTape()
-        {
-            Vector2 p = track.rectTransform.anchoredPosition, sz = track.rectTransform.sizeDelta;
-            AvLay.Place(fill.rectTransform, p.x, -p.y, sz.x * tape, sz.y);
-        }
-
-        public override void Restyle()
-        {
-            WmcDraw.PaintCard(frame, "card " + AvStates.Class(state), AvTheme.SurfaceInert);
-            rail.color = WmcState.Color(railState);
-            title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-            chain.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            track.color = AvStyleHost.FuiFill("metric-track", AvTheme.Hairline);
-            fill.color = WmcState.Color(tapeState);
-            icon.color = AvTheme.Friendly;
-            chip.Restyle();
         }
     }
 }

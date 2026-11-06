@@ -15,3 +15,11 @@ contour-engraving.png: abstract decorative brass contour engraving on charcoal, 
 modules/Progression/Assets/pilot-helmet.png: generic anonymous flight helmet and oxygen mask in ivory/brass on charcoal. Not a portrait of the player.
 Generated for this project. Runtime imports are capped at 512 and 256 pixels respectively, compressed, no mipmaps, non-readable.
 Source prompts: docs/mockups/grok47-mfd-restyle/codex-implementation/ASSETS.md.
+
+Original generated artwork, OpenAI image generation through the Codex CLI (ChatGPT), 2026-11-06:
+console-ground.png: near-black tactical map plate: faint topographic contour lines of hilly terrain toward the edges, a sparse
+square grid, crosshair registration marks and edge tick scales, calm centre. Generated at 1024x1536 from the prompt "Neutral grey
+background texture for a military tactical display: near-black with faint thin topographic contour lines of hilly terrain, a sparse
+square map grid, a few small crosshair registration marks and short tick scales along the edges ... Greyscale only", then
+contrast-stretched, curved (gamma 1.8), resized to 512x768 and stored white with luminance in alpha so each scheme tints it
+(embedded PNG, decoded once).

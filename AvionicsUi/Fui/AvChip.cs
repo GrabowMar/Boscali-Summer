@@ -17,10 +17,12 @@ namespace NOAvionics
             Rect = AvLay.Child(parent, "Chip");
             back = AvLay.Solid(Rect, "Back", Color.clear); AvLay.Fill(back.rectTransform);
             rail = AvLay.Solid(Rect, "Rail", Color.clear);
-            AvLay.Place(rail.rectTransform, 0f, 0f, 2f, AvGridTokens.ChipStrip);
+            rail.rectTransform.anchorMin = Vector2.zero; rail.rectTransform.anchorMax = new Vector2(0f, 1f);
+            rail.rectTransform.pivot = new Vector2(0f, 0.5f); rail.rectTransform.sizeDelta = new Vector2(2f, 0f);
+            rail.rectTransform.anchoredPosition = Vector2.zero;
             text = AvText.Make(Rect, "Text", AvTextRole.Micro);
             AvText.Fit(text, false);
-            AvLay.Fill(text.rectTransform); text.rectTransform.offsetMin = new Vector2(8f, 0f);
+            AvLay.Fill(text.rectTransform); text.rectTransform.offsetMin = new Vector2(8f, 0f); text.rectTransform.offsetMax = new Vector2(-8f, 0f);
             Restyle();
         }
 
@@ -28,9 +30,9 @@ namespace NOAvionics
 
         public void Set(string value, AvState s)
         {
-            string composed = AvStates.Glyph(s) + (value ?? "");
-            if (composed == body && s == state) return;
-            body = composed; state = s; text.text = composed;
+            string next = value ?? "";
+            if (next == body && s == state) return;
+            body = next; state = s; AvText.Set(text, AvStates.Glyph(s) + next);
             Restyle();
         }
 

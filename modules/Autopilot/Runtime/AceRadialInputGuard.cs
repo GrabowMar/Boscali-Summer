@@ -16,7 +16,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static bool held;
         private static bool ownsCursorFlag;
         private static bool mouseTaken, keyboardTaken, cursorBlank;
-        private static UnityEngine.Texture2D blank;
 
         public static bool Held => held;
 
@@ -47,7 +46,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (keyboardTaken) { Keyboard keyboard = TryKeyboard(); if (keyboard != null) keyboard.enabled = true; keyboardTaken = false; }
             if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, false);
             ownsCursorFlag = false;
-            if (cursorBlank) { UnityEngine.Cursor.SetCursor(null, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto); cursorBlank = false; }
+            if (cursorBlank) { BoscaliSummer.Core.Ui.ModCursor.Restore(); cursorBlank = false; }
             UnityEngine.Cursor.visible = CursorManager.Visible;
             UnityEngine.Cursor.lockState = CursorManager.Visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Locked; // CursorManager's own rule
         }
@@ -61,13 +60,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (!UnityEngine.Cursor.visible) UnityEngine.Cursor.visible = true;
             if (cursorBlank == visible)
             {
-                if (blank == null)
-                {
-                    blank = new UnityEngine.Texture2D(32, 32, UnityEngine.TextureFormat.RGBA32, false) { hideFlags = UnityEngine.HideFlags.HideAndDontSave };
-                    blank.SetPixels32(new UnityEngine.Color32[32 * 32]);
-                    blank.Apply();
-                }
-                UnityEngine.Cursor.SetCursor(visible ? null : blank, UnityEngine.Vector2.zero, UnityEngine.CursorMode.Auto);
+                if (visible) BoscaliSummer.Core.Ui.ModCursor.Restore();
+                else BoscaliSummer.Core.Ui.ModCursor.Set(BoscaliSummer.Core.Ui.CursorShape.Blank);
                 cursorBlank = !visible;
             }
             UnityEngine.CursorLockMode mode = visible ? UnityEngine.CursorLockMode.None : UnityEngine.CursorLockMode.Confined;

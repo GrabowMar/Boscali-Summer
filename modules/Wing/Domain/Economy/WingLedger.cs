@@ -38,15 +38,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <param name="price">What it costs (SUPPLY's quote, the surcharge included); negative: the list value.</param>
-        /// <param name="held">Airframes of the type in the HANGAR store: they count as stock and one is used first (never
-        /// drawn from the faction by hand).</param>
-        public static CallQuote Quote(AircraftDefinition definition, FactionHQ hq, bool viaHangar, bool sandbox, float price = -1f, int held = 0)
+        public static CallQuote Quote(AircraftDefinition definition, FactionHQ hq, bool viaHangar, bool sandbox, float price = -1f)
         {
             GameManager.GetLocalPlayer(out Player player);
-            CallQuote q = CallCost.Quote(price >= 0f ? price : definition != null ? definition.value : 0f, player != null ? player.Allocation : 0f,
-                (hq != null && definition != null ? hq.GetUnitSupply(definition) : 0) + held, sandbox, viaHangar);
-            if (held > 0) q.TakeStock = false;
-            return q;
+            return CallCost.Quote(price >= 0f ? price : definition != null ? definition.value : 0f, player != null ? player.Allocation : 0f,
+                hq != null && definition != null ? hq.GetUnitSupply(definition) : 0, sandbox, viaHangar);
         }
 
         public static Charge Take(CallQuote quote, FactionHQ hq, AircraftDefinition definition, bool viaHangar, bool sandbox = false)

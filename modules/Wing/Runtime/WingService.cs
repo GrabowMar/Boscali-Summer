@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// <item>The wing forms on its anchor while one is set and alive (an aircraft from automation, or any unit it
     /// escorts), else on the local player. A lost anchor falls back to the player; a lost escortee also says so.</item>
     /// <item>The shape use follows the anchor: rotary shapes behind a helicopter, escort shapes while escorting.</item>
-    /// <item><see cref="Metrics"/> accumulates formation quality for the automated in-game scenarios.</item>
     /// </list></summary>
     internal sealed partial class WingService : IWingService
     {
@@ -45,7 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public Unit Anchor { get; private set; }
         public bool Escorting { get; private set; }
         public static string RotaryDefaultShape = "staggered-trail";
-        public WingMetrics Metrics { get; } = new WingMetrics();
         public float MissionTime => missionTime;
         public double LastFrameAiMs { get; private set; }
         public double AiMsMax { get; private set; }
@@ -82,7 +80,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             // R7: the saved pilots join every mission as ROOKIEs (re-read, so a hand edit or another machine's save shows).
             WingPilotRoster.StartMission(WingSavedPilots.Load().Records);
             WingLedger.Reset();
-            WingSupplyReserve.Reset();
             WingRequisition.Reset();
             WingLoadoutCatalog.Reset();
             Planner.Reset();
@@ -102,7 +99,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             frameTime = float.NaN;
             missionTime = 0f;
             eventsLogged = 0;
-            Metrics.Reset(0f);
             AiMsMax = 0.0;
             if (WingData.Formations.Count == 0)
             {
@@ -285,12 +281,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 SenseThreat(m);
                 ControlOutput o = m.Brain.Step(frame, m.Last, m.Profile, missionTime, dt, Events);
                 ControlWriter.Fly(m.Aircraft, o, m.Profile.Class);
-                m.Why.Update(m.Brain.Pipeline.Report, missionTime);
                 Trigger(m.Aircraft, m.Brain.Mind.Current == BehaviourId.Defend && m.Brain.LastDefence.Countermeasures);
                 FireFromSlot(m, dt);
-                int slot = m.Brain.Slot;
-                Metrics.Sample(m.Id, (frame.Slots[slot].Ref.Pos - m.Last.Pos).Length,
-                    m.Brain.Mind.Current == BehaviourId.StationKeep, m.Last.Tas, missionTime, dt);
             }
             catch (Exception e)
             {
@@ -796,12 +788,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 else if (Planner.Active)
                 {
                     AnchorSample player = PlayerBody();
-                    SampleSeparation(player, n);
                     wing.Update(leader, true, player, inputs, n, others, o, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
                 }
                 else
                 {
-                    SampleSeparation(leader, n);
                     wing.Update(leader, false, default, inputs, n, others, o, floor.Value, Clearance, AnchorRadius(leader.Kind), dt);
                 }
             }
@@ -888,19 +878,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 wings[e] = null;
                 planners[e] = null;
             }
-        }
-
-        /// <summary>The closest pair this tick, the leader included, for <see cref="Metrics"/>.</summary>
-        private void SampleSeparation(AnchorSample leader, int n)
-        {
-            float min = float.MaxValue;
-            for (int i = 0; i < n; i++)
-            {
-                Vec3 p = inputs[i].State.Pos;
-                if (leader.Present) min = Math.Min(min, (leader.Pos - p).Length);
-                for (int j = i + 1; j < n; j++) min = Math.Min(min, (inputs[j].State.Pos - p).Length);
-            }
-            if (min < float.MaxValue) Metrics.Separation(min);
         }
 
         private static bool Flying(Aircraft a) =>
@@ -1029,7 +1006,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Unlist(m);
                 ReleasePad(m);
                 RetirePilot(m);
-                Metrics.Left(m.Id);
                 // Spec WMC rebuild R3: the loss is logged at the seat it flew in, before the seats compact.
                 Events.Push(new WingEvent
                 {
@@ -1255,7 +1231,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             for (int i = Events.Count - (int)fresh; i < Events.Count; i++)
             {
                 WingEvent e = Events[i];
-                Metrics.Event(e.Kind);
                 if (e.Kind >= WingEventKind.TaskStarted && e.Kind <= WingEventKind.WaypointReached)
                 {
                     // 1.0: the event trail is for bug reports (VerboseLogging); a failure stays in the normal log.

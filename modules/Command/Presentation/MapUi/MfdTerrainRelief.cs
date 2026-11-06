@@ -40,11 +40,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float ModelWidth = 900f;
         private const float VerticalScale = 3.6f;
         private const float MaximumAirLift = 120f;
-        // A still view only redraws to pick up a re-baked tint or threat field; each redraw is a full camera render.
+        // A still view only redraws to pick up a re-baked tint or threat field.
         private const float RenderInterval = 1f;
-        // A moving view redraws with the display (capped at 60 Hz): at 30 Hz a pan stepped under the cursor.
-        // A frame already slower than SlowFrame keeps the old 30 Hz, so the map never digs the hole deeper.
-        private const float MovingRenderInterval = 1f / 60f;
+        // A moving view redraws every frame: since the relief draws its few renderers directly (2026-10-29) a redraw is cheap, and
+        // the old 60 Hz cap left the ground a step behind the cursor and the icons on faster displays (at 30 Hz a pan stepped).
+        // A frame already slower than SlowFrame keeps 30 Hz, so the map never digs the hole deeper.
+        private const float MovingRenderInterval = 0f, FollowRenderInterval = 1f / 60f;
         private const float SlowMovingRenderInterval = 1f / 30f;
         private const float SlowFrame = .022f;
         private const int MaximumStems = 64;
@@ -220,7 +221,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Plugin.Settings?.Command?.MapRelief3D?.Value == true &&
             Plugin.Settings?.Command?.MapTerrainImage?.Value == true;
 
-        internal static bool IsDrawing => ready && camera != null && view != null && view.isActiveAndEnabled;
+        /// <summary>Answered once a frame: projections ask it thousands of times a frame while the view moves, and each answer is
+        /// three Unity null checks and a native call (2026-10-29 profile). <see cref="Tick"/>, <see cref="Restore"/> and
+        /// <see cref="Release"/> drop the cached answer when they change what it reads.</summary>
+        internal static bool IsDrawing
+        {
+            get
+            {
+                int frame = Time.frameCount;
+                if (frame != drawingFrame)
+                {
+                    drawingFrame = frame;
+                    drawing = ready && camera != null && view != null && view.isActiveAndEnabled;
+                }
+                return drawing;
+            }
+        }
+        private static int drawingFrame = -1;
+        private static bool drawing;
         internal static ReliefRig Rig => rig;
         internal static float Yaw => rig.Yaw;
         internal static float Pitch => rig.Pitch;
@@ -412,6 +430,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 image.color = imageColor;
             }
             image.enabled = true;
+            drawingFrame = -1;   // the view may have just been made or shown: IsDrawing reads it again
             view.color = Color.white.WithAlpha(
                 Mathf.Clamp01(Plugin.Settings.Command.MapTerrainOpacity.Value));
             if (view.transform.GetSiblingIndex() != 0) view.transform.SetAsFirstSibling();
@@ -439,8 +458,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Unavailable("Render pipeline cannot render the terrain; using the native map.");
                     return;
                 }
+                // FOLLOW eases the focus every frame for as long as it is on, by a fraction of a pixel: it keeps the 60 Hz cap,
+                // or the relief would redraw a million triangles at the display rate for no visible change (2026-10-29 review).
                 nextRender = Time.unscaledTime + (!cameraMoved ? RenderInterval
-                    : Time.unscaledDeltaTime > SlowFrame ? SlowMovingRenderInterval : MovingRenderInterval);
+                    : Time.unscaledDeltaTime > SlowFrame ? SlowMovingRenderInterval
+                    : ReliefNavigator.Following ? FollowRenderInterval : MovingRenderInterval);
                 if (cameraMoved) viewRevision++;
                 lastCameraPosition = camera.transform.localPosition;
                 lastCameraRotation = camera.transform.localRotation;
@@ -482,6 +504,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static bool RenderTerrain()
         {
             if (texture == null || camera == null) return false;
+            SetHaze();
+            if (!directBroken)
+            {
+                RenderTexture before = RenderTexture.active;
+                try
+                {
+                    if (!texture.IsCreated() && !texture.Create()) return false;
+                    DrawDirect();
+                    return true;
+                }
+                catch (Exception error)
+                {
+                    // Once broken, the camera path below for the rest of the session.
+                    directBroken = true;
+                    Plugin.Logger.LogWarning("[MAP] Direct relief draw failed, rendering through the camera: " + error.Message);
+                }
+                finally { RenderTexture.active = before; }
+            }
             renderRequest.destination = texture;
             bool srp = GraphicsSettings.currentRenderPipeline != null;
             // The scene's exponential fog would wash out a relief a kilometre from its camera.
@@ -506,6 +546,78 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 RenderSettings.fog = fog;
                 RenderTexture.active = active;
             }
+        }
+
+        private static readonly string[] FogKeywords = { "FOG_LINEAR", "FOG_EXP", "FOG_EXP2" };
+        private static readonly bool[] fogWasOn = new bool[3];
+        private static readonly List<Renderer> sceneRenderers = new List<Renderer>(64), drawOrder = new List<Renderer>(64);
+        private static readonly List<float> drawDepth = new List<float>(64);
+        private static readonly List<int> drawQueue = new List<int>(64);
+        private static CommandBuffer drawCommands;
+        private static bool directBroken;
+
+        /// <summary>Test seam (MapInputAutomation): render through the camera instead, for a same-pose A/B of the direct draw.</summary>
+        internal static bool DirectDrawOff
+        {
+            get => directBroken;
+            set { directBroken = value; nextRender = 0f; }
+        }
+
+        /// <summary>
+        /// The relief's few renderers drawn straight into its texture with the camera's matrices, in the order a camera draws them
+        /// (render queue, then transparent back to front). A URP camera render of this small scene also culled the whole world and ran
+        /// the per-camera pipeline: about 2 ms a render, every frame while the view moves and once a second at rest (2026-10-29 profile).
+        /// The scene's fog keywords go off for the draw, as the camera path turned RenderSettings.fog off.
+        /// </summary>
+        private static void DrawDirect()
+        {
+            drawCommands ??= new CommandBuffer { name = "NOAvionics.ReliefDraw" };
+            CommandBuffer commands = drawCommands;
+            commands.Clear();
+            sceneRoot.GetComponentsInChildren(false, sceneRenderers);
+            drawOrder.Clear();
+            drawDepth.Clear();
+            drawQueue.Clear();
+            Vector3 eye = camera.transform.position, ahead = camera.transform.forward;
+            for (int i = 0; i < sceneRenderers.Count; i++)
+            {
+                Renderer renderer = sceneRenderers[i];
+                if (!renderer.enabled || renderer.gameObject.layer != TerrainLayer) continue;
+                Material material = renderer.sharedMaterial;
+                if (material == null) continue;
+                // Stable insertion by queue, then far to near among the transparent ones (≤ 64 renderers). The queues ride in their own
+                // list: reading them back off the materials was two native calls a step, ~1,200 a draw (2026-10-29 review).
+                int queue = material.renderQueue;
+                float depth = queue > 2500 ? Vector3.Dot(renderer.bounds.center - eye, ahead) : 0f;
+                int at = drawOrder.Count;
+                while (at > 0 && (drawQueue[at - 1] > queue || (drawQueue[at - 1] == queue && drawDepth[at - 1] < depth))) at--;
+                drawOrder.Insert(at, renderer);
+                drawDepth.Insert(at, depth);
+                drawQueue.Insert(at, queue);
+            }
+            commands.SetRenderTarget(texture);
+            // A camera clears with its colour converted to the project's linear space; a command buffer takes it as given.
+            Color clear = QualitySettings.activeColorSpace == ColorSpace.Linear ? camera.backgroundColor.linear : camera.backgroundColor;
+            commands.ClearRenderTarget(true, true, clear);
+            commands.SetViewProjectionMatrices(camera.worldToCameraMatrix, camera.projectionMatrix);
+            for (int i = 0; i < FogKeywords.Length; i++)
+            {
+                fogWasOn[i] = Shader.IsKeywordEnabled(FogKeywords[i]);
+                if (fogWasOn[i]) commands.DisableShaderKeyword(FogKeywords[i]);
+            }
+            for (int i = 0; i < drawOrder.Count; i++)
+            {
+                Material material = drawOrder[i].sharedMaterial;
+                int pass = material.FindPass("ForwardLit");
+                commands.DrawRenderer(drawOrder[i], material, 0, pass >= 0 ? pass : 0);
+            }
+            for (int i = 0; i < FogKeywords.Length; i++)
+                if (fogWasOn[i]) commands.EnableShaderKeyword(FogKeywords[i]);
+            // As the camera path did: whatever the pipeline reads fog from, it is off for this draw.
+            bool fog = RenderSettings.fog;
+            RenderSettings.fog = false;
+            try { Graphics.ExecuteCommandBuffer(commands); }
+            finally { RenderSettings.fog = fog; }
         }
 
         private static bool UpdateViewportCamera(DynamicMap map)
@@ -623,6 +735,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         dryLand = new bool[land.Length];
                         for (int i = 0; i < dryLand.Length; i++)
                             dryLand[i] = land[i] && heights[i] > 0f;
+                        ShelveFlatSea();
                     }
                 }
             }
@@ -631,6 +744,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ready = true;
             return true;
         }
+
+        /// <summary>
+        /// A heightfield with no seabed (Archipelago: the whole sea flat at 0 m) left the coast flush with the water, so the land
+        /// read as flooded. Drop such a sea to one flat depth, as Heartland's seabed drops. Flat, not a ramp off the coast: at
+        /// 320 m a sample a stepped shelf drew blocky terraces round every shore (2026-11-06).
+        /// </summary>
+        private static void ShelveFlatSea()
+        {
+            for (int i = 0; i < heights.Length; i++)
+                if (heights[i] < 0f) return;   // real bathymetry
+            for (int i = 0; i < heights.Length; i++)
+                if (!dryLand[i]) heights[i] = -FlatSeaDepth;
+        }
+
+        private const float FlatSeaDepth = 60f;
 
         private static bool SafeAssetName(string name)
         {
@@ -737,12 +865,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // over near ones and the grid survived only where it sorted after the tiles. The URP
             // particle unlit shader ships its opaque variant and keeps texture x vertex shade.
             Shader opaque = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            groundMaterial = new Material(opaque != null ? opaque : shader) {
+            // The bundled ground shader adds contours, coloured water, a coastline and tilt haze; without it the plain look.
+            Shader ground = GroundShader();
+            groundMaterial = new Material(ground != null ? ground : opaque != null ? opaque : shader) {
                 mainTexture = styleTexture != null ? styleTexture : sprite.texture,
                 color = mapAssetName == NavalMap
                     ? new Color(1.75f, 1.82f, 1.82f, 1f)
                     : new Color(1.25f, 1.28f, 1.27f, 1f) };
-            if (opaque != null)
+            if (ground != null)
+            {
+                groundMaterial.SetFloat("_MetersPerUnit", 81920f / (VerticalScale * ModelWidth));
+                groundMaterial.SetFloat("_SeaLevel", seaLevel);
+                groundMaterial.SetFloat("_PeakMeters", Mathf.Max(200f, peakMeters));
+                // The shallows reach the same ground distance on every map: 4 samples at Heartland's 160 m a sample, 2 on
+                // Archipelago's 320 m, where 4 drew a blocky 1.3 km halo.
+                float sampleMeters = Mathf.Max(source.MapSize.x, source.MapSize.y) / (Samples - 1);
+                groundMaterial.SetFloat("_CoastCells", Mathf.Clamp(4f * 160f / sampleMeters, 1f, 4f));
+                groundMaterial.renderQueue = 2000;
+            }
+            else if (opaque != null)
             {
                 groundMaterial.SetFloat("_Cull", 0f);
                 groundMaterial.renderQueue = 2000;
@@ -771,9 +912,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // Draw translucent water after opaque ground: nearer shore terrain wins the
             // depth test, while submerged relief remains faintly visible below the plane.
             Shader seaShader = shader;
+            // With the bundled ground shader the seabed already wears the water's colours: the plane only glazes it.
             waterMaterial = new Material(seaShader) {
                 mainTexture = Texture2D.whiteTexture,
-                color = new Color(32f / 255f, 51f / 255f, 78f / 255f, SeaSurfaceAlpha) };
+                color = new Color(32f / 255f, 51f / 255f, 78f / 255f, ground != null ? SeaSurfaceAlpha * .5f : SeaSurfaceAlpha) };
             if (waterMaterial.HasProperty("_Surface")) waterMaterial.SetFloat("_Surface", 1f);
             if (waterMaterial.HasProperty("_SrcBlend")) waterMaterial.SetFloat("_SrcBlend", 5f);
             if (waterMaterial.HasProperty("_DstBlend")) waterMaterial.SetFloat("_DstBlend", 10f);
@@ -820,6 +962,52 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             data.requiresDepthTexture = false;
             data.antialiasing = AntialiasingMode.None;
             data.volumeLayerMask = 0;
+            // The tilt haze fades toward the view's own background.
+            if (ground != null) groundMaterial.SetColor("_Haze", camera.backgroundColor);
+        }
+
+        private static Shader groundShader;
+        private static AssetBundle groundBundle;
+        private static bool groundTried;
+
+        /// <summary>Boscali/ReliefGround from the embedded relief.bundle (tools/Compile-ReliefAssets.ps1), loaded once; null when the
+        /// bundle is missing or the shader is unsupported, and the ground keeps the plain URP look.</summary>
+        private static Shader GroundShader()
+        {
+            if (groundTried) return groundShader;
+            groundTried = true;
+            try
+            {
+                byte[] data = EmbeddedResources.ReadAll(typeof(MfdTerrainRelief).Assembly, "BoscaliSummer.Command.relief.bundle", 256 * 1024);
+                groundBundle = data != null ? AssetBundle.LoadFromMemory(data) : null;
+                if (groundBundle == null)
+                {
+                    Plugin.Logger.LogWarning("[MAP] relief.bundle " + (data == null ? "is not embedded" : "did not load") + "; the relief keeps its plain look.");
+                    return null;
+                }
+                foreach (Shader candidate in groundBundle.LoadAllAssets<Shader>())
+                    if (candidate.name == "Boscali/ReliefGround" && candidate.isSupported) groundShader = candidate;
+                if (groundShader == null) Plugin.Logger.LogWarning("[MAP] Boscali/ReliefGround is missing or unsupported here; the relief keeps its plain look.");
+            }
+            catch (Exception error)
+            {
+                Plugin.Logger.LogWarning("[MAP] Relief ground shader unavailable, plain look: " + error.Message);
+                groundShader = null;
+            }
+            return groundShader;
+        }
+
+        /// <summary>The tilt haze for this draw: from the focus out to the view's far edge, stronger the flatter the view.</summary>
+        private static void SetHaze()
+        {
+            if (groundShader == null || groundMaterial == null || groundMaterial.shader != groundShader) return;
+            Transform eye = camera.transform;
+            Vector3 focus = sceneRoot.transform.position + new Vector3(rig.FocusX, WaterModelHeight, rig.FocusZ);
+            float start = Vector3.Dot(focus - eye.position, eye.forward);
+            float pitch = Mathf.Clamp(rig.Pitch, 5f, 89f);
+            float reach = camera.orthographicSize / Mathf.Tan(pitch * Mathf.Deg2Rad);
+            float amount = .42f * Mathf.Clamp01((70f - pitch) / 45f);
+            groundMaterial.SetVector("_HazeRange", new Vector4(start, start + Mathf.Max(1f, reach * 1.15f), amount, 0f));
         }
 
         private static Material FieldMaterial(Shader shader, float alpha, int queue)
@@ -884,6 +1072,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 DataUtility.GetOuterUV(sprite);
             var vertices = new Vector3[side * side];
             var uv = new Vector2[vertices.Length];
+            // Distance to the shoreline in heightfield samples, for the ground shader's shallows (not the vertex alpha: the control
+            // tint reuses this mesh with a shader that multiplies it).
+            var coastUv = new Vector2[vertices.Length];
             var colors = new Color32[vertices.Length];
             var triangles = new int[TileCells * TileCells * 6];
             Vector3 light = new Vector3(-0.45f, 0.82f, -0.35f).normalized;
@@ -909,6 +1100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 byte shade = ReliefLight.Shade(Vector3.Dot(normal, light), slopeDrop,
                     Mathf.Max(heights[sample], 0f), peakMeters, coast, dryLand[sample]);
                 colors[at] = new Color32(shade, shade, shade, 255);
+                coastUv[at] = new Vector2(coast, 0f);
                 if (x == TileCells || z == TileCells) continue;
                 int t = (z * TileCells + x) * 6;
                 triangles[t] = at;
@@ -921,6 +1113,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var result = new Mesh { name = "NOAvionics.TerrainTile" };
             result.vertices = vertices;
             result.uv = uv;
+            result.uv2 = coastUv;
             result.colors32 = colors;
             result.triangles = triangles;
             result.RecalculateNormals();
@@ -1091,7 +1284,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (!(Mathf.Abs(Mathf.DeltaAngle(nativeAngle, headingMark.Projected)) < .01f))
                     headingMark.Native = nativeAngle;
             }
-            PlaceProjectedIcon(icon, fix, MapImageRect(owner.mapImage).rect);
+            // The game's own per-icon update lands here a fifth of the roster a frame: once the pose is final it is one multiply,
+            // as the bulk reprojection already does (the per-point path was 0.4 ms a frame, 2026-10-29 profile).
+            PlaceProjectedIcon(icon, fix, MapImageRect(owner.mapImage).rect, poseExact);
         }
 
         private static void ReprojectCachedIcons()
@@ -1109,7 +1304,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     if (staleIconFixes.Count < 64) staleIconFixes.Add(entry.Key);
                     continue;
                 }
-                PlaceProjectedIcon(entry.Key, entry.Value, rect, fast);
+                PlaceProjectedIcon(entry.Key, entry.Value, rect, fast, bulk: true);
             }
             foreach (MapIcon icon in staleIconFixes)
             {
@@ -1314,7 +1509,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <see cref="BuildProjection"/> (the bulk pass); otherwise each point goes through the camera
         /// and the UI transforms, which is exact at any moment (the native per-icon refresh).
         /// </summary>
-        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect, bool fast = false)
+        /// <param name="bulk">The whole-roster reprojection: only it may skip a folded icon's sizing. The game's own per-icon update
+        /// rewrites scale and heading on every call, so that path sizes folded icons too, or a stack opening flashes them native.</param>
+        private static void PlaceProjectedIcon(MapIcon icon, IconFix fix, Rect rect, bool fast = false, bool bulk = false)
         {
             float groundHeight = GroundHeight(fix.X, fix.Z);
             Transform symbol = icon.iconImage.transform;
@@ -1347,7 +1544,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             symbol.localPosition = new Vector3(parentPoint.x, parentPoint.y, fix.Depth);
             // A contact folded into a stack is not drawn. It keeps its place, for box selection and for
             // the moment its stack opens; size and heading wait until it shows again.
-            if (fast && hiddenIcons.Contains(icon.iconImage))
+            if (bulk && hiddenIcons.Contains(icon.iconImage))
             {
                 PlaceStem(icon, symbol, groundPoint, parentPoint, false);
                 if (icon is UnitMapIcon folded) MapSymbology.Sync(folded);
@@ -1899,6 +2096,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Restore()
         {
             if (view != null) view.enabled = false;
+            drawingFrame = -1;
             MfdMapOrbitControls.Restore();
             // Do not leave relief coordinates behind while native icons return in batches.
             if (owner != null)
@@ -2023,6 +2221,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             texture = null;
             renderRequest.destination = null;
             camera = null;
+            drawingFrame = -1;
+            drawOrder.Clear();
+            drawQueue.Clear();
+            drawDepth.Clear();
+            sceneRenderers.Clear();
+            drawCommands?.Clear();   // no commands left pointing at destroyed renderers and the freed texture
         }
 
         internal static void Reset()

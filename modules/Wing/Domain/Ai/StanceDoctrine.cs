@@ -21,12 +21,32 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return d;
         }
 
-        /// <summary>RESERVE, ESCORT and SWEEP: the doctrine's own presets, always in slots 1-3 of a fresh book.</summary>
+        /// <summary>The built-in scenarios, slots 1-6 of a fresh book: RESERVE, ESCORT and SWEEP (the doctrine's own presets), then
+        /// INTERCEPT (air only, long, missiles, press), STRIKE (ground, long, radar silent, RTB at winchester) and SILENT (hold fire,
+        /// radar off, hold the slot: slip through).</summary>
         public static Stance[] BuiltIns => new[]
         {
             new Stance { Id = "reserve", Name = "RESERVE", Axes = Axes(WingDoctrine.Reserve), BuiltIn = true },
             new Stance { Id = "escort", Name = "ESCORT", Axes = Axes(WingDoctrine.Escort), BuiltIn = true },
             new Stance { Id = "sweep", Name = "SWEEP", Axes = Axes(WingDoctrine.Sweep), BuiltIn = true },
+            new Stance
+            {
+                Id = "intercept", Name = "INTERCEPT", BuiltIn = true,
+                Axes = Axes(new WingDoctrine(MissileGuard.Self, MissileResponse.Press, FormationInterval.Standard, true,
+                    TargetPolicy.Air, EngagementReach.Long, WeaponsPolicy.Missiles, RadarPolicy.On)),
+            },
+            new Stance
+            {
+                Id = "strike", Name = "STRIKE", BuiltIn = true, Winchester = (sbyte)WinchesterAction.Rtb,
+                Axes = Axes(new WingDoctrine(MissileGuard.Self, MissileResponse.Break, FormationInterval.Open, true,
+                    TargetPolicy.Ground, EngagementReach.Long, WeaponsPolicy.Auto, RadarPolicy.Silent)),
+            },
+            new Stance
+            {
+                Id = "silent", Name = "SILENT", BuiltIn = true,
+                Axes = Axes(new WingDoctrine(MissileGuard.Off, MissileResponse.Break, FormationInterval.Close, false,
+                    TargetPolicy.Hold, EngagementReach.Slot, WeaponsPolicy.Auto, RadarPolicy.Off)),
+            },
         };
     }
 }

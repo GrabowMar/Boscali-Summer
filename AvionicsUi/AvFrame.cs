@@ -83,10 +83,29 @@ namespace NOAvionics
             }
             if (Bracket > 0f && BracketColor.a > 0f)
             {
-                float t = Mathf.Max(0.65f, s), L = Bracket;
-                Quad(vh, r.xMin, r.yMax - t, r.xMin + L, r.yMax); Quad(vh, r.xMin, r.yMax - L, r.xMin + t, r.yMax);
-                Quad(vh, r.xMax - L, r.yMin, r.xMax, r.yMin + t); Quad(vh, r.xMax - t, r.yMin, r.xMax, r.yMin + L);
+                // Reticle corners top-left and bottom-right (where those are square; the top-right keeps room for keys), and a short slash parallel to each cut one (tactical-display vocabulary).
+                float t = Mathf.Max(1f, s), L = Mathf.Min(Bracket, Mathf.Min(r.width, r.height) * 0.4f);
+                if (Chamfer.TL <= 0f) { Quad(vh, r.xMin, r.yMax - t, r.xMin + L, r.yMax); Quad(vh, r.xMin, r.yMax - L, r.xMin + t, r.yMax); }
+                if (Chamfer.BR <= 0f) { Quad(vh, r.xMax - L, r.yMin, r.xMax, r.yMin + t); Quad(vh, r.xMax - t, r.yMin, r.xMax, r.yMin + L); }
+                Slash(vh, outer[2], outer[3], -1f, -1f, Chamfer.TR, t);   // top-right cut, slash sits inside it
+                Slash(vh, outer[6], outer[7], 1f, 1f, Chamfer.BL, t);     // bottom-left cut
+                Slash(vh, outer[0], outer[1], 1f, -1f, Chamfer.TL, t);
+                Slash(vh, outer[4], outer[5], -1f, 1f, Chamfer.BR, t);
             }
+        }
+
+        // A stroke parallel to a chamfer edge (a→b), pushed inward along (dx, dy), half the cut's length; nothing for small cuts.
+        private void Slash(VertexHelper vh, AvV2 a, AvV2 b, float dx, float dy, float cut, float t)
+        {
+            if (cut < 8f) return;   // on a small cut the slash is a stray dot, not a mark
+            float o = 2.5f + t, mx = (a.X + b.X) * 0.5f + dx * o, my = (a.Y + b.Y) * 0.5f + dy * o;
+            float hx = (b.X - a.X) * 0.25f, hy = (b.Y - a.Y) * 0.25f, nx = dx * t * 0.5f, ny = dy * t * 0.5f;
+            int c = vh.currentVertCount;
+            vh.AddVert(new Vector3(mx - hx - nx, my - hy - ny), BracketColor, Vector4.zero);
+            vh.AddVert(new Vector3(mx + hx - nx, my + hy - ny), BracketColor, Vector4.zero);
+            vh.AddVert(new Vector3(mx + hx + nx, my + hy + ny), BracketColor, Vector4.zero);
+            vh.AddVert(new Vector3(mx - hx + nx, my - hy + ny), BracketColor, Vector4.zero);
+            vh.AddTriangle(c, c + 1, c + 2); vh.AddTriangle(c, c + 2, c + 3);
         }
 
         // A quiet top light gives the glass depth without a texture, material instance or extra draw.

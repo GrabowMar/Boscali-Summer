@@ -21,7 +21,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public string Callsign;
         }
 
-        private readonly WmcControls ids;
         private readonly List<Entry> entries = new List<Entry>();
         private readonly List<WingPilot> roster = new List<WingPilot>();
         private readonly System.Random rng = new System.Random();
@@ -45,8 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private string problem;
         private WingPilot focusRequest;
         private readonly ConfirmGate rowGate = new ConfirmGate();
-
-        public WmcStudio(WmcControls controls) => ids = controls;
 
         public string Hint => StudioWords.Hint;
 

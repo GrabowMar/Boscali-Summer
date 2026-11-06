@@ -3,7 +3,7 @@ using System;
 namespace NOAvionics
 {
     /// <summary>
-    /// Ambient cockpit facts for idle chrome: a footer's status column and the bay plate's maker line.
+    /// Ambient cockpit facts for idle chrome: a footer's status column.
     /// The host mod supplies them; nothing here invents a reading. With no provider the consumers stay hidden.
     /// </summary>
     public static class AvAmbient
@@ -12,9 +12,6 @@ namespace NOAvionics
 
         /// <summary>Line <c>0..2</c> of the footer status column (mission clock, link, airframe). Null or empty hides the line.</summary>
         public static Func<int, string> Status;
-
-        /// <summary>Maker stencilled on equipment data plates. Fiction, not a reading.</summary>
-        public static string Maker = "AVIONICS WORKS";
 
         internal static string Line(int index)
         {

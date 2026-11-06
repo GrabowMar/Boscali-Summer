@@ -169,9 +169,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             WingPlans plans = WingPlans.Instance;
             WmcPanel panel = WmcPanel.Instance;
-            bool planShowing = wmcVisible && panel != null && panel.PlanShowing;
+            bool planShowing = wmcVisible && panel != null && panel.OrdersShowing;
             if (w != null && plans != null && !c.Client && (planShowing || plans.Running))
-                CollectPlan(w, plans, planShowing ? panel.Plan.SelectedLane : -1, planShowing ? panel.Plan.SelectedStep : -1);
+                CollectPlan(w, plans, -1, -1);
         }
 
         /// <summary>The plan layer: each lane's steps from where its element is, in its colour.</summary>
@@ -184,12 +184,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 var steps = plan.Steps[e];
                 if (steps.Count == 0) continue;
-                if (!WmcPlan.From(w, e, out float x0, out float z0, out float speed) && !PlanEdit.EndPoint(steps[0], out x0, out z0)) continue;
+                if (!WingPlans.ElementFrom(w, e, out float x0, out float z0, out float speed) && !PlanEdit.EndPoint(steps[0], out x0, out z0)) continue;
                 Color color = ElementColor(e);
                 for (int i = 0; i < steps.Count; i++)
                 {
                     PlanStep p = steps[i];
-                    StepState st = r != null ? r.State(e, i) : StepState.Pending;
+                    StepState st = live ? r.State(e, i) : StepState.Pending;   // an aborted plan keeps its runner, not its states
                     bool gone = live && (st == StepState.Done || st == StepState.Skipped), selected = e == selLane && i == selStep;
                     if (!gone)
                     {

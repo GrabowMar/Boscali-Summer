@@ -32,6 +32,7 @@ namespace BoscaliSummer.Modules.Radio.Configuration
         public readonly ConfigEntry<bool> StationIdents;
         public readonly ConfigEntry<bool> CarrierNoise;
         public readonly ConfigEntry<float> ScanDwellSeconds;
+        public readonly ConfigEntry<bool> BroadcastTalk;
 
         public RadioSettings(ConfigFile config)
         {
@@ -77,6 +78,10 @@ namespace BoscaliSummer.Modules.Radio.Configuration
                 new ConfigDescription(
                     "Seconds SCAN holds on each station before seeking the next.",
                     new AcceptableValueRange<float>(2f, 15f)));
+            BroadcastTalk = config.Bind("Radio", "BroadcastTalk", true,
+                "The built-in stations air voiced breaks between songs: station stings and idents, " +
+                "host links, adverts and news, themed by faction. Base Broadcast follows your side " +
+                "(BDF forces radio, PALA army network, or the contractor net). Off plays music only.");
         }
     }
 }

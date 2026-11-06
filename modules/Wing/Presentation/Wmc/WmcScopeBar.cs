@@ -13,8 +13,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         private const float KeyW = 64f, TextW = 132f, AllW = 40f, ChipGap = 3f, Inset = 10f, ButtonH = 26f;
 
-        private readonly WmcControls ids;
-        private readonly string prefix;
         private readonly AvFrame frame;
         private readonly TMP_Text key, scopeText;
         private readonly AvControl allChip;
@@ -27,23 +25,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private float width, height = AvGridTokens.Row;
         private WmcContext last;
 
-        public WmcScopeBar(RectTransform parent, WmcControls controls, string idPrefix, string keyText)
+        public WmcScopeBar(RectTransform parent, string keyText)
         {
-            ids = controls;
-            prefix = idPrefix;
             Rect = AvLay.Child(parent, "ScopeBar");
             frame = WmcDraw.FillFrame(Rect);
             key = WmcSheet.Text(Rect, "Key", AvTextRole.Label, TextAlignmentOptions.MidlineLeft, keyText);
             scopeText = WmcSheet.Text(Rect, "Scope", AvTextRole.Label, TextAlignmentOptions.MidlineLeft);
             allChip = AvControl.Make(Rect, new AvControl.Spec("ALL", PickAll));
             allChip.Help = "Orders go to the whole wing.";
-            ids.Add(prefix + "all", allChip);
             for (int e = 0; e < elementChips.Length; e++)
             {
                 int k = e;
                 elementChips[e] = AvControl.Make(Rect, new AvControl.Spec(ElementRoster.Letter(e), () => PickElement(k)));
                 elementChips[e].gameObject.SetActive(false);
-                ids.Add(prefix + "el" + e, elementChips[e]);
             }
             Restyle();
         }

@@ -60,7 +60,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
         /// <summary>A button that arms a map pick: it glows amber and reads ARMED while that pick waits for its click.</summary>
         private void PickButton(AvFlow flow, int page, AvControl control, string pick)
         {
-            control.Help = "Then click the map. Esc cancels.";
+            control.Help = "Then right-click the map. Esc cancels.";
             string idle = control.Label;
             flow.Ticker.Add(page, AvTickRate.Fast, () =>
             {
@@ -136,8 +136,8 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
             console.Orders(page,
-                "Pick a side and a unit, then PLACE and click the map.",
-                "Press, drag and release to face what you place.",
+                "Pick a side and a unit, then PLACE and right-click the map.",
+                "Right-press, drag and release to face what you place.",
                 "UNDO takes back the last placement; CLEAR ALL takes back every one.");
         }
 

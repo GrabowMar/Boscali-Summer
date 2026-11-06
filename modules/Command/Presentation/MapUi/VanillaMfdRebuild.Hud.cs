@@ -177,7 +177,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildVehiclesPage(CreatePage());
                 BuildBuildingsPage(CreatePage());
 
-                // A page that ends above the footer prints these on its bay cover, most important first.
+                // The footer shows these one at a time under the status line, most important first.
                 Console.Orders(0,
                     "The HUD picks its mode itself whenever you change weapon or flip the safety.",
                     "Pick a mode by hand to edit its priority set. The next weapon change re-selects.",

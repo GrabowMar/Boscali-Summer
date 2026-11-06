@@ -51,6 +51,7 @@ namespace BoscaliSummer.Modules.Wing
             if (context == null) throw new ArgumentNullException(nameof(context));
             WingLog.Init(context.Logger);
             WingSettings.Instance = context.Settings.Wing;
+            WingSavedPilots.Me = context.Settings.Progression?.PilotProfile;
             WingLogExport.Start();
             GameAccess.Initialise();
             WingNet.Init();
@@ -62,7 +63,6 @@ namespace BoscaliSummer.Modules.Wing
             runtime.Configure(context.Settings.Wing);
             runtime.Register(wing);
             runtime.Register(new WingPlans());
-            runtime.Register(new DebriefService());
             runtime.Register(new WingChatter());
             runtime.Register(new SpawnService());
             runtime.Register(new PlayerAutopilot());

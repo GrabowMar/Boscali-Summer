@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Command
             typeof(MfdReliefAirbaseIconPatch),
             typeof(MfdReliefObjectivePatch),
             typeof(MfdReliefSelectedInfoPatch),
+            typeof(ExclusionZoneCirclePatch),
             typeof(MfdScreenChromePatch),
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),

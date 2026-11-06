@@ -18,35 +18,47 @@ namespace NOAvionics
         private const float Sharpness = 22f * AvFxPacking.AnimationSpeed;
 
         private Vector2 target, written;
+        private RectTransform glideContent;
         private bool gliding;
 
         public override void OnScroll(PointerEventData data)
         {
             if (!IsActive() || content == null) return;
             Vector2 from = content.anchoredPosition;
-            if (gliding) { content.anchoredPosition = target; UpdateBounds(); }   // fast flicks stack
+            if (gliding && content == glideContent && from == written && !AvFxDriver.ReducedMotion)
+            { content.anchoredPosition = target; UpdateBounds(); }   // fast flicks stack only on unchanged content
             base.OnScroll(data);
             target = content.anchoredPosition;
-            content.anchoredPosition = from; UpdateBounds();
             StopMovement();
+            if (AvFxDriver.ReducedMotion) return;
+            content.anchoredPosition = from; UpdateBounds();
             written = from;
+            glideContent = content;
             gliding = target != from;
+        }
+
+        public override void StopMovement()
+        {
+            gliding = false;
+            glideContent = null;
+            base.StopMovement();
         }
 
         public override void OnBeginDrag(PointerEventData eventData)
         {
-            gliding = false;
+            StopMovement();
             base.OnBeginDrag(eventData);
         }
 
         protected override void LateUpdate()
         {
-            if (gliding && content != null)
+            if (gliding)
             {
-                if (content.anchoredPosition != written) gliding = false;   // a scrollbar, a jump-to-top or a relayout moved it
+                if (content == null || content != glideContent || content.anchoredPosition != written) StopMovement();
                 else
                 {
-                    Vector2 p = Vector2.Lerp(written, target, 1f - Mathf.Exp(-Sharpness * Time.unscaledDeltaTime));
+                    Vector2 p = AvFxDriver.ReducedMotion ? target :
+                        Vector2.Lerp(written, target, 1f - Mathf.Exp(-Sharpness * Time.unscaledDeltaTime));
                     if ((p - target).sqrMagnitude < 0.25f) { p = target; gliding = false; }
                     SetContentAnchoredPosition(p);
                     written = content.anchoredPosition;
@@ -57,7 +69,7 @@ namespace NOAvionics
 
         protected override void OnDisable()
         {
-            gliding = false;
+            StopMovement();
             base.OnDisable();
         }
     }

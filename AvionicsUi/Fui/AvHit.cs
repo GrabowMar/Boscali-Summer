@@ -12,6 +12,7 @@ namespace NOAvionics
         public Action<bool> Hover;
         public Action<bool> Press;
         public bool Interactable = true;
+        private bool hovered, pressed;
 
         public static AvHit On(Graphic g)
         {
@@ -20,10 +21,17 @@ namespace NOAvionics
             return hit != null ? hit : g.gameObject.AddComponent<AvHit>();
         }
 
-        public void OnPointerEnter(PointerEventData e) { if (Interactable) { Hover?.Invoke(true); AvUiSound.Play(AvUiCue.Hover); } }
-        public void OnPointerExit(PointerEventData e) { Hover?.Invoke(false); Press?.Invoke(false); }
-        public void OnPointerDown(PointerEventData e) { if (Interactable) Press?.Invoke(true); }
-        public void OnPointerUp(PointerEventData e) { Press?.Invoke(false); }
+        public void OnPointerEnter(PointerEventData e) { if (Interactable) { hovered = true; Hover?.Invoke(true); AvUiSound.Play(AvUiCue.Hover); } }
+        public void OnPointerExit(PointerEventData e) => ClearPointer();
+        public void OnPointerDown(PointerEventData e) { if (Interactable) { pressed = true; Press?.Invoke(true); } }
+        public void OnPointerUp(PointerEventData e) { if (pressed) { pressed = false; Press?.Invoke(false); } }
+        private void OnDisable() => ClearPointer();
+
+        private void ClearPointer()
+        {
+            if (hovered) { hovered = false; Hover?.Invoke(false); }
+            if (pressed) { pressed = false; Press?.Invoke(false); }
+        }
 
         public void OnPointerClick(PointerEventData e)
         {

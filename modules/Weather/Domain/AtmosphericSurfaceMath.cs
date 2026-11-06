@@ -18,6 +18,6 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         // Broad damp tone survives high views; close puddle detail has its own shader LOD.
         internal static float GroundDrawRange(float cameraAltitude)
-            => Math.Min(26000f, 1800f + 2f * Math.Max(0f, cameraAltitude));
+            => Math.Min(26000f, 3500f + 2f * Math.Max(0f, cameraAltitude));
     }
 }

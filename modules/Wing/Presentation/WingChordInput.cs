@@ -1,5 +1,7 @@
+using NuclearOption.MissionEditorScripts;
 using UnityEngine;
 
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
 using BoscaliSummer.Modules.Wing.Configuration;
@@ -22,6 +24,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>The hotkeys went off while the key was held (review fix): nothing stays shown.</summary>
         public static void Release() => Held = false;
+
+        /// <summary>Keys are text, not commands: a WMC name field, a game text field or the chat has focus (HOTAS buttons still act).</summary>
+        public static bool Typing => WmcNameField.Typing || InputFieldChecker.InsideInputField || MapTool.Typing();
 
         public static void Tick(WingConfig s, bool typing)
         {

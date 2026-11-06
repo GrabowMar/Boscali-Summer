@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly Action<string, string> commit;
         private readonly float height, keyWidth;
         private string idAtFocus, shown;
-        private bool focused, blurPending;
+        private bool focused, blurPending, committing;
 
         /// <summary>A field has the keyboard now, or let go this frame or the last (the key that ended the edit acts nowhere else).</summary>
         public static bool Typing => focusedField != null || Time.frameCount <= typingUntilFrame;
@@ -98,10 +98,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             Button?.Restyle();
         }
 
-        /// <summary>The saved text, shown while the field is not being typed in.</summary>
+        /// <summary>The saved text, shown while the field is not being typed in (a commit's own write-back counts: onEndEdit fires while
+        /// the field still has focus, and the page must show what it kept, not what was typed).</summary>
         public void SetText(string text)
         {
-            if (focused || input == null) return;
+            if ((focused && !committing) || input == null) return;
             shown = text ?? "";
             if (input.text != shown) input.SetTextWithoutNotify(shown);
         }
@@ -125,7 +126,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void OnEndEdit(string text)
         {
-            if (idAtFocus != null) commit?.Invoke(idAtFocus, text);
+            if (idAtFocus != null)
+            {
+                committing = true;
+                try { commit?.Invoke(idAtFocus, text); }
+                finally { committing = false; }
+            }
             blurPending = true;
         }
 

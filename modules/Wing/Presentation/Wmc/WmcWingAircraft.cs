@@ -9,31 +9,24 @@ using BoscaliSummer.Modules.Wing.Runtime;
 using BoscaliSummer.Core.Game;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>What the aircraft card shows: plain words and fractions (NaN is unknown), plus the parts for the damage map.</summary>
+    /// <summary>What the aircraft card shows: plain words and fractions (NaN is unknown).</summary>
     internal sealed class AircraftFace
     {
         public string Title = "", Sub = "", FuelText = "", FuelSub = "", AmmoText = "", AmmoSub = "", HullText = "", HullSub = "";
-        public string Radar = "", Alt = "", Task = "", Target = "", MapNote = "";
         public float Fuel = float.NaN, Ammo = float.NaN, Hull = float.NaN;
         public string FuelRail = "inert", AmmoRail = "inert", HullRail = "inert";
-        public readonly PartDot[] Parts = new PartDot[PartMap.Max];
-        public int PartCount;
     }
 
-    /// <summary>The AIRCRAFT page's card: the aircraft's title, a top-view damage map (the real parts as dots over a drawn outline: whole,
-    /// hit, lost), the FUEL (with bingo), AMMO and HULL gauges, and the RADAR · ALT · TASK · TARGET values.</summary>
+    /// <summary>The AIRCRAFT page's card: the aircraft's title and the FUEL (with bingo), AMMO and HULL gauges.</summary>
     internal sealed class WingAircraftCard : AvPart
     {
-        public const float H = 228f;
-        private const float PadX = 10f, MapW = 140f, MapH = 130f, MapY = 30f, GaugeH = 38f;
+        public const float H = 160f;
+        private const float PadX = 10f, GaugeY = 30f, GaugeH = 38f, GaugeGap = 4f, KeyW = 44f;
         private static readonly string[] GaugeKeys = { "FUEL", "AMMO", "HULL" };
-        private static readonly string[] ValueKeys = { "RADAR", "ALT", "TASK", "TARGET" };
         private readonly AvFrame frame;
-        private readonly AvVector map;
-        private readonly TMP_Text title, sub, mapNote;
+        private readonly TMP_Text title, sub;
         private readonly TMP_Text[] gaugeKey = new TMP_Text[3], gaugeValue = new TMP_Text[3], gaugeSub = new TMP_Text[3];
         private readonly Image[] track = new Image[3], fill = new Image[3];
-        private readonly TMP_Text[] valueKey = new TMP_Text[4], value = new TMP_Text[4];
         private readonly AircraftFace face = new AircraftFace();
         private float width = 300f;
 
@@ -43,8 +36,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             frame = WmcDraw.FillFrame(Rect);
             title = WmcSheet.Text(Rect, "Title", AvTextRole.Label);
             sub = WmcSheet.Text(Rect, "Sub", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
-            map = AvVector.Create(Rect, "DamageMap", 400);
-            mapNote = WmcSheet.Text(Rect, "MapNote", AvTextRole.Micro, TextAlignmentOptions.Center);
             for (int i = 0; i < 3; i++)
             {
                 gaugeKey[i] = WmcSheet.Text(Rect, "GaugeKey" + i, AvTextRole.Micro, text: GaugeKeys[i]);
@@ -53,42 +44,27 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 fill[i] = AvLay.Solid(Rect, "Fill" + i, Color.clear);
                 gaugeSub[i] = WmcSheet.Text(Rect, "GaugeSub" + i, AvTextRole.Micro);
             }
-            for (int i = 0; i < 4; i++)
-            {
-                valueKey[i] = WmcSheet.Text(Rect, "ValueKey" + i, AvTextRole.Micro, text: ValueKeys[i]);
-                value[i] = WmcSheet.Text(Rect, "Value" + i, AvTextRole.DataSmall);
-            }
             Restyle();
         }
 
         public void Show(AircraftFace f)
         {
-            face.Title = f.Title;
-            face.Sub = f.Sub;
             face.Fuel = f.Fuel;
             face.Ammo = f.Ammo;
             face.Hull = f.Hull;
             face.FuelRail = f.FuelRail;
             face.AmmoRail = f.AmmoRail;
             face.HullRail = f.HullRail;
-            face.PartCount = f.PartCount;
-            Array.Copy(f.Parts, face.Parts, f.PartCount);
             AvText.Set(title, f.Title);
             AvText.Set(sub, f.Sub);
-            AvText.Set(mapNote, f.MapNote);
             AvText.Set(gaugeValue[0], f.FuelText);
             AvText.Set(gaugeSub[0], f.FuelSub);
             AvText.Set(gaugeValue[1], f.AmmoText);
             AvText.Set(gaugeSub[1], f.AmmoSub);
             AvText.Set(gaugeValue[2], f.HullText);
             AvText.Set(gaugeSub[2], f.HullSub);
-            AvText.Set(value[0], f.Radar);
-            AvText.Set(value[1], f.Alt);
-            AvText.Set(value[2], f.Task);
-            AvText.Set(value[3], f.Target);
             PlaceFills();
             Restyle();
-            DrawMap();
         }
 
         public override float Measure(float w) => H;
@@ -99,62 +75,28 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             width = s.W;
             AvLay.Place(title.rectTransform, PadX, 6f, s.W * 0.5f - PadX, 18f);
             AvLay.Place(sub.rectTransform, s.W * 0.5f, 6f, s.W * 0.5f - PadX, 18f);
-            AvLay.Place(mapNote.rectTransform, PadX, MapY + MapH + 4f, MapW, 16f);
-            float gx = PadX + MapW + 14f, gw = s.W - gx - PadX;
+            float gw = s.W - 2f * PadX;
             for (int i = 0; i < 3; i++)
             {
-                float y = MapY + i * (GaugeH + 4f);
-                AvLay.Place(gaugeKey[i].rectTransform, gx, y, 44f, 16f);
-                AvLay.Place(gaugeValue[i].rectTransform, gx + 44f, y, gw - 44f, 16f);
-                AvLay.Place(track[i].rectTransform, gx, y + 17f, gw, 5f);
-                AvLay.Place(gaugeSub[i].rectTransform, gx, y + 22f, gw, 16f);
-            }
-            float vy = MapY + MapH + 22f, cw = (s.W - 2f * PadX) * 0.5f;
-            for (int i = 0; i < 4; i++)
-            {
-                float x = PadX + (i % 2) * cw, y = vy + (i / 2) * 18f;
-                AvLay.Place(valueKey[i].rectTransform, x, y, 44f, 16f);
-                AvLay.Place(value[i].rectTransform, x + 44f, y, cw - 48f, 16f);
+                float y = GaugeY + i * (GaugeH + GaugeGap);
+                AvLay.Place(gaugeKey[i].rectTransform, PadX, y, KeyW, 16f);
+                AvLay.Place(gaugeValue[i].rectTransform, PadX + KeyW, y, gw - KeyW, 16f);
+                AvLay.Place(track[i].rectTransform, PadX, y + 17f, gw, 5f);
+                AvLay.Place(gaugeSub[i].rectTransform, PadX, y + 22f, gw, 16f);
             }
             PlaceFills();
-            DrawMap();
         }
 
         private void PlaceFills()
         {
-            float gx = PadX + MapW + 14f, gw = Mathf.Max(0f, width - gx - PadX);
+            float gw = Mathf.Max(0f, width - 2f * PadX);
             float[] f = { face.Fuel, face.Ammo, face.Hull };
             for (int i = 0; i < 3; i++)
             {
-                float y = MapY + i * (GaugeH + 4f);
+                float y = GaugeY + i * (GaugeH + GaugeGap);
                 float v = float.IsNaN(f[i]) ? 0f : Mathf.Clamp01(f[i]);
-                AvLay.Place(fill[i].rectTransform, gx, y + 17f, gw * v, 5f);
+                AvLay.Place(fill[i].rectTransform, PadX, y + 17f, gw * v, 5f);
             }
-        }
-
-        /// <summary>The outline, then every known part: a small dim tick when whole, an amber block when hit, a red cross when lost.</summary>
-        private void DrawMap()
-        {
-            AvQuadBuffer b = map.Buffer;
-            b.Clear();
-            var ink = new WingInk(b, H);
-            Color dim = AvStyleHost.FuiColor("frame", AvTheme.Frame), whole = WmcState.Color("live").WithAlpha(0.55f);
-            float mx = PadX + 2f, my = MapY + 2f;
-            WingSilhouette.Draw(ink, mx, my, MapW - 4f, MapH - 4f, dim);
-            Color warn = WmcState.Color("warn"), danger = WmcState.Color("danger");
-            for (int i = 0; i < face.PartCount; i++)
-            {
-                PartDot p = face.Parts[i];
-                Vector2 at = WingSilhouette.Place(mx, my, MapW - 4f, MapH - 4f, p.X, p.Z);
-                if (p.State == 0) ink.Rect(at.x - 1.5f, at.y - 1.5f, 3f, 3f, whole);
-                else if (p.State == 1) ink.Rect(at.x - 3f, at.y - 3f, 6f, 6f, warn);
-                else
-                {
-                    ink.Line(at.x - 4f, at.y - 4f, at.x + 4f, at.y + 4f, 1.6f, danger);
-                    ink.Line(at.x - 4f, at.y + 4f, at.x + 4f, at.y - 4f, 1.6f, danger);
-                }
-            }
-            map.Commit();
         }
 
         public override void Restyle()
@@ -162,7 +104,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcDraw.PaintCard(frame, "card", AvTheme.Surface);
             title.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             sub.color = AvInk.Dim;
-            mapNote.color = AvInk.Dim;
             string[] rails = { face.FuelRail, face.AmmoRail, face.HullRail };
             Color trackColor = AvStyleHost.FuiColor("surface-inert", AvTheme.SurfaceInert);
             for (int i = 0; i < 3; i++)
@@ -173,12 +114,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 track[i].color = trackColor;
                 fill[i].color = WmcState.Color(rails[i]);
             }
-            for (int i = 0; i < 4; i++)
-            {
-                valueKey[i].color = AvInk.Dim;
-                value[i].color = AvInk.Ink;
-            }
-            DrawMap();
         }
     }
 

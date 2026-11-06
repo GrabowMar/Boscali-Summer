@@ -142,6 +142,8 @@ namespace BoscaliSummer.Core
                 modules.Add(new ImmersionModule());
                 // Default off; installed so SET can switch the display grade live.
                 modules.Add(new BoscaliSummer.Modules.Effects.EffectsModule());
+                // Shares the sky and the overlapping effects with NoAtmoFX and Kelly's Client Effects (SET > COMPAT).
+                modules.Add(new BoscaliSummer.Modules.Compatibility.CompatibilityModule());
             }
             if (settings.QoL.Enabled.Value && !Application.isBatchMode)
                 modules.Add(new QoLModule());

@@ -22,12 +22,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
         // Page indices are per console (each console has its own ticker and page set).
-        private const int CPanels = 0, CMap = 1, CHud = 2, CCockpit = 3, CWorld = 4, CPerf = 5;
+        private const int CPanels = 0, CMap = 1, CHud = 2, CCockpit = 3, CWorld = 4, CPerf = 5, CCompat = 6;
         private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
 
         private static readonly string[] ClientPageNames =
         {
-            "PILOT · PANELS", "PILOT · MAP CONSOLE", "PILOT · HUD & KEYS", "PILOT · COCKPIT FEEL", "PILOT · WORLD LOOK", "PILOT · PERFORMANCE"
+            "PILOT · PANELS", "PILOT · MAP CONSOLE", "PILOT · HUD & KEYS", "PILOT · COCKPIT FEEL", "PILOT · WORLD LOOK", "PILOT · PERFORMANCE",
+            "PILOT · OTHER MODS"
         };
 
         private static readonly string[] ServerPageNames =
@@ -263,35 +264,32 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         //
         // Every SET control is one of a few compact shapes, all built from kit v2 primitives and refreshed at
         // the console's 2 Hz "Slow" tier while their page is open:
-        //   * ToggleCell  - an AvCell (LED + name + ON/OFF), two or three to a line; the sentence lives on hover.
-        //   * Ring        - a SetRingCell dial with - / + for a level (percent, seconds, a named step), packed by
+        //   * ToggleCell  - a SetToggleBar (stripe + name + ON/OFF + slide track), one thin bar per line; the sentence lives on hover.
+        //   * Ring        - a thin SetRingCell bar with - / + for a level (percent, seconds, a named step), packed by
         //                   a SetRingRow so hidden dials never leave a hole.
         //   * Stepper     - the classic "name - value +" AvRow, kept for values that are words or file names.
 
-        private AvCell ToggleCell(AvFlow flow, AvCellGrid grid, int page, string title, string help, Func<bool> get,
+        private SetToggleBar ToggleCell(AvFlow flow, int page, string title, string help, Func<bool> get,
             Action<bool> set, Func<bool> enabled = null, Func<string> reason = null)
         {
-            AvCell cell = null;
-            Action<bool> apply = v =>
+            SetToggleBar bar = null;
+            bar = flow.Add(new SetToggleBar(flow.Content, title, get, v =>
             {
                 if (enabled != null && !enabled()) return;
                 set(v);
                 Echo(title + " — " + (get() ? "ON" : "OFF"));
                 Changed();
-            };
-            cell = grid != null
-                ? grid.Toggle(title, "", get, apply)
-                : AvCell.Toggle(flow.Content, title, "", get, apply);
-            void RefreshCell()
+            }));
+            void RefreshBar()
             {
                 bool avail = enabled == null || enabled();
-                cell.Interactable = avail;
-                cell.Help = avail ? help : (reason != null ? reason() : help);
-                cell.Refresh();
+                bar.Interactable = avail;
+                bar.Help = avail ? help : (reason != null ? reason() : help);
+                bar.Refresh();
             }
-            RefreshCell();
-            flow.Ticker.Add(page, AvTickRate.Slow, RefreshCell);
-            return cell;
+            RefreshBar();
+            flow.Ticker.Add(page, AvTickRate.Slow, RefreshBar);
+            return bar;
         }
 
         private SetRingCell Ring(AvFlow flow, SetRingRow row, int page, string title, Func<string> get, Func<float> level01,

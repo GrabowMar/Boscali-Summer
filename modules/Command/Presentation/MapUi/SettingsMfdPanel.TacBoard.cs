@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<string> off = () => "Turn on TAC BOARD first.";
 
             flow.Section(AvIcon.Target, "TAC BOARD", "BOARD · LAYOUT · LOOK");
-            ToggleCell(flow, flow.Grid(1), page, "TAC BOARD",
+            ToggleCell(flow, page, "TAC BOARD",
                 "Off hides the board and gives back the game's own weapon, countermeasure and power panels.",
                 () => board.Enabled, v => board.Enabled = v);
             BoardStrip(flow, page, "LAYOUT", BoardLayoutNames, BoardLayoutBriefs,
@@ -83,26 +83,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => pagesOn() && board.PageCount >= 4, () => pagesOn() ? "Choose 4 full pages first." : pagesOff());
 
             flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", "MAJOR DISPLAY ELEMENTS");
-            AvCellGrid blocks = flow.Grid(2);
-            ToggleCell(flow, blocks, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
+            ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
-            ToggleCell(flow, blocks, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
+            ToggleCell(flow, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
                 () => board.ScopeMode != BoardScopeMode.Off, v => board.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off, on, off);
-            ToggleCell(flow, blocks, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
+            ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
-            ToggleCell(flow, blocks, page, "NOTICES", "The notice line at the foot of the board.",
+            ToggleCell(flow, page, "NOTICES", "The notice line at the foot of the board.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
-            ToggleCell(flow, blocks, page, "SYSTEMS BLOCK", "The fire, engine and fuel strip under the lamps. Its warnings still post when hidden.",
+            ToggleCell(flow, page, "SYSTEMS BLOCK", "The fire, engine and fuel strip under the lamps. Its warnings still post when hidden.",
                 () => board.ShowSystems, v => board.ShowSystems = v, on, off);
-            ToggleCell(flow, blocks, page, "FEED AND MAP", "Draw the kill feed and map frame in the board's look. Stays on with the board off.",
+            ToggleCell(flow, page, "FEED AND MAP", "Draw the kill feed and map frame in the board's look. Stays on with the board off.",
                 () => board.Corners, v => board.Corners = v);
-            ToggleCell(flow, blocks, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
+            ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
 
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESET");
-            AvCellGrid extras = flow.Grid(2);
-            ToggleCell(flow, extras, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
+            ToggleCell(flow, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
                 () => board.Sway, v => board.Sway = v, on, off);
             AvControl reset = flow.Buttons(new AvControl.Spec("RESET TO DEFAULTS", () =>
             {

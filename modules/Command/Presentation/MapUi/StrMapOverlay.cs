@@ -96,7 +96,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private void LateUpdate()
         {
             Tick(Time.unscaledTime);
-            if (Visible && !Application.isBatchMode && Input.GetKeyDown(KeyCode.Escape))
+            if (Visible && !Application.isBatchMode && BoscaliSummer.Core.Ui.MapTool.CancelPressed())
             {
                 IStrHub hub = Hub;
                 if (DrawArmed) CancelDraw("DRAW CANCELLED");
@@ -451,26 +451,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // A proposal nobody points at is hollow (outline, faint fill); the live operation is filled, and its chevrons march while it advances.
         private void Offensive(AvQuadBuffer b, in StrPrim p, IMapProjection projection, float factor, float px, Rgba c)
         {
-            float dx = p.X2 - p.X, dz = p.Z2 - p.Z;
-            if (!(dx * dx + dz * dz > 1f)) return;
-            float bow = (p.Id.Key & 1) == 0 ? 0.08f : -0.08f;
-            float cx = (p.X + p.X2) * 0.5f - dz * bow, cz = (p.Z + p.Z2) * 0.5f + dx * bow, run = 0f;
-            int n = 0;
-            for (int k = 0; k < StrStrokes.MaxCurve; k++)
+            // Only the two ends sit on the ground; the bow is laid in screen space, so the arrow is one clean sweep instead of a rope
+            // draped over every ridge between them.
+            if (!Project(projection, factor, p.X, p.Z, out float sx, out float sy) || !Project(projection, factor, p.X2, p.Z2, out float ex, out float ey)) return;
+            float dx = ex - sx, dy = ey - sy, run = Mathf.Sqrt(dx * dx + dy * dy);
+            if (!(run > 2f * px)) return;
+            float bow = (p.Id.Key & 1) == 0 ? 0.14f : -0.14f;
+            float cx = (sx + ex) * 0.5f - dy * bow, cy = (sy + ey) * 0.5f + dx * bow;
+            int n = StrStrokes.MaxCurve;
+            for (int k = 0; k < n; k++)
             {
-                float t = k / (StrStrokes.MaxCurve - 1f), u = 1f - t;
-                float wx = u * u * p.X + 2f * u * t * cx + t * t * p.X2, wz = u * u * p.Z + 2f * u * t * cz + t * t * p.Z2;
-                if (!Project(projection, factor, wx, wz, out curveX[n], out curveY[n])) continue;
-                if (n > 0) run += Mathf.Sqrt((curveX[n] - curveX[n - 1]) * (curveX[n] - curveX[n - 1]) + (curveY[n] - curveY[n - 1]) * (curveY[n] - curveY[n - 1]));
-                n++;
+                float t = k / (n - 1f), u = 1f - t;
+                curveX[k] = u * u * sx + 2f * u * t * cx + t * t * ex;
+                curveY[k] = u * u * sy + 2f * u * t * cy + t * t * ey;
             }
-            if (n < 2) return;
-            // HOI4 look: a slim ribbon of near-constant width in solid ink, a dark rim to lift it off the relief, a modest head.
-            float neck = Mathf.Clamp(run * 0.012f, 2.2f * px, 3.4f * px), tail = neck * 0.75f, head = neck * 2.6f;
-            float fillA = p.Hollow ? 0.45f : 0.92f;
+            // HOI4 look: a fat body swelling from a slim tail to a broad neck, a wide head, a firm dark rim to lift it off the relief;
+            // the fill fades in from the tail (StrStrokes) so the push reads as a direction.
+            float neck = Mathf.Clamp(run * 0.04f, 6f * px, 13f * px), tail = neck * 0.4f, head = neck * 2f;
+            float fillA = p.Hollow ? 0.4f : 0.95f;
             var fill = new Rgba(c.R, c.G, c.B, c.A * fillA);
-            var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.3f : 0.55f));
-            StrStrokes.Offensive(b, curveX, curveY, n, tail, neck, head, 0.9f * px, fill, line);
+            var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.4f : 0.75f));
+            StrStrokes.Offensive(b, curveX, curveY, n, tail, neck, head, 1.3f * px, fill, line);
             if (!p.Pulse || pulseCount >= MaxPulse) return;
             System.Array.Copy(curveX, pulseCurveX[pulseCount], n);
             System.Array.Copy(curveY, pulseCurveY[pulseCount], n);
@@ -551,6 +552,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 min = Vector2.Min(min, local); max = Vector2.Max(max, local);
             }
             card.Show(Rect.MinMaxRect(min.x, min.y, max.x, max.y), viewport.rect, chrome.BottomReserve, rebind);
+        }
+
+        /// <summary>A shown tag's plate is under the screen point: the map pointer test counts it as a control, so a right click on a
+        /// tag never opens the ground card or drops a pick behind it.</summary>
+        internal bool ContainsTag(Vector2 screen)
+        {
+            if (!Visible) return false;
+            // Asked on every map pointer test: the tags share one canvas, so its camera is resolved once per ask, not per tag.
+            Camera camera = null;
+            bool resolved = false;
+            for (int i = 0; i < tags.Count; i++)
+            {
+                if (tags[i] == null || !tags[i].gameObject.activeInHierarchy) continue;
+                if (!resolved)
+                {
+                    camera = MapUiPointer.UiCamera(tags[i].Root.GetComponentInParent<Canvas>());
+                    resolved = true;
+                }
+                if (RectTransformUtility.RectangleContainsScreenPoint(tags[i].Root, screen, camera)) return true;
+            }
+            return false;
         }
 
         private StrMapTag TagFor(StrItemId id)

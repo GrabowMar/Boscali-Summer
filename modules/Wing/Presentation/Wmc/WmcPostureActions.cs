@@ -1,12 +1,10 @@
 using BoscaliSummer.Modules.Wing.Domain;
-using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>The posture settings' orders (spec tactical v3 §4), shared by TACTICAL's posture strip and BEHAVIOUR's TUNING and FORM
-    /// so the two pages cannot drift apart. Each gates on the host through <see cref="WmcUi.Order"/>.</summary>
+    /// <summary>The posture settings' orders (spec tactical v3 §4), shared by TACTICAL's posture strip and FORMATION and BEHAVIOUR › STANCES
+    /// so the pages cannot drift apart. Each gates on the host through <see cref="WmcUi.Order"/>.</summary>
     internal static class WmcPostureActions
     {
-        public static readonly WingDoctrine[] Profiles = { WingDoctrine.Reserve, WingDoctrine.Escort, WingDoctrine.Sweep };
         public static readonly float[] FallBackRatios = { 0f, 1.5f, 2f, 3f };
         public const string HostOnly = "The host sets these";
 
@@ -21,12 +19,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcUi.Order(c, () => WingOrders.Run(new WingOrder { Kind = OrderKind.SetOverride, Number = (int)axis, Text = word, Scope = c.Scope }));
         }
 
-        public static void Profile(WmcContext c, int i)
-        {
-            if (c == null || i < 0 || i >= Profiles.Length) return;
-            WmcUi.Order(c, () => WingOrders.Run(new WingOrder { Kind = OrderKind.SetDoctrine, Text = Profiles[i].ToString(), Scope = c.Scope }));
-        }
-
         public static void Shape(WmcContext c, string id)
         {
             if (c == null || string.IsNullOrEmpty(id)) return;
@@ -37,18 +29,5 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>0 BUSTER (no afterburner), 1 GATE.</summary>
         public static void Power(WmcContext c, int i) => WmcUi.Order(c, () => WingCommands.Afterburner(i == 1));
-
-        public static void Winchester(WmcContext c, int i) => WmcUi.Order(c, () => WingSettings.Instance.AfterWinchester.Value = (WinchesterAction)i);
-
-        public static void Bingo(WmcContext c, int i) => WmcUi.Order(c, () => WingSettings.Instance.AfterBingo.Value = (BingoAction)i);
-
-        public static void FallBack(WmcContext c, int i) => WmcUi.Order(c, () => WingSettings.Instance.FallBackRatio.Value = FallBackRatios[i]);
-
-        public static int FallBackIndex(float ratio)
-        {
-            for (int i = 0; i < FallBackRatios.Length; i++)
-                if (System.Math.Abs(ratio - FallBackRatios[i]) < 0.05f) return i;
-            return -1;
-        }
     }
 }

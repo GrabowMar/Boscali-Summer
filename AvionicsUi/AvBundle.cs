@@ -41,6 +41,32 @@ namespace NOAvionics
             image.raycastTarget = false;
         }
 
+        public const string GroundResourceName = "NOAvionics.console-ground.png";
+        private static Texture2D ground;
+        private static bool groundTried;
+
+        /// <summary>
+        /// The console ground: display glass over brushed metal (white, luminance in alpha), tinted per scheme by the caller.
+        /// Embedded as a plain PNG so it never needs a bundle re-bake. Decoded once on first use; null when missing or bad.
+        /// </summary>
+        public static Texture2D Ground
+        {
+            get
+            {
+                if (groundTried) return ground;
+                groundTried = true;
+                try
+                {
+                    byte[] png = ReadResource(GroundResourceName, 1 << 20);
+                    if (png == null) return null;
+                    var t = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "NOA console ground", wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                    if (ImageConversion.LoadImage(t, png, true)) ground = t;
+                }
+                catch (Exception) { ground = null; }
+                return ground;
+            }
+        }
+
         public static void Load(Action<string> log = null)
         {
             if (attempted) return;

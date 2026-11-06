@@ -20,6 +20,21 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             return state;
         }
 
+        /// <summary>World effects (airfield and city lights, vapour, missile boom) and the Compatibility yields.</summary>
+        public static Dictionary<string, object> WorldReadout(Dictionary<string, object> args)
+        {
+            WorldFx world = WorldFx.Live;
+            if (world == null) return Failure("ImmersionAutomation", "WorldReadout", "no world fx in this scene");
+            var state = new Dictionary<string, object>();
+            world.DescribeFx(state);
+            state["skyYielded"] = ForeignMods.SkyYielded;
+            state["rainYielded"] = ForeignMods.RainYielded;
+            state["worldFxYielded"] = ForeignMods.WorldFxYielded;
+            state["airfieldYielded"] = ForeignMods.AirfieldYielded;
+            state["noAtmoFx"] = ForeignMods.Find(ForeignMods.NoAtmoFx) != null;
+            return state;
+        }
+
         public static Dictionary<string, object> SetEnabled(Dictionary<string, object> args)
         {
             ImmersionManager manager = ImmersionManager.Live;

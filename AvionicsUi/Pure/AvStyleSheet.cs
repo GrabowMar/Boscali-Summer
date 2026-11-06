@@ -154,6 +154,9 @@ namespace NOAvionics
         private readonly Dictionary<string, AvStyle> cache =
             new Dictionary<string, AvStyle>(StringComparer.Ordinal);
 
+        private readonly Dictionary<string, AvPaint> paints =
+            new Dictionary<string, AvPaint>(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>Problems found while parsing, as "line N: message". Never throws.</summary>
         public List<string> Errors { get; } = new List<string>();
 
@@ -564,10 +567,13 @@ namespace NOAvionics
         /// <summary>A <c>:root</c> variable as a colour.</summary>
         public AvPaint Paint(string name, Rgba fallback)
         {
+            if (paints.TryGetValue(name, out AvPaint cached)) return cached;
             if (!vars.TryGetValue(name, out string raw)) return new AvPaint(fallback);
             string[] parts = raw.Trim().Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length == 0) return new AvPaint(fallback);
             AvPaint parsed = ParsePaint(parts, 0, 0);
+            // Store the declaration, so live theme references still resolve at paint time.
+            if (parsed.HasValue) paints[name] = parsed;
             return parsed.HasValue ? parsed : new AvPaint(fallback);
         }
     }

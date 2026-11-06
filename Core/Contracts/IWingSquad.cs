@@ -20,6 +20,8 @@ namespace BoscaliSummer.Core.Contracts
         public int Uniform;
         public int Accessory;
         public int Backdrop;
+        /// <summary>The PNG portrait on file for the callsign (borrowed), else null.</summary>
+        public Sprite File;
     }
 
     /// <summary>
@@ -63,6 +65,9 @@ namespace BoscaliSummer.Core.Contracts
         Sprite PortraitForSelection(int body, int face, int hair, int uniform,
             int accessory, int backdrop, bool preview = false);
         bool TryGetCustomPilot(string callsign, out CustomPilotView record);
+
+        /// <summary>The saved pilots' callsigns in studio order.</summary>
+        string[] SavedPilotCallsigns();
 
         /// <summary>Open the WMC SQUADRON > STUDIO page (the saved-pilot editor). False when it cannot open.</summary>
         bool OpenPilotStudio();

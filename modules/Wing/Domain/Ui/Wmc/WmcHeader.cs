@@ -37,10 +37,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public const string None = "—";
 
-        /// <summary>The same line on every tab: the wing, who is up and who is coming; a client says whose wing it shows.</summary>
+        /// <summary>The same line on every tab: the wing, who is up and who is coming; a client says whose wing it shows (no maximum:
+        /// the client's own config is not the host's).</summary>
         public static string Title(int count, int max, int airborne, int inbound, bool client, bool stale, out string state)
         {
-            string wing = "WING " + N(count) + "/" + N(max);
+            string wing = "WING " + N(count) + (client ? "" : "/" + N(max));
             if (client)
             {
                 state = stale ? "danger" : "info";
@@ -76,7 +77,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 return "SANDBOX";
             }
             state = funds <= 0f ? "warn" : "info";
-            return "FUNDS " + ((int)funds).ToString("N0", System.Globalization.CultureInfo.InvariantCulture);
+            return "FUNDS " + Credits.Number(funds);
         }
 
         public static string Fuel(in WingVitals v, out string state)

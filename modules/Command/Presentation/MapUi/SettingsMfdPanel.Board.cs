@@ -30,6 +30,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("FRAME BUDGET", CPerf, AvIcon.Gauge),
             ("BASE GAME", CPerf, AvIcon.Settings),
             ("FAR UNITS", CPerf, AvIcon.Radar2),
+            ("NOATMOFX", CCompat, AvIcon.Cloud),
+            ("KELLY'S FX", CCompat, AvIcon.Bolt),
+            ("KEY CLASHES", CCompat, AvIcon.AdjustmentsHorizontal),
         };
 
         private static int ClientSectionIndex(string section)
@@ -64,10 +67,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 int index = ClientSectionIndex(section);
                 flow.Section(index < 0 ? AvIcon.Settings : ClientSections[index].Icon, section, "APPLIES NOW");
 
-                AvCellGrid grid = null;
                 foreach (ClientSetting row in rows)
                     if (row.Section == section && row is ClientSettingToggle t)
-                        ToggleCell(flow, grid = grid ?? flow.Grid(2), page, t.Label, t.Help, () => t.Value, t.Set,
+                        ToggleCell(flow, page, t.Label, t.Help, () => t.Value, t.Set,
                             () => t.Available, () => t.Reason);
                 SetRingRow dials = null;
                 foreach (ClientSetting row in rows)

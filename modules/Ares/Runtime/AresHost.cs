@@ -5,6 +5,7 @@ using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Scenario;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Ares.Domain;
 using NOAvionics;
 using UnityEngine;
@@ -26,7 +27,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         private ManualLogSource log;
 
         /// <summary>The last action's answer, shown on every ARES page.</summary>
-        public string Result { get; private set; } = "Select a unit, then PLACE and click the map.";
+        public string Result { get; private set; } = "Select a unit, then PLACE and right-click the map.";
 
         public void Configure(ModConfiguration config, ManualLogSource logger)
         {
@@ -81,11 +82,11 @@ namespace BoscaliSummer.Modules.Ares.Runtime
 
         // ------------------------------------------------------------------ map pick
         //
-        // ARES holds the shared MapPicker while armed: Command then swallows unit-icon clicks and box drags, so a click on the map is
-        // always ours. A press records where; the release decides the heading when the pointer travelled (press-drag-release).
+        // ARES holds the shared MapPicker while armed, so the right button is ours (rule B): no card, no orbit, no other tool. A right
+        // press records where; the release decides the heading when the pointer travelled (press-drag-release).
 
         private Action<GlobalPosition, float> onPick;
-        private bool pickRepeat, pickDown, pauseHeld;
+        private bool pickRepeat, pickDown;
         private int armedFrame;
         private Vector2 downScreen;
         private GlobalPosition downWorld;
@@ -99,18 +100,13 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             if (!Host(out string refusal)) return Say(refusal);
             var map = SceneSingleton<DynamicMap>.i;
             if (map == null) return Say("No map.");
-            if (!MapPicker.TryArm(PickOwner, MapPicker.GestureLeft, prompt)) return Say("The map is busy with another pick. Finish or cancel it first.");
+            if (!MapPicker.TryArm(PickOwner, MapPicker.GestureRight, prompt)) return Say("The map is busy with another pick. Finish or cancel it first.");
             if (!DynamicMap.mapMaximized) map.Maximize();
             onPick = pick;
             pickRepeat = repeat;
             pickDown = false;
             armedFrame = Time.frameCount;
             PickLabel = label;
-            if (!pauseHeld)
-            {
-                GameplayUI.AllowPauseKeybind = false; // Esc cancels the pick instead of pausing
-                pauseHeld = true;
-            }
             return Say(prompt);
         }
 
@@ -120,13 +116,10 @@ namespace BoscaliSummer.Modules.Ares.Runtime
             pickDown = false;
             PickLabel = null;
             MapPicker.Disarm(PickOwner);
-            if (pauseHeld)
-            {
-                GameplayUI.AllowPauseKeybind = true;
-                pauseHeld = false;
-            }
         }
 
+        // Rule B (2026-10-29), like every armed map tool: the right button places (a right drag sets the heading), Esc stops and
+        // Command keeps it from pausing, the left button still pans and selects. A cursor over a panel has no map coordinates.
         private void TickPick()
         {
             if (onPick == null) return;
@@ -136,25 +129,23 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 Disarm();
                 return;
             }
-            // Esc or a right click on the map stops; a click on a panel is that panel's, never a pick.
-            bool right = Input.GetMouseButtonDown(1) && !OverPanel();
-            if (Input.GetKeyDown(KeyCode.Escape) || right)
+            if (MapTool.CancelPressed())
             {
                 Disarm();
                 Say("Stopped.");
                 return;
             }
             if (Time.frameCount <= armedFrame + 1) return; // the click that pressed the button is not a pick
-            if (Input.GetMouseButtonDown(0) && !OverPanel() && map.TryGetCursorCoordinates(out GlobalPosition at))
+            if (Input.GetMouseButtonDown(MapTool.Button) && map.TryGetCursorCoordinates(out GlobalPosition at))
             {
                 pickDown = true;
                 downScreen = Input.mousePosition;
                 downWorld = at;
             }
-            if (!Input.GetMouseButtonUp(0) || !pickDown) return;
+            if (!Input.GetMouseButtonUp(MapTool.Button) || !pickDown) return;
             pickDown = false;
             float heading = lastHeading;
-            if (((Vector2)Input.mousePosition - downScreen).sqrMagnitude > 144f && map.TryGetCursorCoordinates(out GlobalPosition up))
+            if (!MapTool.IsClick(downScreen, Input.mousePosition) && map.TryGetCursorCoordinates(out GlobalPosition up))
                 heading = AresMath.HeadingFromDrag(up.x - downWorld.x, up.z - downWorld.z, lastHeading);
             lastHeading = heading;
             Action<GlobalPosition, float> pick = onPick;
@@ -165,18 +156,6 @@ namespace BoscaliSummer.Modules.Ares.Runtime
                 Say("Failed: " + error.Message);
                 log?.LogWarning("[Ares] pick action failed: " + error);
             }
-        }
-
-        private static readonly List<RaycastResult> uiHits = new List<RaycastResult>(8);
-
-        // Only asked on a press, so the raycast never runs per frame.
-        private static bool OverPanel()
-        {
-            EventSystem events = EventSystem.current;
-            if (events == null) return false;
-            uiHits.Clear();
-            events.RaycastAll(new PointerEventData(events) { position = Input.mousePosition }, uiHits);
-            return uiHits.Count > 0 && uiHits[0].gameObject.GetComponentInParent<AvTicker>() != null;
         }
 
         // ------------------------------------------------------------------ world helpers

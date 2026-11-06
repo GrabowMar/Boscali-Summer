@@ -19,8 +19,6 @@ namespace BoscaliSummer.Modules.Comms.Runtime
     /// </summary>
     internal static class CommsInput
     {
-        /// <summary>Set by the manager: a drawing tool is armed and owns left-drag.</summary>
-        internal static bool DrawToolArmed;
 
         /// <summary>Set by the manager: the hold-to-draw key this session uses; None disables it.</summary>
         internal static KeyCode DrawHoldKey = KeyCode.None;
@@ -41,7 +39,7 @@ namespace BoscaliSummer.Modules.Comms.Runtime
             if (!DynamicMap.mapMaximized) return false;
             if (GestureActive) return true;
             if (!Input.GetMouseButton(0) && !Input.GetMouseButtonDown(0)) return false;
-            if (DrawToolArmed) return true;
+            // An armed tool draws with the right button (rule B); only hold-to-draw keeps the left one.
             return DrawHoldKey != KeyCode.None && Input.GetKey(DrawHoldKey);
         }
 

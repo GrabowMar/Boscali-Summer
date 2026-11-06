@@ -94,6 +94,53 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingToast.Show(ok ? StudioWords.ExportToast(n) : "EXPORT failed: see the log");
         }
 
+        /// <summary>FLY AS: this saved pilot becomes the player's pilot and stays so (the SQD dossier shows them). It only sets: picking
+        /// another pilot's FLY AS is the way to change it.</summary>
+        private void ToggleMe()
+        {
+            if (draft == null || draftNew || draftOriginal == null || WingSavedPilots.IsMe(draftOriginal)) return;
+            WingSavedPilots.SetMe(draftOriginal);
+            WingToast.Show("You fly as " + draftOriginal);
+            WmcPanel.Instance?.Refresh();
+        }
+
+        // PNG portraits: written at once under the callsign (Pilots/Portraits/<CALLSIGN>.png), not held by SAVE.
+        private void LoadPng()
+        {
+            if (draft == null) return;
+            ReadFields();
+            WmcNameField.BlurAny();
+            string source = FileDialog.OpenImage("Portrait for " + draft.Callsign, WingSavedPilots.PortraitFolder);
+            if (source == null) return;
+            if (WingSavedPilots.LoadPortrait(draft.Callsign, source, out string why)) WingToast.Show("Portrait loaded for " + draft.Callsign);
+            else problem = why;
+            studioKey = int.MinValue;
+            WmcPanel.Instance?.Refresh();
+        }
+
+        private void SavePng()
+        {
+            if (draft == null) return;
+            ReadFields();
+            WmcNameField.BlurAny();
+            System.IO.Directory.CreateDirectory(WingSavedPilots.PortraitFolder);
+            string from = PilotPortrait.FromFile(draft.Callsign) != null || draftNew || draftOriginal == null ? draft.Callsign : draftOriginal;
+            string target = FileDialog.SavePng("Save the portrait of " + draft.Callsign, WingSavedPilots.PortraitFolder, draft.Callsign + "_portrait.png");
+            if (target == null) return;
+            if (WingSavedPilots.SavePortrait(from, draft.Selection, target, out string why)) WingToast.Show("Portrait saved: " + System.IO.Path.GetFileName(target));
+            else problem = why;
+            WmcPanel.Instance?.Refresh();
+        }
+
+        private void ClearPng()
+        {
+            if (draft == null) return;
+            bool cleared = WingSavedPilots.ClearPortrait(draft.Callsign) | (!draftNew && draftOriginal != null && WingSavedPilots.ClearPortrait(draftOriginal));
+            if (cleared) WingToast.Show("PNG portrait dropped: the stepped look is back");
+            studioKey = int.MinValue;
+            WmcPanel.Instance?.Refresh();
+        }
+
         private void RecruitOrDischarge()
         {
             if (client || draft == null || recruitReason != null) return;

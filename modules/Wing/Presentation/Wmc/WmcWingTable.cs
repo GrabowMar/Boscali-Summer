@@ -11,7 +11,7 @@ using BoscaliSummer.Core.Math;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>The dense wing table (spec 2026-10-04 §4.2; mockup board/orders.html): a header row, one row per element (letter, name, its
-    /// task) and one per member (number, callsign, type, task, fuel tape, ammo, damage). It is also TACTICAL's scope: ALL, an element
+    /// task) and one per member (number, callsign, type, task, fuel, ammo, damage). It is also TACTICAL's scope: ALL, an element
     /// row or a member row sets who orders go to (shift adds a member), and what the scope holds is outlined. Full on ORDERS; on
     /// FORMATION and ROUTE it collapses to one summary line that a tap expands. Kit gap: no table part, so the rows are drawn from kit
     /// primitives (<see cref="AvFrame"/>, <see cref="AvText"/>, <see cref="AvHit"/>) the way the FLIGHT list was.</summary>
@@ -19,20 +19,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     {
         public const int MaxMembers = WcSnapshot.MaxMembers, MaxElements = ElementRoster.MaxElements;
         private const float RowH = 19f, HeadH = 18f, SumH = 22f, Pad = 6f, Gap = 4f, RowGap = 1f;
-        private const float NumW = 24f, NameW = 98f, TypeW = 44f, FuelW = 52f, AmmoW = 34f, DmgW = 36f;
+        private const float NumW = 24f, NameW = 98f, TypeW = 44f, FuelW = 40f, AmmoW = 34f, DmgW = 36f;
         private const int KindHead = 0, KindRow = 1;
 
         private sealed class Cell
         {
             public AvFrame Frame;
-            public Image Rail, FuelTrack, FuelFill;
-            public TMP_Text Num, Name, Type, Task, Ammo, Dmg;
+            public Image Rail;
+            public TMP_Text Num, Name, Type, Task, Fuel, Ammo, Dmg;
             public uint Id;
             public int Key = int.MinValue;
             public bool Selected, Styled, Hover;
             public bool IsHead;
-            public string FuelRail = "ready";
-            public float Fuel;
             public int Element;
         }
 
@@ -105,10 +103,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         public AvControl SupplyButton { get; }
-        public Transform AllTarget => allHit.transform;
-        public Transform SummaryTarget => sumFrame.transform;
-        public Transform HeadTarget(int e) => heads[e].Frame.transform;
-        public Transform RowTarget(int r) => rows[r].Frame.transform;
         public uint IdAt(int r) => r >= 0 && r < rows.Length ? rows[r].Id : 0u;
         public bool Collapsed => collapsed;
         private int shownRows, shownHeads;
@@ -141,8 +135,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (!head)
             {
                 c.Type = Label(name + "Type", AvTextRole.Micro);
-                c.FuelTrack = AvLay.Solid(Rect, name + "FuelTrack", Color.clear);
-                c.FuelFill = AvLay.Solid(Rect, name + "FuelFill", Color.clear);
+                c.Fuel = Label(name + "Fuel", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 c.Ammo = Label(name + "Ammo", AvTextRole.DataSmall, TextAlignmentOptions.MidlineRight);
                 c.Dmg = Label(name + "Dmg", AvTextRole.Micro);
             }
@@ -160,8 +153,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             c.Task.gameObject.SetActive(on);
             if (c.IsHead) return;
             c.Type.gameObject.SetActive(on);
-            c.FuelTrack.gameObject.SetActive(on);
-            c.FuelFill.gameObject.SetActive(on);
+            c.Fuel.gameObject.SetActive(on);
             c.Ammo.gameObject.SetActive(on);
             c.Dmg.gameObject.SetActive(on);
         }
@@ -206,8 +198,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            measuredWidth = s.W;
-            float w = s.W, y = 0f;
+            Arrange(s.W);
+        }
+
+        /// <summary>The summary line, header, rows and seat row inside the table's block. A regroup at the same row count leaves the
+        /// table's height alone, so the flow does not place it again: <see cref="Refresh"/> arranges the rows itself.</summary>
+        private void Arrange(float width)
+        {
+            measuredWidth = width;
+            float w = width, y = 0f;
             if (collapsible)
             {
                 AvLay.Place(sumFrame.rectTransform, 0f, y, w, SumH);
@@ -279,9 +278,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             float taskW = w - x - Pad - FuelW - AmmoW - DmgW - 3f * Gap;
             AvLay.Place(c.Task.rectTransform, x, y, taskW, RowH);
             x += taskW + Gap;
-            AvLay.Place(c.FuelTrack.rectTransform, x, y + (RowH - 5f) * 0.5f, FuelW, 5f);
-            c.Fuel = Mathf.Clamp01(c.Fuel);
-            AvLay.Place(c.FuelFill.rectTransform, x, y + (RowH - 5f) * 0.5f, FuelW * c.Fuel, 5f);
+            AvLay.Place(c.Fuel.rectTransform, x, y, FuelW, RowH);
             x += FuelW + Gap;
             AvLay.Place(c.Ammo.rectTransform, x, y, AmmoW, RowH);
             x += AmmoW + Gap;
@@ -338,8 +335,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (!c.IsHead)
             {
                 c.Type.color = sub;
-                c.FuelTrack.color = AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.8f);
-                c.FuelFill.color = WmcState.Color(c.FuelRail);
             }
         }
 
@@ -422,6 +417,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 count = n;
                 shown = sig;
+                Arrange(measuredWidth);
                 Changed();
             }
         }
@@ -442,10 +438,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             seats.Set(name, empty ? "CALL one on the WING row, or requisition on SUPPLY." : "Empty seats: requisition wingmen on SUPPLY.", "", AvState.Inert);
             SupplyButton.gameObject.SetActive(!c.Client);
         }
-
-        public bool SeatsEmpty => last != null && last.Count == 0;
-
-        public bool SeatsOpen => seatsOn && last != null && last.Count > 0;
 
         private void FillHead(Cell h, int e, WmcContext c)
         {
@@ -507,8 +499,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(v.Task, MemberLine.Task(m, code));
             string state = WingRows.State(m);
             v.Task.color = WmcState.Color(selected ? "live" : WmcStyle.Rail(state) == "inert" ? "info" : WmcStyle.Rail(state));
-            v.Fuel = WingRows.Fraction(m.Fuel);
-            v.FuelRail = MemberLine.FuelRail(m.Flags);
+            // Fuel reads like ammo: a number, or the call word in its colour (never the colour alone).
+            var flags = (SnapshotFlags)m.Flags;
+            string fuelRail = MemberLine.FuelRail(m.Flags);
+            AvText.Set(v.Fuel, (flags & SnapshotFlags.Bingo) != 0 ? "BINGO" : (flags & SnapshotFlags.Joker) != 0 ? "JOKER"
+                : AvNum.Fixed(Mathf.RoundToInt(WingRows.Fraction(m.Fuel) * 100f), 0) + "%");
+            v.Fuel.color = fuelRail == "ready" ? AvStyleHost.FuiInk("row-sub", AvTheme.Dim) : WmcState.Color(fuelRail);
             bool win = (m.Flags & (byte)SnapshotFlags.Winchester) != 0;
             AvText.Set(v.Ammo, win ? "WIN" : AvNum.Fixed(Mathf.RoundToInt(WingRows.Fraction(m.Ammo) * 100f), 0) + "%");
             v.Ammo.color = win ? WmcState.Color("danger") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
@@ -516,12 +512,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvText.Set(v.Dmg, dmg ? "DMG" : "—");
             v.Dmg.color = dmg ? WmcState.Color("caution") : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             Style(v);
-            // The fuel fill is placed against the row's slot; a changed fraction moves it.
-            if (v.FuelTrack.rectTransform.sizeDelta.x > 0f)
-            {
-                Vector2 p = v.FuelTrack.rectTransform.anchoredPosition;
-                AvLay.Place(v.FuelFill.rectTransform, p.x, -p.y, FuelW * v.Fuel, 5f);
-            }
         }
 
         private void Identity(WmcContext c, in SnapshotMember m, out string callsign, out string type)

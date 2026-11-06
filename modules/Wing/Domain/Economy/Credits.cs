@@ -13,7 +13,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>A price: nothing is FREE.</summary>
         public static string Price(float millions) => millions <= 0f ? "FREE" : Text(millions);
 
-        private static string Number(float v) =>
+        /// <summary>The figure alone (no CR): whole credits, one decimal under 100 when it has a fraction.</summary>
+        public static string Number(float v) =>
             Math.Abs(v) < 100f && Math.Abs(v - (float)Math.Round(v)) > 0.001f
                 ? v.ToString("0.#", CultureInfo.InvariantCulture)
                 : v.ToString("N0", CultureInfo.InvariantCulture);

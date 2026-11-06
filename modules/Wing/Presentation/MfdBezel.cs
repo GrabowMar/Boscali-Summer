@@ -21,30 +21,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Bind <paramref name="screen"/> to the claimed slot. Returns false if another plugin
         /// took the slot in the same frame between the scan and here; the caller retries next second.</summary>
         public static bool Bind(VirtualMFD mfd, List<Button> buttons, List<MFDScreen> screens,
-            int slot, bool left, MFDScreen screen)
-        {
-            while (screens.Count <= slot) screens.Add(null);
-            if (screens[slot] != null && screens[slot] != screen) return false;
-            screens[slot] = screen;
-            mfd.SetupButtons();
-
-            Button bezel = buttons[slot];
-            bezel.enabled = true;
-            bezel.interactable = true;
-            if (bezel.onClick.GetPersistentEventCount() == 0)
-            {
-                VirtualMFD owner = mfd;
-                bool onLeft = left;
-                bezel.onClick.AddListener(() =>
-                {
-                    if (onLeft) owner.PressLeftButton(bezel);
-                    else owner.PressRightButton(bezel);
-                });
-            }
-
-            screen.CloseScreen(Screen.width * (left ? Vector3.left : Vector3.right));
-            return true;
-        }
+            int slot, bool left, MFDScreen screen) =>
+            CoreMfdBezel.Bind(mfd, buttons, screens, slot, left, screen);
 
         public static MFDScreen FindTemplate(VirtualMFD mfd)
         {

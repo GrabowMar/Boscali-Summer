@@ -24,15 +24,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private static readonly string[] ToolTips =
         {
-            "Ping: click the map to drop the selected ping. Middle-click does the same without arming anything.",
-            "Pen: drag on the map to draw freehand. Holding the draw key does this without opening COM.",
-            "Line: drag from start to end.",
-            "Arrow: drag from the tail to the tip — an attack axis or a route.",
-            "Circle: drag from the centre out to the edge — a threat ring or a CAP station.",
-            "Box: drag corner to corner — a kill box or an area to avoid.",
-            "Text: type the words in the field below, press PLACE, then click the map where they belong.",
-            "Erase: click one of your own marks to remove it (the host can erase any mark).",
-            "Ruler: drag for range and true bearing. Only you see it.",
+            "Ping: right-click the map to drop the selected ping. Middle-click does the same without arming anything.",
+            "Pen: right-drag on the map to draw freehand. Holding the draw key does this without opening COM.",
+            "Line: right-drag from start to end.",
+            "Arrow: right-drag from the tail to the tip — an attack axis or a route.",
+            "Circle: right-drag from the centre out to the edge — a threat ring or a CAP station.",
+            "Box: right-drag corner to corner — a kill box or an area to avoid.",
+            "Text: type the words in the field below, press PLACE, then right-click the map where they belong.",
+            "Erase: right-click one of your own marks to remove it (the host can erase any mark).",
+            "Ruler: right-drag for range and true bearing. Only you see it.",
         };
 
         private AvSection plotSection;
@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void BuildMapPage(AvFlow p)
         {
-            // Top to bottom: pick a tool and its ink, or a marker, then click the map. The map itself is the list of marks.
+            // Top to bottom: pick a tool and its ink, or a marker, then right-click the map. The map itself is the list of marks.
             plotSection = p.Section(AvIcon.Pencil, "PLOT", "MAP FREE");
             var toolSpecs = new AvControl.Spec[ToolRow.Length + 2];
             var toolHelps = new string[toolSpecs.Length];
@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 penRow.Swatches[i].Help = CommsCatalog.Pens[i].Name + " ink, for the pen and the shapes.";
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Help = "Stroke width for the pen and shapes. " + HoldHint();
 
-            p.Section(AvIcon.MapPin, "MARKERS", "CLICK THE MAP");
+            p.Section(AvIcon.MapPin, "MARKERS", "RIGHT-CLICK THE MAP");
             var pingSpecs = new AvControl.Spec[CommsCatalog.PalettePings];
             var pingHelps = new string[pingSpecs.Length];
             for (int i = 0; i < pingSpecs.Length; i++)
@@ -100,14 +100,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     comms.PingKind = kind;
                     comms.SetTool(CommsTool.Ping);
                 }, ToneStyle(ping.Tone), PingIcons[i]);
-                pingHelps[i] = ping.Code + " ping: " + ping.Phrase + ". Pick it, then click the map.";
+                pingHelps[i] = ping.Code + " ping: " + ping.Phrase + ". Pick it, then right-click the map.";
             }
             pingButtons = ButtonGrid(p, pingSpecs, pingSpecs.Length, pingHelps);
 
             labelField = new AvField(p.Content, "TEXT: FARP HERE, CAP EAST…", CommsText.MaxLabel, _ => ArmLabel());
-            Tip(labelField, "Words for the map, up to " + CommsText.MaxLabel + " characters. Press PLACE, then click where they go.");
+            Tip(labelField, "Words for the map, up to " + CommsText.MaxLabel + " characters. Press PLACE, then right-click where they go.");
             var placeRow = new AvButtons(p.Content, new[] { new AvControl.Spec("PLACE", ArmLabel, AvButtonStyle.Primary, AvIcon.MapPin) });
-            placeRow.Controls[0].Help = "Arm the text label, then click the map where it belongs.";
+            placeRow.Controls[0].Help = "Arm the text label, then right-click the map where it belongs.";
             p.Row(labelField, placeRow);
 
             var clearRow = new AvButtons(p.Content,
@@ -122,7 +122,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             p.Add(clearRow);
 
             console.Orders(TabMap,
-                "Arm a tool, then click or drag on the map. ESC puts it down.",
+                "Arm a tool, then right-click or right-drag on the map. ESC puts it down.",
                 HoldHint());
         }
 

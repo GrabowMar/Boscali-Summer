@@ -27,9 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
             if (mountKeys != null) MountKeys.AddRange(mountKeys);
         }
 
-        public LoadoutTemplateRecord Copy(string newId, string newName) =>
-            new LoadoutTemplateRecord(newId, AirframeKey, newName, MountKeys);
-
         /// <summary>Pylon key, or null for a bare or missing entry; newly added airframe stations remain
         /// empty.</summary>
         public string KeyAt(int index) =>

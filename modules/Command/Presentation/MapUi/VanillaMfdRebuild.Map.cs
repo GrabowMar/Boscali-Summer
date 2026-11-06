@@ -128,7 +128,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildLayers(CreatePage());
                 BuildReadability(CreatePage());
 
-                // A page that ends above the footer prints these on its bay cover, most important first.
+                // The footer shows these one at a time under the status line, most important first.
                 Console.Orders(0,
                     "Left-click a tile to show or hide that layer.",
                     "ALL ON and HIDE ALL act on the game layers and the Boscali overlays together.",

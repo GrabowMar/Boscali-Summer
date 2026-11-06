@@ -54,12 +54,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<string> holoOff = () => "Turn on HOLO MAP first.";
             Func<bool> turns = () => holoOn() || tacHolo();
             Func<string> turnsOff = () => "Turn on HOLO MAP or set TAC MAP to HOLO first.";
-            ToggleCell(flow, flow.Grid(1), page, "HOLO MAP",
+            ToggleCell(flow, page, "HOLO MAP",
                 "Enable holographic maps. OFF restores the classic corner map and the normal map key immediately.",
                 () => settings.HoloMap.Value, v => settings.HoloMap.Value = v);
             BoardStrip(flow, page, "HOLO RANGE", HoloRangeNames, HoloRangeBriefs,
                 () => Array.IndexOf(HoloRanges, settings.HoloRangeKm.Value), i => settings.HoloRangeKm.Value = HoloRanges[i], holoOn, holoOff);
-            ToggleCell(flow, flow.Grid(1), page, "NORTH UP",
+            ToggleCell(flow, page, "NORTH UP",
                 "ON keeps north at the top of the terrain map. OFF turns it so your heading is up.",
                 () => settings.HoloNorthUp.Value, v => settings.HoloNorthUp.Value = v, turns, turnsOff);
         }

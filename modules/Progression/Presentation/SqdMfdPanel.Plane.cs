@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void BuildPlanePage(AvFlow p)
         {
-            // No grow: a lone card is the page's whole content, and what it leaves is the bay cover's, orders included.
+            // No grow: a lone card is the page's whole content; below it the console ground shows, and the orders run in the footer.
             planeEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Plane, "NO AIRCRAFT ASSIGNED",
                 "Take an aircraft and this card opens its status: damage, engine map, flight data and stores."));
             planeIdentity = p.Add(Live(new PlaneHero(p.Content)));

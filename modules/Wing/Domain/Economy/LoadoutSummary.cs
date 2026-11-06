@@ -3,10 +3,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
     /// <summary>What a fitted store is, for the summary and the role.</summary>
     internal enum StoreKind : byte { None, AirToAir, AirToGround, Bomb, Ecm, Cargo, MissileDefence, Other }
 
-    /// <summary>One set's store as the page resolved it: a key at all, one this build knows, and what it is.</summary>
+    /// <summary>One set's store as the page resolved it: one this build knows, and what it is.</summary>
     internal struct StoreFacts
     {
-        public bool HasKey, Known;
+        public bool Known;
         /// <summary>A known store this mission refuses (restricted, nuclear not yet, …): it launches empty here.</summary>
         public bool Refused;
         public StoreKind Kind;
@@ -16,10 +16,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
     }
 
     /// <summary>A fit in numbers: stations (rows), how many carry a store that flies, how many hold one the launch empties
-    /// (blocked) or this build does not know, the mass of what flies (every pylon) and its rounds by kind.</summary>
+    /// (blocked) or the mission refuses, the mass of what flies (every pylon) and its rounds by kind.</summary>
     internal struct FitSummary
     {
-        public int Stations, Fitted, Blocked, Unknown, Refused;
+        public int Stations, Fitted, Blocked, Refused;
         public float Mass;
         public int Aam, Agm, Bombs, Ecm, Cargo, MslDef;
     }
@@ -51,31 +51,17 @@ namespace BoscaliSummer.Modules.Wing.Domain
             var sum = new FitSummary { Stations = layout.Stations };
             for (int st = 0; st < layout.Stations; st++)
             {
-                bool flies = false, blocked = false, unknown = false, refused = false;
-                for (int s = layout.First(st); s < layout.End(st) && s < facts.Length; s++)
+                if (st >= facts.Length || !facts[st].Known) continue;
+                StoreFacts f = facts[st];
+                if (f.Refused) sum.Refused++;
+                else if (cleared[st]) sum.Blocked++;
+                else
                 {
-                    StoreFacts f = facts[s];
-                    if (f.HasKey && !f.Known) unknown = true;
-                    if (!f.Known) continue;
-                    if (f.Refused)
-                    {
-                        refused = true;
-                        continue;
-                    }
-                    if (cleared[s])
-                    {
-                        blocked = true;
-                        continue;
-                    }
-                    flies = true;
-                    int pylons = layout.PylonsAt(s);
+                    int pylons = layout.PylonsAt(st);
+                    sum.Fitted++;
                     sum.Mass += f.Mass * pylons;
                     Add(ref sum, f.Kind, f.Ammo * pylons);
                 }
-                if (flies) sum.Fitted++;
-                else if (blocked) sum.Blocked++;
-                else if (refused) sum.Refused++;
-                if (unknown) sum.Unknown++;
             }
             return sum;
         }

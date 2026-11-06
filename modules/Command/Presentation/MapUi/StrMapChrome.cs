@@ -109,7 +109,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "The main effort, its axis, groups and wave route, and the proposals.");
             Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "Sortie markers and zones, and the enemy command posts when the host reports any.");
             draw.Bind(controls, "layer.draw", "DRAW", () => StrMapOverlay.DrawArmed ? new StrAct(StrWhy.None, "") : StrGate.DrawGate(vm),
-                "Draw your own offensive: press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
+                "Draw your own offensive: right-press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
             string line = string.IsNullOrEmpty(Note) ? StrPanelText.LayerLine(vm) : Note;
 
             float x = 8f, y = 6f;

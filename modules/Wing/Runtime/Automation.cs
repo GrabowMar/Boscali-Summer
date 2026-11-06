@@ -109,9 +109,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             var ids = new Dictionary<string, object>();
             foreach (WingMember m in wing.Members) ids["w" + m.Number] = m.Aircraft;
             WingLog.Logger.LogInfo($"[Automation] Members: {ids.Count} ({string.Join(", ", ids.Keys)})");
-            // R5: how many members carry a LOADOUT template's stores as it would launch, and wear its airframe's saved livery.
+            // R5: how many members carry their airframe's custom LOADOUT stores as it would launch (with a "template" argument), and wear its saved livery.
             int matching = 0, liveryMatch = 0;
-            string templateName = Text(args, "template");
+            bool custom = Text(args, "template") != null;
             var carried = new List<string>();
             foreach (WingMember m in wing.Members)
             {
@@ -119,10 +119,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 AircraftDefinition def = m.Aircraft.definition;
                 string token = WingLoadoutTemplates.LiveryTokenOf(def);
                 if (token != null && WingLoadoutTemplates.TokenOf(m.Aircraft.NetworkLiveryKey) == token) liveryMatch++;
-                if (templateName == null) continue;
-                LoadoutTemplateRecord template = null;
-                foreach (LoadoutTemplateRecord t in WingLoadoutTemplates.For(def))
-                    if (string.Equals(t.Name, templateName, StringComparison.OrdinalIgnoreCase)) template = t;
+                if (!custom) continue;
+                LoadoutTemplateRecord template = WingLoadoutTemplates.CustomFor(def);
                 if (template == null) continue;
                 WingLoadoutCatalog.KeysOf(m.Aircraft.Networkloadout, carried);
                 bool same = true;
@@ -135,6 +133,27 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 { "ok", true }, { "count", ids.Count }, { "pending", SpawnService.Instance?.Pending ?? 0 }, { "ids", ids },
                 { "matching", matching }, { "livery_match", liveryMatch },
             };
+        }
+
+        /// <summary>Opens the WMC on <c>tab</c> (0 TACTICAL … 4 WING) and, on TACTICAL, BEHAVIOUR and WING, sub-page <c>sub</c>, for a
+        /// capture of each page; <c>close</c> minimizes the map again.</summary>
+        public static Dictionary<string, object> Wmc(Dictionary<string, object> args)
+        {
+            Presentation.WmcPanel panel = Presentation.WmcPanel.Instance;
+            if (panel == null) return Fail("Wmc", "the WMC is not installed");
+            if (Arg(args, "close") is bool close && close)
+            {
+                SceneSingleton<DynamicMap>.i?.Minimize();
+                return Ok("closed", true);
+            }
+            int tab = Number(args, "tab", WmcTabs.Tactical), sub = Number(args, "sub", 0);
+            panel.Open();
+            panel.Show(tab);
+            if (tab == WmcTabs.Tactical) panel.Tactical?.ShowSub(sub);
+            else if (tab == WmcTabs.Wing) panel.WingPage?.ShowSub(sub);
+            panel.Refresh();
+            WingLog.Logger.LogInfo($"[Automation] Wmc: tab {tab} sub {sub} visible {panel.Visible}");
+            return new Dictionary<string, object> { { "ok", true }, { "tab", tab }, { "sub", sub }, { "visible", panel.Visible } };
         }
 
         /// <summary>Writes every field in use as the mod reads it (the nomodkit dump format) to <c>path</c> (default:

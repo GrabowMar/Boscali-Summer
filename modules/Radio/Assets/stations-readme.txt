@@ -16,6 +16,12 @@ Each falls back to Nuclear Option's installed soundtrack if its folder is empty.
 is stored here on this computer only; the mod does not bundle it.
 Generated Bulletin tracks in built-in folders are ignored by the receiver and deck.
 
+Between songs the built-in stations air their own talk: station stings and idents, hosts,
+adverts and news. Each station sounds like its side - the Republic's public radio, the
+State's propaganda service, and on Base Broadcast your own forces' network (BDF forces radio,
+the PALA army network, or the contractor net when you fly for the PMC). Set
+[Radio] BroadcastTalk = false in the config for music only.
+
 Reception on RAD is modelled: the three built-in stations each transmit from
 a tower on the map (your capital, another faction's, your nearest airbase), so range, your
 altitude, the radio horizon and terrain between you and the tower all matter. Tracks in your

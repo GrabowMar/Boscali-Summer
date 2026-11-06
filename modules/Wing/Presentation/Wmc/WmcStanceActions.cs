@@ -44,8 +44,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return r;
         }
 
-        /// <summary>The stance whose axes the scope flies now, or null when none matches exactly (then ORDERS shows the closest
-        /// slot with a * and its changed axes).</summary>
+        /// <summary>The stance whose axes the scope flies now, or null when none matches exactly.</summary>
         public static Stance Matching(byte[] liveAxes)
         {
             foreach (Stance s in Book.All)

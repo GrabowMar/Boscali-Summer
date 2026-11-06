@@ -103,20 +103,22 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 return;
             }
 
-            // Support numbered keyboard choices while the cursor remains captured.
+            // Support numbered keyboard choices while the cursor remains captured — but not while a field has the keyboard
+            // (a callsign typed in STUDIO is not a choice: the R in RIPTIDE would end the game).
+            bool typing = WmcNameField.Typing || NuclearOption.MissionEditorScripts.InputFieldChecker.InsideInputField;
             CurrentCandidates();
             for (int i = 0; i < candidates.Count && i < MaxCards; i++)
             {
                 KeyCode alpha = (KeyCode)((int)KeyCode.Alpha1 + i);
                 KeyCode keypad = (KeyCode)((int)KeyCode.Keypad1 + i);
-                if (Input.GetKeyDown(alpha) || Input.GetKeyDown(keypad))
+                if (!typing && (Input.GetKeyDown(alpha) || Input.GetKeyDown(keypad)))
                 {
                     TakeControl(candidates[i]);
                     return;
                 }
             }
 
-            if (Input.GetKeyDown(KeyCode.R))
+            if (!typing && Input.GetKeyDown(KeyCode.R))
             {
                 ContinueWithoutTakeover("Returning to aircraft selection");
                 return;

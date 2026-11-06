@@ -13,6 +13,41 @@ namespace BoscaliSummer.Modules.Wing.Runtime
     /// REFIT end on those aircraft, not on an empty letter. Nothing runs on a client, and nothing allocates while no plan runs.</summary>
     internal sealed class WingPlans : IWingService
     {
+
+        /// <summary>Where lane <paramref name="e"/>'s element is and how fast it goes: its task lead when one flies, else its members'
+        /// mean (a grounded element is timed at cruise). False when it has none.</summary>
+        internal static bool ElementFrom(WingService w, int e, out float x0, out float z0, out float speed)
+        {
+            x0 = z0 = speed = 0f;
+            if (w == null || !w.Roster.InUse(e)) return false;
+            bool airborne = false;
+            foreach (WingMember m in w.Members)
+                if (!m.Released && m.Alive && (object)m.Aircraft != null && w.ElementOf(m) == e && !m.OnGround) airborne = true;
+            WingPlanner p = w.PlannerOf(e);
+            if (airborne && p != null && p.Active && p.Lead != null)
+            {
+                x0 = p.Lead.Position.X;
+                z0 = p.Lead.Position.Z;
+                speed = p.Lead.Speed;
+                return true;
+            }
+            int n = 0;
+            foreach (WingMember m in w.Members)
+            {
+                if (m.Released || !m.Alive || (object)m.Aircraft == null || w.ElementOf(m) != e) continue;
+                x0 += m.Last.Pos.X;
+                z0 += m.Last.Pos.Z;
+                speed += m.Last.Vel.Length;
+                n++;
+            }
+            if (n == 0) return false;
+            x0 /= n;
+            z0 /= n;
+            speed /= n;
+            if (!airborne) speed = 150f;
+            return true;
+        }
+
         public static WingPlans Instance { get; private set; }
 
         /// <summary>How often the plan is stepped, s of mission time.</summary>
@@ -27,10 +62,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         public bool Running => Runner != null && Runner.Running;
         /// <summary>The last run went through every step.</summary>
         public bool Completed { get; private set; }
-        /// <summary>Mission time the last run went through its last step (the TIMELINE's DONE stops there).</summary>
+        /// <summary>Mission time the last run went through its last step (SORTIE's clock stops there).</summary>
         public float FinishedAt { get; private set; }
         public int Sent { get; private set; }
-        /// <summary>Each step's planned start and end, s after EXECUTE, frozen then (the TIMELINE's PLAN; NaN: open).</summary>
+        /// <summary>Each step's planned start and end, s after EXECUTE, frozen then (SORTIE's plan bars; NaN: open).</summary>
         public readonly float[,] PlannedStart = new float[WingPlan.Lanes, WingPlan.MaxSteps], PlannedEnd = new float[WingPlan.Lanes, WingPlan.MaxSteps];
         private readonly float[] fromX = new float[WingPlan.Lanes], fromZ = new float[WingPlan.Lanes], fromSpeed = new float[WingPlan.Lanes];
 
@@ -115,7 +150,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 Capture(w, l, l);
             }
             for (int l = 0; l < WingPlan.Lanes; l++)
-                if (!WmcPlan.From(w, l, out fromX[l], out fromZ[l], out fromSpeed[l])) fromSpeed[l] = 150f;
+                if (!ElementFrom(w, l, out fromX[l], out fromZ[l], out fromSpeed[l])) fromSpeed[l] = 150f;
             PlanTimeline.Planned(Plan, fromX, fromZ, fromSpeed, PlannedStart, PlannedEnd);
             Runner.Execute(w.MissionTime);
             lastTick = float.NegativeInfinity;

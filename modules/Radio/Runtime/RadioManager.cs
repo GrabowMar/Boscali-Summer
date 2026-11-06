@@ -119,6 +119,11 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private float restoreTime = -1f;
         private bool restorePaused;
 
+        // Station talk between songs (RadioBroadcastSegments)
+        private readonly Queue<RadioStationTrack> breakQueue = new Queue<RadioStationTrack>();
+        private RadioStationTrack segmentTrack;
+        private int breakIndex;
+
         // ------------------------------------------------------------------ receiver face
 
         public int ChannelCount => stations.Length;
@@ -315,6 +320,8 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             nextPropagationAt = 0f;
             nextVanillaSweep = 0f;
             filterApplied = false;
+            ClearBreak();
+            breakIndex = 0;
             bulletinCursor = 0;
             lastProgramName = null;
             lastChatter = string.Empty;
@@ -410,7 +417,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         private void AdvanceReceiver()
         {
-            if (settings.RepeatTrack.Value) PlayCurrent();
+            if (settings.RepeatTrack.Value && segmentTrack == null) PlayCurrent();
             else NextTrack();
         }
 
@@ -961,6 +968,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 " · " + CurrentChannelName;
             fx?.SetCarrier(false, Volume);
             fx?.Tune(CurrentChannelCode, settings.CarrierNoise.Value, settings.StationIdents.Value);
+            ClearBreak();
             bulletinCursor = 0;
             nextBulletinAt = Time.unscaledTime + BulletinSeconds;
             nextProgramRefresh = 0f;
@@ -1002,6 +1010,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             hold.EngageReceiver();
             BeginVanillaHold();
             status = "On air · " + track.Title;
+            if (ReferenceEquals(track, segmentTrack)) PushLog(CurrentChannelName + " · " + track.Title);
             ApplyFilters();
             SyncVanillaHold();
         }
@@ -1037,6 +1046,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private RadioStationTrack CurrentTrack()
         {
             if (huntTrack != null) return huntTrack;
+            if (segmentTrack != null) return segmentTrack;
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return null;
             selectedTrack = Mathf.Clamp(selectedTrack, 0, channel.Tracks.Length - 1);
@@ -1050,6 +1060,19 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 PlayCurrent();
                 return;
             }
+            // After a song comes the station's break (sting, ident, talk), then the next song.
+            if (breakQueue.Count == 0 && segmentTrack == null && settings.BroadcastTalk.Value)
+                foreach (RadioStationTrack segment in RadioBroadcastSegments.Break(
+                    CurrentStationId, LocalFactionName(), breakIndex++))
+                    breakQueue.Enqueue(segment);
+            if (breakQueue.Count > 0)
+            {
+                segmentTrack = breakQueue.Dequeue();
+                PlayCurrent();
+                return;
+            }
+            segmentTrack = null;
+
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return;
             if (settings.Shuffle.Value && channel.Tracks.Length > 1)
@@ -1057,6 +1080,59 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             else
                 selectedTrack = (selectedTrack + 1) % channel.Tracks.Length;
             PlayCurrent();
+        }
+
+#if !PUBLIC_RELEASE
+        /// <summary>Sim hook: tune a built-in station by id, start it, and on later calls end the current item early.</summary>
+        internal static Dictionary<string, object> AutomationStep(string stationId, string faction, bool advance)
+        {
+            RadioManager radio = active;
+            if (radio == null || !radio.configured) return null;
+            if (!string.IsNullOrEmpty(stationId))
+                for (int i = 0; i < radio.stations.Length; i++)
+                    if (radio.stations[i].Id == stationId && i != radio.selectedChannel) radio.SelectChannelInternal(i);
+            if (faction != null) automationFaction = faction;
+            if (!radio.receiver.Engaged) radio.PlayCurrent();
+            else if (advance) radio.NextTrack();
+            return radio.AutomationState();
+        }
+
+        private static string automationFaction;
+
+        internal Dictionary<string, object> AutomationState() => new Dictionary<string, object>
+        {
+            ["station"] = CurrentStationId,
+            ["track"] = CurrentTrackTitle,
+            ["segment"] = segmentTrack != null,
+            ["queued"] = breakQueue.Count,
+            ["break_index"] = breakIndex,
+            ["state"] = receiver.State.ToString(),
+            ["duration"] = receiver.Duration,
+            ["error"] = receiver.LastError ?? string.Empty,
+            ["ticker"] = TickerText,
+            ["set"] = RadioBroadcastSegments.SetFor(CurrentStationId, LocalFactionName()) ?? string.Empty,
+        };
+#endif
+
+        private void ClearBreak()
+        {
+            breakQueue.Clear();
+            segmentTrack = null;
+        }
+
+        private static string LocalFactionName()
+        {
+#if !PUBLIC_RELEASE
+            if (automationFaction != null) return automationFaction;
+#endif
+            try
+            {
+                return GameManager.GetLocalPlayer<Player>(out Player player) && player != null &&
+                    player.HQ != null && player.HQ.faction != null
+                    ? player.HQ.faction.factionName
+                    : null;
+            }
+            catch { return null; }
         }
 
         private static int ShuffleIndex(int count, int current)

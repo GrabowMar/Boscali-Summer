@@ -99,10 +99,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static bool IsHosted(MFDScreen screen) =>
             screen != null && bindings.ContainsKey(screen);
 
+#if !PUBLIC_RELEASE
+        /// <summary>Dev tooling: the live console of a rebuilt stock screen, or null while it is not bound.</summary>
+        internal static AvConsole ConsoleForAutomation(VanillaMfdPanelId id)
+        {
+            foreach (Binding binding in bindings.Values)
+                if (binding.Presenter != null && binding.Presenter.Id == id) return binding.Presenter.ConsoleForAutomation;
+            return null;
+        }
+
+        /// <summary>Dev tooling: clicks the MIS job board's slip at this index (the click path), false without one.</summary>
+        internal static bool PickContractForAutomation(int index)
+        {
+            foreach (Binding binding in bindings.Values)
+                if (binding.Presenter is MissionPresenter mission) return mission.PickForAutomation(index);
+            return false;
+        }
+#endif
+
         /// <summary>Restore every native screen exactly before its dock is dismantled.</summary>
         public static void Restore()
         {
-            MissionContractWindow.CloseOpen();
             foreach (Binding binding in bindings.Values)
             {
                 binding.Restore(keepView: true);
@@ -416,6 +433,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected readonly MFDScreen Screen;
             public readonly VanillaMfdPanelId Id;
             protected AvConsole Console { get; private set; }
+            internal AvConsole ConsoleForAutomation => Console;
 
             /// <summary>The console's full header title (the id plate carries the short tag).</summary>
             protected abstract string Title { get; }

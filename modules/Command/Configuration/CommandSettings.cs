@@ -43,6 +43,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<bool> MapMinis3D { get; }
         public ConfigEntry<bool> MapLeftDragBox { get; }
         public ConfigEntry<bool> MapClickAdds { get; }
+        public ConfigEntry<bool> MapCursor { get; }
         public ConfigEntry<MapBoxSide> MapBoxSide { get; }
         public ConfigEntry<bool> MapRightDragTurns { get; }
         public ConfigEntry<bool> MapDoubleClickZoom { get; }
@@ -255,6 +256,8 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Expanded map: a plain left drag draws a selection box and Shift or Ctrl + drag pans. Off (default) is the other way round. The DRAG tool on the map corner switches it.");
             MapClickAdds = config.Bind("Command", "MapClickAdds", true,
                 "Expanded map: a click on a contact adds it to the selection (or drops it if already in). Off makes a click replace the selection; Shift or Ctrl + click still adds. The CLICK tool on the map corner switches it.");
+            MapCursor = config.Bind("Command", "MapCursor", true,
+                "A themed cursor in missions. On the expanded map it shows what the mouse would do: select or drop a contact, box add or drop, pan, turn, place an armed tool, or move the selection. Off keeps the system arrow.");
             MapBoxSide = config.Bind("Command", "MapBoxSide", Domain.MapBoxSide.All,
                 "Expanded map: which contacts a selection box picks up - All, Hostile or Friendly. The BOX tool on the map corner cycles it.");
             MapRightDragTurns = config.Bind("Command", "MapRightDragTurns", true,

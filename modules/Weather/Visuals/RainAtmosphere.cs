@@ -102,7 +102,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
             // must still be able to navigate by. Heavy rain keeps several km of contrast.
             // Forced local showers also need haze when the mission starts with zero fog.
-            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, rain * 0.00012f), 0.00055f) * thin;
+            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, RainSkyMath.HazeFloor(rain, shade)), 0.00055f) * thin;
             // Cloud extinction belongs to the ray-marched volume. Applying it to global
             // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             // Dark nights: ambient, fog and sky dome take one factor, so near terrain, far haze and the sky stay in step at the horizon.
@@ -112,9 +112,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // At night the fog colours turn grey too: vanilla's night fog is a saturated teal far brighter than its night sky, and the far
             // sea (Boscali/Ocean fogs to it) and the distant deck seen from above glowed cyan along the horizon (2026-10-19).
             fogColor.Written = Dim(NightGrey(ShadeTint(Tint(fogColor.Base, rain), shade), sunHeight, shade), night);
-            skyColor.Written = Moonlit(Dim(skyColor.Base, dim), sunHeight, moon, darkNight);
-            equatorColor.Written = Moonlit(Dim(equatorColor.Base, dim), sunHeight, moon, darkNight);
-            groundColor.Written = Moonlit(Dim(groundColor.Base, dim), sunHeight, moon, darkNight);
+            // Under a deck the ground loses the blue sky fill: grey the ambient gradients so terrain reads flat and overcast, not shaded summer.
+            float grey = RainSkyMath.ShadeAmbientGrey * Mathf.Max(shade, rain);
+            skyColor.Written = Moonlit(Grey(Dim(skyColor.Base, dim), grey), sunHeight, moon, darkNight);
+            equatorColor.Written = Moonlit(Grey(Dim(equatorColor.Base, dim), grey), sunHeight, moon, darkNight);
+            groundColor.Written = Moonlit(Grey(Dim(groundColor.Base, dim), grey), sunHeight, moon, darkNight);
 
             RenderSettings.fogDensity = fog.Written;
             RenderSettings.ambientIntensity = ambient.Written;
@@ -180,6 +182,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         private static Color Dim(Color c, float k) => new Color(c.r * k, c.g * k, c.b * k, c.a);
+
+        // No clamp: ambient gradients can be HDR.
+        private static Color Grey(Color c, float k)
+        {
+            float lum = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+            return new Color(c.r + (lum - c.r) * k, c.g + (lum - c.g) * k, c.b + (lum - c.b) * k, c.a);
+        }
 
         private static Color Moonlit(Color c, float sunHeight, float moon, bool darkNight)
         {

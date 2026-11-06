@@ -87,6 +87,12 @@ namespace BoscaliSummer.Modules.Immersion
             ClientSettingToggle visor = context.AddClientSetting(Look, "HELMET VISOR",
                 "Cockpit view: near-future helmet-mounted display - curved visor, electrochromic sun tint, breath fog, sun-lit scratches, visor and canopy reflections.",
                 s.HelmetVisorEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(Look, "AR APPROACH TUNNEL",
+                "On final, the helmet draws green frames on the 3 degree glide path down to the runway ahead. Uses the AIRFIELD LIGHTS runways.",
+                s.ArTunnelEnabled, requires: master);
+            context.AddClientSetting(Look, "CANOPY FROST",
+                "Cloud or precipitation below freezing rimes the canopy from the frame inward; it melts in warmer air.",
+                s.CanopyFrostEnabled, ClientPreset.Light, master);
             context.AddClientSetting(Look, "DAMAGE SURFACES",
                 "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
                 s.SurfaceImmersionEnabled, ClientPreset.Light, master);
@@ -130,6 +136,18 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting(World, "DUST WAKE",
                 "Aircraft fast and very low over land kick up a dust wake behind them.",
                 s.DustWakeEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(World, "AIRFIELD LIGHTS",
+                "At night: runway and taxiway edges, green/red threshold bars, approach lights with a running flasher, a PAPI glide-path guide and the tower beacon.",
+                s.AirfieldLightsEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(World, "CITY LIGHTS",
+                "At night: lit windows and sodium street lamps on every town, fading in at dusk. A building that is destroyed goes dark.",
+                s.CityLightsEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(World, "VAPOUR",
+                "In humid air: a vapour cone around aircraft near Mach 1 and white vapour ribbons off the wingtips in hard turns (above about 3 G).",
+                s.VapourEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(World, "MISSILE BOOM",
+                "A supersonic missile passing close by cracks with a sonic boom as its shock cone sweeps over you.",
+                s.MissileBoomEnabled, requires: master);
             context.AddClientSetting(World, "QUIET PARKED AI",
                 "Parked AI aircraft switch navigation lights off and leave the cockpit empty until they start up.",
                 s.ParkedAircraftEnabled, requires: master);

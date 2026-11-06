@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static readonly string[] Formation =
         {
             "The shape is the scope element's; spacing and stack move the whole wing.",
-            "MEMBERS shows each slot's error and closure; phases run CUTOFF › PRE-SLOT › IN SLOT.",
+            "MEMBERS shows each slot's error in metres; phases run CUTOFF › PRE-SLOT › IN SLOT.",
             "ALL SHAPES › opens every shape card. Spacing ticks are the old presets.",
         };
 
@@ -24,51 +24,43 @@ namespace BoscaliSummer.Modules.Wing.Domain
             "DRAW, then right-click the map to drop points. UNDO takes the last one back.",
             "Select a point to set its altitude, speed and action; AUTO lets the wing choose.",
             "ONCE, LOOP or PING-PONG sets how the route repeats; SEND TO WING flies it.",
-            "SAVE keeps a route for another sortie; NAV flies your own aircraft along it.",
+            "NAV flies your own aircraft along the route; AP OFF hands it back.",
         };
 
-        public static readonly string[] Stances =
+        public static readonly string[] Behaviour =
         {
-            "A stance is a whole rulebook: what to hit, how far, which weapons, radar, defence and after-action.",
-            "Pick one, read its card, APPLY. Built-ins are read-only: SAVE AS makes a copy you can edit.",
-            "Slots W+1 to W+6 are the cockpit keys: wing key + number switches stance in flight.",
-            "LIVE DOCTRINE edits what the scope flies right now, without touching the book.",
-        };
-
-        public static readonly string[] Sortie =
-        {
-            "Build the plan on ORDERS (SHIFT + a map order adds a step), then EXECUTE here.",
-            "Dashed bars are the plan, solid bars what really happened. Tap a bar for its step.",
-            "SKIP STEP moves the wing on; ABORT drops the plan. EVENTS is the radio log per element.",
+            "Tap a scenario to fly it: STRIKE for a bombing run, INTERCEPT for bandits, SILENT to slip in unseen.",
+            "TUNE changes the scope's AI at once; the outlined choice is the scenario's own. SAVE NEW keeps your tuning.",
+            "Wing key + 1-6 flies a scenario from the cockpit; give the lit one a key with WING KEY.",
         };
 
         public static readonly string[] Supply =
         {
-            "Work top to bottom: pilot, airframe, fit and fuel, launch base. Then REQUISITION.",
+            "Tap an airframe tile, then work down: pilot, stores and fuel, launch base. Then REQUISITION at the top.",
             "A requisitioned aircraft joins the wing once it takes off; the strip counts the inbound.",
-            "FIT AUTO picks stores for the role; YOUR LOADOUT copies yours; EDIT › opens LOADOUT.",
+            "STORES: AUTO arms it for the role, YOUR LOADOUT copies yours, CUSTOM is the LOADOUT build (EDIT LOADOUT ›).",
             "Airframes and fields list once you are flying. In multiplayer the host requisitions.",
         };
 
         public static readonly string[] Loadout =
         {
-            "A template is a saved fit for one airframe, not the aircraft in the air.",
-            "Pick an airframe, NEW a template, then click a hardpoint to fit a store.",
-            "SUPPLY step 3 flies a template. Templates are saved on this PC.",
+            "Tap any airframe tile to edit its one custom loadout (CUSTOM tiles already have one).",
+            "Click a hardpoint, then a store; the first change saves the standard stores as your own.",
+            "FLY IT ON SUPPLY sends this airframe and loadout to SUPPLY. Saved on this PC; in multiplayer only the host edits.",
         };
 
         public static readonly string[] Roster =
         {
-            "Pilots keep rank, ribbons and perks between missions; XP opens the four perk slots.",
+            "Every pilot starts a mission a ROOKIE; kills and sorties earn XP, rank, ribbons and a perk per rank.",
             "‹ › pages the roster; RECRUIT adds a pilot, STUDIO changes their look and identity.",
             "A downed pilot: AIR SAR sends a helicopter, LOCAL SAR waits them out. RELEASE lets one go.",
         };
 
         public static readonly string[] Aircraft =
         {
-            "#2 to #7 pick one wingman: damage, fuel, stores and what it is doing now.",
-            "CENTER puts the picked aircraft in the middle of the map.",
-            "The host reports wingman details; a client sees them once they arrive.",
+            "A chip picks one wingman: fuel, ammo, hull, stores and its pilot.",
+            "CENTER puts the picked aircraft in the middle of the map; RELEASE hands it to the game's AI.",
+            "Only the host sees wingman details; a client sees the chips.",
         };
 
         public static readonly string[] Studio =

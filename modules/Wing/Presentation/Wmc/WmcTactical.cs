@@ -2,15 +2,13 @@ using NOAvionics;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL (spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
-    /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (stances and their
-    /// fine-tune, the command card with REACT, the queue), FORMATION (the Station
-    /// Board) and ROUTE · AP (the Flight Plan). The wing table is full on ORDERS and one summary line on the others (a tap expands it). The
-    /// console body scrolls, so nothing pages or clips.</summary>
+    /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (the stance
+    /// slots, the command card with REACT, the queue), FORMATION (the Station Board) and ROUTE · AP (the Flight Plan). The wing table is
+    /// full on ORDERS and one summary line on the others (a tap expands it). The console body scrolls, so nothing pages or clips.</summary>
     internal sealed partial class WmcTactical : IWmcPage
     {
         public const int SubOrders = 0, SubFormation = 1, SubRoute = 2;
         private static readonly string[] SubLabels = { "ORDERS", "FORMATION", "ROUTE · AP" };
-        private static readonly string[] SubKeys = { "orders", "formation", "route" };
         private static readonly AvIcon[] SubIcons = { AvIcon.Flag, AvIcon.LayersSubtract, AvIcon.MapPin };
         private static readonly string[] SubHelp =
         {
@@ -19,32 +17,24 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             "The Flight Plan: the scope's route as legs, and your own autopilot with NAV.",
         };
 
-        private readonly WmcControls ids;
-        private readonly WmcForm form;
-        private readonly WmcRoute route;
+        private readonly WmcForm form = new WmcForm();
+        private readonly WmcRoute route = new WmcRoute();
         private WmcWingTable table;
         private AvFlow flow;
         private AvTicker ticker;
         private int pageIndex;
         private WmcSubPages subPages;
         private AvControl[] subTabs;
-        private AvPopup popup;
         private int sub = -1;
         private WmcContext last;
         private bool relayout, tableOpen;
-
-        public WmcTactical(WmcControls controls)
-        {
-            ids = controls;
-            form = new WmcForm(controls);
-            route = new WmcRoute(controls);
-        }
 
         public int Sub => sub;
 
         public string Hint => last != null && last.Count == 0 && !last.Client
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
             : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
+            : last != null && last.Client ? "Orders are host only for now."
             : "Click the table to choose who orders go to; a stance sets how the scope fights.";
 
         public string Alert => alertText;
@@ -59,10 +49,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < subTabs.Length; i++)
             {
                 subTabs[i].Help = SubHelp[i];
-                ids.Add("tac.sub." + SubKeys[i], subTabs[i]);
             }
-            // The 0.9 id of the merged sub-tab (its label lower-cased) still answers.
-            ids.Add("tac.sub." + SubLabels[SubRoute].ToLowerInvariant(), subTabs[SubRoute]);
 
             BuildTable(flow);
 
@@ -70,9 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
-            // Last, so its list draws over the page.
-            popup = new AvPopup(flow.Content, flow.Width);
-            route.UsePopup(popup, flow.Content);
             ShowSub(SubOrders);
         }
 
@@ -80,6 +64,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void ShowSub(int k)
         {
             if (subPages == null || k < 0 || k >= SubLabels.Length) return;
+            if (k != SubFormation) form.CloseShapes();
             if (k != sub && last != null)
             {
                 if (k == SubFormation) form.Shown(last);
@@ -89,11 +74,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             subPages.Show(k);
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
             table.SetMode(k != SubOrders, !tableOpen);
-            AvPopup.CloseAny();
             WmcNameField.BlurAny();
             if (last != null) Refresh(last);
             flow.RequestRelayout();
         }
+
+        /// <summary>The page left the screen (another tab, the panel hid) or the panel reset: its floating windows go with it.</summary>
+        public void CloseWindows(bool drop = false) => form.CloseShapes(drop);
 
         public void Shown(WmcContext c)
         {
@@ -108,7 +95,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             RefreshAlertList(c);
             table.FlashUntil = flashUntil;
             table.Refresh(c, AlertWord(out AvState alertAs), alertAs);
-            RefreshTableIds();
             if (sub == SubOrders) RefreshOrders(c);
             else if (sub == SubFormation) form.Refresh(c);
             else if (sub == SubRoute) route.Refresh(c);

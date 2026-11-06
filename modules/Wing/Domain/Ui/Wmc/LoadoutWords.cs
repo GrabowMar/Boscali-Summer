@@ -5,46 +5,37 @@ using static BoscaliSummer.Modules.Wing.Domain.WmcText;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>LOADOUT's words (spec WMC rebuild §LOADOUT; critique 11: one phrase, NO TEMPLATE, everywhere): the build card, the
-    /// chain, station and row words, the STATIONS / MASS / ROLE tiles and captions, the template bar's refusals and the hints — each
-    /// capped at the source, never with "…".</summary>
+    /// <summary>LOADOUT's words (spec WMC rebuild §LOADOUT): the build card, the chain, station and row words, the captions and the
+    /// hints — each capped at the source, never with "…".</summary>
     internal static class LoadoutWords
     {
         public const int BuildChars = 60, CaptionChars = 22, StationChars = 40, StoreChars = 48, LiveryChars = 36;
-        public const string NoTemplate = "NO TEMPLATE", EmptyStore = "EMPTY", Standard = "STANDARD (FACTION)";
+        public const string EmptyStore = "EMPTY", Standard = "STANDARD (FACTION)";
         public const string Unreadable = "This airframe's hardpoints cannot be read here";
 
-        public static string Title(string code, string template) => code + " · " + (template ?? NoTemplate);
+        /// <summary>The one empty-state line (no airframe to edit).</summary>
+        public const string NoAirframe = "NO AIRFRAME · pick one above";
 
-        /// <summary>NO TEMPLATE, then EDITED (the NAME field holds text not yet saved), then SUPPLY FIT, then SAVED.</summary>
-        public static string Chip(bool hasTemplate, bool editing, bool supplyFit, out string state)
+        /// <summary>Why nothing can be edited on a client: the host launches the wing, so the host's loadouts and liveries are the ones used.</summary>
+        public const string ClientWhy = "HOST ONLY · the host launches the wing, so only the host edits loadouts and liveries";
+
+        public static string Title(string code, bool custom) => code + " · " + (custom ? "CUSTOM LOADOUT" : "STANDARD FIT");
+
+        /// <summary>STANDARD (nothing saved yet: the airframe's own stores), SUPPLY FIT (SUPPLY's fit flies the custom loadout), else SAVED.</summary>
+        public static string Chip(bool custom, bool supplyFit, out string state)
         {
-            if (!hasTemplate)
-            {
-                state = "warn";
-                return NoTemplate;
-            }
-            if (editing)
-            {
-                state = "warn";
-                return "EDITED";
-            }
-            state = supplyFit ? "info" : "live";
-            return supplyFit ? "SUPPLY FIT" : "SAVED";
+            state = !custom ? "inert" : supplyFit ? "info" : "live";
+            return !custom ? "STANDARD" : supplyFit ? "SUPPLY FIT" : "SAVED";
         }
 
         /// <summary>The build card's second line (spec bezel v2: the STATIONS, MASS and ROLE tiles are gone; the card carries them):
         /// fitted of stations, stores mass, role, then what does not fly.</summary>
-        public static string Build(in FitSummary f, bool hasTemplate, int emptyHere)
+        public static string Build(in FitSummary f, int emptyHere)
         {
-            if (!hasTemplate) return NoTemplate + " · NEW STARTS ONE FROM THE STANDARD STORES";
             string s = Stations(f) + " FITTED · " + Mass(f.Mass) + " KG · " + Role(f);
-            string caption = StationsCaption(f, true, emptyHere);
+            string caption = StationsCaption(f, emptyHere);
             return caption == "ALL FITTED" || s.Length + 3 + caption.Length > BuildChars ? s : s + " · " + caption;
         }
-
-        /// <summary>Which SUPPLY fit flies this template: "USED BY 1 SUPPLY FIT" (a template is one airframe's, so 0 or 1).</summary>
-        public static string UsedBy(int fits) => fits <= 0 ? "NOT USED BY SUPPLY" : "USED BY " + N(fits) + (fits == 1 ? " SUPPLY FIT" : " SUPPLY FITS");
 
         /// <summary>The station picker's head: "STATION 3 · INNER L" (the number is 1-based).</summary>
         public static string PickerHead(int station, string name) => "STATION " + N(station + 1) + " · " + (name ?? "").ToUpperInvariant();
@@ -83,9 +74,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>What does not fly and why, whole parts within 22 characters; ALL FITTED when everything does.</summary>
-        public static string StationsCaption(in FitSummary f, bool hasTemplate, int emptyHere)
+        public static string StationsCaption(in FitSummary f, int emptyHere)
         {
-            if (!hasTemplate) return NoTemplate;
             int empty = Math.Max(0, f.Stations - f.Fitted - f.Blocked - emptyHere);
             var sb = new StringBuilder();
             Part(sb, emptyHere, "EMPTY HERE", "EMPTY HERE");
@@ -94,38 +84,20 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return sb.Length == 0 ? "ALL FITTED" : sb.ToString();
         }
 
-        public static string RowMass(float kg) => kg <= 0f ? WmcText.Unknown : Math.Round(kg).ToString("N0", CultureInfo.InvariantCulture) + " kg";
-
         /// <summary>The status strip's alert when stations hold stores this mission refuses; null when none.</summary>
         public static string EmptyHereAlert(int n) =>
             n <= 0 ? null : n == 1 ? "1 STATION LAUNCHES EMPTY HERE · clear it or fit another store"
             : N(n) + " STATIONS LAUNCH EMPTY HERE · clear them or fit other stores";
 
-        public static string DeleteLabel(bool asking) => asking ? "DELETE?" : "DELETE";
-
-        public static string DeleteAsk(string name) => "Press DELETE again to delete " + name + " · aircraft in the air keep their fit";
-
-        public static string Deleted(string name, bool wasSupplyFit) => name + " deleted" + (wasSupplyFit ? " · SUPPLY FIT is AUTO again" : "");
-
-        public static string NewWhy(bool readable, int count) =>
-            !readable ? Unreadable : count >= TemplateNames.PerAirframe ? Limit : null;
-
-        public static string CopyWhy(bool hasTemplate, int count) =>
-            !hasTemplate ? "Pick a template to copy" : count >= TemplateNames.PerAirframe ? Limit : null;
-
-        public static string DeleteWhy(bool hasTemplate) => hasTemplate ? null : "No template to delete";
-
         public static string Livery(string label) => WmcText.Cut(label, LiveryChars);
 
-        public static string Hint(bool client, bool hasAirframe, bool hasTemplate, string code)
+        public static string Hint(bool client, bool hasAirframe, bool custom)
         {
-            if (client) return "SAVED ON THIS PC · THE HOST USES ITS OWN templates when you fly for it.";
-            if (!hasAirframe) return "Pick an airframe to edit its templates.";
-            if (!hasTemplate) return "NEW starts a template for " + code + "; until then SUPPLY FIT offers AUTO and YOUR LOADOUT.";
-            return "A saved preset, not the aircraft in the air: SUPPLY FIT flies it. Click a station to fit a store.";
+            if (client) return ClientWhy;
+            if (!hasAirframe) return "Pick an airframe to edit its loadout.";
+            return custom ? "A saved preset, not the aircraft in the air: SUPPLY FIT CUSTOM flies it. Click a station to fit a store."
+                : "Standard stores shown: the first change saves them as this airframe's CUSTOM loadout for SUPPLY FIT.";
         }
-
-        private static readonly string Limit = N(TemplateNames.PerAirframe) + " templates is this airframe's limit · delete one first";
 
         private static void Part(StringBuilder sb, int n, string one, string many)
         {

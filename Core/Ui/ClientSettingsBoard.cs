@@ -46,8 +46,10 @@ namespace BoscaliSummer.Core.Ui
         public string Help { get; }
         public ConfigEntryBase Entry { get; }
         public ClientSettingToggle Requires { get; }
-        public bool Available => Requires == null || Requires.Value && Requires.Available;
-        public string Reason => Requires == null ? Help : !Requires.Available ? Requires.Reason : "Turn on " + Requires.Label + " first.";
+        /// <summary>Optional lock that does not live in a config entry (the other mod is not installed): a reason locks the row, null leaves it free.</summary>
+        public Func<string> Gate { get; set; }
+        public bool Available => Gate?.Invoke() == null && (Requires == null || Requires.Value && Requires.Available);
+        public string Reason => Gate?.Invoke() ?? (Requires == null ? Help : !Requires.Available ? Requires.Reason : "Turn on " + Requires.Label + " first.");
         public void Reset() => Entry.BoxedValue = Entry.DefaultValue;
     }
 

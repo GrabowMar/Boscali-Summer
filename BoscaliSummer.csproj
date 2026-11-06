@@ -135,6 +135,8 @@
     <EmbeddedResource Include="AvionicsUi\Assets\avionics-icons.bundle" Condition="Exists('AvionicsUi\Assets\avionics-icons.bundle')">
       <LogicalName>NOAvionics.avionics-icons.bundle</LogicalName>
     </EmbeddedResource>
+    <!-- Console ground texture (see AvionicsUi/Assets/PROVENANCE.txt). Optional: without it consoles keep a flat ground. -->
+    <EmbeddedResource Include="AvionicsUi\Assets\console-ground.png" LogicalName="NOAvionics.console-ground.png" />
   </ItemGroup>
 
   <ItemGroup Label="Radio station assets">
@@ -143,6 +145,10 @@
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Radio\Assets\stations-readme.txt">
       <LogicalName>BoscaliSummer.RadioAssets.stations-readme.txt</LogicalName>
+    </EmbeddedResource>
+    <!-- Station talk (ElevenLabs, scripts and voices in broadcast.tsv), unpacked to the BepInEx cache by RadioBroadcastSegments. -->
+    <EmbeddedResource Include="modules\Radio\Assets\Broadcast\*.mp3;modules\Radio\Assets\Broadcast\broadcast.tsv">
+      <LogicalName>BoscaliSummer.RadioAssets.Broadcast.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
 
@@ -211,6 +217,9 @@
 
   <ItemGroup Label="Night vision shader bundle">
     <!-- Built by tools/Compile-NightVisionAssets.ps1. Optional: without it the look is a white tint on vanilla's gain. -->
+    <EmbeddedResource Include="modules\Command\Assets\relief.bundle" Condition="Exists('modules\Command\Assets\relief.bundle')">
+      <LogicalName>BoscaliSummer.Command.relief.bundle</LogicalName>
+    </EmbeddedResource>
     <EmbeddedResource Include="modules\QoL\Assets\nightvision.bundle" Condition="Exists('modules\QoL\Assets\nightvision.bundle')">
       <LogicalName>BoscaliSummer.QoL.nightvision.bundle</LogicalName>
     </EmbeddedResource>

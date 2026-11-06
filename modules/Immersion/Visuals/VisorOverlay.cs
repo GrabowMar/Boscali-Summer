@@ -65,6 +65,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             reflect = HelmetMath.Sanitize(reflection01, HelmetMath.DefaultReflection);
             float targetTint = HelmetMath.ElectroTint(elevation, sunFacing01, light01);
             tint = VisorMath.Ease(tint, targetTint, dt, 2f);
+            // Electrochromic auto-dim: a nearby blast darkens the glass at once; it clears again at the normal rate.
+            tint = Mathf.Max(tint, .85f * ExplosionFlash.Level(Time.time));
             light = Mathf.Clamp01(light01); sunLit = Mathf.Clamp01(sunLit01);
             sunView = new Vector4(sunViewport.x, sunViewport.y, sunViewport.z, 0f);
             if ((cues & PilotCue.Exhale) != 0 && VisorMath.FogsOnExhale(p.Exertion01, temperatureC, temperatureKnown))
@@ -154,16 +156,19 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         }
 
         // One below the lower of HUD and blackout: the glass never tints symbology and the blackout always wins.
-        private void ResolveOrder(out int order, out int layerId)
+        private void ResolveOrder(out int order, out int layerId) => order = UnderHud(out layerId, out hud);
+
+        /// <summary>One below the lower of the vanilla HUD and the blackout; also used by the canopy frost.</summary>
+        internal static int UnderHud(out int layerId, out Canvas hudCanvas)
         {
             FlightHud flight = SceneSingleton<FlightHud>.i;
-            hud = flight != null && HudCanvas != null ? HudCanvas(flight) : null;
-            int hudOrder = hud != null ? hud.rootCanvas.sortingOrder : 0;
-            layerId = hud != null ? hud.rootCanvas.sortingLayerID : 0;
+            hudCanvas = flight != null && HudCanvas != null ? HudCanvas(flight) : null;
+            int hudOrder = hudCanvas != null ? hudCanvas.rootCanvas.sortingOrder : 0;
+            layerId = hudCanvas != null ? hudCanvas.rootCanvas.sortingLayerID : 0;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             Image blackout = cameras != null ? cameras.GetBlackoutImage() : null;
             int blackoutOrder = blackout != null && blackout.canvas != null ? blackout.canvas.rootCanvas.sortingOrder : int.MaxValue;
-            order = Mathf.Min(hudOrder, blackoutOrder) - 1;
+            return Mathf.Min(hudOrder, blackoutOrder) - 1;
         }
 
         private void WriteAll()

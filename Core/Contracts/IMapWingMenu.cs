@@ -15,10 +15,15 @@ namespace BoscaliSummer.Core.Contracts
     {
         /// <param name="clicked">The track under the cursor, or null for bare ground.</param>
         void Fill(Unit clicked, GlobalPosition ground, List<MapMenuRow> rows, List<MapMenuAction> actions);
+
+        /// <summary>Rule B (2026-10-29): WMC has wingmen selected and will MOVE them on a right click, so the card stays shut and the
+        /// relief does not orbit on that press. An armed map tool still comes first.</summary>
+        bool TakesRightClick { get; }
     }
 
     internal struct MapMenuRow { internal string Key, Value; internal Color Tone; }
 
-    /// <summary>Two neighbouring <see cref="Half"/> actions share one line.</summary>
-    internal struct MapMenuAction { internal string Label; internal AvIcon Icon; internal Action Invoke; internal bool Half; }
+    /// <summary>Two neighbouring <see cref="Half"/> actions of one <see cref="Group"/> share a line; the card prints the group's label
+    /// above its first action.</summary>
+    internal struct MapMenuAction { internal string Label, Group; internal AvIcon Icon; internal Action Invoke; internal bool Half; }
 }

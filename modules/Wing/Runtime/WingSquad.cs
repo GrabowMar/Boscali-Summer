@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         {
             name = Limit(name, 64);
             callsign = Limit(callsign, 32);
+            Sprite file = role == PortraitRole.Pilot ? PilotPortrait.FromFile(callsign) : null;
+            if (file != null) return file;
             if ((int)role < 0 || (int)role > 3) role = PortraitRole.Pilot;
             faction = faction == 0 || faction == 1 ? faction : -1;
             string identity = name + "|" + callsign;

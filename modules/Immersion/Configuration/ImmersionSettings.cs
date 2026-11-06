@@ -35,6 +35,12 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> ContrailsEnabled { get; }
         public ConfigEntry<bool> DustWakeEnabled { get; }
         public ConfigEntry<bool> ParkedAircraftEnabled { get; }
+        public ConfigEntry<bool> AirfieldLightsEnabled { get; }
+        public ConfigEntry<bool> CityLightsEnabled { get; }
+        public ConfigEntry<bool> VapourEnabled { get; }
+        public ConfigEntry<bool> MissileBoomEnabled { get; }
+        public ConfigEntry<bool> CanopyFrostEnabled { get; }
+        public ConfigEntry<bool> ArTunnelEnabled { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -111,6 +117,18 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Aircraft flying fast and very low over land kick up a dust wake behind them (Weather's sea spray covers water).");
             ParkedAircraftEnabled = config.Bind(section, "ParkedAircraftEnabled", true,
                 "Parked AI aircraft switch their navigation lights off and leave the cockpit empty until they start up.");
+            AirfieldLightsEnabled = config.Bind(section, "AirfieldLightsEnabled", true,
+                "Night airfield lighting: runway and taxiway edges, threshold bars, approach lights with a sequenced flasher, PAPI and the tower beacon.");
+            CityLightsEnabled = config.Bind(section, "CityLightsEnabled", true,
+                "Night city lights: lit windows and sodium street lamps on map buildings, fading in at dusk; a destroyed building goes dark.");
+            VapourEnabled = config.Bind(section, "VapourEnabled", true,
+                "In humid air: a transonic vapour cone near Mach 1 and white wingtip vapour above about 3 G.");
+            MissileBoomEnabled = config.Bind(section, "MissileBoomEnabled", true,
+                "A supersonic missile passing close by cracks with a sonic boom as its shock cone sweeps over the camera.");
+            ArTunnelEnabled = config.Bind(section, "ArTunnelEnabled", true,
+                "Cockpit view on final: the helmet draws green frames on the 3 degree glide path to the runway end ahead. Needs AirfieldLightsEnabled.");
+            CanopyFrostEnabled = config.Bind(section, "CanopyFrostEnabled", true,
+                "Cloud or precipitation below freezing rimes the canopy from the frame inward; it melts in warmer air.");
         }
     }
 }

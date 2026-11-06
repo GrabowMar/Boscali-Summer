@@ -158,7 +158,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return null;
         }
 
-        /// <summary>What each page's bay cover prints when its content ends above the footer: usage doctrine, most important first.</summary>
+        /// <summary>Each page's standing orders, shown one at a time in the console footer: usage doctrine, most important first.</summary>
         private void SetStandingOrders()
         {
             console.Orders(TabPilot,
@@ -180,7 +180,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "Roll fresh proofs, then tap one to adopt it; the insignia you had takes its place.",
                 "A PNG in the emblem folder overrides the generated insignia; NO ART clears it.",
                 "Tail-fin paint shows on your own aircraft only: OFF, COLOUR or LOW-VIS.",
-                "Custom pilots are written in the Wing Command studio, not on this console.");
+                "FLY AS picks the saved pilot this dossier shows; pilots and PNG portraits are made in the Wing Command studio.");
             console.Orders(TabPlane,
                 "Read the status card on the ramp: damage, fuel state and discrepancies come first.",
                 "Choose an engine map, then land to apply it; it cannot change in the air.",
@@ -340,19 +340,20 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                     ?? emblemCanvas.Draw(emblem);
             }
 
+            // Read every refresh: the WMC studio edits (and renames) the profile pilot while this panel is open.
             string profileKey = settings?.PilotProfile?.Value ?? string.Empty;
             if (!string.Equals(localProfileKey, profileKey, StringComparison.OrdinalIgnoreCase))
             {
                 localProfileKey = profileKey;
-                hasLocalProfile = !string.IsNullOrEmpty(profileKey) &&
-                    WingLink.TryGetCustomPilot(profileKey, out localProfile);
                 profilePortrait = null;
                 profilePortraitKey = null;
             }
+            hasLocalProfile = !string.IsNullOrEmpty(profileKey) && WingLink.TryGetCustomPilot(profileKey, out localProfile);
         }
 
         private Sprite PlayerPortrait(string name, string callsign)
         {
+            if (hasLocalProfile && localProfile.File != null) return localProfile.File;
             if (hasLocalProfile && localProfile.HasPortrait)
             {
                 string key = "p|" + localProfile.Body + "|" + localProfile.Face + "|" + localProfile.Hair + "|" +

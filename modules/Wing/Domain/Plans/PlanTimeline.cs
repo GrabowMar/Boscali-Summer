@@ -4,7 +4,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>The TIMELINE's planned times (spec WMC rebuild §PLAN timeline, frozen at EXECUTE): each step's start and end, in seconds
     /// after EXECUTE, from where each lane's element is and how fast it flies, the steps' distances, TIME ends, T+ and AFTER. An end that
-    /// cannot be known in advance (bingo, Winchester, targets down, an RTB) is NaN, and so is every start that waits for it.</summary>
+    /// cannot be known in advance (bingo, Winchester, an RTB) is NaN, and so is every start that waits for it.</summary>
     internal static class PlanTimeline
     {
         /// <summary>Fills <paramref name="start"/> and <paramref name="end"/> ([lane, step]) for <paramref name="plan"/>; the lanes'

@@ -5,7 +5,7 @@ using BoscaliSummer.Modules.Command.Domain;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The panel's control registry (the idea of the Wing panel's WmcControls): an id maps to a gate, read at press time, and a press action.
+    /// The panel's control registry: an id maps to a gate, read at press time, and a press action.
     /// Parts register what they show when they bind and nothing when they are hidden, so a pooled ticket that went away leaves no id behind.
     /// <see cref="Press"/> is the path a click takes minus the pointer: the same gate, then the same hub call, and a refusal returns the very
     /// words the disabled button carries. System-only, so the tests compile it.

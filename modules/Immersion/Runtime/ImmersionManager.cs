@@ -40,6 +40,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly CockpitLights cockpitLights = new CockpitLights();
         private readonly SurfaceImmersion surface = new SurfaceImmersion();
         private readonly VisorOverlay visor = new VisorOverlay();
+        private readonly CanopyFrost frost = new CanopyFrost();
         private AirframeAudio airframeAudio;
         private CanopyWindAudio windAudio;
         private PilotBreathingAudio pilotBreathingAudio;
@@ -73,6 +74,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             ResetForScene();
             visor.Release();
+            frost.Release();
             SunGlare.ReleaseData();
             if (airframeAudio != null) { airframeAudio.Release(); Object.Destroy(airframeAudio); }
             if (windAudio != null) { windAudio.Release(); Object.Destroy(windAudio); }
@@ -221,6 +223,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             mfdGlow.Release();
             cockpitLights.Release();
             visor.Hide();
+            frost.Hide();
             surface.Reset();
             if (airframeAudio != null) airframeAudio.Silence();
             if (windAudio != null) windAudio.Silence();
@@ -356,6 +359,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             visor.Tick(Cues, physiology, glare.Visibility * facing * facing, ambient,
                 environmentValid ? environment.TemperatureC : 15f, environmentValid, settings.HelmetVisorEnabled.Value, dt,
                 sunViewport, facing, settings.HelmetCurvature.Value, settings.HelmetReflection.Value);
+            // Rime needs the weather's air: without a cockpit snapshot it neither builds nor shows.
+            frost.Tick(settings.CanopyFrostEnabled.Value && !BoscaliSummer.Core.Game.ForeignMods.FrostYielded, environmentValid,
+                environmentValid ? environment.TemperatureC : 15f,
+                environmentValid ? Mathf.Max(environment.CloudDensity01, environment.Precipitation01) : 0f, Mathf.Clamp01(ambient + .2f), dt);
             mfdGlow.Tick(aircraft, true, ambient, settings.MfdGlowEnabled.Value);
             // The night cockpit lights ride on the MFD GLOW switch ("instruments glow at dusk and night").
             cockpitLights.Tick(aircraft, camera, sunLight != null ? -sunLight.transform.forward.y : 1f, settings.MfdGlowEnabled.Value, dt);
@@ -485,6 +492,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionWarningsBound"] = warnings != null && warnings.Bound;
             if (warnings != null) { WarningInput w = warnings.Last; state["immersionWarningsAgl"] = w.RadarAltM; state["immersionWarningsClimb"] = w.ClimbMps; }
             state["visorVisible"] = visor.Visible;
+            state["frostLevel"] = frost.Level;
+            state["frostVisible"] = frost.Visible;
             state["visorTint"] = visor.Tint;
             state["visorSunLit"] = visor.SunLit;
             state["visorFog"] = visor.Fog;

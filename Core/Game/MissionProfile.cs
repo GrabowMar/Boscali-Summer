@@ -25,7 +25,8 @@ namespace BoscaliSummer.Core.Game
 
         /// <summary>The plumbing every other module leans on; never offered as a switch.</summary>
         public static bool IsCore(string id) =>
-            id == "mission-profile" || id == "scenario" || id == "pmc" || id == "session" || id == "hud" || id == "performance";
+            id == "mission-profile" || id == "scenario" || id == "pmc" || id == "session" || id == "hud" || id == "performance" ||
+            id == "compatibility";
 
         public static bool IsBattlefield(string id) => Array.IndexOf(BattlefieldModules, id) >= 0;
 

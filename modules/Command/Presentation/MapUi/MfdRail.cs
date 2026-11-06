@@ -452,7 +452,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             float w = slot.width, h = slot.height;
             MfdChromeLay.Place(Rect, slot);
-            MfdChromeLay.Place(selection.rectTransform, new Rect(0f, -3f, 3f, h - 6f));
+            // Inset strip, clear of the frame stroke and the 5 px bottom-left cut, so it never reads taller than the key.
+            MfdChromeLay.Place(selection.rectTransform, new Rect(4f, -7f, 2f, Mathf.Max(0f, h - 14f)));
             MfdChromeLay.Place(icon.rectTransform, new Rect((IconBay - IconSize) * 0.5f + 2f, -(h - IconSize) * 0.5f, IconSize, IconSize));
             MfdChromeLay.Place(divider.rectTransform, new Rect(IconBay, -8f, 1f, h - 16f));
             MfdChromeLay.Place(index.rectTransform, new Rect(w - 36f, -4f, 30f, 14f));
@@ -484,7 +485,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame.Paint(AvStyleHost.Resolve(style.Background, MfdRail.Role("surface-inert", AvTheme.Surface)), edge);
             frame.BracketColor = Latched ? accent : edge;
             frame.SetVerticesDirty();
-            selection.color = Latched ? accent : Color.clear;
+            selection.color = Latched ? accent : hover ? accent.WithAlpha(accent.a * 0.45f) : Color.clear;
             divider.color = hairline;
             lamp.color = Latched ? accent : MfdRail.Role("inert", AvTheme.Disabled);
             icon.color = Latched ? accent : quiet;

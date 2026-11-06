@@ -10,6 +10,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// aircraft silhouette.</summary>
     internal static class WingMarkerBadge
     {
+        private const string LayerObjectName = "WingCommand_BadgeLayer";
         private const string RingObjectName = "WingCommand_MembershipRing";
         private const string SelectionObjectName = "WingCommand_SelectionBadge";
         private const string StatusObjectName = "WingCommand_StatusLabel";
@@ -36,11 +37,22 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     if (h == null) deadHosts.Add(h);
                 foreach (Image h in deadHosts) slots.Remove(h);
             }
-            Transform ring = host.transform.Find(RingObjectName);
-            Transform selection = host.transform.Find(SelectionObjectName);
-            Transform status = host.transform.Find(StatusObjectName);
+            // The children live under the layer. A layer a hot reload left (its pose is the old assembly's) is dropped with them.
+            Transform layer = host.transform.Find(LayerObjectName);
+            WingMapBadgePose pose = layer != null ? layer.GetComponent<WingMapBadgePose>() : null;
+            if (pose != null) pose.Host = host;
+            else if (layer != null)
+            {
+                layer.gameObject.SetActive(false);
+                Object.Destroy(layer.gameObject);
+                layer = null;
+            }
+            Transform ring = layer != null ? layer.Find(RingObjectName) : null;
+            Transform selection = layer != null ? layer.Find(SelectionObjectName) : null;
+            Transform status = layer != null ? layer.Find(StatusObjectName) : null;
             return slots[host] = new Slots
             {
+                Layer = layer as RectTransform,
                 Ring = ring != null ? ring.GetComponent<WingMapRingGraphic>() : null,
                 Selection = selection != null ? selection.GetComponent<Image>() : null,
                 Status = status != null ? status.GetComponent<TMP_Text>() : null,
@@ -64,7 +76,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             if (known.Layer == null)
             {
-                var go = new GameObject("WingCommand_BadgeLayer", typeof(RectTransform), typeof(WingMapBadgePose));
+                var go = new GameObject(LayerObjectName, typeof(RectTransform), typeof(WingMapBadgePose));
                 known.Layer = go.GetComponent<RectTransform>();
                 known.Layer.SetParent(host.rectTransform, false);
                 go.GetComponent<WingMapBadgePose>().Host = host;
@@ -74,7 +86,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             // Measure rendered icon dimensions because native local scale includes zoom, icon size, and
             // heading rotation.
-            Canvas canvas = host.canvas;
+            Canvas canvas = ScreenCanvas(host);
             Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay
                 ? canvas.worldCamera : null;
             Rect rect = host.rectTransform.rect;
@@ -158,6 +170,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return outlined;
         }
 
+        /// <summary>The root canvas: the icons' nested canvas turns with the heading-up minimap, so lining the
+        /// badge up with it left the labels rotated there (issue #32).</summary>
+        private static Canvas ScreenCanvas(Image host) => host.canvas != null ? host.canvas.rootCanvas : null;
+
         private static Vector2 ScreenPoint(RectTransform transform, Vector2 point, Camera camera) =>
             RectTransformUtility.WorldToScreenPoint(camera, transform.TransformPoint(point));
 
@@ -175,7 +191,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (host == null || !slots.TryGetValue(host, out Slots known) || known.Layer == null) return;
             CancelIconScale(host, known.Layer);
-            Canvas canvas = host.canvas;
+            Canvas canvas = ScreenCanvas(host);
             Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
             Rect rect = host.rectTransform.rect;
             Vector2 origin = ScreenPoint(host.rectTransform, rect.min, camera);
@@ -208,12 +224,29 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             badge.anchoredPosition = Vector2.zero;
             badge.localScale = Vector3.one;
             badge.rotation = canvas != null ? canvas.transform.rotation : Quaternion.identity;
+            // Whatever still turns the badge on screen (a rotated RectTransform under the heading-up minimap, not
+            // only a nested canvas) is cancelled in the canvas plane, so the label reads upright (#32).
+            float roll = ScreenRoll(badge, camera);
+            if (Mathf.Abs(roll) > 0.5f)
+            {
+                Quaternion upright = badge.rotation * Quaternion.Euler(0f, 0f, -roll);
+                badge.rotation = upright;
+                // A canvas seen from behind turns the other way on screen.
+                if (Mathf.Abs(ScreenRoll(badge, camera)) > 1f) badge.rotation = upright * Quaternion.Euler(0f, 0f, 2f * roll);
+            }
 
             Vector2 origin = ScreenPoint(badge, Vector2.zero, camera);
             float scaleX = Vector2.Distance(origin, ScreenPoint(badge, Vector2.right, camera));
             float scaleY = Vector2.Distance(origin, ScreenPoint(badge, Vector2.up, camera));
             badge.localScale = new Vector3(1f / Mathf.Max(0.0001f, scaleX),
                                           1f / Mathf.Max(0.0001f, scaleY), 1f);
+        }
+
+        /// <summary>Screen angle of the badge's local up from screen up, in degrees, anticlockwise positive.</summary>
+        private static float ScreenRoll(RectTransform badge, Camera camera)
+        {
+            Vector2 up = ScreenPoint(badge, Vector2.up, camera) - ScreenPoint(badge, Vector2.zero, camera);
+            return up.sqrMagnitude < 1e-8f ? 0f : Vector2.SignedAngle(Vector2.up, up);
         }
 
         private static void ApplyCommandSelection(Image host, bool selected, Color color,

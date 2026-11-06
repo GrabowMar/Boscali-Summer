@@ -12,7 +12,7 @@ namespace NOAvionics
     /// </summary>
     public sealed class AvCell : AvPart
     {
-        private const float PadX = 10f, PadY = 7f, Led = 6f, StateW = 34f;
+        private const float PadX = 10f, PadY = 7f, Led = 6f, StateW = 34f, StateGap = 8f;
         private AvFrame frame;
         private Image led;
         private TMP_Text title, sub, stateWord, glyph;
@@ -21,12 +21,14 @@ namespace NOAvionics
         private string onWord, offWord;
         private bool on, hover, interactable = true;
         private AvFx fx;
+        private AvSlot lastSlot;
+        private bool placed;
 
         public Action OnRightClick;
         public Action<bool> Hovered;
 
         /// <summary>Hover help shown in the console footer.</summary>
-        public string Help { set => AvHelpTip.Attach(frame.gameObject, value); }
+        public string Help { set => AvHelpTip.Attach(frame.gameObject, value, title); }
 
         public static AvCell Toggle(RectTransform parent, string titleText, string subText, Func<bool> get, Action<bool> set,
             string onWord = "ON", string offWord = "OFF", AvIcon icon = AvIcon.None)
@@ -57,14 +59,20 @@ namespace NOAvionics
         public bool Interactable
         {
             get => interactable;
-            set { interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); }
+            set { if (interactable == value) return; interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); }
         }
 
         public void Refresh()
         {
             bool now = get != null && get();
             if (now != on) { on = now; if (on) fx.Play(AvFxKind.Shine, 0.4f); }
+            bool hadState = stateWord.text.Length > 0;
             AvText.Set(stateWord, on ? onWord : offWord);
+            if (hadState != (stateWord.text.Length > 0))
+            {
+                if (placed) Place(lastSlot);
+                Changed();
+            }
             Restyle();
         }
 
@@ -72,7 +80,7 @@ namespace NOAvionics
 
         public override float Measure(float width)
         {
-            float textW = width - 2f * PadX - Lead - 6f - StateW;
+            float textW = TextWidth(width);
             float h = PadY + AvText.Height(title, textW) + (sub.text.Length > 0 ? 2f + AvText.Height(sub, textW) : 0f) + PadY;
             return Mathf.Max(AvGridTokens.ToolCell, h);
         }
@@ -80,7 +88,8 @@ namespace NOAvionics
         public override void Place(AvSlot s)
         {
             base.Place(s);
-            float x = PadX + Lead + 6f, textW = s.W - x - PadX - StateW;
+            lastSlot = s; placed = true;
+            float x = PadX + Lead + 6f, textW = TextWidth(s.W);
             float th = AvText.Height(title, textW);
             AvLay.Place(led.rectTransform, PadX, PadY + 4f, Led, Led);
             if (glyph != null) AvLay.Place(glyph.rectTransform, PadX, PadY, Lead, Lead);
@@ -96,14 +105,25 @@ namespace NOAvionics
             styledLook = look; styledGen = AvStyleHost.FuiGeneration;
             string st = !interactable ? "disabled" : on ? "on" : hover ? "hover" : null;
             AvStyle c = AvStyleHost.FuiStyle("cell", st);
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+            Color fill = AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), edge = AvStyleHost.Resolve(c.Border, AvTheme.Hairline);
+            if (on && !interactable)
+            {
+                AvStyle selected = AvStyleHost.FuiStyle("cell", "on");
+                fill = AvStyleHost.Resolve(selected.Background, fill); fill.a *= .7f;
+                edge = AvStyleHost.Resolve(selected.Border, edge).WithAlpha(.75f);
+            }
+            if (on && interactable && hover) edge = Color.Lerp(edge, AvInk.Ink, .35f);
+            frame.Paint(fill, edge);
             title.color = AvStyleHost.Resolve(c.Color, AvTheme.TextPrimary);
-            sub.color = AvStyleHost.FuiInk("cell-sub", AvTheme.Dim);
+            sub.color = interactable ? AvStyleHost.FuiInk("cell-sub", AvTheme.Dim) : AvInk.Muted;
             stateWord.color = AvStyleHost.FuiInk("cell-state", AvTheme.Disabled, on ? "on" : null);
             led.color = AvStyleHost.FuiFill("cell-led", AvTheme.RailInert, on ? "on" : null);
-            if (glyph != null) glyph.color = on && interactable ? led.color : sub.color;
+            if (!interactable) led.color = led.color.WithAlpha(.75f);
+            if (glyph != null) glyph.color = on ? led.color : sub.color;
         }
 
         private float Lead => glyph != null ? AvGridTokens.IconTool : Led;
+        private float TextWidth(float width) => Mathf.Max(1f, width - 2f * PadX - Lead - 6f -
+            (stateWord.text.Length > 0 ? StateW + StateGap : 0f));
     }
 }

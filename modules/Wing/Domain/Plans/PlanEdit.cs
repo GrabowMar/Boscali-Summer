@@ -2,18 +2,12 @@ using System;
 
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>A PLAN map tool (spec bezel v2 §6): what the next right-click adds to the selected lane. RE-PLACE puts the selected
-    /// step's point, area or targets somewhere else. At most one tool or one TACTICAL order mode is armed.</summary>
-    internal enum PlanTool : byte { Off, Move, Route, Orbit, Cap, Sweep, Attack, Land, Cargo, Replace }
-
-    /// <summary>Edits a <see cref="WingPlan"/> from the map's tools and the step editor (spec bezel v2 §5 PLAN › ELEMENTS): new steps
-    /// with an end that can happen, insertion after the selected step, removal and reordering that keep every AFTER on the step it
-    /// named, and AFTER cycling through the other lanes' steps that would not wait for themselves.</summary>
+    /// <summary>Edits a <see cref="WingPlan"/> from the step editor (BEHAVIOUR › SORTIE): removal and reordering that keep every AFTER on
+    /// the step it named, and AFTER cycling through the other lanes' steps that would not wait for themselves.</summary>
     internal static class PlanEdit
     {
         /// <summary>An ORBIT step's default time, s.</summary>
         public static float OrbitSeconds = 180f;
-        public const int MaxRoutePoints = 16;
 
         /// <summary>Removes a step: what waited for it starts on EXECUTE, AFTERs on the lane's later steps follow them.</summary>
         public static void Remove(WingPlan plan, int lane, int step)
@@ -33,13 +27,22 @@ namespace BoscaliSummer.Modules.Wing.Domain
             });
         }
 
-        /// <summary>Swaps a step with its neighbour (<paramref name="dir"/> -1 up, +1 down); AFTERs follow the steps they named.</summary>
+        /// <summary>Swaps a step with its neighbour (<paramref name="dir"/> -1 up, +1 down); AFTERs follow the steps they named. False,
+        /// with nothing changed, at the lane's end or when the new order would make a step wait for itself.</summary>
         public static bool MoveStep(WingPlan plan, int lane, int step, int dir)
         {
             if (lane < 0 || lane >= WingPlan.Lanes) return false;
+            int to = step + dir, count = plan.Steps[lane].Count;
+            if (step < 0 || step >= count || to < 0 || to >= count) return false;
+            Swap(plan, lane, step, to);
+            if (!WaitCycle(plan)) return true;
+            Swap(plan, lane, step, to);   // a swap is its own undo
+            return false;
+        }
+
+        private static void Swap(WingPlan plan, int lane, int step, int to)
+        {
             var steps = plan.Steps[lane];
-            int to = step + dir;
-            if (step < 0 || step >= steps.Count || to < 0 || to >= steps.Count) return false;
             PlanStep moved = steps[step];
             steps[step] = steps[to];
             steps[to] = moved;
@@ -49,7 +52,19 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (s.AfterStep == step) s.AfterStep = to;
                 else if (s.AfterStep == to) s.AfterStep = step;
             });
-            return true;
+        }
+
+        /// <summary>Whether a step waits for itself through the lane order and the AFTER links (what EXECUTE refuses).</summary>
+        private static bool WaitCycle(WingPlan plan)
+        {
+            for (int l = 0; l < WingPlan.Lanes; l++)
+                for (int s = 0; s < plan.Steps[l].Count; s++)
+                {
+                    PlanStep p = plan.Steps[l][s];
+                    if (p.Start == PlanStart.After && p.AfterLane >= 0 && p.AfterLane < WingPlan.Lanes && p.AfterStep >= 0
+                        && p.AfterStep < plan.Steps[p.AfterLane].Count && PlanRules.WaitsFor(plan, p.AfterLane, p.AfterStep, l, s)) return true;
+                }
+            return false;
         }
 
         /// <summary>Makes the step wait for the next of the other lanes' steps (lane by lane, wrapping) that does not already wait

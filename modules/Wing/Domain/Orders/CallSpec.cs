@@ -2,7 +2,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 {
     /// <summary>A requisition as data (spec WMC rebuild §SUPPLY; supply-critic §1.1): which airframe (the game's jsonKey), from
     /// which field (its SavedAirbase unique name), flown by which pilot (callsign), with which fit (null: AUTO, the game's pick;
-    /// <see cref="YourLoadout"/>; else a LOADOUT template id) and fuel (0: full, else the fraction). Unset fields keep the
+    /// <see cref="YourLoadout"/>; else the airframe's custom LOADOUT, by its record id) and fuel (0: full, else the fraction). Unset fields keep the
     /// radial call's choices.</summary>
     internal struct CallSpec
     {

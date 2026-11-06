@@ -20,7 +20,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public Waypoint this[int i] => points[i];
         public int Selected { get; private set; } = -1;
         public RouteLoop Loop { get; private set; }
-        /// <summary>Altitude and speed a new point takes (the steppers edit these while no point is selected).</summary>
+        /// <summary>Altitude and speed a new route point takes (the steppers edit these while no point is selected); map orders other
+        /// than a route point never read them.</summary>
         public float Altitude { get; private set; } = float.NaN;
         public float Speed { get; private set; } = float.NaN;
 
@@ -94,16 +95,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         public void CycleLoop() => Loop = Loop == RouteLoop.PingPong ? RouteLoop.Once : Loop + 1;
-
-        public void Load(Waypoint[] from, RouteLoop loop)
-        {
-            points.Clear();
-            for (int i = 0; from != null && i < from.Length && i < MaxPoints; i++) points.Add(from[i]);
-            Loop = loop;
-            Selected = -1;
-        }
-
-        public Waypoint[] ToArray() => points.ToArray();
 
         public bool TryTask(out WingTask task, out string reason)
         {

@@ -15,8 +15,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>
         /// The MIS bezel as a briefing board. MISSION is the hero card (name, clock, lead objective,
         /// briefing) over key numbers, the escalation ladder, the lead contract and a funds trend;
-        /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS shares the tactical briefing,
-        /// phase gates and host actions with the task desk. Reads happen in <see cref="Gather"/> into one reusable
+        /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS is a job board: contract slots, then
+        /// every contract as a slip (in the field, on offer, closed) that opens in place into its order, plot and actions. Reads happen in <see cref="Gather"/> into one reusable
         /// <see cref="BoardModel"/>; <see cref="Render"/> only writes it to already-built parts.
         /// </summary>
         private sealed class MissionPresenter : Presenter
@@ -84,20 +84,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private TaskTypeTally typeTally;
 
             // CONTRACTS page.
-            private MissionTaskPart tasking;
+            private const int MaxSlips = 12;
+            private MissionTaskPlot taskPlot;
             private MissionTaskActions taskActions;
-            private AvStepper taskPicker;
-            private int secondarySelectedId=-1;
-            private int renderedTaskId=-1;
+            private ContractSlots slots;
+            private AvNote boardBook;
+            private readonly ContractCard[] slips = new ContractCard[MaxSlips];
+            private readonly List<SecondaryObjectiveView> activeContracts = new List<SecondaryObjectiveView>(4);
+            private int openSlipId = -2;   // -2 = not chosen yet: the first render opens the HUD pick or the lead job
             private bool secondaryFresh;
-            private AvControl[] secondaryFilterControls;
             private AvSection boardSection;
-
             private AvRow contractsEmpty;
-            private AvControl openDesk;
-            private UnityEngine.UI.Image actionsBack;
-            private MissionContractWindow contractWindow;
-            private int secondaryFilter;
 
             private bool secondaryHasCapacity;
             private string secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE";
@@ -121,7 +118,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 "Mission: the briefing, lead objective, escalation ladder, lead contract and a funds trend.",
                 "Objectives: the checklist with progress and distance to each objective, and a map of how far each one has come.",
-                "Contracts: browse, accept or abort optional contracts, or open the shared contract desk.",
+                "Contracts: the job board. Click a slip to open its order, plot and accept or abort.",
             };
 
             protected override void BuildContent()
@@ -145,9 +142,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Percent complete is the host's own figure. The strip under each task mirrors it.",
                     "BY TASK TYPE counts done against issued for each kind of task.");
                 Console.Orders(2,
-                    "ACCEPT shares a task with the whole faction. HUD selection stays with this pilot.",
-                    "ABORT asks for confirmation, then the host applies the task's failure consequence.",
-                    "DESK opens the full tactical task desk with the same host actions.");
+                    "Click a slip to open it. Click it again to close it.",
+                    "ACCEPT shares a job with the whole faction. HUD selection stays with this pilot.",
+                    "ABORT asks for confirmation, then the host applies the job's failure consequence.");
                 ShowTitle();
             }
 
@@ -167,7 +164,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 selectedPage = index;
                 ShowTitle();
                 taskActions?.CancelConfirmation();
-                taskActions?.SetShown(index==2);
                 RequestRefresh();
             }
 
@@ -406,43 +402,30 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void BuildContractsPage(AvFlow page)
             {
-                boardSection=page.Section(AvIcon.ListDetails,"FACTION TASKING");
-                AvButtons filters=page.Buttons(
-                    new AvControl.Spec("OFFERS",()=>SetFilter(MfdSecondaryObjectives.FilterAvailable)),
-                    new AvControl.Spec("ACTIVE",()=>SetFilter(MfdSecondaryObjectives.FilterActive)),
-                    new AvControl.Spec("RESULTS",()=>SetFilter(MfdSecondaryObjectives.FilterResults)),
-                    new AvControl.Spec("DESK",OpenContractDesk,AvButtonStyle.Default,MfdChromeIcon.For("LEDGER")));
-                secondaryFilterControls=new[]{filters.Controls[0],filters.Controls[1],filters.Controls[2]};
-                openDesk=filters.Controls[3];openDesk.Help="Open the tactical task desk with the same host actions.";
-                taskPicker=page.Add(new AvStepper(page.Content,"TASK",()=>model.Contracts.Count==0?"NONE":(SelectedIndex()+1)+" / "+model.Contracts.Count,()=>MoveTask(-1),()=>MoveTask(1)));
-                tasking=page.Add(new MissionTaskPart(page.Content));
+                boardSection=page.Section(AvIcon.ListDetails,"FACTION JOB BOARD");
+                slots=page.Add(new ContractSlots(page.Content,OpenSlip));
+                boardBook=page.Add(new AvNote(page.Content,AvTextRole.DataSmall));boardBook.CollapseEmpty=true;
+                for(int i=0;i<MaxSlips;i++){slips[i]=page.Add(new ContractCard(page.Content,ToggleSlip));slips[i].SetShown(false);}
                 contractsEmpty=page.Add(new AvRow(page.Content));contractsEmpty.SetShown(false);
-                taskActions=new MissionTaskActions(Console.Root,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
-                // The bar docks below the shrunken body; the console's bay cover still reckons with the full body, so an
-                // opaque ground under the bar keeps the cover's data plate from showing through it.
-                actionsBack=AvLay.Solid(Console.Root,"Mission actions ground",Color.clear);
-                actionsBack.transform.SetSiblingIndex(taskActions.Rect.GetSiblingIndex());
-                taskActions.SetShown(false);
+                // One plot and one action bar, handed to whichever slip is open.
+                taskPlot=new MissionTaskPlot(page.Content);taskPlot.Rect.gameObject.SetActive(false);
+                taskActions=new MissionTaskActions(page.Content,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
+                taskActions.Rect.gameObject.SetActive(false);
             }
-            private void SetFilter(int filter)
+            private void ToggleSlip(int id)
             {
-                secondaryFilter=filter;secondarySelectedId=-1;taskActions.CancelConfirmation();RequestRefresh();
+                openSlipId=openSlipId==id?-1:id;taskActions.CancelConfirmation();RenderContracts();
             }
-            private int SelectedIndex()
+#if !PUBLIC_RELEASE
+            internal bool PickForAutomation(int index)
             {
-                for(int i=0;i<model.Contracts.Count;i++)if(model.Contracts[i].Id==secondarySelectedId)return i;
-                return 0;
+                if(index<0||index>=model.Contracts.Count||index>=MaxSlips)return false;
+                ToggleSlip(model.Contracts[index].Id);return true;
             }
-            private void MoveTask(int delta)
+#endif
+            private void OpenSlip(int id)
             {
-                if(model.Contracts.Count==0)return;
-                int i=(SelectedIndex()+delta+model.Contracts.Count)%model.Contracts.Count;
-                secondarySelectedId=model.Contracts[i].Id;taskActions.CancelConfirmation();RenderContracts();
-            }
-            private void OpenContractDesk()
-            {
-                if(contractWindow==null)contractWindow=MissionContractWindow.Create();
-                contractWindow.Show();
+                openSlipId=id;taskActions.CancelConfirmation();RenderContracts();
             }
             private void ExposeTaskMap()
             {
@@ -450,62 +433,53 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             private void RenderContracts()
             {
-                secondaryFilterControls[0].Label="OFFERS "+model.Offers;
-                secondaryFilterControls[1].Label="ACTIVE "+MfdSecondaryObjectives.ShortCount(model.ActiveContracts,model.Limit);
-                secondaryFilterControls[2].Label="RESULTS "+model.Closed;
-                for(int i=0;i<secondaryFilterControls.Length;i++)secondaryFilterControls[i].Latched=i==secondaryFilter;
-                boardSection.SetCaption(!model.Installed?"DIRECTOR UNAVAILABLE":!secondaryFresh?"HOST UNAVAILABLE":model.Limit>0?"ACTIVE LIMIT / "+model.Limit:"HOST TASKING");
+                int hud=-1;bool pending=false;string result="";
+                if(ModuleServices.TryGet(out ISecondaryObjectivesView view)){hud=view.SelectedForHud;pending=view.IsActionPending;result=view.ActionResult;}
+                boardSection.SetCaption(!model.Installed?"DIRECTOR UNAVAILABLE":!secondaryFresh?"HOST UNAVAILABLE":
+                    MfdSecondaryObjectives.BoardSummary(model.Offers,model.ActiveContracts,model.Limit,model.Closed));
+                activeContracts.Clear();
+                foreach(var e in model.Contracts)if(e.IsActive)activeContracts.Add(e);
+                slots.Set(model.Installed?model.Limit:0,activeContracts);
+                boardBook.Set(!model.Installed?"":"ON OFFER "+Cash(model.Offered)+"   ·   IN FIELD "+Cash(model.AtStake)+"   ·   PAID OUT "+Cash(model.Paid));
+
                 bool empty=model.Contracts.Count==0;
-                contractsEmpty.SetShown(empty);taskPicker.SetShown(!empty);tasking.SetShown(!empty);
+                contractsEmpty.SetShown(empty);
                 if(empty)
                 {
-                    string message=MfdSecondaryObjectives.EmptyMessage(secondaryFilter,EmptyReason(model.Installed,secondaryFresh));
+                    string message=MfdSecondaryObjectives.EmptyMessage(EmptyReason(model.Installed,secondaryFresh));
                     int split=message.IndexOf('\n');
                     contractsEmpty.Set(split<0?message:message.Substring(0,split),split<0?"":message.Substring(split+1),"",secondaryFresh?AvState.Inert:AvState.Caution);
                 }
-                if(!model.Contracts.Exists(e=>e.Id==secondarySelectedId))
+                // The open job left the board (taken, lapsed or replaced): pick again rather than leave the board shut.
+                if(openSlipId>=0&&!model.Contracts.Exists(e=>e.Id==openSlipId))openSlipId=-2;
+                if(openSlipId==-2&&!empty)
+                    openSlipId=model.Contracts.Exists(e=>e.Id==hud)?hud:model.Contracts[0].IsActive||model.Contracts[0].IsOffered?model.Contracts[0].Id:-1;
+
+                GlobalPosition self=default;bool hasSelf=false;
+                if(GameManager.GetLocalAircraft(out Aircraft aircraft)&&aircraft!=null&&!aircraft.disabled&&!aircraft.HasEjected())
+                {self=aircraft.transform.position.ToGlobalPosition();hasSelf=true;}
+
+                ContractCard open=null;SecondaryObjectiveView openEntry=null;
+                int group=-1;
+                for(int i=0;i<MaxSlips;i++)
                 {
-                    int preferred=-1;
-                    if(ModuleServices.TryGet(out ISecondaryObjectivesView board))preferred=board.SelectedForHud;
-                    secondarySelectedId=model.Contracts.Exists(e=>e.Id==preferred)?preferred:empty?-1:model.Contracts[0].Id;
+                    ContractCard slip=slips[i];
+                    bool shown=i<model.Contracts.Count;
+                    slip.Release();slip.SetShown(shown);
+                    if(!shown)continue;
+                    SecondaryObjectiveView e=model.Contracts[i];
+                    int g=e.IsActive?0:e.IsOffered?1:2;
+                    string heading=g==group?"":g==0?"IN THE FIELD  ·  "+MfdSecondaryObjectives.ShortCount(model.ActiveContracts,model.Limit)+" SLOTS":
+                        g==1?"ON OFFER  ·  "+model.Offers:"CLOSED  ·  "+model.Closed;
+                    group=g;
+                    string range=hasSelf&&e.HasMarker&&secondaryFresh?MfdSecondaryObjectives.RangeBearing(self.x,self.z,e.X,e.Z):"";
+                    bool isOpen=e.Id==openSlipId;
+                    slip.Set(e,secondaryFresh,range,heading,isOpen);
+                    if(isOpen){open=slip;openEntry=e;}
                 }
-                SecondaryObjectiveView current=model.Contracts.Find(e=>e.Id==secondarySelectedId);
-                taskPicker.Refresh();taskPicker.Minus.Interactable=taskPicker.Plus.Interactable=model.Contracts.Count>1;
-                tasking.SetViewportHeight(contractsFlow.ViewportHeight);tasking.Set(current,secondaryFresh);
-                int hud=-1;bool pending=false;string result="";
-                if(ModuleServices.TryGet(out ISecondaryObjectivesView view)){hud=view.SelectedForHud;pending=view.IsActionPending;result=view.ActionResult;}
-                taskActions.Set(current,secondaryFresh,secondaryHasCapacity,hud,pending,result);
-                taskActions.SetShown(selectedPage==2);
-                FitTaskActions();
-                if(renderedTaskId!=secondarySelectedId)
-                {
-                    renderedTaskId=secondarySelectedId;
-                    contractsFlow.Relayout();
-                    if(selectedPage==2)
-                    {
-                        var scroll=Console.Root.Find("Body")?.GetComponent<UnityEngine.UI.ScrollRect>();
-                        if(scroll!=null)scroll.verticalNormalizedPosition=1;
-                    }
-                }
-            }
-            private void FitTaskActions()
-            {
-                var body=Console.Root.Find("Body") as RectTransform;if(body==null)return;
-                float top=-body.anchoredPosition.y;
-                float reserve=selectedPage==2?Mathf.Max(64,taskActions.Measure(Console.Root.rect.width-28))+12:0;
-                float height=Mathf.Max(96,Console.Root.rect.height-top-AvGridTokens.Footer-reserve);
-                AvLay.Place(body,0,top,Console.Root.rect.width,height);
-                var scroll=body.GetComponent<UnityEngine.UI.ScrollRect>();
-                AvLay.Place(scroll.viewport,0,0,Console.Root.rect.width,height);
-                if(scroll.verticalScrollbar!=null){var bar=(RectTransform)scroll.verticalScrollbar.transform;bar.sizeDelta=new Vector2(bar.sizeDelta.x,height-4);}
-                briefFlow.ViewportHeight=objectivesFlow.ViewportHeight=contractsFlow.ViewportHeight=height;
-                actionsBack.gameObject.SetActive(selectedPage==2);
-                if(selectedPage==2)
-                {
-                    actionsBack.color=AvStyleHost.FuiColor("ground",AvTheme.Ground);
-                    AvLay.Place(actionsBack.rectTransform,2,top+height,Console.Root.rect.width-4,reserve);
-                    taskActions.Place(new AvSlot(14,top+height+8,Console.Root.rect.width-28,reserve-12));
-                }
+                if(open!=null)open.Attach(taskPlot,taskActions);
+                else{taskPlot.Rect.gameObject.SetActive(false);taskActions.Rect.gameObject.SetActive(false);}
+                taskActions.Set(openEntry,secondaryFresh,secondaryHasCapacity,hud,pending,result);
             }
             private static BoardEmptyReason EmptyReason(bool installed,bool streamed)=>
                 !installed?BoardEmptyReason.Unavailable:!streamed?BoardEmptyReason.LinkLost:BoardEmptyReason.Ready;
@@ -683,12 +657,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         model.Closed++;
                         if (entry.IsComplete) model.Paid += money;
                     }
-                    if (secondaryFilter == MfdSecondaryObjectives.FilterAvailable ? entry.IsOffered :
-                        secondaryFilter == MfdSecondaryObjectives.FilterActive ? entry.IsActive :
-                        !entry.IsActive && !entry.IsOffered)
-                        model.Contracts.Add(entry);
+                    model.Contracts.Add(entry);
                 }
-                MfdSecondaryObjectives.SortForDisplay(model.Contracts, secondaryFilter);
+                MfdSecondaryObjectives.SortForBoard(model.Contracts);
                 secondaryHasCapacity = model.Limit <= 0 || model.ActiveContracts < model.Limit;
                 model.Lead = leadActive ?? leadOffer;
             }

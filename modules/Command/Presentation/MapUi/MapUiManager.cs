@@ -13,6 +13,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private bool mapWasMaximized;
         private void LateUpdate()
         {
+            MapCursor.Tick();
             if (!DynamicMap.mapMaximized)
             {
                 if (mapWasMaximized)
@@ -68,6 +69,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdTerrainRelief.Reset();
             MfdMapInteractions.Reset();
             MfdNewsTicker.Reset();
+            MapCursor.Reset();
             MapUiPointer.ResetFloating();
             nextRefresh = 0f;
             screenCount = -1;

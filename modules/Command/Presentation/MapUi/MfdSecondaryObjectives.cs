@@ -18,17 +18,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     }
 
     /// <summary>
-    /// Pure layout and copy rules for the MIS contract board. The board is a paged grid:
-    /// the panel decides how many dossiers fit from its own body height, and every label
-    /// states only what the host actually reported.
+    /// Pure ordering and copy rules for the MIS job board. Every label states only what the
+    /// host actually reported.
     /// </summary>
     internal static class MfdSecondaryObjectives
     {
-        /// <summary>Three filter tabs: offers, accepted work, closed work.</summary>
-        public const int FilterAvailable = 0;
-        public const int FilterActive = 1;
-        public const int FilterResults = 2;
-
         public static string PlainObjective(string value)
         {
             if (string.IsNullOrWhiteSpace(value)) return "OBJECTIVE";
@@ -85,13 +79,30 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// Offers and accepted work read soonest-deadline-first; closed work reads newest-first.
-        /// A missing clock never jumps the queue.
+        /// The board order: accepted work, then offers, then closed work. Accepted work and offers read
+        /// soonest-deadline-first; closed work reads newest-first. A missing clock never jumps the queue.
         /// </summary>
-        public static void SortForDisplay(List<SecondaryObjectiveView> entries, int filter)
+        public static void SortForBoard(List<SecondaryObjectiveView> entries)
         {
             if (entries == null || entries.Count < 2) return;
-            entries.Sort(filter == FilterResults ? CompareNewest : CompareDeadline);
+            entries.Sort((a, b) =>
+            {
+                int byGroup = Group(a).CompareTo(Group(b));
+                if (byGroup != 0) return byGroup;
+                return Group(a) == 2 ? CompareNewest(a, b) : CompareDeadline(a, b);
+            });
+        }
+
+        private static int Group(SecondaryObjectiveView e) => e == null ? 3 : e.IsActive ? 0 : e.IsOffered ? 1 : 2;
+
+        /// <summary>"12.4 KM 087°": range and true bearing from one global X/Z to another.</summary>
+        public static string RangeBearing(float fromX, float fromZ, float toX, float toZ)
+        {
+            float dx = toX - fromX, dz = toZ - fromZ;
+            if (!float.IsFinite(dx) || !float.IsFinite(dz)) return "";
+            double km = Math.Sqrt(dx * (double)dx + dz * (double)dz) / 1000.0;
+            int bearing = (int)Math.Round((Math.Atan2(dx, dz) * 180.0 / Math.PI + 360.0) % 360.0) % 360;
+            return km.ToString(km < 10 ? "0.0" : "0", CultureInfo.InvariantCulture) + " KM " + bearing.ToString("000") + "°";
         }
 
         private static int CompareDeadline(SecondaryObjectiveView a, SecondaryObjectiveView b)
@@ -173,7 +184,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// The zero-count line. A missing director, a silent host or a full active roster is
         /// named for what it is; the contract-cycle copy only prints when the board is serving.
         /// </summary>
-        public static string EmptyMessage(int filter, BoardEmptyReason reason)
+        public static string EmptyMessage(BoardEmptyReason reason)
         {
             switch (reason)
             {
@@ -186,15 +197,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case BoardEmptyReason.DirectorExhausted:
                     return "NO CONTRACTS TO ISSUE\nThe mission director has no eligible work for this faction.";
                 default:
-                    switch (filter)
-                    {
-                        case FilterAvailable:
-                            return "NO OFFERS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
-                        case FilterActive:
-                            return "NO ACCEPTED CONTRACTS\nReview the offered locations on the map, then accept a task.";
-                        default:
-                            return "NO CLOSED CONTRACTS\nCompleted and lapsed contracts stay listed for a short while.";
-                    }
+                    return "NO JOBS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
             }
         }
     }

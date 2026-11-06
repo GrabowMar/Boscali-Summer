@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Ares.Runtime
         }
 
         public string ArmTeleportMe() =>
-            Arm("TELEPORT ME", "TELEPORT ME: click where you want to be; you keep your height above the ground. Esc cancels.", false,
+            Arm("TELEPORT ME", "TELEPORT ME: right-click where you want to be; you keep your height above the ground.", false,
                 (at, heading) => TeleportMe(at));
 
         public string TeleportMe(GlobalPosition at)

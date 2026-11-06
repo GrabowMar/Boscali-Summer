@@ -27,8 +27,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case StoreVerdict.Blocked: return "BLOCKED";
                 case StoreVerdict.NuclearNotYet: return "NOT YET";
                 case StoreVerdict.NuclearRank: return "RANK " + N(rank);
-                case StoreVerdict.NotFromShip: return "NOT FROM SHIP";
-                case StoreVerdict.Warheads: return "WARHEADS";
                 default: return "";
             }
         }
@@ -45,8 +43,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 case StoreVerdict.Blocked: return "Another station's store keeps this one empty.";
                 case StoreVerdict.NuclearNotYet: return "Nuclear stores open with escalation; until then the station launches empty.";
                 case StoreVerdict.NuclearRank: return "Nuclear stores need rank " + N(rank) + "; until then the station launches empty.";
-                case StoreVerdict.NotFromShip: return "A ship-rearm store cannot launch from a carrier.";
-                case StoreVerdict.Warheads: return "The field has too few warheads for this store.";
                 default: return "";
             }
         }

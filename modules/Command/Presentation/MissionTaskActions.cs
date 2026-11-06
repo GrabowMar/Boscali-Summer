@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>Both briefing surfaces dispatch the same validated host intents.</summary>
+    /// <summary>The open job slip's host actions: accept or HUD-select, view map, dismiss or abort.</summary>
     internal sealed class MissionTaskActions : AvPart
     {
         private readonly AvControl primary,map,close;
@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             close.Label=entry?.IsActive==true?confirm?"CONFIRM ABORT":"ABORT":"DISMISS";
             close.Interactable=fresh&&!pending&&hasBriefing&&(entry.IsOffered||entry.IsActive);
             close.Armed=confirm;
-            feedback.text=!fresh?"Host report unavailable. Task actions are disabled.":entry!=null&&!hasBriefing?"Host briefing unavailable. Refresh the task board.":pending?"WAITING FOR HOST ACKNOWLEDGMENT":confirm?AbortMessage():!string.IsNullOrWhiteSpace(result)?"HOST RESPONSE / "+MissionTaskPart.Clean(result):entry?.IsActive==true?"Acceptance is shared. HUD selection belongs to this pilot.":entry==null?"Choose a task to review its briefing.":"Accepting a task does not complete it.";
+            feedback.text=!fresh?"Host report unavailable. Task actions are disabled.":entry!=null&&!hasBriefing?"Host briefing unavailable. Refresh the task board.":pending?"WAITING FOR HOST ACKNOWLEDGMENT":confirm?AbortMessage():!string.IsNullOrWhiteSpace(result)?"HOST RESPONSE / "+ContractCard.Clean(result):entry?.IsActive==true?"Acceptance is shared. HUD selection belongs to this pilot.":entry==null?"Choose a task to review its briefing.":"Paid when the host confirms completion.";
             Changed();Restyle();
         }
 
@@ -91,7 +91,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
         private string AbortMessage()=>string.IsNullOrWhiteSpace(entry?.Tasking?.AbortConsequence)
             ?"Abort this faction's accepted task? The host applies its failure consequence. No money or XP."
-            :"Abort this faction's accepted task? "+MissionTaskPart.Clean(entry.Tasking.AbortConsequence);
+            :"Abort this faction's accepted task? "+ContractCard.Clean(entry.Tasking.AbortConsequence);
 
         public override float Measure(float width)=>40+AvText.Height(feedback,width)+8;
         public override void Place(AvSlot s)

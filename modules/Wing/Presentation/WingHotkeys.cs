@@ -34,9 +34,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public void Tick(float dt)
         {
             WingConfig s = WingSettings.Instance;
-            WingChordInput.Tick(s, WmcNameField.Typing);
+            // The pause menu takes every key and button; a game text field (the chat) takes the keys.
+            bool paused = GameplayUI.GameIsPaused;
+            bool typing = WingChordInput.Typing;
+            WingChordInput.Tick(s, typing || paused);
+            if (paused) return;
             // R5: keys typed into a WMC text field are text, never commands (HOTAS buttons still act).
-            if (WmcNameField.Typing)
+            if (typing)
             {
                 TickHotas(s);
                 return;

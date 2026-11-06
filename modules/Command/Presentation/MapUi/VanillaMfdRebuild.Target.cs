@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildFilterPage(CreatePage());
                 BuildMarkPage(CreatePage());
 
-                // A page that ends above the footer prints these on its bay cover, most important first.
+                // The footer shows these one at a time under the status line, most important first.
                 Console.Orders(0,
                     "Click a known contact to add it to your targets; click a held target to drop it.",
                     "Contacts are listed nearest first, from positions your side actually knows.",
