@@ -448,7 +448,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         // A HOI4 battle plan: a fat arrow bowed to one side, its centre line projected point by point so it lies true on the relief's tilt.
-        // A proposal nobody points at is hollow (outline, faint fill); the live operation is filled, and its chevrons march while it advances.
+        // A proposal nobody points at is hollow (lighter fill and rim); the live operation is filled, and its chevrons march while it advances.
         private void Offensive(AvQuadBuffer b, in StrPrim p, IMapProjection projection, float factor, float px, Rgba c)
         {
             // Only the two ends sit on the ground; the bow is laid in screen space, so the arrow is one clean sweep instead of a rope
@@ -468,9 +468,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // HOI4 look: a fat body swelling from a slim tail to a broad neck, a wide head, a firm dark rim to lift it off the relief;
             // the fill fades in from the tail (StrStrokes) so the push reads as a direction.
             float neck = Mathf.Clamp(run * 0.04f, 6f * px, 13f * px), tail = neck * 0.4f, head = neck * 2f;
-            float fillA = p.Hollow ? 0.4f : 0.95f;
+            float fillA = p.Hollow ? 0.75f : 1f;
             var fill = new Rgba(c.R, c.G, c.B, c.A * fillA);
-            var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.4f : 0.75f));
+            var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.7f : 0.9f));
             StrStrokes.Offensive(b, curveX, curveY, n, tail, neck, head, 1.3f * px, fill, line);
             if (!p.Pulse || pulseCount >= MaxPulse) return;
             System.Array.Copy(curveX, pulseCurveX[pulseCount], n);

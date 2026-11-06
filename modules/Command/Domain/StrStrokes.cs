@@ -205,7 +205,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 float along = neckAt > 1e-6f ? bodyS[k] / neckAt : 1f;
                 float half = tail + (neck - tail) * along;
                 // The body firms up toward the head, so the push reads as a direction even without the chevrons.
-                var ink = new Rgba(fill.R, fill.G, fill.B, fill.A * (0.5f + 0.5f * along));
+                var ink = new Rgba(fill.R, fill.G, fill.B, fill.A * (0.8f + 0.2f * along));
                 float nx = -ty / tl * half, ny = tx / tl * half;
                 float lx = bodyX[k] + nx, ly = bodyY[k] + ny, rx = bodyX[k] - nx, ry = bodyY[k] - ny;
                 if (k == 0) { l0x = lx; l0y = ly; r0x = rx; r0y = ry; }

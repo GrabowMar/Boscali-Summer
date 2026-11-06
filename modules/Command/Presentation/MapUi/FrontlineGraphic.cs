@@ -6,60 +6,63 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The theater front as one vector line, drawn the way HOI4 draws a front: a dark casing with
-    /// our blue on our side and their red on theirs, and teeth along it pointing into enemy ground
-    /// (amber where the fighting is hot). Which side is ours is voted per trace from the sector
-    /// field; a trace with no clear side keeps the plain pale line. Sampled in map pixels so it
-    /// never magnifies the overlay texture into blocks.
+    /// The theater front as one vector line: our blue washing out on our side, their red on
+    /// theirs, a dark casing with a bright core between them, and teeth pointing into enemy
+    /// ground. Heat shows as an amber glow and core. A trace with no clear side keeps a cool glow.
     ///
-    /// <para>Rebuilds on the sector-grid cadence, bounded by <see cref="MaximumSamples"/> and
-    /// a hard vertex ceiling, hottest trace first.</para>
+    /// <para>Shape is decided in world space (corner-cut smoothing, teeth at fixed metres along
+    /// the trace) once per front change, so the line and its teeth hold still while the camera
+    /// pans, zooms or orbits; only the projection runs per view. Bounded by
+    /// <see cref="MaximumSamples"/> and a hard vertex ceiling, hottest trace first.</para>
     /// </summary>
     [RequireComponent(typeof(CanvasRenderer))]
     [DefaultExecutionOrder(101)] // Invalidate after MapUiManager commits the displayed relief pose.
     internal sealed class FrontlineGraphic : MaskableGraphic
     {
         private const int MaximumTraces = FrontlineTraceLimits.MaximumTraces;
-        private const int MaximumSamples = 1200;
-        private const int MaximumVertices = 16000;
-        private const float StationStep = 7f;
-        private const float HalfWidth = 1f;
-        private const int TickEvery = 12;
-        private const int VoteSegments = 8;
-        private const float StripeOffset = 1.7f, StripeHalf = 1.3f;
-        // Teeth are world-anchored: sized and spaced in metres, so they grow as the camera closes in and shrink as it pulls
-        // back (near teeth bigger than far ones on a tilted relief), clamped so they never vanish or swamp the map.
-        private const float ToothWorld = 200f, ToothSpacingWorld = 520f, ToothMinPx = 2.5f, ToothMaxPx = 8f;
+        // Two corner-cut passes at most quadruple the points.
+        private const int MaximumSmooth = FrontlineTraceLimits.MaximumPoints * 4;
+        private const int MaximumSamples = 1600;
+        private const int MaximumVertices = 30000;
+        private const float StationStep = 5f;
+        private const float WashWidth = 10f, CasingHalf = 2.1f, CoreHalf = .75f;
+        // Teeth sit at fixed metres along a trace. Zoomed out, every other one drops (spacing doubles) rather than
+        // sliding, so the survivors stay put. Size follows the projection's scale, clamped.
+        private const float ToothWorld = 240f, ToothSpacingWorld = 600f, ToothGapPx = 16f, ToothMinPx = 4f, ToothMaxPx = 9f;
+        private const float HotPressure = .35f;
 
-        private static readonly Color32 Casing = new Color32(4, 10, 14, 205);
-        private static readonly Color32 CoolGlow = new Color32(70, 190, 220, 80);
-        private static readonly Color32 HotGlow = new Color32(255, 168, 72, 130);
-        private static readonly Color32 TickInk = new Color32(150, 220, 235, 190);
-        private static readonly Color32 OwnStripe = Alpha(TacticalSectorGrid.FriendlyTint, 235);
-        private static readonly Color32 TheirStripe = Alpha(TacticalSectorGrid.HostileTint, 235);
-        private static readonly Color32 OwnTooth = Alpha(TacticalSectorGrid.FriendlyTint, 255);
+        private static readonly Color32 Casing = new Color32(3, 8, 12, 225);
+        private static readonly Color32 CoolGlow = new Color32(90, 200, 230, 70);
+        private static readonly Color32 HotGlow = new Color32(255, 160, 60, 120);
+        private static readonly Color32 OwnWash = Alpha(TacticalSectorGrid.FriendlyTint, 120);
+        private static readonly Color32 TheirWash = Alpha(TacticalSectorGrid.HostileTint, 120);
+        private static readonly Color32 OwnTooth = Lift(TacticalSectorGrid.FriendlyTint, .25f);
+        private static readonly Color32 HotCore = new Color32(255, 222, 170, 250);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
         internal static readonly Color32 Ink = new Color32(228, 241, 245, 245);
 
-        private readonly FrontlineTracePoint[] points = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
+        private readonly FrontlineTracePoint[] raw = new FrontlineTracePoint[FrontlineTraceLimits.MaximumPoints];
         private readonly int[] lengths = new int[MaximumTraces];
         private readonly float[] pressures = new float[MaximumTraces];
         private readonly int[] order = new int[MaximumTraces];
-        private readonly int[] starts = new int[MaximumTraces + 1];
+        private readonly int[] ourSide = new int[MaximumTraces];   // +1 ours left of travel, -1 right, 0 unclear
+        private readonly bool[] closed = new bool[MaximumTraces];
+        private readonly int[] smoothStart = new int[MaximumTraces];
         private readonly int[] bounds = new int[MaximumTraces + 1];
-        private readonly Vector2[] projected = new Vector2[FrontlineTraceLimits.MaximumPoints];
+
+        private readonly Vector2[] pass = new Vector2[FrontlineTraceLimits.MaximumPoints * 2];
+        private readonly Vector2[] world = new Vector2[MaximumSmooth];
+        private readonly Vector2[] projected = new Vector2[MaximumSmooth];
         private readonly Vector2[] stations = new Vector2[MaximumSamples];
-        private readonly Vector2[] shifted = new Vector2[MaximumSamples];
-        // Map pixels per world metre at each station (the projection's local scale, perspective included).
+        private readonly float[] stationMetres = new float[MaximumSamples];
         private readonly float[] pixelsPerMetre = new float[MaximumSamples];
-        // +1: our ground lies left of the trace's direction, -1: right, 0: no clear side.
-        private readonly int[] ourSide = new int[MaximumTraces];
 
         private TacticalSectorGrid grid;
         private ulong drawnFrontlineHash;
         private bool reliefWasDrawing;
         private int reliefRevision;
+        private int traceCount;   // smoothed traces held in world[] for the drawn hash
 
         private void LateUpdate()
         {
@@ -71,275 +74,209 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             SetVerticesDirty();
         }
 
-        /// <summary>Source of the next rebuild; null draws nothing. An unchanged front skips the mesh rebuild.</summary>
+        /// <summary>Source of the next rebuild; null draws nothing. An unchanged front skips the rebuild.</summary>
         public void SetSource(TacticalSectorGrid source)
         {
-            if (source == grid)
-            {
-                if (source == null) return;
-                if (source.FrontlineHash == drawnFrontlineHash) return;
-            }
+            if (source == grid && (source == null || source.FrontlineHash == drawnFrontlineHash)) return;
             grid = source;
             drawnFrontlineHash = source != null ? source.FrontlineHash : 0UL;
+            traceCount = source != null ? Prepare(source) : 0;
             SetVerticesDirty();
+        }
+
+        /// <summary>World-space work, once per front change: copy, vote sides, smooth, rank.</summary>
+        private int Prepare(TacticalSectorGrid source)
+        {
+            int count = source.CopyFrontlineTraces(raw, lengths, pressures);
+            int rawAt = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int n = lengths[i], last = rawAt + n - 1;
+                ourSide[i] = VoteSide(source, rawAt, n);
+                float dx = raw[rawAt].X - raw[last].X, dz = raw[rawAt].Z - raw[last].Z;
+                closed[i] = n > 3 && dx * dx + dz * dz < 1f;
+                // Each trace owns a 4n slot of world[]: two corner cuts there -> pass[] -> back.
+                int slot = smoothStart[i] = rawAt * 4;
+                for (int p = 0; p < n; p++) world[slot + p] = new Vector2(raw[rawAt + p].X, raw[rawAt + p].Z);
+                int once = CornerCut(world, slot, n, pass, 0, closed[i]);
+                lengths[i] = CornerCut(pass, 0, once, world, slot, closed[i]);
+                rawAt += n;
+            }
+
+            // Hottest first: a bounded station budget keeps the fighting.
+            for (int i = 0; i < count; i++)
+            {
+                int at = i - 1;
+                while (at >= 0 && pressures[order[at]] < pressures[i]) { order[at + 1] = order[at]; at--; }
+                order[at + 1] = i;
+            }
+            return count;
+        }
+
+        /// <summary>
+        /// Chaikin corner cutting: each segment becomes its 1/4 and 3/4 points, so the marching-squares
+        /// staircase rounds into a curve that never leaves the original hull. Open traces keep their ends.
+        /// </summary>
+        private static int CornerCut(Vector2[] src, int from, int n, Vector2[] dst, int to, bool loop)
+        {
+            if (n < 3) { System.Array.Copy(src, from, dst, to, n); return n; }
+            int w = to;
+            if (!loop) dst[w++] = src[from];
+            for (int p = from; p + 1 < from + n; p++)
+            {
+                Vector2 a = src[p], b = src[p + 1];
+                dst[w++] = a * .75f + b * .25f;
+                dst[w++] = a * .25f + b * .75f;
+            }
+            dst[w] = loop ? dst[to] : src[from + n - 1];
+            return w + 1 - to;
         }
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();
-            if (grid == null || !isActiveAndEnabled) return;
-
+            if (grid == null || traceCount <= 0 || !isActiveAndEnabled) return;
             float worldSizeX = grid.WorldSizeX, worldSizeZ = grid.WorldSizeY;
             if (!(worldSizeX > 0f) || !(worldSizeZ > 0f)) return;
-
             Rect rect = rectTransform.rect;
             if (rect.width < 4f || rect.height < 4f) return;
-
             float scale = Mathf.Abs(transform.lossyScale.x);
             if (!(scale > 1e-4f)) scale = 1f;
 
-            int traceCount = grid.CopyFrontlineTraces(points, lengths, pressures);
-            if (traceCount <= 0) return;
+            float total = 0f;
+            for (int t = 0; t < traceCount; t++)
+            {
+                int s = smoothStart[t], e = s + lengths[t];
+                for (int p = s; p < e; p++)
+                {
+                    projected[p] = ToPixels(world[p], rect, worldSizeX, worldSizeZ, scale);
+                    if (p > s) total += (projected[p] - projected[p - 1]).magnitude;
+                }
+            }
+            // Zoomed in, a coarser step keeps the whole front inside the station budget.
+            float density = Mathf.Max(StationStep, total / MaximumSamples);
 
-            // Trace i occupies lengths[i] points continuing where the previous trace ended,
-            // so the point cursor must stay in the buffer's own order, not the ranked one.
-            starts[0] = 0;
-            for (int i = 0; i < traceCount; i++) starts[i + 1] = starts[i] + lengths[i];
-            // Project once per source point; both length measurement and sampling reuse it.
-            for (int i = 0; i < starts[traceCount]; i++)
-                projected[i] = ToPixels(points[i], rect, worldSizeX, worldSizeZ, scale);
-            for (int i = 0; i < traceCount; i++) ourSide[i] = VoteSide(starts[i], lengths[i]);
+            int written = 0;
+            for (int t = 0; t < traceCount; t++)
+            {
+                int index = order[t];
+                bounds[t] = written;
+                if (written < MaximumSamples && lengths[index] >= 2)
+                    written = Sample(smoothStart[index], lengths[index], density, written);
+                bounds[t + 1] = written;
+            }
+            Paint(vh, 1f / scale);
+        }
 
-            RankTraces(traceCount);
-            int stationCount = Sample(traceCount);
-            Paint(vh, traceCount, stationCount, 1f / scale);
+        /// <summary>Stations every <paramref name="density"/> pixels, each carrying its metres along the trace and the local scale.</summary>
+        private int Sample(int from, int count, float density, int written)
+        {
+            float travel = 0f, metres = 0f, scaleHere = 0f;
+            for (int p = from; p + 1 < from + count && written < MaximumSamples; p++)
+            {
+                Vector2 a = projected[p], delta = projected[p + 1] - a;
+                float segment = delta.magnitude, span = (world[p + 1] - world[p]).magnitude;
+                if (span > 1f) scaleHere = segment / span;
+                if (segment > .01f)
+                {
+                    float at = travel;
+                    for (; at < segment && written < MaximumSamples; at += density)
+                    {
+                        float k = at / segment;
+                        stations[written] = a + delta * k;
+                        stationMetres[written] = metres + span * k;
+                        pixelsPerMetre[written++] = scaleHere;
+                    }
+                    travel = at - segment;
+                }
+                metres += span;
+            }
+            if (written < MaximumSamples)
+            {
+                stations[written] = projected[from + count - 1];
+                stationMetres[written] = metres;
+                pixelsPerMetre[written++] = scaleHere;
+            }
+            return written;
+        }
+
+        /// <summary>Back to front: glow, both washes, casing, core, teeth.</summary>
+        private void Paint(VertexHelper vh, float toLocal)
+        {
+            for (int t = 0; t < traceCount; t++)
+            {
+                int start = bounds[t], end = bounds[t + 1], count = end - start;
+                if (count < 2) continue;
+                if (vh.currentVertCount + count * 24 > MaximumVertices) return;
+
+                int index = order[t], side = ourSide[index];
+                bool hot = pressures[index] >= HotPressure, loop = closed[index];
+                if (hot || side == 0)
+                    MapStroke.Ribbon(vh, stations, start, end, toLocal, .5f, hot ? 16f : 10f, hot ? HotGlow : CoolGlow, loop);
+                if (side != 0)
+                {
+                    MapStroke.Band(vh, stations, start, end, toLocal, side, WashWidth, OwnWash, loop);
+                    MapStroke.Band(vh, stations, start, end, toLocal, -side, WashWidth, TheirWash, loop);
+                }
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, CasingHalf, 1.2f, Casing, loop);
+                MapStroke.Ribbon(vh, stations, start, end, toLocal, CoreHalf, .9f, hot ? HotCore : Ink, loop);
+                if (side != 0) Teeth(vh, start, end, side, toLocal);
+            }
         }
 
         /// <summary>
-        /// Which side of a trace is ours, voted in world space across a few of its segments by the
-        /// cells a cell and a bit to either side. World and map share handedness, so a world left
-        /// is a map left.
+        /// A tooth wherever the trace crosses a multiple of the spacing, the spacing doubled until
+        /// neighbours keep <see cref="ToothGapPx"/> apart on screen. Fixed in metres, so they never swim.
         /// </summary>
-        private int VoteSide(int start, int count)
+        private void Teeth(VertexHelper vh, int start, int end, int side, float toLocal)
+        {
+            for (int i = start + 1; i + 1 < end; i++)
+            {
+                float ppm = pixelsPerMetre[i];
+                if (!(ppm > 1e-6f)) continue;
+                float spacing = ToothSpacingWorld;
+                while (spacing * ppm < ToothGapPx && spacing < 1e6f) spacing *= 2f;
+                if (Mathf.Floor(stationMetres[i] / spacing) == Mathf.Floor(stationMetres[i - 1] / spacing)) continue;
+
+                float reach = Mathf.Clamp(ToothWorld * ppm, ToothMinPx, ToothMaxPx), half = reach * .55f;
+                Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
+                Vector2 into = new Vector2(along.y, -along.x) * side;   // into their ground
+                Vector2 foot = stations[i] + into * (CasingHalf * .5f);
+                Vector2 tip = foot + into * (CasingHalf + reach);
+                Triangle(vh, (foot - along * (half + 1.1f)) * toLocal, (foot + along * (half + 1.1f)) * toLocal,
+                    (tip + into * 1.3f) * toLocal, Casing);
+                Triangle(vh, (foot - along * half) * toLocal, (foot + along * half) * toLocal, tip * toLocal, OwnTooth);
+            }
+        }
+
+        /// <summary>Which side of a trace is ours, voted across a few segments by the cells either side.</summary>
+        private int VoteSide(TacticalSectorGrid source, int start, int count)
         {
             if (count < 2) return 0;
-            float reach = Mathf.Max(250f, grid.CellSize * 1.2f);
-            int vote = 0, stride = Mathf.Max(1, (count - 1) / VoteSegments);
+            float reach = Mathf.Max(250f, source.CellSize * 1.2f);
+            int vote = 0, stride = Mathf.Max(1, (count - 1) / 8);
             for (int p = start; p + 1 < start + count; p += stride)
             {
-                float dx = points[p + 1].X - points[p].X, dz = points[p + 1].Z - points[p].Z, len = Mathf.Sqrt(dx * dx + dz * dz);
+                float dx = raw[p + 1].X - raw[p].X, dz = raw[p + 1].Z - raw[p].Z, len = Mathf.Sqrt(dx * dx + dz * dz);
                 if (len < 1f) continue;
-                float mx = (points[p].X + points[p + 1].X) * .5f, mz = (points[p].Z + points[p + 1].Z) * .5f;
+                float mx = (raw[p].X + raw[p + 1].X) * .5f, mz = (raw[p].Z + raw[p + 1].Z) * .5f;
                 float lx = -dz / len * reach, lz = dx / len * reach;
-                vote += Side(mx + lx, mz + lz) - Side(mx - lx, mz - lz);
+                vote += Side(source, mx + lx, mz + lz) - Side(source, mx - lx, mz - lz);
             }
             return vote > 0 ? 1 : vote < 0 ? -1 : 0;
         }
 
-        private int Side(float x, float z)
+        private static int Side(TacticalSectorGrid source, float x, float z)
         {
-            if (!grid.WorldToCell(x, z, out int col, out int row)) return 0;
-            SectorControl s = grid.GetSectorControl(col, row);
+            if (!source.WorldToCell(x, z, out int col, out int row)) return 0;
+            SectorControl s = source.GetSectorControl(col, row);
             return s == SectorControl.Friendly ? 1 : s == SectorControl.Hostile ? -1 : 0;
         }
 
         private static Color32 Alpha(Color32 c, byte a) { c.a = a; return c; }
 
-        /// <summary>Hottest trace first: a bounded station budget keeps the fighting.</summary>
-        private void RankTraces(int traceCount)
-        {
-            for (int i = 0; i < traceCount; i++) order[i] = i;
-            for (int i = 1; i < traceCount; i++)
-            {
-                int candidate = order[i];
-                float pressure = pressures[candidate];
-                int at = i - 1;
-                while (at >= 0 && pressures[order[at]] < pressure)
-                {
-                    order[at + 1] = order[at];
-                    at--;
-                }
-                order[at + 1] = candidate;
-            }
-        }
-
-        /// <summary>
-        /// Walks every selected trace in map-pixel space, placing a station every
-        /// <see cref="StationStep"/> pixels travelled (more on a long front, to stay inside the station budget).
-        /// </summary>
-        private int Sample(int traceCount)
-        {
-            int written = 0;
-
-            // Zoomed in, the whole front is far longer on screen than the station budget. Widening
-            // every step keeps the entire front drawn, a little coarser, instead of spending the
-            // budget on its first traces and dropping the rest.
-            float density = Mathf.Max(StationStep, TotalPixels(traceCount) /
-                MaximumSamples);
-
-            for (int t = 0; t < traceCount; t++)
-            {
-                int index = order[t];
-                int count = lengths[index];
-                bounds[t] = written;
-                if (written < MaximumSamples && count >= 2)
-                {
-                    written = SampleTrace(starts[index], count, density, written);
-                    Smooth(bounds[t], written);
-                }
-                bounds[t + 1] = written;
-            }
-            return written;
-        }
-
-        private float TotalPixels(int traceCount)
-        {
-            float total = 0f;
-            for (int t = 0; t < traceCount; t++)
-            {
-                int index = order[t];
-                for (int p = starts[index]; p + 1 < starts[index + 1]; p++)
-                {
-                    total += (projected[p + 1] - projected[p]).magnitude;
-                }
-            }
-            return total;
-        }
-
-        /// <summary>
-        /// The contour is a chain of cell-edge crossings, so its raw shape is a staircase with
-        /// cell-sized treads. Four weighted passes turn it into a fluid tactical vector curve.
-        /// </summary>
-        private void Smooth(int start, int end)
-        {
-            for (int pass = 0; pass < 4 && end - start > 2; pass++)
-            {
-                Vector2 previous = stations[start];
-                for (int i = start + 1; i < end - 1; i++)
-                {
-                    Vector2 current = stations[i];
-                    stations[i] = (previous + current * 2f + stations[i + 1]) * 0.25f;
-                    previous = current;
-                }
-            }
-        }
-
-        private int SampleTrace(int offset, int count, float density, int written)
-        {
-            int start = written;
-            float travel = 0f, scaleHere = 0f;
-
-            for (int p = offset; p + 1 < offset + count && written < MaximumSamples; p++)
-            {
-                Vector2 a = projected[p];
-                Vector2 b = projected[p + 1];
-                Vector2 delta = b - a;
-                float segment = delta.magnitude;
-                if (segment < 0.01f) continue;
-                float wx = points[p + 1].X - points[p].X, wz = points[p + 1].Z - points[p].Z;
-                float world = Mathf.Sqrt(wx * wx + wz * wz);
-                if (world > 1f) scaleHere = segment / world;
-
-                float at = travel;
-                while (at < segment && written < MaximumSamples)
-                {
-                    pixelsPerMetre[written] = scaleHere;
-                    stations[written++] = a + delta * (at / segment);
-                    at += density;
-                }
-                travel = at - segment;
-            }
-            Vector2 end = projected[offset + count - 1];
-            if (written < MaximumSamples && (written == start ||
-                (end - stations[written - 1]).sqrMagnitude > .01f))
-            {
-                pixelsPerMetre[written] = scaleHere;
-                stations[written++] = end;
-            }
-            return written;
-        }
-
-        /// <summary>
-        /// Soft glow, dark casing, then either the HOI4 front (our stripe, their stripe, teeth into
-        /// their ground) or, with no clear side, the crisp pale core with cross ticks. Every stroke is
-        /// a continuous feathered ribbon, legible over terrain, the forward-band tint and the trench
-        /// trace beneath it, with no stair-stepped edge at any zoom.
-        /// </summary>
-        private void Paint(VertexHelper vh, int traceCount, int stationCount, float toLocal)
-        {
-            for (int t = 0; t < traceCount; t++)
-            {
-                int start = bounds[t], end = Mathf.Min(bounds[t + 1], stationCount);
-                int count = end - start;
-                if (count < 2) continue;
-                int ticks = (count - 2) / TickEvery + 1;
-                if (vh.currentVertCount + count * MapStroke.RibbonVertices * 4 +
-                    Mathf.Max(ticks * MapStroke.SegmentVertices, count * 6) > MaximumVertices) return;
-
-                bool hot = pressures[order[t]] >= .35f;
-                int side = ourSide[order[t]];
-                MapStroke.Ribbon(vh, stations, start, end, toLocal, .5f, hot ? 13f : 9f, hot ? HotGlow : CoolGlow);
-                if (side == 0)
-                {
-                    MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth + 1.5f, 1.6f, Casing);
-                    for (int i = start; i + 1 < end; i += TickEvery)
-                    {
-                        Vector2 along = (stations[i + 1] - stations[i]).normalized;
-                        Vector2 reach = new Vector2(-along.y, along.x) * 3.4f;
-                        MapStroke.Segment(vh, (stations[i] - reach) * toLocal, (stations[i] + reach) * toLocal,
-                            .5f * toLocal, toLocal, TickInk);
-                    }
-                    MapStroke.Ribbon(vh, stations, start, end, toLocal, HalfWidth, 1f, Ink);
-                    continue;
-                }
-
-                MapStroke.Ribbon(vh, stations, start, end, toLocal, StripeOffset + StripeHalf + 1f, 1.6f, Casing);
-                Shift(start, end, side * StripeOffset);
-                MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, OwnStripe);
-                Shift(start, end, -side * StripeOffset);
-                MapStroke.Ribbon(vh, shifted, start, end, toLocal, StripeHalf, 1f, TheirStripe);
-                // Teeth wear our own colour (HOI4: your line pressing into theirs); heat shows in the glow, not as a second ink.
-                Teeth(vh, start, end, side, OwnTooth, toLocal);
-            }
-        }
-
-        /// <summary>
-        /// Teeth: cased triangles standing on their stripe and pointing into their ground, one every
-        /// <see cref="ToothSpacingWorld"/> metres of front, each sized from the projection's scale where it stands.
-        /// </summary>
-        private void Teeth(VertexHelper vh, int start, int end, int side, Color32 tooth, float toLocal)
-        {
-            float walked = 0f, next = ToothSpacingWorld * .5f;
-            for (int i = start + 1; i + 1 < end; i++)
-            {
-                float scaleHere = pixelsPerMetre[i];
-                if (!(scaleHere > 1e-6f)) continue;
-                walked += (stations[i] - stations[i - 1]).magnitude / scaleHere;
-                if (walked < next) continue;
-
-                float reach = Mathf.Clamp(ToothWorld * scaleHere, ToothMinPx, ToothMaxPx);
-                // A clamped tooth keeps at least two and a half of its own lengths of air between neighbours.
-                next = walked + Mathf.Max(ToothSpacingWorld, reach * 2.5f / scaleHere);
-                Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
-                Vector2 into = new Vector2(along.y, -along.x) * side;   // right of travel when ours is left
-                Vector2 foot = stations[i] + into * (StripeOffset + StripeHalf * .5f);
-                float half = reach * .5f;
-                Triangle(vh, (foot - along * (half + .9f) - into * .5f) * toLocal, (foot + along * (half + .9f) - into * .5f) * toLocal,
-                    (foot + into * (reach + 1.2f)) * toLocal, Casing);
-                Triangle(vh, (foot - along * half) * toLocal, (foot + along * half) * toLocal,
-                    (foot + into * reach) * toLocal, tooth);
-            }
-        }
-
-        /// <summary>The stations moved sideways by a fixed pixel distance (left of travel for a positive one).</summary>
-        private void Shift(int start, int end, float by)
-        {
-            for (int i = start; i < end; i++)
-            {
-                Vector2 along = (stations[Mathf.Min(i + 1, end - 1)] - stations[Mathf.Max(i - 1, start)]).normalized;
-                shifted[i] = stations[i] + new Vector2(-along.y, along.x) * by;
-            }
-        }
+        private static Color32 Lift(Color32 c, float toWhite)
+            => new Color32((byte)(c.r + (255 - c.r) * toWhite), (byte)(c.g + (255 - c.g) * toWhite), (byte)(c.b + (255 - c.b) * toWhite), 255);
 
         private static void Triangle(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Color32 ink)
         {
@@ -352,12 +289,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             vh.AddTriangle(first, first + 1, first + 2);
         }
 
-        private static Vector2 ToPixels(FrontlineTracePoint point, Rect rect, float worldSizeX, float worldSizeZ, float scale)
+        private static Vector2 ToPixels(Vector2 point, Rect rect, float worldSizeX, float worldSizeZ, float scale)
         {
-            float u = Mathf.Clamp01(point.X / worldSizeX + 0.5f);
-            float v = Mathf.Clamp01(point.Z / worldSizeZ + 0.5f);
-            if (MfdTerrainRelief.TryProject(point.X, point.Z, rect, out Vector2 projected))
+            if (MfdTerrainRelief.TryProject(point.x, point.y, rect, out Vector2 projected))
                 return projected * scale;
+            float u = Mathf.Clamp01(point.x / worldSizeX + 0.5f);
+            float v = Mathf.Clamp01(point.y / worldSizeZ + 0.5f);
             return new Vector2(rect.xMin + u * rect.width, rect.yMin + v * rect.height) * scale;
         }
     }

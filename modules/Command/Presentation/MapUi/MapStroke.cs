@@ -33,24 +33,58 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// pixels; <paramref name="toLocal"/> converts them to the graphic's units.
         /// </summary>
         internal static void Ribbon(VertexHelper vh, Vector2[] points, int start, int end, float toLocal,
-            float halfWidth, float feather, Color32 ink)
+            float halfWidth, float feather, Color32 ink, bool closed = false)
         {
             if (end - start < 2) return;
             halfWidth *= toLocal;
             feather *= toLocal;
             for (int i = start; i < end; i++)
             {
-                Vector2 into = i > start ? (points[i] - points[i - 1]).normalized : Vector2.zero;
-                Vector2 away = i + 1 < end ? (points[i + 1] - points[i]).normalized : Vector2.zero;
-                Vector2 along = (into + away).normalized;
-                if (along == Vector2.zero) along = into != Vector2.zero ? into : Vector2.right;
-                Vector2 normal = new Vector2(-along.y, along.x);
-                // Widen the joint so the stroke keeps its width through the bend, within reason.
-                Vector2 leg = away != Vector2.zero ? away : into;
-                float cosine = Mathf.Abs(normal.x * -leg.y + normal.y * leg.x);
-                Row(vh, points[i] * toLocal, normal / Mathf.Max(.5f, cosine), halfWidth, feather, ink);
+                Row(vh, points[i] * toLocal, JointNormal(points, i, start, end, closed), halfWidth, feather, ink);
                 if (i > start) Bridge(vh, vh.currentVertCount - RibbonVertices * 2);
             }
+        }
+
+        /// <summary>
+        /// A one-sided wash beside a polyline: full ink on the line, fading to clear
+        /// <paramref name="width"/> screen pixels out on the left of travel (right for a negative <paramref name="side"/>).
+        /// Two vertices per point.
+        /// </summary>
+        internal static void Band(VertexHelper vh, Vector2[] points, int start, int end, float toLocal,
+            float side, float width, Color32 ink, bool closed = false)
+        {
+            if (end - start < 2) return;
+            Color32 clear = ink;
+            clear.a = 0;
+            UIVertex vert = UIVertex.simpleVert;
+            for (int i = start; i < end; i++)
+            {
+                Vector2 at = points[i] * toLocal;
+                vert.color = ink; vert.position = at; vh.AddVert(vert);
+                vert.color = clear; vert.position = at + JointNormal(points, i, start, end, closed) * (side * width * toLocal); vh.AddVert(vert);
+                if (i == start) continue;
+                int b = vh.currentVertCount - 4;
+                vh.AddTriangle(b, b + 1, b + 3);
+                vh.AddTriangle(b, b + 3, b + 2);
+            }
+        }
+
+        /// <summary>
+        /// Left-of-travel normal at point <paramref name="i"/>, mitred so a stroke keeps its width
+        /// through a bend (within reason). A closed run (last point repeats the first) wraps.
+        /// </summary>
+        private static Vector2 JointNormal(Vector2[] points, int i, int start, int end, bool closed)
+        {
+            Vector2 into = i > start ? (points[i] - points[i - 1]).normalized
+                : closed ? (points[start] - points[end - 2]).normalized : Vector2.zero;
+            Vector2 away = i + 1 < end ? (points[i + 1] - points[i]).normalized
+                : closed ? (points[start + 1] - points[start]).normalized : Vector2.zero;
+            Vector2 along = (into + away).normalized;
+            if (along == Vector2.zero) along = into != Vector2.zero ? into : Vector2.right;
+            Vector2 normal = new Vector2(-along.y, along.x);
+            Vector2 leg = away != Vector2.zero ? away : into;
+            float cosine = Mathf.Abs(normal.x * -leg.y + normal.y * leg.x);
+            return normal / Mathf.Max(.5f, cosine);
         }
 
         /// <summary>Clear, ink, ink, clear across the stroke at one point.</summary>
