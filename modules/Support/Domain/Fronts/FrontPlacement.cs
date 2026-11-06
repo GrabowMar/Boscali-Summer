@@ -56,16 +56,26 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         /// Where a picked camp may stand, nearest first: the point itself, then <see cref="CampRings"/> round it at <see cref="CampBearings"/> spread bearings, own ground only
         /// (<see cref="OwnGround"/>). At most 1 + 3 x 12 = 37 spots. <paramref name="into"/> is cleared first.
         /// </summary>
-        public static void CampSpots(IReadOnlyList<Base> bases, float x, float z, List<(float X, float Z)> into)
+        public static void CampSpots(IReadOnlyList<Base> bases, float x, float z, List<(float X, float Z)> into) =>
+            Spots(x, z, into, (cx, cz) => OwnGround(bases, cx, cz));
+
+        /// <summary>
+        /// Where a picked EW truck (DEPLOY or RELOCATE) may stand, nearest first: the point, then the camp rings round it (ruling R38), keeping only spots within
+        /// <paramref name="reach"/> of one of <paramref name="centers"/> (the 20 km data center rule). At most 37 spots. <paramref name="into"/> is cleared first.
+        /// </summary>
+        public static void TruckSpots(IReadOnlyList<(float X, float Z)> centers, float x, float z, float reach, List<(float X, float Z)> into) =>
+            Spots(x, z, into, (cx, cz) => WithinReach(centers, cx, cz, reach));
+
+        private static void Spots(float x, float z, List<(float X, float Z)> into, Func<float, float, bool> keep)
         {
             into.Clear();
-            if (OwnGround(bases, x, z)) into.Add((x, z));
+            if (keep(x, z)) into.Add((x, z));
             foreach (float r in CampRings)
                 for (int step = 0; step < CampBearings; step++)
                 {
                     double angle = step * 5 % CampBearings * 2.0 * Math.PI / CampBearings; // 5 is coprime with 12: neighbours in the list sit far apart on the ring
                     float cx = x + (float)(Math.Sin(angle) * r), cz = z + (float)(Math.Cos(angle) * r);
-                    if (OwnGround(bases, cx, cz)) into.Add((cx, cz));
+                    if (keep(cx, cz)) into.Add((cx, cz));
                 }
         }
 

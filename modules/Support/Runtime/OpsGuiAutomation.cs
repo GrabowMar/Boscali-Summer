@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Dictionary<string, object> r = State(fronts, window);
             if (!MapScreen(window, u, v, out Vector2 at)) { r["error"] = "the active room has no map plate"; return r; }
             Click(at);
-            r["x"] = Mathf.RoundToInt(at.x); r["y"] = Mathf.RoundToInt(at.y);
+            r["x"] = Mathf.RoundToInt(at.x); r["y"] = Mathf.RoundToInt(at.y); r["u"] = u; r["v"] = v;
             return r;
         }
 
@@ -212,6 +212,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["centerX"] = Mathf.RoundToInt(c.x); r["centerY"] = Mathf.RoundToInt(c.y);
             }
             r["played"] = FrontPointer.Played; r["frame"] = Time.frameCount;
+            { MapFrame tf = FrontController.Frame(); r["theatreW"] = tf.W; r["theatreH"] = tf.H; }
             r["lastWheel"] = FrontPointer.LastWheel; r["lastWheelFrame"] = FrontPointer.LastWheelFrame;
             r["lastWheelX"] = Mathf.RoundToInt(FrontPointer.LastWheelAt.x); r["lastWheelY"] = Mathf.RoundToInt(FrontPointer.LastWheelAt.y);
             return r;

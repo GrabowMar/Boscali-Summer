@@ -66,6 +66,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private readonly List<FrontPlacement.Base> heldBases = new List<FrontPlacement.Base>(MaximumBases);
         private readonly List<Airbase> heldAirbases = new List<Airbase>(MaximumBases);
         private readonly List<(float X, float Z)> centers = new List<(float X, float Z)>(4);
+        private readonly List<(float X, float Z)> truckSpots = new List<(float X, float Z)>(37);
         private SupportManager manager;
         private SpaceService space;
         private PhasedGate tickGate;
@@ -272,7 +273,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// EW TRUCK finished: a real truck at the picked point (nudged up to 120 m round it), or without a point on a ring 3 km round the first standing data center. It needs a free
+        /// EW TRUCK finished: a real truck at the picked point or on the rings round it (<see cref="TruckNear"/>), or without a point on a ring 3 km round the first standing data center. It needs a free
         /// standing data center now and takes the first down truck slot else a new index (indices stay stable: an intrusion names its truck by index). False with the refusal in <paramref name="why"/>.
         /// </summary>
         internal bool TryDeployTruck(FactionHQ owner, bool hasPoint, float x, float z, out FrontOutcome why)
@@ -283,7 +284,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             int index = FreeIndex(f, AnchorKind.EwTruck);
             Discard(f, AnchorKind.EwTruck, index); // shared spawner cap: the wreck goes first
             Unit made = null;
-            if (hasPoint) TryTruckAt(owner, index, x, z, out made);
+            if (hasPoint) { CopyCenters(f); TruckNear(owner, index, x, z, out made); }
             else
             {
                 CopyCenters(f);
@@ -322,15 +323,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return FrontOutcome.Ok;
         }
 
-        /// <summary>A packed truck is due: it deploys at its picked point, else back where it stood, else its slot stays down (the next EW TRUCK takes it).</summary>
+        /// <summary>A packed truck is due: it deploys at its picked point or on the rings round it (<see cref="TruckNear"/>), else back where it stood, else its slot stays down (the next EW TRUCK takes it).</summary>
         private void Unpack(FactionCyber f, AnchorSlot slot)
         {
             slot.PackUntil = 0f;
             bool hadSpot = f.Anchors.TryPosition(AnchorKind.EwTruck, slot.Index, out float oldX, out float oldZ);
-            if ((TryTruckAt(f.Owner, slot.Index, slot.PackX, slot.PackZ, out Unit made) || (hadSpot && TryTruckAt(f.Owner, slot.Index, oldX, oldZ, out made))) &&
+            CopyCenters(f);
+            if ((TruckNear(f.Owner, slot.Index, slot.PackX, slot.PackZ, out Unit made) || (hadSpot && TryTruckAt(f.Owner, slot.Index, oldX, oldZ, out made))) &&
                 Place(f, AnchorKind.EwTruck, slot.Index, made, null))
                 Plugin.Logger?.LogInfo("[Support.Cyber] " + f.Owner.name + " EW TRUCK " + (slot.Index + 1) + " redeployed.");
             else Plugin.Logger?.LogWarning("[Support.Cyber] " + f.Owner.name + " EW TRUCK " + (slot.Index + 1) + " found no ground to redeploy on: it stays down.");
+        }
+
+        /// <summary>
+        /// A picked truck spot (DEPLOY, or RELOCATE's redeploy): the point, else rings of 400, 800 and 1500 m round it that stay within 20 km of a standing data center
+        /// (ruling R38, <see cref="FrontPlacement.TruckSpots"/>), each through the spawner's own 120 m nudge. Needs <see cref="centers"/> filled. False when no spot fits.
+        /// </summary>
+        // ponytail: at most 37 truck plans (17 footprint tests each), once per finished programme or redeploy; step it across frames if a hitch shows.
+        private bool TruckNear(FactionHQ owner, int index, float x, float z, out Unit made)
+        {
+            FrontPlacement.TruckSpots(centers, x, z, FrontRules.TruckReachMetres, truckSpots);
+            foreach ((float X, float Z) spot in truckSpots) if (TryTruckAt(owner, index, spot.X, spot.Z, out made)) return true;
+            made = null;
+            return false;
         }
 
         /// <summary>A truck on the ground under (x, z), nudged round it when the exact point does not fit.</summary>
