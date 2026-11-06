@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
                 case TaskedOutcome.Locked: return CallWords.Refusal(CallRefusal.Locked);
                 case TaskedOutcome.Cooldown: return CallWords.Refusal(CallRefusal.Cooldown, seconds: detail);
                 case TaskedOutcome.BirdBusy: return "NEGATIVE: BIRD BUSY — WAIT FOR THE NEXT TASK";
-                case TaskedOutcome.UplinkDown: return "NEGATIVE: UPLINK DOWN — RESTORE THE SITE";
+                case TaskedOutcome.UplinkDown: return "NEGATIVE: NO LIVE PAD — BUILD ONE";
                 case TaskedOutcome.DeliveryFailed: return "NEGATIVE: LAUNCH FAILED — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.TimedOut: return "NEGATIVE: LAUNCH TIMED OUT — NOTHING CHARGED, CALL REOPENED";
                 case TaskedOutcome.SceneEnded: return "NEGATIVE: MISSION ENDED — START A NEW MISSION";

@@ -31,6 +31,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct FrontInputs
     {
         public int Allocation;
+        /// <summary>Funds per minute the faction's share tick moves into its three fronts (0 when unknown); each front takes its priority share of it.</summary>
+        public float Trickle;
         /// <summary>The local pilot's skill grade per front system (index = <see cref="Front"/>, 1..6): what unlocks its perks. Null reads as grade 1.</summary>
         public int[] Grades;
         public float Now, CostScale;
@@ -125,7 +127,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             v.Queue.Clear(); v.Offers.Clear(); v.Perks.Clear(); v.Log.Clear();
             FrontRow row = known && d != null ? d.Fronts[(int)f] : Waiting;
             v.Row = row;
-            v.FocusGrid = row.HasFocus ? OpsKit.Grid(row.FocusX, row.FocusZ) : "";
+            // This front's share of the minute's trickle, as far as it still fits under the budget cap.
+            v.FundsRate = IsWaiting(row) ? 0 : (int)Math.Round(Math.Min(c.Trickle * row.PriorityPct / 100f, Math.Max(0f, FrontRules.BudgetCap - row.Budget)));
+            v.FocusGrid =row.HasFocus ? OpsKit.Grid(row.FocusX, row.FocusZ) : "";
             v.PowerLine = IsWaiting(row) ? "" : FrontSuperiority.PowerLine(row.Superiority);
             v.Grade = GradeOf(c, f);
             float stamp = known && d != null ? d.Now : c.Now;

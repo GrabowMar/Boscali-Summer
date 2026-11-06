@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // The footer's resting line: how to use the room on screen, in the order the clicks happen (the latest answer replaces it for a few seconds).
         private static readonly string[] Resting =
         {
-            "Click a track (row or camera bracket) > MARK > TRANSMIT. Click a satellite to RELOCATE it. ENLARGE the camera. Esc closes.",
+            "BUILD PAD > click a held airbase. LAUNCH a satellite on its card. FEED › or a click on a bird opens its DOWNLINK: bracket > MARK > TRANSMIT. Esc closes.",
             "Click a node in reach > HOP. Hold it to blind the SAMs, or BURN it for a strike package. PURGE clears intruders. Esc closes.",
             "Pick a team > pick a target (or click the map for RECON) > click a mission to send it. SWEEP hunts intruders. Esc closes.",
         };
@@ -231,7 +231,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        private static MapFrame Frame()
+        /// <summary>The theatre frame the view projects with (the ORBIT room measures its pad pick in it).</summary>
+        internal static MapFrame Frame()
         {
             Vector2 span = TheaterFrame.Resolve();
             return new MapFrame(span.x, span.y);
@@ -266,6 +267,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 c.Faction = player.HQ != null && player.HQ.faction != null ? player.HQ.faction.factionName : "";
                 c.Callsign = Callsign(player);
                 if (player.HQ != null) for (int k = 0; k < 3; k++) hasBird[k] = manager.HasSpaceBird(player.HQ, (BirdKind)k);
+                // The faction's minute share as FrontBook.ShareTick takes it, read with this peer's share settings (the host's are not on the wire).
+                float funds = player.HQ != null ? player.HQ.factionFunds : 0f;
+                if (manager.Settings != null && float.IsFinite(funds) && funds > 0f)
+                    c.Trickle = Math.Min(funds * FrontRules.ClampShare(manager.Settings.FrontShare.Value), Math.Max(0f, manager.Settings.FrontShareCap.Value));
             }
             return c;
         }

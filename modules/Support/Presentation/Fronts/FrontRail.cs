@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         // Perks.
         private readonly FrontBox perks;
-        private readonly float programmesH, perksH;
+        private readonly float programmesH, perksH, railX, programmesY, perksY;
         private readonly TMP_Text perksHint;
         private readonly PerkRow[] perkRows = new PerkRow[Rungs];
         private int perkShown = -1;
@@ -119,6 +119,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // No radio log: the programmes take every pixel the fixed boxes leave, so each offer gets its second line.
             programmesH = Mathf.Min(ProgrammesMax, height - StatusH - DirectiveH - 212f - 3f * Gap);
             perksH = height - StatusH - DirectiveH - programmesH - 3f * Gap;
+            railX = x; programmesY = cy; perksY = cy + programmesH + Gap;
             programmes = new FrontBox(parent, skin, "Programmes", x, cy, w, programmesH, "PROGRAMMES", AvIcon.Stack2);
             RectTransform pr = programmes.Rect;
             active = new ActiveCard(this, pr, 8f, CardY, w - 16f, CardH);
@@ -179,10 +180,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         }
 
         /// <summary>"25 AP → 75 FUNDS": both sides of the donation, the funds from the current conversion rate.</summary>
-        private static string Pays(int ap) => ap + " AP → " + Mathf.RoundToInt(ap * FrontRules.DonateRate) + " FUNDS";
+        internal static string Pays(int ap) => ap + " AP → " + Mathf.RoundToInt(ap * FrontRules.DonateRate) + " FUNDS";
 
         /// <summary>One chip-in: up to <see cref="Chip"/> AP, never more than the funding bar still needs. 0 when nothing is needed.</summary>
-        private static int ChipFor(int need) => need <= 0 ? 0 : Mathf.Min(Chip, Mathf.CeilToInt(need / FrontRules.DonateRate));
+        internal static int ChipFor(int need) => need <= 0 ? 0 : Mathf.Min(Chip, Mathf.CeilToInt(need / FrontRules.DonateRate));
 
         /// <summary>Seats the one CHIP IN button of a programme: hidden when it needs nothing, greyed when the pilot cannot pay it.</summary>
         private static void PaintChip(AvControl b, int ap, int allocation)
@@ -207,7 +208,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         // ---- Paint ---------------------------------------------------------------------------------------------------
 
         // The host sends a lock holder as printable ASCII, cleaned to 20 then cut to 16 (SpaceWire.Clean, FrontBook.Trim): the local callsign is compared in that form, so a long or non-ASCII name still reads as its own lock.
-        private static bool SameName(string by, string callsign)
+        internal static bool SameName(string by, string callsign)
         {
             if (string.IsNullOrEmpty(by) || callsign == null) return false;
             string mine = Domain.Space.SpaceWire.Clean(callsign, Domain.Space.SpaceReply.MaxClaimant).Trim();
@@ -215,7 +216,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return string.Equals(by, mine, StringComparison.OrdinalIgnoreCase);
         }
 
-        private static string LockWord(bool mine, string by, float left) =>
+        internal static string LockWord(bool mine, string by, float left) =>
             mine ? "HELD BY YOU · " + FrontKit.Clock(left) : "LOCKED · " + (string.IsNullOrEmpty(by) ? "?" : by) + " · " + FrontKit.Clock(left);
 
         /// <summary>The one-line state of the front for the window's title bar: the pilot's skill grade and the superiority band, or words before the host speaks.</summary>
@@ -254,6 +255,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // The two currencies: programme funds and the pilot's own allocation (a donation never edits either figure locally; the mirror repaints them).
             FrontKit.Set(budgetValue, wait ? "—" : r.Budget + " FUNDS", wait ? AvInk.Dim : AvInk.Ink);
             FrontKit.Set(allocValue, v.Allocation + " AP", AvInk.Ink);
+
+            // SPACE's standing orders live on its SATELLITES tab: the rail drops STRATEGY there and lifts the boxes under it (phase E finishes FRONT for every room).
+            bool space = front == Front.Space;
+            if (directive.Rect.gameObject.activeSelf == space)
+            {
+                directive.Rect.gameObject.SetActive(!space);
+                float lift = space ? DirectiveH + Gap : 0f;
+                AvLay.Place(programmes.Rect, railX, programmesY - lift, w, programmesH);
+                AvLay.Place(perks.Rect, railX, perksY - lift, w, perksH);
+            }
 
             // Directive: a lock held by someone else disables the postures here (the host still judges).
             FrontDirective[] set = Postures(front);
@@ -321,7 +332,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             : f == Front.Cyber ? new[] { FrontDirective.Defend, FrontDirective.Balanced, FrontDirective.Attack }
             : new[] { FrontDirective.Recon, FrontDirective.Sabotage, FrontDirective.Hold };
 
-        private static string Describe(Front f, FrontDirective d)
+        internal static string Describe(Front f, FrontDirective d)
         {
             switch (f)
             {

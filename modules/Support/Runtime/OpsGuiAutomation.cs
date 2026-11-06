@@ -176,6 +176,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["selKind"] = Int(Field(room, "selKind"));
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));
+            r["padPick"] = Bool(Field(room, "padPick"));
             if (Field(room, "plate") is FrontMapPlate plate)
             {
                 r["zoom"] = plate.View.Zoom; r["centerU"] = plate.View.Center.x; r["centerV"] = plate.View.Center.y;

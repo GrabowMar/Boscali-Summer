@@ -181,6 +181,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Faction = "", Callsign = "", Dtg = "", Classification = "";
         /// <summary>The local pilot's allocation (what a donation spends).</summary>
         public int Allocation;
+        /// <summary>Funds per minute the share tick should add to this front's budget (0 at the cap or before the host speaks).</summary>
+        public int FundsRate;
         /// <summary>Mission clock (seconds) the lock line counts against.</summary>
         public float Now;
         public FrontRow Row = new FrontRow();
