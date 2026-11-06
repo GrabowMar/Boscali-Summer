@@ -26,7 +26,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         private FrontBox targets;
         private FrontVector listG, fileMarks;
-        private TMP_Text fieldHead, fieldRight, fieldNote, listNote, listHint, listMore, hostHead, hostLine;
+        private TMP_Text fieldHead, fieldRight, fieldNote, listNote, listHint, listMore, emptyHead, guideHead, guideText, hostHead, hostLine;
+        private const float GuideH = 78f;
         private readonly TMP_Text[] fieldL = new TMP_Text[MaxTeams], fieldR = new TMP_Text[MaxTeams];
         private readonly AvControl[] filterChips = new AvControl[5];
         private readonly int[] filterCount = new int[5];
@@ -144,12 +145,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             listNote = FrontKit.Mono(b, "ListNote", CardX + 2f, 0f, cardW - 4f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
             listHint = FrontKit.Mono(b, "ListHint", CardX + 2f, 0f, cardW - 4f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             listMore = FrontKit.Mono(b, "ListMore", CardX + 2f, 0f, cardW - 4f, 14f, 10f, TextAlignmentOptions.MidlineLeft);
+            emptyHead = FrontKit.Mono(b, "EmptyHead", 0f, 0f, 260f, 26f, 12f, TextAlignmentOptions.Midline, true, 2f);
+            guideHead = FrontKit.Mono(b, "GuideHead", CardX + 2f, 0f, cardW - 4f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true, 1f);
+            guideHead.text = "HOW A MISSION GOES";
+            guideText = FrontKit.Mono(b, "GuideText", CardX + 2f, 0f, cardW - 4f, GuideH - 26f, 10.5f, TextAlignmentOptions.TopLeft);
+            guideText.enableWordWrapping = true;
+            guideText.text = "1 · PICK A TARGET HERE OR ON THE MAP, OR CLICK OPEN GROUND FOR AN AREA RECON\n"
+                + "2 · THE NEAREST TEAM THAT CAN GO IS PICKED: ANOTHER IS ONE CLICK AWAY\n"
+                + "3 · SEND: IT MARCHES AT " + Mathf.RoundToInt(SofRules.SpeedMetresPerSecond * 3.6f) + " KM/H, ROLLS ITS ODDS ON SITE, COMES HOME";
             hostHead = FrontKit.Mono(b, "HostHead", SecX + 10f, 0f, 260f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
             hostLine = FrontKit.Mono(b, "HostLine", SecX + 10f, 0f, secW - 20f, 28f, 10.5f, TextAlignmentOptions.TopLeft);
             hostLine.enableWordWrapping = true;
             cardTexts = new[] { fileTab, fileA, fileB, fileC, fileD, fileNote, missionKey, missionNote, teamKey, crewNote, goKey, goIn, helo, sendNote };
             HideCard();
-            skin.Add(() => { fieldRight.color = RoomInk.Khaki; listMore.color = RoomInk.Khaki; });
+            skin.Add(() => { fieldRight.color = RoomInk.Khaki; listMore.color = RoomInk.Khaki; guideHead.color = RoomInk.Gold; guideText.color = RoomInk.Khaki; });
         }
 
         private static TMP_Text Key(RectTransform b, string name, string word)
@@ -286,15 +295,49 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontKit.Set(listMore, "CARDS " + (listScroll + 1) + "-" + (listScroll + shown) + " OF " + listCount + " · WHEEL SCROLLS", RoomInk.Khaki);
                 ry += 16f;
             }
-            string hint = !s.Active ? (s.Meta == FrontViews.NoCamp ? "NO CAMP YET · BUILD ONE ON TEAMS & BASES, THEN TRAIN A TEAM" : "WAITING FOR THE HOST")
-                : s.Targets.Count == 0 && !open ? "NO TARGETS REVEALED · " + (s.Teams.Count > 0 ? ReconHint : "TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND")
-                : listCount == 0 ? "NO TARGET MATCHES " + FilterWord[targetFilter] + " · ALL SHOWS EVERY ONE"
-                : s.HasPoint ? "" : "OR " + ReconHint;
+            bool empty = listCount == 0;
+            string hint = !s.Active ? (s.Meta == FrontViews.NoCamp ? "BUILD A CAMP ON TEAMS & BASES, THEN TRAIN A TEAM" : "THE HOST HAS NOT SPOKEN YET")
+                : s.Targets.Count == 0 ? (s.Teams.Count > 0 ? ReconHint : "TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND")
+                : empty ? "ALL SHOWS EVERY ONE" : s.HasPoint ? "" : "OR " + ReconHint;
+            Show(emptyHead, empty);
+            if (empty)
+            {
+                // An empty card tray: three dashed slots and a label slip pinned over them, what fills it under the slip.
+                for (int i = 0; i < 3; i++)
+                {
+                    float sy = ry + i * (CardH + CardGap);
+                    g.Rect(CardX, sy, cardW, CardH, Paper.Khaki.WithAlpha(0.08f)); // a tint (alpha under 0.2), not a ground
+                    Hand.DashRect(g, CardX + 0.5f, sy + 0.5f, cardW - 1f, CardH - 1f, 1f, Paper.Khaki.WithAlpha(0.5f));
+                }
+                const float sw = 300f;
+                float sx = CardX + (cardW - sw) * 0.5f, slipY = ry + (3f * (CardH + CardGap) - 26f) * 0.5f;
+                g.Rect(sx + 2f, slipY + 2f, sw, 26f, Paper.Shadow);
+                g.Rect(sx, slipY, sw, 26f, Paper.Card);
+                g.Frame(sx, slipY, sw, 26f, 1f, Paper.CardEdge);
+                Hand.Pin(g, new Vector2(sx + 11f, slipY + 13f), 3.6f, Paper.Grease);
+                Put(emptyHead.rectTransform, sx + 20f, slipY, sw - 24f, 26f);
+                FrontKit.Set(emptyHead, !s.Active ? (s.Meta == FrontViews.NoCamp ? "NO CAMP YET" : "WAITING FOR THE HOST")
+                    : s.Targets.Count == 0 ? "NO TARGETS REVEALED" : "NONE UNDER " + FilterWord[targetFilter], Paper.Pen);
+                ry += 3f * (CardH + CardGap) + 2f;
+            }
             Show(listHint, hint.Length > 0 && ry + 18f <= bottom);
             if (hint.Length > 0)
             {
                 Put(listHint.rectTransform, CardX + 2f, ry + 2f, cardW - 4f, 16f);
-                FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, cardW - 4f), s.Active && s.Targets.Count > 0 ? RoomInk.Khaki : RoomInk.Gold);
+                listHint.alignment = empty ? TextAlignmentOptions.Midline : TextAlignmentOptions.MidlineLeft;
+                FrontKit.Set(listHint, C2Kit.FitTo(listHint, hint, cardW - 4f), empty ? RoomInk.Gold : RoomInk.Khaki);
+                ry += 20f;
+            }
+
+            // How a mission goes, in the room the list leaves at the foot of the well.
+            float guideY = bottom - GuideH - 4f;
+            bool guide = s.Active && !open && ry + 8f <= guideY;
+            Show(guideHead, guide); Show(guideText, guide);
+            if (guide)
+            {
+                g.Rect(CardX, guideY, cardW, 1f, RoomInk.Gold.WithAlpha(0.35f));
+                Put(guideHead.rectTransform, CardX + 2f, guideY + 6f, cardW - 4f, 16f);
+                Put(guideText.rectTransform, CardX + 2f, guideY + 24f, cardW - 4f, GuideH - 26f);
             }
 
             PaintHostiles(s, g, hostY, secW);

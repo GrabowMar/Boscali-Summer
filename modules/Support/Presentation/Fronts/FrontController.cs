@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             "BUILD PAD > click a held airbase. LAUNCH a satellite on its card. FEED › or a click on a bird opens its DOWNLINK: click a box, then SEND TO TASKED. Esc closes.",
             "BUILD DATA CENTER > click a held airbase. DEPLOY TRUCK > click near it. On NODES: a node in reach > HOP, then hold it or BURN it. Esc closes.",
-            "BUILD CAMP > click ground you hold. TRAIN a team. Pick a team, then a target on TARGETS (or click open ground for RECON) and press a mission. SWEEP hunts intruders. Esc closes.",
+            "BUILD CAMP > click ground you hold. TRAIN a team. Pick a target on TARGETS (or click open ground for RECON): the nearest ready team is picked, SEND sends it. SWEEP hunts intruders. Esc closes.",
         };
 
         private SupportManager manager;

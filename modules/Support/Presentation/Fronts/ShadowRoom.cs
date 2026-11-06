@@ -49,6 +49,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly Image[] teamHits = new Image[MaxTeams];
         private readonly int[] hitSlots = new int[MaxTeams], hitTargets = new int[MaxTargets];
         private readonly Image[] targetHits = new Image[MaxTargets];
+        private readonly Vector2[] hitAt = new Vector2[MaxTargets];
         // Each team's drawn point this paint (stepped aside off a marker already there); TeamStep clears a 34 px team hit beside a 30 px target or team hit.
         private readonly Vector2[] teamAt = new Vector2[MaxTeams];
         private const float TeamStep = 36f;
@@ -649,18 +650,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // Revealed targets: one hit region each (the list beside the map reaches every one, even when a cluster stacks them here),
             // each ringed twice in china marker (a resisted one in faded ink, an exploit one with an amber third ring).
-            for (int i = 0; i < MaxTargets; i++) if (i >= s.Targets.Count) targetHits[i].gameObject.SetActive(false);
+            // One hit per spot, the picked target's first: in a cluster (the buildings of an airbase) only one takes the map's click, the list reaches the rest
+            // and a zoom pulls them apart.
+            int placed = 0;
+            for (int pass = 0; pass < 2; pass++)
+                for (int i = 0; i < MaxTargets; i++)
+                {
+                    if (i >= s.Targets.Count) { if (pass == 0) Show(targetHits[i], false); continue; }
+                    if (s.Targets[i].Selected != (pass == 0)) continue;
+                    Vector2 p = P(s.Targets[i].X, s.Targets[i].Y);
+                    bool on = hits && plate.Shown(p, 10f);
+                    for (int j = 0; j < placed && on; j++) on = Mathf.Abs(hitAt[j].x - p.x) >= 30f || Mathf.Abs(hitAt[j].y - p.y) >= 30f;
+                    Show(targetHits[i], on);
+                    if (!on) continue;
+                    hitTargets[i] = s.Targets[i].Id;
+                    hitAt[placed++] = p;
+                    AvLay.Place(targetHits[i].rectTransform, p.x - 15f, p.y - 15f, 30f, 30f);
+                }
             for (int i = 0; i < s.Targets.Count; i++)
             {
                 SofTargetView t = s.Targets[i];
                 Vector2 p = P(t.X, t.Y);
-                if (i < MaxTargets && !plate.Shown(p, 10f)) targetHits[i].gameObject.SetActive(false);
-                else if (i < MaxTargets)
-                {
-                    targetHits[i].gameObject.SetActive(hits);
-                    hitTargets[i] = t.Id;
-                    AvLay.Place(targetHits[i].rectTransform, p.x - 15f, p.y - 15f, 30f, 30f);
-                }
                 Color k = t.Resisted ? dim : foe;
                 g.Disc(p, 11f, AvInk.Ground.WithAlpha(0.85f), 18);
                 TargetGlyph(g, t.Kind, p, 7f, k);
