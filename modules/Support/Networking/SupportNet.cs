@@ -132,6 +132,11 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// the CyberStateMessage carries the enemy holds on the faction's own network (kind and point) and its PURGE clock, and a held node row says the victim is purging it; SOF outcomes 23..25,
         /// the SofStateMessage carries its SWEEP clock, each enemy row says whether it was detected near the faction's own sites and whether a QRF hunts it, and an own team row says it is hunted.
         /// Protocol 43 (OPS M1) removes front READINESS: the FRONTS row loses its readiness byte, programme 0 and the outcomes 11 / 14 and result 136 are retired; perks unlock by the pilot's skill grade.
+        /// Protocol 44 (organic fronts phase A) starts every room empty and builds it from the queue: each FRONTS queue row carries its row id (2 bytes) and a flags byte (has point, waiting,
+        /// satellite kind 0..2, owner 0 = faction pool) with the placed point when it has one, and each front carries its superiority terms byte (2 bits a term: even, ahead, behind).
+        /// FrontQueue and FrontDonate take two ints: { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic placement) } and { front | row &lt;&lt; 2, allocation amount }.
+        /// One SpaceCommand kind, TruckMove = 29 (a truck slot and a packed point). The OpsStateMessage adds BirdsLaunched (bit per own bird launched this scene), and a CYBER anchor's
+        /// health field reads 3 for a truck packing up.
         /// </summary>
         internal const byte ProtocolVersion = 44;
 

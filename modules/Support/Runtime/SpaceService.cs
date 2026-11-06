@@ -166,16 +166,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// Host: can a pad be built (at the picked point when <paramref name="hasPoint"/>)? A slot must be free (never built or destroyed); a picked point must lie
-        /// within <see cref="FrontRules.PadPickMetres"/> of a held airbase or own carrier; without a point any held airbase or carrier will do. Spawns nothing.
+        /// within <see cref="FrontRules.PadPickMetres"/> of a held airbase or own carrier. Without a point anything the faction holds or fields will do: <see cref="RearSite"/>
+        /// tries held airbases, then a carrier, then ground near an own unit's start (spec 4.5 fallback), and a completion that finds no spot fails NO SPOT and backs off.
+        /// Spawns nothing; reads only the pads' health (no observation tick).
         /// </summary>
         internal FrontOutcome CheckPad(FactionHQ owner, bool hasPoint, float x, float z)
         {
             if (owner == null || !factions.TryGetValue(owner, out FactionSpace faction)) return FrontOutcome.Unavailable;
-            Refresh(owner, faction, SupportManager.MissionNow());
+            RefreshPads(owner, faction, SupportManager.MissionNow());
             if (FreeSlot(faction) < 0) return FrontOutcome.UplinksMax;
+            if (!hasPoint) return AnyFoothold(owner) ? FrontOutcome.None : FrontOutcome.NoSite;
             CollectHeld(owner, faction);
-            if (hasPoint) return FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: true) >= 0 ? FrontOutcome.None : FrontOutcome.NotHeld;
-            return heldBases.Count > 0 ? FrontOutcome.None : FrontOutcome.NoSite;
+            return FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: true) >= 0 ? FrontOutcome.None : FrontOutcome.NotHeld;
+        }
+
+        /// <summary>A held land airbase or any live own unit (a carrier, or a start position <see cref="RearSite"/> can build near). Stops at the first.</summary>
+        private static bool AnyFoothold(FactionHQ owner)
+        {
+            if (FactionRegistry.airbaseLookup != null)
+                foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+                    if (a != null && !a.disabled && !a.AttachedAirbase && a.CurrentHQ == owner && a.center != null) return true;
+            List<Unit> units = UnitRegistry.allUnits;
+            for (int i = 0; units != null && i < units.Count && i < MaximumScanUnits; i++)
+                if (units[i] != null && !units[i].disabled && units[i].NetworkHQ == owner) return true;
+            return false;
         }
 
         /// <summary>
@@ -199,7 +213,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 else if (site is Airbase airbase && TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot, requireRear: false))
                     spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out made);
             }
-            else made = RearSite(owner, slot, diagonal);
+            else
+            {
+                CollectHeld(owner, faction); // CheckPad fills the scratch only for a picked point
+                made = RearSite(owner, slot, diagonal);
+            }
             if (made == null) { why = FrontOutcome.NoSpot; return false; }
             faction.Links[slot] = made;
             faction.Baseline[slot] = UplinkSpawner.Health(made);
@@ -643,6 +661,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private static void Refresh(FactionHQ owner, FactionSpace faction, float now)
         {
             faction.Observations?.Tick(now);
+            RefreshPads(owner, faction, now);
+        }
+
+        private static void RefreshPads(FactionHQ owner, FactionSpace faction, float now)
+        {
             for (int i = 0; i < faction.Links.Length; i++)
             {
                 if (!faction.State.PadPresent(i)) continue; // a slot never built has no site to read

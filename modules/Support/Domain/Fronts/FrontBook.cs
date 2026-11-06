@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public byte Kind, Owner;
         public bool HasPoint;
         public float X, Z;
-        /// <summary>Not started and its prerequisite is not live yet (refreshed by Tick).</summary>
+        /// <summary>Not started and its prerequisite is not live yet (set at Enqueue, refreshed by Tick).</summary>
         public bool Waiting;
         /// <summary>Mission second the build ends, or -1 while it is not started.</summary>
         public float BuildEnd = -1f;
@@ -131,6 +131,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return moved;
         }
 
+        /// <summary>The cap is hard (ruling R22): every budget above <see cref="FrontRules.BudgetCap"/> is cut back to it. Returns the total cut, for the host to give back to the faction treasury.</summary>
+        public float TrimToCap()
+        {
+            float excess = 0f;
+            foreach (FrontSide s in sides)
+            {
+                if (!(s.Budget > FrontRules.BudgetCap)) continue;
+                excess += s.Budget - FrontRules.BudgetCap;
+                s.Budget = FrontRules.BudgetCap;
+            }
+            return excess;
+        }
+
         public DonateResult Donate(Front f, ushort row, float amount) => Donate(Find(sides[(int)f], row), amount);
 
         private static DonateResult Donate(FrontProgrammeEntry e, float amount)
@@ -170,8 +183,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             FrontSide s = sides[(int)f];
             s.Queue.Add(new FrontProgrammeEntry
             {
-                Id = id, Cost = FrontRules.Cost(id, CostScale), Build = FrontRules.BuildSeconds(id), Row = nextRow, Kind = kind, Owner = owner,
-                HasPoint = hasPoint && float.IsFinite(x) && float.IsFinite(z), X = x, Z = z
+                // Kind means something only on a satellite (RefusalCode bounds it to 0..2 there); anything else stores 0, so the mirror's kind bits always read back.
+                Id = id, Cost = FrontRules.Cost(id, CostScale), Build = FrontRules.BuildSeconds(id), Row = nextRow, Kind = id == ProgrammeId.LaunchSatellite ? kind : (byte)0, Owner = owner,
+                HasPoint = hasPoint && float.IsFinite(x) && float.IsFinite(z), X = x, Z = z,
+                Waiting = !FrontLadder.Ready(id, w) // the mirror shows WAITS from the first snapshot, not from the next Tick
             });
             if (++nextRow == 0) nextRow = 1;
             if (human) LastHumanQueue[(int)f] = now;

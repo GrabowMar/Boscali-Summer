@@ -50,6 +50,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public float NextAiAsat;
             /// <summary>[front, programme]: the quartermaster skips this automatic step until this mission second (it found no room; ruling R20).</summary>
             public readonly float[,] BlockedUntil = new float[FrontRules.FrontCount, FrontRules.Programmes.Length];
+            /// <summary>Unscaled time this faction's next tick-failure warning may be logged.</summary>
+            public float NextWarning;
         }
 
         private const float AiAsatSpacingSeconds = 1200f;
@@ -222,8 +224,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionFront f in order)
             {
                 if (f.Owner == null) continue;
-                Quartermaster(f, now);
-                foreach (FrontEvent e in f.Book.Tick(now, f.World)) Apply(f, e, now);
+                // One faction's fault must not stall the factions after it (Apply already guards each effect).
+                try
+                {
+                    Quartermaster(f, now);
+                    foreach (FrontEvent e in f.Book.Tick(now, f.World)) Apply(f, e, now);
+                    float excess = f.Book.TrimToCap(); // ruling R22: refunds and SIPHON never leave a budget above the cap past this tick
+                    if (excess > 0f) f.Owner.AddFunds(excess);
+                }
+                catch (Exception ex)
+                {
+                    if (Time.unscaledTime >= f.NextWarning) { f.NextWarning = Time.unscaledTime + 10f; Plugin.Logger?.LogWarning("[Support.Fronts] " + f.Owner.name + " tick failed: " + ex.Message); }
+                }
             }
             Superiority(now);
         }
@@ -295,8 +307,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// The quartermaster (organic fronts 4.6): a human front idle for 180 s with an empty queue climbs its ladder by one step at the automatic spot; a faction with no humans does so
-        /// whenever a front's queue is empty. Owner 0 (the pool), never a human queue. A step the service cannot place now (no held airbase) or that is backing off after finding no room
-        /// (<see cref="BlockedSeconds"/>) is not queued: a human front waits (it never jumps to a later step that needs this one), an AI front follows its doctrine instead
+        /// whenever a front's queue is empty. Owner 0 (the pool), never a human queue. A step the service cannot place now, or that is backing off after finding no room at queue time or
+        /// at completion (<see cref="BlockedSeconds"/>), is not queued: a human front waits (it never jumps to a later step that needs this one), an AI front follows its doctrine instead
         /// (<see cref="FrontAi.Doctrine"/>: ASAT, ZERO-DAY, FOB), as it does with the ladder complete; a doctrine build backing off is skipped the same way.
         /// </summary>
         private void Quartermaster(FactionFront f, float now)
@@ -559,13 +571,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// One build onto a front's queue (Queued, or the refusal; nothing is paid on a refusal): the book's dry check first (queue room, the ladder counting queued rows), then the
-        /// service's placement rule, then the book takes it. Owner 0: the faction pool. <paramref name="human"/> restarts the front's quartermaster clock.
+        /// service's placement rule, then the book takes it. Owner 0: the faction pool. <paramref name="human"/> restarts the front's quartermaster clock. An automatic (quartermaster / AI)
+        /// build the service finds no room for now backs off <see cref="BlockedSeconds"/> like one that failed at completion; a human queue never does.
         /// </summary>
         private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now)
         {
+            if (id != ProgrammeId.LaunchSatellite) kind = 0; // a client's kind bits on any other row would ride the mirror and fail every reader's kind check
             FrontOutcome r = f.Book.RefusalCode(front, id, kind, f.World);
             if (r == FrontOutcome.None) r = Placement(f.Owner, f.Book.Side(front), id, hasPoint, x, z);
             if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, f.World, now);
+            if (!human && (r == FrontOutcome.NoSpot || r == FrontOutcome.NoSite || r == FrontOutcome.NotHeld)) f.BlockedUntil[(int)front, (int)id] = now + BlockedSeconds;
             return r == FrontOutcome.None ? FrontOutcome.Queued : r;
         }
 
