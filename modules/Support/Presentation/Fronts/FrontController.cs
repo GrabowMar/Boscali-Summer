@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             "BUILD PAD > click a held airbase. LAUNCH a satellite on its card. FEED › or a click on a bird opens its DOWNLINK: click a box, then SEND TO TASKED. Esc closes.",
             "BUILD DATA CENTER > click a held airbase. DEPLOY TRUCK > click near it. On NODES: a node in reach > HOP, then hold it or BURN it. Esc closes.",
-            "Pick a team > pick a target (or click the map for RECON) > click a mission to send it. SWEEP hunts intruders. Esc closes.",
+            "BUILD CAMP > click ground you hold. TRAIN a team. Pick a team, then a target on TARGETS (or click open ground for RECON) and press a mission. SWEEP hunts intruders. Esc closes.",
         };
 
         private SupportManager manager;
@@ -145,7 +145,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
             ShadowRoomView sof = view.Shadow;
-            sof.HasDraft = false; sof.DraftMission = MissionKind.None; sof.Reason = "";
+            sof.HasDraft = false; sof.Reason = "";
             sof.History.Clear(); sof.LastSeq = 0;
             NetworkRoomView net = view.Network;
             net.History.Clear(); net.LastSeq = 0; // another faction's (or scene's) session log must not be prefixed to the new one's
@@ -229,7 +229,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     }
                     break;
                 default:
-                    FrontViews.Shadow(view.Shadow, manager.SofMirror.State, manager.SofMirror.Known, manager.CyberMirror.Known ? manager.CyberMirror.State : null, c.Frame, selectedTeam, selectedTarget, now);
+                    FrontViews.Shadow(view, c, manager.SofMirror.State, manager.SofMirror.Known, manager.CyberMirror.Known ? manager.CyberMirror.State : null, selectedTeam, selectedTarget);
                     if (view.Shadow.Active) { selectedTeam = view.Shadow.SelectedSlot; selectedTarget = view.Shadow.SelectedTargetId; }
                     break;
             }
@@ -258,6 +258,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             };
             c.WorldKnown = FrontViews.World(current, manager.OpsMirror.Known && ops.Active ? ops : null, manager.CyberMirror.Known ? manager.CyberMirror.State : null,
                 manager.SofMirror.Known ? manager.SofMirror.State : null, now, out c.World);
+            if (c.World.FobUp) foreach (OpsRow r in ops.Rows) if (r.Domain == OpDomain.Sof && r.Kind == OpKind.Fob && r.State == OpState.Done && r.EndsAt > c.FobUntil) c.FobUntil = r.EndsAt;
             if (c.EnemyKnown)
             {
                 for (int k = 0; k < 3; k++) { geoOwn[k] = ops.Geo[k]; geoFoe[k] = ops.Geo[3 + k]; }
@@ -454,7 +455,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             else if (!have) { Say("NEGATIVE: PICK A TARGET FIRST", AvState.Danger); return; }
             else sent = Sent(Front.Sof, manager.SofMission(slot, kind, targetId, 0f, 0f), "NO HOST LINK", SpaceCommandKind.SofMission, SofWords.Kind(kind));
-            if (sent) { view.Shadow.HasDraft = false; view.Shadow.DraftMission = MissionKind.None; } // one press, one order; a refused press keeps the reviewed draft
+            if (sent) view.Shadow.HasDraft = false; // one press, one order: the RECON point goes with it
         }
 
         /// <summary>An order names a team that must still be on the roster and not be commanded by another operator; a press never reaches a different team, and a vanished one drops the draft.</summary>
@@ -467,7 +468,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Say("NEGATIVE: " + SofRules.Callsign(slot) + " IS COMMANDED BY " + t.Controller, AvState.Danger);
                 return false;
             }
-            view.Shadow.DraftMission = MissionKind.None;
             Say("NEGATIVE: " + SofRules.Callsign(slot) + " IS NOT ON THE ROSTER", AvState.Danger);
             return false;
         }

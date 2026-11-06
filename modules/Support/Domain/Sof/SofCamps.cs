@@ -21,6 +21,32 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         /// <summary>A damaged camp raises teams 1.5x slower; a down camp raises none; teams already in the field carry on.</summary>
         public static float RaiseFactor(AnchorHealth health) => health == AnchorHealth.Damaged ? RaiseDamagedFactor : 1f;
+
+        /// <summary>
+        /// Each team's home camp as the TEAMS &amp; BASES tab words it (ruling D-R4; the wire carries no team-to-camp link): teams in slot order each take the
+        /// nearest standing camp (index into <paramref name="camps"/>) that still has room for <see cref="Fronts.FrontRules.TeamsPerBase"/>. A lost team, or one
+        /// no standing camp has room for (the FOB's share), gets -1. <paramref name="home"/> is indexed by slot.
+        /// </summary>
+        public static void Homes(List<SofCampRow> camps, List<SofTeamRow> teams, int[] home)
+        {
+            var held = new int[camps.Count];
+            for (int slot = 0; slot < home.Length; slot++)
+            {
+                home[slot] = -1;
+                foreach (SofTeamRow t in teams)
+                {
+                    if (t.Slot != slot || t.State == TeamState.Lost) continue;
+                    float bestD = float.MaxValue;
+                    for (int c = 0; c < camps.Count; c++)
+                    {
+                        if (camps[c].Health == AnchorHealth.Down || held[c] >= Fronts.FrontRules.TeamsPerBase) continue;
+                        float d = SofRules.Distance(t.X, t.Z, camps[c].X, camps[c].Z);
+                        if (d < bestD) { bestD = d; home[slot] = c; }
+                    }
+                    if (home[slot] >= 0) held[home[slot]]++;
+                }
+            }
+        }
     }
 
     /// <summary>One faction's SOF camps: health, position, grace and the restore bar. Pure state the host runtime measures into.</summary>

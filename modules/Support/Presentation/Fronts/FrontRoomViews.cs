@@ -177,11 +177,35 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Meta = "";
     }
 
+    /// <summary>
+    /// One camp card, by host slot (CAMP-1 is slot 0): standing, damaged or lost (the SOF mirror, which lists camps in slot order), or building (a queued CAMP row in
+    /// the slot the host builds into, which takes over a lost card there: Row, Progress and BuildLeft come from it).
+    /// </summary>
     internal struct SofCampView
     {
+        public int Slot;
+        /// <summary>Map point (0..1, y down); -1 for a queued camp with automatic placement.</summary>
         public float X, Y;
         public AnchorHealth Health;
+        public InfraState State;
         public string Name;
+        /// <summary>The airbase short name it stands by, a grid, or AUTO PLACE.</summary>
+        public string Place;
+        /// <summary>"HOLDS A-1, A-2 · FULL" / "ROOM FOR 2 TEAMS" (derived: <see cref="CampRules.Homes"/>); "" for a building or lost camp.</summary>
+        public string Holds;
+        public ushort Row;
+        public float Progress;
+        public int BuildLeft;
+    }
+
+    /// <summary>The FOB card (ruling D-R3: its place is not mirrored): UP with the time left, building or funding (a queued FOB row), NOT BUILT, or NEEDS A SEIZED BUILDING.</summary>
+    internal struct SofFobView
+    {
+        public string State, Note;
+        public AvState Tone;
+        public bool Up, Queued;
+        public ushort Row;
+        public float Progress;
     }
 
     internal struct SofTeamView
@@ -192,6 +216,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Codename;
         /// <summary>Who commands the team (<see cref="SofPageWords.Control"/>: YOU, CTRL name, AUTO) and the stamp word of its state (STANDBY, TASKED, PINNED ...).</summary>
         public string Control, Stamp;
+        /// <summary>The camp it calls home (ruling D-R4: "AT CAMP-1" while ready there, "HOME CAMP-2" out in the field, "NO CAMP").</summary>
+        public string Home;
         public AvState Tone;
         public float X, Y, DestX, DestY, TargetX, TargetY;
         public bool HasDest, Lasing, Wounded, Selected, Present;
@@ -199,6 +225,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public bool Locked;
         public byte Exposure, Ammo, Odds;
         public bool Helicopter;
+        /// <summary>PUSH, HOLD, EXFIL, LIFT as bits 0..3 (<see cref="IFrontActions.TeamOrder"/>'s verbs): which the host would take now, and which toggles are on.</summary>
+        public byte VerbOn, VerbOnLatched;
+        /// <summary>What the verbs mean for this team now, or why there are none (LIFT: the team waits for a pilot's helicopter, +20 odds once carried).</summary>
+        public string VerbNote;
+        /// <summary>A queued TRAIN TEAM row (Present false) in the slot the host raises it into: funding or building, with its row for CHIP IN.</summary>
+        public bool Training, Building;
+        public ushort Row;
+        public float Progress;
+        public int BuildLeft;
     }
 
     internal struct SofTargetView
@@ -214,6 +249,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
     internal struct SofHeldView
     {
+        /// <summary>The host's held-building id (the FOB pick snaps to it).</summary>
+        public int Id;
         public float X, Y, SecondsLeft;
         public string Name;
     }
@@ -222,14 +259,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     {
         public MissionKind Kind;
         public string Name, Cost, Odds, Note;
-        /// <summary>Allowed: the selected team could be sent now. Pick: the mission may be drafted (a team is picked and no other operator commands it). Drafted: it is the draft. Current: best fit for the picked target.</summary>
-        public bool Allowed, Pick, Drafted, Exploit, Current;
+        /// <summary>Allowed: the selected team could be sent now. Current: best fit for the picked target.</summary>
+        public bool Allowed, Exploit, Current;
     }
 
     internal sealed class ShadowRoomView
     {
         public bool Active;
-        public readonly List<SofCampView> Camps = new List<SofCampView>(3);
+        /// <summary>Camp cards by host slot (standing, lost and queued); the map pins the ones with a point that are not building (those are <see cref="Ghosts"/>).</summary>
+        public readonly List<SofCampView> Camps = new List<SofCampView>(CampRules.MaxCamps);
+        /// <summary>Queued camps and a queued FOB with a map point ("CAMP-2 · OPAL · 0:51"; Kind 0 camp, 1 FOB).</summary>
+        public readonly List<MapGhostView> Ghosts = new List<MapGhostView>(FrontRules.MaxQueue);
+        public SofFobView Fob;
+        /// <summary>Standing camps and fielded teams (a lost one excluded), for the section heads.</summary>
+        public int CampsUp, TeamsUp;
+        /// <summary>Every team on the roster (bug 7: one beyond the cap stays), then each queued TRAIN TEAM row as a card in the slot it will take.</summary>
         public readonly List<SofTeamView> Teams = new List<SofTeamView>(4);
         public readonly List<SofTargetView> Targets = new List<SofTargetView>(SofWire.MaxTargets);
         public readonly List<SofHeldView> Held = new List<SofHeldView>(4);
@@ -245,30 +289,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public int SelectedSlot = -1;
         public int SelectedTargetId;
         public readonly List<SofMissionView> Missions = new List<SofMissionView>(5);
-        /// <summary>PUSH, HOLD, EXFIL, LIFT: whether each may be pressed, and whether PUSH/HOLD is on.</summary>
-        public readonly bool[] OrderOn = new bool[4], OrderLatched = new bool[4];
         public string Meta = "";
-        /// <summary>The operator's draft RECON point: a click on the room's own map (map u,v in 0..1, y down) and its id for <see cref="IFrontActions.TeamMission"/>.
+        /// <summary>The operator's RECON point: a click on the room's own map (map u,v in 0..1, y down) and its id for <see cref="IFrontActions.TeamMission"/>.
         /// Local state: the room writes it, the controller clears it once the order is sent.</summary>
         public bool HasDraft;
         public float DraftU, DraftV;
         public int DraftId;
-        /// <summary>The mission the operator drafted (None = nothing). Local like the point: the room writes it, ISSUE sends it, the controller clears it once sent.</summary>
-        public MissionKind DraftMission;
-        /// <summary>Why a draft or pick was dropped (a team left the roster, a target left the list); the room clears it on the operator's next pick.</summary>
+        /// <summary>Why a pick was dropped (a team left the roster, a target left the list); the room clears it on the operator's next pick.</summary>
         public string Reason = "";
 
-        // The order composer, one worded line per step (TEAM, MISSION rows above, AIM, QUOTE, ISSUE) and the movement caption.
-        public string TeamLine = "", AimLine = "", AimNote = "", QuoteLine = "", QuoteNote = "", IssueLabel = "ISSUE ORDER", IssueNote = "", ExfilLabel = "EXFIL", ExfilNote = "";
-        public AvState TeamTone, AimTone, QuoteTone, IssueTone;
-        public bool CanIssue;
+        /// <summary>The picked team in one line, and the one next step (or why the missions are dark) under the TARGETS tab's mission strip.</summary>
+        public string TeamLine = "", IssueNote = "";
+        public AvState IssueTone;
         /// <summary>The picked target's file card: the tab word and four worded lines (kind, grid and best mission, who is tasked on it, what its tag means).</summary>
         public string FileTab = "", FileA = "", FileB = "", FileC = "", FileD = "";
 
-        // The roster's warning strip: the worst team (lost, pinned, low on ammo), whether a team is raised at all, and the events kept across refreshes.
-        public int WarnSlot = -1;
-        public string WarnText = "";
-        public AvState WarnTone;
         public const int MaxHistory = 8;
         public readonly List<FrontLogLine> History = new List<FrontLogLine>(MaxHistory);
         public int LastSeq;

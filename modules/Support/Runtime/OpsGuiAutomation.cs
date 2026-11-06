@@ -201,6 +201,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 // 1 a session runs; 2 nothing in reach to hop and the picked enemy node (if any) says why it is blocked; 0 a node in reach but no session
                 r["hopCase"] = nw.HasIntrusion ? 1 : inReach == 0 && (nw.SelectedId <= 0 || (nw.Dossier.Next ?? "").StartsWith("BLOCKED", System.StringComparison.Ordinal)) ? 2 : 0;
                 r["netEnemy"] = nw.Nodes.Count - own;
+                ShadowRoomView sv = lv.Shadow;
+                int campsQueued = 0;
+                foreach (SofCampView c in sv.Camps) if (c.State == InfraState.Building) campsQueued++;
+                string teams = "";
+                foreach (SofTeamView t in sv.Teams) teams += (teams.Length > 0 ? "," : "") + t.Callsign + " " + (t.Training ? "TRAINING" : t.State) + " v" + t.VerbOn + "/" + t.VerbOnLatched;
+                r["sofActive"] = sv.Active ? 1 : 0; r["sofCamps"] = sv.CampsUp; r["sofCampsQueued"] = campsQueued; r["sofGhosts"] = sv.Ghosts.Count; r["sofTeams"] = sv.TeamsUp;
+                r["sofCards"] = sv.Teams.Count; r["sofTeamList"] = teams; r["sofHeld"] = sv.Held.Count; r["sofFob"] = sv.Fob.State ?? "";
                 if (Field(window, "tabOf") is int[] tabs && (int)lv.Front < tabs.Length) r["tab"] = tabs[(int)lv.Front];
             }
             object room = Room(window);
@@ -237,16 +244,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// The map point a gesture aims at: <c>u</c>, <c>v</c>; with <c>at: "center"</c> the middle of the current view (always on screen, whatever the zoom and pan);
-        /// with <c>at: "base"</c> our first held airbase, <c>at: "dc"</c> / <c>"truck"</c> our first standing data center / EW truck, each moved <c>east_km</c> / <c>north_km</c> on the ground.
+        /// with <c>at: "base"</c> / <c>"foe"</c> our / the enemy's first airbase, <c>at: "dc"</c> / <c>"truck"</c> our first standing data center / EW truck, <c>"camp"</c> / <c>"held"</c> our first standing camp / held building, each moved <c>east_km</c> / <c>north_km</c> on the ground.
         /// </summary>
         private static Vector2 Aim(OpsFrontWindow window, Dictionary<string, object> args)
         {
             string at = Text(args, "at");
             if (at == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
-            if ((at == "base" || at == "dc" || at == "truck") && Field(window, "lastView") is FrontRoomView v)
+            if ((at == "base" || at == "foe" || at == "dc" || at == "truck" || at == "camp" || at == "held") && Field(window, "lastView") is FrontRoomView v)
             {
                 Vector2 p = new Vector2(-1f, -1f);
-                if (at == "base") { foreach (MapAirbaseView a in v.Airbases) if (a.Side == AirbaseSide.Own) { p = new Vector2(a.U, a.V); break; } }
+                if (at == "base" || at == "foe") { foreach (MapAirbaseView a in v.Airbases) if (a.Side == (at == "base" ? AirbaseSide.Own : AirbaseSide.Enemy)) { p = new Vector2(a.U, a.V); break; } }
+                else if (at == "camp") { foreach (SofCampView c in v.Shadow.Camps) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.X, c.Y); break; } }
+                else if (at == "held") { if (v.Shadow.Held.Count > 0) p = new Vector2(v.Shadow.Held[0].X, v.Shadow.Held[0].Y); }
                 else if (at == "dc") { foreach (InfraCenterView c in v.Network.Centers) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.U, c.V); break; } }
                 else foreach (InfraTruckView t in v.Network.Trucks) if (t.State == InfraState.Up || t.State == InfraState.Damaged) { p = new Vector2(t.U, t.V); break; }
                 if (p.x >= 0f)
