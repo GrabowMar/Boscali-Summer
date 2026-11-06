@@ -30,25 +30,49 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             public AnchorHealth Health = AnchorHealth.Live;
             public float X, Z, DownSince = -1f;
-            public bool HasPosition;
+            public bool HasPosition, Placed;
         }
 
         private readonly Slot[] slots;
 
-        public SofCampSet(int camps)
+        /// <summary>Slots start unplaced: a camp exists only once <see cref="Place"/> (or <see cref="SetPosition"/>) is called.</summary>
+        public SofCampSet(int capacity)
         {
-            slots = new Slot[Math.Clamp(camps, 0, CampRules.MaxCamps)];
+            slots = new Slot[Math.Clamp(capacity, 0, CampRules.MaxCamps)];
             for (int i = 0; i < slots.Length; i++) slots[i] = new Slot();
         }
 
-        public int Count => slots.Length;
+        public int Capacity => slots.Length;
 
-        public AnchorHealth Health(int index) => index >= 0 && index < slots.Length ? slots[index].Health : AnchorHealth.Down;
+        /// <summary>Placed camps.</summary>
+        public int Count
+        {
+            get { int n = 0; for (int i = 0; i < slots.Length; i++) if (slots[i].Placed) n++; return n; }
+        }
+
+        public bool Placed(int i) => i >= 0 && i < slots.Length && slots[i].Placed;
+
+        /// <summary>A camp stands in this slot: live, at (x, z).</summary>
+        public void Place(int i, float x, float z)
+        {
+            if (i < 0 || i >= slots.Length) return;
+            Slot s = slots[i];
+            s.Health = AnchorHealth.Live; s.DownSince = -1f; s.X = x; s.Z = z; s.HasPosition = s.Placed = true;
+        }
+
+        /// <summary>First unplaced or down slot (where the next camp goes), else -1.</summary>
+        public int FreeSlot()
+        {
+            for (int i = 0; i < slots.Length; i++) if (!slots[i].Placed || slots[i].Health == AnchorHealth.Down) return i;
+            return -1;
+        }
+
+        public AnchorHealth Health(int index) => index >= 0 && index < slots.Length && slots[index].Placed ? slots[index].Health : AnchorHealth.Down;
 
         public int LiveCount()
         {
             int n = 0;
-            for (int i = 0; i < slots.Length; i++) if (slots[i].Health != AnchorHealth.Down) n++;
+            for (int i = 0; i < slots.Length; i++) if (slots[i].Placed && slots[i].Health != AnchorHealth.Down) n++;
             return n;
         }
 
@@ -66,7 +90,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public void SetPosition(int index, float x, float z)
         {
             if (index < 0 || index >= slots.Length) return;
-            slots[index].X = x; slots[index].Z = z; slots[index].HasPosition = true;
+            slots[index].X = x; slots[index].Z = z; slots[index].HasPosition = slots[index].Placed = true;
         }
 
         public bool TryPosition(int index, out float x, out float z)
@@ -117,7 +141,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         public void Clear()
         {
-            for (int i = 0; i < slots.Length; i++) { slots[i].Health = AnchorHealth.Live; slots[i].DownSince = -1f; slots[i].HasPosition = false; }
+            for (int i = 0; i < slots.Length; i++) { slots[i].Health = AnchorHealth.Live; slots[i].DownSince = -1f; slots[i].HasPosition = slots[i].Placed = false; }
         }
     }
 

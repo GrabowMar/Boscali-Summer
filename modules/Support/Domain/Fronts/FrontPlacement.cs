@@ -1,0 +1,57 @@
+using System;
+using System.Collections.Generic;
+
+namespace BoscaliSummer.Modules.Support.Domain.Fronts
+{
+    /// <summary>Pure placement helpers for the organic fronts (world metres). The host decides legality with these.</summary>
+    internal static class FrontPlacement
+    {
+        internal readonly struct Base
+        {
+            public readonly int Id;
+            public readonly float X, Z;
+            public readonly bool Ours, Carrier, Land;
+
+            public Base(int id, float x, float z, bool ours, bool carrier, bool land) { Id = id; X = x; Z = z; Ours = ours; Carrier = carrier; Land = land; }
+        }
+
+        private static float Dist(float ax, float az, float bx, float bz)
+        {
+            float dx = ax - bx, dz = az - bz;
+            return (float)Math.Sqrt(dx * dx + dz * dz);
+        }
+
+        /// <summary>Index of the nearest base we hold within <paramref name="within"/> metres (a carrier only when allowed), or -1.</summary>
+        public static int NearestHeld(IReadOnlyList<Base> bases, float x, float z, float within, bool allowCarrier)
+        {
+            int best = -1; float bestD = within;
+            for (int i = 0; i < bases.Count; i++)
+            {
+                Base b = bases[i];
+                if (!b.Ours || (b.Carrier && !allowCarrier)) continue;
+                float d = Dist(x, z, b.X, b.Z);
+                if (d <= bestD) { bestD = d; best = i; }
+            }
+            return best;
+        }
+
+        /// <summary>The nearest land base is ours (false when there is no land base).</summary>
+        public static bool OwnGround(IReadOnlyList<Base> bases, float x, float z)
+        {
+            bool ours = false; float bestD = float.PositiveInfinity;
+            for (int i = 0; i < bases.Count; i++)
+            {
+                if (!bases[i].Land) continue;
+                float d = Dist(x, z, bases[i].X, bases[i].Z);
+                if (d < bestD) { bestD = d; ours = bases[i].Ours; }
+            }
+            return ours;
+        }
+
+        public static bool WithinReach(IReadOnlyList<(float X, float Z)> centers, float x, float z, float reach)
+        {
+            for (int i = 0; i < centers.Count; i++) if (Dist(x, z, centers[i].X, centers[i].Z) <= reach) return true;
+            return false;
+        }
+    }
+}

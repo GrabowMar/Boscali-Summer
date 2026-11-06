@@ -245,7 +245,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (sof != null && sof.TryDesk(hq, out SofDesk sd))
             {
-                w.Camps = s.CampsLive = sd.Camps.LiveCount(); w.CampMax = sd.Camps.Count;
+                w.Camps = s.CampsLive = sd.Camps.LiveCount(); w.CampMax = sd.Camps.Capacity;
                 w.Teams = sd.ActiveCount; w.HasHeldBuilding = sd.Held.Count > 0;
                 s.HeldBuildings = sd.Held.Count;
                 int afield = 0;

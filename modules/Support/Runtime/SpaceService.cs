@@ -634,7 +634,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < array.Length; i++) baseline[i] = UplinkSpawner.Health(array[i]);
             faction = new FactionSpace { State = new SpaceState(array.Length), Links = array, Baseline = baseline,
                 SiteX = new float[array.Length], SiteZ = new float[array.Length], View = Array.AsReadOnly(array), Observations = new SpaceObservations(owner) };
-            for (int i = 0; i < array.Length; i++) Locate(faction, i);
+            for (int i = 0; i < array.Length; i++) { faction.State.PlacePad(i); Locate(faction, i); } // shim until organic fronts Task 5
+            foreach (BirdKind kind in new[] { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic }) faction.State.Launch(kind); // shim until organic fronts Task 5
             faction.Tasked = manager?.CreateTaskedDesk(this, owner, faction.Observations);
             SeedGeo(owner, faction.State);
             if (owner == null || factions.ContainsKey(owner)) yield break;
