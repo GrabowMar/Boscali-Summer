@@ -51,14 +51,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
     /// <summary>
     /// WATCH OFFICER OVERLORD for SOF (spec section 4), one faction. It works the same <see cref="SofDesk"/> a human operator does, as the reserved identity: it keeps at most one team of its own
-    /// in the field, raises it when the camp is LIVE and there is work, sends it to LASE or RECON a high-value revealed contact near the front or to SABOTAGE a revealed enemy anchor when the
+    /// in the field, taken from the pool the TEAM builds raise (it raises none itself: ruling R8), sends it to LASE or RECON a high-value revealed contact near the front or to SABOTAGE a revealed enemy anchor when the
     /// odds are at least 55 %, and steers it with PUSH, HOLD and EXFIL by its exposure. It sees only <see cref="SofDesk.Visible"/> (what the faction has really sighted) and it never orders the helicopter
-    /// lift: the lift is for human pilots. It has no wallet: raises and missions are free. Bounded by the pacer.
+    /// lift: the lift is for human pilots. It has no wallet: missions are free. Bounded by the pacer.
     /// </summary>
     internal sealed class SofWatchBrain : WatchBrainBase
     {
         public const float ThinkSeconds = 2f, HighValueScore = 10f, NearFrontMeters = 20000f, MaxEtaSeconds = 900f, SabotageCooldownSeconds = 600f,
-            TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f, LostRestSeconds = 120f,
+            TargetBackoffSeconds = 600f, FailBackoffSeconds = 60f, ReconSpacingMeters = 1500f, ReconStandOffMeters = 900f, ReconRepeatSeconds = 300f,
             UrgentFloor = 15f, SweepAfterSeconds = 30f, ApproachMeters = 1600f, PushBelow = 20f, PushStopAbove = 35f, HoldAt = 50f, ResumeBelow = 30f, ExfilAt = 40f, PushMinMeters = 1500f, StrandedMeters = 300f, RisingEpsilon = 0.2f;
         public const float ReadyMaxExposure = 10f, CommitCeiling = 85f, CommitMargin = 15f, OnSiteHoldAt = 45f, ProjectedExfil = 95f, ProjectedFloor = 40f, RiskRadiusMeters = 1000f, ArmourRadiusMeters = 1000f;
         public const int MaxBackoffs = 32, MaxRecon = 4, MaxRevealedNear = 3;
@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         private readonly List<int> scratch = new List<int>(MaxBackoffs);
         private readonly float[] reconX = new float[MaxRecon], reconZ = new float[MaxRecon], reconAt = new float[MaxRecon];
         private int reconHead, reconCount;
-        private float restUntil, sabotageAt = float.NegativeInfinity, clock;
+        private float sabotageAt = float.NegativeInfinity, clock;
         private float lastExposure = -1f, lastExposureAt;
         private int lastSlot = -1;
 
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             base.Reset(); backoff.Clear();
             Array.Clear(reconAt, 0, reconAt.Length);
             reconHead = reconCount = 0;
-            restUntil = clock = lastExposureAt = 0f; sabotageAt = float.NegativeInfinity; lastExposure = -1f; lastSlot = -1;
+            clock = lastExposureAt = 0f; sabotageAt = float.NegativeInfinity; lastExposure = -1f; lastSlot = -1;
             Raises = Missions = Orders = Sweeps = Failures = Thinks = 0;
             Last = default;
         }
@@ -108,11 +108,9 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             Prune(now);
             SofWatchPlan sweep = SweepPlan(desk, now);
             if (sweep.Action != SofWatchAction.None) return sweep;
-            int humans = world.Humans;
             SofTeam team = Mine(desk);
-            if (team != null && team.State == TeamState.Lost) restUntil = Math.Max(restUntil, now + LostRestSeconds);
             pacer.SetUrgent(WatchDomain.Sof, false); // refreshed below only while a team is in danger: a stale reservation would hold CYBER off the shared limiter
-            if (team == null || team.State == TeamState.Lost) return RaisePlan(desk, world, humans, now);
+            if (team == null || team.State == TeamState.Lost) return SofWatchPlan.Idle(SofWatchWhy.Waiting); // ruling R8: no free raise, pool teams come only from TEAM builds
             if (team.Slot != lastSlot) { lastSlot = team.Slot; lastExposure = -1f; }
             float prior = lastExposure, priorAt = lastExposureAt;
             lastExposure = team.Exposure; lastExposureAt = now;
@@ -145,31 +143,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             for (int i = 0; i < desk.Teams.Length; i++) if (desk.Teams[i].Active && desk.Teams[i].Raiser == Me) return desk.Teams[i];
             return null;
-        }
-
-        // ---- Raise -----------------------------------------------------------------------------
-
-        private SofWatchPlan RaisePlan(SofDesk desk, ISofWatchWorld world, int humans, float now)
-        {
-            if (now < restUntil) return SofWatchPlan.Idle(SofWatchWhy.Resting);
-            if (!desk.FobActive)
-            {
-                if (desk.Camps.Count == 0) return SofWatchPlan.Idle(SofWatchWhy.NoCamp);
-                // RAISE only while the camp is LIVE: a damaged camp raises slowly and a down camp not at all.
-                if (!desk.Camps.TryBest(out _, out _, out _, out AnchorHealth health) || health != AnchorHealth.Live) return SofWatchPlan.Idle(SofWatchWhy.NoCamp);
-            }
-            int cap = SofRules.TeamCap(humans, desk.FobActive) - (humans > 0 ? 1 : 0); // one slot always stays free for a human
-            if (desk.ActiveCount >= cap) return SofWatchPlan.Idle(SofWatchWhy.NoSlot);
-            if (!HasWork(desk, world, now)) return SofWatchPlan.Idle(SofWatchWhy.NoWork);
-            return new SofWatchPlan(SofWatchAction.Raise, SofWatchWhy.None, 0, MissionKind.None, 0, TeamVerb.Cancel, 0f, 0f, WatchCode.SofRaise);
-        }
-
-        private bool HasWork(SofDesk desk, ISofWatchWorld world, float now)
-        {
-            var probe = new SofTeam { Slot = 0, Active = true, State = TeamState.Ready, X = 0f, Z = 0f, Ammo = 100f };
-            if (desk.Camps.TryBest(out _, out float cx, out float cz, out _)) { probe.X = cx; probe.Z = cz; }
-            if (desk.FobActive) { probe.X = desk.FobX; probe.Z = desk.FobZ; }
-            return Choose(desk, world, probe, now).Action != SofWatchAction.None;
         }
 
         // ---- Missions --------------------------------------------------------------------------

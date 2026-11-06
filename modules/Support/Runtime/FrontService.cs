@@ -330,14 +330,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
                         FrontOutcome truckWhy = FrontOutcome.Unavailable;
                         ok = cyber != null && cyber.TryDeployTruck(owner, e.HasPoint, e.X, e.Z, out truckWhy); failure = truckWhy;
                         break;
-                    case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); failure = f.World.Camps >= f.World.CampMax ? FrontOutcome.CampsMax : FrontOutcome.NoSite; break;
+                    case ProgrammeId.Camp:
+                        FrontOutcome campWhy = FrontOutcome.Unavailable;
+                        ok = sof != null && sof.TryBuildCamp(owner, e.HasPoint, e.X, e.Z, out campWhy); failure = campWhy;
+                        break;
                     case ProgrammeId.TrainTeam:
                         SofResult r = sof != null ? sof.TrainTeam(owner) : new SofResult(SofOutcome.Unavailable);
                         ok = r.Ok; why = r.Words;
-                        failure = r.Outcome == SofOutcome.TeamCap ? FrontOutcome.TeamCap : r.Outcome == SofOutcome.NoCamp || r.Outcome == SofOutcome.CampDown ? FrontOutcome.NoSite : FrontOutcome.Unavailable;
+                        failure = r.Outcome == SofOutcome.TeamCap ? FrontOutcome.TeamCap : r.Outcome == SofOutcome.CampFull ? FrontOutcome.CampFull :
+                            r.Outcome == SofOutcome.NoCamp || r.Outcome == SofOutcome.CampDown ? FrontOutcome.NoCamp : FrontOutcome.Unavailable;
                         break;
                     case ProgrammeId.ZeroDay: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoSamNet; break;
-                    case ProgrammeId.Fob: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoHeldBuilding; break;
+                    case ProgrammeId.Fob:
+                        ok = ops != null && ops.RunProgramme(owner, ProgrammeId.Fob, e.HasPoint && sof != null ? sof.HeldNear(owner, e.X, e.Z, FrontRules.FobPickMetres) : 0);
+                        failure = FrontOutcome.NoHeldBuilding;
+                        break;
                     case ProgrammeId.Asat: ok = ops != null && ops.RunProgramme(owner, e.Id); break;
                 }
             }

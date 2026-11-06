@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using UnityEngine;
 
@@ -10,26 +11,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// Host-owned SOF / JTAC domain: real camps per faction, the abstract teams (raise, route, exposure, pinned, missions), held buildings and the helicopter lift.
-    /// It mirrors the CYBER service: a 1 Hz host tick, scene reset, one faction established per mission second, everything host-only; clients read the SOF state
-    /// through the mirror. The class is split by concern: this file is the camps and the tick; <c>SofService.Effects</c> the mission effects and the reveal path;
+    /// It mirrors the CYBER service: a 1 Hz host tick, scene reset, everything host-only; clients read the SOF state through the mirror. Every faction's desk opens
+    /// empty on its first host second; camps exist only once the SOF front builds them, and a destroyed one stays down until a new CAMP build takes its slot.
+    /// The class is split by concern: this file is the camps and the tick; <c>SofService.Effects</c> the mission effects and the reveal path;
     /// <c>.Lift</c> the helicopter lift, cover kills and the cover/lase posts; <c>.Mirror</c> the faction view and the host verbs.
     /// </summary>
     internal sealed partial class SofService : MonoBehaviour, ISceneService
     {
         private const int MaximumFactions = 8, MaximumBases = 16, MaximumScanUnits = 4096;
-        private const float RelocateRetrySeconds = 30f, RefreshSeconds = 10f, CampRadius = 6500f;
+        private const float RefreshSeconds = 10f, CampRadius = 6500f;
 
         private sealed class CampSlot
         {
             public int Index;
+            /// <summary>The standing camp, its wreck, or null (a reused slot whose new camp found no ground).</summary>
             public Unit Unit;
             public float Baseline;
-            public GlobalPosition Spot;
-            public Airbase Parent;
-            public readonly RebuildBar Bar = new RebuildBar(CampRules.RebuildGoal);
-            public float NextRebuildTry, LastFund;
-            public CampSlot(int index, Unit unit, GlobalPosition spot, Airbase parent)
-            { Index = index; Unit = unit; Spot = spot; Parent = parent; Baseline = UplinkSpawner.Health(unit); }
         }
 
         private sealed partial class FactionSof
@@ -53,8 +50,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             private readonly FactionSof faction;
             public Ports(SofService service, FactionSof faction) { this.service = service; this.faction = faction; }
             public float Now => SupportManager.MissionNow();
-            public int Humans => service.manager != null ? service.manager.HumanCount(faction.Owner) : 1;
-            public bool Fob => faction.FobUntil > SupportManager.MissionNow();
             public SofOutcome TrySpend(ulong op, int cr, out int detail) => service.manager.SofSpend(faction.Owner, op, cr, out detail);
             public void Refund(ulong op, int cr) => service.manager.SofRefund(faction.Owner, op, cr);
             public SofScene Scene(float x, float z) => faction.Obs.Scene(x, z, service.Stared(faction.Owner, x, z));
@@ -73,16 +68,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         private readonly Dictionary<FactionHQ, FactionSof> factions = new Dictionary<FactionHQ, FactionSof>();
-        private readonly Dictionary<FactionHQ, float> nextAttempt = new Dictionary<FactionHQ, float>();
         private readonly CyberAnchorSpawner spawner = new CyberAnchorSpawner();
         private readonly List<KeyValuePair<AnchorSub, Unit>> enemyAnchors = new List<KeyValuePair<AnchorSub, Unit>>(16);
+        /// <summary>Placement scratch: every land airbase (ours flagged; the own-ground test), and the land airbases the faction holds.</summary>
+        private readonly List<FrontPlacement.Base> landBases = new List<FrontPlacement.Base>(32);
+        private readonly List<Airbase> heldAirbases = new List<Airbase>(MaximumBases);
         private SupportManager manager;
         private SpaceService space;
         private CyberService cyber;
         private PhasedGate tickGate;
         private float nextCleanup, nextWarning;
-        private bool loggedNoCampKeys;
-        private readonly HashSet<FactionHQ> loggedNoSite = new HashSet<FactionHQ>();
 
         // Optional hooks: each is implemented by exactly one of the other files (the call is removed when it is not).
         partial void TickEffects(FactionSof f, float now);
@@ -107,10 +102,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (var pair in factions) pair.Value.Desk.Reset();
             ResetEffects();
             factions.Clear();
-            nextAttempt.Clear();
             tickGate.Reset();
-            loggedNoCampKeys = false;
-            loggedNoSite.Clear();
             spawner.ResetForScene();
         }
 
@@ -124,22 +116,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         internal bool HasSof(FactionHQ owner) => owner != null && factions.ContainsKey(owner);
 
-        /// <summary>CAMP programme finished: the first dead camp has its restore bar filled and the existing rebuild raises it again. False when no camp is down.</summary>
-        internal bool CompleteCampRebuild(FactionHQ owner)
-        {
-            if (owner == null || !factions.TryGetValue(owner, out FactionSof f)) return false;
-            foreach (CampSlot slot in f.Slots)
-            {
-                if (f.Camps.Health(slot.Index) != AnchorHealth.Down || slot.Bar.Complete) continue;
-                slot.Bar.Fund(slot.Bar.Goal);
-                return true;
-            }
-            return false;
-        }
-
-        /// <summary>TRAIN TEAM programme finished: one team is raised at the camp (or the FOB) for free, up to the front cap of four. It joins OVERLORD's pool until an operator tasks it. The refusal says why when none could be.</summary>
+        /// <summary>
+        /// TRAIN TEAM programme finished: one team is raised at the camp (or the FOB) for free, up to two per live camp (+2 with a FOB), four at most (<see cref="SofDesk.TeamCap"/>).
+        /// It joins OVERLORD's pool until an operator tasks it. The refusal says why when none could be.
+        /// </summary>
         internal SofResult TrainTeam(FactionHQ owner) =>
-            owner != null && factions.TryGetValue(owner, out FactionSof f) ? f.Desk.Raise(Domain.Space.SpaceContacts.WatchOfficerId, Domain.Fronts.FrontRules.TeamCap) : new SofResult(SofOutcome.Unavailable);
+            owner != null && factions.TryGetValue(owner, out FactionSof f) ? f.Desk.Raise(Domain.Space.SpaceContacts.WatchOfficerId) : new SofResult(SofOutcome.Unavailable);
 
         internal bool TryDesk(FactionHQ owner, out SofDesk desk)
         {
@@ -195,29 +177,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             spawner.RetryCleanup();
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs == null) return;
-            bool establishedOne = false;
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null) continue;
-                if (factions.TryGetValue(hq, out FactionSof f)) { TickFaction(f, now); continue; }
-                if (establishedOne || factions.Count >= MaximumFactions || (nextAttempt.TryGetValue(hq, out float retry) && now < retry)) continue;
-                if (nextAttempt.Count >= MaximumFactions && !nextAttempt.ContainsKey(hq)) continue;
-                nextAttempt[hq] = now + RelocateRetrySeconds;
-                establishedOne = true; // initial world sampling is limited to one faction per mission second
-                if (TryEstablish(hq, out f)) { factions.Add(hq, f); Plugin.Logger?.LogInfo("[Support.Sof] " + hq.name + ": " + f.Slots.Count + " native camp(s), " + CyberAnchorSpawner.DescribeCamp() + "."); }
-                else LogNoCampKeys(hq);
+                if (!factions.TryGetValue(hq, out FactionSof f))
+                {
+                    if (factions.Count >= MaximumFactions) continue;
+                    factions.Add(hq, f = Open(hq));
+                    Plugin.Logger?.LogInfo("[Support.Sof] " + hq.name + ": desk open, no camp until the front builds one (" + CyberAnchorSpawner.DescribeCamp() + ").");
+                }
+                TickFaction(f, now);
             }
             TickDefence(now);
-        }
-
-        /// <summary>Once per mission: when no camp vehicle key resolves, say which keys were tried (a faction with no legal site just has no SOF, which is not logged here).</summary>
-        private void LogNoCampKeys(FactionHQ hq)
-        {
-            if (loggedNoCampKeys) return;
-            string described = CyberAnchorSpawner.DescribeCamp();
-            if (!described.Contains("=none")) return;
-            loggedNoCampKeys = true;
-            Plugin.Logger?.LogWarning("[Support.Sof] " + hq.name + ": no camp vehicle key resolved (" + described + "; tried " + string.Join("/", CyberAnchorSpawner.CampKeys) + " and escorts " + string.Join("/", CyberAnchorSpawner.CampGuardKeys) + "): SOF stays offline.");
         }
 
         private void TickFaction(FactionSof f, float now)
@@ -226,7 +197,6 @@ namespace BoscaliSummer.Modules.Support.Runtime
             // ponytail: no grace timer, an operator who left the faction hands the team back to OVERLORD's pool at once; add a delay if reconnect flapping matters.
             foreach (SofTeam t in f.Desk.Teams)
                 if (t.Active && t.Raiser != Domain.Space.SpaceContacts.WatchOfficerId && !manager.InFaction(f.Owner, t.Raiser)) t.Raiser = Domain.Space.SpaceContacts.WatchOfficerId;
-            Rebuild(f, now);
             f.Obs.Snapshot(f.Owner, now);
             if (now >= f.NextRefresh) { f.NextRefresh = now + RefreshSeconds; RefreshTargets(f); }
             TickLift(f, now);
@@ -288,30 +258,65 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        /// <summary>Spec 2.1: a down camp starts its restore fund after the 120 s grace (goal 120); when the bar is full it is rebuilt where it stood. Teams in the field carry on meanwhile.</summary>
-        private void Rebuild(FactionSof f, float now)
+        // ---- Building (OPS FRONTS programme effects, host) -------------------------------------------------
+
+        /// <summary>The faction's SOF record and desk, empty: two unplaced camp slots, no team until a TEAM build raises one.</summary>
+        private FactionSof Open(FactionHQ owner)
         {
-            foreach (CampSlot slot in f.Slots)
-            {
-                if (f.Camps.Health(slot.Index) != AnchorHealth.Down) { slot.Bar.Reset(); slot.LastFund = now; continue; }
-                if (!f.Camps.PastGrace(slot.Index, now)) { slot.LastFund = now; continue; }
-                float dt = Mathf.Clamp(now - slot.LastFund, 0f, 5f);
-                slot.LastFund = now;
-                slot.Bar.Fund(manager.CampRebuildFunding(f.Owner, dt));
-                if (!slot.Bar.Complete || now < slot.NextRebuildTry) continue;
-                slot.NextRebuildTry = now + RelocateRetrySeconds;
-                spawner.DiscardGroup(slot.Unit);
-                if (!spawner.TryCreateCamp(f.Owner, slot.Index, slot.Spot, slot.Parent, out Unit made)) continue;
-                slot.Unit = made;
-                slot.Baseline = UplinkSpawner.Health(made);
-                slot.Bar.Reset();
-                GlobalPosition p = made.transform.position.ToGlobalPosition();
-                f.Camps.Restore(slot.Index, (float)p.x, (float)p.z);
-                Plugin.Logger?.LogInfo("[Support.Sof] " + f.Owner.name + " camp " + slot.Index + " rebuilt.");
-            }
+            var f = new FactionSof { Owner = owner, Key = manager.FactionKeyOf(owner), Camps = new SofCampSet(CampRules.MaxCamps), Rng = new System.Random(unchecked(owner.GetInstanceID() * 7919 + 17)) };
+            f.Desk = new SofDesk(new Ports(this, f), f.Camps);
+            f.Desk.Happened += e => OnEvent(f, e);
+            return f;
         }
 
-        // ---- Establish -----------------------------------------------------------------------------------
+        /// <summary>
+        /// Host: can a camp go up (at the picked point when <paramref name="hasPoint"/>)? A slot must be free (fewer than two, or one down); a picked point must be own ground (the nearest
+        /// land airbase is ours); without a point any held land airbase will do. Water passes here and fails the build (NO SPOT). Spawns nothing.
+        /// </summary>
+        internal FrontOutcome CheckCamp(FactionHQ owner, bool hasPoint, float x, float z)
+        {
+            if (owner == null || !factions.TryGetValue(owner, out FactionSof f)) return FrontOutcome.Unavailable;
+            if (f.Camps.FreeSlot() < 0) return FrontOutcome.CampsMax;
+            CollectBases(owner);
+            if (hasPoint) return FrontPlacement.OwnGround(landBases, x, z) ? FrontOutcome.None : FrontOutcome.NotOwnGround;
+            return heldAirbases.Count > 0 ? FrontOutcome.None : FrontOutcome.NoSite;
+        }
+
+        /// <summary>
+        /// CAMP finished: a real camp and its two guards on dry level ground at the picked point (nudged up to 120 m round it), or without a point on the best rear ring spot round the held
+        /// land airbases, clear of the standing camps. It takes the first free slot; a down one first loses its wreck and guards. False with the refusal in <paramref name="why"/>.
+        /// </summary>
+        internal bool TryBuildCamp(FactionHQ owner, bool hasPoint, float x, float z, out FrontOutcome why)
+        {
+            why = CheckCamp(owner, hasPoint, x, z);
+            if (why != FrontOutcome.None) return false;
+            FactionSof f = factions[owner];
+            int index = f.Camps.FreeSlot();
+            CampSlot slot = f.Slots.Find(s => s.Index == index);
+            if (slot != null)
+            {
+                if (spawner.Owns(slot.Unit)) spawner.DiscardGroup(slot.Unit); // the 32-unit spawner cap is shared: the old group goes before the new one spawns
+                slot.Unit = null;
+            }
+            Unit made = null;
+            if (hasPoint)
+            {
+                SupportTargeting.TryMapPoint(new GlobalPosition(x, 0f, z), out Vector3 ground);
+                spawner.TryCreateCamp(owner, index, ground.ToGlobalPosition(), null, out made);
+            }
+            else made = RearCamp(f, index);
+            if (made == null) { why = FrontOutcome.NoSpot; return false; }
+            if (slot == null)
+            {
+                f.Slots.Add(slot = new CampSlot { Index = index });
+                f.Slots.Sort((a, b) => a.Index.CompareTo(b.Index));
+            }
+            slot.Unit = made; slot.Baseline = UplinkSpawner.Health(made);
+            GlobalPosition p = made.transform.position.ToGlobalPosition();
+            f.Camps.Place(index, (float)p.x, (float)p.z);
+            Plugin.Logger?.LogInfo("[Support.Sof] " + owner.name + " CAMP " + (index + 1) + " built at " + Mathf.RoundToInt((float)p.x) + ", " + Mathf.RoundToInt((float)p.z) + ".");
+            return true;
+        }
 
         private sealed class Site
         {
@@ -319,51 +324,40 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public Site(Airbase parent, GlobalPosition anchor) { Parent = parent; Anchor = anchor; }
         }
 
-        private bool TryEstablish(FactionHQ owner, out FactionSof made)
+        /// <summary>
+        /// The automatic camp (no picked point): the 6.5/7.5 km rings round the held land airbases (else the wide fan), deepest rear first, at least the CYBER separation from every
+        /// standing camp. The first pick that spawns wins; null when none does.
+        /// </summary>
+        // ponytail: up to 16 bases x 24 ring spots (or 96 fan spots) planned synchronously at programme completion; step it across frames if a hitch shows.
+        private Unit RearCamp(FactionSof f, int index)
         {
-            made = null;
-            Vector2 span = TheaterFrame.Resolve();
-            var sites = new List<Site>(); var cands = new List<SiteCandidate>(); var bases = new List<Airbase>(MaximumBases);
-            if (FactionRegistry.airbaseLookup != null)
-            {
-                int inspected = 0;
-                foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
-                {
-                    if (++inspected > 128 || bases.Count >= MaximumBases) break;
-                    if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.CurrentHQ != owner || airbase.center == null) continue;
-                    bases.Add(airbase);
-                    Collect(owner, airbase, sites, cands);
-                }
-            }
-            if (cands.Count == 0 && bases.Count > 0) CollectWide(owner, bases, sites, cands);
-            var picks = new List<int>();
-            CyberPlacement.Pick(cands, span.magnitude, CampRules.MaxCamps, null, 0f, picks);
-            var slots = new List<CampSlot>(CampRules.MaxCamps);
+            var sites = new List<Site>(); var cands = new List<SiteCandidate>(); var avoid = new List<SiteCandidate>(CampRules.MaxCamps); var picks = new List<int>();
+            foreach (Airbase airbase in heldAirbases) Collect(f.Owner, airbase, sites, cands);
+            if (cands.Count == 0 && heldAirbases.Count > 0) CollectWide(f.Owner, heldAirbases, sites, cands);
+            for (int i = 0; i < f.Camps.Capacity; i++)
+                if (i != index && f.Camps.Health(i) != AnchorHealth.Down && f.Camps.TryPosition(i, out float cx, out float cz)) avoid.Add(new SiteCandidate(i, cx, cz, 0f, 0f));
+            float diagonal = TheaterFrame.Resolve().magnitude;
+            CyberPlacement.Pick(cands, diagonal, CampRules.MaxCamps, avoid, diagonal * CyberPlacement.SeparationFraction, picks);
             foreach (int id in picks)
+                if (spawner.TryCreateCamp(f.Owner, index, sites[id].Anchor, sites[id].Parent, out Unit made)) return made;
+            return null;
+        }
+
+        /// <summary>Fills the placement scratch: every land airbase (a carrier is never ground) with ours flagged, and the land airbases the faction holds.</summary>
+        private void CollectBases(FactionHQ owner)
+        {
+            landBases.Clear(); heldAirbases.Clear();
+            if (FactionRegistry.airbaseLookup == null) return;
+            int inspected = 0;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
             {
-                if (!spawner.TryCreateCamp(owner, slots.Count, sites[id].Anchor, sites[id].Parent, out Unit camp)) continue;
-                slots.Add(new CampSlot(slots.Count, camp, sites[id].Anchor, sites[id].Parent));
+                if (++inspected > 128) break;
+                if (airbase == null || airbase.disabled || airbase.AttachedAirbase || airbase.center == null) continue;
+                bool ours = airbase.CurrentHQ == owner;
+                GlobalPosition p = airbase.center.position.ToGlobalPosition();
+                landBases.Add(new FrontPlacement.Base(landBases.Count, (float)p.x, (float)p.z, ours, false, true));
+                if (ours && heldAirbases.Count < MaximumBases) heldAirbases.Add(airbase);
             }
-            if (slots.Count == 0)
-            {
-                // Once per faction per mission: an offline SOF must say why (no held airbase, no legal ground on the rings, or the spawn failed).
-                if (loggedNoSite.Add(owner))
-                    Plugin.Logger?.LogWarning("[Support.Sof] " + owner.name + ": no camp placed (" + bases.Count + " held airbase(s), " + cands.Count + " legal site(s) on the 6.5/7.5 km rings and the 3-12 km fan, " +
-                        picks.Count + " picked): SOF stays offline, retrying every " + (int)RelocateRetrySeconds + " s" + (bases.Count == 0 ? " (hold an airbase)." : "."));
-                return false;
-            }
-            var camps = new SofCampSet(slots.Count);
-            made = new FactionSof { Owner = owner, Key = manager.FactionKeyOf(owner), Camps = camps, Rng = new System.Random(unchecked(owner.GetInstanceID() * 7919 + 17)) };
-            made.Slots.AddRange(slots);
-            foreach (CampSlot slot in slots)
-            {
-                GlobalPosition p = slot.Unit.transform.position.ToGlobalPosition();
-                camps.SetPosition(slot.Index, (float)p.x, (float)p.z);
-            }
-            FactionSof captured = made;
-            made.Desk = new SofDesk(new Ports(this, made), camps);
-            made.Desk.Happened += e => OnEvent(captured, e);
-            return true;
         }
 
         /// <summary>Spec 2.1: a camp sits near a friendly airbase but at least 6 km from it. Candidates ring the airbase at 6.5 and 7.5 km.</summary>
