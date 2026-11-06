@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.13 — update
 
 - **SET > PANELS > CONSOLE**: new options for every console: GRID, STANDING ORDERS,
   FOOTER CLOCK and HOVER HELP. The finish preview box is gone from the PANELS page.

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.12-alpha"><img src="https://img.shields.io/badge/release-0.2.12_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.12 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.13-alpha"><img src="https://img.shields.io/badge/release-0.2.13_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.13 alpha"></a>
   <a href="#maintenance-mode"><img src="https://img.shields.io/badge/status-maintenance_mode-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Status: maintenance mode"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.3-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.3">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
@@ -225,7 +225,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.12.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.12-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.13.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.13-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
