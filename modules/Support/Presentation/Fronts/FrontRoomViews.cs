@@ -294,6 +294,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public SofFobView Fob;
         /// <summary>Standing camps and fielded teams (a lost one excluded), for the section heads.</summary>
         public int CampsUp, TeamsUp;
+        /// <summary>Teams out of camp (moving, on site, returning, pinned): the SOF superiority term's own count.</summary>
+        public int Afield;
         /// <summary>Every team on the roster (bug 7: one beyond the cap stays), then each queued TRAIN TEAM row as a card in the slot it will take.</summary>
         public readonly List<SofTeamView> Teams = new List<SofTeamView>(4);
         public readonly List<SofTargetView> Targets = new List<SofTargetView>(SofWire.MaxTargets);

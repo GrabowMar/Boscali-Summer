@@ -234,6 +234,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (manager.SofMirror.Known) { selectedTeam = view.Shadow.SelectedSlot; selectedTarget = view.Shadow.SelectedTargetId; }
                     break;
             }
+            FrontViews.Terms(view);
         }
 
         /// <summary>The theatre frame the view projects with (the ORBIT room measures its pad pick in it).</summary>

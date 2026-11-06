@@ -6,7 +6,7 @@ using NOAvionics;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
-    /// <summary>One programme in the front's queue, already worded for the rail.</summary>
+    /// <summary>One programme in the front's queue, already worded for the panels.</summary>
     internal struct FrontQueueView
     {
         public ProgrammeId Id;
@@ -174,7 +174,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
     /// <summary>
     /// Everything a front window paints, built by the (later) controller from the faction mirror. Plain data, reused each
-    /// refresh; the rail reads the common part, each room reads its own payload.
+    /// refresh; the FRONT tab reads the common part, each room reads its own payload.
     /// </summary>
     internal sealed class FrontRoomView
     {
@@ -195,10 +195,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public readonly List<FrontQueueView> Queue = new List<FrontQueueView>(FrontRules.MaxQueue);
         public readonly List<FrontOfferView> Offers = new List<FrontOfferView>(4);
         public readonly List<FrontPerkView> Perks = new List<FrontPerkView>(8);
-        /// <summary>This front's perk power as the rail words it: <c>POWER ×1.25 · AHEAD</c> (empty before the host has spoken).</summary>
+        /// <summary>This front's perk power in words: <c>POWER ×1.25 · AHEAD</c> (empty before the host has spoken).</summary>
         public string PowerLine = "";
         /// <summary>The local pilot's skill grade in this front's system (1..6), shown where front readiness used to be.</summary>
         public int Grade = 1;
+        /// <summary>
+        /// The FRONT tab's superiority terms (<see cref="FrontViews.Terms"/>): <see cref="FrontSuperiority.Compute"/>'s three summands in words with our own count
+        /// ("SATELLITES UP 2"); each one's lean rides <see cref="FrontRow.Terms"/>. Fog: never an enemy count.
+        /// </summary>
+        public readonly string[] Terms = { "", "", "" };
         public readonly List<FrontLogLine> Log = new List<FrontLogLine>(8);
 
         // ORBIT payload.
@@ -206,7 +211,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public readonly List<OrbitTrackView> Birds = new List<OrbitTrackView>(6);
         public readonly List<OrbitSiteView> Sites = new List<OrbitSiteView>(6);
         public string Theatre = "";
-        /// <summary>The SPACE front's focus pin on the map (0..1, y down) when the rail has one set; the birds' OVER FOCUS reading is against it.</summary>
+        /// <summary>The SPACE front's focus pin on the map (0..1, y down) when the host has one set; the birds' OVER FOCUS reading is against it.</summary>
         public bool HasFocus;
         public float FocusU, FocusV, TheatreKm;
         /// <summary>Airbases on the theatre plate (all three rooms draw them).</summary>

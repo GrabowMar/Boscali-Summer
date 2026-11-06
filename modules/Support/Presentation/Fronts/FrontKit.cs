@@ -103,7 +103,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public static Color Tone(AvState s) => s == AvState.Inert ? AvInk.Muted : s == AvState.Info ? AvInk.Key : OpsInk.Word(s);
     }
 
-    /// <summary>How a box is dressed: the shared rail stays <see cref="Plain"/>; each room wears its own console so the three rooms read as three places.</summary>
+    /// <summary>How a box is dressed: a plain kit box (<see cref="Plain"/>), or each room wears its own console so the three rooms read as three places.</summary>
     internal enum FrontLook
     {
         Plain,
@@ -117,7 +117,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
     /// <summary>
     /// A titled box: chamfered frame with brackets, a header band (icon, stencil title, right-hand meta) and a body rect.
-    /// The same chrome frames every section of the rail and every pane of a room; a room passes its <see cref="FrontLook"/>.
+    /// The same chrome frames every pane of a room; a room passes its <see cref="FrontLook"/>.
     /// </summary>
     internal sealed class FrontBox
     {

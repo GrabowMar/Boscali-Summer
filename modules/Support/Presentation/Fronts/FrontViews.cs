@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal static class FrontViews
     {
-        /// <summary>The row painted before the host has said anything: shared, never edited, recognised by reference. The rail shows a dash and WAITING FOR HOST for it, never a made-up R1.</summary>
+        /// <summary>The row painted before the host has said anything: shared, never edited, recognised by reference. The panels show a dash and WAITING FOR HOST for it, never a made-up figure.</summary>
         public static readonly FrontRow Waiting = new FrontRow();
         public static bool IsWaiting(FrontRow r) => ReferenceEquals(r, Waiting);
 
@@ -196,6 +196,48 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The local pilot's grade in a front's system (1 when the window passed none).</summary>
         internal static int GradeOf(in FrontInputs c, Front f) => c.Grades != null && (int)f < c.Grades.Length ? Math.Max(1, c.Grades[(int)f]) : 1;
 
+        /// <summary>One superiority term's lean from the host (<see cref="FrontSuperiority.Terms"/>): 0 even, 1 ahead, 2 behind.</summary>
+        public static int Lean(FrontRow r, int term) => (r.Terms >> (2 * term)) & 3;
+
+        /// <summary>
+        /// The FRONT tab's three superiority terms (<see cref="FrontSuperiority.Compute"/>'s summands, in its order) with our own count each, read from the room
+        /// payload <see cref="Orbit"/>, <see cref="Network"/> or <see cref="Shadow"/> just built for the shown front.
+        /// </summary>
+        public static void Terms(FrontRoomView v)
+        {
+            string[] t = v.Terms;
+            switch (v.Front)
+            {
+                case Front.Space:
+                    t[0] = "SATELLITES UP " + v.BirdsUp + " / " + FrontRules.BirdCap;
+                    t[1] = "PADS LIVE " + v.PadsUp + " / " + FrontRules.PadCap;
+                    // ponytail: no own jam flag is mirrored, so the lean words it (EVEN reads NO even when both sides jam); mirror the flag if that matters.
+                    int jam = Lean(v.Row, 2);
+                    t[2] = "JAMMING THEIR SATELLITES · " + (jam == 1 ? "YES" : jam == 2 ? "NO · THEY JAM YOURS" : "NO");
+                    break;
+                case Front.Cyber:
+                    NetworkRoomView n = v.Network;
+                    int live = 0;
+                    float trace = 0f;
+                    foreach (InfraCenterView c in n.Centers) if (c.State == InfraState.Up || c.State == InfraState.Damaged) live++;
+                    foreach (InfraTruckView k in n.Trucks)
+                    {
+                        if (k.State == InfraState.Up || k.State == InfraState.Damaged) live++; // a packing truck is offline (FrontService.Sample)
+                        trace = Math.Max(trace, k.Trace); // the highest session trace, as the host weighs it
+                    }
+                    t[0] = "ENEMY NODES HELD " + n.HeldTotal;
+                    t[1] = "DATA CENTERS + TRUCKS " + live;
+                    t[2] = n.Sessions == 0 ? "YOUR TRACE · NO SESSION" : "YOUR TRACE " + Mathf.RoundToInt(trace * 100f) + " %";
+                    break;
+                default:
+                    ShadowRoomView s = v.Shadow;
+                    t[0] = "TEAMS IN THE FIELD " + s.Afield;
+                    t[1] = "BUILDINGS HELD " + s.Held.Count;
+                    t[2] = "CAMPS " + s.CampsUp + " / " + FrontRules.CampCap;
+                    break;
+            }
+        }
+
         /// <summary>A build as a press offers it: name, cost, build time, and the refusal (WAITING FOR THE HOST before the first front snapshot).</summary>
         private static FrontOfferView Offer(Front f, ProgrammeId id, byte kind, FrontRow row, in QueuedCounts queued, in FrontInputs c) => new FrontOfferView
         {
@@ -259,7 +301,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return GeoOf(c.Geo, k, true).Covers(c.Now, c.AimU, c.AimV, Reach[k]) ? "" : SupportWords.OutsideFootprint(GeoSpace.Names[k]);
         }
 
-        /// <summary>One line per perk for the rail's tier ladder.</summary>
+        /// <summary>One line per perk for the FRONT tab's perk list.</summary>
         public static string PerkEffect(SupportActionId id)
         {
             switch (id)
@@ -424,7 +466,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     U = q.HasPoint ? c.Frame.U(q.X) : -1f, V = q.HasPoint ? c.Frame.V(q.Z) : -1f, Place = q.HasPoint ? PlaceOf(q.X, q.Z, c) : "AUTO PLACE",
                 };
                 v.Pads.Add(p);
-                if (q.HasPoint) v.Ghosts.Add(new MapGhostView { U = p.U, V = p.V, Label = p.Name + " · " + p.Place + " · " + (qv.Building ? FrontRules.Clock(qv.BuildLeft) : Pct(qv.Progress)) });
+                if (q.HasPoint) v.Ghosts.Add(new MapGhostView { U = p.U, V = p.V, Label = p.Name + " · " + p.Place + " · " + (qv.Building ? FrontPanels.Clocked("", qv.BuildLeft) : Pct(qv.Progress)) });
             }
             for (int i = 0; sites != null && i < sites.Count; i++)
             {
@@ -476,7 +518,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (q.Id != ProgrammeId.LaunchSatellite || q.Kind != k) continue;
                 FrontQueueView qv = v.Queue[i];
                 tone = !qv.Building && q.Waiting ? AvState.Caution : AvState.Info;
-                return qv.Building ? "LAUNCHING " + FrontRules.Clock(qv.BuildLeft) : q.Waiting ? "WAITS FOR A PAD" : "QUEUED · " + Pct(qv.Progress);
+                return qv.Building ? FrontPanels.Clocked("LAUNCHING ", qv.BuildLeft) : q.Waiting ? "WAITS FOR A PAD" : "QUEUED · " + Pct(qv.Progress);
             }
             tone = lost ? AvState.Danger : AvState.Inert;
             return lost ? "LOST" : "NOT LAUNCHED";
@@ -1017,7 +1059,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (slot < 0) continue;
                 FrontQueueView qv = v.Queue[i];
                 float u = q.HasPoint ? f.U(q.X) : -1f, vv = q.HasPoint ? f.V(q.Z) : -1f;
-                string clock = qv.Building ? FrontRules.Clock(qv.BuildLeft) : Pct(qv.Progress);
+                string clock = qv.Building ? FrontPanels.Clocked("", qv.BuildLeft) : Pct(qv.Progress);
                 if (truck)
                 {
                     var t = new InfraTruckView { Ordinal = slot, Name = TruckTag(slot), State = InfraState.Building, U = u, V = vv, Grid = q.HasPoint ? "GRID " + OpsKit.Grid(q.X, q.Z) : "AUTO PLACE",
@@ -1253,7 +1295,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool active = known && s != null && s.Active;
             r.Active = active;
             r.SelectedSlot = -1; r.SelectedTargetId = 0;
-            r.TapLine = "NO TAP RUNNING"; r.TeamCap = active ? s.TeamCap : 0; r.TeamsUp = 0;
+            r.TapLine = "NO TAP RUNNING"; r.TeamCap = active ? s.TeamCap : 0; r.TeamsUp = r.Afield = 0;
             r.FieldNote = ""; r.SendWhy = ""; r.GoIn = ""; r.Helo = "";
             r.FileTab = r.FileA = r.FileB = r.FileC = r.FileD = "";
             if (!known) { r.History.Clear(); r.LastSeq = 0; }
@@ -1341,7 +1383,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     r.Teams.Add(new SofTeamView
                     {
                         Slot = slot, Training = true, Building = q.Building, Row = q.Row, Progress = q.Progress, BuildLeft = q.BuildLeft, Callsign = SofRules.Callsign(slot), Codename = TeamCodename(slot),
-                        State = q.Building ? "TRAINING " + FrontRules.Clock(q.BuildLeft) : "FUNDING " + Pct(q.Progress), Mission = "", Flags = "", Eta = "", Control = "", Stamp = "", Home = "", VerbNote = ""
+                        State = q.Building ? FrontPanels.Clocked("TRAINING ", q.BuildLeft) : "FUNDING " + Pct(q.Progress), Mission = "", Flags = "", Eta = "", Control = "", Stamp = "", Home = "", VerbNote = ""
                     });
                     continue;
                 }
@@ -1353,6 +1395,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     : SofWords.Kind(t.Mission) + (t.TargetId > 0 ? " T-" + t.TargetId : "") + " · " + OpName(slot, t.Mission, t.TargetId) + (afield ? " · ODDS " + t.Odds + " %" : "");
                 bool helo = t.Carried || t.Insert == Insertion.Helicopter;
                 if (t.State != TeamState.Lost) r.TeamsUp++;
+                if (afield || t.State == TeamState.Returning || t.State == TeamState.Pinned) r.Afield++; // FrontService.Sample's rule
                 r.Teams.Add(new SofTeamView
                 {
                     Slot = slot, Present = true, Selected = slot == selectedSlot, Callsign = SofRules.Callsign(slot), State = SofWords.State(t.State), Tone = tone,
@@ -1499,11 +1542,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 FrontQueueRow q = v.Row.Queue[i];
                 FrontQueueView qv = v.Queue[i];
-                string clock = qv.Building ? FrontRules.Clock(qv.BuildLeft) : Pct(qv.Progress);
+                string clock = qv.Building ? FrontPanels.Clocked("", qv.BuildLeft) : Pct(qv.Progress);
                 if (q.Id == ProgrammeId.Fob)
                 {
-                    fob = new SofFobView { Queued = true, Row = qv.Row, Progress = qv.Progress, State = qv.Building ? "BUILDING " + clock : "FUNDING " + clock, Tone = qv.Building ? AvState.Caution : AvState.Info,
-                        Note = qv.Building ? "UP IN " + clock + " · REARM + REFUEL BY THE BUILDING" : "FRONT FUNDS PAY IT · CHIP IN SPEEDS IT UP" };
+                    fob = new SofFobView { Queued = true, Row = qv.Row, Progress = qv.Progress, State = qv.Building ? FrontPanels.Clocked("BUILDING ", qv.BuildLeft) : "FUNDING " + clock, Tone = qv.Building ? AvState.Caution : AvState.Info,
+                        Note = qv.Building ? FrontPanels.Clocked("UP IN ", qv.BuildLeft, FrontPanels.AnyMoment) + " · REARM + REFUEL BY THE BUILDING" : "FRONT FUNDS PAY IT · CHIP IN SPEEDS IT UP" };
                     if (q.HasPoint) r.Ghosts.Add(new MapGhostView { U = f.U(q.X), V = f.V(q.Z), Kind = 1, Label = "FOB · " + clock });
                     continue;
                 }

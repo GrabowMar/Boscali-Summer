@@ -857,7 +857,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Color ink;
             if (queued > 0)
             {
-                foot = (first.Building ? "ZERO-DAY RUNS IN " + FrontKit.Clock(first.BuildLeft) : "ZERO-DAY QUEUED · FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(first.Progress) * 100f) + " % · FRONT FUNDS PAY IT")
+                foot = (first.Building ? FrontPanels.Clocked("ZERO-DAY RUNS IN ", first.BuildLeft, "ZERO-DAY ROLLING OUT") : "ZERO-DAY QUEUED · FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(first.Progress) * 100f) + " % · FRONT FUNDS PAY IT")
                     + (queued > 1 ? " · " + (queued - 1) + " MORE QUEUED" : "");
                 ink = first.Building ? Amber : HopInk;
             }

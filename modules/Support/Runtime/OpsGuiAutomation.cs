@@ -139,16 +139,21 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         // ---- Checks ----------------------------------------------------------------------------------------------------
 
-        /// <summary>Every enabled control of the open room and the rail must take a click at its centre (the window's own topmost-first test) and sit on screen.</summary>
+        /// <summary>
+        /// Every enabled control of the open room and its column must take a click at its centre (the window's own topmost-first test) and sit on screen;
+        /// <c>column</c> counts the enabled ones inside the open column tab (0 on the read-only FRONT tab).
+        /// </summary>
         private static Dictionary<string, object> Audit(FrontController fronts, OpsFrontWindow window)
         {
             List<AvHit> hits = Hits(window);
-            int enabled = 0, covered = 0, off = 0;
+            int enabled = 0, covered = 0, off = 0, column = 0;
             var notes = new List<object>(8);
+            Transform shown = Field(window, "columnRoots") is RectTransform[] cols && Field(window, "lastView") is FrontRoomView lv && (int)lv.Front < cols.Length ? cols[(int)lv.Front] : null;
             foreach (AvHit h in hits)
             {
                 if (!h.Interactable) continue;
                 enabled++;
+                if (shown != null && h.transform.IsChildOf(shown)) column++; // the open column tab's own controls (FRONT has none)
                 Vector2 at = Centre((RectTransform)h.transform);
                 if (at.x < 0f || at.y < 0f || at.x > Screen.width || at.y > Screen.height) { off++; if (notes.Count < 8) notes.Add("OFF " + Describe(window, h)); continue; }
                 AvHit top = TopHit(hits, at);
@@ -157,7 +162,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (notes.Count < 8) notes.Add(Describe(window, h) + " <- " + (top != null ? Describe(window, top) : "nothing"));
             }
             Dictionary<string, object> r = State(fronts, window);
-            r["enabled"] = enabled; r["covered"] = covered; r["offscreen"] = off; r["notes"] = notes;
+            r["enabled"] = enabled; r["covered"] = covered; r["offscreen"] = off; r["column"] = column; r["notes"] = notes;
             return r;
         }
 

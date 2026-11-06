@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 FrontDirective d = Orders[i];
                 orders[i] = Button(b, FrontRules.Name(d), CardX + i * (ow + 6f), OrderY + 30f, ow, 24f, AvButtonStyle.Default, () => Do(() => actions.SetDirective(Front.Sof, d)),
-                    FrontRules.Name(d) + ": " + FrontRail.Describe(Front.Sof, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
+                    FrontRules.Name(d) + ": " + FrontPanels.Describe(Front.Sof, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
             }
             orderLine = FrontKit.Mono(b, "OrderLine", CardX + 2f, OrderY + 60f, cardW - 4f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             TMP_Text orderNote = FrontKit.Mono(b, "OrderNote", CardX + 2f, OrderY + 80f, cardW - 4f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
@@ -134,14 +134,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // Standing orders: a lock held by someone else disables them here (the host still judges).
             float left = r.DirectiveLockUntil - v.Now;
-            bool locked = !wait && left > 0f, blocked = locked && !FrontRail.SameName(r.DirectiveBy, v.Callsign);
+            bool locked = !wait && left > 0f, blocked = locked && !FrontPanels.SameName(r.DirectiveBy, v.Callsign);
             for (int i = 0; i < orders.Length; i++)
             {
                 orders[i].Latched = !wait && r.Directive == Orders[i];
                 OpsKit.Enable(orders[i], !wait && !blocked);
             }
-            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontRail.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE", locked ? RoomInk.Gold : RoomInk.Khaki);
-            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontRail.Describe(Front.Sof, r.Directive).ToUpperInvariant(), 10.5f), RoomInk.FieldInk);
+            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontPanels.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE", locked ? RoomInk.Gold : RoomInk.Khaki);
+            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontPanels.Describe(Front.Sof, r.Directive).ToUpperInvariant(), 10.5f), RoomInk.FieldInk);
         }
 
         /// <summary>Why BUILD CAMP and PLACE FOB are refused now ("" when they may go): the ladder's refusal, else no airbase of ours / no held building to click.</summary>
@@ -351,8 +351,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                             case InfraState.Building:
                                 bool building = FrontPanels.QueueRow(fv, c.Row, out FrontQueueView q) && q.Building;
                                 int total = Mathf.RoundToInt(q.Cost), funded = building ? total : Mathf.Min(total, Mathf.RoundToInt(q.Cost * q.Progress));
-                                st = building ? "BUILDING " + FrontKit.Clock(c.BuildLeft) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(c.Progress) * 100f) + " %";
-                                a = building ? "UP IN " + FrontKit.Clock(c.BuildLeft) + " · THEN IT HOLDS " + FrontRules.TeamsPerBase + " TEAMS" : funded + " / " + total + " FUNDS · CHIP IN SPEEDS IT UP";
+                                st = building ? FrontPanels.Clocked("BUILDING ", c.BuildLeft) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(c.Progress) * 100f) + " %";
+                                a = building ? FrontPanels.Clocked("UP IN ", c.BuildLeft, FrontPanels.AnyMoment) + " · THEN IT HOLDS " + FrontRules.TeamsPerBase + " TEAMS" : funded + " / " + total + " FUNDS · CHIP IN SPEEDS IT UP";
                                 tone = building ? AvState.Caution : AvState.Info;
                                 fill = c.Progress; row = c.Row; dashed = true;
                                 verb = Chip(fv, c.Row) > 0 ? 1 : 0;
@@ -378,7 +378,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (verb == 1)
                 {
                     int chip = Chip(fv, row);
-                    OpsKit.Label(act, "CHIP IN · " + FrontRail.Pays(chip));
+                    OpsKit.Label(act, "CHIP IN · " + FrontPanels.Pays(chip));
                     OpsKit.Enable(act, fv.Allocation >= chip);
                     act.Latched = false;
                     act.Help = "Optional: speed it up with your allocation. Front funds pay for it anyway.";

@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// The ORBIT room's SATELLITES tab (spec 5.2), top to bottom: the front's funds; the launch pads (BUILD PAD arms the map pick, a building pad takes CHIP IN, a
     /// lost one REBUILD at the same point); the fleet by kind (state, what it covers, the perk it enables, fuel, RELOCATE with the cost rings, FEED › to its
     /// DOWNLINK, or LAUNCH with the reason it cannot); the hostile birds the OPS mirror carries and ASAT; the standing orders the directors follow when nobody
-    /// drives (the posture, moved here from the FRONT rail). Every press is a request to <see cref="IFrontActions"/>; the host judges.
+    /// drives (the posture, moved here from the old FRONT rail). Every press is a request to <see cref="IFrontActions"/>; the host judges.
     /// </summary>
     internal sealed partial class OrbitRoom
     {
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 FrontDirective d = Orders[i];
                 orders[i] = Small(b, FrontRules.Name(d), CardX + i * (ow + 6f), OrderY + 30f, ow, () => { actions.Touch(); actions.SetDirective(Front.Space, d); },
-                    FrontRules.Name(d) + ": " + FrontRail.Describe(Front.Space, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
+                    FrontRules.Name(d) + ": " + FrontPanels.Describe(Front.Space, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
             }
             orderLine = FrontKit.Mono(b, "OrderLine", CardX + 2f, OrderY + 60f, cardW - 4f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             TMP_Text orderNote = FrontKit.Mono(b, "OrderNote", CardX + 2f, OrderY + 78f, cardW - 4f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
@@ -155,15 +155,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // Standing orders: a lock held by someone else disables them here (the host still judges).
             float left = r.DirectiveLockUntil - v.Now;
-            bool locked = !wait && left > 0f, blocked = locked && !FrontRail.SameName(r.DirectiveBy, v.Callsign);
+            bool locked = !wait && left > 0f, blocked = locked && !FrontPanels.SameName(r.DirectiveBy, v.Callsign);
             for (int i = 0; i < orders.Length; i++)
             {
                 orders[i].Latched = !wait && r.Directive == Orders[i];
                 OpsKit.Enable(orders[i], !wait && !blocked);
             }
-            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontRail.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE",
+            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontPanels.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE",
                 locked ? FrontKit.Tone(AvState.Caution) : Mc.Steel);
-            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontRail.Describe(Front.Space, r.Directive).ToUpperInvariant(), 10.5f), RoomInk.Engrave);
+            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontPanels.Describe(Front.Space, r.Directive).ToUpperInvariant(), 10.5f), RoomInk.Engrave);
         }
 
         // ---- Parts ---------------------------------------------------------------------------------------------------
@@ -245,14 +245,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     bool building = QueueRow(v, cur.Row, out FrontQueueView q) && q.Building;
                     int total = Mathf.RoundToInt(q.Cost), funded = building ? total : Mathf.Min(total, Mathf.RoundToInt(q.Cost * q.Progress)), chip = ChipAp(q);
                     k = AvInk.State(AvState.Caution); sk = FrontKit.Tone(building ? AvState.Caution : AvState.Info);
-                    st = building ? "BUILDING " + FrontKit.Clock(cur.BuildLeft) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(cur.Progress) * 100f) + " %";
-                    ln = building ? "UP IN " + FrontKit.Clock(cur.BuildLeft) : funded + " / " + total + " FUNDS";
+                    st = building ? Clocked("BUILDING ", cur.BuildLeft) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(cur.Progress) * 100f) + " %";
+                    ln = building ? Clocked("UP IN ", cur.BuildLeft, AnyMoment) : funded + " / " + total + " FUNDS";
                     showBar = true;
                     bar.Set(cur.Progress, building ? AvInk.State(AvState.Caution) : AvInk.State(AvState.Info));
                     showAct = chip > 0;
                     if (showAct)
                     {
-                        OpsKit.Label(act, "CHIP IN · " + FrontRail.Pays(chip));
+                        OpsKit.Label(act, "CHIP IN · " + FrontPanels.Pays(chip));
                         OpsKit.Enable(act, v.Allocation >= chip);
                         act.Help = "Optional: speed it up with your allocation. Front funds pay for it anyway.";
                     }
@@ -384,9 +384,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 else if (LaunchRow(v, c.Kind, out FrontQueueView q))
                 {
                     int total = Mathf.RoundToInt(q.Cost), funded = q.Building ? total : Mathf.Min(total, Mathf.RoundToInt(q.Cost * q.Progress)), ap = ChipAp(q);
-                    cov = q.Building ? "LAUNCHING · ON STATION IN " + FrontKit.Clock(q.BuildLeft) : "LAUNCH QUEUED · " + funded + " / " + total + " FUNDS";
+                    cov = q.Building ? Clocked("LAUNCHING · ON STATION IN ", q.BuildLeft, "ROLLING OUT · ON STATION " + AnyMoment) : "LAUNCH QUEUED · " + funded + " / " + total + " FUNDS";
                     chipOn = ap > 0;
-                    if (chipOn) { OpsKit.Label(chip, "CHIP IN · " + FrontRail.Pays(ap)); OpsKit.Enable(chip, v.Allocation >= ap); }
+                    if (chipOn) { OpsKit.Label(chip, "CHIP IN · " + FrontPanels.Pays(ap)); OpsKit.Enable(chip, v.Allocation >= ap); }
                     else tip = q.Building ? "" : "FULLY FUNDED · IT BUILDS WHEN ITS TURN COMES";
                 }
                 else

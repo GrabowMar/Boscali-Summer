@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The operations centre's fixed lamp, ice and engraving hues (a console lamp is the same colour in every pilot's scheme).</summary>
         private static class Mc
         {
-            public static readonly Color Go = RoomInk.Rgb(0x57E389), NoGo = RoomInk.Rgb(0xFF6B5E), Steel = RoomInk.Rgb(0x9DB4D3), PlateInk = RoomInk.Rgb(0x050A18),
+            public static readonly Color Go = RoomInk.Rgb(0x57E389), NoGo = RoomInk.Rgb(0xFF6B5E), Steel = RoomInk.Steel, PlateInk = RoomInk.Rgb(0x050A18),
                 Ice = RoomInk.Ice, Lost = RoomInk.Rgb(0x6D7F99);
         }
 

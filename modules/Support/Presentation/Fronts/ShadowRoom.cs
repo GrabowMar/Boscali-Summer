@@ -134,7 +134,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Card = RoomInk.Rgb(0xDDD2AE), CardEdge = RoomInk.Rgb(0xA89C75), Form = RoomInk.Rgb(0xD9D3BF), FormEdge = RoomInk.Rgb(0xA39D86),
                 Cream = RoomInk.Rgb(0xF6F0DC), Pen = RoomInk.Typewriter, PenDim = RoomInk.Rgb(0x4E432C), Grease = RoomInk.Grease,
                 Red = RoomInk.Rgb(0x7F1A12), Olive = RoomInk.Rgb(0x364216), Amber = RoomInk.Rgb(0x5E3700), Blue = RoomInk.Rgb(0x1B4152), Biro = RoomInk.Rgb(0x1F3F8F),
-                BoardInk = RoomInk.Rgb(0xA89F78), Hole = RoomInk.Rgb(0x0C0B08), Khaki = RoomInk.Khaki, TabIdle = RoomInk.Rgb(0xA8966A),
+                BoardInk = RoomInk.BoardInk, Hole = RoomInk.Rgb(0x0C0B08), Khaki = RoomInk.Khaki, TabIdle = RoomInk.Rgb(0xA8966A),
                 PhotoPaper = RoomInk.Rgb(0xEFE9D6), PhotoDark = RoomInk.Rgb(0x1E261B), BackTop = RoomInk.Rgb(0x9FB1B6), BackLow = RoomInk.Rgb(0x7E9096),
                 Silhouette = RoomInk.Rgb(0x25303A), Gear = RoomInk.Rgb(0x3D4A38), Steel = RoomInk.Rgb(0x7E8791),
                 GaugeOk = RoomInk.Rgb(0x9DB84A), GaugeWarn = RoomInk.Rgb(0xE8A93A), GaugeAmmo = RoomInk.Rgb(0x6FA3B8),
@@ -1067,7 +1067,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     if (offer)
                     {
                         HolePlate(g, VerbX, VerbY, ChipW, 22f, fv.Allocation >= ap);
-                        OpsKit.Label(chip, "CHIP IN · " + FrontRail.Pays(ap));
+                        OpsKit.Label(chip, "CHIP IN · " + FrontPanels.Pays(ap));
                         OpsKit.Enable(chip, fv.Allocation >= ap);
                     }
                     g.Flush();

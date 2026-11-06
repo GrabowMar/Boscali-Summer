@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             {
                 FrontDirective d = Orders[i];
                 orders[i] = Small(b, FrontRules.Name(d), CardX + i * (ow + 6f), OrderY + 30f, ow, () => { actions.Touch(); actions.SetDirective(Front.Cyber, d); },
-                    FrontRules.Name(d) + ": " + FrontRail.Describe(Front.Cyber, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
+                    FrontRules.Name(d) + ": " + FrontPanels.Describe(Front.Cyber, d) + " The directors follow it when nobody is driving. Free for any pilot on your side; a " + locks + " s lock follows.");
             }
             orderLine = FrontKit.Mono(b, "OrderLine", CardX + 2f, OrderY + 60f, cardW - 4f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
             TMP_Text orderNote = FrontKit.Mono(b, "OrderNote", CardX + 2f, OrderY + 80f, cardW - 4f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
@@ -190,14 +190,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
             // Standing orders: a lock held by someone else disables them here (the host still judges).
             float left = r.DirectiveLockUntil - v.Now;
-            bool locked = !wait && left > 0f, blocked = locked && !FrontRail.SameName(r.DirectiveBy, v.Callsign);
+            bool locked = !wait && left > 0f, blocked = locked && !FrontPanels.SameName(r.DirectiveBy, v.Callsign);
             for (int i = 0; i < orders.Length; i++)
             {
                 orders[i].Latched = !wait && r.Directive == Orders[i];
                 OpsKit.Enable(orders[i], !wait && !blocked);
             }
-            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontRail.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE", locked ? Amber : PhosDim);
-            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontRail.Describe(Front.Cyber, r.Directive).ToUpperInvariant(), 10.5f), Bright);
+            FrontKit.Set(orderLock, wait ? "WAITING FOR HOST" : locked ? FrontPanels.LockWord(!blocked, r.DirectiveBy, left) : FrontRules.Name(r.Directive) + " ACTIVE", locked ? Amber : PhosDim);
+            FrontKit.Set(orderLine, FrontKit.Fit(orderLine, wait ? "WAITING FOR THE HOST" : "> " + FrontPanels.Describe(Front.Cyber, r.Directive).ToUpperInvariant(), 10.5f), Bright);
         }
 
         /// <summary>A section's foot: the armed pick's words (the miss in trace red), else why its button is greyed, else what the build costs and does.</summary>
@@ -302,15 +302,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     int left = truck ? unit.BuildLeft : center.BuildLeft;
                     nm += " · " + (truck ? unit.Grid : center.Place);
                     k = Amber; sk = building ? Amber : HopInk;
-                    st = building ? "BUILDING " + FrontKit.Clock(left) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(truck ? unit.Progress : center.Progress) * 100f) + " %";
-                    a = building ? (truck ? "ROLLS OUT IN " : "UP IN ") + FrontKit.Clock(left) + (truck ? "" : " · THEN IT RUNS A TRUCK") : funded + " / " + total + " FUNDS";
+                    st = building ? FrontPanels.Clocked("BUILDING ", left) : "FUNDING " + Mathf.RoundToInt(Mathf.Clamp01(truck ? unit.Progress : center.Progress) * 100f) + " %";
+                    a = building ? FrontPanels.Clocked(truck ? "ROLLS OUT IN " : "UP IN ", left, FrontPanels.AnyMoment) + (truck ? "" : " · THEN IT RUNS A TRUCK") : funded + " / " + total + " FUNDS";
                     b = building ? "" : "FRONT FUNDS PAY IT · CHIP IN SPEEDS IT UP";
                     showBar = true; fill = truck ? unit.Progress : center.Progress; bk = building ? Amber : HopInk;
                     dashed = true;
                     showAct = chip > 0;
                     if (showAct)
                     {
-                        OpsKit.Label(act, "CHIP IN · " + FrontRail.Pays(chip));
+                        OpsKit.Label(act, "CHIP IN · " + FrontPanels.Pays(chip));
                         OpsKit.Enable(act, v.Allocation >= chip);
                         act.Latched = false;
                         act.Help = "Optional: speed it up with your allocation. Front funds pay for it anyway.";
