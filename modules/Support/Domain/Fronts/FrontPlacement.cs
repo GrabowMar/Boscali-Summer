@@ -48,6 +48,27 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return ours;
         }
 
+        /// <summary>Ring radii (metres) a picked camp widens to when its point does not fit (ruling R13), and the bearings per ring.</summary>
+        public static readonly float[] CampRings = { 400f, 800f, 1500f };
+        public const int CampBearings = 12;
+
+        /// <summary>
+        /// Where a picked camp may stand, nearest first: the point itself, then <see cref="CampRings"/> round it at <see cref="CampBearings"/> spread bearings, own ground only
+        /// (<see cref="OwnGround"/>). At most 1 + 3 x 12 = 37 spots. <paramref name="into"/> is cleared first.
+        /// </summary>
+        public static void CampSpots(IReadOnlyList<Base> bases, float x, float z, List<(float X, float Z)> into)
+        {
+            into.Clear();
+            if (OwnGround(bases, x, z)) into.Add((x, z));
+            foreach (float r in CampRings)
+                for (int step = 0; step < CampBearings; step++)
+                {
+                    double angle = step * 5 % CampBearings * 2.0 * Math.PI / CampBearings; // 5 is coprime with 12: neighbours in the list sit far apart on the ring
+                    float cx = x + (float)(Math.Sin(angle) * r), cz = z + (float)(Math.Cos(angle) * r);
+                    if (OwnGround(bases, cx, cz)) into.Add((cx, cz));
+                }
+        }
+
         public static bool WithinReach(IReadOnlyList<(float X, float Z)> centers, float x, float z, float reach)
         {
             for (int i = 0; i < centers.Count; i++) if (Dist(x, z, centers[i].X, centers[i].Z) <= reach) return true;

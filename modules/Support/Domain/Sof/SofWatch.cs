@@ -110,7 +110,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             if (sweep.Action != SofWatchAction.None) return sweep;
             SofTeam team = Mine(desk);
             pacer.SetUrgent(WatchDomain.Sof, false); // refreshed below only while a team is in danger: a stale reservation would hold CYBER off the shared limiter
-            if (team == null || team.State == TeamState.Lost) return SofWatchPlan.Idle(SofWatchWhy.Waiting); // ruling R8: no free raise, pool teams come only from TEAM builds
+            if (team == null) return SofWatchPlan.Idle(SofWatchWhy.Waiting); // ruling R8: no free raise, pool teams come only from TEAM builds
             if (team.Slot != lastSlot) { lastSlot = team.Slot; lastExposure = -1f; }
             float prior = lastExposure, priorAt = lastExposureAt;
             lastExposure = team.Exposure; lastExposureAt = now;
@@ -138,10 +138,17 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
             return new SofWatchPlan(SofWatchAction.Sweep, SofWatchWhy.None, 0, MissionKind.None, 0, TeamVerb.Cancel, 0f, 0f, WatchCode.SofSweep, n, 0);
         }
 
-        /// <summary>OVERLORD's team: a pool team (TRAIN TEAM, or one back from an operator) or one it raised. A team an operator has tasked answers to that operator and is never picked here.</summary>
+        /// <summary>
+        /// OVERLORD's team: a pool team (TRAIN TEAM, or one back from an operator). A team an operator has tasked answers to that operator and is never picked here; a Lost one
+        /// (still active while it lingers) is skipped so it never blocks the next pool team (ruling R17).
+        /// </summary>
         private SofTeam Mine(SofDesk desk)
         {
-            for (int i = 0; i < desk.Teams.Length; i++) if (desk.Teams[i].Active && desk.Teams[i].Raiser == Me) return desk.Teams[i];
+            for (int i = 0; i < desk.Teams.Length; i++)
+            {
+                SofTeam t = desk.Teams[i];
+                if (t.Active && t.State != TeamState.Lost && t.Raiser == Me) return t;
+            }
             return null;
         }
 

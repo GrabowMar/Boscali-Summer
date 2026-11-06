@@ -20,6 +20,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
     {
         private const int MaximumFactions = 8, MaximumBases = 16, MaximumScanUnits = 4096;
         private const float RefreshSeconds = 10f, CampRadius = 6500f;
+        /// <summary>An automatic camp keeps this far from every standing camp (ruling R16: camp scale; the ring spots round one base are at most 15 km apart).</summary>
+        private const float CampSpacingMetres = 3000f;
 
         private sealed class CampSlot
         {
@@ -73,6 +75,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>Placement scratch: every land airbase (ours flagged; the own-ground test), and the land airbases the faction holds.</summary>
         private readonly List<FrontPlacement.Base> landBases = new List<FrontPlacement.Base>(32);
         private readonly List<Airbase> heldAirbases = new List<Airbase>(MaximumBases);
+        private readonly List<(float X, float Z)> campSpots = new List<(float X, float Z)>(37);
         private SupportManager manager;
         private SpaceService space;
         private CyberService cyber;
@@ -283,7 +286,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// CAMP finished: a real camp and its two guards on dry level ground at the picked point (nudged up to 120 m round it), or without a point on the best rear ring spot round the held
+        /// CAMP finished: a real camp and its two guards on dry level ground at the picked point (see <see cref="CampNear"/>), or without a point on the best rear ring spot round the held
         /// land airbases, clear of the standing camps. It takes the first free slot; a down one first loses its wreck and guards. False with the refusal in <paramref name="why"/>.
         /// </summary>
         internal bool TryBuildCamp(FactionHQ owner, bool hasPoint, float x, float z, out FrontOutcome why)
@@ -298,13 +301,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (spawner.Owns(slot.Unit)) spawner.DiscardGroup(slot.Unit); // the 32-unit spawner cap is shared: the old group goes before the new one spawns
                 slot.Unit = null;
             }
-            Unit made = null;
-            if (hasPoint)
-            {
-                SupportTargeting.TryMapPoint(new GlobalPosition(x, 0f, z), out Vector3 ground);
-                spawner.TryCreateCamp(owner, index, ground.ToGlobalPosition(), null, out made);
-            }
-            else made = RearCamp(f, index);
+            Unit made = hasPoint ? CampNear(owner, index, x, z) : RearCamp(f, index);
             if (made == null) { why = FrontOutcome.NoSpot; return false; }
             if (slot == null)
             {
@@ -318,6 +315,22 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return true;
         }
 
+        /// <summary>
+        /// A picked camp: at the point (the spawner nudges it up to 120 m), else on rings of 400, 800 and 1500 m round it that are still own ground (ruling R13,
+        /// <see cref="FrontPlacement.CampSpots"/>). Needs <see cref="landBases"/> filled (<see cref="CheckCamp"/> does). Null when no spot fits.
+        /// </summary>
+        // ponytail: at most 37 camp plans (17 footprint tests each), once per finished CAMP programme; step it across frames if a hitch shows.
+        private Unit CampNear(FactionHQ owner, int index, float x, float z)
+        {
+            FrontPlacement.CampSpots(landBases, x, z, campSpots);
+            foreach ((float X, float Z) spot in campSpots)
+            {
+                SupportTargeting.TryMapPoint(new GlobalPosition(spot.X, 0f, spot.Z), out Vector3 ground);
+                if (spawner.TryCreateCamp(owner, index, ground.ToGlobalPosition(), null, out Unit made)) return made;
+            }
+            return null;
+        }
+
         private sealed class Site
         {
             public Airbase Parent; public GlobalPosition Anchor;
@@ -325,8 +338,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
         /// <summary>
-        /// The automatic camp (no picked point): the 6.5/7.5 km rings round the held land airbases (else the wide fan), deepest rear first, at least the CYBER separation from every
-        /// standing camp. The first pick that spawns wins; null when none does.
+        /// The automatic camp (no picked point): the 6.5/7.5 km rings round the held land airbases (else the wide fan), deepest rear first, at least
+        /// <see cref="CampSpacingMetres"/> from every standing camp (ruling R16). The first pick that spawns wins; null when none does.
         /// </summary>
         // ponytail: up to 16 bases x 24 ring spots (or 96 fan spots) planned synchronously at programme completion; step it across frames if a hitch shows.
         private Unit RearCamp(FactionSof f, int index)
@@ -337,7 +350,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             for (int i = 0; i < f.Camps.Capacity; i++)
                 if (i != index && f.Camps.Health(i) != AnchorHealth.Down && f.Camps.TryPosition(i, out float cx, out float cz)) avoid.Add(new SiteCandidate(i, cx, cz, 0f, 0f));
             float diagonal = TheaterFrame.Resolve().magnitude;
-            CyberPlacement.Pick(cands, diagonal, CampRules.MaxCamps, avoid, diagonal * CyberPlacement.SeparationFraction, picks);
+            CyberPlacement.Pick(cands, diagonal, CampRules.MaxCamps, avoid, CampSpacingMetres, picks);
             foreach (int id in picks)
                 if (spawner.TryCreateCamp(f.Owner, index, sites[id].Anchor, sites[id].Parent, out Unit made)) return made;
             return null;
