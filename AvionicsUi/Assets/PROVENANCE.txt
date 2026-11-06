@@ -21,5 +21,5 @@ console-ground.png: near-black tactical map plate: faint topographic contour lin
 square grid, crosshair registration marks and edge tick scales, calm centre. Generated at 1024x1536 from the prompt "Neutral grey
 background texture for a military tactical display: near-black with faint thin topographic contour lines of hilly terrain, a sparse
 square map grid, a few small crosshair registration marks and short tick scales along the edges ... Greyscale only", then
-contrast-stretched, curved (gamma 1.8), resized to 512x768 and stored white with luminance in alpha so each scheme tints it
+high-passed (minus a 12 px blur) and thresholded so only the line work survives (no mottled ground), resized to 512x768 and stored white with luminance in alpha so each scheme tints it
 (embedded PNG, decoded once).
