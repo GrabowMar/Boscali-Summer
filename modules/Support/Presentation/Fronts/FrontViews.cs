@@ -792,13 +792,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     FromNode = fromNode, FromAnchor = fromAnchor, Label = NodeLabel(r), Handle = NodeHandle(r.Kind, r.Id), Owner = owner, Reach = reachText
                 });
             }
-            // Our own anchors as nodes after the enemy's: negative ids the room picks locally (a truck is no NodeKind; Kind only matters for a data center).
+            // Our own anchors as nodes after the enemy's: negative ids the room picks locally. The node vocabulary (a wire enum) has no truck: an EW truck reads as
+            // the relay it is to the network, a data center as a data center; Anchors[AnchorAt].Kind says which anchor it is.
             for (int i = 0; i < n.Anchors.Count; i++)
             {
                 NetAnchorView a = n.Anchors[i];
                 n.Nodes.Add(new NetNodeView
                 {
-                    Id = NetworkRoomView.OwnId(a.Kind, a.Slot), Kind = NodeKind.DataCenter, X = a.X, Y = a.Y, State = NetNodeState.OutOfReach, FromNode = -1, FromAnchor = -1,
+                    Id = NetworkRoomView.OwnId(a.Kind, a.Slot), Kind = a.Kind == AnchorKind.EwTruck ? NodeKind.Relay : NodeKind.DataCenter, X = a.X, Y = a.Y, State = NetNodeState.OutOfReach, FromNode = -1, FromAnchor = -1,
                     Label = a.Label, Handle = a.Label.ToLowerInvariant() + ".local", Owner = "YOU", Reach = a.Reach > 0f ? "REACH " + Mathf.RoundToInt(a.Reach * n.MapKmW) + " KM" : "",
                     Own = true, AnchorAt = i, Breached = a.Breached
                 });

@@ -1211,6 +1211,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!string.IsNullOrEmpty(next)) g.Rect(10f, 268f, 3f, 28f, nc);
             g.Flush();
             hop.Interactable = n.CanHop && !poor;
+            purge.Label = n.PurgeLabel; // the countdown or the recharge rides the button
+            purge.Interactable = n.CanPurge;
             burn.Interactable = n.CanBurn;
             drop.Interactable = n.CanDrop;
             string help = d.Has ? "Hop to this node. " + d.Hop + ". The host charges exactly this quote. Going deeper from a node your session holds is free." : "Pick a node on the map or in the list first.";

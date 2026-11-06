@@ -171,7 +171,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int i = 0; i < centerCards.Length; i++) centerCards[i].Paint(v);
 
             // Trucks: DEPLOY TRUCK needs a free data center (the offer's refusal) and a ring to click in (a standing data center, or a queued one with a point).
-            trWhy = !string.IsNullOrEmpty(n.DeployTruck.Refusal) ? n.DeployTruck.Refusal : Rings(v, PickMode.Truck).Count > 0 ? "" : "WAITS FOR A DATA CENTER WITH A SPOT";
+            // The ladder counts every queued center; a picked truck (always picked here) is judged by the host against the centers that have a spot only.
+            int trucksComing = 0, spots = Rings(v, PickMode.Truck).Count;
+            foreach (InfraTruckView t in n.Trucks) if (t.State == InfraState.Building) trucksComing++;
+            trWhy = !string.IsNullOrEmpty(n.DeployTruck.Refusal) ? n.DeployTruck.Refusal : spots == 0 ? "WAITS FOR A DATA CENTER WITH A SPOT"
+                : n.TrucksUp + trucksComing + 1 > spots ? FrontWords.Refusal(FrontOutcome.DataCenterFull, Front.Cyber) : "";
             FrontKit.Set(trHead, "EW TRUCKS " + n.TrucksUp + " / " + FrontRules.TruckCap, Phos);
             deploy.Latched = pick == PickMode.Truck;
             OpsKit.Enable(deploy, pick == PickMode.Truck || trWhy.Length == 0);
