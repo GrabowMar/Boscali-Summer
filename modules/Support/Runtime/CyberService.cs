@@ -256,15 +256,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// Host: can an EW truck deploy (at the picked point when <paramref name="hasPoint"/>)? Each standing data center, or one queued ahead (<paramref name="queuedCenters"/>), runs one
-        /// truck (a truck packing up is not live, so it holds none); a picked point must lie within <see cref="FrontRules.TruckReachMetres"/> of one of them. Spawns nothing.
+        /// truck (a truck packing up still holds its data center: ruling R10); a picked point must lie within <see cref="FrontRules.TruckReachMetres"/> of one of them. Spawns nothing.
         /// </summary>
         internal FrontOutcome CheckTruck(FactionHQ owner, bool hasPoint, float x, float z, IReadOnlyList<(float X, float Z)> queuedCenters)
         {
             if (owner == null || !factions.TryGetValue(owner, out FactionCyber f)) return FrontOutcome.Unavailable;
             int running = f.Anchors.LiveCount(AnchorKind.DataCenter) + (queuedCenters != null ? queuedCenters.Count : 0);
             if (running <= 0) return FrontOutcome.NoDataCenter;
-            if (f.Anchors.LiveCount(AnchorKind.EwTruck) + 1 > running) return FrontOutcome.DataCenterFull;
-            if (FreeIndex(f, AnchorKind.EwTruck) < 0) return FrontOutcome.TrucksMax; // one truck stands and the other slot is packing up
+            // Live + packing trucks < live data centers <= 2 = truck slots: TryDeployTruck (no queued centers) always finds a free slot past this line.
+            if (f.Anchors.LiveCount(AnchorKind.EwTruck) + Packing(f) + 1 > running) return FrontOutcome.DataCenterFull;
             if (!hasPoint) return FrontOutcome.None;
             CopyCenters(f);
             if (queuedCenters != null) centers.AddRange(queuedCenters);
@@ -338,6 +338,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             SupportTargeting.TryMapPoint(new GlobalPosition(x, 0f, z), out Vector3 ground);
             return spawner.TryCreateTruckNear(owner, index, ground.ToGlobalPosition(), null, out made);
+        }
+
+        /// <summary>Trucks packing up (RELOCATE): offline for reach and hops, but each still holds its data center's capacity (ruling R10).</summary>
+        internal int PackingTrucks(FactionHQ owner) => owner != null && factions.TryGetValue(owner, out FactionCyber f) ? Packing(f) : 0;
+
+        private static int Packing(FactionCyber f)
+        {
+            int n = 0;
+            foreach (AnchorSlot s in f.Slots) if (s.Kind == AnchorKind.EwTruck && s.PackUntil > 0f) n++;
+            return n;
         }
 
         /// <summary>The slot a new anchor of this kind takes: the first down one (never a truck packing up), else the next new index; -1 at the cap.</summary>
