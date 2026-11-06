@@ -271,7 +271,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             scope.Alloc = m.LocalAllocation;
             scope.RodCost = rodCost;
             scope.AllocCostCount = costs.Length;
-            if (player.HQ != null && m.TryOwnGeo(player.HQ, (int)BirdKind.Kinetic, out GeoBird geo))
+            if (player.HQ != null && m.HasSpaceBird(player.HQ, BirdKind.Kinetic) && m.TryOwnGeo(player.HQ, (int)BirdKind.Kinetic, out GeoBird geo))
             {
                 scope.HasBird = true;
                 scope.BirdFuel = Mathf.Clamp01(geo.Fuel / 100f);

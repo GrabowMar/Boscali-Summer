@@ -1,5 +1,4 @@
 using System;
-using BoscaliSummer.Modules.Support.Domain.Cyber;
 
 namespace BoscaliSummer.Modules.Support.Domain.Space
 {
@@ -29,36 +28,46 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         }
 
         private readonly float[] health;
-        private readonly bool[] down;
+        private readonly bool[] down, present;
+        private readonly bool[] launched = new bool[SpaceRules.BirdCount];
         private readonly BirdSlot[] birds = new BirdSlot[SpaceRules.BirdCount];
         private readonly float[] cooldownUntil = new float[SpaceRules.TaskCount];
-        private readonly bool[] dead = new bool[SpaceRules.BirdCount];
-        private readonly float[] buildEndsAt = new float[SpaceRules.BirdCount];
-        private readonly RebuildBar[] bars = { new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal), new RebuildBar(SpaceRules.BirdRebuildGoal) };
+        private readonly bool[] dead = { true, true, true };
         private readonly GeoBird[] geo = { new GeoBird(0.40f, 0.50f, 100f), new GeoBird(0.50f, 0.50f, 100f), new GeoBird(0.60f, 0.50f, 100f) };
         private readonly float[] homeU = { 0.40f, 0.50f, 0.60f }, homeV = { 0.50f, 0.50f, 0.50f };
         private float allDownAt = float.PositiveInfinity;
         private int nextToken;
         private bool retired;
 
-        public SpaceState(int uplinkCount)
+        /// <summary>Every pad slot starts absent and every bird not launched: nothing is on station until built.</summary>
+        public SpaceState(int padSlots = 2)
         {
-            if (uplinkCount < 1 || uplinkCount > 2) throw new ArgumentOutOfRangeException(nameof(uplinkCount));
-            health = new float[uplinkCount];
-            down = new bool[uplinkCount];
-            for (int i = 0; i < health.Length; i++) health[i] = 1f;
+            if (padSlots < 0 || padSlots > 2) throw new ArgumentOutOfRangeException(nameof(padSlots));
+            health = new float[padSlots];
+            down = new bool[padSlots];
+            present = new bool[padSlots];
         }
 
-        public int UplinkCount => health.Length;
-        /// <summary>The host's last reading of one uplink site: destroyed (or out of range of the list).</summary>
-        public bool UplinkDown(int index) => index < 0 || index >= down.Length || down[index];
+        public int UplinkCount
+        {
+            get { int n = 0; for (int i = 0; i < present.Length; i++) if (present[i]) n++; return n; }
+        }
+        public bool PadPresent(int i) => i >= 0 && i < present.Length && present[i];
+        /// <summary>A pad was built in this slot: present, full health, up.</summary>
+        public void PlacePad(int i)
+        {
+            if (i < 0 || i >= present.Length) return;
+            present[i] = true; health[i] = 1f; down[i] = false; allDownAt = float.PositiveInfinity;
+        }
+        /// <summary>The host's last reading of one uplink site: destroyed, absent (or out of range of the list).</summary>
+        public bool UplinkDown(int index) => index < 0 || index >= down.Length || !present[index] || down[index];
         public int Generation { get; private set; } = 1;
         public int LiveUplinkCount
         {
             get
             {
                 int count = 0;
-                for (int i = 0; i < down.Length; i++) if (!down[i]) count++;
+                for (int i = 0; i < down.Length; i++) if (present[i] && !down[i]) count++;
                 return count;
             }
         }
@@ -71,15 +80,30 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             {
                 float jam = float.IsFinite(JamFactor) && JamFactor >= 1f && JamFactor <= 4f ? JamFactor : 1f;
                 for (int i = 0; i < health.Length; i++)
-                    if (health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
+                    if (present[i] && health[i] <= SpaceRules.DamagedHealth) return SpaceRules.DamagedCooldownFactor * jam;
                 return jam;
             }
         }
 
-        /// <summary>The bird is up: it exists and an ASAT strike has not killed it (a dead bird is back after its rebuild bar and build time).</summary>
+        /// <summary>The bird is up: it was launched and an ASAT strike has not killed it (a dead bird stays dead until a LAUNCH build relaunches it).</summary>
         public bool HasBird(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && !dead[(byte)bird];
 
         public bool BirdDown(BirdKind bird) => (byte)bird < SpaceRules.BirdCount && dead[(byte)bird];
+
+        /// <summary>Bit i set (OPTICAL, RADAR, KINETIC) has been launched at least once (a killed bird stays launched: LOST).</summary>
+        public byte LaunchedMask
+        {
+            get { byte m = 0; for (int i = 0; i < launched.Length; i++) if (launched[i]) m |= (byte)(1 << i); return m; }
+        }
+
+        /// <summary>A satellite is put on station at its home point with a full tank. False when that bird is already alive.</summary>
+        public bool Launch(BirdKind bird)
+        {
+            if ((byte)bird >= SpaceRules.BirdCount || !dead[(byte)bird]) return false;
+            int i = (byte)bird;
+            dead[i] = false; launched[i] = true; birds[i] = default; Reset(i);
+            return true;
+        }
 
         /// <summary>The bird's geostationary state (position, burn under way, fuel).</summary>
         public GeoBird Geo(BirdKind bird) => geo[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
@@ -111,61 +135,19 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
             get { byte m = 0; for (int i = 0; i < dead.Length; i++) if (dead[i]) m |= (byte)(1 << i); return m; }
         }
 
-        /// <summary>The restore bar of a dead bird (auto-funded by the host from HQ FUND, like an anchor).</summary>
-        public RebuildBar BirdBar(BirdKind bird) => bars[(byte)bird < SpaceRules.BirdCount ? (byte)bird : 0];
-
-        /// <summary>0..100: how far a dead bird's rebuild has come (the bar first, then the build clock). 0 for a living bird.</summary>
-        public int RebuildPercent(BirdKind bird, float now)
-        {
-            if (!BirdDown(bird)) return 0;
-            int i = (byte)bird;
-            if (buildEndsAt[i] > 0f) return 50 + (int)Math.Clamp(50f * (1f - (buildEndsAt[i] - now) / SpaceRules.BirdBuildSeconds), 0f, 50f);
-            return (int)Math.Min(49f, Math.Floor(bars[i].Fraction * 50f));
-        }
-
-        /// <summary>An ASAT strike hit this bird. Its tasks stop (an in-flight reservation is voided) until the rebuild bar and the build finish. False when it was already dead.</summary>
+        /// <summary>An ASAT strike hit this bird. Its tasks stop (an in-flight reservation is voided) until a LAUNCH build relaunches it. False when it was already dead.</summary>
         public bool KillBird(BirdKind bird, float now)
         {
             if ((byte)bird >= SpaceRules.BirdCount || dead[(byte)bird] || !SpaceRules.MissionTime(now)) return false;
             int i = (byte)bird;
-            dead[i] = true; buildEndsAt[i] = 0f; bars[i].Reset();
+            dead[i] = true;
             birds[i] = default;
             return true;
         }
 
-        /// <summary>OPS FRONTS S1b: a LAUNCH SATELLITE programme finished (its own build time has run): the lowest dead bird is on station at once. Returns it, or -1 when none is down.</summary>
-        public int RestoreBird()
-        {
-            for (int i = 0; i < dead.Length; i++)
-            {
-                if (!dead[i]) continue;
-                dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
-                return i;
-            }
-            return -1;
-        }
-
-        /// <summary>Starts the build once a dead bird's bar is full and finishes it after 6 minutes. Returns the mask of birds restored by this call.</summary>
-        public byte TickBirds(float now)
-        {
-            byte restored = 0;
-            if (!SpaceRules.MissionTime(now)) return restored;
-            for (int i = 0; i < dead.Length; i++)
-            {
-                if (!dead[i]) continue;
-                if (buildEndsAt[i] <= 0f && bars[i].Complete) buildEndsAt[i] = now + SpaceRules.BirdBuildSeconds;
-                if (buildEndsAt[i] > 0f && now >= buildEndsAt[i])
-                {
-                    dead[i] = false; buildEndsAt[i] = 0f; bars[i].Reset(); Reset(i);
-                    restored |= (byte)(1 << i);
-                }
-            }
-            return restored;
-        }
-
         public void SetUplink(int index, float nativeHealthFraction, bool isDown, float now)
         {
-            if (index < 0 || index >= health.Length || !SpaceRules.MissionTime(now) ||
+            if (index < 0 || index >= health.Length || !present[index] || !SpaceRules.MissionTime(now) ||
                 !float.IsFinite(nativeHealthFraction) || nativeHealthFraction < 0f || nativeHealthFraction > 1f) return;
             bool wasAllDown = LiveUplinkCount == 0;
             health[index] = isDown ? 0f : nativeHealthFraction;
@@ -179,7 +161,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         {
             if (!SpaceRules.MissionTime(now)) return SpaceFamilyState.Dark;
             int live = LiveUplinkCount;
-            if (live == down.Length) return SpaceFamilyState.Normal;
+            if (live == UplinkCount) return SpaceFamilyState.Normal; // also true with no pad at all: no surcharge before the first build
             if (live > 0 || now - allDownAt < SpaceRules.DarkGraceSeconds) return SpaceFamilyState.Degraded;
             return SpaceFamilyState.Dark;
         }

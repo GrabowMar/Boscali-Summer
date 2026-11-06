@@ -21,6 +21,60 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         /// <summary>A damaged camp raises teams 1.5x slower; a down camp raises none; teams already in the field carry on.</summary>
         public static float RaiseFactor(AnchorHealth health) => health == AnchorHealth.Damaged ? RaiseDamagedFactor : 1f;
+
+        /// <summary>
+        /// Each team's home camp as the TEAMS &amp; BASES tab words it (ruling D-R4; the wire carries no team-to-camp link): the ready teams first, then the rest,
+        /// each in slot order, take the nearest standing camp (index into <paramref name="camps"/>) that still has room for <see cref="Fronts.FrontRules.TeamsPerBase"/>
+        /// (a team out in the field never takes the room of one standing at a camp). A lost team, or one no standing camp has room for (the FOB's share), gets -1.
+        /// <paramref name="home"/> is indexed by slot.
+        /// </summary>
+        public static void Homes(List<SofCampRow> camps, List<SofTeamRow> teams, int[] home)
+        {
+            var held = new int[camps.Count];
+            for (int slot = 0; slot < home.Length; slot++) home[slot] = -1;
+            for (int pass = 0; pass < 2; pass++)
+                for (int slot = 0; slot < home.Length; slot++)
+                    foreach (SofTeamRow t in teams)
+                    {
+                        if (t.Slot != slot || t.State == TeamState.Lost || (t.State == TeamState.Ready) != (pass == 0)) continue;
+                        float bestD = float.MaxValue;
+                        for (int c = 0; c < camps.Count; c++)
+                        {
+                            if (camps[c].Health == AnchorHealth.Down || held[c] >= Fronts.FrontRules.TeamsPerBase) continue;
+                            float d = SofRules.Distance(t.X, t.Z, camps[c].X, camps[c].Z);
+                            if (d < bestD) { bestD = d; home[slot] = c; }
+                        }
+                        if (home[slot] >= 0) held[home[slot]]++;
+                    }
+        }
+    }
+
+    /// <summary>The TARGETS tab's pure choices: a target's filter chip (ruling D-R1) and the team a new aim pre-picks (spec 7.3).</summary>
+    internal static class SofAim
+    {
+        public const int Sites = 1, Buildings = 2, Network = 3, Ground = 4;
+
+        /// <summary>D-R1: SITES an anchor that is no data center, BUILDINGS, NETWORK a relay or a data center, GROUND a contact (the LASE targets).</summary>
+        public static int Filter(TargetKind kind, AnchorSub sub) =>
+            kind == TargetKind.Ground ? Ground : kind == TargetKind.Building ? Buildings : kind == TargetKind.Relay || sub == AnchorSub.DataCenter ? Network : Sites;
+
+        /// <summary>The host would send this team now (SofDesk.Send): ready, armed for a mission, and ours or nobody's.</summary>
+        public static bool CanGo(in SofTeamRow t) =>
+            t.State == TeamState.Ready && t.Ammo + 0.01f >= SofDesk.AmmoPerMission && (t.Mine || string.IsNullOrEmpty(t.Controller));
+
+        /// <summary>The slot of the nearest team that can go now and stands on its own feet (not waiting for or riding a helicopter) to (x, z); -1 when none can.</summary>
+        public static int Nearest(List<SofTeamRow> teams, float x, float z)
+        {
+            int best = -1;
+            float bestD = float.MaxValue;
+            foreach (SofTeamRow t in teams)
+            {
+                if (!CanGo(t) || t.Carried || t.LiftWaiting) continue;
+                float d = SofRules.Distance(t.X, t.Z, x, z);
+                if (d < bestD || (d == bestD && t.Slot < best)) { bestD = d; best = t.Slot; }
+            }
+            return best;
+        }
     }
 
     /// <summary>One faction's SOF camps: health, position, grace and the restore bar. Pure state the host runtime measures into.</summary>
@@ -30,25 +84,49 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         {
             public AnchorHealth Health = AnchorHealth.Live;
             public float X, Z, DownSince = -1f;
-            public bool HasPosition;
+            public bool HasPosition, Placed;
         }
 
         private readonly Slot[] slots;
 
-        public SofCampSet(int camps)
+        /// <summary>Slots start unplaced: a camp exists only once <see cref="Place"/> (or <see cref="SetPosition"/>) is called.</summary>
+        public SofCampSet(int capacity)
         {
-            slots = new Slot[Math.Clamp(camps, 0, CampRules.MaxCamps)];
+            slots = new Slot[Math.Clamp(capacity, 0, CampRules.MaxCamps)];
             for (int i = 0; i < slots.Length; i++) slots[i] = new Slot();
         }
 
-        public int Count => slots.Length;
+        public int Capacity => slots.Length;
 
-        public AnchorHealth Health(int index) => index >= 0 && index < slots.Length ? slots[index].Health : AnchorHealth.Down;
+        /// <summary>Placed camps.</summary>
+        public int Count
+        {
+            get { int n = 0; for (int i = 0; i < slots.Length; i++) if (slots[i].Placed) n++; return n; }
+        }
+
+        public bool Placed(int i) => i >= 0 && i < slots.Length && slots[i].Placed;
+
+        /// <summary>A camp stands in this slot: live, at (x, z).</summary>
+        public void Place(int i, float x, float z)
+        {
+            if (i < 0 || i >= slots.Length) return;
+            Slot s = slots[i];
+            s.Health = AnchorHealth.Live; s.DownSince = -1f; s.X = x; s.Z = z; s.HasPosition = s.Placed = true;
+        }
+
+        /// <summary>First unplaced or down slot (where the next camp goes), else -1.</summary>
+        public int FreeSlot()
+        {
+            for (int i = 0; i < slots.Length; i++) if (!slots[i].Placed || slots[i].Health == AnchorHealth.Down) return i;
+            return -1;
+        }
+
+        public AnchorHealth Health(int index) => index >= 0 && index < slots.Length && slots[index].Placed ? slots[index].Health : AnchorHealth.Down;
 
         public int LiveCount()
         {
             int n = 0;
-            for (int i = 0; i < slots.Length; i++) if (slots[i].Health != AnchorHealth.Down) n++;
+            for (int i = 0; i < slots.Length; i++) if (slots[i].Placed && slots[i].Health != AnchorHealth.Down) n++;
             return n;
         }
 
@@ -66,7 +144,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         public void SetPosition(int index, float x, float z)
         {
             if (index < 0 || index >= slots.Length) return;
-            slots[index].X = x; slots[index].Z = z; slots[index].HasPosition = true;
+            slots[index].X = x; slots[index].Z = z; slots[index].HasPosition = slots[index].Placed = true;
         }
 
         public bool TryPosition(int index, out float x, out float z)
@@ -117,7 +195,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         public void Clear()
         {
-            for (int i = 0; i < slots.Length; i++) { slots[i].Health = AnchorHealth.Live; slots[i].DownSince = -1f; slots[i].HasPosition = false; }
+            for (int i = 0; i < slots.Length; i++) { slots[i].Health = AnchorHealth.Live; slots[i].DownSince = -1f; slots[i].HasPosition = slots[i].Placed = false; }
         }
     }
 

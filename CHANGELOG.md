@@ -49,6 +49,15 @@
   WMC Formation page no longer jump to the top of the page, under the tabs.
 - **Upright wing labels on the minimap** ([#32](https://github.com/GrabowMar/Boscali-Summer/issues/32)): the
   wingman labels no longer turn with the heading-up minimap; they read level above the marker.
+- **OPS fronts start empty**: every faction begins a mission with no OPS infrastructure or assets. Each front gets a
+  500-fund seed (host setting `Support > FrontSeed`) and holds up to 1000.
+- **Build the ladder**: SPACE builds a LAUNCH PAD at a held airbase or carrier, then launches a SATELLITE by kind; CYBER
+  builds a DATA CENTER at a held land airbase, then deploys an EW TRUCK within 20 km of it; SOF builds a CAMP on own
+  ground, then trains TEAMS (two per camp), and a FOB can be raised on a held building.
+- **Placed by the host**: builds queue on the front window and the host finds them legal ground. Infrastructure takes
+  2 minutes, assets 90 seconds, and each front builds one thing at a time.
+- **Quartermaster**: a front nobody has touched for 3 minutes builds its next step on its own, and AI factions climb
+  their own ladders, so the enemy grows its OPS kit through the mission as well.
 
 ## 0.2.12 — update
 

@@ -45,6 +45,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
         /// <summary>Host only: the share of the faction's funds that flows into its three fronts every minute (0 .. 0.10; default 0.03).</summary>
         public ConfigEntry<float> FrontShare { get; }
         public ConfigEntry<float> FrontShareCap { get; }
+        /// <summary>Host only: the funds each front's budget starts a mission with (0 .. 1000, the budget cap; default 500).</summary>
+        public ConfigEntry<float> FrontSeed { get; }
         /// <summary>Host only: scales every front programme's cost (0.25 .. 4; default 1).</summary>
         public ConfigEntry<float> ProgrammeCostScale { get; }
 
@@ -185,6 +187,8 @@ namespace BoscaliSummer.Modules.Support.Configuration
                 new ConfigDescription("Host: the share of a faction's funds that flows into its SPACE, CYBER and SOF fronts every 60 s (0 = fronts live on donations only).", new AcceptableValueRange<float>(0f, 0.10f)));
             FrontShareCap = config.Bind("Support", "FrontShareCap", FrontRules.DefaultShareCap,
                 new ConfigDescription("Host: the most funds one faction's fronts take per 60 s tick, however rich the treasury (default 250: a satellite relaunch in about 8 minutes).", new AcceptableValueRange<float>(0f, FrontRules.MaxShareCap)));
+            FrontSeed = config.Bind("Support", "FrontSeed", FrontRules.SeedFunds,
+                new ConfigDescription("Host: the funds each SPACE, CYBER and SOF front starts a mission with (default 500: a first pad and satellite). Read when a faction's fronts open.", new AcceptableValueRange<float>(0f, FrontRules.MaxSeed)));
             ProgrammeCostScale = config.Bind("Support", "ProgrammeCostScale", 1f,
                 new ConfigDescription("Host: scales every front programme's cost (1 = the table: LAUNCH SATELLITE 300, ASAT 900 ...).", new AcceptableValueRange<float>(0.25f, 4f)));
         }

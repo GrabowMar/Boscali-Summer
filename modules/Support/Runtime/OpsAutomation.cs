@@ -35,8 +35,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return Readout(null);
         }
 
-        /// <summary>Send one verb: <c>hop</c> (first unheld CYBER node, 0 when none), <c>directive</c> (<c>front</c>, <c>directive</c> id), <c>queue</c> / <c>donate</c> (<c>front</c>, <c>programme</c>, <c>amount</c>),
-        /// <c>scan</c> (the RECON PASS perk: arm, then the map pick), <c>sync</c> (all mirrors). The verdict arrives as spoken words a frame or two later.</summary>
+        /// <summary>Send one verb: <c>hop</c> (first unheld CYBER node, 0 when none), <c>directive</c> (<c>front</c>, <c>directive</c> id), <c>queue</c> (<c>front</c>, <c>programme</c>, optional <c>kind</c>,
+        /// <c>x</c> and <c>z</c>), <c>donate</c> (<c>front</c>, <c>programme</c>, <c>amount</c>), <c>truckmove</c> (dev: <c>truck</c>, <c>x</c>, <c>z</c>), <c>scan</c> (the RECON PASS perk: arm, then the map pick),
+        /// <c>sync</c> (all mirrors). The verdict arrives as spoken words a frame or two later.</summary>
         public static Dictionary<string, object> Verb(Dictionary<string, object> args)
         {
             SupportManager m = SupportManager.Active;
@@ -58,13 +59,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "directive":
                     request = m.FrontSetDirective((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (FrontDirective)Mathf.Clamp((int)Number(args, "directive", 1f), 0, 6));
                     break;
-                case "queue":
-                    request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1));
+                case "queue": // optional kind (satellite) and a picked point when both x and z are given, else automatic placement
+                    request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
+                        (byte)Mathf.Clamp((int)Number(args, "kind", 0f), 0, 3), Has(args, "x") && Has(args, "z"), Number(args, "x", 0f), Number(args, "z", 0f));
                     break;
-                case "donate":
+                case "donate": // into the first queued row of the programme
                     spendMark = m.LocalAllocation;
-                    request = m.FrontDonate((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
-                        (int)Number(args, "amount", 25f));
+                    var donateFront = (Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2);
+                    var donateId = (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1);
+                    if (m.FrontMirror.Known)
+                        foreach (FrontQueueRow q in m.FrontMirror.State.Fronts[(int)donateFront].Queue)
+                            if (q.Id == donateId) { request = m.FrontDonate(donateFront, q.Row, (int)Number(args, "amount", 25f)); break; }
                     break;
                 case "sync":
                     m.FrontFeed.Want(true); m.CyberFeed.Want(true); m.SofFeed.Want(true); m.OpsFeed.Want(true);
@@ -101,7 +106,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "team": // TEST ONLY: what a finished TRAIN TEAM programme does (one free team at the camp), so a run need not wait minutes for one
                     request = SofService.Active != null && GameManager.GetLocalPlayer(out Player tp) && tp != null ? (int)SofService.Active.TrainTeam(tp.HQ).Outcome : -2;
                     break;
+                case "reveal": // TEST ONLY: what a RECON that came off does, round the first enemy airbase (radius m), so the TARGETS list fills without a march of minutes
+                    request = SofService.Active != null && GameManager.GetLocalPlayer(out Player rp) && rp != null && EnemyBase(rp.HQ, out GlobalPosition rb)
+                        && SofService.Active.RevealArea(rp.HQ, (float)rb.x, (float)rb.z, Number(args, "radius", 3000f), SofRules.ReconRevealSeconds) ? 1 : 0;
+                    break;
                 case "relocate": request = Relocate(m, Mathf.Clamp((int)Number(args, "bird", 1f), 0, 2), Number(args, "range", 0f)); break; // own bird over an enemy mover (tests/ingame/ops-overwatch.json)
+                case "truckmove": request = m.MoveTruck((int)Number(args, "truck", 0f), Number(args, "x", 0f), Number(args, "z", 0f)); break; // TRUCK MOVE: the verdict lands in lastOutcome
+                case "downlink": // DOWNLINK mode (0 EO, 1 IR, 2 LOW LIGHT, 3 SAR, 4 STRIKE), optional zoom; the feed fields come back in the readout
+                    SpaceFeedController feed = Find<SpaceFeedController>();
+                    if (feed == null) return Fail("Verb", "no SPACE feed");
+                    feed.SetMode((DownlinkMode)Mathf.Clamp((int)Number(args, "mode", 0f), 0, (int)DownlinkMode.Strike));
+                    if (Has(args, "zoom")) feed.SetZoom(Number(args, "zoom", 1f));
+                    if (Has(args, "slow")) OrbitRoom.AcquireSlow = Number(args, "slow", 1f); // the acquire sequence this many times longer (1..20), so a capture lands inside a step
+                    string pick = Text(args, "select"); // lock the faction's first MARK or reveal, as a click on its box would
+                    var sm = m.SpaceMirror.State;
+                    if (pick == "mark" && sm.Marks.Count > 0) feed.SelectEntry(sm.Marks[0].Id);
+                    else if (pick == "contact" && sm.Contacts.Count > 0) feed.SelectEntry(sm.Contacts[0].Id);
+                    request = -1;
+                    break;
 #endif
                 default: return Fail("Verb", "unknown verb '" + verb + "'");
             }
@@ -263,7 +285,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (CyberAnchorRow a in s.Anchors)
             {
                 if (a.Kind != AnchorKind.EwTruck) continue;
-                if (a.Health != AnchorHealth.Down) trucks.Add(new EwSource(ordinal, a.X, a.Z, AnchorRules.Reach(a.Health)));
+                if (a.Health != AnchorHealth.Down && !a.Packing) trucks.Add(new EwSource(ordinal, a.X, a.Z, AnchorRules.Reach(a.Health)));
                 ordinal++;
             }
             if (have && mine.Held != null)
@@ -347,6 +369,32 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["frontWords"] = fronts.LastWords;
             }
             if (calls != null) { r["words"] = calls.LastWords; r["wordsAt"] = calls.LastWordsAt; }
+            SpaceFeedController feed = Find<SpaceFeedController>();
+            if (feed != null)
+            {
+                SpaceFeedView f = feed.View;
+                r["feedShown"] = feed.Shown ? 1 : 0;
+                r["feedMode"] = (int)f.Mode;
+                r["feedZoom"] = f.Zoom;
+                r["feedImage"] = f.Image != null ? 1 : 0;
+                r["feedPost"] = f.PostTexture != null ? 1 : 0;
+                r["feedPostMs"] = feed.PostPassMs;
+                r["feedRefusal"] = f.Refusal;
+                r["feedLink"] = f.Link;
+                r["feedPackets"] = f.Packets;
+                r["feedLook"] = f.HasLook ? 1 : 0;
+                r["feedLookU"] = f.LookU; r["feedLookV"] = f.LookV; r["feedLookKm"] = f.LookKm; r["feedLookNote"] = f.LookNote ?? "";
+                Camera eye = Camera.main;
+                if (eye != null && f.HasLook) // how far the look is from the player's camera (the far-terrain question)
+                {
+                    MapFrame lf = FrontController.Frame();
+                    GlobalPosition at = eye.transform.position.ToGlobalPosition();
+                    r["feedLookFromEyeKm"] = Mathf.Sqrt(Mathf.Pow(lf.X(f.LookU) - at.x, 2f) + Mathf.Pow(lf.Z(f.LookV) - at.z, 2f)) / 1000f;
+                }
+                r["feedSelected"] = f.SelectedId; r["feedBrackets"] = f.Brackets.Count;
+                r["feedStrikeEta"] = f.Strike.Has ? f.Strike.Eta : -1f; r["feedStrikeHeld"] = f.Strike.Held ? 1 : 0; r["feedStrikeOn"] = f.Strike.OnPicture ? 1 : 0;
+                r["feedTelemetry"] = string.Join(" | ", f.Telemetry);
+            }
             if (m == null) return r;
             r["online"] = m.Online;
             r["allocation"] = m.LocalAllocation;
@@ -417,9 +465,64 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["cruiseLegs"] = cruiseLegs;
 #if !PUBLIC_RELEASE
             FollowReadout(m, r);
+            if (GameManager.GetLocalPlayer(out Player me) && me != null && me.HQ != null)
+            {
+                BuildReadout(me.HQ, "own", r);
+                var hqs = FactionRegistry.GetAllHQs();
+                if (hqs != null) foreach (FactionHQ hq in hqs) if (hq != null && hq != me.HQ) { BuildReadout(hq, "enemy", r); break; }
+            }
 #endif
             return r;
         }
+
+#if !PUBLIC_RELEASE
+        /// <summary>The first standing airbase another faction holds (the "reveal" verb's aim).</summary>
+        private static bool EnemyBase(FactionHQ viewer, out GlobalPosition p)
+        {
+            p = default;
+            if (FactionRegistry.airbaseLookup == null) return false;
+            foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+            {
+                if (a == null || a.disabled || a.AttachedAirbase || a.center == null || a.CurrentHQ == null || a.CurrentHQ == viewer) continue;
+                p = a.center.position.ToGlobalPosition();
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Host: what a faction has built, read from the services (the organic-fronts acceptance sim): <c>Pads</c> live, <c>BirdsUp</c> / <c>BirdsLaunched</c> masks, <c>DataCenters</c> and
+        /// <c>Trucks</c> live (a packing truck is not), <c>Camps</c> live, <c>Teams</c> active, each under <paramref name="prefix"/>. A service with no record for the faction writes nothing.
+        /// <c>Optical</c> is the OPTICAL bird's up bit; <c>Infra</c> sums pads, data centers and camps (the sim's "climbed its ladder" check).
+        /// </summary>
+        private static void BuildReadout(FactionHQ hq, string prefix, Dictionary<string, object> r)
+        {
+            int infra = 0;
+            SpaceService space = Find<SpaceService>();
+            if (space != null && space.TryGetStateCoarse(hq, out SpaceState s))
+            {
+                int up = ~s.DownMask & ((1 << SpaceRules.BirdCount) - 1);
+                r[prefix + "Pads"] = s.LiveUplinkCount;
+                r[prefix + "BirdsUp"] = up;
+                r[prefix + "Optical"] = up & 1;
+                r[prefix + "BirdsLaunched"] = (int)s.LaunchedMask;
+                infra += s.LiveUplinkCount;
+            }
+            if (CyberService.Active != null && CyberService.Active.TryDesk(hq, out CyberDesk cd))
+            {
+                r[prefix + "DataCenters"] = cd.Anchors.LiveCount(AnchorKind.DataCenter);
+                r[prefix + "Trucks"] = cd.Anchors.LiveCount(AnchorKind.EwTruck);
+                infra += cd.Anchors.LiveCount(AnchorKind.DataCenter);
+            }
+            if (SofService.Active != null && SofService.Active.TryDesk(hq, out SofDesk sd))
+            {
+                r[prefix + "Camps"] = sd.Camps.LiveCount();
+                r[prefix + "Teams"] = sd.ActiveCount;
+                infra += sd.Camps.LiveCount();
+            }
+            r[prefix + "Infra"] = infra;
+        }
+#endif
 
 #if !PUBLIC_RELEASE
         // ---- TEST ONLY: the OVERWATCH and STARFALL proofs (tests/ingame/ops-overwatch.json) ------------------------------------------------

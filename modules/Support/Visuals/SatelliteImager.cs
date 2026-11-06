@@ -38,9 +38,10 @@ namespace BoscaliSummer.Modules.Support.Visuals
     /// hidden in the pixels. Fog of war is enforced by what can be MARKed, never by what is drawn:
     /// only host-revealed contacts (the faction mirror, <see cref="SetApprovedContacts"/>) get a
     /// bracket and a label, and nothing is bracketed just because it is visible. Cloud and rain soften
-    /// the image; at night, with no thermal path in the game, the camera refuses and draws nothing.
-    /// Radar products are formed separately by SarCollector when the host accepts a scan; the live
-    /// view does no GPU readback.
+    /// the image; at night, with no thermal path in the game, the camera refuses and draws nothing unless the DOWNLINK's IR or
+    /// LOW LIGHT post (<see cref="DownlinkPost"/>) asks for the render (<see cref="NightCapable"/>).
+    /// Radar products are formed separately by SarCollector when the host accepts a scan; the imager
+    /// itself does no GPU readback (only the DOWNLINK post reads a 320x200 copy, asynchronously).
     /// </summary>
     internal sealed class SatelliteImager : MonoBehaviour
     {
@@ -76,11 +77,19 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly List<OpticalBracket> brackets = new List<OpticalBracket>(SpaceWire.MaxContacts);
 
         /// <summary>The picture, or null while the camera refuses (night, no sky state): a refused feed shows words, never the last frame.</summary>
-        public Texture Output => verdict == OpticalVerdict.Ok ? colour : null;
+        public Texture Output => Renders ? colour : null;
         public int FramesRendered { get; private set; }
+
+        /// <summary>False when the render-target budget refused the camera's picture: the feed says so instead of showing black.</summary>
+        public bool Ready => colour != null;
 
         /// <summary>False while the feed is not on screen: the camera does not render and spends nothing.</summary>
         public bool Visible { get; set; } = true;
+
+        /// <summary>The DOWNLINK's IR and LOW LIGHT modes post-process the render, so they may image at night; EO keeps refusing. Set before <see cref="SetSky"/>.</summary>
+        public bool NightCapable { get; set; }
+
+        private bool Renders => verdict == OpticalVerdict.Ok || (verdict == OpticalVerdict.NightUnavailable && NightCapable);
 
         /// <summary>Why the camera is not rendering (night, no sky state), or Ok.</summary>
         public OpticalVerdict Verdict => verdict;
@@ -159,8 +168,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public void SetSky(bool known, in WeatherViewSample sky)
         {
             verdict = SpaceFeedRules.Optical(known, sky);
-            softness = verdict == OpticalVerdict.Ok ? SpaceFeedRules.Softness(sky) : 0f;
-            if (verdict != OpticalVerdict.Ok)
+            softness = Renders ? SpaceFeedRules.Softness(sky) : 0f;
+            if (!Renders)
             {
                 posed = false;
                 brackets.Clear();
@@ -221,7 +230,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         /// </summary>
         public void Aim(Vector3 aimLocal, Vector3 lineOfSight, Vector3 along, float footprint, float framesPerSecond)
         {
-            if (cam == null || colour == null || verdict != OpticalVerdict.Ok) return;
+            if (cam == null || colour == null || !Renders) return;
             cleared = false;
             Vector3 los = lineOfSight.sqrMagnitude > 1e-6f ? lineOfSight.normalized : Vector3.up;
 
@@ -256,10 +265,20 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
         }
 
+        /// <summary>Where a world point (local metres) falls in the picture (0..1, origin bottom-left); false off the picture or with no pose.</summary>
+        public bool TryProject(Vector3 local, out Vector2 uv)
+        {
+            uv = default;
+            if (cam == null || !posed || !Renders) return false;
+            Vector3 view = cam.WorldToViewportPoint(local);
+            uv = new Vector2(view.x, view.y);
+            return view.z > 0f && view.x >= 0f && view.x <= 1f && view.y >= 0f && view.y <= 1f;
+        }
+
         private void Project()
         {
             brackets.Clear();
-            if (cam == null || !posed || verdict != OpticalVerdict.Ok) return;
+            if (cam == null || !posed || !Renders) return;
             for (int i = 0; i < rowCount; i++)
             {
                 Vector3 view = cam.WorldToViewportPoint(rowPoints[i].ToLocalPosition());

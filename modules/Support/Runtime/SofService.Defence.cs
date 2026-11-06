@@ -44,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void CollectSites(FactionSof f)
         {
             f.Sites.Clear();
-            for (int i = 0; i < f.Camps.Count; i++) if (f.Camps.TryPosition(i, out float x, out float z)) f.Sites.Add(new Vector2(x, z));
+            for (int i = 0; i < f.Camps.Capacity; i++) if (f.Camps.TryPosition(i, out float x, out float z)) f.Sites.Add(new Vector2(x, z));
             if (FactionRegistry.airbaseLookup != null)
             {
                 int seen = 0;

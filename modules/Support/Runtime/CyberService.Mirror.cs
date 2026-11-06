@@ -81,9 +81,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (AnchorSlot slot in f.Slots)
             {
                 if (into.Anchors.Count >= CyberWire.MaxAnchors || !f.Anchors.TryPosition(slot.Kind, slot.Index, out float x, out float z)) continue;
-                AnchorHealth health = f.Anchors.Health(slot.Kind, slot.Index);
-                into.Anchors.Add(new CyberAnchorRow { Kind = slot.Kind, Health = health, X = x, Z = z,
-                    Rebuild = health == AnchorHealth.Down ? (byte)Mathf.Clamp(Mathf.RoundToInt(slot.Bar.Fraction * 100f), 0, 100) : (byte)0,
+                // A truck packing up rides the wire as health 3, which the client reads back as Live + Packing: the host's own row says the same.
+                bool packing = slot.PackUntil > 0f;
+                into.Anchors.Add(new CyberAnchorRow { Kind = slot.Kind, Health = packing ? AnchorHealth.Live : f.Anchors.Health(slot.Kind, slot.Index), Packing = packing, X = x, Z = z,
                     LockUntil = slot.Kind == AnchorKind.EwTruck && f.Anchors.TruckLocked(slot.Index, now) ? f.Anchors.LockUntil(slot.Index) : 0f });
             }
             foreach (CyberNode n in desk.Visible)

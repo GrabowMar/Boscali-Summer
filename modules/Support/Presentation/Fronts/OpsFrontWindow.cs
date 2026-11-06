@@ -14,8 +14,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 {
     /// <summary>
     /// The shared root of the three front windows (R3): a near-full-screen popup over a dimmed backdrop with the classification
-    /// strip, the ORBIT / NETWORK / SHADOW switch in the title bar, one room on the left (the hero) and the shared
-    /// <see cref="FrontRail"/> on the right. Input follows the SPACE feed: the window owns the pointer only (the game's cursor
+    /// strip, the ORBIT / NETWORK / SHADOW switch in the title bar, one room on the left (the hero) and its column of tabs on the right, the last one the room's
+    /// read-only <see cref="FrontInfoPanel"/>. Input follows the SPACE feed: the window owns the pointer only (the game's cursor
     /// flag frees the cursor, the Rewired mouse is off so a click cannot fire a weapon, the window hit-tests its own
     /// controls); keyboard and joysticks stay live; Esc or the X closes. Every press is a
     /// request to <see cref="IFrontActions"/>; nothing here decides or sends.
@@ -30,14 +30,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private AvWindow window;
         private GameObject backdrop;
         private readonly FrontSkin skin = new FrontSkin();
-        private FrontRail rail;
         private readonly IFrontRoom[] rooms = new IFrontRoom[FrontRules.FrontCount];
         private readonly RectTransform[] roomRoots = new RectTransform[FrontRules.FrontCount];
-        // The management column right of the map: each room's panels are tabs, the front itself (status, posture, programmes) is the last one.
+        // The management column right of the map: each room's panels are tabs, the read-only FRONT panel is the last one.
         private readonly RectTransform[] columnRoots = new RectTransform[FrontRules.FrontCount];
         private readonly AvTabBar[] bars = new AvTabBar[FrontRules.FrontCount];
         private readonly int[] tabOf = new int[FrontRules.FrontCount];
-        private RectTransform railRoot;
+        private readonly FrontInfoPanel[] infos = new FrontInfoPanel[FrontRules.FrontCount];
         private int shownFront = -1;
         private readonly AvControl[] tabs = new AvControl[FrontRules.FrontCount];
         private TMP_Text titleText, headRight, stripLeft, stripMid, stripRight;
@@ -97,7 +96,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // Front switch in the title bar: the domain and its room, so the two names stay connected.
             string[] names = { "SPACE · ORBIT", "CYBER · NETWORK", "SOF · SHADOW" };
             string[] help = { "The SPACE front's room: satellites, ground tracks and the live camera.",
-                "The CYBER front's room: the enemy node graph, your intrusion's trace, a node inspector, node list and session log.", "The SOF front's room: teams, camps and the infiltration map." };
+                "The CYBER front's room: your data centers and EW trucks, the enemy node graph and the nodes you hop.", "The SOF front's room: teams, camps and the infiltration map." };
             float tw = 150f, tabX = (WindowWidth - (3f * tw + 12f)) * 0.5f, tabEnd = tabX + 3f * tw + 12f;
             // The front's callsign header sits right of the switch: net callsign, readiness rung and superiority band.
             headRight = FrontKit.Mono(r, "HeadRight", tabEnd + 16f, 0f, WindowWidth - 44f - tabEnd - 16f, TitleH, 11f, TextAlignmentOptions.MidlineRight, true, 1f);
@@ -119,9 +118,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             rooms[(int)Front.Space] = new OrbitRoom(actions, skin);
             rooms[(int)Front.Cyber] = new NetworkRoom(actions, skin);
             rooms[(int)Front.Sof] = new ShadowRoom(actions, skin);
-            railRoot = AvLay.Child(r, "Rail");
-            AvLay.Place(railRoot, cx, ty, cw, ch);
-            rail = new FrontRail(railRoot, skin, actions, 0f, 0f, cw, ch);
             for (int i = 0; i < rooms.Length; i++)
             {
                 roomRoots[i] = AvLay.Child(hero, "Room " + (Front)i);
@@ -130,14 +126,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 AvLay.Place(columnRoots[i], cx, ty, cw, ch);
                 rooms[i].Build(roomRoots[i], HeroW, mh, columnRoots[i], cw, ch);
                 IReadOnlyList<ColumnTab> panels = rooms[i].Column;
+                infos[i] = new FrontInfoPanel(columnRoots[i], skin, (Front)i, cw, ch, panels.Count > 0 ? panels[0].Label : "THE FIRST TAB");
                 // Every panel sits on its room's painted ground: ORBIT's orbit-chart glass, NETWORK's glass over circuit, SHADOW's olive map-table canvas.
                 string ground = i == (int)Front.Space ? "ops_bg_orbit" : i == (int)Front.Cyber ? "ops_bg_network" : "ops_bg_shadow";
                 for (int k = 0; k < panels.Count; k++) FrontArt.Ground(panels[k].Panel, ground, GroundTint);
+                FrontArt.Ground(infos[i].Rect, ground, GroundTint);
                 var items = new (AvIcon, string)[panels.Count + 1];
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
                 int room = i;
-                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); });
+                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); if (k != 0) LeaveFirstTab(room); });
                 bars[i].SetAccent(i == (int)Front.Space ? RoomInk.Ice : i == (int)Front.Cyber ? RoomInk.Phosphor : RoomInk.Gold);
                 bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
                 skin.Add(bars[i].Restyle);
@@ -193,7 +191,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Mark(v.Front);
             AvText.Set(stripLeft, C2Kit.FitTo(stripLeft, "OPERATOR " + (v.Callsign ?? "") + " · COMPARTMENT " + Room(v.Front), stripLeft.rectTransform.rect.width));
             AvText.Set(stripRight, C2Kit.FitTo(stripRight, "DTG " + (v.Dtg ?? "") + " · " + Feed(v.FeedAge), stripRight.rectTransform.rect.width));
-            AvText.Set(headRight, C2Kit.FitTo(headRight, "NET " + FrontWords.Callsign(v.Front) + " · " + FrontRail.Headline(v), headRight.rectTransform.rect.width));
+            AvText.Set(headRight, C2Kit.FitTo(headRight, "NET " + FrontWords.Callsign(v.Front) + " · " + Headline(v), headRight.rectTransform.rect.width));
             for (int i = 0; i < tabs.Length; i++) tabs[i].Latched = i == (int)v.Front;
             int front = (int)v.Front;
             for (int i = 0; i < roomRoots.Length; i++)
@@ -202,22 +200,30 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 columnRoots[i].gameObject.SetActive(i == front);
                 bars[i].Rect.gameObject.SetActive(i == front);
             }
-            if (shownFront != front) { shownFront = front; ShowTab(front, tabOf[front]); }
-            rail.Paint(v);
+            if (shownFront != front) { shownFront = front; EndPicks(); ShowTab(front, tabOf[front]); } // a map pick never waits behind another room
+            infos[front].Paint(v);
             rooms[front]?.Paint(v);
             int want = rooms[front] != null ? rooms[front].TakeTab() : -1;
             if (want >= 0 && want != tabOf[front]) ShowTab(front, want);
         }
 
-        /// <summary>Shows column tab <paramref name="tab"/> of a room: one of its panels, or the FRONT panel (status, posture, programmes) after them.</summary>
+        /// <summary>Shows column tab <paramref name="tab"/> of a room: one of its panels, or its read-only FRONT panel after them.</summary>
         private void ShowTab(int room, int tab)
         {
             IReadOnlyList<ColumnTab> panels = rooms[room].Column;
             tabOf[room] = Mathf.Clamp(tab, 0, panels.Count);
             for (int k = 0; k < panels.Count; k++) panels[k].Panel.gameObject.SetActive(k == tabOf[room]);
-            railRoot.gameObject.SetActive(tabOf[room] == panels.Count);
+            infos[room].Rect.gameObject.SetActive(tabOf[room] == panels.Count);
             bars[room].Select(tabOf[room], false);
             skin.Apply(); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
+        }
+
+        /// <summary>The one-line state of the front for the title bar: the pilot's skill grade and the superiority band, or words before the host speaks.</summary>
+        private static string Headline(FrontRoomView v)
+        {
+            FrontRow r = v.Row;
+            if (FrontViews.IsWaiting(r)) return "WAITING FOR HOST";
+            return "YOUR SKILL " + Mathf.Clamp(v.Grade, 1, 6) + "/6 · " + FrontSuperiority.Word(r.Superiority) + " " + FrontKit.Signed(r.Superiority);
         }
 
         private static string Command(Front f) => f == Front.Space ? "ORBITAL COMMAND" : f == Front.Cyber ? "CYBER COMMAND" : "SPECIAL OPERATIONS COMMAND";
@@ -264,8 +270,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             window.Hide(); // raises Closed -> OnWindowClosed hands the input back
         }
 
+        private OrbitRoom Orbit => rooms[(int)Front.Space] as OrbitRoom;
+
+        /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
+        internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && (tabOf[shownFront] == OrbitRoom.DownlinkTab || Orbit.Enlarged);
+
+        /// <summary>A hand click on a room's later tab: an armed map pick of its first tab ends (it would wait off screen) and the map drops its rings now.</summary>
+        private void LeaveFirstTab(int room)
+        {
+            rooms[room].EndPicks();
+            if (room == (int)Front.Space && Orbit != null && tabOf[room] == OrbitRoom.DownlinkTab) Orbit.DownlinkOpened();
+            if (lastView != null && (int)lastView.Front == room) rooms[room].Paint(lastView);
+        }
+
+        private void EndPicks() { foreach (IFrontRoom room in rooms) room?.EndPicks(); }
+
         private void OnWindowClosed()
         {
+            EndPicks(); // a reopened window starts with no pick armed
+            Orbit?.Dock(); // a reopened window starts docked, and NODES auto-picks again
+            (rooms[(int)Front.Cyber] as NetworkRoom)?.ForgetPick();
+            Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
             GiveBackInput();
@@ -318,6 +343,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (mouseDisabledByUs || (device != null && !device.enabled)) Pointer(mouse);
                 IFrontRoom room = lastView != null ? rooms[(int)lastView.Front] : null;
                 if (room != null && room.Tick(mouse)) room.Paint(lastView);
+                int want = room != null ? room.TakeTab() : -1; // a map pick opens its tab this frame, not at the next refresh
+                if (want >= 0 && want != tabOf[shownFront]) ShowTab(shownFront, want);
             }
             catch (Exception e)
             {

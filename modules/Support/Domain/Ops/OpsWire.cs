@@ -68,6 +68,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         public byte BirdsDown;
         /// <summary>Same bits for the strongest enemy's constellation (alive or dead is public: its launches are visible); rides in the BirdsDown byte's bits 3..5.</summary>
         public byte EnemyBirdsDown;
+        /// <summary>Bit i set once the faction's own satellite i has been launched at least once this scene (protocol 44; own birds only).</summary>
+        public byte BirdsLaunched;
         public readonly byte[] BirdPercent = new byte[SpaceRules.BirdCount];
         /// <summary>Each satellite's geostationary state: indices 0..2 the viewer's own birds, 3..5 the strongest enemy's (public: a geostationary bird is visible to all).</summary>
         public readonly GeoBird[] Geo = new GeoBird[OpsWire.GeoCount];
@@ -82,7 +84,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
 
         public override OpsStateData Clone()
         {
-            var c = new OpsStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown };
+            var c = new OpsStateData { Protocol = Protocol, Faction = Faction, Epoch = Epoch, Active = Active, CyberOps = CyberOps, SofOps = SofOps, Seq = Seq, Now = Now, BirdsDown = BirdsDown, EnemyBirdsDown = EnemyBirdsDown, BirdsLaunched = BirdsLaunched };
             Array.Copy(BirdPercent, c.BirdPercent, BirdPercent.Length);
             Array.Copy(Geo, c.Geo, Geo.Length);
             c.Rows.AddRange(Rows); c.Pings.AddRange(Pings); c.Events.AddRange(Events); c.Flights.AddRange(Flights); c.Sites.AddRange(Sites); c.Log.AddRange(Log);
@@ -92,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
         /// <summary>The fields that decide whether anything changed since the last send (everything but Seq and Now).</summary>
         public override bool SameAs(OpsStateData o)
         {
-            if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown || EnemyBirdsDown != o.EnemyBirdsDown ||
+            if (o == null || Active != o.Active || CyberOps != o.CyberOps || SofOps != o.SofOps || BirdsDown != o.BirdsDown || EnemyBirdsDown != o.EnemyBirdsDown || BirdsLaunched != o.BirdsLaunched ||
                 Rows.Count != o.Rows.Count || Pings.Count != o.Pings.Count || Events.Count != o.Events.Count || Flights.Count != o.Flights.Count || Sites.Count != o.Sites.Count || Log.Count != o.Log.Count) return false;
             for (int i = 0; i < BirdPercent.Length; i++) if (BirdPercent[i] != o.BirdPercent[i]) return false;
             for (int i = 0; i < Geo.Length; i++) if (!OpsWire.SameGeo(Geo[i], o.Geo[i])) return false;
@@ -157,6 +159,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             s.WriteHeader(w);
             if (!s.Active) { WriteLog(w, s); return; } // OVERLORD's log still reaches the faction console when OPERATIONS is off
             w.WriteByte((byte)((s.BirdsDown & 7) | ((s.EnemyBirdsDown & 7) << 3)));
+            w.WriteByte(s.BirdsLaunched);
             for (int i = 0; i < s.BirdPercent.Length; i++) w.WriteByte(s.BirdPercent[i]);
             for (int i = 0; i < GeoCount; i++) WriteGeo(w, s.Geo[i], s.Now);
             int n = Math.Min(s.Rows.Count, MaxRows);
@@ -247,6 +250,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Ops
             if (!s.Active) return ReadLog(r, s) ? s : Bad();
             if (!r.TryReadByte(out byte birds) || (birds & ~63) != 0) return Bad();
             s.BirdsDown = (byte)(birds & 7); s.EnemyBirdsDown = (byte)(birds >> 3);
+            if (!r.TryReadByte(out s.BirdsLaunched) || (s.BirdsLaunched & ~7) != 0) return Bad();
             for (int i = 0; i < s.BirdPercent.Length; i++) if (!r.TryReadByte(out s.BirdPercent[i]) || s.BirdPercent[i] > 100) return Bad();
             if (r.Remaining < GeoCount * GeoBytes) return Bad();
             for (int i = 0; i < GeoCount; i++) if (!ReadGeo(r, now, out s.Geo[i])) return Bad();

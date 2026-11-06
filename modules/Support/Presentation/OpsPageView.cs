@@ -139,23 +139,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 c.Directive = FrontRules.Name(row.Directive); // the lock and its holder live in the front window, where the posture is changed
                 if (row.Superiority >= 20) ahead++;
 
-                // The current blocker: unresolved conditions only, in a fixed priority (no link, a lost anchor still being rebuilt, enemy superiority).
+                // The current blocker: unresolved conditions only, in a fixed priority (no link, enemy superiority).
                 // The newest log row is history: it never makes an alert by itself.
                 int conditions = 0;
                 string blocker = null;
                 AvState bt = AvState.Inert;
                 if (!online) { conditions++; blocker = "NO HOST LINK" + Dot + "LAST READING SHOWN"; bt = AvState.Danger; }
-                if (RebuildPending(row, out ProgrammeId lostId, out int lostAt))
-                {
-                    conditions++;
-                    if (blocker == null)
-                    {
-                        FrontQueueRow lq = row.Queue[lostAt];
-                        blocker = FrontRules.Info(lostId).Name + " LOST" + Dot + "REBUILD " +
-                            (lq.Percent >= 100 ? "BUILDING " + FrontRules.Clock(BuildLeft(lq, d, now)) : "FUNDING " + lq.Percent + " %");
-                        bt = AvState.Caution;
-                    }
-                }
                 if (row.Superiority <= -20)
                 {
                     conditions++;
@@ -186,7 +175,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     int left = BuildLeft(q, d, now);
                     float build = Math.Max(1f, FrontRules.BuildSeconds(q.Id));
                     c.Phase = building ? ProgrammePhase.Building : ProgrammePhase.Funding;
-                    c.Building = FrontRules.Info(q.Id).Name;
+                    c.Building = FrontWords.Programme(q.Id, q.Kind);
                     c.BuildProgress = building ? 1f - left / build : q.Percent / 100f;
                     c.BuildNote = building ? FrontRules.Clock(left) + " LEFT" : q.Percent + " % FUNDED";
                 }
@@ -220,29 +209,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private static int BuildLeft(in FrontQueueRow q, FrontStateData d, float now) =>
             (int)Math.Max(0f, Math.Ceiling(q.BuildLeft - (q.Percent >= 100 ? now - d.Now : 0f)));
-
-        /// <summary>
-        /// True while an anchor the log says was lost still has its rebuild programme in the queue: that is a current condition. A rebuild
-        /// line whose programme finished (a later DONE row) or left the queue is history. ponytail: matches by programme id, so a fresh
-        /// queue of the same programme for growth reads as a rebuild until the log scrolls past it; the log keeps 8 rows.
-        /// </summary>
-        private static bool RebuildPending(FrontRow row, out ProgrammeId id, out int queueIndex)
-        {
-            id = default; queueIndex = -1;
-            for (int q = row.Log.Count - 1; q >= 0; q--)
-            {
-                FrontLogRow l = row.Log[q];
-                if ((FrontLogCode)l.Code != FrontLogCode.Rebuild) continue;
-                bool done = false;
-                for (int n = q + 1; n < row.Log.Count && !done; n++)
-                    done = (FrontLogCode)row.Log[n].Code == FrontLogCode.Done && row.Log[n].A == l.A;
-                if (done) continue;
-                var pid = (ProgrammeId)Math.Max(0, Math.Min(FrontRules.Programmes.Length - 1, (int)l.A));
-                for (int k = 0; k < row.Queue.Count; k++)
-                    if (row.Queue[k].Id == pid) { id = pid; queueIndex = k; return true; }
-            }
-            return false;
-        }
 
         // ---- Perks ------------------------------------------------------------------------------------------
 

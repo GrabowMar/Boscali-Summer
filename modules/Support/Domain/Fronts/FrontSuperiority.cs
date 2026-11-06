@@ -47,6 +47,33 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return (int)Math.Round(Clamp(sum, 100f), MidpointRounding.AwayFromZero);
         }
 
+        /// <summary>The three summands of <see cref="Compute"/>, each packed in 2 bits (0 even, 1 ahead when &gt; 0.5, 2 behind when &lt; -0.5): term0 | term1 &lt;&lt; 2 | term2 &lt;&lt; 4.</summary>
+        public static byte Terms(Front front, in FrontSides own, in FrontSides enemy)
+        {
+            float a, b, c;
+            switch (front)
+            {
+                case Front.Space:
+                    a = Clamp(40f * (own.BirdsUp - enemy.BirdsUp) / 3f, 40f);
+                    b = Clamp(30f * (Frac(own.UplinksLive, own.UplinksTotal) - Frac(enemy.UplinksLive, enemy.UplinksTotal)), 30f);
+                    c = Clamp(30f * ((own.JamsOpponent ? 1f : 0f) - (enemy.JamsOpponent ? 1f : 0f)), 30f);
+                    break;
+                case Front.Cyber:
+                    a = Clamp(50f * (own.HeldEnemyNodes - enemy.HeldEnemyNodes) / 4f, 50f);
+                    b = Clamp(30f * (own.AnchorsLive - enemy.AnchorsLive) / 4f, 30f);
+                    c = Clamp(20f * (enemy.Trace - own.Trace), 20f);
+                    break;
+                default:
+                    a = Clamp(40f * (own.TeamsAfield - enemy.TeamsAfield) / 4f, 40f);
+                    b = Clamp(40f * (own.HeldBuildings - enemy.HeldBuildings) / 4f, 40f);
+                    c = Clamp(20f * (own.CampsLive - enemy.CampsLive) / 2f, 20f);
+                    break;
+            }
+            return (byte)(Term(a) | (Term(b) << 2) | (Term(c) << 4));
+        }
+
+        private static int Term(float v) => v > 0.5f ? 1 : v < -0.5f ? 2 : 0;
+
         /// <summary>One number for "how strong is this side on the front": the strongest enemy is the one with the most.</summary>
         public static float Strength(Front front, in FrontSides s) =>
             front == Front.Space ? s.BirdsUp * 10f + s.UplinksLive :

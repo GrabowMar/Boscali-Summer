@@ -113,27 +113,16 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     }
 
     /// <summary>
-    /// What a faction with no humans queues by itself when its front has nothing building (the AI faction raises its fronts without a pilot). <paramref name="asatReady"/> (the host's call: an
-    /// enemy bird up, spacing since the last one) lets SPACE build an ASAT, so an AI faction hits back in orbit too.
+    /// What a faction with no humans queues by itself when its front has nothing building and its ladder step (<see cref="FrontLadder.Next"/>, tried first by the host) is complete, blocked
+    /// or cannot be placed: its doctrine. SPACE an ASAT when <paramref name="asatReady"/> (the host's call: an enemy bird up, spacing since the last one), CYBER a ZERO-DAY on a known SAM net,
+    /// SOF a FOB on a held building while none is up or queued.
     /// </summary>
     internal static class FrontAi
     {
-        public static ProgrammeId? Next(Front front, in FrontWorld w, bool samKnown, bool asatReady = false)
+        public static bool Doctrine(Front front, in FrontWorld w, in QueuedCounts q, bool samKnown, bool asatReady, out ProgrammeId id)
         {
-            switch (front)
-            {
-                case Front.Space:
-                    if (asatReady) return ProgrammeId.Asat;
-                    break;
-                case Front.Cyber:
-                    if (samKnown) return ProgrammeId.ZeroDay;
-                    break;
-                case Front.Sof:
-                    if (w.Teams < 2) return ProgrammeId.TrainTeam;
-                    if (w.HasHeldBuilding) return ProgrammeId.Fob;
-                    break;
-            }
-            return null;
+            id = front == Front.Space ? ProgrammeId.Asat : front == Front.Cyber ? ProgrammeId.ZeroDay : ProgrammeId.Fob;
+            return front == Front.Space ? asatReady : front == Front.Cyber ? samKnown : w.HasHeldBuilding && !w.FobUp && q.Fobs == 0;
         }
     }
 }

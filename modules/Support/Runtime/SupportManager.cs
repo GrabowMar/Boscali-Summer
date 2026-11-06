@@ -478,9 +478,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
             if (!IsAuthorised(def)) return CallGate.LockWord(row);
-            if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird)) return "NO SATELLITE · REBUILD IT";
+            if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird))
+                return (opsMirror.State.BirdsLaunched & BirdMask(def.RequiredBird)) != 0 ? "SATELLITE LOST · RELAUNCH IT" : "NO SATELLITE · LAUNCH ONE";
             return "";
         }
+
+        /// <summary>The OPS mirror's bird bits a requirement reads (bit = BirdKind).</summary>
+        private static int BirdMask(SpaceBirdRequirement r) =>
+            r == SpaceBirdRequirement.Optical ? 1 : r == SpaceBirdRequirement.Radar ? 2 : r == SpaceBirdRequirement.Kinetic ? 4 : r == SpaceBirdRequirement.OpticalOrRadar ? 3 : 0;
 
         /// <summary>Client view: the OPS mirror says the satellite the perk needs is alive (true while the mirror is unknown).</summary>
         private bool BirdsUpFor(SpaceBirdRequirement r) => r switch

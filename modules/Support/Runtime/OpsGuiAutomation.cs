@@ -30,11 +30,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             switch (what)
             {
                 case "press": return Press(fronts, window, (Text(args, "label") ?? "").ToUpperInvariant(), (int)Number(args, "nth", 0f));
-                case "map": return MapClick(fronts, window, Number(args, "u", 0.5f), Number(args, "v", 0.5f));
+                case "map": { Vector2 at = Aim(window, args); return MapClick(fronts, window, at.x, at.y); }
                 case "drag": { Vector2 at = Aim(window, args); return Drag(fronts, window, at.x, at.y, Number(args, "du", 0.1f), Number(args, "dv", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600)); }
                 case "wheel": { Vector2 at = Aim(window, args); return Wheel(fronts, window, at.x, at.y, Number(args, "delta", 1f)); }
+                case "pic": return Picture(fronts, window, Number(args, "wheel", 0f), Number(args, "dx", 0f), Number(args, "dy", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600));
                 case "esc": FrontPointer.Play(FrontPointer.Position, 0, 0f, true, ClickGap); FrontPointer.Play(FrontPointer.Position, 0); return State(fronts, window);
                 case "audit": return Audit(fronts, window);
+                case "cost": { Dictionary<string, object> c = State(fronts, window); OrbitRoom.PaneCost.Read(c); return c; } // DOWNLINK pane ms since the last read
                 case "labels": return Labels(fronts, window);
                 default: return State(fronts, window);
             }
@@ -92,7 +94,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             Dictionary<string, object> r = State(fronts, window);
             if (!MapScreen(window, u, v, out Vector2 at)) { r["error"] = "the active room has no map plate"; return r; }
             Click(at);
-            r["x"] = Mathf.RoundToInt(at.x); r["y"] = Mathf.RoundToInt(at.y);
+            r["x"] = Mathf.RoundToInt(at.x); r["y"] = Mathf.RoundToInt(at.y); r["u"] = u; r["v"] = v;
             return r;
         }
 
@@ -117,18 +119,41 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return r;
         }
 
+        /// <summary>The DOWNLINK picture's own gestures from its centre: a wheel notch (zoom), or a left drag by (dx, dy) screen pixels (pan).</summary>
+        private static Dictionary<string, object> Picture(FrontController fronts, OpsFrontWindow window, float wheel, float dx, float dy, int steps)
+        {
+            Dictionary<string, object> r = State(fronts, window);
+            if (!(Room(window) is OrbitRoom orbit) || !orbit.DownlinkAt(out Vector2 a)) { r["error"] = "no DOWNLINK picture on screen"; return r; }
+            FrontPointer.Play(a, 0, 0f, false, ClickGap);
+            if (wheel != 0f) { FrontPointer.Play(a, 0, wheel); FrontPointer.Play(a, 0); }
+            if (dx != 0f || dy != 0f)
+            {
+                Vector2 b = a + new Vector2(dx, dy);
+                FrontPointer.Play(a, 1);
+                for (int i = 1; i <= steps; i++) FrontPointer.Play(Vector2.Lerp(a, b, i / (float)steps), 1);
+                FrontPointer.Play(b, 0);
+            }
+            r["x"] = Mathf.RoundToInt(a.x); r["y"] = Mathf.RoundToInt(a.y);
+            return r;
+        }
+
         // ---- Checks ----------------------------------------------------------------------------------------------------
 
-        /// <summary>Every enabled control of the open room and the rail must take a click at its centre (the window's own topmost-first test) and sit on screen.</summary>
+        /// <summary>
+        /// Every enabled control of the open room and its column must take a click at its centre (the window's own topmost-first test) and sit on screen;
+        /// <c>column</c> counts the enabled ones inside the open column tab (0 on the read-only FRONT tab).
+        /// </summary>
         private static Dictionary<string, object> Audit(FrontController fronts, OpsFrontWindow window)
         {
             List<AvHit> hits = Hits(window);
-            int enabled = 0, covered = 0, off = 0;
+            int enabled = 0, covered = 0, off = 0, column = 0;
             var notes = new List<object>(8);
+            Transform shown = Field(window, "columnRoots") is RectTransform[] cols && Field(window, "lastView") is FrontRoomView lv && (int)lv.Front < cols.Length ? cols[(int)lv.Front] : null;
             foreach (AvHit h in hits)
             {
                 if (!h.Interactable) continue;
                 enabled++;
+                if (shown != null && h.transform.IsChildOf(shown)) column++; // the open column tab's own controls (FRONT has none)
                 Vector2 at = Centre((RectTransform)h.transform);
                 if (at.x < 0f || at.y < 0f || at.x > Screen.width || at.y > Screen.height) { off++; if (notes.Count < 8) notes.Add("OFF " + Describe(window, h)); continue; }
                 AvHit top = TopHit(hits, at);
@@ -137,7 +162,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (notes.Count < 8) notes.Add(Describe(window, h) + " <- " + (top != null ? Describe(window, top) : "nothing"));
             }
             Dictionary<string, object> r = State(fronts, window);
-            r["enabled"] = enabled; r["covered"] = covered; r["offscreen"] = off; r["notes"] = notes;
+            r["enabled"] = enabled; r["covered"] = covered; r["offscreen"] = off; r["column"] = column; r["notes"] = notes;
             return r;
         }
 
@@ -168,14 +193,48 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["birdsMoving"] = moving;
                 for (int i = 0; i < lv.Shares.Length; i++) r["share" + i] = lv.Shares[i];
                 r["queue"] = lv.Queue.Count;
+                NetworkRoomView nw = lv.Network;
+                int packing = 0;
+                string grids = "";
+                foreach (InfraTruckView t in nw.Trucks) { if (t.State == InfraState.Packing) packing++; grids += (grids.Length > 0 ? "," : "") + t.Name + " " + t.State + " " + t.Grid + " " + t.U.ToString("0.0000") + "/" + t.V.ToString("0.0000"); }
+                r["trucks"] = grids;
+                r["centersUp"] = nw.CentersUp; r["trucksUp"] = nw.TrucksUp; r["trucksPacking"] = packing; r["netGhosts"] = nw.Ghosts.Count;
+                int own = 0, inReach = 0;
+                foreach (NetNodeView nd in nw.Nodes) { if (nd.Own) own++; else if (nd.State == NetNodeState.InReach) inReach++; }
+                r["netNodes"] = nw.Nodes.Count; r["netOwn"] = own; r["netInReach"] = inReach; r["netSession"] = nw.HasIntrusion ? 1 : 0; r["netHeld"] = nw.YourHeld;
+                r["netHopping"] = nw.Hopping ? 1 : 0; r["netBreaches"] = nw.Breaches; r["netCanHop"] = nw.CanHop ? 1 : 0; r["netNext"] = nw.Dossier.Next ?? "";
+                // 1 a session runs; 2 nothing in reach to hop and the picked enemy node (if any) says why it is blocked; 0 a node in reach but no session
+                r["hopCase"] = nw.HasIntrusion ? 1 : inReach == 0 && (nw.SelectedId <= 0 || (nw.Dossier.Next ?? "").StartsWith("BLOCKED", System.StringComparison.Ordinal)) ? 2 : 0;
+                r["netEnemy"] = nw.Nodes.Count - own;
+                ShadowRoomView sv = lv.Shadow;
+                int campsQueued = 0;
+                foreach (SofCampView c in sv.Camps) if (c.State == InfraState.Building) campsQueued++;
+                string teams = "";
+                foreach (SofTeamView t in sv.Teams) teams += (teams.Length > 0 ? "," : "") + t.Callsign + " " + (t.Training ? "TRAINING" : t.State) + " v" + t.VerbOn + "/" + t.VerbOnLatched;
+                r["sofActive"] = sv.Active ? 1 : 0; r["sofCamps"] = sv.CampsUp; r["sofCampsQueued"] = campsQueued; r["sofGhosts"] = sv.Ghosts.Count; r["sofTeams"] = sv.TeamsUp;
+                r["sofCards"] = sv.Teams.Count; r["sofTeamList"] = teams; r["sofHeld"] = sv.Held.Count; r["sofFob"] = sv.Fob.State ?? "";
+                // TARGETS: the aim (a target id, -1 the RECON point, 0 none), the team SEND sends and why it cannot, the field strip, the hostiles near us.
+                r["sofTargets"] = sv.Targets.Count; r["sofAim"] = sv.SelectedTargetId != 0 ? sv.SelectedTargetId : sv.HasPoint ? -1 : 0; r["sofSendSlot"] = sv.SelectedSlot;
+                r["sofSendWhy"] = sv.SendWhy ?? ""; r["sofField"] = sv.Field.Count; r["sofCrew"] = sv.Crew.Count; r["sofNear"] = sv.Near; r["sofCanSweep"] = sv.CanSweep ? 1 : 0;
+                r["sofReason"] = sv.Reason ?? ""; r["sofMissions"] = sv.Missions.Count;
+                if (Field(window, "tabOf") is int[] tabs && (int)lv.Front < tabs.Length) r["tab"] = tabs[(int)lv.Front];
             }
             object room = Room(window);
             if (room == null) return r;
             r["room"] = room.GetType().Name;
             r["enlarged"] = room is OrbitRoom orbit && orbit.Enlarged ? 1 : 0;
+            if (room is OrbitRoom acq) r["acquire"] = acq.AcquirePhase; // 0 WIDE, 1 SLEW, 2 RESOLVE, 3 done
             r["selKind"] = Int(Field(room, "selKind"));
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));
+            r["padPick"] = Bool(Field(room, "padPick"));
+            if (Field(room, "pick") is System.Enum netPick) { r["netPick"] = System.Convert.ToInt32(netPick); r["pickMiss"] = Field(room, "pickMiss") as string ?? ""; } // 0 none, 1 DATA CENTER, 2 TRUCK, 3 RELOCATE
+            if (Field(room, "filter") is System.Enum netFilter) { r["netFilter"] = System.Convert.ToInt32(netFilter); r["selOwn"] = Int(Field(room, "selOwn")); r["openNode"] = Int(Field(room, "lastOpen")); } // 0 ALL, 1 MINE, 2 ENEMY, 3 IN REACH
+            if (room is ShadowRoom)
+            {
+                r["sofFilter"] = Int(Field(room, "targetFilter")); r["sofCanSend"] = Bool(Field(room, "canSend")); r["sofListCount"] = Int(Field(room, "listCount")); // 0 ALL, 1 SITES .. 4 GROUND
+                if (Field(room, "sendKind") is System.Enum kind) r["sofKind"] = System.Convert.ToInt32(kind); // the mission SEND sends (MissionKind)
+            }
             if (Field(room, "plate") is FrontMapPlate plate)
             {
                 r["zoom"] = plate.View.Zoom; r["centerU"] = plate.View.Center.x; r["centerV"] = plate.View.Center.y;
@@ -183,6 +242,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["centerX"] = Mathf.RoundToInt(c.x); r["centerY"] = Mathf.RoundToInt(c.y);
             }
             r["played"] = FrontPointer.Played; r["frame"] = Time.frameCount;
+            { MapFrame tf = FrontController.Frame(); r["theatreW"] = tf.W; r["theatreH"] = tf.H; }
             r["lastWheel"] = FrontPointer.LastWheel; r["lastWheelFrame"] = FrontPointer.LastWheelFrame;
             r["lastWheelX"] = Mathf.RoundToInt(FrontPointer.LastWheelAt.x); r["lastWheelY"] = Mathf.RoundToInt(FrontPointer.LastWheelAt.y);
             return r;
@@ -196,10 +256,30 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return rooms[(int)v.Front];
         }
 
-        /// <summary>The map point a gesture aims at: <c>u</c>, <c>v</c>, or with <c>at: "center"</c> the middle of the current view (always on screen, whatever the zoom and pan).</summary>
+        /// <summary>
+        /// The map point a gesture aims at: <c>u</c>, <c>v</c>; with <c>at: "center"</c> the middle of the current view (always on screen, whatever the zoom and pan);
+        /// with <c>at: "base"</c> / <c>"foe"</c> our / the enemy's first airbase, <c>at: "dc"</c> / <c>"truck"</c> our first standing data center / EW truck, <c>"camp"</c> / <c>"held"</c> our first standing camp / held building, each moved <c>east_km</c> / <c>north_km</c> on the ground.
+        /// </summary>
         private static Vector2 Aim(OpsFrontWindow window, Dictionary<string, object> args)
         {
-            if (Text(args, "at") == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
+            string at = Text(args, "at");
+            if (at == "center" && Field(Room(window), "plate") is FrontMapPlate plate) return plate.View.Center;
+            if ((at == "base" || at == "foe" || at == "dc" || at == "truck" || at == "camp" || at == "held" || at == "target" || at == "team") && Field(window, "lastView") is FrontRoomView v)
+            {
+                Vector2 p = new Vector2(-1f, -1f);
+                if (at == "base" || at == "foe") { foreach (MapAirbaseView a in v.Airbases) if (a.Side == (at == "base" ? AirbaseSide.Own : AirbaseSide.Enemy)) { p = new Vector2(a.U, a.V); break; } }
+                else if (at == "camp") { foreach (SofCampView c in v.Shadow.Camps) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.X, c.Y); break; } }
+                else if (at == "held") { if (v.Shadow.Held.Count > 0) p = new Vector2(v.Shadow.Held[0].X, v.Shadow.Held[0].Y); }
+                else if (at == "target") { if (v.Shadow.Targets.Count > 0) p = new Vector2(v.Shadow.Targets[0].X, v.Shadow.Targets[0].Y); }
+                else if (at == "team") { foreach (SofTeamView t in v.Shadow.Teams) if (t.Present) { p = new Vector2(t.X, t.Y); break; } }
+                else if (at == "dc") { foreach (InfraCenterView c in v.Network.Centers) if (c.State == InfraState.Up || c.State == InfraState.Damaged) { p = new Vector2(c.U, c.V); break; } }
+                else foreach (InfraTruckView t in v.Network.Trucks) if (t.State == InfraState.Up || t.State == InfraState.Damaged) { p = new Vector2(t.U, t.V); break; }
+                if (p.x >= 0f)
+                {
+                    MapFrame f = FrontController.Frame();
+                    return p + new Vector2(Number(args, "east_km", 0f) * 1000f / f.W, -Number(args, "north_km", 0f) * 1000f / f.H);
+                }
+            }
             return new Vector2(Number(args, "u", 0.5f), Number(args, "v", 0.5f));
         }
 

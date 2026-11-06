@@ -13,19 +13,30 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         TrucksMax = 16, TeamCap = 17, CampsMax = 18, NoHeldBuilding = 19, NoSamNet = 20, NotQueued = 21, BadAmount = 22, LowAllocation = 23,
         NoDonations = 24, Locked = 25, BadPosture = 26, BadWeights = 27, Offline = 28, Unavailable = 29, RateLimited = 30, BadFront = 31,
         /// <summary>GEO burn verdicts (Detail = seconds of burn, Charged = fuel percent spent; for NoFuel Detail = percent needed).</summary>
-        Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36, NoSite = 37
+        Relocated = 32, NoFuel = 33, Burning = 34, NoMove = 35, BirdLost = 36, NoSite = 37,
+        NoPad = 38, PadFull = 39, KindUp = 40, NoDataCenter = 41, DataCenterFull = 42, NoCamp = 43, CampFull = 44, NotHeld = 45,
+        NotOwnGround = 46, TooFar = 47, FobMax = 48, NoSpot = 49, Packing = 50, TruckBusy = 51
     }
 
     /// <summary>Every front sentence, built from a few bytes on the client (radio style, upper case). Pure.</summary>
     internal static class FrontWords
     {
-        public const byte MaxOutcome = (byte)FrontOutcome.NoSite;
+        public const byte MaxOutcome = (byte)FrontOutcome.TruckBusy;
 
         public static bool Good(FrontOutcome o) => (o >= FrontOutcome.Ok && o <= FrontOutcome.FocusCleared) || o == FrontOutcome.Relocated;
 
         public static string Callsign(Front f) => f == Front.Space ? "DARKSTAR" : f == Front.Cyber ? "HEXWARD" : "SHADOW";
 
         public static string Programme(ProgrammeId id) => FrontRules.Info(id).Name;
+
+        /// <summary>A queued or offered build: a satellite names its kind ("SATELLITE · OPTICAL").</summary>
+        public static string Programme(ProgrammeId id, byte kind) =>
+            id == ProgrammeId.LaunchSatellite && kind < 3 ? Programme(id) + " · " + Bird(kind) : Programme(id);
+
+        /// <summary>The verdict of a TRUCK MOVE (the host replies a front outcome).</summary>
+        public static string TruckMove(FrontOutcome code) =>
+            code == FrontOutcome.Ok ? "TRUCK PACKING UP · REDEPLOYS IN " + FrontRules.Clock(FrontRules.TruckPackSeconds)
+            : code == FrontOutcome.NoSite ? "THAT TRUCK IS NOT STANDING" : Outcome(code, Front.Cyber);
 
         public static string Refusal(FrontOutcome code, Front front)
         {
@@ -35,7 +46,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.AlreadyQueued: return "ALREADY QUEUED";
                 case FrontOutcome.QueueFull: return "QUEUE FULL, WAIT FOR A PROGRAMME TO FINISH";
                 case FrontOutcome.BirdsUp: return "ALL SATELLITES ARE UP";
-                case FrontOutcome.UplinksMax: return "UPLINKS AT MAX";
+                case FrontOutcome.UplinksMax: return "PADS AT MAX";
                 case FrontOutcome.DataCentersMax: return "DATA CENTERS AT MAX";
                 case FrontOutcome.TrucksMax: return "EW TRUCK LIMIT: 2";
                 case FrontOutcome.TeamCap: return "TEAM CAP REACHED";
@@ -43,6 +54,20 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
                 case FrontOutcome.NoHeldBuilding: return "HOLD A BUILDING FIRST";
                 case FrontOutcome.NoSamNet: return "NO SAM NET REVEALED YET, SWEEP FOR ONE";
                 case FrontOutcome.NoSite: return "NO HELD AIRBASE"; // an uplink site needs one; short so the FRONTS card line holds it whole
+                case FrontOutcome.NoPad: return "BUILD A LAUNCH PAD FIRST";
+                case FrontOutcome.PadFull: return "PADS FULL · BUILD ANOTHER PAD";
+                case FrontOutcome.KindUp: return "THAT SATELLITE IS ALREADY UP OR QUEUED";
+                case FrontOutcome.NoDataCenter: return "BUILD A DATA CENTER FIRST";
+                case FrontOutcome.DataCenterFull: return "EACH DATA CENTER RUNS ONE TRUCK";
+                case FrontOutcome.NoCamp: return "BUILD A CAMP FIRST";
+                case FrontOutcome.CampFull: return "CAMPS FULL · BUILD ANOTHER CAMP";
+                case FrontOutcome.NotHeld: return "PICK A HELD AIRBASE";
+                case FrontOutcome.NotOwnGround: return "PICK GROUND YOU HOLD";
+                case FrontOutcome.TooFar: return "WITHIN 20 KM OF A DATA CENTER";
+                case FrontOutcome.FobMax: return "A FOB IS ALREADY UP";
+                case FrontOutcome.NoSpot: return "NO ROOM THERE · PICK ANOTHER SPOT";
+                case FrontOutcome.Packing: return "TRUCK IS PACKING UP";
+                case FrontOutcome.TruckBusy: return "TRUCK IS BUSY";
                 default: return "";
             }
         }

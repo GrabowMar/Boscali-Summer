@@ -54,9 +54,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
         /// <summary>
         /// OPS FRONTS S1b: a finished ZERO-DAY, ASAT or FOB programme runs its effect directly, with no operation bar behind it (the programme was the bar). ZERO-DAY takes the faction's nearest
-        /// revealed SAM C2 node, ASAT the first satellite class (RADAR, OPTICAL, KINETIC) an enemy still has up, FOB the first building the faction holds. False when there is nothing to hit.
+        /// revealed SAM C2 node, ASAT the first satellite class (RADAR, OPTICAL, KINETIC) an enemy still has up, FOB the picked building (<paramref name="heldId"/>) while it is still held, else the
+        /// first building the faction holds. False when there is nothing to hit.
         /// </summary>
-        internal bool RunProgramme(FactionHQ owner, ProgrammeId id)
+        internal bool RunProgramme(FactionHQ owner, ProgrammeId id, int heldId = 0)
         {
             if (!Enabled || owner == null || !factions.TryGetValue(owner, out FactionOps f)) return false;
             switch (id)
@@ -64,8 +65,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case ProgrammeId.ZeroDay:
                     return cyber != null && cyber.TryBestSamNode(owner, out int node) && cyber.TryNodeTarget(owner, node, out OpTarget sam) && FireZeroDay(f, sam);
                 case ProgrammeId.Fob:
-                    int held = sof != null ? sof.FirstHeldId(owner) : 0;
-                    return held != 0 && sof.TryHeldTarget(owner, held, out OpTarget spot) && FireFob(f, spot);
+                    return sof != null && ((heldId != 0 && sof.TryHeldTarget(owner, heldId, out OpTarget spot)) || sof.TryHeldTarget(owner, sof.FirstHeldId(owner), out spot)) && FireFob(f, spot);
                 case ProgrammeId.Asat:
                     if (f.PendingBird >= 0) return false; // one launcher on the pad at a time
                     foreach (int cls in new[] { 1, 0, 2 })
@@ -103,7 +103,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         // ---- FOB -------------------------------------------------------------------------------------
 
         /// <summary>
-        /// The FORWARD OPERATING BASE goes live on the held building: 20 minutes (a second FOB renews it), +1 team cap, teams raised there, and a rearm vehicle (vanilla Rearmer) and a fuel vehicle (vanilla Refueler) beside it when
+        /// The FORWARD OPERATING BASE goes live on the held building: 20 minutes (a second FOB renews it), +2 team capacity, teams raised there, and a rearm vehicle (vanilla Rearmer) and a fuel vehicle (vanilla Refueler) beside it when
         /// the encyclopedia allows them. A field spawn point for players is not built (vanilla spawns only at airbases); the page says so. Retaking the building ends it (SofService.TickFob).
         /// </summary>
         private bool FireFob(FactionOps f, in OpTarget target)
@@ -266,17 +266,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return space != null && space.TryGetStateCoarse(fl.Victim, out SpaceState s) && s.HasBird((BirdKind)fl.Bird) && s.Geo((BirdKind)fl.Bird).DepartAt >= fl.LaunchedAt;
         }
 
-        /// <summary>The viewer's own dead satellites with their rebuild progress, its own uplink sites, and every faction's ASAT in flight (a smoke column and a rising light all clients play from this row).</summary>
+        /// <summary>The viewer's own satellites (down, ever launched), its own pads, and every faction's ASAT in flight (a smoke column and a rising light all clients play from this row). No bird rebuilds itself: BirdPercent stays 0.</summary>
         partial void FillBirdsAndFlights(FactionHQ viewer, float now, OpsStateData into)
         {
             into.Sites.Clear();
-            if (space != null) space.CopySites(viewer, into.Sites); // the viewer's own uplink sites: where they stand and how
+            if (space != null) space.CopySites(viewer, into.Sites); // the viewer's own pads: where they stand and how
             if (space != null && space.TryGetStateCoarse(viewer, out SpaceState state))
             {
                 into.BirdsDown = state.DownMask;
+                into.BirdsLaunched = state.LaunchedMask;
                 for (int i = 0; i < SpaceRules.BirdCount; i++) into.Geo[i] = state.Geo((BirdKind)i);
-                for (int i = 0; i < SpaceRules.BirdCount; i++)
-                    if (state.BirdDown((BirdKind)i)) into.BirdPercent[i] = (byte)Mathf.Clamp(state.RebuildPercent((BirdKind)i, now), 0, 100);
             }
             var hqs = FactionRegistry.GetAllHQs();
             if (hqs != null)

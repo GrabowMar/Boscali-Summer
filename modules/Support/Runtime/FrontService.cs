@@ -23,11 +23,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
     }
 
     /// <summary>
-    /// OPS FRONTS S1b: the host owner of every faction's three fronts (spec 3, 5). One <see cref="FrontBook"/> per faction, AI-only factions included. Every 60 s a share of the
-    /// faction's vanilla funds moves into the fronts; every 5 s the real services are read into a <see cref="FrontWorld"/>, lost anchors queue their rebuild programme, the books tick and
-    /// each finished programme is turned into its world effect through the existing spawners and effects. Superiority is recomputed against the strongest enemy and, at +40, presses the
-    /// enemy front it beats (SPACE on SOF exposure, CYBER on SPACE cooldowns, SOF on CYBER trace). The same service answers the faction's commands, builds its mirror and gates perks
-    /// (<see cref="IFrontPower"/>): the host reads the books, a client reads the mirror.
+    /// OPS FRONTS S1b: the host owner of every faction's three fronts (spec 3, 5). One <see cref="FrontBook"/> per faction (seeded with <c>Support/FrontSeed</c>), AI-only factions included.
+    /// Every 60 s a share of the faction's vanilla funds moves into the fronts; every 5 s the real services are read into a <see cref="FrontWorld"/>, an idle front's quartermaster queues its
+    /// next ladder step (organic fronts 4.6: a human front after 180 s with nothing queued by a human, an AI front whenever its queue is empty, then its doctrine), the books tick and each
+    /// finished programme is placed through the services (pads, data centers, trucks, camps) or run as an effect. A queued build is checked twice: the ladder and the service's placement
+    /// rule at queue time, the service again at completion. Superiority is recomputed against the strongest enemy and, at +40, presses the enemy front it beats (SPACE on SOF exposure,
+    /// CYBER on SPACE cooldowns, SOF on CYBER trace). The same service answers the faction's commands, builds its mirror and gates perks (<see cref="IFrontPower"/>): the host reads the
+    /// books, a client reads the mirror.
     /// </summary>
     internal sealed class FrontService : MonoBehaviour, ISceneService, IFrontPower
     {
@@ -37,7 +39,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private sealed class FactionFront
         {
             public FactionHQ Owner;
-            public readonly FrontBook Book = new FrontBook();
+            public FrontBook Book;
             public FrontWorld World;
             public FrontSides Own;
             public readonly bool[] CounterOn = new bool[FrontRules.FrontCount];
@@ -46,12 +48,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
             public float CacheAt = float.NegativeInfinity;
             /// <summary>An AI faction queues its next ASAT no sooner than this (one every <see cref="AiAsatSpacingSeconds"/>).</summary>
             public float NextAiAsat;
+            /// <summary>[front, programme]: the quartermaster skips this automatic step until this mission second (it found no room; ruling R20).</summary>
+            public readonly float[,] BlockedUntil = new float[FrontRules.FrontCount, FrontRules.Programmes.Length];
+            /// <summary>Unscaled time this faction's next tick-failure warning may be logged.</summary>
+            public float NextWarning;
         }
 
         private const float AiAsatSpacingSeconds = 1200f;
+        /// <summary>An automatic pool build that found no room (NO SPOT, NO SITE, NOT HELD) is not tried again by the quartermaster for this long.</summary>
+        private const float BlockedSeconds = 600f;
 
         private readonly Dictionary<FactionHQ, FactionFront> factions = new Dictionary<FactionHQ, FactionFront>();
         private readonly List<FactionFront> order = new List<FactionFront>(MaximumFactions);
+        /// <summary>Scratch: a front's queued data-center points for the EW TRUCK queue check.</summary>
+        private readonly List<(float X, float Z)> queuedCenters = new List<(float X, float Z)>(FrontRules.MaxQueue);
         private SupportManager manager;
         private SpaceService space;
         private CyberService cyber;
@@ -189,7 +199,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionHQ hq in hqs)
             {
                 if (hq == null || factions.ContainsKey(hq) || factions.Count >= MaximumFactions) continue;
-                var made = new FactionFront { Owner = hq };
+                var made = new FactionFront { Owner = hq, Book = new FrontBook(manager.Settings.FrontSeed.Value) };
                 factions.Add(hq, made);
                 order.Add(made);
             }
@@ -214,9 +224,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
             foreach (FactionFront f in order)
             {
                 if (f.Owner == null) continue;
-                f.Book.AutoQueueRebuilds(f.World, now);
-                if (manager.HumanCount(f.Owner) == 0) AiQueue(f, now);
-                foreach (FrontEvent e in f.Book.Tick(now)) Apply(f, e, now);
+                // One faction's fault must not stall the factions after it (Apply already guards each effect).
+                try
+                {
+                    Quartermaster(f, now);
+                    foreach (FrontEvent e in f.Book.Tick(now, f.World)) Apply(f, e, now);
+                    float excess = f.Book.TrimToCap(); // ruling R22: refunds and SIPHON never leave a budget above the cap past this tick
+                    if (excess > 0f) f.Owner.AddFunds(excess);
+                }
+                catch (Exception ex)
+                {
+                    if (Time.unscaledTime >= f.NextWarning) { f.NextWarning = Time.unscaledTime + 10f; Plugin.Logger?.LogWarning("[Support.Fronts] " + f.Owner.name + " tick failed: " + ex.Message); }
+                }
             }
             Superiority(now);
         }
@@ -228,26 +247,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
             FactionHQ hq = f.Owner;
             var w = new FrontWorld();
             var s = new FrontSides();
+            s.UplinksTotal = FrontRules.PadCap; // the pads term reads 0..1 by pads built out of the two slots
             if (space != null && space.TryGetStateCoarse(hq, out SpaceState state))
             {
-                int down = 0;
-                for (int i = 0; i < SpaceRules.BirdCount; i++) if (state.BirdDown((BirdKind)i)) down++;
-                w.BirdsDown = down; s.BirdsUp = SpaceRules.BirdCount - down;
-                w.Uplinks = s.UplinksLive = state.LiveUplinkCount; w.UplinkMax = s.UplinksTotal = state.UplinkCount;
+                w.BirdsUp = (byte)(~state.DownMask & ((1 << SpaceRules.BirdCount) - 1));
+                for (int i = 0; i < SpaceRules.BirdCount; i++) if ((w.BirdsUp & (1 << i)) != 0) s.BirdsUp++;
+                w.PadsLive = s.UplinksLive = state.LiveUplinkCount;
             }
             if (cyber != null && cyber.TryDesk(hq, out CyberDesk cd))
             {
-                w.DataCenters = cd.Anchors.LiveCount(AnchorKind.DataCenter); w.DataCenterMax = AnchorRules.MaxDataCenters;
-                w.Trucks = cd.Anchors.LiveCount(AnchorKind.EwTruck); w.TruckMax = AnchorRules.MaxTrucks;
-                s.AnchorsLive = w.DataCenters + w.Trucks;
+                int trucks = cd.Anchors.LiveCount(AnchorKind.EwTruck);
+                w.DataCentersLive = cd.Anchors.LiveCount(AnchorKind.DataCenter);
+                w.TrucksLive = trucks + cyber.PackingTrucks(hq); // a truck packing up still holds its data center (ruling R10) ...
+                s.AnchorsLive = w.DataCentersLive + trucks;        // ... but is not live for superiority
                 int held = 0; float trace = 0f;
                 foreach (CyberIntrusion x in cd.Network.Active) { held += x.HeldCount; trace = Mathf.Max(trace, x.Trace); }
                 s.HeldEnemyNodes = held; s.Trace = Mathf.Clamp01(trace / CyberRules.TraceMax);
             }
             if (sof != null && sof.TryDesk(hq, out SofDesk sd))
             {
-                w.Camps = s.CampsLive = sd.Camps.LiveCount(); w.CampMax = sd.Camps.Count;
-                w.Teams = sd.ActiveCount; w.HasHeldBuilding = sd.Held.Count > 0;
+                w.CampsLive = s.CampsLive = sd.Camps.LiveCount();
+                w.Teams = sd.ActiveCount; w.HasHeldBuilding = sd.Held.Count > 0; w.FobUp = sd.FobActive;
                 s.HeldBuildings = sd.Held.Count;
                 int afield = 0;
                 foreach (SofTeam t in sd.Teams)
@@ -285,68 +305,92 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return false;
         }
 
-        /// <summary>A faction with no humans raises its fronts itself: when a front has nothing building it queues the next programme of its doctrine (a team, a ZERO-DAY, a FOB, an ASAT).</summary>
-        private void AiQueue(FactionFront f, float now)
+        /// <summary>
+        /// The quartermaster (organic fronts 4.6): a human front idle for 180 s with an empty queue climbs its ladder by one step at the automatic spot; a faction with no humans does so
+        /// whenever a front's queue is empty. Owner 0 (the pool), never a human queue. A step the service cannot place now, or that is backing off after finding no room at queue time or
+        /// at completion (<see cref="BlockedSeconds"/>), is not queued: a human front waits (it never jumps to a later step that needs this one), an AI front follows its doctrine instead
+        /// (<see cref="FrontAi.Doctrine"/>: ASAT, ZERO-DAY, FOB), as it does with the ladder complete; a doctrine build backing off is skipped the same way.
+        /// </summary>
+        private void Quartermaster(FactionFront f, float now)
         {
+            bool humans = manager.HumanCount(f.Owner) > 0;
             for (int i = 0; i < FrontRules.FrontCount; i++)
             {
                 var front = (Front)i;
-                if (f.Book.Side(front).Queue.Count > 0) continue;
+                if (!f.Book.QuartermasterDue(front, now, humans)) continue;
+                QueuedCounts queued = f.Book.Queued(front);
+                if (FrontLadder.Next(front, f.World, queued, out ProgrammeId id, out byte kind) && now >= f.BlockedUntil[i, (int)id] &&
+                    Queue(f, front, id, kind, false, 0f, 0f, false, now) == FrontOutcome.Queued) continue;
+                if (humans) continue;
                 bool sam = front == Front.Cyber && cyber != null && cyber.TryBestSamNode(f.Owner, out _);
                 bool asat = front == Front.Space && now >= f.NextAiAsat && EnemyBirdUp(f.Owner);
-                ProgrammeId? next = FrontAi.Next(front, f.World, sam, asat);
-                if (!next.HasValue) continue;
-                f.Book.Queue(front, next.Value, f.World, now, out _);
-                if (next.Value == ProgrammeId.Asat) f.NextAiAsat = now + AiAsatSpacingSeconds;
+                if (FrontAi.Doctrine(front, f.World, queued, sam, asat, out id) && now >= f.BlockedUntil[i, (int)id] &&
+                    Queue(f, front, id, 0, false, 0f, 0f, false, now) == FrontOutcome.Queued && id == ProgrammeId.Asat)
+                    f.NextAiAsat = now + AiAsatSpacingSeconds;
             }
         }
 
         // ---- Programme effects ----------------------------------------------------------------------
 
         /// <summary>
-        /// A finished programme meets its owning adapter. DONE is logged only when the adapter accepted the effect; when it refused (the world no longer needs it: the anchor was rebuilt another
-        /// way, the camp is down, no legal ground), a FAILED line names why and the cost the programme captured at queue time goes back to the front's budget, once (<see cref="FrontBook.Settle"/>).
+        /// A finished programme meets its owning service, which places it again at completion (the world may have moved since the queue check). DONE is logged only when the service
+        /// accepted; when it refused (no legal ground, the prerequisite is gone, nothing to hit), a FAILED line names the service's cause and the cost the programme captured goes back to
+        /// the front's budget, once (<see cref="FrontBook.Settle"/>).
         /// </summary>
         private void Apply(FactionFront f, FrontEvent e, float now)
         {
             FactionHQ owner = f.Owner;
-            bool ok = true;
-            string why = "nothing to do";
-            FrontOutcome failure = FrontOutcome.Unavailable; // what the log names if the adapter refuses
-            BirdKind bird = BirdKind.Optical;
+            bool ok = false;
+            string why = null;
+            FrontOutcome failure = FrontOutcome.Unavailable; // what the log names if the service refuses
+            var bird = (BirdKind)e.Kind;
             try
             {
                 switch (e.Id)
                 {
-                    case ProgrammeId.LaunchSatellite: ok = space != null && space.TryLaunchBird(owner, out bird); failure = FrontOutcome.BirdsUp; break;
-                    case ProgrammeId.UplinkSite: ok = space != null && space.TryRebuildUplink(owner); failure = f.World.Uplinks >= f.World.UplinkMax ? FrontOutcome.UplinksMax : FrontOutcome.NoSite; break;
-                    case ProgrammeId.DataCenter: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.DataCenter); failure = FrontOutcome.DataCentersMax; break;
-                    case ProgrammeId.EwTruck: ok = cyber != null && cyber.CompleteRebuild(owner, AnchorKind.EwTruck); failure = FrontOutcome.TrucksMax; break;
-                    case ProgrammeId.Camp: ok = sof != null && sof.CompleteCampRebuild(owner); failure = f.World.Camps >= f.World.CampMax ? FrontOutcome.CampsMax : FrontOutcome.NoSite; break;
+                    case ProgrammeId.LaunchSatellite:
+                        ok = space != null && space.TryLaunchBird(owner, bird);
+                        if (!ok && space != null) failure = space.CheckLaunch(owner, bird); // the real cause: NO PAD, PAD FULL, KIND UP
+                        break;
+                    case ProgrammeId.UplinkSite: ok = space != null && space.TryBuildPad(owner, e.HasPoint, e.X, e.Z, out failure); break;
+                    case ProgrammeId.DataCenter: ok = cyber != null && cyber.TryBuildDataCenter(owner, e.HasPoint, e.X, e.Z, out failure); break;
+                    case ProgrammeId.EwTruck: ok = cyber != null && cyber.TryDeployTruck(owner, e.HasPoint, e.X, e.Z, out failure); break;
+                    case ProgrammeId.Camp: ok = sof != null && sof.TryBuildCamp(owner, e.HasPoint, e.X, e.Z, out failure); break;
                     case ProgrammeId.TrainTeam:
                         SofResult r = sof != null ? sof.TrainTeam(owner) : new SofResult(SofOutcome.Unavailable);
                         ok = r.Ok; why = r.Words;
-                        failure = r.Outcome == SofOutcome.TeamCap ? FrontOutcome.TeamCap : r.Outcome == SofOutcome.NoCamp || r.Outcome == SofOutcome.CampDown ? FrontOutcome.NoSite : FrontOutcome.Unavailable;
+                        failure = r.Outcome == SofOutcome.TeamCap ? FrontOutcome.TeamCap : r.Outcome == SofOutcome.CampFull ? FrontOutcome.CampFull :
+                            r.Outcome == SofOutcome.NoCamp || r.Outcome == SofOutcome.CampDown ? FrontOutcome.NoCamp : FrontOutcome.Unavailable;
                         break;
                     case ProgrammeId.ZeroDay: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoSamNet; break;
-                    case ProgrammeId.Fob: ok = ops != null && ops.RunProgramme(owner, e.Id); failure = FrontOutcome.NoHeldBuilding; break;
+                    case ProgrammeId.Fob:
+                        // The picked building while it is still held, else the first held one (ruling R15: the strict pick was judged at queue time).
+                        ok = ops != null && ops.RunProgramme(owner, ProgrammeId.Fob, e.HasPoint && sof != null ? sof.HeldNear(owner, e.X, e.Z, FrontRules.FobPickMetres) : 0);
+                        failure = FrontOutcome.NoHeldBuilding;
+                        break;
                     case ProgrammeId.Asat: ok = ops != null && ops.RunProgramme(owner, e.Id); break;
                 }
             }
             catch (Exception ex)
             {
-                // An adapter that throws must not swallow the programme: it is refused like any other failure and the rest of the faction's completions still run.
+                // A service that throws must not swallow the programme: it is refused like any other failure and the rest of the faction's completions still run.
                 ok = false; why = ex.Message; failure = FrontOutcome.Unavailable;
                 Plugin.Logger?.LogWarning("[Support.Fronts] " + owner.name + " " + FrontWords.Programme(e.Id) + " effect threw: " + ex.Message);
             }
+            if (!ok && failure == FrontOutcome.None) failure = FrontOutcome.Unavailable; // a refusal is never settled as DONE
             f.Book.Settle(e, ok ? FrontOutcome.None : failure, now);
+            // An automatic pool build that found no room would loop (fund, build, refund) every cycle: the quartermaster backs off that step for 10 minutes.
+            if (!ok && !e.HasPoint && e.Owner == 0 && (failure == FrontOutcome.NoSpot || failure == FrontOutcome.NoSite || failure == FrontOutcome.NotHeld))
+                f.BlockedUntil[(int)e.Front, (int)e.Id] = now + BlockedSeconds;
             if (ok)
             {
                 if (e.Id == ProgrammeId.LaunchSatellite) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
                 Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " complete.");
                 return;
             }
-            Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " had no effect (" + why + "); " + (int)e.Cost + " returned to the front budget.");
+            if (string.IsNullOrEmpty(why)) why = FrontWords.Refusal(failure, e.Front);
+            Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " had no effect (" +
+                (why.Length > 0 ? why : "nothing to do") + "); " + (int)e.Cost + " returned to the front budget.");
         }
 
         // ---- Superiority and the counter triangle ----------------------------------------------------
@@ -368,6 +412,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     }
                     int s = FrontSuperiority.Compute(front, a.Own, enemy);
                     a.Book.SetSuperiority(front, s);
+                    a.Book.SetTerms(front, FrontSuperiority.Terms(front, a.Own, enemy));
                     bool on = FrontSuperiority.CounterActive(s);
                     if (on != a.CounterOn[i]) { a.CounterOn[i] = on; a.Book.NoteLog(front, FrontLogCode.Counter, on ? 1 : 0, 0, now); }
                 }
@@ -457,9 +502,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontDirective: result = SetDirective(f, c.Target, key, name, now); break;
                 case SpaceCommandKind.FrontPriority: result = SetPriority(f, c.Ids, key, name, now); break;
                 case SpaceCommandKind.FrontFocus: result = SetFocus(f, c.Ids, now); break;
-                case SpaceCommandKind.FrontQueue: result = Queue(f, c.Target, now); break;
+                case SpaceCommandKind.FrontQueue: result = Queue(f, c.Ids, true, now); break;
                 case SpaceCommandKind.FrontDonate: result = Donate(f, player, c.Ids); break;
                 case SpaceCommandKind.RelocateBird: result = Relocate(f, c.Ids, now); break;
+                case SpaceCommandKind.TruckMove: result = MoveTruck(f, c.Ids); break;
                 default: result = new FrontResult(FrontOutcome.Unavailable); break;
             }
             if (result.Ok) f.CacheAt = float.NegativeInfinity;
@@ -511,26 +557,68 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        private FrontResult Queue(FactionFront f, int target, float now)
+        /// <summary>QUEUE: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic placement) }.</summary>
+        private FrontResult Queue(FactionFront f, int[] ids, bool human, float now)
         {
-            if (!Unpack(target, out Front front, out int programme)) return new FrontResult(FrontOutcome.BadFront);
-            if (programme < 0 || programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
-            var id = (ProgrammeId)programme;
-            // The host knows what the book cannot: a ZERO-DAY needs a revealed SAM net to hit.
-            if (id == ProgrammeId.ZeroDay && FrontRules.BelongsTo(front, id) && !f.Book.Side(front).Has(id) && !(cyber != null && cyber.TryBestSamNode(f.Owner, out _)))
-                return new FrontResult(FrontOutcome.NoSamNet);
-            if (f.Book.Queue(front, id, f.World, now, out _)) return new FrontResult(FrontOutcome.Queued);
-            return new FrontResult(f.Book.RefusalCode(front, id, f.World));
+            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int packed)) return new FrontResult(FrontOutcome.BadFront);
+            int programme = packed & 15; byte kind = (byte)((packed >> 4) & 3);
+            if (programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
+            float px = 0f, pz = 0f;
+            bool hasPoint = ids[1] != 0;
+            if (hasPoint && !SofCodes.TryUnpackPoint(ids[1], out px, out pz)) return new FrontResult(FrontOutcome.NoSpot);
+            return new FrontResult(Queue(f, front, (ProgrammeId)programme, kind, hasPoint, px, pz, human, now));
+        }
+
+        /// <summary>
+        /// One build onto a front's queue (Queued, or the refusal; nothing is paid on a refusal): the book's dry check first (queue room, the ladder counting queued rows), then the
+        /// service's placement rule, then the book takes it. Owner 0: the faction pool. <paramref name="human"/> restarts the front's quartermaster clock. An automatic (quartermaster / AI)
+        /// build the service finds no room for now backs off <see cref="BlockedSeconds"/> like one that failed at completion; a human queue never does.
+        /// </summary>
+        private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now)
+        {
+            if (id != ProgrammeId.LaunchSatellite) kind = 0; // a client's kind bits on any other row would ride the mirror and fail every reader's kind check
+            FrontOutcome r = f.Book.RefusalCode(front, id, kind, f.World);
+            if (r == FrontOutcome.None) r = Placement(f.Owner, f.Book.Side(front), id, hasPoint, x, z);
+            if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, f.World, now);
+            if (!human && (r == FrontOutcome.NoSpot || r == FrontOutcome.NoSite || r == FrontOutcome.NotHeld)) f.BlockedUntil[(int)front, (int)id] = now + BlockedSeconds;
+            return r == FrontOutcome.None ? FrontOutcome.Queued : r;
+        }
+
+        /// <summary>The service's placement rule at queue time (None when the build may stand there). A satellite, a team and an ASAT need no place: their row waits on the ladder.</summary>
+        private FrontOutcome Placement(FactionHQ owner, FrontSide side, ProgrammeId id, bool hasPoint, float x, float z)
+        {
+            switch (id)
+            {
+                case ProgrammeId.UplinkSite: return space != null ? space.CheckPad(owner, hasPoint, x, z) : FrontOutcome.Unavailable;
+                case ProgrammeId.DataCenter: return cyber != null ? cyber.CheckDataCenter(owner, hasPoint, x, z) : FrontOutcome.Unavailable;
+                case ProgrammeId.EwTruck:
+                    if (cyber == null) return FrontOutcome.Unavailable;
+                    // A queued data center counts as coming. An automatic truck needs only its capacity, so every queued center counts; a picked point can only be judged
+                    // against a queued center that has a place.
+                    queuedCenters.Clear();
+                    foreach (FrontProgrammeEntry e in side.Queue) if (e.Id == ProgrammeId.DataCenter && (e.HasPoint || !hasPoint)) queuedCenters.Add((e.X, e.Z));
+                    return cyber.CheckTruck(owner, hasPoint, x, z, queuedCenters);
+                case ProgrammeId.Camp: return sof != null ? sof.CheckCamp(owner, hasPoint, x, z) : FrontOutcome.Unavailable;
+                case ProgrammeId.Fob: return sof != null ? sof.CheckFob(owner, hasPoint, x, z) : FrontOutcome.Unavailable; // ruling R15: the strict pick
+                case ProgrammeId.ZeroDay: return cyber != null && cyber.TryBestSamNode(owner, out _) ? FrontOutcome.None : FrontOutcome.NoSamNet; // it needs a revealed SAM net to hit
+                default: return FrontOutcome.None;
+            }
+        }
+
+        /// <summary>TRUCK MOVE: Ids = { truck index, packed point }. The truck packs up and redeploys at the point; CYBER judges the 20 km data center reach.</summary>
+        private FrontResult MoveTruck(FactionFront f, int[] ids)
+        {
+            if (ids == null || ids.Length != 2) return new FrontResult(FrontOutcome.BadAmount);
+            if (!SofCodes.TryUnpackPoint(ids[1], out float x, out float z)) return new FrontResult(FrontOutcome.NoSpot);
+            return new FrontResult(cyber != null ? cyber.MoveTruck(f.Owner, ids[0], x, z) : FrontOutcome.Unavailable);
         }
 
         private FrontResult Donate(FactionFront f, Player player, int[] ids)
         {
-            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int programme)) return new FrontResult(FrontOutcome.BadFront);
-            if (programme < 0 || programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
+            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int row) || row > ushort.MaxValue) return new FrontResult(FrontOutcome.BadFront);
             if (player.HQ.preventDonation && GameManager.gameState == GameState.Multiplayer) return new FrontResult(FrontOutcome.NoDonations);
-            var id = (ProgrammeId)programme;
             FrontProgrammeEntry entry = null;
-            foreach (FrontProgrammeEntry e in f.Book.Side(front).Queue) if (e.Id == id) { entry = e; break; }
+            foreach (FrontProgrammeEntry e in f.Book.Side(front).Queue) if (e.Row == row) { entry = e; break; }
             if (entry == null) return new FrontResult(FrontOutcome.NotQueued);
             int wanted = Mathf.Min(Mathf.Max(0, ids[1]), Mathf.CeilToInt(entry.Remaining / FrontRules.DonateRate));
             if (wanted <= 0) return new FrontResult(FrontOutcome.BadAmount);
@@ -538,7 +626,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             int give = free ? wanted : Mathf.Min(wanted, Mathf.FloorToInt(Mathf.Max(0f, player.Allocation)));
             if (give <= 0) return new FrontResult(FrontOutcome.LowAllocation, 1);
             if (!free && !manager.TrySpendAllocation(player, give)) return new FrontResult(FrontOutcome.LowAllocation, give);
-            DonateResult r = f.Book.Donate(front, id, give * FrontRules.DonateRate);
+            DonateResult r = f.Book.Donate(front, (ushort)row, give * FrontRules.DonateRate);
             if (r.Status != DonateStatus.Ok) { if (!free) manager.RefundAllocation(player, give); return new FrontResult(FrontOutcome.NotQueued); }
             int used = Mathf.Min(give, Mathf.CeilToInt(r.Accepted / FrontRules.DonateRate));
             if (!free && used < give) manager.RefundAllocation(player, give - used); // the bar took less than was offered: the rest goes back

@@ -42,14 +42,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
             SofDesk desk = f.Desk;
             into.Active = true;
             ulong viewerId = PlayerIdentity.Of(viewer);
-            into.TeamCap = (byte)Math.Min(SofRules.MaxTeams, SofRules.TeamCap(manager.HumanCount(viewer.HQ), f.FobUntil > now));
+            into.TeamCap = (byte)Math.Min(SofRules.MaxTeams, desk.TeamCap);
             into.SweepEndsAt = desk.SweepEndsAt > now ? desk.SweepEndsAt : 0f;
             into.SweepReadyAt = desk.SweepReadyAt > now ? desk.SweepReadyAt : 0f;
             foreach (CampSlot slot in f.Slots)
             {
                 if (into.Camps.Count >= SofWire.MaxCamps || !f.Camps.TryPosition(slot.Index, out float x, out float z)) continue;
-                AnchorHealth health = f.Camps.Health(slot.Index);
-                into.Camps.Add(new SofCampRow { Health = health, X = x, Z = z, Rebuild = health == AnchorHealth.Down ? (byte)Mathf.Clamp(Mathf.RoundToInt(slot.Bar.Fraction * 100f), 0, 100) : (byte)0 });
+                into.Camps.Add(new SofCampRow { Health = f.Camps.Health(slot.Index), X = x, Z = z }); // no self-revival: a down camp's rebuild stays 0 until a CAMP build
             }
             foreach (SofTeam t in desk.Teams)
             {

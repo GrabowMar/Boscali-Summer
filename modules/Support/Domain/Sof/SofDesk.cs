@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Domain.Calls;
 using BoscaliSummer.Modules.Support.Domain.Cyber;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Space;
 
 namespace BoscaliSummer.Modules.Support.Domain.Sof
@@ -17,12 +18,14 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
         /// <summary>Another operator has tasked this team and keeps it until it is back home, lost or they leave.</summary>
         Controlled = 22,
         /// <summary>Protocol 42: the defence verb SWEEP.</summary>
-        Swept = 23, NothingToSweep = 24, SweepCooling = 25
+        Swept = 23, NothingToSweep = 24, SweepCooling = 25,
+        /// <summary>Organic fronts: every live camp (and the FOB) already runs its two teams.</summary>
+        CampFull = 26
     }
 
     internal static class SofOutcomeWords
     {
-        public const byte MaxOutcome = (byte)SofOutcome.SweepCooling;
+        public const byte MaxOutcome = (byte)SofOutcome.CampFull;
 
         public static string Of(SofOutcome outcome, int detail = 0)
         {
@@ -53,6 +56,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 case SofOutcome.Swept: return "QRF ROLLING — ON THE HOSTILE TEAMS IN " + Math.Max(0, detail) + " S";
                 case SofOutcome.NothingToSweep: return "NEGATIVE: NO HOSTILE TEAM DETECTED NEAR OUR SITES — NOTHING TO SWEEP";
                 case SofOutcome.SweepCooling: return detail > 0 ? "NEGATIVE: QRF REFITTING — READY IN " + SpaceRules.Clock(detail) : "NEGATIVE: THE QRF IS ALREADY ROLLING";
+                case SofOutcome.CampFull: return "NEGATIVE: CAMPS FULL — BUILD ANOTHER CAMP";
                 default: return "NEGATIVE: SOF OFFLINE — NO CAMP STANDING";
             }
         }
@@ -96,8 +100,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
     internal interface ISofPorts
     {
         float Now { get; }
-        int Humans { get; }
-        bool Fob { get; }
         SofOutcome TrySpend(ulong op, int cr, out int detail);
         void Refund(ulong op, int cr);
         SofScene Scene(float x, float z);
@@ -368,8 +370,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
 
         // ---- Verbs --------------------------------------------------------------------------------
 
-        /// <summary>Raises a team at the best camp (or the FOB). <paramref name="teamCap"/> above 0 replaces the usual cap (the TRAIN TEAM programme raises up to 4).</summary>
-        public SofResult Raise(ulong op, int teamCap = 0)
+        /// <summary>Teams the faction may field now: <see cref="FrontRules.TeamsPerBase"/> per live camp, as many more while a FOB is up, never above <see cref="FrontRules.TeamCap"/>.</summary>
+        public int TeamCap => Math.Min(FrontRules.TeamCap, FrontRules.TeamsPerBase * (Camps.LiveCount() + (FobActive ? 1 : 0)));
+
+        /// <summary>Raises a team at the best camp (or the FOB), up to <see cref="TeamCap"/>: the hard cap answers TEAM CAP, the camps' capacity CAMP FULL.</summary>
+        public SofResult Raise(ulong op)
         {
             float now = ports.Now;
             float cx, cz;
@@ -380,7 +385,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Sof
                 if (Camps.Count == 0) return new SofResult(SofOutcome.NoCamp);
                 if (!Camps.TryBest(out _, out cx, out cz, out health)) return new SofResult(SofOutcome.CampDown);
             }
-            if (ActiveCount >= (teamCap > 0 ? teamCap : SofRules.TeamCap(ports.Humans, ports.Fob))) return new SofResult(SofOutcome.TeamCap);
+            if (ActiveCount >= FrontRules.TeamCap) return new SofResult(SofOutcome.TeamCap);
+            if (ActiveCount >= TeamCap) return new SofResult(SofOutcome.CampFull);
             int slot = -1;
             for (int i = 0; i < Teams.Length && slot < 0; i++) if (!Teams[i].Active) slot = i;
             if (slot < 0) return new SofResult(SofOutcome.TeamCap);

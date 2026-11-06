@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Domain.Ops;
 using BoscaliSummer.Modules.Support.Domain.Sof;
 using UnityEngine;
@@ -7,7 +8,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
 {
     /// <summary>
     /// The seams OPERATIONS reads and writes on SOF: held buildings as FOB targets, and the FORWARD OPERATING BASE itself. A FOB is a held building made permanent for 20 minutes: its team
-    /// cap (+1) and the raise point live in the desk, the rearm and refuel points are real vehicles with a vanilla <c>Rearmer</c> / <c>Refueler</c> parked beside it when the encyclopedia allows them. A field spawn
+    /// capacity (+2, like a camp) and the raise point live in the desk, the rearm and refuel points are real vehicles with a vanilla <c>Rearmer</c> / <c>Refueler</c> parked beside it when the encyclopedia allows them. A field spawn
     /// point for aircraft is NOT built: vanilla spawns only at airbases and the mod must not invent one (see the plan).
     /// </summary>
     internal sealed partial class SofService
@@ -45,6 +46,31 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal bool HeldAlive(FactionHQ owner, int heldId) => TryHeldTarget(owner, heldId, out _);
 
         internal bool FobUp(FactionHQ owner) => owner != null && factions.TryGetValue(owner, out FactionSof f) && f.FobUntil > SupportManager.MissionNow();
+
+        /// <summary>The id of the held building nearest (x, z) within <paramref name="within"/> metres, 0 when none.</summary>
+        internal int HeldNear(FactionHQ owner, float x, float z, float within)
+        {
+            if (!TryDesk(owner, out SofDesk desk)) return 0;
+            int best = 0;
+            float bestD = within;
+            foreach (HeldBuilding h in desk.Held)
+            {
+                float d = SofRules.Distance(x, z, h.X, h.Z);
+                if (d <= bestD) { bestD = d; best = h.Id; }
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Host: can a FOB go up (on the building picked near (x, z) when <paramref name="hasPoint"/>)? Only one at a time; a picked point needs a held building within
+        /// <see cref="FrontRules.FobPickMetres"/>, no point any held building. Spawns nothing.
+        /// </summary>
+        internal FrontOutcome CheckFob(FactionHQ owner, bool hasPoint, float x, float z)
+        {
+            if (owner == null || !factions.ContainsKey(owner)) return FrontOutcome.Unavailable;
+            if (FobUp(owner)) return FrontOutcome.FobMax;
+            return (hasPoint ? HeldNear(owner, x, z, FrontRules.FobPickMetres) : FirstHeldId(owner)) != 0 ? FrontOutcome.None : FrontOutcome.NoHeldBuilding;
+        }
 
         /// <summary>
         /// The FOB goes live on a held building: 20 minutes (renewing adds 20 more), the team cap and raise point, and a rearm and a fuel vehicle beside it when they exist.

@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SupportResult.RateLimited: return CallWords.Refusal(CallRefusal.Busy);
                 case SupportResult.Duplicate: return "NEGATIVE: ALREADY HANDLED — CHECK THE CALL STATUS";
                 case SupportResult.CapabilityUnavailable: return "NEGATIVE: UNAVAILABLE ON THIS MAP — TRY ANOTHER CALL";
-                case SupportResult.UplinkDown: return "NEGATIVE: UPLINK DOWN — RESTORE THE SITE";
+                case SupportResult.UplinkDown: return "NEGATIVE: NO LIVE PAD — BUILD ONE";
                 case SupportResult.BirdNotReady: return "NEGATIVE: BIRD BUSY — WAIT FOR THE NEXT TASK";
                 case SupportResult.OpticalNight: return SpaceFeedRules.OpticalRefusal(OpticalVerdict.NightUnavailable);
                 case SupportResult.SkyUnknown: return SpaceFeedRules.OpticalRefusal(OpticalVerdict.SkyUnknown);

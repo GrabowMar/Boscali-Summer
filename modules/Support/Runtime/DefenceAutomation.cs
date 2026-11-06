@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!m.Sof.TryDesk(them, out SofDesk theirs)) { why = "enemy has no SOF desk"; return -1; }
             float x, z;
             if (!(m.Sof.TryDesk(us, out SofDesk ours) && ours.Camps.TryBest(out _, out x, out z, out _)) && !FirstAirbase(us, out x, out z)) { why = "we have no camp and no airbase"; return -1; }
-            SofResult raised = theirs.Raise(Enemy, SofRules.MaxTeams);
+            SofResult raised = theirs.Raise(Enemy);
             if (!raised.Ok) { why = "raise: " + raised.Outcome; return -1; }
             SofTeam t = theirs.Teams[raised.Slot];
             t.State = TeamState.Ready; t.RaiseEndsAt = SupportManager.MissionNow();
