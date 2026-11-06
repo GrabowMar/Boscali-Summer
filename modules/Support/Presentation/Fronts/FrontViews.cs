@@ -1385,7 +1385,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 });
             }
             Remember(r, s);
-            r.FieldNote = r.Field.Count > 0 ? "" : s.Teams.Count == 0 ? "NO TEAM YET · TRAIN ONE ON TEAMS & BASES"
+            r.FieldNote = r.Field.Count > 0 ? "" : s.Teams.Count == 0 ? (r.CampsUp > 0 ? "NO TEAM YET · TRAIN ONE ON TEAMS & BASES" : "NO TEAM YET · BUILD A CAMP, THEN TRAIN ONE ON TEAMS & BASES")
                 : "NO TEAM OUT · " + (readyList.Length > 0 ? readyList + " READY TO GO" : "NONE READY NOW");
 
             foreach (SofTargetRow t in s.Targets)

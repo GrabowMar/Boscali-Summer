@@ -297,7 +297,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             bool empty = listCount == 0;
             string hint = !s.Active ? (s.Meta == FrontViews.NoCamp ? "BUILD A CAMP ON TEAMS & BASES, THEN TRAIN A TEAM" : "THE HOST HAS NOT SPOKEN YET")
-                : s.Targets.Count == 0 ? (s.Teams.Count > 0 ? ReconHint : "TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND")
+                : s.Targets.Count == 0 ? (s.Teams.Count > 0 ? ReconHint : s.CampsUp > 0 ? "TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND" : "BUILD A CAMP AND TRAIN A TEAM ON TEAMS & BASES, THEN RECON GROUND")
                 : empty ? "ALL SHOWS EVERY ONE" : s.HasPoint ? "" : "OR " + ReconHint;
             Show(emptyHead, empty);
             if (empty)
