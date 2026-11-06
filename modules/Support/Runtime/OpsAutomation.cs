@@ -377,6 +377,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["feedLook"] = f.HasLook ? 1 : 0;
                 r["feedLookU"] = f.LookU; r["feedLookV"] = f.LookV; r["feedLookKm"] = f.LookKm;
                 r["feedSelected"] = f.SelectedId; r["feedBrackets"] = f.Brackets.Count;
+                r["feedStrikeEta"] = f.Strike.Has ? f.Strike.Eta : -1f; r["feedStrikeHeld"] = f.Strike.Held ? 1 : 0; r["feedStrikeOn"] = f.Strike.OnPicture ? 1 : 0;
                 r["feedTelemetry"] = string.Join(" | ", f.Telemetry);
             }
             if (m == null) return r;

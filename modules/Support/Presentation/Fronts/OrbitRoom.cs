@@ -129,8 +129,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             actions.Touch();
             if (shown != enlarged && (relocating || padPick)) { relocating = false; hasPending = false; padPick = false; Repaint(); }
-            Use(shown == enlarged ? docked : enlarged);
-            if (last != null && shown.Visible) shown.Paint(last);
+            Use(shown == enlarged ? docked : enlarged); // the pane just shown paints on its first Tick
         }
 
         // ---- Situation -----------------------------------------------------------------------------------------------
@@ -357,8 +356,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             PaintSituation(v);
             PaintSatellites(v);
             // Each pane on screen paints (enlarged, the column may still show the docked one); a hidden pane paints the frame it shows again.
+#if !PUBLIC_RELEASE
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             if (docked.Visible) docked.Paint(v);
             if (enlarged.Visible) enlarged.Paint(v);
+#if !PUBLIC_RELEASE
+            PaneCost.Paint(t0);
+#endif
         }
 
         // ---- Ellipse drawing: footprints and cost rings are uv distances, which are slightly flattened ovals on a theatre wider than it is tall ----
@@ -952,8 +957,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             // The DOWNLINK's own frame (zoom, pan, the acquire sequence): it updates its pane only and asks the window for nothing.
             float wall = Time.unscaledTime;
             if (last != null && last.Feed != null && (docked.Visible || enlarged.Visible)) WatchAcquire(last.Feed, wall);
+#if !PUBLIC_RELEASE
+            long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
+#endif
             docked.Tick(mouse, wall);
             enlarged.Tick(mouse, wall);
+#if !PUBLIC_RELEASE
+            PaneCost.Tick(t0);
+#endif
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;

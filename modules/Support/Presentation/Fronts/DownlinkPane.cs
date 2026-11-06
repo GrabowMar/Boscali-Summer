@@ -45,6 +45,27 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private const float Slow = 1f;
 #endif
 
+#if !PUBLIC_RELEASE
+        /// <summary>TEST ONLY: main-thread milliseconds the DOWNLINK panes spend per frame (Tick) and per window paint, since the GUI check last read them.</summary>
+        internal static class PaneCost
+        {
+            private static double tickSum, tickMax, paintSum, paintMax;
+            private static int ticks, paints;
+
+            private static double Ms(long t0) => (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            public static void Tick(long t0) { double ms = Ms(t0); tickSum += ms; ticks++; if (ms > tickMax) tickMax = ms; }
+            public static void Paint(long t0) { double ms = Ms(t0); paintSum += ms; paints++; if (ms > paintMax) paintMax = ms; }
+
+            /// <summary>Averages and peaks since the last read, then starts over.</summary>
+            public static void Read(System.Collections.Generic.IDictionary<string, object> r)
+            {
+                r["dlTickMs"] = ticks > 0 ? tickSum / ticks : 0.0; r["dlTickMax"] = tickMax; r["dlTicks"] = ticks;
+                r["dlPaintMs"] = paints > 0 ? paintSum / paints : 0.0; r["dlPaintMax"] = paintMax; r["dlPaints"] = paints;
+                tickSum = tickMax = paintSum = paintMax = 0.0; ticks = paints = 0;
+            }
+        }
+#endif
+
         /// <summary>Where the acquire sequence stands (0 WIDE, 1 SLEW, 2 RESOLVE, 3 done): the GUI check reads it.</summary>
         internal int AcquirePhase => last != null && last.Feed != null ? SpaceFeedRules.AcquirePhase(Time.unscaledTime - acqAt, last.Feed.Link, Slow, out _) : 3;
 
@@ -149,6 +170,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             private readonly RawImage wideMap, baseImg, fineImg, insetMap;
             private readonly FrontVector panel, standby, hud, fx;
             private readonly FeedBracket[] boxes = new FeedBracket[SpaceFeedView.MaxBrackets];
+            private readonly Vector2[] boxAt = new Vector2[SpaceFeedView.MaxBrackets];
             private readonly AvControl[] birds = new AvControl[3], modes = new AvControl[3];
             private readonly DownlinkMode[] modeOf = new DownlinkMode[3];
             private readonly AvControl send, markSpot, release;
@@ -633,7 +655,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                         if (!SpaceFeedRules.CropPoint(b.U, b.V, u0, v0, uw, vh, out float ax, out float ay)) continue;
                         float x = ax * pw, y = (1f - ay) * ph;
                         if (x < HitHalf || x > pw - HitHalf || y < HitHalf || y > ph - Bar - 8f) continue;
-                        boxes[shown++].Paint(b, x, y, pw);
+                        // A box on top of an earlier one is drawn but takes no click (it would cover that one's): zoom in and they part.
+                        bool clear = true;
+                        for (int j = 0; j < shown && clear; j++) clear = Mathf.Abs(boxAt[j].x - x) > HitHalf || Mathf.Abs(boxAt[j].y - y) > HitHalf;
+                        boxAt[shown] = new Vector2(x, y);
+                        boxes[shown++].Paint(b, x, y, pw, clear);
                         if (b.Selected) { lockShown = true; lockAt = new Vector2(x, y); }
                     }
                 for (int i = shown; i < boxes.Length; i++) boxes[i].Hide();

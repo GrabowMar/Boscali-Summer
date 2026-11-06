@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly AvFrame outline;
         private readonly TMP_Text label;
         private readonly Image hitArea;
+        private readonly AvHit hit;
         private int id;
         private bool selected, marked;
         private ProbableClass cls;
@@ -35,7 +36,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             hitArea = AvLay.Solid(root, "Hit", Color.clear);
             AvLay.Fill(hitArea.rectTransform);
             hitArea.raycastTarget = true;
-            AvHit hit = hitArea.gameObject.AddComponent<AvHit>();
+            hit = hitArea.gameObject.AddComponent<AvHit>();
             hit.Click = e => { if (e.button == UnityEngine.EventSystems.PointerEventData.InputButton.Left) select(id); };
             outline = AvFrame.Add(root, "Outline", default(AvChamfer));
             outline.Fill = false;
@@ -52,9 +53,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
 
         public void Hide() { if (root.gameObject.activeSelf) root.gameObject.SetActive(false); }
 
-        public void Paint(in FeedBracketView b, float x, float y, float pictureW)
+        /// <summary><paramref name="clickable"/> false: drawn, but takes no click (another box's click area already holds its centre).</summary>
+        public void Paint(in FeedBracketView b, float x, float y, float pictureW, bool clickable = true)
         {
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
+            if (hit.Interactable != clickable) hit.Interactable = clickable;
             id = b.Id; selected = b.Selected; marked = b.Marked; cls = b.Class;
             AvLay.Place(root, x - Hit * 0.5f, y - Hit * 0.5f, Hit, Hit);
             // The name stays centred under its bracket but slides inside the picture near an edge instead of being clipped by the mask.

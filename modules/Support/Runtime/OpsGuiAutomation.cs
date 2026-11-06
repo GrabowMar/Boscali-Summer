@@ -36,6 +36,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "pic": return Picture(fronts, window, Number(args, "wheel", 0f), Number(args, "dx", 0f), Number(args, "dy", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600));
                 case "esc": FrontPointer.Play(FrontPointer.Position, 0, 0f, true, ClickGap); FrontPointer.Play(FrontPointer.Position, 0); return State(fronts, window);
                 case "audit": return Audit(fronts, window);
+                case "cost": { Dictionary<string, object> c = State(fronts, window); OrbitRoom.PaneCost.Read(c); return c; } // DOWNLINK pane ms since the last read
                 case "labels": return Labels(fronts, window);
                 default: return State(fronts, window);
             }
