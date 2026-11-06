@@ -437,26 +437,34 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// <summary>
         /// Host: what a faction has built, read from the services (the organic-fronts acceptance sim): <c>Pads</c> live, <c>BirdsUp</c> / <c>BirdsLaunched</c> masks, <c>DataCenters</c> and
         /// <c>Trucks</c> live (a packing truck is not), <c>Camps</c> live, <c>Teams</c> active, each under <paramref name="prefix"/>. A service with no record for the faction writes nothing.
+        /// <c>Optical</c> is the OPTICAL bird's up bit; <c>Infra</c> sums pads, data centers and camps (the sim's "climbed its ladder" check).
         /// </summary>
         private static void BuildReadout(FactionHQ hq, string prefix, Dictionary<string, object> r)
         {
+            int infra = 0;
             SpaceService space = Find<SpaceService>();
             if (space != null && space.TryGetStateCoarse(hq, out SpaceState s))
             {
+                int up = ~s.DownMask & ((1 << SpaceRules.BirdCount) - 1);
                 r[prefix + "Pads"] = s.LiveUplinkCount;
-                r[prefix + "BirdsUp"] = ~s.DownMask & ((1 << SpaceRules.BirdCount) - 1);
+                r[prefix + "BirdsUp"] = up;
+                r[prefix + "Optical"] = up & 1;
                 r[prefix + "BirdsLaunched"] = (int)s.LaunchedMask;
+                infra += s.LiveUplinkCount;
             }
             if (CyberService.Active != null && CyberService.Active.TryDesk(hq, out CyberDesk cd))
             {
                 r[prefix + "DataCenters"] = cd.Anchors.LiveCount(AnchorKind.DataCenter);
                 r[prefix + "Trucks"] = cd.Anchors.LiveCount(AnchorKind.EwTruck);
+                infra += cd.Anchors.LiveCount(AnchorKind.DataCenter);
             }
             if (SofService.Active != null && SofService.Active.TryDesk(hq, out SofDesk sd))
             {
                 r[prefix + "Camps"] = sd.Camps.LiveCount();
                 r[prefix + "Teams"] = sd.ActiveCount;
+                infra += sd.Camps.LiveCount();
             }
+            r[prefix + "Infra"] = infra;
         }
 #endif
 
