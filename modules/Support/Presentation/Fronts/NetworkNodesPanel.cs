@@ -335,8 +335,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 shown++;
             }
             bool more = scroll > 0 || listMoreBelow;
-            string note = listCount == 0 ? (count > 0 ? "NO NODE MATCHES " + FilterWord[(int)filter] + " · ALL SHOWS EVERY ONE" : n.Active ? Unsighted : n.Next)
-                : filterCount[(int)NodeFilter.Enemy] == 0 && filter != NodeFilter.Mine ? Unsighted : "";
+            string note = count == 0 && !n.Active ? n.Next
+                : filter != NodeFilter.Mine && filterCount[(int)NodeFilter.Enemy] == 0 ? Unsighted
+                : listCount > 0 ? ""
+                : filter == NodeFilter.Mine ? "NONE OF OURS STANDS · BUILD A DATA CENTER ON INFRASTRUCTURE"
+                : "NO NODE MATCHES " + FilterWord[(int)filter] + " · ALL SHOWS EVERY ONE";
             int noteLines = note.Length > 0 ? Math.Min(3, Lines(note, secW - 20f)) : 0;
             bool guide = ry + (more ? 18f : 0f) + noteLines * LineH + 16f <= guideY;
             Slab(g, SecX, y, secW, (guide ? guideY : opsY) - 8f - y, Phos);
