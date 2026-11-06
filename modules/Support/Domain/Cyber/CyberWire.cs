@@ -8,6 +8,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
     {
         public AnchorKind Kind;
         public AnchorHealth Health;
+        /// <summary>A truck folding up (protocol 44): rides the health field as value 3 on the wire only; Health reads Live.</summary>
+        public bool Packing;
         public float X, Z;
         /// <summary>Rebuild fund bar, 0..100 percent (0 while the anchor stands).</summary>
         public byte Rebuild;
@@ -93,7 +95,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; i < Anchors.Count; i++)
             {
                 CyberAnchorRow a = Anchors[i], b = o.Anchors[i];
-                if (a.Kind != b.Kind || a.Health != b.Health || a.Rebuild != b.Rebuild || !SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z) ||
+                if (a.Kind != b.Kind || a.Health != b.Health || a.Packing != b.Packing || a.Rebuild != b.Rebuild || !SpaceMirror.SamePoint(a.X, b.X) || !SpaceMirror.SamePoint(a.Z, b.Z) ||
                     !SpaceMirror.SameExpiry(a.LockUntil, b.LockUntil)) return false;
             }
             for (int i = 0; i < Nodes.Count; i++)
@@ -138,7 +140,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             for (int i = 0; i < n; i++)
             {
                 CyberAnchorRow a = s.Anchors[i];
-                w.WriteByte((byte)((int)a.Kind | ((int)a.Health << 1)));
+                w.WriteByte((byte)((int)a.Kind | ((a.Packing ? 3 : (int)a.Health) << 1)));
                 SpaceWire.WriteCoordinate(w, a.X); SpaceWire.WriteCoordinate(w, a.Z);
                 w.WriteByte(a.Rebuild);
                 SpaceWire.WriteExpiry(w, a.LockUntil, s.Now);
@@ -203,11 +205,11 @@ namespace BoscaliSummer.Modules.Support.Domain.Cyber
             s.PurgeEndsAt = purgeEnds <= now ? 0f : purgeEnds; s.PurgeReadyAt = purgeReady <= now ? 0f : purgeReady;
             for (int i = 0; i < n; i++)
             {
-                if (!r.TryReadByte(out byte bits) || (bits & ~7) != 0 || (bits & 1) > (int)AnchorKind.DataCenter || (bits >> 1) > (int)AnchorHealth.Down ||
+                if (!r.TryReadByte(out byte bits) || (bits & ~7) != 0 || (bits & 1) > (int)AnchorKind.DataCenter || (bits >> 1) > 3 ||
                     !SpaceWire.ReadCoordinate(r, out float x) || !SpaceWire.ReadCoordinate(r, out float z) || !r.TryReadByte(out byte rebuild) || rebuild > 100 ||
                     !SpaceWire.ReadExpiry(r, now, out float lockUntil)) return Bad();
                 if (lockUntil <= now) lockUntil = 0f; // an expired or absent lock reads as none
-                s.Anchors.Add(new CyberAnchorRow { Kind = (AnchorKind)(bits & 1), Health = (AnchorHealth)(bits >> 1), X = x, Z = z, Rebuild = rebuild, LockUntil = lockUntil });
+                s.Anchors.Add(new CyberAnchorRow { Kind = (AnchorKind)(bits & 1), Health = (bits >> 1) == 3 ? AnchorHealth.Live : (AnchorHealth)(bits >> 1), Packing = (bits >> 1) == 3, X = x, Z = z, Rebuild = rebuild, LockUntil = lockUntil });
             }
             if (!r.TryReadByte(out n) || n > MaxNodes || r.Remaining < n * MinNodeBytes) return Bad();
             for (int i = 0; i < n; i++)

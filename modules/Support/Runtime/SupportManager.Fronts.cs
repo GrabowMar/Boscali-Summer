@@ -41,13 +41,18 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal int FrontSetFocus(Front front, float x, float z) =>
             SendSpace(SpaceCommandKind.FrontFocus, 0, new[] { Pack(front, 0), SofCodes.PackPoint(x, z) });
 
-        /// <summary>Queue a programme on a front.</summary>
+        /// <summary>Queue a programme on a front with automatic placement (protocol 44: Ids = { front | programme &lt;&lt; 2 | kind &lt;&lt; 6, packed point (0 = automatic) }).</summary>
         internal int FrontQueue(Front front, ProgrammeId programme) =>
-            FrontRules.BelongsTo(front, programme) ? SendSpace(SpaceCommandKind.FrontQueue, Pack(front, (int)programme), null) : 0;
+            FrontRules.BelongsTo(front, programme) ? SendSpace(SpaceCommandKind.FrontQueue, 0, new[] { Pack(front, (int)programme) | (0 << 6), 0 }) : 0;
 
-        /// <summary>Donate allocation to a queued programme (the host takes only what the bar still needs and your balance allows).</summary>
-        internal int FrontDonate(Front front, ProgrammeId programme, int amount) =>
-            amount <= 0 || !FrontRules.BelongsTo(front, programme) ? 0 : SendSpace(SpaceCommandKind.FrontDonate, 0, new[] { Pack(front, (int)programme), amount });
+        /// <summary>Donate allocation to the first queued row of a programme (the host takes only what the bar still needs and your balance allows). Sends nothing when the mirror has no such row.</summary>
+        internal int FrontDonate(Front front, ProgrammeId programme, int amount)
+        {
+            if (amount <= 0 || !FrontRules.BelongsTo(front, programme) || !frontMirror.Known) return 0;
+            foreach (FrontQueueRow q in frontMirror.State.Fronts[(int)front].Queue)
+                if (q.Id == programme) return SendSpace(SpaceCommandKind.FrontDonate, 0, new[] { Pack(front, q.Row), amount });
+            return 0;
+        }
 
         /// <summary>Burn one of the faction's satellites to a map point (u,v in 0..1); the host judges fuel and burn state.</summary>
         internal int RelocateBird(int bird, float u, float v) =>

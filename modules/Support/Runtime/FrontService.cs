@@ -456,7 +456,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case SpaceCommandKind.FrontDirective: result = SetDirective(f, c.Target, key, name, now); break;
                 case SpaceCommandKind.FrontPriority: result = SetPriority(f, c.Ids, key, name, now); break;
                 case SpaceCommandKind.FrontFocus: result = SetFocus(f, c.Ids, now); break;
-                case SpaceCommandKind.FrontQueue: result = Queue(f, c.Target, now); break;
+                case SpaceCommandKind.FrontQueue: result = Queue(f, c.Ids, now); break;
                 case SpaceCommandKind.FrontDonate: result = Donate(f, player, c.Ids); break;
                 case SpaceCommandKind.RelocateBird: result = Relocate(f, c.Ids, now); break;
                 default: result = new FrontResult(FrontOutcome.Unavailable); break;
@@ -510,26 +510,28 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
         }
 
-        private FrontResult Queue(FactionFront f, int target, float now)
+        private FrontResult Queue(FactionFront f, int[] ids, float now)
         {
-            if (!Unpack(target, out Front front, out int programme)) return new FrontResult(FrontOutcome.BadFront);
+            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int packed)) return new FrontResult(FrontOutcome.BadFront);
+            int programme = packed & 15; byte kind = (byte)((packed >> 4) & 3);
             if (programme < 0 || programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
+            float px = 0f, pz = 0f;
+            bool hasPoint = ids[1] != 0;
+            if (hasPoint && !SofCodes.TryUnpackPoint(ids[1], out px, out pz)) return new FrontResult(FrontOutcome.BadAmount);
             var id = (ProgrammeId)programme;
             // The host knows what the book cannot: a ZERO-DAY needs a revealed SAM net to hit.
             if (id == ProgrammeId.ZeroDay && FrontRules.BelongsTo(front, id) && !f.Book.Side(front).Has(id) && !(cyber != null && cyber.TryBestSamNode(f.Owner, out _)))
                 return new FrontResult(FrontOutcome.NoSamNet);
-            if (f.Book.Queue(front, id, f.World, now, out _)) return new FrontResult(FrontOutcome.Queued);
-            return new FrontResult(f.Book.RefusalCode(front, id, f.World));
+            FrontOutcome outcome = f.Book.Enqueue(front, id, kind, hasPoint, px, pz, 0, true, f.World, now);
+            return new FrontResult(outcome == FrontOutcome.None ? FrontOutcome.Queued : outcome);
         }
 
         private FrontResult Donate(FactionFront f, Player player, int[] ids)
         {
-            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int programme)) return new FrontResult(FrontOutcome.BadFront);
-            if (programme < 0 || programme >= FrontRules.Programmes.Length) return new FrontResult(FrontOutcome.NotAProgramme);
+            if (ids == null || ids.Length != 2 || !Unpack(ids[0], out Front front, out int row) || row > ushort.MaxValue) return new FrontResult(FrontOutcome.BadFront);
             if (player.HQ.preventDonation && GameManager.gameState == GameState.Multiplayer) return new FrontResult(FrontOutcome.NoDonations);
-            var id = (ProgrammeId)programme;
             FrontProgrammeEntry entry = null;
-            foreach (FrontProgrammeEntry e in f.Book.Side(front).Queue) if (e.Id == id) { entry = e; break; }
+            foreach (FrontProgrammeEntry e in f.Book.Side(front).Queue) if (e.Row == row) { entry = e; break; }
             if (entry == null) return new FrontResult(FrontOutcome.NotQueued);
             int wanted = Mathf.Min(Mathf.Max(0, ids[1]), Mathf.CeilToInt(entry.Remaining / FrontRules.DonateRate));
             if (wanted <= 0) return new FrontResult(FrontOutcome.BadAmount);
@@ -537,7 +539,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             int give = free ? wanted : Mathf.Min(wanted, Mathf.FloorToInt(Mathf.Max(0f, player.Allocation)));
             if (give <= 0) return new FrontResult(FrontOutcome.LowAllocation, 1);
             if (!free && !manager.TrySpendAllocation(player, give)) return new FrontResult(FrontOutcome.LowAllocation, give);
-            DonateResult r = f.Book.Donate(front, id, give * FrontRules.DonateRate);
+            DonateResult r = f.Book.Donate(front, (ushort)row, give * FrontRules.DonateRate);
             if (r.Status != DonateStatus.Ok) { if (!free) manager.RefundAllocation(player, give); return new FrontResult(FrontOutcome.NotQueued); }
             int used = Mathf.Min(give, Mathf.CeilToInt(r.Accepted / FrontRules.DonateRate));
             if (!free && used < give) manager.RefundAllocation(player, give - used); // the bar took less than was offered: the rest goes back

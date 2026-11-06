@@ -133,7 +133,7 @@ namespace BoscaliSummer.Modules.Support.Networking
         /// the SofStateMessage carries its SWEEP clock, each enemy row says whether it was detected near the faction's own sites and whether a QRF hunts it, and an own team row says it is hunted.
         /// Protocol 43 (OPS M1) removes front READINESS: the FRONTS row loses its readiness byte, programme 0 and the outcomes 11 / 14 and result 136 are retired; perks unlock by the pilot's skill grade.
         /// </summary>
-        internal const byte ProtocolVersion = 43;
+        internal const byte ProtocolVersion = 44;
 
         private const float QueryInterval = 0.4f;
         private const int MaximumQueries = 64;
