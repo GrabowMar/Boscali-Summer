@@ -225,6 +225,28 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         /// <summary>The block size (post pixels) a resolved picture keeps: 1 at link 4-5, 2 at 2-3, 4 at 1.</summary>
         public static int ResolveBands(int link) => 1 << ((5 - ClampLink(link)) / 2);
 
+        /// <summary>The client's acquire sequence: a wide frame of the footprint, a slew into the look, then the resolve (seconds).</summary>
+        public const float AcquireWide = 0.3f, AcquireSlew = 0.4f;
+
+        /// <summary>
+        /// Where the acquire sequence stands <paramref name="t"/> seconds after it began (every step <paramref name="slow"/> times longer): 0 WIDE, 1 SLEW,
+        /// 2 RESOLVE, 3 done; <paramref name="k"/> is the progress through that step (1 when done). A bad clock reads done.
+        /// </summary>
+        public static int AcquirePhase(float t, int link, float slow, out float k)
+        {
+            k = 1f;
+            float s = float.IsFinite(slow) && slow > 0f ? slow : 1f, wide = AcquireWide * s, slew = AcquireSlew * s, resolve = ResolveSeconds(link) * s;
+            if (!float.IsFinite(t) || t < 0f || t >= wide + slew + resolve) return 3;
+            if (t < wide) { k = t / wide; return 0; }
+            if (t < wide + slew) { k = (t - wide) / slew; return 1; }
+            k = (t - wide - slew) / resolve;
+            return 2;
+        }
+
+        /// <summary>A bird switch, a new lock or a new pick (the resolve restarted on its own) replays the whole sequence; another mode of the same bird or a release only resolves again.</summary>
+        public static bool AcquireFull(DownlinkMode was, DownlinkMode now, int wasSelected, int nowSelected, bool restarted) =>
+            SourceOf(was) != SourceOf(now) || (nowSelected != wasSelected && nowSelected != 0) || (restarted && was == now && wasSelected == nowSelected);
+
         public static string ModeWord(DownlinkMode mode) =>
             mode == DownlinkMode.Ir ? "IR" : mode == DownlinkMode.LowLight ? "LOW LIGHT" : mode == DownlinkMode.Sar ? "SAR" : mode == DownlinkMode.Strike ? "STRIKE" : "EO";
 

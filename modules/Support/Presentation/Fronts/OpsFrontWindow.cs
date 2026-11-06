@@ -137,7 +137,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 for (int k = 0; k < panels.Count; k++) items[k] = (panels[k].Icon, panels[k].Label);
                 items[panels.Count] = (AvIcon.Stack2, "FRONT");
                 int room = i;
-                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); });
+                bars[i] = new AvTabBar(r, items, k => { actions.Touch(); ShowTab(room, k); if (room == (int)Front.Space && k != 0) LeaveSatellites(); });
                 bars[i].SetAccent(i == (int)Front.Space ? RoomInk.Ice : i == (int)Front.Cyber ? RoomInk.Phosphor : RoomInk.Gold);
                 bars[i].Place(new AvSlot(cx, my, cw, AvGridTokens.Tab));
                 skin.Add(bars[i].Restyle);
@@ -269,9 +269,18 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// <summary>The SPACE room shows the DOWNLINK picture (its column tab, or enlarged over the map): only then does the feed hold its lease and render.</summary>
         internal bool DownlinkShown => IsOpen && shownFront == (int)Front.Space && Orbit != null && (tabOf[shownFront] == OrbitRoom.DownlinkTab || Orbit.Enlarged);
 
+        /// <summary>A hand click on DOWNLINK or FRONT: an armed SPACE map pick ends like it does for FEED › (it would wait off screen), and the map drops its rings now.</summary>
+        private void LeaveSatellites()
+        {
+            if (Orbit == null) return;
+            Orbit.EndPicks();
+            if (lastView != null && lastView.Front == Front.Space) Orbit.Paint(lastView);
+        }
+
         private void OnWindowClosed()
         {
             Orbit?.EndPicks(); // a reopened window starts with no pick armed
+            Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
             GiveBackInput();

@@ -113,6 +113,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (feed == null) return Fail("Verb", "no SPACE feed");
                     feed.SetMode((DownlinkMode)Mathf.Clamp((int)Number(args, "mode", 0f), 0, (int)DownlinkMode.Strike));
                     if (Has(args, "zoom")) feed.SetZoom(Number(args, "zoom", 1f));
+                    if (Has(args, "slow")) OrbitRoom.AcquireSlow = Number(args, "slow", 1f); // the acquire sequence this many times longer (1..20), so a capture lands inside a step
                     request = -1;
                     break;
 #endif
@@ -374,6 +375,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["feedLink"] = f.Link;
                 r["feedPackets"] = f.Packets;
                 r["feedLook"] = f.HasLook ? 1 : 0;
+                r["feedLookU"] = f.LookU; r["feedLookV"] = f.LookV; r["feedLookKm"] = f.LookKm;
+                r["feedSelected"] = f.SelectedId; r["feedBrackets"] = f.Brackets.Count;
                 r["feedTelemetry"] = string.Join(" | ", f.Telemetry);
             }
             if (m == null) return r;

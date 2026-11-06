@@ -671,7 +671,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.Brief = new FeedBriefView
             {
                 Has = true, Id = e.Id, Class = e.Class, Percent = e.Percent, Moving = e.Moving, Marked = e.Marked, FixedPoint = e.Kind == FeedEntryKind.Mark,
-                Title = SpaceFeedEntries.Title(e), Grid = briefGrid, Left = e.Expires - now
+                Title = SpaceFeedEntries.Title(e), Grid = briefGrid, Left = e.Expires - now, X = e.X, Z = e.Z
             };
         }
 

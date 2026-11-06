@@ -18,14 +18,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// point as a nadir marker, its footprint is drawn exactly as the coverage gate tests it (Reach as a share of the theatre, so a slightly flattened oval in
     /// kilometres), a burn is the dashed path to a ghost footprint, the selected bird's fuel-cost rings are the real burn cost (1.5 + 36 per theatre width, in
     /// percent), the pads stand at their airbases with queued pads as dashed ghosts, and the first held airbase no footprint covers is named at the foot.
-    /// The column has two tabs: SATELLITES (pads, fleet, hostile birds, standing orders: OrbitSatellitesPanel.cs) and DOWNLINK (the live sensor picture under a
-    /// camera burn-in; ENLARGE gives it the whole room). Two local map picks, one at a time: BUILD PAD (a click within 8 km of a held airbase queues a pad
-    /// there) and RELOCATE (a click proposes a bird's new parked point, CONFIRM BURN sends it). A click on one of our birds opens its feed.
-    /// Mission-control flavour (lamps, burn-in lines, the radar sweep angle, the station-keeping boxes) is derived from fields the room already has.
+    /// The column has two tabs: SATELLITES (pads, fleet, hostile birds, standing orders: OrbitSatellitesPanel.cs) and DOWNLINK (the sensor station around the
+    /// live feed, DownlinkPane.cs; ENLARGE gives it the whole room, and the map shows its amber look box). Two local map picks, one at a time: BUILD PAD (a click
+    /// within 8 km of a held airbase queues a pad there) and RELOCATE (a click proposes a bird's new parked point, CONFIRM BURN sends it). A click on one of our
+    /// birds opens its feed. Mission-control flavour (lamps, burn-in lines, the radar sweep angle, the station-keeping boxes) is derived from fields the room already has.
     /// </summary>
     internal sealed partial class OrbitRoom : IFrontRoom
     {
-        private const float DragSlop = 6f, LegendX = 14f, PicX = 8f, PicY = 60f, BirdPickPx = 22f, FootX = 560f, FootRight = 190f;
+        private const float DragSlop = 6f, LegendX = 14f, BirdPickPx = 22f, FootX = 560f, FootRight = 190f;
         private float mapW = 880f, mapH = 502f;
         private const int GridCols = 10, GridRows = 8, MaxBirdLabels = 8, MaxSiteLabels = 6;
         private static readonly BirdKind[] Kinds = { BirdKind.Optical, BirdKind.Radar, BirdKind.Kinetic };
@@ -64,28 +64,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private Vector2 pressAt, pressCenter;
         private int pressZoom;
 
-        // Sensor: the fields below belong to the camera pane on screen (Use swaps them between the docked and the enlarged one).
-        private FrontBox sensor;
-        private AvControl optical, radar, zoom, sizeBtn;
-        private OpsFeedPicture picture;
-        private TMP_Text sensorNote;
-        private FrontVector standby, burn;
-        private TMP_Text burnTl, burnTl2, burnTr, burnBr;
-        private float picW, picH;
-        private bool standbyDrawn;
-        private CamPane docked, enlarged, shown;
-
-        /// <summary>One camera pane (docked in the column, or enlarged over the map): its own box, toolbar, picture and burn-in layers.</summary>
-        private sealed class CamPane
-        {
-            public FrontBox Box;
-            public AvControl Optical, Radar, Zoom, Size, Mark, Send;
-            public OpsFeedPicture Picture;
-            public TMP_Text Note, Tl, Tl2, Tr, Br;
-            public FrontVector Standby, Burn;
-            public float W, H;
-            public bool StandbyDrawn;
-        }
+        // DOWNLINK: the docked pane (the column tab) and the enlarged one (over the map); Use puts one on screen (DownlinkPane.cs).
+        private DownlinkPane docked, enlarged, shown;
 
         public OrbitRoom(IFrontActions actions, FrontSkin skin)
         {
@@ -125,36 +105,32 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             mapW = w; mapH = h;
             BuildSituation(hero, w);
             BuildSatellites(column, cw, ch);
-            docked = BuildSensor(column, 0f, 0f, cw, ch, false);
-            enlarged = BuildSensor(hero, 0f, 0f, w, h, true); // over the map: the column stays (brackets on the picture select tracks)
+            docked = new DownlinkPane(this, column, cw, ch, false);
+            enlarged = new DownlinkPane(this, hero, w, h, true); // over the map: the column stays (boxes on the picture lock targets)
             Use(docked);
             columnTabs = new[] { new ColumnTab("SATELLITES", AvIcon.Satellite, sats.Rect), new ColumnTab("DOWNLINK", AvIcon.Camera, docked.Box.Rect) };
         }
 
-        /// <summary>Puts <paramref name="pane"/> on screen and points the sensor fields at it.</summary>
-        private void Use(CamPane pane)
+        /// <summary>Puts <paramref name="pane"/> on screen: the enlarged one hides the map, the docked one gives it back.</summary>
+        private void Use(DownlinkPane pane)
         {
-            if (shown != null) shown.StandbyDrawn = standbyDrawn;
             shown = pane;
             bool dock = pane == docked;
-            situation.Rect.gameObject.SetActive(dock); // the enlarged camera lies over the map; the column tabs stay as they are
+            situation.Rect.gameObject.SetActive(dock); // the enlarged DOWNLINK lies over the map; the column tabs stay as they are
             enlarged.Box.Rect.gameObject.SetActive(!dock);
             pane.Box.Tagged("INCO"); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
-            sensor = pane.Box; optical = pane.Optical; radar = pane.Radar; zoom = pane.Zoom; sizeBtn = pane.Size; picture = pane.Picture;
-            sensorNote = pane.Note; burnTl = pane.Tl; burnTl2 = pane.Tl2; burnTr = pane.Tr; burnBr = pane.Br; standby = pane.Standby; burn = pane.Burn;
-            picW = pane.W; picH = pane.H; standbyDrawn = pane.StandbyDrawn;
         }
 
-        /// <summary>True while the camera has the whole room (the map takes no input then).</summary>
+        /// <summary>True while the DOWNLINK has the whole room (the map takes no input then).</summary>
         internal bool Enlarged => shown == enlarged;
 
-        /// <summary>ENLARGE / SHRINK: the camera grows over the map or docks back. The map goes under it, so a pick in progress ends first.</summary>
+        /// <summary>ENLARGE / DOCK: the DOWNLINK grows over the map or docks back. The map goes under it, so a pick in progress ends first.</summary>
         internal void ToggleCamera()
         {
             actions.Touch();
             if (shown != enlarged && (relocating || padPick)) { relocating = false; hasPending = false; padPick = false; Repaint(); }
             Use(shown == enlarged ? docked : enlarged);
-            if (last != null) PaintSensor(last);
+            if (last != null && shown.Visible) shown.Paint(last);
         }
 
         // ---- Situation -----------------------------------------------------------------------------------------------
@@ -374,67 +350,15 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return best;
         }
 
-        // ---- Sensor --------------------------------------------------------------------------------------------------
-
-        private CamPane BuildSensor(RectTransform hero, float x, float y, float w, float h, bool big)
-        {
-            sensor = new FrontBox(hero, skin, big ? "SensorBig" : "Sensor", x, y, w, h, "SATELLITE CAMERA", AvIcon.Camera, FrontLook.Console).Tagged("INCO");
-            RectTransform b = sensor.Rect;
-            sizeBtn = Tool(b, big ? "SHRINK" : "ENLARGE", w - 118f, 28f, 110f, ToggleCamera,
-                big ? "Dock the camera back under the map (Esc does the same)." : "Give the camera the whole room. Click a bracket to select a track, then MARK and TRANSMIT. SHRINK or Esc docks it again.");
-            sizeBtn.SetStyle(AvButtonStyle.Primary);
-            AvControl markBig = null, sendBig = null;
-            if (big)
-            {
-                markBig = Tool(b, "MARK", 326f, 28f, 130f, () => Do(() => Feed.Confirm()), "Mark the selected track so it shows on every pilot's map.");
-                sendBig = Tool(b, "TRANSMIT", 462f, 28f, 170f, () => Do(() => Feed.Send()), "Post the marked tracks as TASKED targets for any pilot.");
-                markBig.SetStyle(AvButtonStyle.Primary);
-                sendBig.SetStyle(AvButtonStyle.Primary);
-            }
-            float noteX = big ? 640f : 326f;
-            optical = Tool(b, "OPTICAL", 8f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Optical)), "Show the OPTICAL satellite's camera picture. Cloud softens it, night refuses it.");
-            radar = Tool(b, "RADAR", 108f, 28f, 96f, () => Do(() => Feed.SetSource(BirdKind.Radar)), "Show the RADAR satellite's SAR picture from the last scan.");
-            zoom = Tool(b, "ZOOM", 208f, 28f, 112f, () => Do(() => Feed.CycleZoom()), "Cycle the picture zoom: 1X, 2X, 4X, 8X, 16X. Zoomed in, the picture stares at the selected track.");
-            sensorNote = FrontKit.Mono(b, "Note", noteX, 28f, w - noteX - 8f - 122f, 26f, 10.5f, TextAlignmentOptions.MidlineRight);
-            picture = new OpsFeedPicture(b, id => Do(() => Feed.SelectEntry(id)));
-            picture.Place(new AvSlot(PicX, PicY, w - 16f, h - 68f));
-            picW = w - 16f; picH = h - 68f;
-            standby = FrontVector.Add(b, "Standby");
-            AvLay.Place(standby.rectTransform, PicX, PicY, picW, picH);
-
-            // The camera burn-in: crop marks, reticle and the plated data lines sit over the picture and its brackets (it never takes a click).
-            burn = FrontVector.Add(b, "Burn");
-            AvLay.Place(burn.rectTransform, PicX, PicY, picW, picH);
-            burnTl = FrontKit.Mono(b, "BurnTl", 0f, 0f, 200f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true);
-            burnTl2 = FrontKit.Mono(b, "BurnTl2", 0f, 0f, 200f, 16f, 10f, TextAlignmentOptions.MidlineLeft);
-            burnTr = FrontKit.Mono(b, "BurnTr", 0f, 0f, 40f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft, true, 1f);
-            burnBr = FrontKit.Mono(b, "BurnBr", 0f, 0f, 200f, 16f, 10f, TextAlignmentOptions.MidlineRight);
-            TMP_Text note = sensorNote, tl = burnTl, tl2 = burnTl2, br = burnBr;
-            skin.Add(() => { note.color = Mc.Steel; tl.color = RoomInk.Engrave; tl2.color = Mc.Steel; br.color = RoomInk.Engrave; });
-            return new CamPane
-            {
-                Box = sensor, Optical = optical, Radar = radar, Zoom = zoom, Size = sizeBtn, Mark = markBig, Send = sendBig, Picture = picture, Note = sensorNote,
-                Tl = burnTl, Tl2 = burnTl2, Tr = burnTr, Br = burnBr, Standby = standby, Burn = burn, W = picW, H = picH
-            };
-        }
-
-        private AvControl Tool(RectTransform p, string label, float x, float y, float w, Action click, string help)
-        {
-            AvControl c = AvControl.Make(p, new AvControl.Spec(label, click, AvButtonStyle.Default));
-            c.Accent = RoomInk.Ice;
-            AvLay.Place(c.Rect, x, y, w, 26f);
-            c.SingleLine();
-            c.Help = help;
-            return c;
-        }
-
         // ---- Paint ---------------------------------------------------------------------------------------------------
 
         public void Paint(FrontRoomView v)
         {
             PaintSituation(v);
             PaintSatellites(v);
-            PaintSensor(v);
+            // Each pane on screen paints (enlarged, the column may still show the docked one); a hidden pane paints the frame it shows again.
+            if (docked.Visible) docked.Paint(v);
+            if (enlarged.Visible) enlarged.Paint(v);
         }
 
         // ---- Ellipse drawing: footprints and cost rings are uv distances, which are slightly flattened ovals on a theatre wider than it is tall ----
@@ -679,6 +603,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 Vector2 p = BirdPoint(b);
                 labels.Take(new Rect(p.x - 26f, p.y - 20f, 52f, 40f));
             }
+
+            // Where the DOWNLINK points, while its tab shows a picture (over the nadir glyphs: a look at nadir must still show).
+            if (docked.Visible && HasPicture(v.Feed) && v.Feed.HasLook) DrawLook(g, v.Feed, mv);
 
             // A proposed parked point: the dashed path from the selected bird, the ghost footprint at the pointer, the cost and the ETA.
             string propWord = null;
@@ -1022,6 +949,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// </summary>
         public bool Tick(Vector2 mouse)
         {
+            // The DOWNLINK's own frame (zoom, pan, the acquire sequence): it updates its pane only and asks the window for nothing.
+            float wall = Time.unscaledTime;
+            if (last != null && last.Feed != null && (docked.Visible || enlarged.Visible)) WatchAcquire(last.Feed, wall);
+            docked.Tick(mouse, wall);
+            enlarged.Tick(mouse, wall);
             FrontMapView mv = plate.View;
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;
@@ -1058,168 +990,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (changed) PaintSituation(last);
             return false;
-        }
-
-        // ---- Sensor paint --------------------------------------------------------------------------------------------
-
-        /// <summary>mission seconds as HH:MM:SS (MET); cosmetic read-out of the mission clock, capped at 99 hours.</summary>
-        private static string Met(float seconds)
-        {
-            int t = Mathf.Clamp(Mathf.FloorToInt(seconds), 0, 99 * 3600 + 3599);
-            return (t / 3600).ToString("00", CultureInfo.InvariantCulture) + ":" + (t / 60 % 60).ToString("00", CultureInfo.InvariantCulture) + ":" + (t % 60).ToString("00", CultureInfo.InvariantCulture);
-        }
-
-        private void PaintSensor(FrontRoomView v)
-        {
-            SpaceFeedView f = v.Feed;
-            // A cockpit warning outranks the sensor line: the pilot flying with this room open still sees it.
-            if (f.ThreatActive) sensor.SetMeta(C2Words.Fit(f.Threat, 58), FrontKit.Tone(AvState.Danger));
-            else sensor.SetMeta(SpaceFeedRules.ModeWord(f.Mode) + " · LINK " + f.Link + " · ZOOM " + (f.ZoomEnabled ? SpaceFeedRules.ZoomWord(f.Zoom) : "—"), AvInk.Dim);
-            optical.Latched = f.Source == BirdKind.Optical;
-            radar.Latched = f.Source == BirdKind.Radar;
-            OpsKit.Label(zoom, f.ZoomEnabled ? "ZOOM " + SpaceFeedRules.ZoomWord(f.Zoom) : "ZOOM —");
-            OpsKit.Enable(zoom, f.ZoomEnabled);
-            bool none = f.Image == null || f.ImageKind == FeedImageKind.None || (f.Refusal != null && f.Refusal.Length > 0);
-            string age = none ? "NO PICTURE" : f.ImageAge < 0f ? "LOOK TIME UNKNOWN" : (f.Source == BirdKind.Radar ? "SCAN " : "LOOK ") + C2Words.Clock(f.ImageAge) + " AGO" + (f.ImageStale ? " · STALE" : "");
-            FrontKit.Set(sensorNote, age, f.ImageStale ? FrontKit.Tone(AvState.Caution) : Mc.Steel);
-            picture.Paint(f);
-            if (shown != null && shown.Mark != null)
-            {
-                OpsKit.Label(shown.Mark, f.ConfirmFull ? "MARKS FULL" : f.SelectedId > 0 ? "MARK " + C2Orbit.TrackId(f.SelectedId) : "MARK");
-                OpsKit.Enable(shown.Mark, f.CanConfirm);
-                OpsKit.Label(shown.Send, C2Orbit.TransmitLabel(f.SendCount));
-                OpsKit.Enable(shown.Send, f.CanSend);
-            }
-            DrawStandby(none);
-            PaintBurn(v, none);
-        }
-
-        private static float TextW(string s, float size) => (s ?? "").Length * size * 0.6f;
-
-        /// <summary>One burn-in line on its dark plate: the plate is drawn into the burn layer, the text sits over it in the sensor box.</summary>
-        private void BurnLine(TMP_Text t, FrontVector g, string s, Color ink, float x, float y, float size, bool right)
-        {
-            float w = TextW(s, size) + 6f, pw = w + 8f;
-            float px = right ? x - pw : x;
-            g.Rect(px, y, pw, 18f, RoomInk.Plate.WithAlpha(0.86f));
-            g.Frame(px, y, pw, 18f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
-            FrontKit.Set(t, s, ink);
-            AvLay.Place(t.rectTransform, PicX + px + 4f, PicY + y + 1f, w, 16f);
-        }
-
-        /// <summary>
-        /// The camera burn-in over the picture (cosmetic flavour, nothing on the wire): crop marks, a centre reticle with mil ticks, an
-        /// "EO · FRAME 0412 · GSD 0.6 M" line (the frame count runs off the mission clock, the ground sample distance off the zoom step), the source
-        /// bird, a red REC lamp (STBY while there is no picture) and a time stamp. The reticle stays off a standby pattern, which carries its own.
-        /// </summary>
-        private void PaintBurn(FrontRoomView v, bool none)
-        {
-            SpaceFeedView f = v.Feed;
-            bool sar = f.Source == BirdKind.Radar;
-            FrontVector g = burn;
-            g.Clear();
-            float W = picW, H = picH, floorY = H - 18f - 8f, mid = floorY * 0.5f + 4f;
-            Color ink = RoomInk.Engrave, dark = RoomInk.Plate.WithAlpha(0.55f);
-
-            // Crop marks, above the picture's own status strip.
-            const float inset = 10f, arm = 22f;
-            for (int sx = 0; sx < 2; sx++)
-                for (int sy = 0; sy < 2; sy++)
-                {
-                    Vector2 o = new Vector2(sx == 0 ? inset : W - inset, sy == 0 ? inset : floorY);
-                    float dx = sx == 0 ? 1f : -1f, dy = sy == 0 ? 1f : -1f;
-                    g.Line(o + new Vector2(-dx * 1.7f, 0f), o + new Vector2(arm * dx, 0f), 3.6f, dark);
-                    g.Line(o + new Vector2(0f, -dy * 1.7f), o + new Vector2(0f, arm * dy), 3.6f, dark);
-                    g.Line(o, o + new Vector2(arm * dx, 0f), 1.5f, ink);
-                    g.Line(o, o + new Vector2(0f, arm * dy), 1.5f, ink);
-                }
-
-            // Reticle with mil ticks.
-            if (!none)
-            {
-                Vector2 c = new Vector2(W * 0.5f, mid);
-                g.Ring(c, 24f, 3.4f, dark, 48);
-                g.Ring(c, 24f, 1.2f, ink, 48);
-                for (int axis = 0; axis < 2; axis++)
-                {
-                    float reach = axis == 0 ? 112f : Mathf.Min(112f, mid - 16f);   // the ladder never runs off a short picture
-                    int ticks = Mathf.Max(0, Mathf.FloorToInt((reach - 28f) / 8f));
-                    for (int sgn = -1; sgn <= 1; sgn += 2)
-                    {
-                        Vector2 d = axis == 0 ? new Vector2(sgn, 0f) : new Vector2(0f, sgn), n = new Vector2(-d.y, d.x);
-                        g.Line(c + d * 28f, c + d * (28f + ticks * 8f), 3.4f, dark);
-                        g.Line(c + d * 28f, c + d * (28f + ticks * 8f), 1.2f, ink);
-                        for (int t = 1; t <= ticks; t++)
-                        {
-                            float at = 28f + t * 8f, hh = t % 5 == 0 ? 5.5f : 3f;
-                            g.Line(c + d * at - n * hh, c + d * at + n * hh, 1.2f, ink);
-                        }
-                    }
-                }
-                g.Disc(c, 1.9f, RoomInk.Telemetry, 10);
-
-                // Edge ladders: a tick every 16 px down both sides, a longer one every fifth, clear of the crop marks.
-                for (int t = 0; ; t++)
-                {
-                    float y = inset + arm + 14f + t * 16f;
-                    if (y > floorY - arm - 14f) break;
-                    float len = t % 5 == 0 ? 8f : 4.5f;
-                    g.Line(new Vector2(inset, y), new Vector2(inset + len, y), 1.2f, ink.WithAlpha(0.8f));
-                    g.Line(new Vector2(W - inset, y), new Vector2(W - inset - len, y), 1.2f, ink.WithAlpha(0.8f));
-                }
-            }
-
-            // Data lines.
-            int frame = Mathf.FloorToInt(Mathf.Max(0f, v.Now) * 0.412f) % 10000;
-            string fr = frame.ToString("0000", CultureInfo.InvariantCulture);
-            string mode = SpaceFeedRules.ModeWord(f.Mode);
-            string tl = none ? mode + " · NO FRAME · STANDBY" : mode + (sar ? " · SCAN " : " · FRAME ") + fr + " · " + f.Telemetry[0];
-            string who = "NO BIRD ON STATION";
-            for (int i = 0; i < v.Birds.Count; i++)
-            {
-                OrbitTrackView b = v.Birds[i];
-                if (!b.Own || b.Kind != f.Source) continue;
-                who = (b.Callsign ?? "") + " · " + (string.IsNullOrEmpty(b.Catalog) ? C2Orbit.BirdName(b.Kind) : b.Catalog) + (string.IsNullOrEmpty(b.Slot) ? "" : " · SLOT " + b.Slot);
-                break;
-            }
-            const float edge = 32f;
-            BurnLine(burnTl, g, tl, ink, edge, 8f, 10.5f, false);
-            BurnLine(burnTl2, g, who, Mc.Steel, edge, 30f, 10f, false);
-            string stamp = "T+" + Met(v.Now) + (string.IsNullOrEmpty(v.Dtg) ? "" : " · " + v.Dtg);
-            BurnLine(burnBr, g, stamp, ink, W - edge, floorY - 20f, 10f, true);
-
-            // REC lamp top right (a ring and STBY while there is nothing to record).
-            string rec = none ? "STBY" : "REC";
-            Color recInk = none ? RoomInk.Telemetry : RoomInk.Trace;
-            float rw = TextW(rec, 10.5f) + 6f + 22f, rx = W - edge - rw;
-            g.Rect(rx, 8f, rw, 18f, RoomInk.Plate.WithAlpha(0.86f));
-            g.Frame(rx, 8f, rw, 18f, 1f, RoomInk.Bezel.WithAlpha(0.6f));
-            if (none) g.Ring(new Vector2(rx + 11f, 17f), 4f, 1.6f, recInk, 16);
-            else g.Disc(new Vector2(rx + 11f, 17f), 4.2f, recInk, 16);
-            FrontKit.Set(burnTr, rec, recInk);
-            AvLay.Place(burnTr.rectTransform, PicX + rx + 20f, PicY + 9f, TextW(rec, 10.5f) + 6f, 16f);
-            g.Flush();
-        }
-
-        /// <summary>The no-picture state: a dead-air test pattern. It marks no swath and no target, so it can never pass for coverage; the refusal in the middle says why.</summary>
-        private void DrawStandby(bool on)
-        {
-            if (on == standbyDrawn) return;
-            standbyDrawn = on;
-            FrontVector g = standby;
-            g.Clear();
-            if (on)
-            {
-                Color k = AvInk.Key;
-                Vector2 c = new Vector2(picW * 0.5f, picH * 0.5f);
-                for (float x = 0f; x <= picW; x += 40f) g.Line(new Vector2(x, 0f), new Vector2(x, picH), 1f, k.WithAlpha(0.10f));
-                for (float y = 0f; y <= picH; y += 40f) g.Line(new Vector2(0f, y), new Vector2(picW, y), 1f, k.WithAlpha(0.10f));
-                for (int i = 1; i <= 4; i++) g.Ring(c, 38f * i, 1.2f, k.WithAlpha(0.28f), 72, i % 2 == 0 ? 1f : 0f, 1f);
-                g.Line(new Vector2(0f, c.y), new Vector2(picW, c.y), 1f, k.WithAlpha(0.3f));
-                g.Line(new Vector2(c.x, 0f), new Vector2(c.x, picH), 1f, k.WithAlpha(0.3f));
-                for (float x = 8f; x < picW - 8f; x += 10f) g.Line(new Vector2(x, picH - 22f), new Vector2(x, picH - (x % 50f < 10f ? 12f : 17f)), 1f, k.WithAlpha(0.5f));
-            }
-            g.Flush();
         }
     }
 }

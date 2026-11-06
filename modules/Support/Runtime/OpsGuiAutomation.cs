@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "map": return MapClick(fronts, window, Number(args, "u", 0.5f), Number(args, "v", 0.5f));
                 case "drag": { Vector2 at = Aim(window, args); return Drag(fronts, window, at.x, at.y, Number(args, "du", 0.1f), Number(args, "dv", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600)); }
                 case "wheel": { Vector2 at = Aim(window, args); return Wheel(fronts, window, at.x, at.y, Number(args, "delta", 1f)); }
+                case "pic": return Picture(fronts, window, Number(args, "wheel", 0f), Number(args, "dx", 0f), Number(args, "dy", 0f), Mathf.Clamp((int)Number(args, "steps", 12f), 2, 600));
                 case "esc": FrontPointer.Play(FrontPointer.Position, 0, 0f, true, ClickGap); FrontPointer.Play(FrontPointer.Position, 0); return State(fronts, window);
                 case "audit": return Audit(fronts, window);
                 case "labels": return Labels(fronts, window);
@@ -117,6 +118,24 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return r;
         }
 
+        /// <summary>The DOWNLINK picture's own gestures from its centre: a wheel notch (zoom), or a left drag by (dx, dy) screen pixels (pan).</summary>
+        private static Dictionary<string, object> Picture(FrontController fronts, OpsFrontWindow window, float wheel, float dx, float dy, int steps)
+        {
+            Dictionary<string, object> r = State(fronts, window);
+            if (!(Room(window) is OrbitRoom orbit) || !orbit.DownlinkAt(out Vector2 a)) { r["error"] = "no DOWNLINK picture on screen"; return r; }
+            FrontPointer.Play(a, 0, 0f, false, ClickGap);
+            if (wheel != 0f) { FrontPointer.Play(a, 0, wheel); FrontPointer.Play(a, 0); }
+            if (dx != 0f || dy != 0f)
+            {
+                Vector2 b = a + new Vector2(dx, dy);
+                FrontPointer.Play(a, 1);
+                for (int i = 1; i <= steps; i++) FrontPointer.Play(Vector2.Lerp(a, b, i / (float)steps), 1);
+                FrontPointer.Play(b, 0);
+            }
+            r["x"] = Mathf.RoundToInt(a.x); r["y"] = Mathf.RoundToInt(a.y);
+            return r;
+        }
+
         // ---- Checks ----------------------------------------------------------------------------------------------------
 
         /// <summary>Every enabled control of the open room and the rail must take a click at its centre (the window's own topmost-first test) and sit on screen.</summary>
@@ -173,6 +192,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (room == null) return r;
             r["room"] = room.GetType().Name;
             r["enlarged"] = room is OrbitRoom orbit && orbit.Enlarged ? 1 : 0;
+            if (room is OrbitRoom acq) r["acquire"] = acq.AcquirePhase; // 0 WIDE, 1 SLEW, 2 RESOLVE, 3 done
             r["selKind"] = Int(Field(room, "selKind"));
             r["relocating"] = Bool(Field(room, "relocating"));
             r["hasPending"] = Bool(Field(room, "hasPending"));

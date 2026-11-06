@@ -44,6 +44,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Title, Grid;
         /// <summary>Seconds the host keeps this reveal (or MARK) alive.</summary>
         public float Left;
+        /// <summary>Where it is (world metres east, north): the lock card's nearest held airbase and the STARE track tail.</summary>
+        public float X, Z;
     }
 
     /// <summary>The STRIKE view's own rod: where it lands (picture 0..1, origin bottom-left, when on the picture), its radius in metres, seconds to impact, and the 8 s hold after it.</summary>
