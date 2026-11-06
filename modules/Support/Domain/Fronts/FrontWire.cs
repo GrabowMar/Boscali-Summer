@@ -10,6 +10,10 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         public byte Percent;
         /// <summary>Seconds left of the build (the full build time while the bar is still filling).</summary>
         public ushort BuildLeft;
+        public ushort Row;
+        public byte Kind, Owner;
+        public bool HasPoint, Waiting;
+        public float X, Z;
     }
 
     internal struct FrontLogRow
@@ -23,6 +27,8 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
     internal sealed class FrontRow
     {
         public sbyte Superiority;
+        /// <summary>Superiority terms, 2 bits each (0 even, 1 ahead, 2 behind).</summary>
+        public byte Terms;
         public ushort Budget;
         public FrontDirective Directive;
         public byte PriorityPct;
@@ -38,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
         {
             var c = new FrontRow
             {
-                Superiority = Superiority, Budget = Budget, Directive = Directive, PriorityPct = PriorityPct, HasFocus = HasFocus,
+                Superiority = Superiority, Terms = Terms, Budget = Budget, Directive = Directive, PriorityPct = PriorityPct, HasFocus = HasFocus,
                 FocusX = FocusX, FocusZ = FocusZ, DirectiveLockUntil = DirectiveLockUntil, DirectiveBy = DirectiveBy
             };
             c.Queue.AddRange(Queue); c.Log.AddRange(Log);
