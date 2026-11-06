@@ -42,6 +42,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int chipCount, chainAnchor;
         private AvControl dropAll, purgeAll;
         private TMP_Text breachLine;
+        private int breachRow, breachHelpFor = int.MinValue; // the first breached node of ours in the list (0: none), and the mode the bar's help was set for
+        private string purgeHelp;
 
         // Filters and rows.
         private readonly AvControl[] filterChips = new AvControl[4];
@@ -50,8 +52,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private readonly TMP_Text[] rowName = new TMP_Text[MaxNodes], rowReach = new TMP_Text[MaxNodes];
         private readonly int[] rowIds = new int[MaxNodes], order = new int[MaxNodes], rankOf = new int[MaxNodes], vis = new int[MaxNodes];
         private TMP_Text listMore, listEmpty;
-        private int scroll, listCount, lastOpen, rowsShown = MaxNodes;
+        private int scroll, listCount, lastOpen;
         private bool listMoreBelow, handPicked;
+        // The enemy id the room last picked by itself and the controller's pick it saw then: until the view moves on, that id is not sent again.
+        private int autoSent, autoFrom = int.MinValue;
 
         // The open row's body.
         private readonly TMP_Text[] bodyKey = new TMP_Text[BodyLines], bodyVal = new TMP_Text[BodyLines];
@@ -65,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private int poorCost = -1, poorHave = -1;
 
         // OPERATIONS and the guide.
-        private TMP_Text opsFunds, zdFoot, guideHead, guideText;
+        private TMP_Text opsHead, opsFunds, zdLine, zdFoot, guideHead, guideText;
         private AvControl zdQueue;
 
         private void BuildNodes(RectTransform column, float cw, float ch)
@@ -94,8 +98,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             dropAll.SetStyle(AvButtonStyle.Danger);
             string purgeHelp = "Cut every enemy hold on our own network: lands " + (int)CyberRules.PurgeSeconds + " s after the press, costs " + CyberRules.PurgeCost + " AP, then " +
                 (int)CyberRules.PurgeCooldownSeconds + " s to recharge. Each cut intrusion's trace jumps " + (int)CyberRules.PurgeTraceKick + " %.";
-            purgeAll = Small(b, "PURGE", SecX + secW - 10f - 140f, 0f, 140f, () => Do(() => actions.Purge()), purgeHelp);
+            // The breach bar's one control: OPEN DC-n when a listed node of ours is breached (its row carries PURGE), else PURGE itself (a hold on a node the list does not carry).
+            purgeAll = Small(b, "PURGE", SecX + secW - 10f - 140f, 0f, 140f, () => Do(() => { if (breachRow != 0) Pick(breachRow, false); else actions.Purge(); }), purgeHelp);
             purgeAll.SetStyle(AvButtonStyle.Danger);
+            this.purgeHelp = purgeHelp;
             float bw = (secW - 28f - 12f) / 3f;
             hop = Small(b, "HOP", SecX + 14f, 0f, bw, () => Do(() => actions.Hop(selected)), "Pick a node first.");
             hop.SetStyle(AvButtonStyle.Primary);
@@ -161,10 +167,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 + "3 · HOP ON FROM IT (" + (int)(CyberGraph.ChainReach / 1000f) + " KM) FOR FREE, UP TO " + CyberRules.MaxHeldPerIntrusion + " HELD\n"
                 + "4 · BURN A NODE FOR ITS STRIKE PACKAGE · DROP ALL BEFORE THE TRACE FILLS";
 
-            TMP_Text opsHead = SecHead(b, "OpsHead", opsY, secW);
+            opsHead = SecHead(b, "OpsHead", opsY, secW);
             opsHead.text = "OPERATIONS";
             opsFunds = FrontKit.Mono(b, "OpsFunds", SecX + 190f, opsY + 5f, secW - 190f - 176f, 18f, 10.5f, TextAlignmentOptions.MidlineLeft);
-            TMP_Text zdLine = Wrapped(b, "ZeroDay", SecX + 10f, opsY + 31f, secW - 20f, 32f, 10.5f);
+            zdLine = Wrapped(b, "ZeroDay", SecX + 10f, opsY + 31f, secW - 20f, 32f, 10.5f);
             zdLine.text = "<b>ZERO-DAY</b> · THEIR SAM C2 NEAREST THE FRONT GOES DARK: NO SAM WITHIN 3 KM LAUNCHES FOR " + FrontKit.Clock(zdSeconds)
                 + " (" + FrontKit.Clock(zdHalved) + " NEAR ONE OF THEIR EW TRUCKS)";
             zdFoot = FrontKit.Mono(b, "ZeroDayFoot", SecX + 10f, opsY + 66f, secW - 20f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
@@ -237,7 +243,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 NetNodeView nd = n.Nodes[order[k]];
                 if (!Passes(filter, nd)) continue;
                 if (nd.Own) selOwn = nd.Id;
-                else if (nd.Id != n.SelectedId) actions.SelectNode(nd.Id);
+                else if (nd.Id != n.SelectedId && !(nd.Id == autoSent && n.SelectedId == autoFrom))
+                {
+                    // A second paint of the same stale view must not send it again: the controller would read the same id twice as a toggle off.
+                    autoSent = nd.Id; autoFrom = n.SelectedId;
+                    actions.SelectNode(nd.Id);
+                }
                 return true;
             }
             return false;
@@ -292,7 +303,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             NetworkRoomView n = v.Network;
             FrontVector g = nodesG;
             g.Clear();
-            float secW = nodesW - 2f * SecX, opsY = nodesH - 8f - OpsH, guideY = opsY - 8f - GuideH;
+            float secW = nodesW - 2f * SecX;
             nodesBox.SetMeta(n.Active ? n.HasIntrusion ? "SESSION LIVE · TRACE " + n.Trace + " %" : "NO SESSION" : n.Meta, n.HasIntrusion ? HopInk : PhosDim);
 
             float y = PaintStrip(n, g, NodeTop, secW) + 6f;
@@ -317,22 +328,21 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             for (int k = 0; k < count; k++) if (Passes(filter, n.Nodes[order[k]])) vis[listCount++] = order[k];
             int open = selOwn != 0 ? selOwn : n.SelectedId > 0 && Shows(n, n.SelectedId) ? n.SelectedId : 0;
             float bodyH = open != 0 ? Body(v, n, open, secW) : 0f;
-            if (open != lastOpen)
-            {
-                lastOpen = open;
-                for (int k = 0; k < listCount; k++) if (n.Nodes[vis[k]].Id == open && (k < scroll || k >= scroll + rowsShown)) scroll = k;
-            }
+            bool follow = open != lastOpen; // a new pick is brought into view (a wheel may take it out again)
+            lastOpen = open;
             scroll = Mathf.Clamp(scroll, 0, Math.Max(0, listCount - 1));
-            // Measure first (the list's well is drawn under the rows): the rows that fit above OPERATIONS, then whether the guide still fits under them.
-            float bottom = opsY - 8f, ry = y + 4f;
-            int shown = 0;
-            listMoreBelow = false;
-            for (int k = scroll; k < listCount; k++)
+
+            // Measure first (the well is drawn under the rows): the rows that fit above OPERATIONS at the foot. A new open row that the measure leaves out (it grew by
+            // its body) moves the window to the smallest scroll that shows it whole.
+            float bottom = nodesH - 8f - OpsH - 8f, ry;
+            int shown = Measure(n, scroll, open, bodyH, y + 4f, bottom, out listMoreBelow, out ry);
+            int oi = -1;
+            for (int k = 0; k < listCount && follow; k++) if (n.Nodes[vis[k]].Id == open) oi = k;
+            if (oi >= 0 && (oi < scroll || oi >= scroll + shown))
             {
-                float h = NodeRowH + (n.Nodes[vis[k]].Id == open ? bodyH : 0f), reserve = k + 1 < listCount ? 18f : 0f;
-                if (shown > 0 && ry + h > bottom - reserve) { listMoreBelow = true; break; }
-                ry += h + 2f;
-                shown++;
+                scroll = oi;
+                while (scroll > 0 && oi < scroll - 1 + Measure(n, scroll - 1, open, bodyH, y + 4f, bottom, out _, out _)) scroll--;
+                shown = Measure(n, scroll, open, bodyH, y + 4f, bottom, out listMoreBelow, out ry);
             }
             bool more = scroll > 0 || listMoreBelow;
             string note = count == 0 && !n.Active ? n.Next
@@ -341,8 +351,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 : filter == NodeFilter.Mine ? "NONE OF OURS STANDS · BUILD A DATA CENTER ON INFRASTRUCTURE"
                 : "NO NODE MATCHES " + FilterWord[(int)filter] + " · ALL SHOWS EVERY ONE";
             int noteLines = note.Length > 0 ? Math.Min(3, Lines(note, secW - 20f)) : 0;
-            bool guide = ry + (more ? 18f : 0f) + noteLines * LineH + 16f <= guideY;
-            Slab(g, SecX, y, secW, (guide ? guideY : opsY) - 8f - y, Phos);
+            // Everything stacks from the top like the other rooms' first tabs: the well as tall as its rows, the guide under it when it fits, OPERATIONS next (never
+            // lower than the foot).
+            float wellEnd = Math.Min(bottom, ry + (more ? 18f : 0f) + (noteLines > 0 ? noteLines * LineH + 12f : 0f) + 2f);
+            float guideY = wellEnd + 8f;
+            bool guide = guideY + GuideH + 8f + OpsH + 8f <= nodesH;
+            float opsY = Math.Min(nodesH - 8f - OpsH, (guide ? guideY + GuideH : wellEnd) + 8f);
+            Slab(g, SecX, y, secW, wellEnd - y, Phos);
 
             ry = y + 4f;
             bool bodyShown = false;
@@ -355,7 +370,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (isOpen) { PlaceBody(ry + NodeRowH, secW, g); bodyShown = true; }
                 ry += h + 2f;
             }
-            rowsShown = Math.Max(1, shown);
             for (int i = shown; i < MaxNodes; i++) { Show(rowHits[i].gameObject, false); Show(rowName[i].gameObject, false); Show(rowReach[i].gameObject, false); }
             if (!bodyShown) HideBody();
 
@@ -373,12 +387,34 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontKit.Set(listEmpty, note, PhosDim);
             }
 
-            // How a session runs, where the list leaves room for it; OPERATIONS at the foot.
+            // How a session runs, under the rows when it fits; OPERATIONS under that.
             Show(guideText.gameObject, guide);
             Show(guideHead.gameObject, guide);
-            if (guide) Slab(g, SecX, guideY, secW, GuideH, PhosDim);
+            if (guide)
+            {
+                Slab(g, SecX, guideY, secW, GuideH, PhosDim);
+                Put(guideHead.rectTransform, SecX + 10f, guideY + 5f, 178f, 18f);
+                Put(guideText.rectTransform, SecX + 10f, guideY + 24f, secW - 20f, GuideH - 28f);
+            }
             PaintOps(v, n, g, opsY, secW);
             g.Flush();
+        }
+
+        /// <summary>How many rows from <paramref name="from"/> fit between <paramref name="top"/> and <paramref name="bottom"/> (the first always does), whether more follow, and where they end.</summary>
+        private int Measure(NetworkRoomView n, int from, int open, float bodyH, float top, float bottom, out bool below, out float end)
+        {
+            float ry = top;
+            int shown = 0;
+            below = false;
+            for (int k = from; k < listCount; k++)
+            {
+                float h = NodeRowH + (n.Nodes[vis[k]].Id == open ? bodyH : 0f), reserve = k + 1 < listCount || from > 0 ? 18f : 0f;
+                if (shown > 0 && ry + h > bottom - reserve) { below = true; break; }
+                ry += h + 2f;
+                shown++;
+            }
+            end = ry;
+            return shown;
         }
 
         /// <summary>One row: the hex (ours bright and solid, theirs by state), name and place, the reach word; the open row framed with its body under it.</summary>
@@ -751,7 +787,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Put(traceEta.rectTransform, x1 - 300f, traceY, 300f, 16f);
             FrontKit.Set(traceWord, "TRACE " + n.Trace + " %", tk);
             FrontKit.Set(traceEta, n.Stale ? "STALE · HOST DATA " + n.AgeSeconds + " S" : n.EstTraceSeconds >= 0 ? "TRACED IN ~" + FrontKit.Clock(n.EstTraceSeconds) : "TRACE HOLDING",
-                n.Stale || n.EstTraceSeconds >= 0 ? TraceRed : PhosDim);
+                n.Stale ? TraceRed : n.EstTraceSeconds >= 0 ? tk : PhosDim);
             g.Rect(x0, barY, bw, 8f, TraceRed.WithAlpha(0.12f));
             g.Frame(x0, barY, bw, 8f, 1f, PhosDim.WithAlpha(0.4f));
             g.Rect(x0, barY, bw * Mathf.Clamp01(trace / 100f), 8f, tk);
@@ -771,9 +807,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool on = n.Breaches > 0 || n.ThreatWord == "PURGING";
             Show(breachLine.gameObject, on);
             Show(purgeAll.Rect.gameObject, on);
+            breachRow = 0;
             if (!on) return y;
-            string s = n.Breaches > 0 ? n.ThreatNote + " · PURGE CUTS EVERY ONE: " + CyberRules.PurgeCost + " AP, LANDS " + (int)CyberRules.PurgeSeconds + " S AFTER THE PRESS"
-                : "PURGE UNDER WAY · EVERY ENEMY HOLD ON OUR NET IS CUT WHEN IT LANDS";
+            string where = "";
+            foreach (NetNodeView nd in n.Nodes) if (nd.Own && nd.Breached) { breachRow = nd.Id; where = nd.Label; break; }
+            string cost = CyberRules.PurgeCost + " AP, LANDS " + (int)CyberRules.PurgeSeconds + " S AFTER THE PRESS";
+            string s = n.Breaches == 0 ? "PURGE UNDER WAY · EVERY ENEMY HOLD ON OUR NET IS CUT WHEN IT LANDS"
+                : breachRow != 0 ? n.ThreatNote + " · PURGE IT ON " + where + " BELOW: " + cost
+                : n.ThreatNote + " · PURGE CUTS EVERY ONE: " + cost;
             float tw = secW - 30f - 160f;
             int ln = Math.Min(2, Lines(s, tw));
             float h = Math.Max(24f, ln * LineH + 2f) + 12f;
@@ -782,8 +823,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Put(breachLine.rectTransform, SecX + 30f, y + (ln == 1 ? 10f : 6f), tw, ln * LineH + 2f);
             FrontKit.Set(breachLine, s, TraceRed);
             Put(purgeAll.Rect, SecX + secW - 10f - 140f, y + (h - 24f) * 0.5f, 140f, 24f);
-            OpsKit.Label(purgeAll, n.PurgeLabel);
-            OpsKit.Enable(purgeAll, n.CanPurge);
+            OpsKit.Label(purgeAll, breachRow != 0 ? "OPEN " + where : n.PurgeLabel);
+            OpsKit.Enable(purgeAll, breachRow != 0 || n.CanPurge);
+            if (breachHelpFor != breachRow)
+            {
+                breachHelpFor = breachRow;
+                purgeAll.Help = breachRow != 0 ? "Opens " + where + " in the list below: its row carries PURGE." : purgeHelp;
+            }
             return y + h + 6f;
         }
 
@@ -793,6 +839,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void PaintOps(FrontRoomView v, NetworkRoomView n, FrontVector g, float opsY, float secW)
         {
             Slab(g, SecX, opsY, secW, OpsH, Amber);
+            Put(opsHead.rectTransform, SecX + 10f, opsY + 5f, 178f, 18f);
+            Put(opsFunds.rectTransform, SecX + 190f, opsY + 5f, secW - 190f - 176f, 18f);
+            Put(zdQueue.Rect, SecX + secW - 8f - 160f, opsY + 4f, 160f, 24f);
+            Put(zdLine.rectTransform, SecX + 10f, opsY + 31f, secW - 20f, 32f);
+            Put(zdFoot.rectTransform, SecX + 10f, opsY + 66f, secW - 20f, 16f);
             bool wait = FrontViews.IsWaiting(v.Row);
             FrontKit.Set(opsFunds, wait ? "FRONT FUNDS —" : "FRONT FUNDS " + v.Row.Budget, PhosDim);
             FrontOfferView zd = n.ZeroDay;
