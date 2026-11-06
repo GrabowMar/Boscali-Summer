@@ -41,7 +41,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly List<FeedEntry> entries = new List<FeedEntry>(SpaceWire.MaxContacts + SpaceWire.MaxMarks);
         private readonly int[] sendIds = new int[SpaceCommand.MaxIds];
 
-        private int pageRows = SpaceFeedLayout.Tiles6;
         private bool visible, leaseOpen, dirty;
 
         /// <summary>The OPS page's PERKS tab is on screen: hold the feed lease for its TASKED rows (posts arrive with the rows) without rebuilding the ORBIT view.</summary>
@@ -72,11 +71,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // Telemetry: what changed since the last look at the mirrors. Baselined on the first sample, so nothing that happened before the room existed is reported as news.
         private const float StaleLookSeconds = 60f, PostedHold = 20f;
-        private bool watching;
         private int cameraSeen, radarSeen;
         private float cameraAt = -1f, radarAt = -1f, postedAt = -100f;
-        private readonly float[] departSeen = new float[3];
-        private readonly int[] siteSeen = { -1, -1 };
         private int briefId;
         private float briefX, briefZ;
         private string briefGrid = "";
@@ -148,10 +144,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             markRequest = sendRequest = chainTrack = 0;
             feedWords = "";
             feedWordsAt = -100f;
-            watching = false;
             cameraAt = radarAt = -1f;
             postedAt = -100f;
-            view.Log.Clear();
             view.Brief = default;
             view.Brackets.Clear();
             view.Image = null;
@@ -237,50 +231,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // ---- Telemetry ---------------------------------------------------------------------------------------------------
 
-        /// <summary>One real event onto the station log (newest first, bounded).</summary>
-        private void Note(float at, string text, AvState tone)
-        {
-            view.Log.Insert(0, new FeedLogLine { Stamp = C2Words.Clock(at), Text = text, Tone = tone });
-            if (view.Log.Count > SpaceFeedView.MaxLog) view.Log.RemoveAt(view.Log.Count - 1);
-            dirty = true;
-        }
-
-        /// <summary>A burn begun (by anyone in the faction), a look heard, an uplink site standing or falling: each becomes a log line, from the mirrors the feed already reads.</summary>
+        /// <summary>A look heard (OPTICAL or RADAR): stamps when it was taken, for the picture age.</summary>
         private void WatchEvents(float now)
         {
             if (!baselined) return;
             if (manager.CameraSerial != cameraSeen)
             {
                 cameraSeen = manager.CameraSerial; cameraAt = now;
-                Note(now, "OPTICAL LOOK · GRID " + Ops.OpsKit.Grid(manager.CameraTarget.x, manager.CameraTarget.z) + " · " + manager.CameraContacts + " CONTACTS", AvState.Info);
+                dirty = true;
             }
             if (manager.RadarScanSerial != radarSeen)
             {
                 radarSeen = manager.RadarScanSerial; radarAt = now;
-                Note(now, "RADAR SCAN · GRID " + Ops.OpsKit.Grid(manager.RadarScanTarget.x, manager.RadarScanTarget.z) + " · " + manager.RadarScanContacts + " CONTACTS", AvState.Info);
-            }
-            var ops = manager.OpsMirror;
-            if (!ops.Known || !ops.State.Active) return;
-            bool first = !watching;
-            watching = true;
-            for (int k = 0; k < departSeen.Length; k++)
-            {
-                GeoBird g = ops.State.Geo[k];
-                // The wire carries the burn as whole seconds since it began, so the client's DepartAt wobbles by about a second with every snapshot of the same burn (and a parked bird keeps its
-                // last leg, Length > 0, for the rest of the mission): only a departure that moved by more than that wobble, or the first one seen, is a new burn.
-                bool burnt = g.Length > 0f;
-                if (!first && burnt && (float.IsNaN(departSeen[k]) || Math.Abs(g.DepartAt - departSeen[k]) > 3f))
-                    Note(g.DepartAt, Fronts.FrontViews.BirdCallsign(k) + " BURN · -" + Mathf.RoundToInt(g.BurnCost) + " % FUEL · ETA " + C2Words.Clock(g.Duration), AvState.Caution);
-                departSeen[k] = burnt ? g.DepartAt : float.NaN;
-            }
-            var sites = ops.State.Sites;
-            for (int i = 0; i < siteSeen.Length; i++)
-            {
-                int state = -1;
-                for (int j = 0; j < sites.Count; j++) if (sites[j].Slot == i) state = (int)sites[j].State;
-                if (!first && state >= 0 && siteSeen[i] >= 0 && state != siteSeen[i])
-                    Note(now, Fronts.FrontViews.SiteName(i) + (state == 0 ? " BACK UP" : state == 1 ? " DESTROYED" : " REBUILDING"), state == 0 ? AvState.Ready : state == 1 ? AvState.Danger : AvState.Caution);
-                siteSeen[i] = state;
+                dirty = true;
             }
         }
 
@@ -293,11 +256,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             bool known = mirror.Known;
 
             SpaceFeedEntries.Build(state.Contacts, state.Marks, now, entries);
-            view.Pages = SpaceFeedRules.PageCount(entries.Count, pageRows);
-            draft.Page = SpaceFeedRules.ClampPage(draft.Page, entries.Count, pageRows);
             // The rows only flow while DOWNLINK shows: a lock survives the trip to SATELLITES and back until the rows say it is gone.
             if (draft.Selected != 0 && known && state.Feed && IndexOf(draft.Selected) < 0) draft.Selected = 0;
-            view.Page = draft.Page;
             view.SelectedId = draft.Selected;
             view.Source = draft.Source;
             view.Mode = draft.Mode;
@@ -322,7 +282,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (view.Strike.Held) view.Status += " · HOLD · IMPACT";
             view.StatusTone = !known || !state.Active || state.Family == SpaceFamilyState.Dark ? AvState.Danger
                 : state.Family == SpaceFamilyState.Degraded ? AvState.Caution : AvState.Info;
-            FillTiles();
             FillBrief(now);
             FillNoContacts(state, known, now);
             FillActions(state, known);
@@ -693,23 +652,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // ---- Tiles, actions, cards, words -----------------------------------------------------------------------------
 
-        private void FillTiles()
-        {
-            int first = draft.Page * pageRows;
-            for (int i = 0; i < view.Tiles.Length; i++)
-            {
-                int at = first + i;
-                if (i >= pageRows || at >= entries.Count) { view.Tiles[i] = default; continue; }
-                FeedEntry e = entries[at];
-                view.Tiles[i] = new FeedTileView
-                {
-                    Present = true, Id = e.Id, Class = e.Class, Marked = e.Marked, Selected = e.Id == draft.Selected,
-                    Percent = e.Percent, Moving = e.Moving, FixedPoint = e.Kind == FeedEntryKind.Mark,
-                    Title = SpaceFeedEntries.Title(e), Sub = SpaceFeedEntries.Sub(e)
-                };
-            }
-        }
-
         /// <summary>The selected track read once, from the entry its row and bracket also come from (the grid name is rebuilt only when the point moves).</summary>
         private void FillBrief(float now)
         {
@@ -801,9 +743,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             draft.Selected = IndexOf(id) >= 0 ? id : 0;
             dirty = true;
         }
-
-        public void PrevPage() { draft.Page = Math.Max(0, draft.Page - 1); dirty = true; }
-        public void NextPage() { draft.Page = SpaceFeedRules.ClampPage(draft.Page + 1, entries.Count, pageRows); dirty = true; }
 
         /// <summary>A bird's feed: OPTICAL keeps its EO / IR / LOW LIGHT choice, RADAR is the SAR strip, KINETIC the STRIKE view.</summary>
         public void SetSource(BirdKind source)
@@ -908,9 +847,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 bool good = reply.Verdict == MarkVerdict.Confirmed && !reply.Replayed;
                 AvState markTone = good ? AvState.Ready : reply.Verdict == MarkVerdict.Neutral || reply.Verdict == MarkVerdict.Decoy || reply.Replayed ? AvState.Caution : AvState.Danger;
                 Say(words, markTone, good ? AvUiCue.Confirm : AvUiCue.Caution);
-                if (!reply.Replayed)
-                    Note(SupportManager.MissionNow(), "MARK " + C2Orbit.TrackId(markTrack) + " · " + (reply.Verdict == MarkVerdict.Confirmed ? "CONFIRMED" : reply.Verdict == MarkVerdict.Neutral ? "NEUTRAL" :
-                        reply.Verdict == MarkVerdict.Decoy ? "DECOY" : reply.Verdict == MarkVerdict.Friendly ? "FRIENDLY" : "REFUSED"), markTone);
             }
             else if (reply.Kind == SpaceCommandKind.SendTasked && reply.RequestId == sendRequest && sendRequest != 0)
             {
@@ -919,7 +855,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (!reply.Replayed)
                 {
                     if (posted) postedAt = SupportManager.MissionNow();
-                    Note(SupportManager.MissionNow(), posted ? "TRANSMIT · PACKAGE POSTED TO TASKED" : "TRANSMIT REFUSED · " + C2Words.Fit(TaskedWords.Of(reply.Tasked, reply.Detail), 36), posted ? AvState.Ready : AvState.Danger);
                 }
                 Say(SpaceFeedRules.SendWords(reply.Tasked, reply.Detail, reply.Replayed), posted && !reply.Replayed ? AvState.Ready : AvState.Danger,
                     posted && !reply.Replayed ? AvUiCue.Confirm : AvUiCue.Caution);

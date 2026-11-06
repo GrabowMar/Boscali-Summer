@@ -288,6 +288,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private void OnWindowClosed()
         {
             EndPicks(); // a reopened window starts with no pick armed
+            Orbit?.Dock(); // a reopened window starts docked, and NODES auto-picks again
+            (rooms[(int)Front.Cyber] as NetworkRoom)?.ForgetPick();
             Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);

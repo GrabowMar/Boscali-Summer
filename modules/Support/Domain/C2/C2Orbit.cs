@@ -11,9 +11,6 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
         /// <summary>The id a contact wears on the track file and on the CONFIRM button (the wire id, unpadded, so the two always match).</summary>
         public static string TrackId(int id) => "T" + id.ToString(CultureInfo.InvariantCulture);
 
-        public static string TransmitLabel(int marks) =>
-            marks <= 0 ? "TRANSMIT" : "TRANSMIT " + marks.ToString(CultureInfo.InvariantCulture) + (marks == 1 ? " MARK" : " MARKS");
-
         public static string BirdName(BirdKind bird) =>
             bird == BirdKind.Optical ? "OPTICAL" : bird == BirdKind.Radar ? "RADAR" : "KINETIC";
 
@@ -46,8 +43,5 @@ namespace BoscaliSummer.Modules.Support.Domain.C2
             return "PADS " + live.ToString(CultureInfo.InvariantCulture) + "/" + FrontRules.PadCap.ToString(CultureInfo.InvariantCulture) + " · " +
                 (family == SpaceFamilyState.Normal ? "NORMAL" : family == SpaceFamilyState.Degraded ? "DEGRADED" : "OFFLINE");
         }
-
-        public static string PageMeta(int page, int pages) =>
-            "PAGE " + (Math.Max(0, page) + 1).ToString(CultureInfo.InvariantCulture) + "/" + Math.Max(1, pages).ToString(CultureInfo.InvariantCulture);
     }
 }

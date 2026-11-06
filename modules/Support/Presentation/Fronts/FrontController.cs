@@ -146,9 +146,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             selectedNode = 0; selectedTeam = -1; selectedTarget = 0;
             ShadowRoomView sof = view.Shadow;
             sof.HasPoint = false; sof.Reason = ""; sof.AimSeen = 0; sof.PickedId = 0;
-            sof.History.Clear(); sof.LastSeq = 0;
-            NetworkRoomView net = view.Network;
-            net.History.Clear(); net.LastSeq = 0; // another faction's (or scene's) session log must not be prefixed to the new one's
         }
 
         // ---- Frame ------------------------------------------------------------------------------------------------------

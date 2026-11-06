@@ -126,6 +126,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         internal SofResult TrainTeam(FactionHQ owner) =>
             owner != null && factions.TryGetValue(owner, out FactionSof f) ? f.Desk.Raise(Domain.Space.SpaceContacts.WatchOfficerId) : new SofResult(SofOutcome.Unavailable);
 
+#if !PUBLIC_RELEASE
         /// <summary>TEST ONLY (the sim's "reveal" verb): what a RECON that came off at (x, z) does for this faction.</summary>
         internal bool RevealArea(FactionHQ owner, float x, float z, float radius, float seconds)
         {
@@ -133,6 +134,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             StartReveal(f, x, z, radius, seconds);
             return true;
         }
+#endif
 
         internal bool TryDesk(FactionHQ owner, out SofDesk desk)
         {

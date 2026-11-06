@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
     {
         private float closedAt = float.NaN;
 
-        public int Page, Selected;
+        public int Selected;
         /// <summary>Continuous zoom 1..16 and the look's offset from the window centre (metres east, north).</summary>
         public float Zoom = 1f, PanX, PanZ;
         public DownlinkMode Mode = DownlinkMode.Eo;
@@ -56,7 +56,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Space
         public void Clear()
         {
             closedAt = float.NaN;
-            Page = Selected = 0;
+            Selected = 0;
             Zoom = 1f; PanX = PanZ = 0f;
             Mode = DownlinkMode.Eo;
         }

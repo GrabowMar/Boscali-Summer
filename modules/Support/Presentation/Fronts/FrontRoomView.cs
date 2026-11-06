@@ -47,14 +47,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Reason;
     }
 
-    internal struct FrontLogLine
-    {
-        public string Stamp, Text;
-        public AvState Tone;
-        /// <summary>Seconds since the host wrote the line (the radio log only; zero for a terminal line).</summary>
-        public float Ago;
-    }
-
     /// <summary>One satellite as the ORBIT situation view draws it. Pure data: the view derives every point from these.</summary>
     internal struct OrbitTrackView
     {
@@ -204,7 +196,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         /// ("SATELLITES UP 2"); each one's lean rides <see cref="FrontRow.Terms"/>. Fog: never an enemy count.
         /// </summary>
         public readonly string[] Terms = { "", "", "" };
-        public readonly List<FrontLogLine> Log = new List<FrontLogLine>(8);
 
         // ORBIT payload.
         public SpaceFeedView Feed = new SpaceFeedView();

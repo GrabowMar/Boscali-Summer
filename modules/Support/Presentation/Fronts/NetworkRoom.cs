@@ -666,6 +666,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H;
         }
 
+        /// <summary>The window closed: the next open (a new mission, maybe) lets NODES auto-pick again.</summary>
+        internal void ForgetPick() => handPicked = false;
+
         /// <summary>
         /// One frame of input. A pan, zoom or inset move repaints only the map and a wheel over the node list only the list; both return false (the column does not
         /// depend on the view). True only for a pick's click, which changes the column too. Node clicks arrive through their own hits.

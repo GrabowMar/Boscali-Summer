@@ -61,7 +61,6 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             id == ProgrammeId.LaunchSatellite || id == ProgrammeId.EwTruck || id == ProgrammeId.TrainTeam ? BuildClass.Asset : BuildClass.Operation;
 
         /// <summary>On the ladder: infrastructure or asset, the FOB excepted (it is a one-off the ladder never walks to).</summary>
-        public static bool IsLadder(ProgrammeId id) => Class(id) != BuildClass.Operation && id != ProgrammeId.Fob;
 
         public static FrontProgramme Info(ProgrammeId id) => Programmes[(int)id];
 

@@ -122,6 +122,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             pane.Box.Tagged("INCO"); // a box first shown now lays its header out now (TMP measures nothing while it is inactive)
         }
 
+        /// <summary>The window closed: the next open starts with the camera docked.</summary>
+        internal void Dock() { if (Enlarged) Use(docked); }
+
         /// <summary>True while the DOWNLINK has the whole room (the map takes no input then).</summary>
         internal bool Enlarged => shown == enlarged;
 

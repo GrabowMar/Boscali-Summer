@@ -144,11 +144,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Operator = "";
         public int YourHeld;
         public bool Hopping;
-        public float HopFraction;
         public int HopLeft;
         /// <summary>Estimated seconds until the trace fills at the current rate (rules only, no counter-pressure); -1 when nothing climbs it.</summary>
         public int EstTraceSeconds = -1;
-        public string HopLine = "";
         /// <summary>No host update for this long while the session should be changing it; blocks HOP.</summary>
         public bool Stale;
         public int AgeSeconds;
@@ -156,7 +154,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public string Next = "";
         public AvState NextTone = AvState.Caution;
         // The FACTION's network.
-        public byte Infocon = 5;
         public string ThreatWord = "", ThreatNote = "";
         /// <summary>Enemy holds on our own network, and whether PURGE can run now (its label carries the countdown or the recharge).</summary>
         public int Breaches;
@@ -167,13 +164,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public int SelectedId = -1;
         public NetDossierView Dossier;
         public bool CanHop, CanBurn, CanDrop;
-        // Session log: who is online, then the faction's real events (kept across refreshes, the mirror only carries the newest three).
-        public const int MaxHistory = 8;
-        public readonly List<FrontLogLine> Roster = new List<FrontLogLine>(3);
-        public readonly List<FrontLogLine> History = new List<FrontLogLine>(MaxHistory);
-        public int LastSeq;
-        public string Prompt = "";
-        public string Session = "";
         public string Meta = "";
     }
 
@@ -262,7 +252,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     internal struct SofCrewView
     {
         public int Slot;
-        public bool CanGo;
         public string Word, Help;
     }
 
@@ -309,7 +298,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public AvState QrfTone = AvState.Inert;
         public bool CanSweep;
         public int TeamCap;
-        public string TapLine = "";
         /// <summary>The picked team: the one SEND sends (a new aim pre-picks the nearest that can go, spec 7.3) and the jacket TEAMS &amp; BASES clips.</summary>
         public int SelectedSlot = -1;
         public int SelectedTargetId;
@@ -339,10 +327,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         public TargetKind PickedKind;
         public AnchorSub PickedSub;
         public float PickedX, PickedZ;
-
-        public const int MaxHistory = 8;
-        public readonly List<FrontLogLine> History = new List<FrontLogLine>(MaxHistory);
-        public int LastSeq;
     }
 
     internal struct NetPoint { public float X, Y; }

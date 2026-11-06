@@ -126,7 +126,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             v.Now = c.Now;
             v.Theatre = "THEATRE " + (c.Frame.W / 1000f).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " x " + (c.Frame.H / 1000f).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " KM";
             Airbases(v.Airbases, c.Airbases, c.Frame);
-            v.Queue.Clear(); v.Offers.Clear(); v.Perks.Clear(); v.Log.Clear();
+            v.Queue.Clear(); v.Offers.Clear(); v.Perks.Clear();
             FrontRow row = known && d != null ? d.Fronts[(int)f] : Waiting;
             v.Row = row;
             // This front's share of the minute's trickle, as far as it still fits under the budget cap.
@@ -171,13 +171,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 });
             }
 
-            for (int i = 0; i < row.Log.Count; i++)
-            {
-                FrontLogRow l = row.Log[i];
-                string text = FrontWords.Line(f, l, row.DirectiveBy);
-                if (text.Length == 0) continue;
-                v.Log.Add(new FrontLogLine { Stamp = FrontKit.Clock(l.Time), Text = text, Tone = LogTone((FrontLogCode)l.Code, l.A), Ago = Math.Max(0f, c.Now - l.Time) });
-            }
         }
 
         /// <summary>Why a perk is not usable right now ("" when it is): the pilot's skill grade (<see cref="CallGate"/>), the satellite it needs, then the allocation price.</summary>
@@ -275,18 +268,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 w.HasHeldBuilding = sof.Held.Count > 0;
             }
             return f == Front.Space ? ops != null : f == Front.Cyber ? cyber != null : sof != null;
-        }
-
-        private static AvState LogTone(FrontLogCode code, int a)
-        {
-            switch (code)
-            {
-                case FrontLogCode.Done: case FrontLogCode.Effect: return AvState.Ready;
-                case FrontLogCode.Rebuild: return AvState.Danger;
-                case FrontLogCode.Counter: return a != 0 ? AvState.Caution : AvState.Info;
-                case FrontLogCode.Started: return AvState.Caution;
-                default: return AvState.Info;
-            }
         }
 
         /// <summary>The satellite a perk needs over its aim point: RECON PASS and OVERWATCH = RADAR, SAT CAMERA = OPTICAL, ORBITAL ROD and STARFALL = KINETIC. -1 for a perk that needs none.</summary>
@@ -755,25 +736,22 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             NetworkRoomView n = v.Network;
             MapFrame frame = c.Frame;
             float now = c.Now;
-            n.Nodes.Clear(); n.Anchors.Clear(); n.Roster.Clear();
+            n.Nodes.Clear(); n.Anchors.Clear();
             Infrastructure(v, c, known ? s : null);
             n.MapKmW = frame.W / 1000f; n.MapKmH = frame.H / 1000f;
             bool active = known && s != null && s.Active;
             n.Active = active;
             n.Dossier = default;
             n.HasIntrusion = false; n.Trace = 0; n.CanHop = n.CanBurn = n.CanDrop = false;
-            n.HeldTotal = 0; n.IntrusionCap = 0; n.Sessions = 0; n.YourHeld = 0; n.Hopping = false; n.HopFraction = 0f; n.HopLeft = 0;
-            n.EstTraceSeconds = -1; n.Stale = false; n.AgeSeconds = 0; n.Operator = ""; n.Prompt = "guest@net:~$";
-            n.Infocon = 5; n.ThreatWord = known ? "CALM" : "NO LINK"; n.ThreatNote = "";
+            n.HeldTotal = 0; n.IntrusionCap = 0; n.Sessions = 0; n.YourHeld = 0; n.Hopping = false; n.HopLeft = 0;
+            n.EstTraceSeconds = -1; n.Stale = false; n.AgeSeconds = 0; n.Operator = "";
+            n.ThreatWord = known ? "CALM" : "NO LINK"; n.ThreatNote = "";
             n.Breaches = 0; n.CanPurge = false; n.PurgeLabel = "PURGE";
-            n.HopLine = ""; n.Next = ""; n.NextTone = AvState.Caution;
+            n.Next = ""; n.NextTone = AvState.Caution;
             n.SelectedId = -1;
-            n.Session = "NO SESSION · IDLE";
-            if (!known) { n.History.Clear(); n.LastSeq = 0; }
             if (!active)
             {
                 n.Meta = known ? "NO EW ASSET STANDING" : "WAITING FOR THE HOST";
-                n.HopLine = "NO EW LINK · NOTHING TO HOP FROM";
                 n.Next = known ? NoTruck(false) : "WAITING FOR THE HOST CYBER STATE · NOTHING TO SHOW YET";
                 n.NextTone = known ? AvState.Caution : AvState.Inert;
                 n.Dossier.Next = n.Next; n.Dossier.NextTone = n.NextTone;
@@ -878,18 +856,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (have)
             {
                 n.Trace = mine.Trace;
-                n.HopLine = CyberNetWords.IntrusionLine(mine, s, now);
-                n.HopFraction = CyberNetWords.HopProgress(mine, now);
                 n.HopLeft = n.Hopping ? (int)Math.Ceiling(Math.Max(0f, mine.HopEndsAt - now)) : 0;
                 NodeKind hopKind = n.Hopping && TryNode(s, mine.HopTarget, out CyberNodeRow hopRow) ? hopRow.Kind : NodeKind.Radar;
                 float rate = ((n.Hopping ? CyberRules.HopTraceRate : 0f) + CyberRules.HeldTraceRate * myHeld) * (s.DataCenterUp ? CyberRules.DataCenterTraceFactor : 1f);
                 n.EstTraceSeconds = rate > 0f ? (int)Math.Ceiling((CyberRules.TraceMax - mine.Trace) / rate) : -1;
                 n.Stale = (n.Hopping || myHeld > 0) && n.AgeSeconds > StaleAfterSeconds;
-                n.Session = "SESSION " + (n.Operator.Length == 0 ? "YOURS" : n.Operator) + " · " + myHeld + " HELD";
-                n.Prompt = (n.Operator.Length == 0 ? "you" : n.Operator.ToLowerInvariant()) + "@" + TruckTag(mine.Truck).ToLowerInvariant() + ":~$";
             }
-            else n.HopLine = "IDLE · NO HOP RUNNING"; // the dial already says NO INTRUSION
-            n.Infocon = (byte)(locked ? 2 : anyDown ? 3 : 5);
             n.ThreatWord = locked ? "TRACED" : anyDown ? "DEGRADED" : "CALM";
             n.ThreatNote = locked ? "AN EW TRUCK WAS TRACED AND IS LOCKED OUT" : anyDown ? "AN EW ASSET IS DOWN · BUILD ANOTHER ON INFRASTRUCTURE" : "NO LOSS ON OUR EW NET";
             // The other side: enemy holds on our own network and our PURGE (protocol 42).
@@ -901,7 +873,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             n.PurgeLabel = purging ? "CUT IN " + purgeLeft + " S" : cooling ? "PURGE " + SpaceRules.Clock(s.PurgeReadyAt - now) : "PURGE";
             if (breached > 0 || purging)
             {
-                n.Infocon = (byte)(breached >= 2 ? 1 : 2);
                 n.ThreatWord = purging ? "PURGING" : "BREACHED";
                 // The PURGE button beside it carries the countdown, so the note only counts the holds.
                 n.ThreatNote = breached == 0 ? "PURGE UNDER WAY" : breached + " ENEMY HOLD" + (breached == 1 ? "" : "S") + " ON OUR NET";
@@ -923,20 +894,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             else if (s.HeldTotal >= CyberRules.MaxHeldPerFaction) { n.Next = "FACTION HOLDS " + s.HeldTotal + " / " + CyberRules.MaxHeldPerFaction + " NODES · A BURN OR DROP FREES ONE"; n.NextTone = AvState.Caution; }
             else if (inReachCount == 0) { n.Next = "NO NODE WITHIN " + Km(maxRange) + " KM OF A TRUCK · MORE NODES SHOW AS THEY ARE FOUND"; n.NextTone = AvState.Caution; }
             else { n.Next = (others > 0 ? others + " ALLY SESSION · " : "") + "SELECT AN IN-REACH NODE AND HOP TO OPEN YOUR SESSION"; n.NextTone = AvState.Ready; }
-
-            // Log: who is online (the mirror lists every intrusion of the faction), then the real events.
-            for (int pass = 0; pass < 2; pass++)
-                foreach (CyberIntrusionRow x in s.Intrusions)
-                {
-                    if (x.Own != (pass == 0)) continue;
-                    string op = string.IsNullOrEmpty(x.Operator) ? (x.Own ? "you" : "ally") : x.Operator.ToLowerInvariant();
-                    n.Roster.Add(new FrontLogLine
-                    {
-                        Stamp = x.Own ? "YOU" : "ALLY", Text = op + " · " + TruckTag(x.Truck) + " · " + (x.Held != null ? x.Held.Length : 0) + " HELD · TRACE " + x.Trace + " %",
-                        Tone = x.Own ? (CyberNetWords.TraceTone(x.Trace) == 2 ? AvState.Danger : CyberNetWords.TraceTone(x.Trace) == 1 ? AvState.Caution : AvState.Ready) : AvState.Info
-                    });
-                }
-            Remember(n, s);
 
             // Inspector and actions for the selected node.
             if (selected > 0 && TryNode(s, selected, out CyberNodeRow sel))
@@ -1134,41 +1091,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             foreach (InfraCenterView cv in n.Centers) if (cv.State == InfraState.Up || cv.State == InfraState.Damaged) n.CentersUp++;
         }
 
-        /// <summary>Keeps the faction's real events across refreshes (the mirror carries only the newest three), oldest first, stamped with their own sequence number.</summary>
-        private static void Remember(NetworkRoomView n, CyberStateData s)
-        {
-            int newest = 0;
-            foreach (CyberEventRow e in s.Events) newest = Math.Max(newest, e.Seq);
-            if (newest < n.LastSeq) { n.History.Clear(); n.LastSeq = 0; } // a new mission numbers its events again
-            for (; ; )
-            {
-                int best = -1;
-                for (int i = 0; i < s.Events.Count; i++)
-                    if (s.Events[i].Seq > n.LastSeq && (best < 0 || s.Events[i].Seq < s.Events[best].Seq)) best = i;
-                if (best < 0) break;
-                n.History.Add(HistoryLine(s.Events[best]));
-                n.LastSeq = s.Events[best].Seq;
-                if (n.History.Count > NetworkRoomView.MaxHistory) n.History.RemoveAt(0);
-            }
-        }
-
-        private static FrontLogLine HistoryLine(in CyberEventRow e)
-        {
-            string stamp = "#" + e.Seq.ToString("00", NetFmt), by = " [" + (e.Own ? "YOU" : "ALLY") + "]", h = NodeHandle(e.Node, e.NodeId);
-            switch (e.Kind)
-            {
-                case CyberEventKind.HopStarted: return new FrontLogLine { Stamp = stamp, Text = "hop " + h + by, Tone = AvState.Info };
-                case CyberEventKind.NodeHeld: return new FrontLogLine { Stamp = stamp, Text = "held " + h + by, Tone = AvState.Ready };
-                case CyberEventKind.Released:
-                    return new FrontLogLine
-                    {
-                        Stamp = stamp, Text = "rel " + h + " " + CyberNetWords.ReasonWord(e.Reason).ToLowerInvariant() + by,
-                        Tone = e.Reason == IntrusionEnd.Burned || e.Reason == IntrusionEnd.Dropped ? AvState.Info : AvState.Danger
-                    };
-                default: return new FrontLogLine { Stamp = stamp, Text = "TRACED · EW TRUCK REVEALED 2:00" + by, Tone = AvState.Danger };
-            }
-        }
-
         private static int TruckAnchor(List<NetAnchorView> anchors, int truckOrdinal)
         {
             int seen = 0;
@@ -1250,29 +1172,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return who.Length > 0 ? "TASKED · " + who : "NO TEAM TASKED";
         }
 
-        private static AvState EventTone(SofEventKind k) =>
-            k == SofEventKind.Lost || k == SofEventKind.Failed || k == SofEventKind.Retaken ? AvState.Danger : k == SofEventKind.Pinned ? AvState.Caution
-            : k == SofEventKind.Success || k == SofEventKind.Seized || k == SofEventKind.Home || k == SofEventKind.Raised ? AvState.Ready : AvState.Info;
-
-        /// <summary>Keeps the faction's real events across refreshes (the mirror carries only the newest three), oldest first, stamped with their own sequence number.</summary>
-        private static void Remember(ShadowRoomView r, SofStateData s)
-        {
-            int newest = 0;
-            foreach (SofEventRow e in s.Events) newest = Math.Max(newest, e.Seq);
-            if (newest < r.LastSeq) { r.History.Clear(); r.LastSeq = 0; } // a new mission numbers its events again
-            for (; ; )
-            {
-                int best = -1;
-                for (int i = 0; i < s.Events.Count; i++)
-                    if (s.Events[i].Seq > r.LastSeq && (best < 0 || s.Events[i].Seq < s.Events[best].Seq)) best = i;
-                if (best < 0) break;
-                SofEventRow ev = s.Events[best];
-                r.History.Add(new FrontLogLine { Stamp = "#" + ev.Seq.ToString("00", System.Globalization.CultureInfo.InvariantCulture), Text = SofPageWords.EventLine(ev), Tone = EventTone(ev.Kind) });
-                r.LastSeq = ev.Seq;
-                if (r.History.Count > ShadowRoomView.MaxHistory) r.History.RemoveAt(0);
-            }
-        }
-
         /// <summary>CAMP-1 is host camp slot 0.</summary>
         internal static string CampName(int slot) => "CAMP-" + (slot + 1);
 
@@ -1295,10 +1194,9 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             bool active = known && s != null && s.Active;
             r.Active = active;
             r.SelectedSlot = -1; r.SelectedTargetId = 0;
-            r.TapLine = "NO TAP RUNNING"; r.TeamCap = active ? s.TeamCap : 0; r.TeamsUp = r.Afield = 0;
+            r.TeamCap = active ? s.TeamCap : 0; r.TeamsUp = r.Afield = 0;
             r.FieldNote = ""; r.SendWhy = ""; r.GoIn = ""; r.Helo = "";
             r.FileTab = r.FileA = r.FileB = r.FileC = r.FileD = "";
-            if (!known) { r.History.Clear(); r.LastSeq = 0; }
             if (active) CampRules.Homes(s.Camps, s.Teams, homes);
             else for (int i = 0; i < homes.Length; i++) homes[i] = -1;
             Bases(v, c, active ? s : null);
@@ -1422,12 +1320,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 string why = locked ? "CTRL " + t.Controller : t.State != TeamState.Ready ? SofWords.State(t.State) : "LOW AMMO";
                 r.Crew.Add(new SofCrewView
                 {
-                    Slot = slot, CanGo = go, Word = call + " · " + (go ? KmWord(d) : why),
+                    Slot = slot, Word = call + " · " + (go ? KmWord(d) : why),
                     Help = go ? call + " can go now: " + KmWord(d) + " from the aim, about " + FrontKit.Clock(d / SofRules.SpeedMetresPerSecond) + " on foot." + (t.Carried ? " It rides a helicopter: +20 odds." : "")
                         : call + " cannot go now: " + why.ToLowerInvariant() + ". Picking it shows why on SEND.",
                 });
             }
-            Remember(r, s);
             r.FieldNote = r.Field.Count > 0 ? "" : s.Teams.Count == 0 ? (r.CampsUp > 0 ? "NO TEAM YET · TRAIN ONE ON TEAMS & BASES" : "NO TEAM YET · BUILD A CAMP, THEN TRAIN ONE ON TEAMS & BASES")
                 : "NO TEAM OUT · " + (readyList.Length > 0 ? readyList + " READY TO GO" : "NONE READY NOW");
 
@@ -1498,7 +1395,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 r.FileD = Does(MissionKind.Recon);
             }
 
-            r.TapLine = s.TapUntil > now ? "TAP · " + s.TapIntrusions + " INTRUSIONS SHARED · " + FrontKit.Clock(s.TapUntil - now) : "NO TAP RUNNING";
             r.Meta = r.TeamsUp + " TEAMS OUT · " + s.Enemies.Count + " ENEMY TEAMS SEEN";
         }
 

@@ -17,23 +17,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Label;
     }
 
-    /// <summary>One track-file row: a host-revealed contact (or a MARK whose reveal lapsed, a fixed point).</summary>
-    internal struct FeedTileView
-    {
-        public bool Present, Selected, Marked, Moving, FixedPoint;
-        public int Id;
-        public byte Percent;
-        public ProbableClass Class;
-        public string Title, Sub;
-    }
-
-    /// <summary>One telemetry line of the station log: the mission clock it happened at, what happened, how serious.</summary>
-    internal struct FeedLogLine
-    {
-        public string Stamp, Text;
-        public AvState Tone;
-    }
-
     /// <summary>The selected track as one reading, from the same entry its row and its bracket come from, so the three always agree.</summary>
     internal struct FeedBriefView
     {
@@ -95,11 +78,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public Texture PostTexture;
         public string Status = "";
         public AvState StatusTone = AvState.Inert;
-        public readonly FeedTileView[] Tiles = new FeedTileView[SpaceFeedRules.ContactsPerPage];
         /// <summary>The single line that replaces the track-file rows when none is revealed (empty when there are contacts).</summary>
         public string NoContacts = "";
         public AvState NoContactsTone = AvState.Inert;
-        public int Page, Pages = 1;
         public int SelectedId;
         public bool CanConfirm, CanSend, ConfirmFull, ZoomEnabled = true;
         public int SendCount;
@@ -115,17 +96,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public FeedBriefView Brief;
         /// <summary>The host acknowledged a TRANSMIT a moment ago: the package is on the TASKED board.</summary>
         public bool Posted;
-        public const int MaxLog = 5;
-        /// <summary>Newest first: a line per real event (burn, look, MARK, TRANSMIT, uplink site change).</summary>
-        public readonly List<FeedLogLine> Log = new List<FeedLogLine>(MaxLog);
     }
 
     /// <summary>What the ORBIT room asks of the feed controller. Every method is a request: none spends or decides anything.</summary>
     internal interface ISpaceFeedActions
     {
         void SelectEntry(int id);
-        void PrevPage();
-        void NextPage();
         void Confirm();
         void Send();
         void SetSource(BirdKind source);
