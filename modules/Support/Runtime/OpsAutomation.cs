@@ -106,6 +106,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 case "team": // TEST ONLY: what a finished TRAIN TEAM programme does (one free team at the camp), so a run need not wait minutes for one
                     request = SofService.Active != null && GameManager.GetLocalPlayer(out Player tp) && tp != null ? (int)SofService.Active.TrainTeam(tp.HQ).Outcome : -2;
                     break;
+                case "reveal": // TEST ONLY: what a RECON that came off does, round the first enemy airbase (radius m), so the TARGETS list fills without a march of minutes
+                    request = SofService.Active != null && GameManager.GetLocalPlayer(out Player rp) && rp != null && EnemyBase(rp.HQ, out GlobalPosition rb)
+                        && SofService.Active.RevealArea(rp.HQ, (float)rb.x, (float)rb.z, Number(args, "radius", 3000f), SofRules.ReconRevealSeconds) ? 1 : 0;
+                    break;
                 case "relocate": request = Relocate(m, Mathf.Clamp((int)Number(args, "bird", 1f), 0, 2), Number(args, "range", 0f)); break; // own bird over an enemy mover (tests/ingame/ops-overwatch.json)
                 case "truckmove": request = m.MoveTruck((int)Number(args, "truck", 0f), Number(args, "x", 0f), Number(args, "z", 0f)); break; // TRUCK MOVE: the verdict lands in lastOutcome
                 case "downlink": // DOWNLINK mode (0 EO, 1 IR, 2 LOW LIGHT, 3 SAR, 4 STRIKE), optional zoom; the feed fields come back in the readout
@@ -472,6 +476,20 @@ namespace BoscaliSummer.Modules.Support.Runtime
         }
 
 #if !PUBLIC_RELEASE
+        /// <summary>The first standing airbase another faction holds (the "reveal" verb's aim).</summary>
+        private static bool EnemyBase(FactionHQ viewer, out GlobalPosition p)
+        {
+            p = default;
+            if (FactionRegistry.airbaseLookup == null) return false;
+            foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+            {
+                if (a == null || a.disabled || a.AttachedAirbase || a.center == null || a.CurrentHQ == null || a.CurrentHQ == viewer) continue;
+                p = a.center.position.ToGlobalPosition();
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>
         /// Host: what a faction has built, read from the services (the organic-fronts acceptance sim): <c>Pads</c> live, <c>BirdsUp</c> / <c>BirdsLaunched</c> masks, <c>DataCenters</c> and
         /// <c>Trucks</c> live (a packing truck is not), <c>Camps</c> live, <c>Teams</c> active, each under <paramref name="prefix"/>. A service with no record for the faction writes nothing.
