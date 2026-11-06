@@ -45,7 +45,7 @@ namespace BoscaliSummer.Core.Game
 
         internal static readonly Type[] PatchTypes =
         [
-            typeof(MissionGroupsPatch), typeof(SetMissionPatch), typeof(SceneLoadedPatch),
+            typeof(MissionGroupsPatch), typeof(MissionSelectGroupsPatch), typeof(SetMissionPatch), typeof(SceneLoadedPatch),
             typeof(SyncMissionPatch), typeof(StopMissionPatch), typeof(MissionEnvironmentPatch),
             .. MissionContentPatches.PatchTypes
         ];
@@ -117,6 +117,14 @@ namespace BoscaliSummer.Core.Game
 
         [HarmonyPatch(typeof(MissionGroup), nameof(MissionGroup.AllGroups), MethodType.Getter)]
         private static class MissionGroupsPatch
+        {
+            [HarmonyPostfix]
+            private static void Postfix(ref MissionGroup[] __result) => AddGroups(ref __result);
+        }
+
+        // The picker's tab row and GetGroup read this list, not AllGroups (split in a game update).
+        [HarmonyPatch(typeof(MissionGroup), nameof(MissionGroup.MissionSelectGroups), MethodType.Getter)]
+        private static class MissionSelectGroupsPatch
         {
             [HarmonyPostfix]
             private static void Postfix(ref MissionGroup[] __result) => AddGroups(ref __result);

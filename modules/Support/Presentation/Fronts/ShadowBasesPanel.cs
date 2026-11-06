@@ -224,11 +224,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             actions.Touch();
             MapFrame f = FrontController.Frame();
+            // A refusal that came up after the pick was armed is said at the click; the pick stays armed (Esc ends it), never dropped behind the operator's back.
+            string why = pick == PickMode.Camp ? campWhy : fobWhy;
+            if (why.Length > 0) { pickMiss = why; return; }
             if (pick == PickMode.Camp)
             {
                 if (!FrontPlacement.OwnGround(Ground(last), f.X(uv.x), f.Z(uv.y))) { pickMiss = FrontWords.Refusal(FrontOutcome.NotOwnGround, Front.Sof); return; }
-                EndPicks();
-                actions.Queue(Front.Sof, ProgrammeId.Camp, 0, true, uv.x, uv.y);
+                if (actions.Queue(Front.Sof, ProgrammeId.Camp, 0, true, uv.x, uv.y)) EndPicks(); else pickMiss = "NOT SENT · CLICK AGAIN";
                 return;
             }
             int best = -1;
@@ -240,8 +242,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (d <= bestD) { bestD = d; best = i; }
             }
             if (best < 0) { pickMiss = "PICK A SEIZED BUILDING"; return; }
-            EndPicks();
-            actions.Queue(Front.Sof, ProgrammeId.Fob, 0, true, lastView.Held[best].X, lastView.Held[best].Y); // snapped to the building (ruling D-R3: the host takes the held one within 1 km)
+            // snapped to the building (ruling D-R3: the host takes the held one within 1 km)
+            if (actions.Queue(Front.Sof, ProgrammeId.Fob, 0, true, lastView.Held[best].X, lastView.Held[best].Y)) EndPicks(); else pickMiss = "NOT SENT · CLICK AGAIN";
         }
 
         /// <summary>The armed pick's rings on the map: the safe ground round each airbase we hold (CAMP), or 1 km round each held building (FOB).</summary>

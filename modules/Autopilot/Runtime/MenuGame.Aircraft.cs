@@ -229,7 +229,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/turret": return () => CombatHUD.i?.ToggleAutoControl();
                 case "flight/lights/nav": return With(a => a.ToggleNavLights());
                 case "flight/lights/light": return () => LandingLight.Instance?.Cycle();
-                case "view/nvg": return NightVision.Toggle;
+                // not NightVision.Toggle: it refuses while any cursor is up, and the open menu holds one
+                case "view/nvg": return () => { if (GameAccess.TryGetNightVisionState(out bool on, out _)) GameAccess.SetNightVisionSelected(!on); };
                 case "view/nvg-gain": return NightVisionLink.CycleGain;
                 case "defence/dark": return With(GoDark);
                 case "flight/gear": return With(ToggleGear);

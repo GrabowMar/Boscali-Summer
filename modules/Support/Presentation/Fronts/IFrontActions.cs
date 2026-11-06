@@ -14,13 +14,14 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void SetDirective(Front front, FrontDirective directive);
         /// <summary>
         /// Queues a build (<paramref name="kind"/> = the satellite kind for a SATELLITE): at the map point <paramref name="u"/>,<paramref name="v"/> (0..1, y down) when
-        /// <paramref name="hasPoint"/>, else with automatic placement. The host judges the place.
+        /// <paramref name="hasPoint"/>, else with automatic placement. The host judges the place. False when it was not sent (an earlier press still waits for the host):
+        /// a map pick then stays armed for another click.
         /// </summary>
-        void Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f);
+        bool Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f);
         /// <summary>CHIP IN: allocation into one queued row, by the host's row id.</summary>
         void Donate(Front front, ushort row, int amount);
-        /// <summary>Packs up one of our EW trucks (its anchor ordinal) and redeploys it at a map point; the host judges the 20 km data center reach.</summary>
-        void MoveTruck(int truck, float x, float z);
+        /// <summary>Packs up one of our EW trucks (its anchor ordinal) and redeploys it at a map point; the host judges the 20 km data center reach. False when not sent.</summary>
+        bool MoveTruck(int truck, float x, float z);
         void SelectFront(Front front);
         // NETWORK room.
         void SelectNode(int nodeId);
@@ -67,6 +68,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         void Paint(FrontRoomView v);
         /// <summary>One frame of pointer input over the room's map (wheel zoom, drag pan); true when the room must repaint.</summary>
         bool Tick(UnityEngine.Vector2 mouse);
+        /// <summary>The cursor the room's map asks for under <paramref name="mouse"/> (placing reticle while a pick is armed), or None for the window's arrow.</summary>
+        BoscaliSummer.Core.Ui.CursorShape Cursor(UnityEngine.Vector2 mouse);
         /// <summary>Esc: ends a local mode the room is in (a relocation proposal) and returns true, so the window stays open; false when there is nothing to end.</summary>
         bool CancelMode();
         /// <summary>The window closed, switched rooms or left the room's first tab: every armed map pick ends (nothing was sent).</summary>

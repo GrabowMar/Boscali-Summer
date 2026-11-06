@@ -39,10 +39,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private bool incomingClipOwned;
         private UnityWebRequest pendingRequest;
         private Coroutine pendingCoroutine;
-        private AudioMixerGroup mixer;
         private int loadGeneration;
         private float volume = 1f;
         private float crossfadeSeconds = 1.5f;
+        private float currentGain = 1f, incomingGain = 1f; // loudness levelling per clip (Loudness.Gain)
 
         public RadioProgram(MonoBehaviour runner, GameObject host, string name, ManualLogSource logger)
         {
@@ -58,6 +58,11 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public bool IsPaused => State == Transport.Paused;
         public AudioSource Source => currentSource;
         public string LastError { get; private set; }
+        /// <summary>The levelling gain on the clip on air (1 when it could not be measured).</summary>
+        public float Gain => currentGain;
+        /// <summary>The measured RMS of the clip on air, or -1 when it could not be read (a streamed soundtrack clip).</summary>
+        public float Rms { get; private set; } = -1f;
+        private float incomingRms = -1f;
 
         public float Duration =>
             currentClip != null ? currentClip.length : 0f;
@@ -83,24 +88,31 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             volume = Mathf.Clamp01(value);
             if (pendingCoroutine == null && currentSource != null)
-                currentSource.volume = volume;
+                currentSource.volume = Level(currentGain);
         }
+
+        /// <summary>
+        /// Knob × levelling × the game's own Master and Music sliders. The sources sit off the game's
+        /// mixer (see <see cref="Prepare"/>), so the sliders are applied here instead.
+        /// </summary>
+        private float Level(float gain) =>
+            volume * gain * AudioMixerVolume.GetPref(AudioMixerVolume.Master) * AudioMixerVolume.GetPref(AudioMixerVolume.Music);
 
         public void SetCrossfade(float seconds) => crossfadeSeconds = Mathf.Max(0f, seconds);
 
-        /// <summary>Prepare the two sources against the music mixer; false disables playback.</summary>
+        /// <summary>
+        /// Prepare the two sources; false (the game's audio not up yet) disables playback. They play
+        /// straight to the listener, off the game's mixer: on the Music bus the radio was muffled by
+        /// the G-LOC master low-pass and sat under every effect, so the set went quiet in a fight.
+        /// </summary>
         public bool Prepare()
         {
             if (currentSource == null) currentSource = CreateSource(name + ".Current");
             if (incomingSource == null) incomingSource = CreateSource(name + ".Incoming");
             try
             {
-                AudioMixerGroup group = SoundManager.i == null ? null : SoundManager.i.MusicMixer;
-                currentSource.outputAudioMixerGroup = group;
-                incomingSource.outputAudioMixerGroup = group;
-                mixer = group;
-                currentSource.volume = volume;
-                return group != null;
+                currentSource.volume = Level(currentGain);
+                return SoundManager.i != null;
             }
             catch (Exception e)
             {
@@ -233,6 +245,8 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             incomingClip = clip;
             incomingClipOwned = owned;
+            incomingRms = Loudness.Rms(clip);
+            incomingGain = Loudness.Gain(incomingRms);
             incomingSource.clip = clip;
             incomingSource.time = startTime <= 0f ? 0f :
                 Mathf.Clamp(startTime, 0f, Math.Max(0f, clip.length - 0.05f));
@@ -251,8 +265,8 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             {
                 elapsed += Time.unscaledDeltaTime;
                 float amount = duration <= 0f ? 1f : Mathf.Clamp01(elapsed / duration);
-                incomingSource.volume = volume * amount;
-                if (currentSource != null) currentSource.volume = volume * (1f - amount);
+                incomingSource.volume = Level(incomingGain) * amount;
+                if (currentSource != null) currentSource.volume = Level(currentGain) * (1f - amount);
                 yield return null;
             }
 
@@ -271,7 +285,9 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 incomingSource.clip = null;
                 incomingSource.volume = 0f;
             }
-            currentSource.volume = volume;
+            currentGain = incomingGain;
+            Rms = incomingRms;
+            currentSource.volume = Level(currentGain);
             pendingCoroutine = null;
             State = paused ? Transport.Paused : Transport.Playing;
         }
@@ -307,15 +323,50 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             source.playOnAwake = false;
             source.loop = false;
             source.ignoreListenerPause = true;
+            source.priority = 0; // never the voice Unity steals when engines + pilot grunts fill the real-voice budget
             source.spatialBlend = 0f;
             source.volume = volume;
-            source.outputAudioMixerGroup = mixer;
             return source;
         }
 
         private static void DestroyClip(AudioClip clip, bool owned)
         {
             if (owned && clip != null) UnityEngine.Object.Destroy(clip);
+        }
+    }
+
+    /// <summary>
+    /// Levels the programme so a shouted advert, a quiet host and a mastered song sit at one
+    /// loudness. RMS is sampled from 48 short windows across the clip (no full copy), once per
+    /// clip as it starts. Attenuation only: an AudioSource cannot go above 1.
+    /// </summary>
+    internal static class Loudness
+    {
+        // ponytail: plain RMS, not LUFS; K-weighting if speech still reads louder than music.
+        internal const float Target = 0.12f;   // about -18 dBFS RMS: trims hot ads and mastered songs, leaves speech
+        private const int Windows = 48, Frames = 2048;
+        private static float[] buffer = new float[0];
+
+        /// <summary>Gain that brings <paramref name="rms"/> to <see cref="Target"/>; 1 when unknown or already quieter.</summary>
+        internal static float Gain(float rms) => rms > 1e-4f ? Mathf.Clamp(Target / rms, 0.2f, 1f) : 1f;
+
+        /// <summary>RMS of a decoded clip, or -1 for one Unity cannot read back (streamed or compressed).</summary>
+        internal static float Rms(AudioClip clip)
+        {
+            if (clip == null || clip.loadType != AudioClipLoadType.DecompressOnLoad ||
+                clip.loadState != AudioDataLoadState.Loaded || clip.samples <= Frames) return -1f;
+            int length = Frames * Math.Max(1, clip.channels);
+            if (buffer.Length < length) buffer = new float[length];
+            double sum = 0d;
+            long count = 0;
+            for (int w = 0; w < Windows; w++)
+            {
+                int offset = (int)((long)(clip.samples - Frames) * (2 * w + 1) / (2 * Windows));
+                if (!clip.GetData(buffer, offset)) return -1f;
+                for (int i = 0; i < length; i++) sum += buffer[i] * buffer[i];
+                count += length;
+            }
+            return count == 0 ? -1f : (float)Math.Sqrt(sum / count);
         }
     }
 }

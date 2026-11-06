@@ -228,7 +228,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (!GroundPlacement.TryPlace(definitions[i], raw, rotation, out Vector3 point) || !UplinkSpawner.Legal(point, parent))
                         throw new InvalidOperationException("Cyber " + kind + " footprint became occupied");
                     Unit unit = spawner.SpawnVehicle(definitions[i].unitPrefab, point.ToGlobalPosition(), rotation, Vector3.zero, owner,
-                        SupportNaming.Prefix + "Cyber:" + kind + ":" + owner.name + ":" + ordinal + ":" + (++serial), 1f, true, null);
+                        SupportNaming.Prefix + "Cyber:" + kind + (i == 0 ? ":" : "Guard:") + owner.name + ":" + ordinal + ":" + (++serial), 1f, true, null);
                     if (unit == null) throw new InvalidOperationException("Native cyber group spawn refused");
                     owned.Add(unit);
                     group.Add(unit);

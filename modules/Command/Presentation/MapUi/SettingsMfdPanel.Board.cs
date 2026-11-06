@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("SCREENS", CPanels, AvIcon.Stack2),
             ("FLIGHT AIDS", CHud, AvIcon.Plane),
             ("COMMS", CHud, AvIcon.Antenna),
+            ("CONTROLLER", CHud, AvIcon.AdjustmentsHorizontal),
             ("IMMERSION", CCockpit, AvIcon.WaveSine),
             ("COCKPIT MOTION", CCockpit, AvIcon.Activity),
             ("COCKPIT VISUALS", CCockpit, AvIcon.Eye),

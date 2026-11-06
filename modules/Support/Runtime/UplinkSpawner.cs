@@ -88,7 +88,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (!GroundPlacement.TryPlace(definitions[i], raw, rotation, out Vector3 point) || !Legal(point, parent))
                         throw new InvalidOperationException("Uplink footprint became occupied");
                     Unit unit = spawner.SpawnVehicle(definitions[i].unitPrefab, point.ToGlobalPosition(), rotation,
-                        Vector3.zero, owner, SupportNaming.Prefix + "Uplink:" + owner.name + ":" + ordinal + ":" + (++serial),
+                        Vector3.zero, owner, SupportNaming.Prefix + (i == 0 ? "Uplink:" : "UplinkGuard:") + owner.name + ":" + ordinal + ":" + (++serial),
                         1f, true, null);
                     if (unit == null) throw new InvalidOperationException("Native uplink group spawn refused");
                     owned.Add(unit);

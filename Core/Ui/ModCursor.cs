@@ -19,6 +19,8 @@ namespace BoscaliSummer.Core.Ui
         private static int cacheSize, cacheTheme = -1;
 
         internal static CursorShape Base = CursorShape.None;
+        /// <summary>The shape a big window that holds the mouse claims (the OPS front window's placing reticle); None leaves the cursor to the map.</summary>
+        internal static CursorShape Window = CursorShape.None;
         internal static CursorShape Current { get; private set; } = CursorShape.None;
 
         internal static void Restore() => Set(Base);

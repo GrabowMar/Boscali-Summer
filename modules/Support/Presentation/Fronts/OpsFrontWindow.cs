@@ -293,6 +293,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
             WindowPointer.Hover(ref hovered, null);
+            ReleaseCursor();
             GiveBackInput();
             closing = false;
             Closed?.Invoke();
@@ -310,6 +311,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (lease.ForceRelease()) RestoreMouse();
             ReleaseFlags();
+            ReleaseCursor();
         }
 
         private void OnDestroy()
@@ -343,6 +345,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (mouseDisabledByUs || (device != null && !device.enabled)) Pointer(mouse);
                 IFrontRoom room = lastView != null ? rooms[(int)lastView.Front] : null;
                 if (room != null && room.Tick(mouse)) room.Paint(lastView);
+                ClaimCursor(room, mouse);
                 int want = room != null ? room.TakeTab() : -1; // a map pick opens its tab this frame, not at the next refresh
                 if (want >= 0 && want != tabOf[shownFront]) ShowTab(shownFront, want);
             }
@@ -371,7 +374,31 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
             }
             WindowPointer.Hover(ref hovered, under);
-            if (under != null && FrontPointer.Down(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
+            if (under != null && FrontPointer.Down(0))
+            {
+                ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
+                nextHits = 0f; // a press often shows or hides controls (a tab, a card's buttons): the next frame hit-tests what is on screen now
+            }
+        }
+
+        /// <summary>
+        /// The window's cursor (MapCursor leaves a window that holds the mouse alone unless it claims a shape): a control under the pointer gets the arrow, a map
+        /// marker the select brackets, the room's map its own glyph (placing reticle while a pick is armed, grab hand on a pan, crosshair).
+        /// </summary>
+        private void ClaimCursor(IFrontRoom room, Vector2 mouse)
+        {
+            CursorShape shape = hovered != null ? (lastView != null && hovered.transform.IsChildOf(roomRoots[(int)lastView.Front]) ? CursorShape.Select : CursorShape.None)
+                : room != null ? room.Cursor(mouse) : CursorShape.None;
+            if (ModCursor.Base == CursorShape.None) shape = CursorShape.None; // the themed cursor is switched off: the OS arrow everywhere
+            ModCursor.Window = shape;
+            ModCursor.Set(shape != CursorShape.None ? shape : ModCursor.Base);
+        }
+
+        private static void ReleaseCursor()
+        {
+            if (ModCursor.Window == CursorShape.None) return;
+            ModCursor.Window = CursorShape.None;
+            ModCursor.Restore();
         }
 
         // ---- Input ownership -------------------------------------------------------------------------------------------

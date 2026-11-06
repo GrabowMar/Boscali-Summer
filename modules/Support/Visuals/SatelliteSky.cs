@@ -59,6 +59,27 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly Transform[] glints = new Transform[SpaceRules.BirdCount];
         private readonly MeshRenderer[] glintRenderers = new MeshRenderer[SpaceRules.BirdCount];
         private MaterialPropertyBlock glintBlock;
+        private readonly Vector3[] skyDirections = new Vector3[SpaceRules.BirdCount];
+
+        private void OnEnable() => RenderPipelineManager.beginCameraRendering += Place;
+        private void OnDisable() => RenderPipelineManager.beginCameraRendering -= Place;
+
+        /// <summary>
+        /// The birds hang at a fixed range from the camera along their sky direction (stars, not places: a fixed world point slid, grew and fell past the
+        /// far plane as the player flew). Placed as the main camera starts rendering, after it and any floating-origin shift have moved this frame.
+        /// </summary>
+        private void Place(ScriptableRenderContext context, Camera camera)
+        {
+            var csm = SceneSingleton<CameraStateManager>.i;
+            if (camera == null || camera != (csm != null ? csm.mainCamera : Camera.main)) return;
+            Vector3 eye = camera.transform.position;
+            for (int i = 0; i < birds.Length; i++)
+            {
+                if (birds[i] == null || !birds[i].gameObject.activeSelf) continue;
+                birds[i].position = eye + skyDirections[i] * DisplayRange;
+                if (glints[i] != null && glints[i].gameObject.activeSelf) glints[i].position = birds[i].position;
+            }
+        }
 
         public void Configure(SupportManager manager) => support = manager;
 
@@ -144,8 +165,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
             for (int i = 0; i < birds.Length; i++)
             {
                 float size = apparent / spans[i];
-                Vector3 offset = Track(i, now) * DisplayRange;
-                birds[i].position = new GlobalPosition(offset.x, offset.y, offset.z).ToLocalPosition();
+                skyDirections[i] = Track(i, now);
+                birds[i].position = (cam != null ? cam.transform.position : Vector3.zero) + skyDirections[i] * DisplayRange;
                 birds[i].localScale = new Vector3(size, size, size);
                 if (birds[i].gameObject.activeSelf != has[i]) birds[i].gameObject.SetActive(has[i]);
                 if (has[i])

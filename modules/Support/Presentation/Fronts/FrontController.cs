@@ -23,7 +23,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
     /// </summary>
     internal sealed class FrontController : MonoBehaviour, ISceneService, IFrontActions
     {
-        private const float Refresh = 0.2f, PressGap = 0.35f, WordsHold = 8f;
+        // PressGap only swallows a double event of one press; 0.35 s refused real quick presses ("STAND BY") and read as a slow panel.
+        private const float Refresh = 0.2f, PressGap = 0.12f, WordsHold = 8f;
         // The footer's resting line: how to use the room on screen, in the order the clicks happen (the latest answer replaces it for a few seconds).
         private static readonly string[] Resting =
         {
@@ -39,7 +40,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private OpsFrontWindow window;
         private readonly FrontRoomView view = new FrontRoomView();
         private Front current = Front.Space;
-        private bool open, requireOwnship;
+        private bool open, requireOwnship, mapWasUp;
         private float nextRefresh, nextPress, wordsAt = -100f;
         private int lastFaction, selectedNode, selectedTeam = -1, selectedTarget;
         private int pendingRequest;
@@ -113,6 +114,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             catch (System.Exception e) { Plugin.Logger?.LogError("OPS front window build failed: " + e); shown = false; }
             if (!shown) { feed?.SetVisible(false); WantFeeds(false); Say("NEGATIVE: WINDOW COULD NOT OPEN", AvState.Danger); return false; }
             open = true;
+            mapWasUp = DynamicMap.mapMaximized;
             ShowFeed();
             badSince = -1f;
             nextRefresh = Time.unscaledTime + Refresh;
@@ -159,6 +161,10 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             WantFeeds(open);
             if (!open) return;
             if (window == null || !window.IsOpen) { OnClosed(); return; }
+            // Closing the MFD (map minimised) closes the room with it; only the transition counts, so automation may still open it map-down.
+            bool mapUp = DynamicMap.mapMaximized;
+            if (mapWasUp && !mapUp) { mapWasUp = false; Close(); return; }
+            mapWasUp = mapUp;
             ShowFeed(); // a tab switch or ENLARGE lands here the frame it happens
             try
             {
@@ -384,11 +390,11 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Sent(front, manager.FrontSetDirective(front, directive), "NO HOST LINK", SpaceCommandKind.None, FrontRules.Name(directive) + " POSTURE");
         }
 
-        public void Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f)
+        public bool Queue(Front front, ProgrammeId id, byte kind, bool hasPoint = false, float u = 0f, float v = 0f)
         {
-            if (!Gate()) return;
+            if (!Gate()) return false;
             MapFrame frame = Frame(); // the map uv the room picked, in world metres
-            Sent(front, manager.FrontQueue(front, id, kind, hasPoint, frame.X(u), frame.Z(v)), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
+            return Sent(front, manager.FrontQueue(front, id, kind, hasPoint, frame.X(u), frame.Z(v)), "NOT A " + FrontRules.Name(front) + " PROGRAMME", SpaceCommandKind.None, "QUEUE " + FrontWords.Programme(id, kind));
         }
 
         public void Donate(Front front, ushort row, int amount)
@@ -397,10 +403,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Sent(front, manager.FrontDonate(front, row, amount), "NOTHING TO FUND", SpaceCommandKind.None, "CHIP IN " + amount + " AP");
         }
 
-        public void MoveTruck(int truck, float x, float z)
-        {
-            if (Gate()) Sent(Front.Cyber, manager.MoveTruck(truck, x, z), "NO HOST LINK", SpaceCommandKind.None, "TRUCK MOVE");
-        }
+        public bool MoveTruck(int truck, float x, float z) =>
+            Gate() && Sent(Front.Cyber, manager.MoveTruck(truck, x, z), "NO HOST LINK", SpaceCommandKind.None, "TRUCK MOVE");
 
         public void SelectFront(Front front)
         {

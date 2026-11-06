@@ -42,6 +42,7 @@ namespace BoscaliSummer.Modules.Support
             SupportNet network = context.AddComponent<SupportNet>();
             SupportHudLine hudLine = context.AddSceneService<SupportHudLine>(56);
             Visuals.SatelliteSky satellite = context.AddSceneService<Visuals.SatelliteSky>(58);
+            context.AddSceneService<Visuals.OpsCompoundVisuals>(63);
 
             CallsController calls = context.AddSceneService<CallsController>(54);
             context.Services.TryGet(out IObservationSource observations);

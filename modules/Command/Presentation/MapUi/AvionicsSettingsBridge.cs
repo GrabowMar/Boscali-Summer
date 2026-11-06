@@ -29,6 +29,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             settings.AvionicsCustomGlassHue.SettingChanged += OnChanged;
             settings.AvionicsCustomGlassTint.SettingChanged += OnChanged;
             settings.DisplayLife.SettingChanged += OnChanged;
+            settings.PanelGrid.SettingChanged += OnChanged;
+            settings.PanelOrders.SettingChanged += OnChanged;
+            settings.PanelClock.SettingChanged += OnChanged;
+            settings.PanelHoverHelp.SettingChanged += OnChanged;
             AvFxDriver.GlitchSource = ReadGlitch;
             AvAmbient.Status = ReadStatus;
             Apply();
@@ -52,6 +56,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvFxDriver.Configure(settings.AvionicsFxTier.Value, settings.AvionicsReducedMotion.Value);
             AvBlurSource.Enabled = settings.AvionicsBlurBehind.Value;
             AvDisplayGlass.ConfigureLife(settings.DisplayLife.Value);
+            AvConsoleLook.Grid = settings.PanelGrid.Value;
+            AvConsoleLook.Orders = settings.PanelOrders.Value;
+            AvConsoleLook.Clock = settings.PanelClock.Value;
+            AvConsoleLook.HoverHelp = settings.PanelHoverHelp.Value;
+            AvConsoleLook.Changed();
         }
 
         // Called once per frame by AvFxDriver's updater; polls the radar at 10 Hz and decays smoothly.
@@ -98,6 +107,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             settings.AvionicsCustomGlassHue.SettingChanged -= OnChanged;
             settings.AvionicsCustomGlassTint.SettingChanged -= OnChanged;
             settings.DisplayLife.SettingChanged -= OnChanged;
+            settings.PanelGrid.SettingChanged -= OnChanged;
+            settings.PanelOrders.SettingChanged -= OnChanged;
+            settings.PanelClock.SettingChanged -= OnChanged;
+            settings.PanelHoverHelp.SettingChanged -= OnChanged;
             if (AvFxDriver.GlitchSource == (Func<float>)ReadGlitch) AvFxDriver.GlitchSource = null;
         }
     }

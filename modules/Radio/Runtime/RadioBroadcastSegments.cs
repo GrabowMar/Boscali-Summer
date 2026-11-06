@@ -27,13 +27,27 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private static Dictionary<string, Dictionary<string, List<Segment>>> sets;
 
         /// <summary>The break that follows song number <paramref name="breakIndex"/>, in play order; empty when the station has no talk.</summary>
-        public static List<RadioStationTrack> Break(string stationId, string playerFaction, int breakIndex)
+        public static List<RadioStationTrack> Break(string stationId, string playerFaction, int breakIndex) =>
+            Build(stationId, playerFaction, BreakPlan.Kinds(breakIndex));
+
+        /// <summary>What a listener hears on tuning in: the station's sting, then a spoken ident.</summary>
+        public static List<RadioStationTrack> Opener(string stationId, string playerFaction, int openerIndex) =>
+            Build(stationId, playerFaction, new[] { ("sting", 0), ("id", openerIndex) });
+
+        /// <summary>The station's own song number <paramref name="pick"/> (ElevenLabs music, walked in order); null when it has none.</summary>
+        public static RadioStationTrack Song(string stationId, string playerFaction, int pick)
+        {
+            List<RadioStationTrack> one = Build(stationId, playerFaction, new[] { ("song", pick) });
+            return one.Count > 0 ? one[0] : null;
+        }
+
+        private static List<RadioStationTrack> Build(string stationId, string playerFaction, IEnumerable<(string Kind, int Pick)> plan)
         {
             var result = new List<RadioStationTrack>(3);
             string set = SetFor(stationId, playerFaction);
             if (set == null || !Load().TryGetValue(set, out Dictionary<string, List<Segment>> kinds)) return result;
 
-            foreach ((string kind, int pick) in BreakPlan.Kinds(breakIndex))
+            foreach ((string kind, int pick) in plan)
             {
                 if (!kinds.TryGetValue(kind, out List<Segment> pool) || pool.Count == 0) continue;
                 Segment segment = pool[pick % pool.Count];
@@ -57,6 +71,20 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                     if (faction.IndexOf("Primeva", StringComparison.OrdinalIgnoreCase) >= 0 ||
                         faction.IndexOf("PALA", StringComparison.OrdinalIgnoreCase) >= 0) return "bb-pala";
                     return faction.Length == 0 ? "bb-bdf" : "bb-pmc";
+                default: return null;
+            }
+        }
+
+        /// <summary>The on-air name of the station's host, for the RECEIVER card; null for a local archive.</summary>
+        public static string Host(string stationId, string playerFaction)
+        {
+            switch (SetFor(stationId, playerFaction))
+            {
+                case "br": return "Kit Vale";
+                case "ps": return "Announcer Dren";
+                case "bb-bdf": return "Sgt. Jerry Banks";
+                case "bb-pala": return "Commissar Strand";
+                case "bb-pmc": return "Dana Quill";
                 default: return null;
             }
         }
@@ -117,13 +145,17 @@ namespace BoscaliSummer.Modules.Radio.Runtime
     {
         private static readonly string[] Rotation = { "host", "ad", "host", "news", "ad", "host" };
 
+        public static string Word(string kind) => kind == "sting" ? "STING" : kind == "id" ? "STATION ID"
+            : kind == "host" ? "HOST" : kind == "ad" ? "ADVERT" : kind == "news" ? "NEWS" : kind.ToUpperInvariant();
+
+        /// <summary>Talk kinds plus <c>song</c>, the station's own music, which plays as a programme item rather than in a break.</summary>
         public static bool IsKind(string value) =>
-            value == "sting" || value == "id" || value == "host" || value == "ad" || value == "news";
+            value == "sting" || value == "id" || value == "host" || value == "ad" || value == "news" || value == "song";
 
         public static IEnumerable<(string Kind, int Pick)> Kinds(int breakIndex)
         {
             int n = Math.Max(0, breakIndex);
-            yield return ("sting", 0);
+            yield return ("sting", n); // rotates the station's stings (sound logo, sung jingle)
             if (n % 3 == 0) yield return ("id", n / 3);
             string main = Rotation[n % Rotation.Length];
             int perCycle = 0, before = 0;

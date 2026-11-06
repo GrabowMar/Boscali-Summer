@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Command.Patches
     {
         public static event Action OnMaximized;
 
-        // The holo map swallows the map key's key-down Maximize in the prefix (a tap calls Maximize itself on release): the original is skipped, the postfix still runs, and nothing was maximised.
+        // Another prefix may skip the original; the postfix still runs, so only a real maximise is reported.
         private static void Postfix()
         {
             if (DynamicMap.mapMaximized) OnMaximized?.Invoke();

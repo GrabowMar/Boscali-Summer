@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool Press;
         public PressSource PressSource;
         public bool Back;
+        /// <summary>The pad's Cancel button went down: one level back, at the root it closes.</summary>
+        public bool PadBack;
         /// <summary>Wheel steps: +1 scrolls down, -1 up.</summary>
         public int Wheel;
         public bool Rmb, Lmb, Esc;

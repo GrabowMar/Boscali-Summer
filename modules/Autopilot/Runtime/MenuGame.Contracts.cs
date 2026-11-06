@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// Boscali integrations, each through its owner's narrow contract: the camera mark and armed support
     /// (<see cref="ICameraTargetService"/>), OPS perks (<see cref="IOpsPerks"/>), SKYWELL, squad exfil, the local radio
     /// (<see cref="IRadioRemote"/>), team brevity calls (<see cref="IQuickCalls"/>), the wing (<see cref="IWingOrders"/>), the TAC BOARD options
-    /// (<see cref="ITacBoardSettings"/>), the cabin effects (<see cref="IImmersionSettings"/>), the kneeboard (<see cref="IKneeboardGallery"/>), the visor
+    /// (<see cref="ITacBoardSettings"/>), the kneeboard (<see cref="IKneeboardGallery"/>), the visor
     /// terrain (<see cref="IVisorTerrainSettings"/>) and the contributed TGT preset page (<see cref="IRadialMenuPage"/>). A missing owner leaves its fields at their
     /// defaults, so the pure catalog hides the rows.
     /// </summary>
@@ -77,20 +77,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
         };
 
-        private static readonly Dictionary<string, Flag<IImmersionSettings>> FeelFlags = new Dictionary<string, Flag<IImmersionSettings>>
-        {
-            ["master"] = new Flag<IImmersionSettings>(s => s.IsEnabled, (s, v) => s.IsEnabled = v),
-            ["head-motion"] = new Flag<IImmersionSettings>(s => s.HeadMotionEnabled, (s, v) => s.HeadMotionEnabled = v),
-            ["shake"] = new Flag<IImmersionSettings>(s => s.ExtraShakeEnabled, (s, v) => s.ExtraShakeEnabled = v),
-            ["glare"] = new Flag<IImmersionSettings>(s => s.SunGlareEnabled, (s, v) => s.SunGlareEnabled = v),
-            ["visor"] = new Flag<IImmersionSettings>(s => s.HelmetVisorEnabled, (s, v) => s.HelmetVisorEnabled = v),
-            ["breathing"] = new Flag<IImmersionSettings>(s => s.PilotBreathingEnabled, (s, v) => s.PilotBreathingEnabled = v),
-            ["wind"] = new Flag<IImmersionSettings>(s => s.WindAudioEnabled, (s, v) => s.WindAudioEnabled = v),
-            ["airframe"] = new Flag<IImmersionSettings>(s => s.AirframeAudioEnabled, (s, v) => s.AirframeAudioEnabled = v),
-            ["buffet"] = new Flag<IImmersionSettings>(s => s.MachBuffetEnabled, (s, v) => s.MachBuffetEnabled = v),
-            ["mfd-glow"] = new Flag<IImmersionSettings>(s => s.MfdGlowEnabled, (s, v) => s.MfdGlowEnabled = v),
-        };
-
         /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
         private static void ReadBoard(MenuWorld w)
         {
@@ -106,25 +92,19 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardPage1 = board.Page1; w.BoardPage2 = board.Page2; w.BoardPage3 = board.Page3; w.BoardPage4 = board.Page4;
             w.BoardPagesOn = board.ScopeMode != BoardScopeMode.Off;
             w.BoardSway = board.Sway;
+            w.CentreAlerts = board.CentreAlerts;
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
         }
 
-        /// <summary>The cabin: the immersion effects, the kneeboard card, and the visor's terrain pictures (listed under VIEW).</summary>
+        /// <summary>The cabin: the kneeboard card, and the visor's terrain pictures (listed under VIEW).</summary>
         private static void ReadCabin(MenuWorld w)
         {
-            IImmersionSettings feel = Service<IImmersionSettings>();
-            if (feel != null)
-            {
-                w.FeelAvailable = true;
-                foreach (KeyValuePair<string, Flag<IImmersionSettings>> flag in FeelFlags) if (flag.Value.Get(feel)) w.Feel.Add(flag.Key);
-            }
             IKneeboardGallery cards = Service<IKneeboardGallery>();
             if (cards != null && cards.Count > 1) { w.KneeboardAvailable = true; w.KneeboardCard = cards.Name(cards.Selected) ?? ""; }
             IVisorTerrainSettings terrain = Service<IVisorTerrainSettings>();
             if (terrain != null)
             {
                 w.TerrainAvailable = true;
-                w.HoloMap = terrain.HoloMap;
                 w.TerrainGhost = MenuCatalog.Nearest(MenuCatalog.GhostSteps, terrain.TerrainGhost);
             }
         }
@@ -211,8 +191,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "cockpit/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
                 case "cockpit/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
                 case "cockpit/kneeboard": return () => { IKneeboardGallery cards = Service<IKneeboardGallery>(); if (cards != null) cards.Selected = cards.Selected + 1; };
-                case "view/holo": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.HoloMap = !t.HoloMap; };
-                case "hud/ghost": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
+                case "view/alerts": return () => { ITacBoardSettings t = Service<ITacBoardSettings>(); if (t != null) t.CentreAlerts = !t.CentreAlerts; };
+                case "view/grid": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
@@ -244,14 +224,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
             if (row.Id.StartsWith("weapons/drones/pick/", StringComparison.Ordinal)) return () => Service<IDroneCommand>()?.Link(index);
             if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
-            const string Page1 = "hud/page1/", Page2 = "hud/page2/", Page3 = "hud/page3/", Page4 = "hud/page4/", Parts = "hud/parts/", Feel = "cockpit/feel/";
+            const string Page1 = "hud/page1/", Page2 = "hud/page2/", Page3 = "hud/page3/", Page4 = "hud/page4/", Parts = "hud/parts/";
             int slot = row.Id.StartsWith(Page1, StringComparison.Ordinal) ? 1 : row.Id.StartsWith(Page2, StringComparison.Ordinal) ? 2 :
                 row.Id.StartsWith(Page3, StringComparison.Ordinal) ? 3 : row.Id.StartsWith(Page4, StringComparison.Ordinal) ? 4 : 0;
             if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, index));
             if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
-            if (row.Id.StartsWith(Feel, StringComparison.Ordinal) && FeelFlags.TryGetValue(row.Id.Substring(Feel.Length), out Flag<IImmersionSettings> effect))
-                return () => { IImmersionSettings feel = Service<IImmersionSettings>(); if (feel != null) effect.Set(feel, !effect.Get(feel)); };
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
             if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));
             if (row.Id.StartsWith(Filters, StringComparison.Ordinal))

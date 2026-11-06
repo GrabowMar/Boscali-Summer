@@ -23,7 +23,11 @@ namespace NOAvionics
 
         public void OnPointerEnter(PointerEventData e) { if (Interactable) { hovered = true; Hover?.Invoke(true); AvUiSound.Play(AvUiCue.Hover); } }
         public void OnPointerExit(PointerEventData e) => ClearPointer();
-        public void OnPointerDown(PointerEventData e) { if (Interactable) { pressed = true; Press?.Invoke(true); } }
+        // A window that hit-tests its own controls clicks on the press (a fresh event, eligibleForClick false); if the event system also hears that press it
+        // clicks again on release, and a toggle (an armed map pick) undid itself: only held while the button was. The release click of that press is dropped.
+        private int downFrame = -10, synthFrame = -10;
+
+        public void OnPointerDown(PointerEventData e) { downFrame = Time.frameCount; if (Interactable) { pressed = true; Press?.Invoke(true); } }
         public void OnPointerUp(PointerEventData e) { if (pressed) { pressed = false; Press?.Invoke(false); } }
         private void OnDisable() => ClearPointer();
 
@@ -36,6 +40,8 @@ namespace NOAvionics
         public void OnPointerClick(PointerEventData e)
         {
             if (!Interactable) return;
+            if (!e.eligibleForClick) synthFrame = Time.frameCount;
+            else if (Mathf.Abs(synthFrame - downFrame) <= 1) return;
             AvUiSound.Play(AvUiCue.Press);
             Click?.Invoke(e);
             AvInput.Deselect(gameObject);

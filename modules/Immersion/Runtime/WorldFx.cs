@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly Vapour vapour = new Vapour();
         private readonly MissileBoom boom = new MissileBoom();
         private readonly ArApproach tunnel = new ArApproach();
+        private readonly SkyOptics optics = new SkyOptics();
         private NearMissCrack crack;
 
         internal NearMissCrack Crack => crack ??= new NearMissCrack(gameObject);
@@ -64,7 +65,26 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             city.Tick(global, on && settings.CityLightsEnabled.Value, night);
             tunnel.Tick(global, on && settings.ArTunnelEnabled.Value && ImmersionManager.IsCockpitActive, airfield, cam.mainCamera);
             vapour.Tick(eye, on && settings.VapourEnabled.Value, Humidity(), light);
+            Optics(cam.mainCamera, global, on && settings.SkyOpticsEnabled.Value, dt);
             boom.Tick(eye, on && settings.MissileBoomEnabled.Value && !ForeignMods.MissileBoomYielded, transform);
+        }
+
+        /// <summary>Sky optics read the weather at the camera and 4 km toward the antisolar point (where a rainbow's rain falls).</summary>
+        private void Optics(Camera camera, Vector3 global, bool enabled, float dt)
+        {
+            WeatherViewSample here = default;
+            float rainAhead = 0f;
+            IWeatherView view = null;
+            bool sky = enabled && ModuleServices.TryGet(out view) && !(view is Object lost && lost == null) &&
+                       view.TrySample(global.x, global.z, out here);
+            if (sky && RenderSettings.sun != null)
+            {
+                Vector3 away = RenderSettings.sun.transform.forward;   // the sun's light travels away from the sun
+                away.y = 0f;
+                Vector3 at = global + away.normalized * 4000f;
+                if (view.TrySample(at.x, at.z, out WeatherViewSample far)) rainAhead = far.Rain01;
+            }
+            optics.Tick(camera, enabled, sky, here, rainAhead, global.y, dt);
         }
 
         /// <summary>0 dry to 1 saturated, from the weather's dewpoint spread at the camera; 0.4 without the Weather module.</summary>
@@ -95,6 +115,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             vapour.Reset();
             boom.Reset();
             tunnel.Reset();
+            optics.Reset();
         }
 
         public void ReleaseFx()
@@ -118,6 +139,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["vapourTip"] = vapour.PeakTip;
             state["missileBooms"] = boom.Played;
             state["arTunnel"] = tunnel.Visible;
+            state["skyOptics"] = optics.Showing;
             state["night"] = LightPoints.NightLevel();
             state["humidity"] = Humidity();
             Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera;

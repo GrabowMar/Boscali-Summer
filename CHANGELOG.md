@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **SET > PANELS > CONSOLE**: new options for every console: GRID, STANDING ORDERS,
+  FOOTER CLOCK and HOVER HELP. The finish preview box is gone from the PANELS page.
+- **Screen finishes remade** (SET > PANELS > SCREEN FINISH): one new full-display shader, smooth terms only, no smudges,
+  dust, glare spot or grain. CLEAR puts nothing over the display; GLASS is coated cover glass (sky light at the top, a
+  faint canopy reflection, a bright rim, a gentle bezel shadow); CRT is a phosphor tube (fine scanlines on real screen
+  pixels, rounded dark corners, a slow refresh band). CRT's scan texture now actually draws. Jamming and hits break the
+  picture up in grey dropouts instead of cyan and magenta blocks. Saved finishes from before show as CUSTOM: pick
+  GLASS (or CLEAR / CRT) once to use the new look.
 - **AR approach tunnel** (SET > COCKPIT > COCKPIT VISUALS): on final, the helmet draws green frames on the 3 degree
   glide path down to the runway ahead. They are world-locked but drawn on the helmet layer, so the instrument panel never
   hides them on a nose-high approach. Uses the AIRFIELD LIGHTS runways.
@@ -31,8 +39,8 @@
 - **Canopy frost** (SET > COCKPIT > COCKPIT VISUALS): cloud or precipitation below freezing rimes the canopy from the
   frame inward. It melts in warmer air.
 - **No more "bay intentionally left blank"**: the equipment-bay cover that filled every short MFD page (big console
-  stencil, data plate, barcode) is gone. The room a page leaves now shows the console ground: a dark tactical map plate, topographic
-  contours and registration marks (a generated texture, tinted by each colour scheme) and a faint graticule that keeps below the page's content.
+  stencil, data plate, barcode) is gone. The room a page leaves now shows the console ground: matte anti-glare terminal glass (a
+  generated high-resolution texture, tinted by each colour scheme) and a faint graticule that keeps below the page's content.
 - **Footer help strip**: hovering a control now shows a TIP tag, the control's name and its help; idle, the status line is
   followed by the page's standing orders (SOP), one at a time, turning over every 8 s with pips showing which one. The
   strip runs on its own canvas, so the clock and hover help no longer redraw the whole console.

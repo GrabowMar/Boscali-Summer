@@ -38,6 +38,18 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             HighCommandManager manager = HighCommandManager.Active;
             return manager == null ? Failure("HighCommandAutomation", "Kill", "high command is not running") : manager.ProofKill((int)Number(args, "office", -1f), Bool(args, "away"));
         }
+
+        /// <summary>{funds, threshold, allocation}: the seat's faction treasury, its vanilla payout threshold and the seat's own allocation.</summary>
+        public static Dictionary<string, object> Treasury(Dictionary<string, object> args)
+        {
+            if (!InSimRun) return Failure("HighCommandAutomation", "Treasury", "requires a nomodkit scenario run");
+            if (!GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player) || player == null || player.HQ == null)
+                return Failure("HighCommandAutomation", "Treasury", "no local player with a faction");
+            return new Dictionary<string, object>
+            {
+                { "ok", true }, { "funds", player.HQ.factionFunds }, { "threshold", player.HQ.excessFundsThreshold }, { "allocation", player.Allocation },
+            };
+        }
     }
 }
 #endif

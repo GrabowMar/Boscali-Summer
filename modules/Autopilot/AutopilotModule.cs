@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Autopilot
             typeof(AutopilotLandInputPatch),
             typeof(FlightAssistReportPatch),
             typeof(RadialMenuLifecyclePatches),
+            typeof(MenuCancelSwallowPatch),
             typeof(ChaffNextPatch),
             typeof(ChaffTriggerPatch),
             typeof(ChaffActivePatch),
@@ -35,6 +36,10 @@ namespace BoscaliSummer.Modules.Autopilot
             context.AddSceneService<Presentation.AceRadialMenuUi>(50).Configure(settings);
             context.AddClientKey("MENU KEY", "The key that opens the interaction menu: hold it and point, or tap it to keep the menu open.",
                 settings.AceRadialKey);
+            context.AddClientSetting("CONTROLLER", "PAD OPENS C MENU",
+                "The gamepad / HOTAS Radial Menu button opens the Boscali interaction menu instead of the game's wheel. " +
+                "Other mods' entries on the game's wheel are then out of reach.",
+                settings.OnRadialBinding);
             context.AddClientKey("CHAFF KEY", "A key that pops one chaff salvo.", settings.ChaffKey);
             context.AddClientSetting("FLIGHT AIDS", "ILS APPROACH",
                 "Gear down near a field: the TAC BOARD shows the APPROACH page (runway funnel, localizer, glideslope).",

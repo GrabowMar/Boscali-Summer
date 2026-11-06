@@ -19,15 +19,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly string[] FinishNames = { "CLEAR", "GLASS", "CRT", "CUSTOM" };
         private static readonly string[] FinishBriefs =
         {
-            "CLEAR: no reflection, texture, edge shading or signal motion. Maximum readability.",
-            "GLASS: subtle light-adaptive reflection and the default live signal. The default finish.",
-            "CRT: restrained scan texture, edge shading and live signal, with low reflection.",
+            "CLEAR: nothing over the display. Maximum readability; power-on and jamming still show.",
+            "GLASS: coated cover glass: soft sky light at the top, a faint canopy reflection, a bright rim and a gentle bezel shadow. The default.",
+            "CRT: phosphor tube: fine scanlines, rounded dark corners and a slow refresh band, with a little glass.",
             "CUSTOM: tune reflection, texture, edge shading and signal yourself on the dials that open below.",
         };
 
         // The CLEAR / GLASS / CRT presets, one entry each. They write the existing saved controls; manual tuning leaves no preset selected.
-        private static readonly float[] FinishGlass = { 0f, .35f, .15f }, FinishScan = { 0f, 0f, .25f },
-            FinishEdge = { 0f, 0f, .15f }, FinishLife = { 0f, .6f, .35f };
+        private static readonly float[] FinishGlass = { 0f, .5f, .2f }, FinishScan = { 0f, 0f, .55f },
+            FinishEdge = { 0f, .35f, .6f }, FinishLife = { 0f, .5f, .6f };
 
         /// <summary>CUSTOM was picked this session, so the dials stay open even while their values match a preset.</summary>
         private bool fineTune;
@@ -52,9 +52,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < finishStrip.Options.Length; i++) finishStrip.Options[i].Help = FinishBriefs[i];
             var tune = flow.Add(new SetRingRow(flow.Content));
             FinishRing(flow, tune, page, "GLASS REFLECTION", settings.DisplayGlass,
-                "How strongly the glass sheen reflects across the maximized MFD. 0% is a matte screen.");
-            FinishRing(flow, tune, page, "SCAN TEXTURE", settings.DisplayScanlines, "Fine static screen texture over the display. 0% is off.");
-            FinishRing(flow, tune, page, "EDGE SHADING", settings.DisplayVignette, "Shades the display perimeter without a circular mask. 0% is off.");
+                "Sky light, canopy reflection and the glass rim across the maximized MFD. 0% is a matte screen.");
+            FinishRing(flow, tune, page, "SCAN TEXTURE", settings.DisplayScanlines, "Phosphor scanlines (one dark row in three screen pixels) and the refresh band. 0% is off.");
+            FinishRing(flow, tune, page, "EDGE SHADING", settings.DisplayVignette, "Bezel shadow on the edges and a rounded falloff into the corners. 0% is off.");
             FinishRing(flow, tune, page, "LIVE SIGNAL", settings.DisplayLife,
                 "The display powers on from a line, a slow refresh band rolls down it, and jamming breaks the picture up harder. 0% is a still display.");
             void RefreshFinish()
@@ -87,11 +87,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             PercentRing(flow, tone, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
                 "Volume of interface clicks and hover sounds. 0% is silent.");
 
-            BuildBoardRows(flow, page, CPanels);
+            flow.Section(AvIcon.AdjustmentsHorizontal, "CONSOLE", "EVERY PANEL");
+            ToggleCell(flow, page, "GRID", "Faint grid crosses in the empty part of each page.",
+                () => settings.PanelGrid.Value, v => settings.PanelGrid.Value = v);
+            ToggleCell(flow, page, "STANDING ORDERS", "Each page's usage notes (SOP) turn over in the footer under the status line.",
+                () => settings.PanelOrders.Value, v => settings.PanelOrders.Value = v);
+            ToggleCell(flow, page, "FOOTER CLOCK", "Mission clock, local time and network column at the right of every footer.",
+                () => settings.PanelClock.Value, v => settings.PanelClock.Value = v);
+            ToggleCell(flow, page, "HOVER HELP", "A control's help (TIP) in the footer while the pointer is over it.",
+                () => settings.PanelHoverHelp.Value, v => settings.PanelHoverHelp.Value = v);
 
-            var preview = flow.Add(new SetFinishPreview(flow.Content), 1f);
-            preview.Refresh(settings);
-            flow.Ticker.Add(page, AvTickRate.Slow, () => preview.Refresh(settings));
+            BuildBoardRows(flow, page, CPanels);
         }
 
         /// <summary>A finish dial. Turning one switches the display filter back on (an old config may have it off).</summary>

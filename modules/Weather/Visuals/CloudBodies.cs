@@ -207,7 +207,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 tower = Scalar.Lerp(tower, Scalar.Clamp01((tower - 0.10f) / 0.25f), hard);
             }
             float layerDensity = Scalar.Clamp01((layerShape - 0.12f) / 0.70f) * WeatherMath.Smoothstep(0.02f, 0.10f, layer);
-            float rain = p.RainRate / 100f, scud = 0f;
+            // The shader's scud drive (2026-11-06): a sheet deck frays as if it rained at half its cover.
+            float rain = Math.Max(p.RainRate / 100f, layer * genus.SheetBlend * 0.55f), scud = 0f;
             if (rain > 0.02f && y < lowest && y > lowest - 700f)
             {
                 float fragment = Sample(nx / 900f + 0.29f, nz / 900f + 0.29f, y / 420f + 0.61f, 0);

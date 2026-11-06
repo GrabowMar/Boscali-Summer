@@ -91,3 +91,5 @@ desktop.ini
 *.tmp
 *.swp
 __pycache__/
+
+.env.local

@@ -116,8 +116,8 @@
 .slab.info      { background: info; }
 .slab.inert     { background: ink-dim; }
 
-/* Console ground: graticule crosses behind the pages (background), display-glass texture tint (color). Theme tokens without alpha. */
-.console-ground { background: ink-muted 22; color: ink 1f; }
+/* Console ground: graticule crosses (background), terminal-glass texture tint (color). Theme tokens without alpha. */
+.console-ground { background: ink-muted 22; color: ink 14; }
 
 /* Portal decoration: ruler + registration crosses (background), serial readout (color). */
 .decor          { background: frame 55; color: ink-muted; }

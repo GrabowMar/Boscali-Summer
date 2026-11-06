@@ -46,7 +46,7 @@ namespace NOAvionics
         private static bool groundTried;
 
         /// <summary>
-        /// The console ground: display glass over brushed metal (white, luminance in alpha), tinted per scheme by the caller.
+        /// The console ground: matte anti-glare terminal glass, 1024x1536 (white, micro-texture and top light in alpha), tinted per scheme by the caller.
         /// Embedded as a plain PNG so it never needs a bundle re-bake. Decoded once on first use; null when missing or bad.
         /// </summary>
         public static Texture2D Ground
@@ -57,15 +57,33 @@ namespace NOAvionics
                 groundTried = true;
                 try
                 {
-                    byte[] png = ReadResource(GroundResourceName, 1 << 20);
+                    byte[] png = ReadResource(GroundResourceName, 4 << 20);
                     if (png == null) return null;
                     var t = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "NOA console ground", wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
-                    if (ImageConversion.LoadImage(t, png, true)) ground = t;
+                    if (!ImageConversion.LoadImage(t, png, false)) return null;
+                    // The game blends in linear space: a faint white at alpha a lands near a^(1/2.2) on screen. Bake the inverse
+                    // into the alpha once so the texture reads as authored (the caller converts its tint the same way).
+                    if (QualitySettings.activeColorSpace == ColorSpace.Linear)
+                    {
+                        Color32[] px = t.GetPixels32();
+                        var lut = new byte[256];
+                        for (int i = 0; i < 256; i++) lut[i] = (byte)Mathf.RoundToInt(Mathf.Pow(i / 255f, 2.2f) * 255f);
+                        for (int i = 0; i < px.Length; i++) px[i].a = lut[px[i].a];
+                        t.SetPixels32(px);
+                    }
+                    t.Apply(false, true);   // upload, then drop the CPU copy
+                    ground = t;
                 }
                 catch (Exception) { ground = null; }
                 return ground;
             }
         }
+
+        /// <summary>
+        /// An overlay alpha authored by eye in gamma space, as it must be sent when the game blends in linear space (a faint
+        /// white overlay otherwise reads several times lighter). Identity in gamma space.
+        /// </summary>
+        public static float OverlayAlpha(float a) => QualitySettings.activeColorSpace == ColorSpace.Linear ? Mathf.Pow(Mathf.Clamp01(a), 2.2f) : a;
 
         public static void Load(Action<string> log = null)
         {

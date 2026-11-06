@@ -146,9 +146,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int Missiles;
         public string MissileStatus = "";
         public string MissileCurrent = "";
-        /// <summary>The visor terrain options are installed: VIEW lists the holo map and ground ghost rows.</summary>
+        /// <summary>The visor terrain options are installed: HUD lists the ground ghost row.</summary>
         public bool TerrainAvailable;
-        public bool HoloMap;
         /// <summary>Index into <see cref="MenuCatalog.Ghosts"/>: OFF, FAINT, CLEAR.</summary>
         public int TerrainGhost;
 
@@ -164,14 +163,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int BoardShade, BoardSize = 1;
         public int BoardPageCount = 1;
         public BoardPage BoardPage1 = BoardPage.Threat, BoardPage2 = BoardPage.Shot, BoardPage3 = BoardPage.Wing, BoardPage4 = BoardPage.Objective;
-        public bool BoardPagesOn = true, BoardSway = true;
+        public bool BoardPagesOn = true, BoardSway = true, CentreAlerts = true;
         /// <summary>The major board elements that are on, as "parts/slug" (<see cref="MenuCatalog.BoardParts"/>).</summary>
         public HashSet<string> BoardSwitches = new HashSet<string>();
 
         // COCKPIT (cabin)
-        public bool FeelAvailable;
-        /// <summary>The cabin effects that are on, by slug (<see cref="MenuCatalog.FeelSwitches"/>).</summary>
-        public HashSet<string> Feel = new HashSet<string>();
         public bool KneeboardAvailable;
         public string KneeboardCard = "";
 

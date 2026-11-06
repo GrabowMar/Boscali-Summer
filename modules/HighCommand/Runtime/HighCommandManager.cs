@@ -319,7 +319,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
                     amount = amount <= 0 ? 0 : (int)Math.Round(amount * traitMultiplier);
                     if (amount > 0)
                     {
-                        command.Hq.AddFunds(amount);
+                        TreasuryCredit.Add(command.Hq, amount);
                         command.StipendsPaid++;
                         Broadcast(command, -1, CommanderLogTone.Economy,
                             "STIPEND PAID +" + amount + " · COHESION " + Percent(current), now);

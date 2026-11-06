@@ -17,9 +17,9 @@ Generated for this project. Runtime imports are capped at 512 and 256 pixels res
 Source prompts: docs/mockups/grok47-mfd-restyle/codex-implementation/ASSETS.md.
 
 Original generated artwork, OpenAI image generation through the Codex CLI (ChatGPT), 2026-11-06:
-console-ground.png: near-black tactical map plate: faint topographic contour lines of hilly terrain toward the edges, a sparse
-square grid, crosshair registration marks and edge tick scales, calm centre. Generated at 1024x1536 from the prompt "Neutral grey
-background texture for a military tactical display: near-black with faint thin topographic contour lines of hilly terrain, a sparse
-square map grid, a few small crosshair registration marks and short tick scales along the edges ... Greyscale only", then
-high-passed (minus a 12 px blur) and thresholded so only the line work survives (no mottled ground), resized to 512x768 and stored white with luminance in alpha so each scheme tints it
+console-ground.png: matte anti-glare coated terminal glass, 1024x1536, no lines or pattern. Generated from the prompt
+"Photorealistic extreme close-up, straight on, of the matte anti-glare coated surface of a modern military-grade touchscreen terminal
+that is switched on and showing pure black: an extremely fine, perfectly uniform frosted micro-texture like etched glass, a very soft
+cool light falloff from the top ... Greyscale only". Split into the micro-texture (minus a 1.5 px blur) and the broad light (80 px
+blur), the blotchy mid scale dropped, recombined, stored white with it in alpha at full size, tinted ~8% per scheme
 (embedded PNG, decoded once).

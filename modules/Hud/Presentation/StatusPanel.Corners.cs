@@ -62,8 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 findTries++;
                 screenCorners.Find();
             }
-            // The map's dressing gives the corner up to a map hologram (HudMapState.HoloActive, set by whoever draws it): hidden whole while it is up.
-            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp && !HudMapState.HoloActive;
+            bool feedUp = screenCorners.FeedUp, mapUp = screenCorners.MapUp;
             Vector2 feedSize = feedUp ? screenCorners.FeedBox.rect.size : default, mapSize = mapUp ? screenCorners.MapPlate.rect.size : default;
             Vector3 feedAt = feedUp ? screenCorners.FeedBox.position : default, mapAt = mapUp ? screenCorners.MapPlate.position : default;
             // The log's state is looked at every frame: a row wiping in or fading, the chat input opening, the capture going quiet are all noticed at once, not at the next tick.
@@ -236,12 +235,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void PaintMapBackdrop(bool mapUp)
         {
-            // While the holo map is up it owns the plate (HoloMap.Ui hides it itself): this restyle touches it neither way.
-            if (HudMapState.HoloActive)
-            {
-                if (mapShadow != null) Show(mapShadow, false);
-                return;
-            }
             bool on = mapUp && mapBoxed;
             screenCorners.HideMapPlate(on);
             if (!on || HudSprites.Backdrop <= 0.001f || !EnsureCornerTree())

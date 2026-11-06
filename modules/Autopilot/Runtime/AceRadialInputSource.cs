@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
     /// </summary>
     internal sealed class AceRadialInputSource
     {
-        public const string PadHorizontal = "Radial Menu Horizontal", PadVertical = "Radial Menu Vertical", PadPress = "Radial Menu";
+        public const string PadHorizontal = "Radial Menu Horizontal", PadVertical = "Radial Menu Vertical", PadPress = "Radial Menu", PadCancel = "Cancel";
         private const float RepeatDelay = 0.35f, RepeatEvery = 0.1f;
         private const int ButtonMode = 2; // PlayerSettings.radialControl: 0 stick, 1 mouse, 2 buttons
 
@@ -120,6 +120,10 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             {
                 // a keyboard or mouse binding also reads through Rewired until the guard takes those devices: only a button with no raw key behind it is a controller
                 padHeld = !rawHeld && pad.GetButton(PadPress);
+                // the Rewired keyboard and mouse are off while the menu is open, so a Cancel press read here is the pad's (or HOTAS) own button
+                // until the guard takes the keyboard, Backspace (also bound to Cancel) reads here too: it already backs out as i.Back
+                i.PadBack = canOpen && pad.GetButtonDown(PadCancel) && !Input.GetKey(KeyCode.Backspace);
+                if (i.PadBack) Patches.MenuCancelSwallowPatch.Swallow();
                 i.PadAHeld = padHeld;
                 if (padHeld && pad.GetButtonDown(PadPress)) { i.Press = true; i.PressSource = PressSource.Pad; i.FromPad = true; }
                 if (PlayerSettings.radialControl >= ButtonMode)

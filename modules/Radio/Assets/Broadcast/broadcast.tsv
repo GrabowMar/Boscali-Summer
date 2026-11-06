@@ -1,7 +1,9 @@
 # Radio broadcast segments. One line per clip: file<TAB>voice id<TAB>ticker title<TAB>script (ElevenLabs eleven_v4).
 # Sets: br = Boscali Republic Radio, ps = PALA State Radio, bb-bdf / bb-pala / bb-pmc = Base Broadcast by the player's faction.
 # Kinds: sting (sound logo, eleven_text_to_sound_v2, voice "-"), id (station ident), host (DJ link), ad (advert / public notice),
-# news (bulletin). The receiver plays a break between songs. ElevenLabs flow OhAguRehhHmPXl96fT69.
+# news (bulletin), song (the station's own music, voice "music": ElevenLabs music_v2_5, prompt in the script column; it
+# alternates with the soundtrack, and stings rotate so -sting-2 is the sung jingle). The receiver plays a break between
+# songs. Talk: ElevenLabs flow OhAguRehhHmPXl96fT69. Music: POST /v1/music, key from .env.local (onboard via @elevenlabs/cli).
 br-sting.mp3	-	REPUBLIC RADIO	Short bright radio station ident sting, three ascending warm vibraphone chime notes with a soft whoosh, 3 seconds, clean
 ps-sting.mp3	-	STATE SIGNAL	Stern state broadcast interval signal, solemn brass fanfare of three low notes followed by a single deep bell strike, old shortwave radio, 4 seconds
 bb-bdf-sting.mp3	-	BASE BROADCAST	Upbeat military radio station sting, snare drum roll into a punchy electric guitar power chord with a jet flyby whoosh (duration 4 s, influence 0.5)
@@ -67,3 +69,23 @@ bb-pmc-ad-2.mp3	x8sMQt44LP3HcQ1PTXuk	AD · MERIDIAN LOGISTICS	Meridian Logistics
 bb-pmc-ad-3.mp3	x8sMQt44LP3HcQ1PTXuk	AD · RECRUITMENT	Tired of flags? Tired of anthems? Contractor Net is hiring experienced pilots. Competitive rates. Flexible loyalties. Apply at your nearest hangar.
 bb-pmc-news-1.mp3	hGVeHdJEcfHv6D6RUSiY	MARKET WIRE	Market wire. The Republic and the State have both posted new contracts this morning. Air superiority rates are up twelve percent. Ground attack is steady. Please check the job board before your next sortie.
 bb-pmc-news-2.mp3	hGVeHdJEcfHv6D6RUSiY	MARKET WIRE	Market wire. Insurance premiums over the contested corridor have doubled. Management recommends flying above the weather and below the radar. Not at the same time.
+br-sting-2.mp3	music	REPUBLIC RADIO	Short bright radio station jingle, warm vocal group sings 'Boscali Republic Radio', vibraphone and strings, sunny (6 s)
+ps-sting-2.mp3	music	STATE SIGNAL	Short solemn radio station jingle, stern male choir sings 'PALA State Radio', brass chord and a bell (6 s)
+bb-bdf-sting-2.mp3	music	BASE BROADCAST	Short rock radio station jingle, energetic vocal group sings 'Base Broadcast', electric guitar power chords and drum fill (6 s)
+bb-pala-sting-2.mp3	music	ARMY NETWORK	Short military radio jingle, male choir chants 'Armed Forces Network', bugle and snare drum (6 s)
+bb-pmc-sting-2.mp3	music	CONTRACTOR NET	Short smooth radio station jingle, silky female vocal sings 'Contractor Net', synth pad and electric piano (6 s)
+br-song-1.mp3	music	HARBOR LIGHTS	Warm Mediterranean acoustic pop song, mandolin, accordion and nylon guitar, hopeful and sunny, female vocals singing original lyrics about ferries in the harbor, lemon trees and a pilot coming home to the coast (90 s)
+br-song-2.mp3	music	COAST ROAD	Breezy instrumental surf rock, twangy reverb electric guitar, light drums, summer seaside road trip, carefree (90 s, instrumental)
+br-song-3.mp3	music	THE NIGHT COMMONS	Mellow late night jazz instrumental, muted trumpet, brushed drums, upright bass, soft piano, quiet blacked-out city (90 s, instrumental)
+ps-song-1.mp3	music	ANTHEM OF LABOR	Stern patriotic anthem of a fictional authoritarian state, brass band and massed male choir singing original lyrics about order, labor and victory, slow and grand, old mono recording (90 s)
+ps-song-2.mp3	music	FACTORY SEVEN	Industrial orchestral instrumental, driving low strings, anvil hits, timpani, relentless machine rhythm, heroic socialist realism film score (90 s, instrumental)
+ps-song-3.mp3	music	EVENING SHIFT	Melancholic accordion waltz instrumental, lone violin, crackly old shortwave recording, grey tired city at curfew (90 s, instrumental)
+bb-bdf-song-1.mp3	music	HARDSTAND FOUR	Driving 1980s arena rock instrumental, punchy electric guitar riffs, big drums, fighter jet energy, upbeat and heroic (90 s, instrumental)
+bb-bdf-song-2.mp3	music	GAS STATION IN THE SKY	Upbeat country rock song, male vocals singing original humorous lyrics thanking the tanker crews flying circles in the sky, banjo, electric guitar, stomping drums (90 s)
+bb-bdf-song-3.mp3	music	LIGHTS OFF	Moody synthwave instrumental, pulsing bass arpeggio, warm pads, night flight with the lights off, steady and calm (90 s, instrumental)
+bb-pala-song-1.mp3	music	NIGHT INTERCEPTORS	Dark powerful military march song, deep male choir singing original lyrics about night interceptor pilots guarding the eastern sky, brass, snare drums, minor key (90 s)
+bb-pala-song-2.mp3	music	REGIMENT MORNING	Military brass band march instrumental, bugles, tuba, snare drum cadence, parade ground at dawn, disciplined (90 s, instrumental)
+bb-pala-song-3.mp3	music	STEPPE WIND	Slow folk instrumental, accordion and plucked strings over a soft marching snare, wide empty plains, stoic and homesick (90 s, instrumental)
+bb-pmc-song-1.mp3	music	BILLABLE HOURS	Slick corporate lounge funk instrumental, clean wah guitar, electric piano, tight bass groove, confident and smooth (90 s, instrumental)
+bb-pmc-song-2.mp3	music	FLEXIBLE LOYALTIES	Cool smooth jazz pop song, sultry female vocals singing original lyrics about flying for no flag and getting paid, saxophone, electric piano, laid back (90 s)
+bb-pmc-song-3.mp3	music	STAY PROFESSIONAL	Minimal dark electronic instrumental, cold pulsing synths, tight electronic drums, focused night operation, sleek (90 s, instrumental)

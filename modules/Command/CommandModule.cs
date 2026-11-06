@@ -33,8 +33,6 @@ namespace BoscaliSummer.Modules.Command
             typeof(MfdSinglePanelPatch),
             typeof(DynamicMapMaximizePatch),
             typeof(DynamicMapMinimizePatch),
-            typeof(HoloMapKeyScopePatch),
-            typeof(HoloMapKeyPatch),
             typeof(MapControlsPanelGuardPatch),
             typeof(MapBoxIconClickGuardPatch),
             typeof(MapCursorPanelGuardPatch),
@@ -51,6 +49,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddClientKey("TGT PRESET 1", "Applies TGT quick slot 1.", context.Settings.Command.TargetPresetKey1, false);
             context.AddClientKey("TGT PRESET 2", "Applies TGT quick slot 2.", context.Settings.Command.TargetPresetKey2, false);
             context.AddClientKey("TGT PRESET 3", "Applies TGT quick slot 3.", context.Settings.Command.TargetPresetKey3, false);
+            context.AddClientKey("MAP HOLD KEY", "Hold to open the full map; let go to close it.", context.Settings.Command.MapHoldKey, false);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
             context.AddService<ITacticalLog>(new MfdRadioLog());
@@ -79,7 +78,7 @@ namespace BoscaliSummer.Modules.Command
                     context.HostSettings, context.ClientSettings);
             context.AddSceneService<MiscMfdPanel>(58).Configure(context.Settings, context.Logger);
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
-            context.AddSceneService<HoloMap>(62).Configure(context.Settings.Command);
+            context.AddSceneService<MapHoldKey>(62).Configure(context.Settings.Command);
 
             TerritoryControlView territory = context.AddSceneService<TerritoryControlView>(52);
             territory.Configure(compat, context.Settings.Command.GridCellSizeMetres.Value);

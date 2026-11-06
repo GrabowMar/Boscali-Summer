@@ -467,9 +467,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             // HOI4 look: a fat body swelling from a slim tail to a broad neck, a wide head, a firm dark rim to lift it off the relief;
             // the fill fades in from the tail (StrStrokes) so the push reads as a direction.
-            float neck = Mathf.Clamp(run * 0.04f, 6f * px, 13f * px), tail = neck * 0.4f, head = neck * 2f;
-            float fillA = p.Hollow ? 0.75f : 1f;
-            var fill = new Rgba(c.R, c.G, c.B, c.A * fillA);
+            float neck = Mathf.Clamp(run * 0.028f, 4f * px, 9f * px), tail = neck * 0.4f, head = neck * 2f;
+            float fillA = p.Hollow ? 0.9f : 1f;
+            var fill = new Rgba(c.R, c.G, c.B, Mathf.Min(1f, c.A * 1.2f) * fillA);
             var line = new Rgba(0f, 0f, 0f, c.A * (p.Hollow ? 0.7f : 0.9f));
             StrStrokes.Offensive(b, curveX, curveY, n, tail, neck, head, 1.3f * px, fill, line);
             if (!p.Pulse || pulseCount >= MaxPulse) return;

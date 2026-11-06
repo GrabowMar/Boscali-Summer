@@ -88,7 +88,14 @@ namespace BoscaliSummer.Modules.Immersion.Patches
             var args = new object[] { on };
             foreach (NavLights lights in aircraft.GetComponentsInChildren<NavLights>(true))
                 if (LightsField.GetValue(lights) is Array array)
-                    foreach (object light in array) if (light != null) ToggleMethod.Invoke(light, args);
+                    foreach (object light in array)
+                    {
+                        if (light == null) continue;
+                        // A light whose part was shot off (or whose airframe is being torn down on ejection) has a destroyed renderer
+                        // and the game has already unhooked it; skip it rather than throw into the ejection sequence.
+                        try { ToggleMethod.Invoke(light, args); }
+                        catch (TargetInvocationException) { }
+                    }
         }
 
         private static void SetCrew(Aircraft aircraft, bool visible)

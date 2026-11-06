@@ -640,15 +640,16 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 if (dx * dx + dz * dz <= reach * reach) { inside = true; break; }
             }
             if (!inside) { pickMiss = FrontWords.Refusal(pick == PickMode.Center ? FrontOutcome.NotHeld : FrontOutcome.TooFar, Front.Cyber); return; }
-            PickMode was = pick;
-            EndPicks();
-            if (was == PickMode.Center) actions.Queue(Front.Cyber, ProgrammeId.DataCenter, 0, true, uv.x, uv.y);
-            else if (was == PickMode.Truck) actions.Queue(Front.Cyber, ProgrammeId.EwTruck, 0, true, uv.x, uv.y);
+            // The pick ends only once the request is out: a press still waiting for the host keeps it armed for another click.
+            bool sent;
+            if (pick == PickMode.Center) sent = actions.Queue(Front.Cyber, ProgrammeId.DataCenter, 0, true, uv.x, uv.y);
+            else if (pick == PickMode.Truck) sent = actions.Queue(Front.Cyber, ProgrammeId.EwTruck, 0, true, uv.x, uv.y);
             else
             {
-                if (moveTruck >= 0 && moveTruck < packTo.Length) { packTo[moveTruck] = uv; movedAt[moveTruck] = last.Now; }
-                actions.MoveTruck(moveTruck, f.X(uv.x), f.Z(uv.y));
+                sent = actions.MoveTruck(moveTruck, f.X(uv.x), f.Z(uv.y));
+                if (sent && moveTruck >= 0 && moveTruck < packTo.Length) { packTo[moveTruck] = uv; movedAt[moveTruck] = last.Now; }
             }
+            if (sent) EndPicks(); else pickMiss = "NOT SENT · CLICK AGAIN";
         }
 
         private bool Local(Vector2 mouse, out Vector2 p)
@@ -680,6 +681,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;
             bool changed = plate.Tick(mouse);
+            if (plate.RightClick(mouse, out Vector2 ruv) && pick != PickMode.None) { PickAt(ruv); return true; } // an armed pick places with either button
             float wheel = FrontPointer.Wheel;
             if (Mathf.Abs(wheel) > 0.01f && nodesBox.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(nodesBox.Rect, mouse, null))
             {
@@ -695,7 +697,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
-            if (pick == PickMode.None || !Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > DragSlop * DragSlop || mv.Zoom != pressZoom ||
+            if (pick == PickMode.None || !Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom ||
                 (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
             PickAt(mv.UV(p));
             return true;
@@ -707,6 +709,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (changed) PaintGraph(last, last.Network);
             return false;
         }
+
+        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => plate.Cursor(mouse, pick != PickMode.None);
 
         /// <summary>A hex outline in dashes: a ghost, or one of our trucks packing up.</summary>
         private static void DashedHex(FrontVector g, Vector2 p, float r, Color k)

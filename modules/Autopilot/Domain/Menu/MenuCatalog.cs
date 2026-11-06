@@ -46,19 +46,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
-        public static readonly MenuSwitch[] FeelSwitches =
-        {
-            new MenuSwitch("master", "IMMERSION", "EVERY CABIN EFFECT AT ONCE", enable: true),
-            new MenuSwitch("head-motion", "HEAD MOTION", "YOUR HEAD MOVES WITH G AND TURNS", enable: true),
-            new MenuSwitch("shake", "EXTRA SHAKE", "MORE AIRFRAME SHAKE IN THE SEAT", enable: true),
-            new MenuSwitch("glare", "SUN GLARE", "THE SUN DAZZLES WHEN YOU LOOK AT IT", enable: true),
-            new MenuSwitch("visor", "HELMET VISOR", "VISOR GLASS AND RIM AROUND THE VIEW", enable: true),
-            new MenuSwitch("breathing", "BREATHING", "HEAR THE PILOT BREATHE UNDER G", enable: true),
-            new MenuSwitch("wind", "WIND AUDIO", "WIND NOISE OVER THE CANOPY", enable: true),
-            new MenuSwitch("airframe", "AIRFRAME AUDIO", "CREAKS AND GROANS OF THE AIRFRAME", enable: true),
-            new MenuSwitch("buffet", "MACH BUFFET", "BUFFET NEAR THE SOUND BARRIER", enable: true),
-            new MenuSwitch("mfd-glow", "MFD GLOW", "DISPLAYS LIGHT THE COCKPIT AT NIGHT", enable: true),
-        };
 
         /// <summary>Index of the step nearest <paramref name="value"/>: where a cycle row over a float option stands.</summary>
         public static int Nearest(float[] steps, float value)
@@ -367,10 +354,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
             var display = new List<MenuRow> { layout, declutter, size, shade, sway };
             if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
-            // the ground ghost is drawn on the visor, not the board: it lives here but never waits for the board
-            if (w.TerrainAvailable) display.Add(MenuRow.Cycle("hud/ghost", "shape", "SET GROUND GHOST", "GROUND GHOST: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "GROUND GHOST: "));
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
-                "LAYOUT: " + BoardLayouts[Clamp(w.BoardLayout, BoardLayouts)] + D + BoardSizes[Clamp(w.BoardSize, BoardSizes)], "LAYOUT, DECLUTTER, SIZE, SHADE, SWAY, GHOST", "DISPLAY", "OPTIONS", display)));
+                "LAYOUT: " + BoardLayouts[Clamp(w.BoardLayout, BoardLayouts)] + D + BoardSizes[Clamp(w.BoardSize, BoardSizes)], "LAYOUT, DECLUTTER, SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
             List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
                 partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
@@ -583,14 +568,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 c.Rows.Add(b.Reg(In("RECEIVER", MenuRow.Action("cockpit/seek", "seek", "SEEK NEXT STATION", w.ReceiverOn && station.Length > 0 ? "TUNED: " + station : "RECEIVER: OFF",
                     "SCAN UP THE DIAL TO THE NEXT STATION", "STATION CHANGED"))));
             }
-            if (w.FeelAvailable)
-            {
-                List<MenuRow> kids = Switches("cockpit/feel/", "", FeelSwitches, w.Feel, out int on);
-                bool master = w.Feel.Contains(FeelSwitches[0].Slug);
-                for (int i = 1; i < kids.Count; i++) if (!master) kids[i].Blocked = "IMMERSION: OFF";
-                c.Rows.Add(b.Reg(In("CABIN", MenuRow.Submenu("cockpit/feel", "cockpit", "CABIN FEEL",
-                    master ? (on - 1) + " OF " + (FeelSwitches.Length - 1) + " ON" : "IMMERSION: OFF", "SWITCH THE COCKPIT IMMERSION EFFECTS", "CABIN", "EFFECTS", kids, iconless: true))));
-            }
             if (w.KneeboardAvailable)
                 c.Rows.Add(b.Reg(In("CABIN", MenuRow.Action("cockpit/kneeboard", "kneeboard", "NEXT KNEEBOARD CARD", "CARD: " + Cut(w.KneeboardCard, MaxState - 6),
                     "FLIP TO THE NEXT CARD ON YOUR KNEE", "KNEEBOARD CARD CHANGED"))));
@@ -721,10 +698,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.HasNvg && w.NvgOn && w.HasNvgGain)
                 c.Rows.Add(b.Reg(MenuRow.Cycle("view/nvg-gain", "night-vision", "SET NVG GAIN", "NVG GAIN: ",
                     new[] { "AUTO", "LOW", "MED", "HIGH" }, Math.Clamp(w.NvgGain, 0, 3), "NVG GAIN: ")));
+            // AR overlays drawn on the world, not the board: never blocked by TAC BOARD OFF
             if (w.TerrainAvailable)
-                c.Rows.Add(b.Reg(MenuRow.Toggle("view/holo", "map", w.HoloMap,
-                    F("ENABLE HOLO MAP", "HOLO MAP: OFF", "MAP KEY STOPS AT A 3D TERRAIN HOLOGRAM", "HOLO MAP ON"),
-                    F("DISABLE HOLO MAP", "HOLO MAP: ON", "MAP KEY GOES STRAIGHT TO THE FULL MAP", "HOLO MAP OFF"))));
+                c.Rows.Add(b.Reg(MenuRow.Cycle("view/grid", "shape", "SET TERRAIN GRID", "TERRAIN GRID: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "TERRAIN GRID: ")));
+            if (w.BoardAvailable)
+                c.Rows.Add(b.Reg(MenuRow.Toggle("view/alerts", "warning", w.CentreAlerts,
+                    F("SHOW COMBAT ALERTS", "COMBAT ALERTS: OFF", "WARNING BANNER, THREAT RING, HIT CALLOUTS", "COMBAT ALERTS ON"),
+                    F("HIDE COMBAT ALERTS", "COMBAT ALERTS: ON", "WARNING BANNER, THREAT RING, HIT CALLOUTS", "COMBAT ALERTS OFF", MenuTone.Active))));
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
             else if (w.HasNvg && w.NvgOn) Badge(c, "NVG ON", show: true);

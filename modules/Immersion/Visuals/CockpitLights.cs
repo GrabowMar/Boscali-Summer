@@ -18,9 +18,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private const float FloodPeak = 0.35f, FloodRange = 1.4f, FloodAngle = 95f;
 
         private static readonly Color FlashColour = new Color(1f, 0.62f, 0.3f), CautionColour = new Color(1f, 0.08f, 0.04f);
-        // The master caution glow sits low in front of the pilot, where the warning lamps are.
-        private static readonly Vector3 CautionOffset = new Vector3(0f, -0.35f, 0.7f);
-        private const float CautionPeak = 0.9f;
+        private const float CautionPeak = 0.5f;
         private MissileWarning warning;
         private Aircraft warnedFor;   // the component lookup runs only when the aircraft changes, by day too
         private const float FlashPeak = 2.2f, FlashRange = 4f;
@@ -44,24 +42,16 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             if (!enabled || aircraft == null || camera == null || (night <= 0.001f && burst <= 0.001f && !inbound)) { Release(); return; }
             if (aircraft != bound) Bind(aircraft, camera);
             if (flood == null) { Release(); return; }
-            // The one extra light does both jobs: a nearby blast from its side wins over the caution glow.
+            // The caution glow rides the downward flood cone, never a point light: the canopy glass sits outside the cone,
+            // so it cannot mirror the glow (a point light threw big red highlights on the windscreen, live 2026-11-06).
             float caution = inbound ? CautionPeak * (0.55f + 0.45f * Mathf.Sin(Time.time * Mathf.PI * 4f)) : 0f;
             float blast = FlashPeak * burst;
-            flash.enabled = blast > 0.001f || caution > 0.001f;
+            flash.enabled = blast > 0.001f;
             if (flash.enabled)
             {
-                if (blast >= caution)
-                {
-                    Vector3 toward = ExplosionFlash.At - camera.transform.position;
-                    flash.transform.position = camera.transform.position + (toward.sqrMagnitude > 1f ? toward.normalized : Vector3.up) * 1.6f;
-                    flash.color = FlashColour;
-                }
-                else
-                {
-                    flash.transform.localPosition = aircraft.transform.InverseTransformPoint(camera.transform.position) + CautionOffset;
-                    flash.color = CautionColour;
-                }
-                flash.intensity = Mathf.Max(blast, caution) * Mathf.Lerp(0.45f, 1f, night);
+                Vector3 toward = ExplosionFlash.At - camera.transform.position;
+                flash.transform.position = camera.transform.position + (toward.sqrMagnitude > 1f ? toward.normalized : Vector3.up) * 1.6f;
+                flash.intensity = blast * Mathf.Lerp(0.45f, 1f, night);
             }
             // The pilot dims the pit for the goggles over about half a second, and brings it back the same way.
             bool goggles = GameAccess.TryGetNightVisionState(out _, out bool nvg) && nvg;
@@ -73,8 +63,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 stutter = Random.value < 0.35f ? 0.1f : 1f; // render-only; a hit browns the bus for a moment
             }
             Intensity = night * level * stutter;
-            flood.intensity = FloodPeak * Intensity;
-            flood.enabled = Intensity > 0.001f;
+            float warm = FloodPeak * Intensity, red = caution * level;
+            flood.color = red > warm ? CautionColour : FloodColour;
+            flood.intensity = Mathf.Max(warm, red);
+            flood.enabled = flood.intensity > 0.001f;
         }
 
         /// <summary>A hit lands: the flood stutters for a moment.</summary>

@@ -289,12 +289,24 @@ namespace BoscaliSummer.Core.Game
             return true;
         }
 
-        /// <summary>Automation: put the goggles on or off as the N key would, without its cursor checks.</summary>
+        /// <summary>
+        /// Put the goggles on or off as the N key would, without its cursor checks, and swap the volumes now: vanilla's
+        /// Toggle and Update both stand still while any cursor (the C menu) is up, so the picture would only change on close.
+        /// </summary>
         public static bool SetNightVisionSelected(bool on)
         {
             NightVision nv = NightVision.i;
             if (nv == null || nvSelectedRef == null) return false;
             nvSelectedRef(nv) = on;
+            UnityEngine.Rendering.Volume volume = nvVolumeRef?.Invoke(nv);
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            if (nvActiveRef != null && volume != null && level != null && level.PostProcessing != null && nvActiveRef(nv) != on)
+            {
+                // the same swap as NightVision.Update, so its next pass finds nothing to do
+                nvActiveRef(nv) = on;
+                volume.enabled = on;
+                level.PostProcessing.enabled = !on;
+            }
             return true;
         }
 

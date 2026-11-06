@@ -6,6 +6,17 @@ using UnityEngine.UI;
 namespace NOAvionics
 {
     /// <summary>
+    /// Client look options for every console (SET > PANELS > CONSOLE). The host mod writes them and calls <see cref="Changed"/>;
+    /// each console picks the change up on its own slow tick (an int compare), so a setting costs nothing per frame.
+    /// </summary>
+    public static class AvConsoleLook
+    {
+        public static bool Grid = true, Orders = true, Clock = true, HoverHelp = true;
+        public static int Revision { get; private set; }
+        public static void Changed() => Revision++;
+    }
+
+    /// <summary>
     /// The chrome every kit v2 console wears (spec §6.2): chamfered frame, header (id / title / page index),
     /// chips, metrics, icon tabs, paged scrolling body with a reserved gutter, footer. Owns its canvas split:
     /// the console root is a nested canvas, chips + metrics sit on a live child canvas, each page is its own
@@ -42,6 +53,7 @@ namespace NOAvionics
         // text and graphics instead of all of them; the rest wake one per fast tick behind their disabled canvases.
         private static readonly System.Collections.Generic.List<AvConsole> all = new System.Collections.Generic.List<AvConsole>(16);
         private bool parked;
+        private int lookRevision = -1;
 
         public RectTransform Root { get; }
         public AvTicker Ticker { get; }
@@ -62,18 +74,18 @@ namespace NOAvionics
 
             frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(10f));
             AvLay.Fill(frame.rectTransform);
-            // Ground: display glass (one shared texture, tinted per scheme) inside the frame, under everything else.
-            Texture2D glass = AvBundle.Ground;
-            if (glass != null)
+            // Ground: matte terminal glass (one shared texture, tinted per scheme) inside the frame, under everything else.
+            Texture2D contours = AvBundle.Ground;
+            if (contours != null)
             {
                 var groundGo = new GameObject("Ground", typeof(RectTransform), typeof(CanvasRenderer));
                 groundGo.transform.SetParent(Root, false);
                 AvLay.Fill((RectTransform)groundGo.transform, 1f);
                 groundArt = groundGo.AddComponent<RawImage>();
-                groundArt.texture = glass;
+                groundArt.texture = contours;
                 groundArt.raycastTarget = false;
-                // Crop to the console's aspect, centred, never stretched: the circuit traces frame every edge.
-                float art = (float)glass.width / glass.height, box = w / Mathf.Max(1f, h);
+                // Crop to the console's aspect, centred, never stretched.
+                float art = (float)contours.width / contours.height, box = w / Mathf.Max(1f, h);
                 groundArt.uvRect = box > art ? new Rect(0f, .5f - art / box * .5f, 1f, art / box) : new Rect(.5f - box / art * .5f, 0f, box / art, 1f);
             }
             headerBack = AvLay.Solid(Root, "Header", Color.clear);
@@ -217,6 +229,7 @@ namespace NOAvionics
         // The graticule keeps to the room under the current page's last part (a float compare; the mesh rebuilds only on a change).
         private void SeatGround()
         {
+            if (lookRevision != AvConsoleLook.Revision) { lookRevision = AvConsoleLook.Revision; Restyle(); Footer.Relook(); }
             if (CurrentPage >= 0) graticule.Top = flows[CurrentPage].ContentHeight;
         }
 
@@ -363,7 +376,8 @@ namespace NOAvionics
         private void Restyle()
         {
             AvStyle c = AvStyleHost.FuiStyle("console");
-            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Ground), AvStyleHost.Resolve(c.Border, AvTheme.Frame));            AvStyle h = AvStyleHost.FuiStyle("header");
+            frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Ground), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
+            AvStyle h = AvStyleHost.FuiStyle("header");
             headerBack.color = AvStyleHost.Resolve(h.Background, AvTheme.Surface);
             AvStyle p = AvStyleHost.FuiStyle("id-plate");
             idPlate.color = AvStyleHost.Resolve(p.Background, AvTheme.SurfaceRaised);
@@ -373,8 +387,14 @@ namespace NOAvionics
             decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
             bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
-            if (groundArt != null) groundArt.color = AvStyleHost.FuiInk("console-ground", AvTheme.TextPrimary.WithAlpha(0.12f));
-            graticule.color = AvStyleHost.FuiFill("console-ground", AvTheme.Hairline.WithAlpha(0.3f));
+            if (groundArt != null)
+            {
+                Color g = AvStyleHost.FuiInk("console-ground", AvTheme.TextPrimary.WithAlpha(0.08f));
+                groundArt.color = g.WithAlpha(AvBundle.OverlayAlpha(g.a));
+            }
+            graticule.enabled = AvConsoleLook.Grid;
+            Color grid = AvStyleHost.FuiFill("console-ground", AvTheme.Hairline.WithAlpha(0.3f));
+            graticule.color = grid.WithAlpha(AvBundle.OverlayAlpha(grid.a));
             scrollView.Restyle();
         }
     }

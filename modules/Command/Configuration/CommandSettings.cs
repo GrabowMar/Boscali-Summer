@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Reflection;
 using BepInEx.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
@@ -7,9 +5,6 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Configuration
 {
-    /// <summary>What the corner map is: a small terrain map hologram that the held map key grows (HOLO), or the game's own corner map (CLASSIC; the held map key still raises the hologram).</summary>
-    internal enum TacMapMode { Holo, Classic }
-
     internal sealed class CommandSettings : Core.Contracts.IVisorTerrainSettings
     {
         public ConfigEntry<bool> Enabled { get; }
@@ -74,66 +69,33 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<AvFxTier> AvionicsFxTier { get; }
         public ConfigEntry<bool> AvionicsBlurBehind { get; }
         public ConfigEntry<bool> AvionicsReducedMotion { get; }
+        public ConfigEntry<bool> PanelGrid { get; }
+        public ConfigEntry<bool> PanelOrders { get; }
+        public ConfigEntry<bool> PanelClock { get; }
+        public ConfigEntry<bool> PanelHoverHelp { get; }
         public ConfigEntry<float> DisplayLife { get; }
         public ConfigEntry<float> TerrainGhost { get; }
-        public ConfigEntry<TacMapMode> TacMap { get; }
-        public ConfigEntry<int> TacMapRangeKm { get; }
-        public ConfigEntry<bool> HoloMap { get; }
-        public ConfigEntry<int> HoloRangeKm { get; }
-        /// <summary>Internal marker: 1 once the saved ranges have been moved from the old disc's options to the tile's.</summary>
-        public ConfigEntry<int> HoloTileRanges { get; }
-        public ConfigEntry<bool> HoloNorthUp { get; }
+        public ConfigEntry<KeyCode> MapHoldKey { get; }
         public ConfigEntry<float> AvionicsCustomKeyHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassHue { get; }
         public ConfigEntry<float> AvionicsCustomGlassTint { get; }
 
-        bool Core.Contracts.IVisorTerrainSettings.HoloMap { get => HoloMap.Value; set => HoloMap.Value = value; }
         float Core.Contracts.IVisorTerrainSettings.TerrainGhost { get => TerrainGhost.Value; set => TerrainGhost.Value = value; }
-
-        /// <summary>
-        /// A whole number saved in the config file for an entry that has not been bound yet (0 when there is none): BepInEx keeps what it read in its (internal) orphan table until the entry is bound, so it is
-        /// read by reflection, and a BepInEx without that table simply gives 0 (no migration).
-        /// </summary>
-        private static int SavedInt(ConfigFile config, string key)
-        {
-            var orphans = typeof(ConfigFile).GetProperty("OrphanedEntries", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(config, null) as Dictionary<ConfigDefinition, string>;
-            return orphans != null && orphans.TryGetValue(new ConfigDefinition("Command", key), out string text) && int.TryParse(text, out int value) ? value : 0;
-        }
 
         public CommandSettings(ConfigFile config)
         {
-            DisplayLife = config.Bind("Command", "DisplayLife", 0.6f,
+            DisplayLife = config.Bind("Command", "DisplayLife", 0.5f,
                 new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
-            TacMap = config.Bind("Command", "TacMapMode", TacMapMode.Classic,
-                new ConfigDescription("TAC MAP, the corner map at the bottom left of the HUD. Classic (default): the game's own corner map. Holo: an optional terrain map with your view wedge, visible contacts and scale bar. Needs HOLO MAP on and a map with baked terrain, else the game's corner map stays. Applies now; no restart."));
-            // A range saved before the tile (2026-10-13) is the old disc's option: read it before the binds take it from the orphan table (and clamp it to the new list).
-            int savedMini = SavedInt(config, "TacMapRangeKm"), savedHolo = SavedInt(config, "HoloRangeKm");
-            TacMapRangeKm = config.Bind("Command", "TacMapRangeKm", 20,
-                new ConfigDescription("TAC MAP: how far the small terrain map reaches from your aircraft to its side, in kilometres: 10, 20 or 40. Applies now; no restart.", new AcceptableValueList<int>(10, 20, 40)));
-            HoloMap = config.Bind("Command", "HoloMap", false,
-                new ConfigDescription("Enable holographic maps (off by default). Hold the map key for the big terrain map; tap for the full map. Off restores the classic corner map and opens the full map on key press, regardless of TacMapMode. Needs baked terrain. Applies now; no restart."));
-            HoloRangeKm = config.Bind("Command", "HoloRangeKm", 40,
-                new ConfigDescription("Holo map: how far the big terrain map reaches from your aircraft to its side, in kilometres: 20, 40 or 80. Applies now; no restart.", new AcceptableValueList<int>(20, 40, 80)));
-            HoloNorthUp = config.Bind("Command", "HoloNorthUp", false,
-                new ConfigDescription("Holo map: keep north at the top of the hologram. Off turns it so your heading is up. Applies now; no restart."));
-            HoloTileRanges = config.Bind("Command", "HoloTileRanges", 0,
-                new ConfigDescription("Internal marker, leave as it is: 1 once the saved TacMapRangeKm and HoloRangeKm have been doubled from the old round hologram's options (5, 10, 20 and 10, 20, 40 km) to the terrain tile's (10, 20, 40 and 20, 40, 80 km).", new AcceptableValueRange<int>(0, 1)));
-            if (HoloTileRanges.Value < 1)
-            {
-                if (savedMini > 0) TacMapRangeKm.Value = HoloPresentation.MigrateMiniRange(savedMini);
-                if (savedHolo > 0) HoloRangeKm.Value = HoloPresentation.MigrateHoloRange(savedHolo);
-                HoloTileRanges.Value = 1;
-            }
-            // 0.2.4 turned the terrain ghost and holo maps off by default; a cfg saved by 0.2.3 still holds the old on values.
+            MapHoldKey = config.Bind("Command", "MapHoldKey", KeyCode.V,
+                "Hold to open the game's full map while flying; let go to close it. None disables the key.");
+            // 0.2.4 turned the terrain ghost off by default; a cfg saved by 0.2.3 still holds the old on values.
             ConfigEntry<int> quietDefaults = config.Bind("Command", "QuietVisorDefaults", 0,
-                new ConfigDescription("Internal marker, leave as it is: 1 once a config saved before 0.2.5 has had TerrainGhost, HoloMap and TacMapMode set back to their off defaults.", new AcceptableValueRange<int>(0, 1)));
+                new ConfigDescription("Internal marker, leave as it is: 1 once a config saved before 0.2.5 has had TerrainGhost set back to its off default.", new AcceptableValueRange<int>(0, 1)));
             if (quietDefaults.Value < 1)
             {
                 TerrainGhost.Value = 0f;
-                HoloMap.Value = false;
-                TacMap.Value = TacMapMode.Classic;
                 quietDefaults.Value = 1;
             }
             AvionicsCustomKeyHue = config.Bind("Avionics", "CustomKeyHue", 190f,
@@ -146,11 +108,11 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Enable client-local MFD glass and display overlays. OFF gives a clean display.");
             DisplayAutoLight = config.Bind("Command", "DisplayAutoLight", true,
                 "Adjust glass reflection strength to ambient lighting.");
-            DisplayGlass = config.Bind("Command", "DisplayGlass", 0.35f,
+            DisplayGlass = config.Bind("Command", "DisplayGlass", 0.5f,
                 new ConfigDescription("MFD glass reflection strength.", new AcceptableValueRange<float>(0f, 1f)));
             DisplayScanlines = config.Bind("Command", "DisplayScanlines", 0f,
                 new ConfigDescription("Static CRT scanline strength over the maximized MFD; no flicker.", new AcceptableValueRange<float>(0f, 1f)));
-            DisplayVignette = config.Bind("Command", "DisplayVignette", 0f,
+            DisplayVignette = config.Bind("Command", "DisplayVignette", 0.35f,
                 new ConfigDescription("Soft edge shading over the maximized MFD.", new AcceptableValueRange<float>(0f, 1f)));
             AvionicsTheme = config.Bind("Avionics", "Theme", AvThemeId.Portal,
                 "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS), Custom (built from the three Custom* keys). Unknown saved names fall back to Portal.");
@@ -160,6 +122,10 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).");
             AvionicsReducedMotion = config.Bind("Avionics", "ReducedMotion", false,
                 "Snap every panel animation to its end state.");
+            PanelGrid = config.Bind("Avionics", "PanelGrid", true, "Faint grid crosses in the empty part of each console page.");
+            PanelOrders = config.Bind("Avionics", "PanelOrders", true, "Show each page's standing orders (SOP) in the console footer.");
+            PanelClock = config.Bind("Avionics", "PanelClock", true, "Show the mission clock, local time and network column in the console footer.");
+            PanelHoverHelp = config.Bind("Avionics", "PanelHoverHelp", true, "Show a control's help (TIP) in the console footer while the pointer is over it.");
 
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
                 "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");

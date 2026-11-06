@@ -56,13 +56,11 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private readonly int[] bandPositions = { 88500, 121500, 780 };
         private bool offStation;
         private bool dialResume;
-        private bool scanning;
         private bool offAir;
         private float towerDistanceKm;
         private bool towerLineOfSight = true;
         private readonly VanillaMusicHold hold = new VanillaMusicHold();
         private RadioReception reception = RadioReception.Perfect;
-        private float nextScanTime;
         private float nextFilterCheck;
         private float nextLevelSample;
         private float nextProgramRefresh;
@@ -122,7 +120,21 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         // Station talk between songs (RadioBroadcastSegments)
         private readonly Queue<RadioStationTrack> breakQueue = new Queue<RadioStationTrack>();
         private RadioStationTrack segmentTrack;
+        private RadioStationTrack songTrack; // the station's own ElevenLabs song, alternating with the soundtrack
+        private int songIndex;
         private int breakIndex;
+
+        // Each station keeps broadcasting while you listen elsewhere: where it was when you left.
+        private sealed class StationCursor
+        {
+            public int Track, Song, Break;
+            public RadioStationTrack OwnSong; // the station's own song that was on air, null for a soundtrack track
+            public bool Music;                // false when you left during talk: return at the next item
+            public float Elapsed, Duration, LeftAt;
+        }
+        private readonly Dictionary<string, StationCursor> cursors = new Dictionary<string, StationCursor>();
+        private int openerIndex;
+        private float nextOpenerAt;
 
         // ------------------------------------------------------------------ receiver face
 
@@ -137,7 +149,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         public string CurrentProgram => programText;
         public bool IsEngaged => receiver.Engaged;
         public bool IsPaused => receiver.IsPaused;
-        public bool IsScanning => scanning;
         public bool IsOffStation => offStation;
 
         /// <summary>
@@ -310,8 +321,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             restoreTime = -1f;
             nextHuntPoll = 0f;
             RadioPanel.Reset();
-            scanning = false;
-            nextScanTime = 0f;
             nextBulletinAt = 0f;
             nextFilterCheck = 0f;
             nextLevelSample = 0f;
@@ -322,6 +331,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             filterApplied = false;
             ClearBreak();
             breakIndex = 0;
+            cursors.Clear();
+            nextOpenerAt = 0f;
+            wire.Clear();
+            wireRevision++;
             bulletinCursor = 0;
             lastProgramName = null;
             lastChatter = string.Empty;
@@ -388,7 +401,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             PollHunt();
             PollIntercepts();
             fx?.Tick();
-            ScanTick();
             BulletinTick();
             ProgramTick();
             FilterTick();
@@ -472,7 +484,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             if (index < 0 || index >= ChannelCount) return;
             if (index == selectedChannel && huntTrack == null && !offStation) return;
-            StopScanning();
             ManualTransport();
             SetDial(stations[index].Dial);
         }
@@ -555,7 +566,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 status = "No signal to monitor";
                 return;
             }
-            StopScanning();
             ManualTransport(false);
             if (receiver.IsPlaying)
             {
@@ -569,12 +579,12 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 status = "On air";
                 return;
             }
-            PlayCurrent();
+            PlayOnTune();
         }
 
         public void Stop()
         {
-            StopScanning();
+            SaveCursor();
             ManualTransport();
             offStation = false;
             dialResume = false;
@@ -582,31 +592,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             fx?.SetCarrier(false, Volume);
             StopReceiverInternal(false);
             SyncVanillaHold();
-        }
-
-        public void ToggleScan()
-        {
-            if (scanning)
-            {
-                StopScanning();
-                status = "Scan stopped";
-                return;
-            }
-            if (ChannelCount < 2)
-            {
-                status = "Nothing to scan";
-                return;
-            }
-            if (offStation)
-            {
-                SeekStation(1);
-                if (offStation) return;
-            }
-            if (!receiver.Engaged) PlayCurrent();
-            if (!receiver.Engaged) return;
-            scanning = true;
-            nextScanTime = Time.unscaledTime + settings.ScanDwellSeconds.Value;
-            status = "Scanning stations";
         }
 
         public void DeckToggleShuffle()
@@ -625,7 +610,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         public void Rescan()
         {
-            StopScanning();
             ManualTransport();
             StopReceiverInternal(false);
             ScanLibrary();
@@ -812,16 +796,16 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             RadioChannel agrapolLocal = FindLocalChannel("Boscali Republic Radio");
             RadioChannel marisLocal = FindLocalChannel("PALA State Radio");
             RadioChannel baseLocal = FindLocalChannel("Base Broadcast");
+            // Every built-in station rotates the whole installed soundtrack, each from its own
+            // faction's seed, so the three never air the same song at once and none loops one clip.
             AddBuiltInStation(result, BuiltInStationRules.AgrapolId, "BR", "Boscali Republic Radio",
-                soundtrackCatalog?.AgrapolSeed == null ? Array.Empty<AudioClip>() :
-                    new[] { soundtrackCatalog.AgrapolSeed }, agrapolLocal,
+                Rotation(soundtrackCatalog?.All, soundtrackCatalog?.AgrapolSeed, 0), agrapolLocal,
                 BuiltInIcon("agrapol-fm.png"), usedFmSlots);
             AddBuiltInStation(result, BuiltInStationRules.MarisId, "PS", "PALA State Radio",
-                soundtrackCatalog?.MarisSeed == null ? Array.Empty<AudioClip>() :
-                    new[] { soundtrackCatalog.MarisSeed }, marisLocal,
+                Rotation(soundtrackCatalog?.All, soundtrackCatalog?.MarisSeed, 1), marisLocal,
                 BuiltInIcon("maris-network.png"), usedFmSlots);
             AddBuiltInStation(result, BuiltInStationRules.BaseId, "BB", "Base Broadcast",
-                soundtrackCatalog?.All ?? Array.Empty<AudioClip>(), baseLocal,
+                Rotation(soundtrackCatalog?.All, null, 2), baseLocal,
                 BuiltInIcon("base-broadcast.png"), usedFmSlots);
 
             if (localLibrary != null)
@@ -890,6 +874,17 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             result.Add(new RadioStation(id, code, name, iconSource, dial, tracks));
         }
 
+        /// <summary>The whole catalogue starting at <paramref name="seed"/> (or a third of the way in per station), so stations differ.</summary>
+        private static AudioClip[] Rotation(AudioClip[] all, AudioClip seed, int station)
+        {
+            if (all == null || all.Length == 0) return Array.Empty<AudioClip>();
+            int start = seed != null ? Array.IndexOf(all, seed) : -1;
+            if (start < 0) start = station * all.Length / 3;
+            var result = new AudioClip[all.Length];
+            for (int i = 0; i < all.Length; i++) result[i] = all[(start + i) % all.Length];
+            return result;
+        }
+
         private static string BuiltInIcon(string fileName) =>
             RadioStationIconCache.EmbeddedPrefix + "BoscaliSummer.RadioAssets." + fileName;
 
@@ -925,7 +920,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private void SetDial(RadioDial dial)
         {
             if (dial.Equals(tunedDial) && !offStation) return;
-            StopScanning();
+            SaveCursor();
             ManualTransport();
             bool wasOnAir = receiver.Engaged && !offStation;
             tunedDial = dial;
@@ -940,7 +935,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 offStation = false;
                 dialResume = false;
                 BeginTune();
-                if (resume) PlayCurrent();
+                if (resume) PlayOnTune();
                 return;
             }
 
@@ -1047,13 +1042,16 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             if (huntTrack != null) return huntTrack;
             if (segmentTrack != null) return segmentTrack;
+            if (songTrack != null) return songTrack;
             RadioStation channel = CurrentChannel();
             if (channel == null || channel.Tracks.Length == 0) return null;
             selectedTrack = Mathf.Clamp(selectedTrack, 0, channel.Tracks.Length - 1);
             return channel.Tracks[selectedTrack];
         }
 
-        private void NextTrack()
+        private void NextTrack() => NextTrack(false);
+
+        private void NextTrack(bool skipBreak)
         {
             if (huntTrack != null)
             {
@@ -1061,7 +1059,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 return;
             }
             // After a song comes the station's break (sting, ident, talk), then the next song.
-            if (breakQueue.Count == 0 && segmentTrack == null && settings.BroadcastTalk.Value)
+            if (!skipBreak && breakQueue.Count == 0 && segmentTrack == null && settings.BroadcastTalk.Value)
                 foreach (RadioStationTrack segment in RadioBroadcastSegments.Break(
                     CurrentStationId, LocalFactionName(), breakIndex++))
                     breakQueue.Enqueue(segment);
@@ -1073,8 +1071,19 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             }
             segmentTrack = null;
 
+            // Every other song is the station's own (all of them when there is no soundtrack).
             RadioStation channel = CurrentChannel();
-            if (channel == null || channel.Tracks.Length == 0) return;
+            bool noProgramme = channel == null || channel.Tracks.Length == 0;
+            songTrack = settings.BroadcastTalk.Value && (noProgramme || songIndex % 2 == 0)
+                ? RadioBroadcastSegments.Song(CurrentStationId, LocalFactionName(), songIndex / 2)
+                : null;
+            songIndex++;
+            if (songTrack != null)
+            {
+                PlayCurrent();
+                return;
+            }
+            if (noProgramme) return;
             if (settings.Shuffle.Value && channel.Tracks.Length > 1)
                 selectedTrack = ShuffleIndex(channel.Tracks.Length, selectedTrack);
             else
@@ -1109,15 +1118,86 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             ["state"] = receiver.State.ToString(),
             ["duration"] = receiver.Duration,
             ["error"] = receiver.LastError ?? string.Empty,
+            ["virtual"] = receiver.Source != null && receiver.Source.isVirtual,
+            ["source_playing"] = receiver.Source != null && receiver.Source.isPlaying,
+            ["time"] = receiver.Elapsed,
+            ["rms"] = receiver.Rms,
+            ["gain"] = receiver.Gain,
             ["ticker"] = TickerText,
             ["set"] = RadioBroadcastSegments.SetFor(CurrentStationId, LocalFactionName()) ?? string.Empty,
         };
 #endif
 
+        /// <summary>
+        /// Start the tuned station as a listener arrives: its sting and a spoken ident, then the
+        /// programme. At most once a minute, so flicking presets stays quiet.
+        /// </summary>
+        private void PlayOnTune()
+        {
+            ClearBreak();
+            if (huntTrack == null && ResumeStation()) return;
+            if (settings.BroadcastTalk.Value && huntTrack == null &&
+                Time.unscaledTime >= nextOpenerAt)
+            {
+                foreach (RadioStationTrack segment in RadioBroadcastSegments.Opener(
+                    CurrentStationId, LocalFactionName(), openerIndex++))
+                    breakQueue.Enqueue(segment);
+                if (breakQueue.Count > 0)
+                {
+                    nextOpenerAt = Time.unscaledTime + 60f;
+                    selectedTrack = -1; // NextTrack after the opener lands on the first song
+                    segmentTrack = breakQueue.Dequeue();
+                    PlayCurrent();
+                    return;
+                }
+            }
+            PlayCurrent();
+        }
+
+        /// <summary>Remember where the tuned station is, as the listener leaves it (retune, preset, STOP).</summary>
+        private void SaveCursor()
+        {
+            if (offStation || huntTrack != null || !receiver.Engaged || ChannelCount == 0) return;
+            cursors[CurrentStationId] = new StationCursor
+            {
+                Track = selectedTrack, Song = songIndex, Break = breakIndex,
+                OwnSong = songTrack, Music = segmentTrack == null,
+                Elapsed = receiver.Elapsed, Duration = receiver.Duration, LeftAt = Time.unscaledTime,
+            };
+        }
+
+        /// <summary>
+        /// Back on a station heard before: join the item it would still be airing, at the point it
+        /// would have reached; if that item would have ended (or you left during talk), its next item.
+        /// False on a first visit, which opens with the sting and ident instead.
+        /// </summary>
+        private bool ResumeStation()
+        {
+            if (!cursors.TryGetValue(CurrentStationId, out StationCursor c))
+            {
+                songIndex = 0;
+                breakIndex = 0;
+                return false;
+            }
+            selectedTrack = c.Track;
+            songIndex = c.Song;
+            breakIndex = c.Break;
+            float at = c.Elapsed + (Time.unscaledTime - c.LeftAt);
+            if (c.Music && c.Duration > 0f && at < c.Duration - 3f)
+            {
+                songTrack = c.OwnSong;
+                restoreTime = at;
+                PlayCurrent();
+            }
+            else NextTrack(skipBreak: !c.Music); // left during talk: the break is over, next song
+            return true;
+        }
+
         private void ClearBreak()
         {
             breakQueue.Clear();
             segmentTrack = null;
+            songTrack = null;
         }
 
         private static string LocalFactionName()
@@ -1141,33 +1221,18 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             return next >= current ? next + 1 : next;
         }
 
-        private void ScanTick()
-        {
-            if (!scanning) return;
-            if (!receiver.Engaged || ChannelCount < 2)
-            {
-                scanning = false;
-                return;
-            }
-            if (Time.unscaledTime < nextScanTime) return;
-            nextScanTime = Time.unscaledTime + settings.ScanDwellSeconds.Value;
-            ManualTransport(false);
-            SelectChannelInternal((selectedChannel + 1) % ChannelCount);
-        }
-
         private void SelectChannelInternal(int index)
         {
             bool resume = receiver.Engaged;
+            SaveCursor();
             selectedChannel = index;
             selectedTrack = 0;
             tunedDial = stationDials[index];
             RememberBandPosition(tunedDial);
             offStation = false;
             BeginTune();
-            if (resume) PlayCurrent();
+            if (resume) PlayOnTune();
         }
-
-        private void StopScanning() => scanning = false;
 
         // ------------------------------------------------------------------ modes/fx
 
@@ -1221,6 +1286,89 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             if (string.IsNullOrEmpty(line)) return;
             if (line.Length > 64) line = line.Substring(0, 64);
             ticker = line;
+            // The wire keeps the last lines with the clock and the station that aired them.
+            wire.Insert(0, new WireLine(DateTime.Now.ToString("HH:mm"),
+                huntTrack != null || offStation ? "RX" : CurrentChannelCode, CurrentChannelColor, line));
+            if (wire.Count > WireCapacity) wire.RemoveAt(wire.Count - 1);
+            wireRevision++;
+        }
+
+        // ---------------------------------------------------------- broadcast desk face
+
+        internal readonly struct WireLine
+        {
+            public readonly string Clock, Tag, Text;
+            public readonly Color Color;
+            public WireLine(string clock, string tag, Color color, string text) { Clock = clock; Tag = tag; Color = color; Text = text; }
+        }
+
+        private const int WireCapacity = 12;
+        private readonly List<WireLine> wire = new List<WireLine>(WireCapacity + 1);
+        private int wireRevision;
+
+        public int WireCount => wire.Count;
+        public int WireRevision => wireRevision;
+        /// <summary>Newest first.</summary>
+        internal WireLine GetWire(int index) => wire[index];
+
+        public float Duration => receiver.Duration;
+        public Color CurrentChannelColor => GetChannelColor(selectedChannel);
+
+        /// <summary>The station is airing talk (a sting, ident, host link, advert or bulletin) rather than a song.</summary>
+        public bool IsTalking => segmentTrack != null;
+
+        /// <summary>"Harbor Voices · with Kit Vale": the daypart show and the station's host.</summary>
+        public string ShowLine
+        {
+            get
+            {
+                string show = programText;
+                string host = RadioBroadcastSegments.Host(CurrentStationId, LocalFactionName());
+                if (string.IsNullOrEmpty(host)) return show ?? string.Empty;
+                return string.IsNullOrEmpty(show) ? "With " + host : show + " · with " + host;
+            }
+        }
+
+        /// <summary>What the station airs after this song (or the rest of the running break), as short words.</summary>
+        public string NextBreakText
+        {
+            get
+            {
+                if (settings == null || !settings.BroadcastTalk.Value) return string.Empty;
+                if (segmentTrack != null)
+                {
+                    if (breakQueue.Count == 0) return "MUSIC";
+                    var parts = new List<string>(breakQueue.Count + 1);
+                    foreach (RadioStationTrack t in breakQueue) parts.Add(t.Title);
+                    parts.Add("MUSIC");
+                    return string.Join(" › ", parts);
+                }
+                string words = string.Empty;
+                foreach ((string kind, int _) in BreakPlan.Kinds(breakIndex))
+                    words += (words.Length == 0 ? string.Empty : " › ") + BreakPlan.Word(kind);
+                return RadioBroadcastSegments.SetFor(CurrentStationId, LocalFactionName()) == null ? string.Empty : words;
+            }
+        }
+
+        /// <summary>Seconds until the current song ends and the break starts; negative when no song is running.</summary>
+        public float SecondsToBreak => segmentTrack == null && receiver.IsPlaying && receiver.Duration > 0f
+            ? Mathf.Max(0f, receiver.Duration - receiver.Elapsed) : -1f;
+
+        /// <summary>One line on who runs a station: side, kind of service, where its tower is.</summary>
+        public string GetChannelSubtitle(int index)
+        {
+            if (index < 0 || index >= ChannelCount) return string.Empty;
+            string tower = anchors.TryGet(stations[index].Id, out _) ? "on air" : anchors.MapResolved ? "no tower" : "local";
+            switch (stations[index].Id)
+            {
+                case BuiltInStationRules.AgrapolId: return "Republic · public radio · " + tower;
+                case BuiltInStationRules.MarisId: return "Directorate · state service · " + tower;
+                case BuiltInStationRules.BaseId:
+                    string set = RadioBroadcastSegments.SetFor(stations[index].Id, LocalFactionName());
+                    return (set == "bb-pala" ? "People's army network" : set == "bb-pmc" ? "Contractor net" : "BDF forces network") +
+                        " · " + tower;
+                default: return "Local archive · " + stations[index].Tracks.Length + " tracks";
+            }
         }
 
         private string CurrentStationId => huntTrack != null ? string.Empty : CurrentChannel()?.Id ?? string.Empty;

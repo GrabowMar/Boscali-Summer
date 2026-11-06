@@ -28,8 +28,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ModCursor.Base = on ? CursorShape.Arrow : CursorShape.None;
             if (MapUiPointer.WindowHoldsMouse())
             {
-                // A big window or the C menu owns the pointer: give it the base arrow, and leave a pad menu's blank alone.
-                if (ModCursor.Current != CursorShape.Blank) ModCursor.Restore();
+                // A big window or the C menu owns the pointer: the shape the window claims, else the base arrow; a pad menu's blank is left alone.
+                if (ModCursor.Window != CursorShape.None) ModCursor.Set(ModCursor.Window);
+                else if (ModCursor.Current != CursorShape.Blank) ModCursor.Restore();
                 leftOnMap = false;
                 return;
             }

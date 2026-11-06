@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Support.Presentation.Ops;
 using NOAvionics;
 using TMPro;
@@ -332,6 +333,36 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(box, screen, null, out Vector2 lp)) return false;
             p = new Vector2(lp.x - box.rect.xMin, box.rect.yMax - lp.y);
             return true;
+        }
+
+        /// <summary>Screen pixels a click may wander between press and release and still be a click (a mouse jitters a few pixels on a firm click).</summary>
+        public const float ClickSlop = 10f;
+        private Vector2 rightAt;
+        private bool rightDown;
+
+        /// <summary>
+        /// A right click that stayed put on the plate (outside the inset): an armed pick places with it too, as every armed tool on the big map does (rule B).
+        /// The right button also pans, so a click's few pixels of jitter may nudge the view; the point is read under the pointer after it. Call once a frame.
+        /// </summary>
+        public bool RightClick(Vector2 mouse, out Vector2 uv)
+        {
+            uv = default;
+            bool on = box.gameObject.activeInHierarchy && ToBox(mouse, out Vector2 p) && View.Visible(p, 0f) && !miniRect.Contains(p);
+            if (FrontPointer.Down(1)) { rightDown = on; rightAt = mouse; }
+            if (!rightDown || !FrontPointer.Up(1)) return false;
+            rightDown = false;
+            if (!on || (mouse - rightAt).sqrMagnitude > ClickSlop * ClickSlop) return false;
+            ToBox(mouse, out Vector2 q);
+            uv = View.UV(q);
+            return true;
+        }
+
+        /// <summary>The cursor this plate asks for: the grab hand while a pan drags, the placing reticle while a pick is armed, the map crosshair over the map, else none.</summary>
+        public CursorShape Cursor(Vector2 mouse, bool armed)
+        {
+            if (dragging) return CursorShape.Grab;
+            if (!box.gameObject.activeInHierarchy || !ToBox(mouse, out Vector2 p) || !View.Visible(p, 0f) || miniRect.Contains(p)) return CursorShape.None;
+            return armed ? CursorShape.Place : CursorShape.Ground;
         }
 
         /// <summary>One frame of pointer input; true when the view moved and the room must repaint.</summary>

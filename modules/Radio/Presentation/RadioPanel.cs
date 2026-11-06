@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
     /// state it used to repeat now lives in the page itself).
     ///
     /// <para>RECEIVER, top to bottom: the head line (frequency, station, programme, status slab), the
-    /// signal line with its squelch gate, ONE key row (band keys, seek/tune keys, monitor/scan/stop), the
+    /// signal line with its squelch gate, ONE key row (band keys, seek/tune keys, play/stop), the
     /// band scope, which is also the tuning control and is the part that grows to fill the page
     /// (<see cref="BandScopePart"/> — hover to preview a channel, click to tune), the volume and squelch
     /// rings with the receiver switches beside them, and the presets: a header that carries the paging
@@ -42,8 +42,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private const string MonitorPauseTip = "Pause the programme. The station stays tuned and the soundtrack bus stays held.";
         private const string MonitorResumeTip = "Resume the paused programme.";
         private const string MonitorOffTip = "No programme on this station.";
-        private const string ScanTip = "Scan: hold each station in the band for a few seconds as it seeks. Press again to stop.";
-        private const string ScanOffTip = "Scan needs at least two stations.";
         private const string BandFmTip = "FM broadcast, 87.5 – 108 MHz in 100 kHz channels. Keeps its last frequency.";
         private const string BandAirTip = "VHF air band, 118 – 137 MHz in 25 kHz channels, AM. Keeps its last frequency.";
         private const string BandMwTip = "Medium wave, 530 – 1700 kHz in 10 kHz channels, AM. Keeps its last frequency.";
@@ -71,15 +69,17 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static RadioManager manager;
 
         // ------------------------------------------------------------------ receiver widgets
-        private static RadioTunePart tunePart;
-        private static RadioSignalPart meterPart;
+        private static RadioOnAirPart onAirPart;
+        private static RadioReadoutPart readoutPart;
         private static RadioStripPart dialStrip;
         private static BandScopePart scopePart;
         private static RadioLevelsPart levelsPart;
         private static AvKeyHeader presetHeader;
         private static readonly AvRow[] stationRows = new AvRow[PresetRows];
         private static int presetShown = PresetRows;
-        private static bool scopeGrows = true;
+        private static AvKeyHeader wireHeader;
+        private static RadioWirePart wirePart;
+        private static int wireShownRevision = -1;
 
         // ----------------------------------------------------------------------- deck widgets
         private static AvRow nowRow;
@@ -148,15 +148,17 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             console = null;
             manager = null;
 
-            tunePart = null;
-            meterPart = null;
+            onAirPart = null;
+            readoutPart = null;
             dialStrip = null;
             scopePart = null;
             levelsPart = null;
             presetHeader = null;
             Array.Clear(stationRows, 0, stationRows.Length);
             presetShown = PresetRows;
-            scopeGrows = true;
+            wireHeader = null;
+            wirePart = null;
+            wireShownRevision = -1;
 
             nowRow = null;
             deckEq = null;
@@ -199,13 +201,14 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         private static void BuildReceiver(AvFlow p)
         {
-            tunePart = p.Add(new RadioTunePart(p.Content));
-            tunePart.Help = "Tuned frequency, station and what it is playing. The slab is the receiver state: " +
-                "ON AIR, STANDBY, SCANNING, DEAD AIR (nothing on this frequency) or OFF AIR (the station's tower is lost).";
+            onAirPart = p.Add(new RadioOnAirPart(p.Content));
+            onAirPart.Help = "The station you are tuned to, its show and host, and what is on air: a song with its clock, " +
+                "or the station's own talk. The bottom line is the break that comes after this song. The slab is the receiver " +
+                "state: ON AIR, STANDBY, PAUSED, DEAD AIR (nothing on this frequency) or OFF AIR (the station's tower is lost).";
 
-            meterPart = p.Add(new RadioSignalPart(p.Content));
-            meterPart.Help = "Signal strength as an S-report and dBm. The amber gate on the bar is the squelch: " +
-                "a station weaker than the gate stays silent.";
+            readoutPart = p.Add(new RadioReadoutPart(p.Content));
+            readoutPart.Help = "Tuned frequency, and the signal as an S-report, dBm and the range to the tower. The amber gate on " +
+                "the bar is the squelch: a station weaker than the gate stays silent.";
 
             dialStrip = p.Add(new RadioStripPart(p.Content,
                 new RadioStripItem("FM", () => SetBandIndex(0), AvButtonStyle.Default, AvIcon.None, 1.3f),
@@ -215,8 +218,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 new RadioStripItem(string.Empty, () => manager?.StepDial(-1), AvButtonStyle.Quiet, AvIcon.Minus),
                 new RadioStripItem(string.Empty, () => manager?.StepDial(1), AvButtonStyle.Quiet, AvIcon.Plus),
                 new RadioStripItem(string.Empty, () => manager?.SeekStation(1), AvButtonStyle.Quiet, AvIcon.ChevronRight),
-                new RadioStripItem(string.Empty, () => manager?.TogglePlayback(), AvButtonStyle.Primary, AvIcon.Volume, 1f, true),
-                new RadioStripItem(string.Empty, () => manager?.ToggleScan(), AvButtonStyle.Toggle, AvIcon.Radar2),
+                new RadioStripItem(string.Empty, () => manager?.TogglePlayback(), AvButtonStyle.Primary, AvIcon.PlayerPlay, 1f, true),
                 new RadioStripItem(string.Empty, () => manager?.Stop(), AvButtonStyle.Danger, AvIcon.PlayerStop)));
             dialStrip[0].Help = BandFmTip;
             dialStrip[1].Help = BandAirTip;
@@ -225,10 +227,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             dialStrip[4].Help = "Tune one step down. Between channels is dead air.";
             dialStrip[5].Help = "Tune one step up. Between channels is dead air.";
             dialStrip[6].Help = "Seek: jump to the next station up the band.";
-            dialStrip[9].Help = "Stop: sign off and hand the soundtrack bus back to the game.";
+            dialStrip[8].Help = "Stop: sign off and hand the soundtrack bus back to the game.";
 
-            // The scope is the part that grows: it takes whatever height the rest of the page leaves over.
-            scopePart = p.Add(new BandScopePart(p.Content), 1f);
+            // The scope keeps a fixed strip; the wire at the bottom of the page takes the leftover height.
+            scopePart = p.Add(new BandScopePart(p.Content));
 
             levelsPart = p.Add(new RadioLevelsPart(p.Content,
                 () => manager?.NudgeVolume(-0.1f), () => manager?.NudgeVolume(0.1f),
@@ -244,7 +246,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             levelsPart.Bandwidth.Help = "Wide or narrow passband. Narrow trades audio quality for less noise.";
             levelsPart.Step.Help = "Channel step, or a five-times finer tuning step.";
 
-            presetHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.ListDetails, "PRESETS",
+            presetHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.ListDetails, "STATIONS",
                 new AvControl.Spec(string.Empty, () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh),
                 new AvControl.Spec(string.Empty, () => { PreviousStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec(string.Empty, () => { NextStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
@@ -257,71 +259,83 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 stationRows[i].BadgeSlot = true;
             }
 
+            wireHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.Radio, "WIRE"));
+            wirePart = p.Add(new RadioWirePart(p.Content), 1f);
+            wirePart.Help = "The wire: what the receiver picked up, newest on top - station talk and bulletins, intercepted " +
+                "enemy chatter, base alarms. The tag is the station that aired it; RX is the set itself.";
+
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
 
             console.Orders(TabReceiver,
-                "Click the band scope to tune it; hover to preview a channel first.",
-                "Seek jumps station to station; the step keys move one channel at a time.",
-                "Monitor plays the station's programme. Stop hands the soundtrack bus back.",
+                "Pick a station below, or click the band scope to tune; hover the scope to preview.",
+                "Between songs each station airs its own talk: idents, hosts, adverts and news.",
+                "Base Broadcast is your own side's network: forces radio, army network or contractor net.",
                 "Raise squelch and only a stronger station opens the audio.");
         }
 
         private static void RefreshReceiver()
         {
-            if (manager == null || console == null || tunePart == null) return;
+            if (manager == null || console == null || onAirPart == null) return;
 
             bool hasChannels = manager.HasChannels;
             bool offStation = manager.IsOffStation || manager.IsOffAir;
             RadioDial dial = manager.TunedDial;
+            bool live = manager.IsEngaged && !manager.IsPaused;
 
             string modeLine = hasChannels ? manager.BroadcastMode + " · " + StepText(dial.Band) : "NO LIBRARY";
-            string name, programme, trackLine = string.Empty;
+            string name, show, label = string.Empty, title = string.Empty;
             if (hasChannels && !offStation)
             {
                 name = manager.CurrentChannelName;
-                programme = string.IsNullOrEmpty(manager.CurrentProgram)
-                    ? manager.TickerText
-                    : manager.CurrentProgram + " · " + manager.TickerText;
-                if (manager.IsEngaged && !manager.IsPaused) trackLine = "NOW  " + (manager.CurrentTrackTitle ?? string.Empty);
-                else if (manager.IsScanning) trackLine = string.Empty;
-                else if (manager.GetChannelTrackCount(manager.SelectedChannel) <= 0) trackLine = "NO PROGRAMME ON THIS STATION";
-                else trackLine = manager.IsPaused ? "PAUSED · KEY MONITOR TO RESUME" : "STANDING BY · KEY MONITOR TO LISTEN";
+                show = manager.ShowLine;
+                if (live)
+                {
+                    label = manager.IsTalking ? "ON AIR · STATION TALK" : "NOW PLAYING";
+                    title = manager.CurrentTrackTitle ?? string.Empty;
+                }
+                else if (manager.GetChannelTrackCount(manager.SelectedChannel) <= 0) label = "NO PROGRAMME ON THIS STATION";
+                else
+                {
+                    label = manager.IsPaused ? "PAUSED" : "STANDING BY";
+                    title = manager.IsPaused ? "Press play to resume" : "Press play to listen";
+                }
             }
             else if (hasChannels)
             {
                 name = manager.IsOffAir ? manager.CurrentChannelName : "NO CARRIER";
-                programme = manager.IsOffAir
-                    ? "TOWER LOST · THIS STATION IS OFF AIR"
-                    : "NOTHING ON THIS FREQUENCY · SEEK OR CLICK THE SCOPE";
+                show = manager.IsOffAir ? "TOWER LOST · THIS STATION IS OFF AIR" : "NOTHING ON THIS FREQUENCY";
+                label = "DEAD AIR";
+                title = "Pick a station below or click the scope";
             }
             else
             {
                 name = "NO STATIONS ON FILE";
-                programme = "THE DIAL HAS NOTHING TO TUNE";
+                show = "THE DIAL HAS NOTHING TO TUNE";
             }
 
             string receiverState = manager.IsOffAir ? "OFF AIR"
-                : manager.IsScanning ? "SCANNING"
                 : manager.IsOffStation ? "DEAD AIR"
                 : manager.IsEngaged && !manager.IsPaused ? "ON AIR"
                 : manager.IsPaused ? "PAUSED"
                 : hasChannels ? "STANDBY" : "NO LIBRARY";
-            AvState receiverChipState = manager.IsOffAir ? AvState.Danger
-                : manager.IsScanning || manager.IsOffStation ? AvState.Caution
-                : manager.IsEngaged && !manager.IsPaused ? AvState.Ready
-                : hasChannels ? AvState.Info : AvState.Inert;
-            tunePart.Set(dial.FrequencyText, dial.UnitText, modeLine, name, programme, trackLine, receiverState, receiverChipState);
-            // With nothing on file the scope has nothing to show: it folds to its minimum and the console ground shows below.
-            if (scopeGrows != hasChannels)
-            {
-                scopeGrows = hasChannels;
-                scopePart.Grow = hasChannels ? 1f : 0f;
-                console.Page(TabReceiver).RequestRelayout();
-            }
+            int selected = manager.SelectedChannel;
+            bool onStation = hasChannels && !offStation;
+            string nextText = onStation && live ? manager.NextBreakText : string.Empty;
+            float toBreak = manager.SecondsToBreak;
+            onAirPart.Set(
+                onStation || manager.IsOffAir ? manager.CurrentChannelColor : AvTheme.Dim,
+                onStation ? RadioStationIconCache.Get(manager.GetChannelIconPath(selected)) : null,
+                hasChannels ? manager.CurrentChannelCode + " · " + dial.FrequencyText : "--",
+                name, receiverState, live && onStation, show, label, title,
+                live ? manager.Progress : 0f,
+                live && manager.Duration > 0f ? AvNum.Clock(manager.Elapsed) + " / " + AvNum.Clock(manager.Duration) : string.Empty,
+                nextText.Length == 0 ? string.Empty : (manager.IsTalking ? "THEN  " : "NEXT BREAK  ") + nextText,
+                nextText.Length == 0 ? string.Empty : toBreak >= 0f ? "IN " + AvNum.Clock(toBreak) : "LIVE");
             FitPresetRows();
 
-            UpdateMeter();
+            UpdateMeter(modeLine);
+            RefreshWire();
 
             levelsPart.Volume.Set(Mathf.Clamp01(manager.VolumeLevel), AvNum.Percent(manager.VolumeLevel), AvState.Info);
             levelsPart.Squelch.Set(Mathf.Clamp01(manager.Squelch), AvNum.Percent(manager.Squelch),
@@ -353,12 +367,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             bool monitorEnabled = selectedTracks > 0 && !offStation;
             AvControl monitor = dialStrip[7];
             monitor.Latched = manager.IsEngaged && !manager.IsPaused;
+            monitor.SetIcon(monitor.Latched ? AvIcon.PlayerPause : AvIcon.PlayerPlay);
             Gate(monitor, monitorEnabled,
                 manager.IsPaused ? MonitorResumeTip : manager.IsEngaged ? MonitorPauseTip : MonitorTip, MonitorOffTip);
 
-            AvControl scan = dialStrip[8];
-            scan.Latched = manager.IsScanning;
-            Gate(scan, manager.ChannelCount > 1, ScanTip, ScanOffTip);
 
             int pages = Math.Max(1, (manager.ChannelCount + presetShown - 1) / presetShown);
             stationPage = Mathf.Clamp(stationPage, 0, pages - 1);
@@ -380,9 +392,11 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             {
                 AvRow row = stationRows[i];
                 int index = stationPage * presetShown + i;
+                // Only real stations get a row; an empty dial keeps one line that says so.
+                row.SetShown(index < manager.ChannelCount || (!hasChannels && i == 0));
                 if (index >= manager.ChannelCount)
                 {
-                    row.Set(hasChannels ? "PRESET " + AvNum.Fixed(index + 1, 0).PadLeft(2, '0') + " · EMPTY"
+                    row.Set(hasChannels ? string.Empty
                         : "FREQUENCY LIST EMPTY · ADD MUSIC FOLDERS, THEN PRESS RESCAN", string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
@@ -394,7 +408,8 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 row.Interactable = true;
                 RadioDial rowDial = manager.GetChannelDial(index);
                 string channelName = manager.GetChannelName(index);
-                string rowName = rowDial.FrequencyText + " " + channelName;
+                string rowName = channelName;
+                string rowSub = manager.GetChannelSubtitle(index) + " · " + rowDial.FullText;
                 if (stationTipName[i] != channelName)
                 {
                     stationTipName[i] = channelName;
@@ -416,7 +431,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                     state = strength >= 0.7f ? AvState.Ready : strength >= 0.35f ? AvState.Caution : AvState.Danger;
                 }
 
-                row.Set(rowName, string.Empty, status, state);
+                row.Set(rowName, rowSub, status, state);
                 row.Armed = index == manager.SelectedChannel && !offStation;
             }
             // A badge changes the row's text width and slot, so the page has to lay the rows out again.
@@ -433,13 +448,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 console.Footer.Set(alert, hasChannels && !manager.IsOffAir ? AvState.Caution : AvState.Danger);
             else
             {
-                string ambient = manager.Status + " · RECEIVE ONLY";
-                if (hasChannels && !manager.IsOffAir)
-                    ambient += manager.ReceptionModelled
-                        ? " · " + AvNum.Fixed(manager.TowerDistanceKm, 0) + " KM · " +
-                          (manager.TowerLineOfSight ? "LOS" : "BLOCKED")
-                        : " · LOCAL";
-                console.Footer.Set(ambient, AvState.Inert);
+                console.Footer.Set(manager.Status + " · RECEIVE ONLY", AvState.Inert);
             }
         }
 
@@ -450,14 +459,15 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             // Measure the same inner width and six fixed lines used by AvFlow. Programme copy can
             // wrap when a tower goes off air, so this runs after the current tune data is applied.
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 5f * AvGridTokens.Gap +
-                tunePart.Measure(width) + meterPart.Measure(width) + dialStrip.Measure(width) +
-                scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width);
+            float fixedHeight = 2f * AvGridTokens.Pad + 8f * AvGridTokens.Gap +
+                onAirPart.Measure(width) + readoutPart.Measure(width) + dialStrip.Measure(width) +
+                scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width) +
+                wireHeader.Measure(width) + wirePart.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
-            // Nothing on file: one line says so, instead of six empty presets.
-            int most = manager.HasChannels ? PresetRows : MinPresetRows;
+            // One row per station on file (the rest of the height goes to the wire); nothing on file: one line says so.
+            int most = manager.HasChannels ? Mathf.Clamp(manager.ChannelCount, MinPresetRows, PresetRows) : MinPresetRows;
             int shown = page.ViewportHeight <= 0f ? most :
                 Mathf.Clamp(Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinPresetRows, most);
             if (shown == presetShown) return;
@@ -468,9 +478,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         }
 
         /// <summary>The level bar, the squelch gate drawn on it, and the two reports.</summary>
-        private static void UpdateMeter()
+        private static void UpdateMeter(string modeLine)
         {
-            if (manager == null || meterPart == null) return;
+            if (manager == null || readoutPart == null) return;
 
             float level;
             string report;
@@ -481,12 +491,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             {
                 level = 0f; report = "S0"; detail = "NO STATIONS";
                 color = AvTheme.Dim;
-            }
-            else if (manager.IsScanning)
-            {
-                level = 0.25f + Mathf.PerlinNoise(Time.unscaledTime * 2.5f, 0.37f) * 0.35f;
-                report = "SEEKING"; detail = "SCANNING";
-                color = AvTheme.Warning;
             }
             else if (manager.IsOffStation)
             {
@@ -507,10 +511,32 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 bool live = open && manager.IsEngaged && !manager.IsPaused;
                 report = reception.SReport;
                 detail = open ? reception.DbmReport : "SQL SHUT";
+                if (manager.ReceptionModelled)
+                    detail += " · " + AvNum.Fixed(manager.TowerDistanceKm, 0) + " KM · " + (manager.TowerLineOfSight ? "LOS" : "BLOCKED");
                 color = open ? (live ? AvTheme.RailReady : AvTheme.Dim) : AvTheme.Warning;
             }
 
-            meterPart.Set(report, detail, level, manager.Squelch, color);
+            RadioDial dial = manager.TunedDial;
+            readoutPart.Set(dial.FrequencyText, dial.UnitText + " · " + modeLine, report, detail, level, manager.Squelch, color);
+        }
+
+        /// <summary>Rewrites the wire's lines when the manager logged something new.</summary>
+        private static void RefreshWire()
+        {
+            if (wirePart == null || manager.WireRevision == wireShownRevision) return;
+            wireShownRevision = manager.WireRevision;
+            for (int i = 0; i < RadioWirePart.MaxLines; i++)
+            {
+                if (i >= manager.WireCount)
+                {
+                    wirePart.SetLine(i, i == 0 ? "<color=#5f737c>Receiver on. Tune a station and the wire fills in.</color>" : null);
+                    continue;
+                }
+                RadioManager.WireLine line = manager.GetWire(i);
+                wirePart.SetLine(i, "<color=#5f737c>" + line.Clock + "</color>  <color=#" +
+                    ColorUtility.ToHtmlStringRGB(line.Color) + ">" + line.Tag + "</color>  " +
+                    line.Text.Replace("<", "‹"));
+            }
         }
 
         /// <summary>Enable a control and swap its hover help with it, so a greyed key always says why.</summary>

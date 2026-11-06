@@ -552,7 +552,8 @@ namespace BoscaliSummer.Modules.Events.Runtime
                     if (amount < 0f)
                         amount = -Mathf.Min(-amount, Mathf.Max(0f, hq.factionFunds));
                     if (Mathf.Abs(amount) <= 0.001f) return;
-                    hq.AddFunds(amount);
+                    if (amount > 0f) TreasuryCredit.Add(hq, amount);
+                    else hq.AddFunds(amount);
                     break;
                 }
                 case EventEffect.Allocation:

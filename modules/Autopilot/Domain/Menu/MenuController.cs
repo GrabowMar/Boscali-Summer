@@ -36,7 +36,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     /// and the category lock; release at the hub to latch; digits that act on ONE level; hat; wheel; RMB / Backspace back one level; Esc;
     /// hold-to-confirm danger rows; the 50 ms rest rule on release; pointer ownership after a key. The mouse is the real cursor in both modes.
     /// A controller drives a wheel: the stick's direction is always the selection, holding it there for <see cref="DwellSec"/> enters it (category,
-    /// BACK, MORE, submenu; the view draws <see cref="Dwell"/> as a ring closing round the icon) and releasing the button runs the aimed row; a hat
+    /// BACK, MORE, submenu, or runs an action row with the menu staying open; the view draws <see cref="Dwell"/> as a ring closing round the icon)
+    /// and releasing the button also runs the aimed row; a hat
     /// turns the wheel instead (see <see cref="Wheel"/>). Pure: one <see cref="MenuInput"/> in,
     /// state + <see cref="Commands"/> out. The view reads the public state; the host runs Execute commands.
     /// </summary>
@@ -46,7 +47,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public const float NearPx = 14f, SwitchRestSec = 0.12f, AimRestSec = 0.03f, EdgeRepeatSec = 0.14f;
         /// <summary>Design px/s at 1080p: a pointer slower than this over a category is settling on it, not crossing it.</summary>
         public const float SlowPxPerSec = 240f;
-        public const float StickDeadzone = 0.25f, StickPick = 0.5f, StickQuietSec = 0.12f, DwellSec = 1f;
+        public const float StickDeadzone = 0.25f, StickPick = 0.5f, StickQuietSec = 0.12f, DwellSec = 0.4f;
 
         private enum Owner : byte { None, Key, Pointer }
         private enum ExecSource : byte { Key, Release, Lmb, Hold }
@@ -71,6 +72,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         private float refusalUntil;
         // the stick: it picks a category on the ring; back at the centre it enters it and the ring becomes the wheel of that list's rows
         private bool stickRows, stickWait;
+        // a held stick ran a row during this press: letting go of the button keeps the menu (LATCHED) instead of running or closing
+        private bool padRan;
         private int wheelPage, dwellKey = -1;
         private float stickQuietUntil, dwellSince;
 
@@ -205,6 +208,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 }
                 if (inp.Press) { SetDevice(inp); HatPress(inp.PressSource, inp.Digit); }
                 if (inp.Back) { SetDevice(inp); Back(false); }
+                if (inp.PadBack) { Device = MenuDevice.Pad; Back(false); if (Open && Wheel) AimSlot(-1); }
                 if (inp.Wheel != 0) Scroll(inp.Wheel);
                 if (inp.Rmb) { Device = MenuDevice.Mouse; Back(true); }
                 if (inp.DeltaX != 0f || inp.DeltaY != 0f || inp.PointerMoved) PointerMove(inp);
@@ -223,7 +227,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             Open = true; Mode = mode; Pending = false; Cat = -1; Sub = null; Focus = -1; DockFocus = false; Offset = 0;
             Hold = null; owner = Owner.None; moved = false; hover = -1; Edge = 0; DenyUntil = 0f; Locked = false;
-            stickRows = false; stickWait = false; stickQuietUntil = 0f; wheelPage = 0; WheelAim = -1; PadSteps = false; dwellKey = -1;
+            stickRows = false; stickWait = false; stickQuietUntil = 0f; wheelPage = 0; WheelAim = -1; PadSteps = false; dwellKey = -1; padRan = false;
             Toast = default;
             Recentre();
         }
@@ -284,6 +288,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         private void PadRelease()
         {
             MenuRow row = DockFocus ? FocusedRow : null;
+            if (padRan && (row == null || row.Id == spent)) { padRan = false; LatchInPlace(); return; }
             if (row == null || row == MenuRow.BackRow || row.IsBlocked) { CloseMenu(); return; }
             if (row.NeedsHold || row.Kind == MenuKind.Danger) { LatchInPlace(); return; }
             Exec(row, ExecSource.Release);
@@ -400,9 +405,12 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (!Open || Device != MenuDevice.Pad || PadSteps || stickWait) return -1;
             if (!Wheel) return Cat >= 0 && !stickRows && Category.Available && Items.Count > 0 ? Cat : -1;
             int w = WheelAim >= 0 ? WheelSlot(WheelAim) : SlotEmpty;
-            bool way = w == SlotBack || w == SlotMore || (w >= 0 && Items[w].Kind == MenuKind.Submenu && !Items[w].IsBlocked);
+            bool way = w == SlotBack || w == SlotMore || (w >= 0 && DwellRuns(Items[w]));
             return way ? 100 + WheelAim : -1;
         }
+
+        /// <summary>A row a held stick may enter or run: anything but a refused row or one that wants its own held press (EJECT).</summary>
+        private static bool DwellRuns(MenuRow r) => !r.IsBlocked && !r.NeedsHold && r.Kind != MenuKind.Danger;
 
         /// <summary>What a ring slot holds in the wheel: a row index, <see cref="SlotBack"/> (always the 0 slot), <see cref="SlotMore"/> (slot 9 of a list longer than nine) or <see cref="SlotEmpty"/>.</summary>
         public int WheelSlot(int slot)
@@ -430,13 +438,14 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             else { DockFocus = false; SetFocus(-1, false); }
         }
 
-        /// <summary>Enter what the wheel aims at when it is a way somewhere (BACK, MORE, a submenu); true when it was. An action row only runs on release.</summary>
+        /// <summary>Enter what the wheel aims at (BACK, MORE, a submenu) or run the aimed action row, menu kept open; true when something happened.</summary>
         private bool EnterAimed()
         {
             int w = WheelAim >= 0 ? WheelSlot(WheelAim) : SlotEmpty;
             if (w == SlotBack) { Back(false); AimSlot(-1); }
             else if (w == SlotMore) { wheelPage = (wheelPage + 1) % ((Items.Count + WheelPageRows - 1) / WheelPageRows); AimSlot(-1); }
             else if (w >= 0 && Items[w].Kind == MenuKind.Submenu && !Items[w].IsBlocked) { Drill(Items[w]); wheelPage = 0; AimSlot(-1); }
+            else if (w >= 0 && DwellRuns(Items[w])) { Exec(Items[w], ExecSource.Hold); padRan = true; }
             else return false;
             stickQuietUntil = Now + StickQuietSec;
             return true;

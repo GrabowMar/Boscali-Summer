@@ -368,7 +368,7 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             { Announce(attacker, StaffWords.ClaimedLine(slot.Person.Rank, slot.Person.Name)); return; }
             int funds = BountyFor(slot);
             if (funds <= 0) return;
-            attacker.AddFunds(funds);                                      // no AddScore: score moves escalation
+            TreasuryCredit.Add(attacker, funds);                                      // no AddScore: score moves escalation
             BountyPaidTotal += funds;
             FactionCommand killer = FindFaction(attacker);
             if (killer != null)

@@ -54,6 +54,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private int wordKey = -1, detailKey, calloutVersion = -1, ledgerVersion = -1;
         private float lastCalled = float.PositiveInfinity;
 
+        // Countermeasure popup: the newly selected dispenser's name under the banner for CmShowS after the pilot switches.
+        private const float CmShowS = 2f;
+        private TextMeshProUGUI cmPopup;
+        private Aircraft cmAircraft;
+        private string cmName;
+        private float cmAt = float.NegativeInfinity, bannerX;
+
         private readonly Missile[] missiles = new Missile[RingMax];
         private readonly int[] numbers = new int[RingMax];
 
@@ -103,6 +110,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             calloutIcon = Icon(callout, TopCentre.NamePt);
             calloutSub = Text(callout, "Sub", TopCentre.LabelPt, TopCentre.LineSpacing);
             calloutSub.rectTransform.anchoredPosition = new Vector2(0f, -TopCentre.NamePt * 0.7f - TopCentre.LabelPt);      // under the brackets, not in them
+
+            cmPopup = Text(root, "CmPopup", TopCentre.DetailPt, TopCentre.WordSpacing, bold: true);
+            cmPopup.gameObject.SetActive(false);
 
             banner.gameObject.SetActive(false);
             callout.gameObject.SetActive(false);
@@ -156,6 +166,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             board.Update(inputs.Raised, now);
             if (root != null && board.Banner(now, out AlertKind kind)) WriteDetail(kind);
             WatchShots(now);
+            WatchCountermeasure(aircraft, now);
+        }
+
+        /// <summary>Pops the selected countermeasure's name when it changes (not on a new aircraft's first look).</summary>
+        private void WatchCountermeasure(Aircraft aircraft, float now)
+        {
+            Countermeasure active = AircraftReadout.ActiveCountermeasure(aircraft);
+            string name = active != null ? active.displayName : null;
+            if (aircraft == cmAircraft && name != cmName && !string.IsNullOrEmpty(name) && cmPopup != null)
+            {
+                cmPopup.text = name.ToUpperInvariant();
+                cmAt = now;
+            }
+            cmAircraft = aircraft;
+            cmName = name;
         }
 
         /// <summary>Every frame: place and paint the banner (its blink), the ring (missiles move every frame) and the callout's pop; hide or give back the game's missile list.</summary>
@@ -182,6 +207,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             PaintBanner(now, h, boardBox, palette);
             PaintRing(aircraft, threats, now, w, h, palette);
             PaintCallout(now, palette);
+            PaintCmPopup(now, h, palette);
             NativeList(true);      // only once the layer has painted: a paint that throws leaves the game's own list up (fail open)
         }
 
@@ -189,6 +215,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool up = board.Banner(now, out AlertKind kind);
             if (banner.gameObject.activeSelf != up) banner.gameObject.SetActive(up);
+            bannerX = 0f;
             if (!up) return;
             if ((int)kind != wordKey)
             {
@@ -208,6 +235,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // On the reticle's axis unless this banner's own width would reach the TAC BOARD.
             float x = boardBox != null && boardBox.TryGetScreenBox(out float l, out float t, out float r, out float bt)
                 ? TopCentre.LaneShift(Screen.width, Screen.height, half * 2f, TopCentre.BannerTop, TopCentre.BannerHeight, l, t, r, bt) : 0f;
+            bannerX = x;
             word.rectTransform.anchoredPosition = new Vector2(x + wordHalf - wordWidth * 0.5f, wordY);
             bannerIcon.rectTransform.anchoredPosition = new Vector2(x - wordHalf + TopCentre.WordPt * 0.5f, wordY);
             detail.rectTransform.anchoredPosition = new Vector2(x, detailY);
@@ -405,6 +433,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             callout.anchoredPosition = new Vector2(0f, -CalloutDown);
             callout.localScale = new Vector3(s, s, 1f);
             calloutGroup.alpha = ShotCallouts.Alpha(age);
+        }
+
+        /// <summary>The countermeasure popup just under the banner's slot (under the banner itself while it is up), fading out over its last 0.4 s.</summary>
+        private void PaintCmPopup(float now, float h, VanillaHudStyle.Palette palette)
+        {
+            float age = now - cmAt;
+            bool live = age >= 0f && age < CmShowS;
+            if (cmPopup.gameObject.activeSelf != live) cmPopup.gameObject.SetActive(live);
+            if (!live) return;
+            float y = h * 0.5f - TopCentre.BannerTop - TopCentre.BannerHeight - TopCentre.DetailPt * 1.2f;
+            cmPopup.rectTransform.anchoredPosition = new Vector2(bannerX, y);
+            cmPopup.color = palette.AllClear.WithAlpha(Mathf.Clamp01((CmShowS - age) / 0.4f));
         }
 
         /// <summary>New results in the shot tracker's ledger since the last call (by their resolution time), handed to the callout; a heavier call keeps the stage (<see cref="ShotCallouts.Push"/>).</summary>

@@ -8,7 +8,7 @@ namespace NOAvionics
     /// Console footer: the console's help strip, at a fixed height (a hover must never move the page above it).
     /// Idle, a state-coloured SYS tag leads the status line; under it the page's standing orders show one at a time (SOP, with
     /// pips; they turn over on the slow tick); the right end carries the ambient status column (<see cref="AvAmbient"/>).
-    /// Hovering a control with help swaps in a TIP tag, the control's own name and its help sentence across the full width.
+    /// Hovering a control with help swaps in a TIP tag, the control's own name and its help sentence, in the same layout.
     /// Text shrinks toward the 11 px floor; an order that still cannot fit waits for a turn with more room.
     /// A compact strip (under 36 px) keeps one line: tag and text.
     /// </summary>
@@ -76,7 +76,7 @@ namespace NOAvionics
         /// <summary>Hover help: <paramref name="value"/>, headed by the control's own name when given; null restores the idle strip.</summary>
         public void SetHint(string value, string controlName = null)
         {
-            string next = string.IsNullOrEmpty(value) ? null : value;
+            string next = string.IsNullOrEmpty(value) || !AvConsoleLook.HoverHelp ? null : value;
             string nextName = next == null ? "" : Clean(controlName);
             if (hint == next && hintName == nextName) return;
             hint = next; hintName = nextName;
@@ -100,14 +100,15 @@ namespace NOAvionics
         public void Tick()
         {
             bool any = false, turned = false;
+            // The clock column stays up under hover help too: the strip keeps one layout, only its words change.
+            for (int i = 0; i < status.Length; i++)
+            {
+                string line = AvAmbient.Line(i);
+                AvText.Set(status[i], line);
+                any |= line.Length > 0;
+            }
             if (hint == null)
             {
-                for (int i = 0; i < status.Length; i++)
-                {
-                    string line = AvAmbient.Line(i);
-                    AvText.Set(status[i], line);
-                    any |= line.Length > 0;
-                }
                 if (orders != null && orders.Length > 1 && ++orderTicks >= Dwell)
                 {
                     orderTicks = 0;
@@ -123,11 +124,19 @@ namespace NOAvionics
         {
             statusAvailable = on;
             // Keep the reading/help column usable on compact consoles; ambient facts yield first.
-            on &= width - (Indent + AvGridTokens.Pad + StatusW + 14f) >= 160f && height >= AvGridTokens.Footer;
+            on &= AvConsoleLook.Clock && width - (Indent + AvGridTokens.Pad + StatusW + 14f) >= 160f && height >= AvGridTokens.Footer;
             if (on == statusShown) return false;
             statusShown = on;
             foreach (TMP_Text line in status) line.enabled = on;
             return true;
+        }
+
+        /// <summary>Re-reads <see cref="AvConsoleLook"/> (clock column, standing orders, hover help).</summary>
+        public void Relook()
+        {
+            if (!AvConsoleLook.HoverHelp && hint != null) SetHint(null);
+            ShowStatus(statusAvailable);
+            Arrange();
         }
 
         public override void Place(AvSlot slot)
@@ -160,7 +169,7 @@ namespace NOAvionics
             // Idle: the status takes what it needs and the order gets the rest, if one fits there.
             float textH = room;
             bool showOrder = false;
-            if (!compact && !hovering && orders != null)
+            if (!compact && !hovering && orders != null && AvConsoleLook.Orders)
             {
                 float statusH = baseText.Length > 0 ? Mathf.Min(AvText.Height(text, colW), room) : 0f;
                 float oy = y + statusH + (statusH > 0f ? 3f : 0f), oroom = height - Bottom - oy;
@@ -183,7 +192,6 @@ namespace NOAvionics
             if (!showOrder) art.SetPips(0, 0, 0f, 0f, 0f);
             AvLay.Place(text.rectTransform, Indent, y, colW, compact ? height : textH);
             art.SetLayout(TagW, statusShown ? right - 7f : -1f);
-            art.SetHover(hovering && !compact);
         }
 
         private static string Clean(string label)
@@ -228,10 +236,6 @@ namespace NOAvionics
         private Color accent = Color.white, rule = Color.white, pipOn = Color.white;
         private float tagW, columnRight = -1f, pipX, pipTop, pipRoom;
         private int pips, pipIndex;
-        private bool hover;
-
-        /// <summary>Hover help on: an info-tinted band with a left rail and reticle corners marks the strip as a readout of the control.</summary>
-        public void SetHover(bool on) { if (on == hover) return; hover = on; SetVerticesDirty(); }
 
         public void Paint(Color accentColor, Color ruleColor, Color pipColor)
         {
@@ -262,16 +266,6 @@ namespace NOAvionics
             Rect r = GetPixelAdjustedRect();
             if (r.width < 40f || r.height < 4f) return;
             float x0 = r.xMin + AvGridTokens.Pad;
-            if (hover)
-            {
-                Color band = pipOn; band.a *= 0.07f;
-                AvMesh.Quad(vh, r.xMin + 2f, r.yMin + 3f, r.xMax - 2f, r.yMax - 3f, band);
-                AvMesh.Quad(vh, r.xMin + 2f, r.yMin + 3f, r.xMin + 4f, r.yMax - 3f, pipOn);
-                Color tick = pipOn; tick.a *= 0.8f;
-                float L = 9f, xa = r.xMax - 3f, ya = r.yMax - 3f, yb = r.yMin + 3f;
-                AvMesh.Quad(vh, xa - L, ya - 1f, xa, ya, tick); AvMesh.Quad(vh, xa - 1f, ya - L, xa, ya, tick);
-                AvMesh.Quad(vh, xa - L, yb, xa, yb + 1f, tick); AvMesh.Quad(vh, xa - 1f, yb, xa, yb + L, tick);
-            }
             AvMesh.Quad(vh, x0, r.yMax - 2f, x0 + tagW, r.yMax, accent);
             if (columnRight >= 0f && r.height > 24f)
             {

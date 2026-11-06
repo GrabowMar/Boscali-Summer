@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> MissileBoomEnabled { get; }
         public ConfigEntry<bool> CanopyFrostEnabled { get; }
         public ConfigEntry<bool> ArTunnelEnabled { get; }
+        public ConfigEntry<bool> SkyOpticsEnabled { get; }
 
         public ImmersionSettings(ConfigFile config)
         {
@@ -125,6 +126,8 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "In humid air: a transonic vapour cone near Mach 1 and white wingtip vapour above about 3 G.");
             MissileBoomEnabled = config.Bind(section, "MissileBoomEnabled", true,
                 "A supersonic missile passing close by cracks with a sonic boom as its shock cone sweeps over the camera.");
+            SkyOpticsEnabled = config.Bind(section, "SkyOpticsEnabled", true,
+                "Halo and sundogs under thin cloud, rainbows opposite the sun in showers, a glory round your shadow above a cloud deck, and meteors on clear nights.");
             ArTunnelEnabled = config.Bind(section, "ArTunnelEnabled", true,
                 "Cockpit view on final: the helmet draws green frames on the 3 degree glide path to the runway end ahead. Needs AirfieldLightsEnabled.");
             CanopyFrostEnabled = config.Bind(section, "CanopyFrostEnabled", true,

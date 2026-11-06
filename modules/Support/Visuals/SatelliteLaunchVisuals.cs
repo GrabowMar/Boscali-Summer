@@ -16,19 +16,25 @@ namespace BoscaliSummer.Modules.Support.Visuals
         public static void Play(Vector3 launchPoint, float duration)
         {
             var go = new GameObject("BoscaliSatelliteLaunch");
+            // Under the datum: a floating-origin shift carries the rocket, its light and its trail together.
+            go.transform.SetParent(Datum.origin, false);
             go.transform.position = launchPoint;
 
             if (trailMaterial == null)
                 trailMaterial = new Material(Shader.Find("Sprites/Default")) { name = "BoscaliLaunchTrail" };
 
-            var trail = go.AddComponent<TrailRenderer>();
-            trail.time = 14f;
-            trail.startWidth = 60f;
-            trail.endWidth = 8f;
+            // The trail is redrawn from the flight path every frame (a TrailRenderer kept world points that kinked on every origin shift).
+            var trailGo = new GameObject("Trail");
+            trailGo.transform.SetParent(Datum.origin, false);
+            var trail = trailGo.AddComponent<LineRenderer>();
+            trail.useWorldSpace = false;
+            trail.positionCount = 0;
+            trail.widthCurve = AnimationCurve.Linear(0f, 8f / 60f, 1f, 1f);
             trail.sharedMaterial = trailMaterial;
-            trail.startColor = new Color(1f, 0.92f, 0.7f, 0.95f);
-            trail.endColor = new Color(0.85f, 0.87f, 0.92f, 0f); // the contrail: hot white at the nozzle, pale vapour behind
-            trail.minVertexDistance = 40f;
+            trail.startColor = new Color(0.85f, 0.87f, 0.92f, 0f); // the contrail: pale vapour behind, hot white at the nozzle
+            trail.endColor = new Color(1f, 0.92f, 0.7f, 0.95f);
+            trail.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            trail.receiveShadows = false;
 
             Light glow = go.AddComponent<Light>();
             glow.type = LightType.Point;
@@ -37,8 +43,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
             glow.intensity = 8f;
 
             SatelliteLaunchEffect effect = go.AddComponent<SatelliteLaunchEffect>();
-            effect.Begin(Mathf.Clamp(duration, 3f, 90f));
             effect.Trail = trail;
+            effect.Begin(Mathf.Clamp(duration, 3f, 90f));
             if (!GameManager.IsHeadless)
             {
                 // World-space exhaust plume: a hot flame core and a smoke wake that hangs in the sky as the rocket pulls away.
@@ -82,32 +88,41 @@ namespace BoscaliSummer.Modules.Support.Visuals
     {
         private const float ClimbHeight = 45000f;
         private const float Downrange = 30000f;
+        private const float TrailSeconds = 14f;
+        private const int TrailPoints = 48;
+        private const float NozzleWidth = 60f;
 
-        /// <summary>Set by <see cref="SatelliteLaunchVisuals.Play"/>; its width follows the camera range so the streak reads from the cockpit at distance.</summary>
-        public TrailRenderer Trail;
+        /// <summary>Set by <see cref="SatelliteLaunchVisuals.Play"/>; drawn in datum space from <see cref="At"/>, its width follows the camera range so the streak reads at distance.</summary>
+        public LineRenderer Trail;
         public ParticleSystem Flame, Smoke;
+        private readonly Vector3[] points = new Vector3[TrailPoints];
         private float nextSmoke;
         private float elapsed;
         private float duration;
-        private GlobalPosition origin;
+        private Vector3 origin; // datum-space (global) launch point
         private Vector3 heading;
 
         public void Begin(float durationSeconds)
         {
             duration = durationSeconds;
-            origin = transform.position.ToGlobalPosition();
+            origin = transform.localPosition;
             // Launches head away from the theatre centre, which sits at the global origin.
             var outward = new Vector3(origin.x, 0f, origin.z);
             heading = outward.sqrMagnitude > 1f ? outward.normalized : Vector3.forward;
         }
 
+        /// <summary>The rocket's datum-space position <paramref name="seconds"/> after lift-off.</summary>
+        private Vector3 At(float seconds)
+        {
+            float t = Mathf.Clamp01(seconds / duration);
+            float climb = 1f - (1f - t) * (1f - t);
+            return origin + Vector3.up * (ClimbHeight * climb) + heading * (Downrange * t * t);
+        }
+
         private void Update()
         {
             elapsed += Time.deltaTime;
-            float t = Mathf.Clamp01(elapsed / duration);
-            float climb = 1f - (1f - t) * (1f - t);
-            // Rebuilt from the global origin every frame so a floating-origin shift cannot tear the trail.
-            transform.position = origin.ToLocalPosition() + Vector3.up * (ClimbHeight * climb) + heading * (Downrange * t * t);
+            transform.localPosition = At(elapsed);
             if (Flame != null)
             {
                 Flame.Emit(2);
@@ -115,11 +130,21 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
             if (Trail != null)
             {
+                float from = Mathf.Max(0f, elapsed - TrailSeconds);
+                for (int i = 0; i < TrailPoints; i++) points[i] = At(Mathf.Lerp(from, elapsed, i / (TrailPoints - 1f)));
+                Trail.positionCount = TrailPoints;
+                Trail.SetPositions(points);
                 var csm = SceneSingleton<CameraStateManager>.i;
                 Camera cam = csm != null ? csm.mainCamera : Camera.main;
-                if (cam != null) Trail.widthMultiplier = Mathf.Clamp(Vector3.Distance(cam.transform.position, transform.position) * 0.0035f / 60f, 1f, 10f);
+                float scale = cam != null ? Mathf.Clamp(Vector3.Distance(cam.transform.position, transform.position) * 0.0035f / NozzleWidth, 1f, 10f) : 1f;
+                Trail.widthMultiplier = NozzleWidth * scale;
             }
             if (elapsed >= duration) Destroy(gameObject);
+        }
+
+        private void OnDestroy()
+        {
+            if (Trail != null) Destroy(Trail.gameObject);
         }
     }
 }

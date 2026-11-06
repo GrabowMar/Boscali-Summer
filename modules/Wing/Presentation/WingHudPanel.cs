@@ -32,7 +32,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>Slot error that fills the slot-keeping bar; in-slot under <see cref="InSlotM"/>.</summary>
         private const float BarFullM = 400f, InSlotM = 60f;
         private const float BingoWarnSeconds = 120f;
-        private static readonly Vector2 Anchor = new Vector2(24f, 180f);
+        /// <summary>Bottom-left corner, right of the TAC MAP (classic plate x 0..320), growing upward (2026-11-06, user: "next to map not on top of it").</summary>
+        private static readonly Vector2 Anchor = new Vector2(372f, 24f);
         /// <summary>The shade stands this far outside the strip (its feathered edge is <see cref="HudSprites.FeatherEdge"/> wide, so the strip's own edge is under the full part) at this alpha; the brackets' arm and stroke.</summary>
         private const float ShadeMargin = 44f, BracketArm = 8f, ChromeStroke = 1.5f;
 

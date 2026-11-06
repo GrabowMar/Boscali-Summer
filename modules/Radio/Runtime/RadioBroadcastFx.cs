@@ -258,6 +258,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             source.spatialBlend = 0f;
             source.volume = 1f;
             source.ignoreListenerPause = true;
+            source.priority = 0; // stays with the programme it dresses (see RadioProgram.CreateSource)
             return source;
         }
 

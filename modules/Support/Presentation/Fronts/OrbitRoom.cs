@@ -335,20 +335,20 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
             padMiss = !near;
             if (!near) return;
-            padPick = false;
-            actions.Queue(Front.Space, ProgrammeId.UplinkSite, 0, true, uv.x, uv.y);
+            if (actions.Queue(Front.Space, ProgrammeId.UplinkSite, 0, true, uv.x, uv.y)) padPick = false; // not sent (a press still waits for the host): stays armed
         }
 
-        /// <summary>The kind of our living bird whose nadir marker lies under <paramref name="p"/> (box pixels), or -1.</summary>
+        /// <summary>The kind of our living bird whose nadir marker lies under <paramref name="p"/> (box pixels), or -1. A hostile bird at least as close wins and
+        /// opens nothing: another faction's satellite never gives us a feed, even parked on top of ours.</summary>
         private int BirdAt(Vector2 p)
         {
             int best = -1;
             float bestD = BirdPickPx * BirdPickPx;
             foreach (OrbitTrackView b in last.Birds)
             {
-                if (!b.Own || !b.Alive) continue;
+                if (!b.Alive) continue;
                 float d = (BirdPoint(b) - p).sqrMagnitude;
-                if (d <= bestD) { bestD = d; best = (int)b.Kind; }
+                if (d <= bestD) { bestD = d; best = b.Own ? (int)b.Kind : -1; }
             }
             return best;
         }
@@ -945,11 +945,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             return true;
         }
 
-        /// <summary>On the map plate and not under the legend.</summary>
+        /// <summary>On the map plate and, with no pick armed, not under the legend or a name. An armed pick takes the click under a word too: the airbase it
+        /// must land near wears its name, and a pick never misses in silence.</summary>
         private bool OnMap(Vector2 p)
         {
             FrontMapView mv = plate.View;
-            return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H && !plate.Labels.Blocked(new Rect(p.x - 1f, p.y - 1f, 2f, 2f));
+            return p.x >= mv.X && p.x <= mv.X + mv.W && p.y >= mv.Y && p.y <= mv.Y + mv.H && (padPick || relocating || !plate.Labels.Blocked(new Rect(p.x - 1f, p.y - 1f, 2f, 2f)));
         }
 
         /// <summary>
@@ -975,6 +976,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (Enlarged) { pressed = false; return false; } // the camera covers the map: no pan, zoom or placement under it
             bool changed = plate.Tick(mouse);
             if (last == null) { pressed = false; return false; }
+            if (plate.RightClick(mouse, out Vector2 ruv) && (padPick || relocating)) // an armed pick places with either button
+            {
+                if (padPick) PickPad(ruv);
+                else { pending = new Vector2(Mathf.Clamp(ruv.x, 0.02f, 0.98f), Mathf.Clamp(ruv.y, 0.02f, 0.98f)); hasPending = true; actions.Touch(); }
+                return true;
+            }
             if (FrontPointer.Down(0))
             {
                 pressed = Local(mouse, out pressAt) && OnMap(pressAt);
@@ -984,7 +991,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
             // Only a click that stayed put on an unmoved, unzoomed map picks anything.
-            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > DragSlop * DragSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
+            if (!Local(mouse, out Vector2 p) || !OnMap(p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f) return MapOnly(changed);
             Vector2 uv = mv.UV(p);
             if (padPick) { PickPad(uv); return true; }
             if (relocating)
@@ -1006,5 +1013,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (changed) PaintSituation(last);
             return false;
         }
+
+        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => Enlarged ? BoscaliSummer.Core.Ui.CursorShape.None : plate.Cursor(mouse, padPick || relocating);
     }
 }

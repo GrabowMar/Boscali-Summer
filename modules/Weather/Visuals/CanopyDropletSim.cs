@@ -14,6 +14,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal const int MaxPanes = 8;
         internal const int StateSize = 256;
         private const float StepSeconds = 1f / 30f;
+        private const float MaxFlowTiles = 1.5f;     // mirrors the shader's runoff cap
+        private const float MaxTexelsPerBlit = 2f;
+        private const int MaxSubsteps = 8;
 
         private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
         private static readonly int FlowTilesId = Shader.PropertyToID("_FlowTiles");
@@ -49,7 +52,25 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (pendingTime + 0.000001f < StepSeconds) return false;
             float step = Mathf.Min(pendingTime, 0.05f);
             pendingTime -= step;
-            simTime += step;
+            // At the 1.5 tiles/s runoff cap one 30 Hz blit moved water ~13 texels, more
+            // than a bead's width: beads hopped and left copies. Substep to <= 2 texels.
+            float fastest = 0f;
+            for (int i = 0; i < surfaces.Count && i < flowsTiles.Length; i++)
+                fastest = Mathf.Max(fastest, Mathf.Min(flowsTiles[i].magnitude, MaxFlowTiles));
+            int subs = Mathf.Clamp(Mathf.CeilToInt(fastest * step * StateSize / MaxTexelsPerBlit), 1, MaxSubsteps);
+            float sub = step / subs;
+            bool stepped = false;
+            for (int s = 0; s < subs; s++)
+            {
+                simTime += sub;
+                stepped |= StepPanes(updateMaterial, surfaces, flowsTiles, rain, speedNorm, sub, condensation, evaporation);
+            }
+            return stepped;
+        }
+
+        private bool StepPanes(Material updateMaterial, IReadOnlyList<CanopySurface> surfaces,
+            Vector2[] flowsTiles, float rain, float speedNorm, float step, float condensation, float evaporation)
+        {
             bool stepped = false;
             for (int i = 0; i < surfaces.Count && i < flowsTiles.Length; i++)
             {

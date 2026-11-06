@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         {
             gauge = default;
             RadioManager m = manager;
-            if (m == null || !m.HasChannels || !m.IsEngaged || m.IsPaused || m.IsOffAir || m.IsOffStation || m.IsScanning) return false;
+            if (m == null || !m.HasChannels || !m.IsEngaged || m.IsPaused || m.IsOffAir || m.IsOffStation) return false;
             RadioReception reception = m.Reception;
             bool modelled = m.ReceptionModelled;
             if (modelled && !reception.Open(m.Squelch)) return false;

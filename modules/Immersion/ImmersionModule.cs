@@ -145,6 +145,9 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting(World, "VAPOUR",
                 "In humid air: a vapour cone around aircraft near Mach 1 and white vapour ribbons off the wingtips in hard turns (above about 3 G).",
                 s.VapourEnabled, ClientPreset.Light, master);
+            context.AddClientSetting(World, "SKY OPTICS",
+                "Halo and sundogs under thin cloud, rainbows opposite the sun in showers, a glory round your shadow above a cloud deck, and meteors on clear nights.",
+                s.SkyOpticsEnabled, requires: master);
             context.AddClientSetting(World, "MISSILE BOOM",
                 "A supersonic missile passing close by cracks with a sonic boom as its shock cone sweeps over you.",
                 s.MissileBoomEnabled, requires: master);

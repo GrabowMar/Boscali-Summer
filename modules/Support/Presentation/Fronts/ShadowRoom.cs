@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private bool pressed;
         private Vector2 pressAt, pressCenter;
         private int pressZoom;
-        private const float ClickSlop = 5f, MarkerClear = 22f; // 22 covers the corners of the 34x26 team and 30x30 target hit boxes, so one click never selects a marker and sets a point
+        private const float MarkerClear = 22f; // 22 covers the corners of the 34x26 team and 30x30 target hit boxes, so one click never selects a marker and sets a point
 
         public ShadowRoom(IFrontActions actions, FrontSkin skin)
         {
@@ -505,9 +505,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             ShadowRoomView s = v.Shadow;
             last = v;
             lastView = s;
-            Why(v);
-            // A pick the ladder now refuses (the camps filled, the last held building fell) ends: nothing left to click.
-            if ((pick == PickMode.Camp && campWhy.Length > 0) || (pick == PickMode.Fob && fobWhy.Length > 0)) EndPicks();
+            Why(v); // a refusal that comes up while a pick is armed is said at its click (PickAt); a refresh never drops the pick
             PaintSituation(v, s);
             PaintBases(v);
             PaintTargets(v);
@@ -527,6 +525,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             Vector2 center = mv.Center;   // the view as the press found it: a press on the inset overview moves it, and that is no click on the map
             int zoomStep = mv.Zoom;
             bool changed = plate.Tick(mouse);
+            if (plate.RightClick(mouse, out Vector2 ruv) && pick != PickMode.None) { PickAt(ruv); return true; } // an armed pick places with either button
             float wheel = FrontPointer.Wheel;
             if (Mathf.Abs(wheel) > 0.01f && targets.Rect.gameObject.activeInHierarchy && RectTransformUtility.RectangleContainsScreenPoint(targets.Rect, mouse, null))
             {
@@ -537,7 +536,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (pressed && (FrontPointer.Held(1) || FrontPointer.Held(2))) pressed = false;   // a pan gesture is no click
             if (!pressed || !FrontPointer.Up(0)) return MapOnly(changed);
             pressed = false;
-            if (!ToBox(mouse, out Vector2 p) || (p - pressAt).sqrMagnitude > ClickSlop * ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f)
+            if (!ToBox(mouse, out Vector2 p) || (p - pressAt).sqrMagnitude > FrontMapPlate.ClickSlop * FrontMapPlate.ClickSlop || mv.Zoom != pressZoom || (mv.Center - pressCenter).sqrMagnitude > 1e-8f)
                 return MapOnly(changed);
             if (pick != PickMode.None)
             {
@@ -556,6 +555,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (changed) PaintSituation(last, last.Shadow);
             return false;
         }
+
+        public BoscaliSummer.Core.Ui.CursorShape Cursor(Vector2 mouse) => plate.Cursor(mouse, pick != PickMode.None);
 
         private bool ToBox(Vector2 screen, out Vector2 p)
         {

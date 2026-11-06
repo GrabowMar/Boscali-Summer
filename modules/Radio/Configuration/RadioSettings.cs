@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Radio.Configuration
         public readonly ConfigEntry<float> Volume;
         public readonly ConfigEntry<bool> StationIdents;
         public readonly ConfigEntry<bool> CarrierNoise;
-        public readonly ConfigEntry<float> ScanDwellSeconds;
         public readonly ConfigEntry<bool> BroadcastTalk;
 
         public RadioSettings(ConfigFile config)
@@ -74,10 +73,6 @@ namespace BoscaliSummer.Modules.Radio.Configuration
                 "Play a short synthesized morse station ident when the radio locks onto a station.");
             CarrierNoise = config.Bind("Radio", "CarrierNoise", true,
                 "Play a synthesized burst of carrier static while tuning between stations.");
-            ScanDwellSeconds = config.Bind("Radio", "ScanDwellSeconds", 5f,
-                new ConfigDescription(
-                    "Seconds SCAN holds on each station before seeking the next.",
-                    new AcceptableValueRange<float>(2f, 15f)));
             BroadcastTalk = config.Bind("Radio", "BroadcastTalk", true,
                 "The built-in stations air voiced breaks between songs: station stings and idents, " +
                 "host links, adverts and news, themed by faction. Base Broadcast follows your side " +
