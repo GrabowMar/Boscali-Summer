@@ -6,7 +6,7 @@ using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     // SUPPLY step ④ LAUNCH BASE: a LAUNCH FROM row (NEAREST or ANY FIELD), and the friendly fields a page at a time (only the ON button
-    // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / NO JETS / SHORT (runway too short for the
+    // toggles one): a dot in the field's state colour, its name, its distance, READY / APRON / AIR START / SHORT (runway too short for the
     // airframe at the chosen fuel) and ON / OFF.
     internal sealed partial class WmcSupply
     {
@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             baseEmpty = f.Add(new WmcLines(f.Content, 1));
         }
 
-        /// <summary>The mode, the step caption and this page of fields: each row's name, distance, status (READY, APRON, NO JETS, OFF; ON/OFF
+        /// <summary>The mode, the step caption and this page of fields: each row's name, distance, status (READY, APRON, AIR START, OFF; ON/OFF
         /// alone with no airframe picked) and ON toggle, the field the requisition will use marked.</summary>
         private void RefreshBase()
         {
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             relayout = true;
         }
 
-        /// <summary>A field's strip: a dot in its state colour, its name, how far it is, READY / APRON / NO JETS / OFF (ON / OFF with no
+        /// <summary>A field's strip: a dot in its state colour, its name, how far it is, READY / APRON / AIR START / OFF (ON / OFF with no
         /// airframe picked) and an ON toggle; the field the requisition will use is marked.</summary>
         private void BindBase(int slot, Airbase f)
         {
@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             bool isOn = WingRequisition.IsOn(f), picked = ReferenceEquals(f, field);
             string status = selected == null ? (isOn ? "ON" : "OFF") : WingRequisition.Status(f, selected);
-            AvState state = status == "READY" ? AvState.Ready : status == "NO JETS" || status == "OFF" || status == "SHORT" ? AvState.Caution
+            AvState state = status == "READY" ? AvState.Ready : status == "OFF" || status == "SHORT" ? AvState.Caution
                 : isOn ? AvState.Info : AvState.Inert;
             string km = caller != null ? SupplyWords.FieldDistance((f.transform.position - caller.transform.position).magnitude / 1000f) : "";
             string sub = (km.Length > 0 ? km : "") + (picked ? (km.Length > 0 ? " · " : "") + "LAUNCH FIELD" : "");

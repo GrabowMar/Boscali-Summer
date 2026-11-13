@@ -63,7 +63,18 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
             Airbase airbase = RecoveryField(m, intent);
             FieldTraffic field = airbase != null ? FieldRegistry.For(airbase) : null;
-            if (field == null) return false;
+            if (field == null)
+            {
+                // Issue #37: a jet air-started off a carrier has no land field to go to (and no deck landing yet). Going home
+                // takes it back into the reserve rather than leaving it to fly on until it runs dry.
+                if (intent == RecoveryIntent.Rtb && m.Profile.Class == AirframeClass.FixedWing &&
+                    FriendlyFields(m.Aircraft).Exists(b => b.AttachedAirbase))
+                {
+                    ReturnToReserve(m, "no land field; recovered to the carrier");
+                    return true;
+                }
+                return false;
+            }
             m.Recovery = new RecoveryPilot(m.Id, field, m.Profile.Class, intent, m.Seat);
             WingLog.Logger.LogInfo($"[Wing] #{m.Number} {(intent == RecoveryIntent.Rtb ? "returning to base" : "going to refit")} at {airbase.name}");
             return true;

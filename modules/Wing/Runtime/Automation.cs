@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             string fieldName = Text(args, "field") ?? "nearest";
             List<Airbase> fields = WingService.FriendlyFields(lead);
             Airbase field = fieldName == "nearest" ? wing.FieldFor(lead, type)
+                : fieldName == "carrier" ? fields.Find(a => a.AttachedAirbase)   // issue #37 check: the nearest friendly carrier
                 : fields.Find(a => string.Equals(a.name, fieldName, StringComparison.OrdinalIgnoreCase));
             if (field == null) return Fail("Launch", $"no friendly field '{fieldName}'; friendly: {string.Join(", ", fields.ConvertAll(a => a.name))}");
             string shape = Text(args, "shape");

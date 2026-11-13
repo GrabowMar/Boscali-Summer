@@ -106,6 +106,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             /// <summary>Reserved at the charge; seated on joining, given back when the launch is dropped.</summary>
             public WingPilot Pilot;
             public Airbase Field;
+            /// <summary>Air-started off a carrier (issue #37): joins from the air, no ground pilot.</summary>
+            public bool Air;
         }
 
         /// <summary>A launch that joined and is still on its way (taxi, departure, rejoin): INBOUND lists it until it reaches
@@ -332,14 +334,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 answer = "VTOL aircraft cannot fly formation";
                 return 0;
             }
-            if (airbase.AttachedAirbase && ProfileReader.ClassOf(template) == AirframeClass.FixedWing)
-            {
-                // ponytail: jets on carrier decks are M3d (no deck taxi network yet; spike S6).
-                answer = definition.unitName + " cannot launch from a carrier yet; pick a field";
-                return 0;
-            }
-            FieldTraffic traffic = FieldRegistry.For(airbase);
-            if (traffic == null)
+            // ponytail: jets on carrier decks are M3d (no deck taxi network yet; spike S6), so a jet called from a carrier
+            // air-starts astern of the ship instead (issue #37).
+            bool airStart = airbase.AttachedAirbase && ProfileReader.ClassOf(template) == AirframeClass.FixedWing;
+            FieldTraffic traffic = airStart ? null : FieldRegistry.For(airbase);
+            if (traffic == null && !airStart)
             {
                 answer = field + " has no runway to take off from";
                 return 0;
@@ -359,7 +358,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 WingPilot pilot = null;
                 try
                 {
-                    CallQuote quote = WingLedger.Quote(definition, hq, true, sandbox, r.Price);
+                    CallQuote quote = WingLedger.Quote(definition, hq, !airStart, sandbox, r.Price);
                     if (!quote.Allowed)
                     {
                         refused = quote.Reason;
@@ -384,8 +383,11 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     if (loadout != null) WingLoadoutCatalog.Vet(loadout, definition, airbase, hq);
                     // Review R4a: a hangar at a field nobody owns has no faction to spawn for (the game throws); an unowned field
                     // launches from its service points.
-                    GroundLaunch launch = airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel, livery) : null;
-                    if (launch == null)
+                    GroundLaunch launch = airStart
+                        ? FromAirStart(airbase, definition, template, hq, player, loadout, fuel, livery,
+                            wing.Members.Count + pending.Count + groundPending.Count)
+                        : airbase.CurrentHQ != null ? FromHangar(airbase, definition, traffic, used, loadout, fuel, livery) : null;
+                    if (launch == null && !airStart)
                     {
                         quote = WingLedger.Quote(definition, hq, false, sandbox, r.Price);
                         launch = FromServicePoint(airbase, definition, traffic, hq, player, loadout, fuel, livery,
@@ -541,6 +543,33 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return new GroundLaunch { Aircraft = a, Traffic = traffic, Spawn = spot.WingPose, StartNode = spot.StartNode, TaxiPrefix = spot.TaxiPrefix };
         }
 
+        /// <summary>Issue #37: a jet called from a carrier spawns in the air 2 km astern of the ship on its heading, at least
+        /// 300 m up (<see cref="AirStart"/>), and joins straight from there. Stock is taken by hand (no hangar draw).</summary>
+        private static GroundLaunch FromAirStart(Airbase carrier, AircraftDefinition definition, Aircraft template, FactionHQ hq, Aircraft player,
+            Loadout loadout, float fuel, LiveryKey livery, int slot)
+        {
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            WingService wing = WingService.Instance;
+            if (spawner == null || wing?.Selection == null) return null;
+            Transform t = carrier.transform;
+            Rigidbody rb = carrier.GetComponentInParent<Rigidbody>();
+            Vec3 bow = t.forward.ToVec3().Horizontal;
+            // The ship's track at no less than 2 m/s, so a ship at rest still gives its heading (not world north).
+            Vec3 track = (bow.SqrLength > 1e-4f ? bow.Normalized : Vec3.Forward) * Math.Max(rb != null ? rb.velocity.magnitude : 0f, 2f);
+            Vec3 at = t.GlobalPosition().ToVec3();
+            Vec3 v0 = AirStart.Velocity(track, LoadedMinimum(definition, template));
+            Vec3 probe = AirStart.ForSlot(wing.Selection.Current, slot, at, track, 0f);
+            Vec3 pos = AirStart.ForSlot(wing.Selection.Current, slot, at, track, TerrainProbe.GroundY(probe));
+            Vec3 fwd = AirStart.Direction(v0);
+            Aircraft a = spawner.SpawnAircraft(null, definition.unitPrefab, loadout, fuel, livery, pos.ToGlobal(),
+                Quaternion.LookRotation(fwd.ToUnity()), v0.ToUnity(), null, hq,
+                "WingCommand_" + Guid.NewGuid().ToString("N").Substring(0, 8), player.skill, player.bravery);
+            if (a == null) return null;
+            // AUTO gets the game's own AI pick, as a hangar spawn does.
+            if (loadout == null && a.weaponManager != null) a.Networkloadout = a.weaponManager.SelectAIAircraftWeapons(carrier);
+            return new GroundLaunch { Aircraft = a, Air = true, Spawn = new WingPose(pos, fwd) };
+        }
+
         private Func<Vec3, bool> SpotTaken(FieldTraffic traffic) => at =>
         {
             if (traffic.Occupied(at, ServiceSpots.ClearRadius, -1)) return true;
@@ -604,7 +633,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     WingLog.Logger.LogWarning("[Spawn] " + g.Aircraft.definition.unitName + " appeared " + (off / 1000f).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)
                         + " km from its launch point at " + g.Field?.name);
                 WingService wing = WingService.Instance;
-                if (wing != null && wing.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode, g.Pilot, g.TaxiPrefix))
+                if (wing != null && (g.Air ? wing.AdoptAir(g.Aircraft, g.Pilot)
+                        : wing.AdoptGround(g.Aircraft, g.Traffic, g.Spawn, g.HangarIndex, g.StartNode, g.Pilot, g.TaxiPrefix)))
                 {
                     WingLedger.Joined(g.Aircraft, g.Charge);
                     WingMember m = wing.MemberOf(g.Aircraft);

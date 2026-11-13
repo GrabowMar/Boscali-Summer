@@ -53,14 +53,14 @@ namespace BoscaliSummer.Core.Config
         private static readonly string[][] Menu =
         {
             new[] { "0 Mission", "Mission", "AskAtStart", "Ask which systems run at mission start" },
-            new[] { "1 Battlefield", "Support", "Enabled", "Support calls (OPS)" },
-            new[] { "1 Battlefield", "Command", "Enabled", "Command map and STR" },
+            new[] { "1 Battlefield", "Support", "Enabled", "Support calls (OPS) - needs Perk board" },
+            new[] { "1 Battlefield", "Command", "Enabled", "Command map and STR - off also drops Trenches" },
             new[] { "1 Battlefield", "HighCommand", "Enabled", "Chain of command" },
             new[] { "1 Battlefield", "Intel", "Enabled", "Threat picture (AI intel)" },
             new[] { "1 Battlefield", "TheaterOps", "Enabled", "Living Front (AI ground staff)" },
             new[] { "1 Battlefield", "DynamicOperations", "Enabled", "Contracts" },
             new[] { "1 Battlefield", "Events", "Enabled", "World events" },
-            new[] { "1 Battlefield", "Trenches", "Enabled", "Trenches and fortifications" },
+            new[] { "1 Battlefield", "Trenches", "Enabled", "Trenches and fortifications - needs Command" },
             new[] { "1 Battlefield", "Garrisons", "Enabled", "Zone garrisons" },
             new[] { "1 Battlefield", "Fires", "Enabled", "Fire ignition and spread" },
             new[] { "1 Battlefield", "CombatAdjust", "Enabled", "Combat adjustments (fog, missile failures, smoke)" },
@@ -74,7 +74,7 @@ namespace BoscaliSummer.Core.Config
             new[] { "1 Battlefield", "Spooktober", "AceRepairPerSecond", "Spooktober ace: self-repair (hull/s)" },
             new[] { "1 Battlefield", "Spooktober", "AceGunDamageScale", "Spooktober ace: gun damage (x)" },
 
-            new[] { "2 Pilot and squadron", "Progression", "Enabled", "Perk board" },
+            new[] { "2 Pilot and squadron", "Progression", "Enabled", "Perk board - off also drops OPS" },
             new[] { "2 Pilot and squadron", "Squad", "EnemyAceHunts", "Enemy ace hunts" },
             new[] { "2 Pilot and squadron", "Squadron", "SandboxFreeCalls", "Sandbox: calls cost nothing" },
             new[] { "2 Pilot and squadron", "Comms", "Enabled", "Map comms, polls and games" },

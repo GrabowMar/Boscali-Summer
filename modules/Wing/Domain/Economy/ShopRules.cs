@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         /// <summary>The faction's supply lists the type (even at none left).</summary>
         public bool Declared;
         public int FactionStock;
-        /// <summary>ON bases this class can launch from (a jet: no carrier).</summary>
+        /// <summary>ON bases this class can launch from (a jet counts a carrier too: it air-starts astern).</summary>
         public int BasesForClass;
     }
 
@@ -128,15 +128,22 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static int PickBase(LaunchMode mode, bool jet, ShopBase[] bases, int count)
         {
-            int nearest = -1, picked = -1, ready = -1;
+            int nearest = -1, picked = -1, ready = -1, deck = -1;
             for (int i = 0; i < count; i++)
             {
                 ShopBase b = bases[i];
-                if (!b.On || (jet && b.Carrier)) continue;
+                if (!b.On) continue;
+                if (jet && b.Carrier)
+                {
+                    // Issue #37: a carrier is a jet's last resort (it air-starts astern), only when no land field is on.
+                    if (deck < 0 || b.Picked || (!bases[deck].Picked && b.DistSq < bases[deck].DistSq)) deck = i;
+                    continue;
+                }
                 if (nearest < 0 || b.DistSq < bases[nearest].DistSq) nearest = i;
                 if (b.Picked) picked = i;
                 if (b.HangarReady && (ready < 0 || b.DistSq < bases[ready].DistSq)) ready = i;
             }
+            if (nearest < 0) return deck;
             if (mode == LaunchMode.Any && ready >= 0) return ready;
             return picked >= 0 ? picked : nearest;
         }

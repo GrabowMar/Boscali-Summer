@@ -35,16 +35,33 @@ namespace BoscaliSummer.Garrisons
                 case "lzdrop": return Drop(lead, args);
                 case "lzstatus": return ZoneStatus();
                 case "status": return Status();
-                case "hover": return Hover(lead, Number(args, "height", 30f), Text(args, "over") == "building");
+                case "hover": return Hover(lead, Number(args, "height", 30f), Text(args, "over") == "building", Text(args, "near") == "enemybase");
+                case "ropedrop": return RopeDrop(lead);
+                case "camps": return Camps(lead);
                 default: return Failure("AirborneAutomation", "Step", "unknown action");
             }
         }
 
         /// <summary>Test only: parks the helicopter frozen at a height over the ground or the nearest roof.</summary>
-        private static Dictionary<string, object> Hover(Aircraft lead, float height, bool overBuilding)
+        private static Dictionary<string, object> Hover(Aircraft lead, float height, bool overBuilding, bool nearEnemyBase = false)
         {
             if (lead == null || lead.rb == null) return Failure("AirborneAutomation", "hover", "no friendly aircraft");
             Vector3 spot = lead.transform.position;
+            if (nearEnemyBase)
+            {
+                // 1.2 km off the nearest land base another faction holds: a drop here used to join (and flip to) that base.
+                Airbase enemy = null;
+                float bestSq = float.MaxValue;
+                foreach (Airbase b in UnityEngine.Object.FindObjectsOfType<Airbase>())
+                {
+                    if (b == null || b.AttachedAirbase || b.CurrentHQ == null || b.CurrentHQ == lead.NetworkHQ) continue;
+                    float d = (b.transform.position - spot).sqrMagnitude;
+                    if (d < bestSq) { bestSq = d; enemy = b; }
+                }
+                if (enemy == null) return Failure("AirborneAutomation", "hover", "no enemy-held base");
+                Vector3 away = Vector3.ProjectOnPlane(spot - enemy.transform.position, Vector3.up);
+                spot = enemy.transform.position + (away.sqrMagnitude > 1f ? away.normalized : Vector3.forward) * 1200f;
+            }
             if (overBuilding)
             {
                 MapBuilding best = null;
@@ -349,6 +366,41 @@ namespace BoscaliSummer.Garrisons
                 ["ok"] = true, ["aboard"] = aboard, ["left"] = Aboard(lead),
                 ["troops"] = troops, ["troopsActive"] = active, ["troopsAmmo"] = ammo,
                 ["stations"] = lead.weaponStations != null ? lead.weaponStations.Count : -1,
+            };
+        }
+
+        /// <summary>A real Ibis drop through the controller (the troops weapon trigger's path): server outcome after the descent.</summary>
+        private static Dictionary<string, object> RopeDrop(Aircraft lead)
+        {
+            AirAssaultController controller = AirAssaultController.Instance;
+            if (lead == null || controller == null)
+                return Failure("AirborneAutomation", "ropedrop", lead == null ? "no friendly aircraft" : "no AirAssaultController");
+            int aboard = Aboard(lead);
+            MountedTroops troops = BayTroops(lead) ?? lead.GetComponentInChildren<MountedTroops>(true);
+            controller.DeployFromWeaponStation(lead, troops, null, null, default);
+            return new Dictionary<string, object> { ["ok"] = true, ["aboard"] = aboard, ["left"] = Aboard(lead) };
+        }
+
+        /// <summary>Drop-made camps (seeded AA excluded): how many, how many emplacements stand, and how many stand under
+        /// another faction than the one that dropped them (the bug: a camp joined to an enemy base flipped to it).</summary>
+        private static Dictionary<string, object> Camps(Aircraft lead)
+        {
+            int camps = 0, own = 0, emplacements = 0, wrong = 0;
+            foreach (InfantryEncampmentBuilder.EncampmentSite site in InfantryEncampmentBuilder.Sites)
+            {
+                if (site == null || site.Seeded) continue;
+                camps++;
+                if (lead != null && site.Owner == lead.NetworkHQ) own++;
+                foreach (Building b in site.Slots)
+                {
+                    if (b == null || b.disabled) continue;
+                    emplacements++;
+                    if (b.NetworkHQ != site.Owner) wrong++;
+                }
+            }
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["camps"] = camps, ["own"] = own, ["emplacements"] = emplacements, ["wrongFaction"] = wrong,
             };
         }
 

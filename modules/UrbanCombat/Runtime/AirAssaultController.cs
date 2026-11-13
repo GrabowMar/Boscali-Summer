@@ -134,7 +134,7 @@ namespace BoscaliSummer.Garrisons
             if (GameAccess.IsServer())
             {
                 FactionHQ owner = aircraft.NetworkHQ;
-                Airbase airbase = FindNearestAirbase(aircraft.transform.position);
+                Airbase airbase = FindNearestAirbase(aircraft.transform.position, owner);
                 var ground = new GlobalPosition(landing.x, landing.y, landing.z);
                 // The stick is on the ground once its first jumper touches down; the rest of the stick lands within seconds.
                 Schedule(HaloRampSeconds + plan.FirstLandingSeconds, () => ResolveParadrop(ground, owner, airbase, dropCount));
@@ -239,7 +239,7 @@ namespace BoscaliSummer.Garrisons
             if (GameAccess.IsServer())
             {
                 FactionHQ owner = aircraft.NetworkHQ;
-                Airbase airbase = FindNearestAirbase(origin);
+                Airbase airbase = FindNearestAirbase(origin, owner);
                 int landingShellId = shell != null ? shell.GetInstanceID() : 0;
                 Schedule(descent, () => ResolveFastRope(aircraft, owner, airbase, landing, shell, landingShellId));
             }
@@ -359,6 +359,12 @@ namespace BoscaliSummer.Garrisons
 
             Vector3 global = landing.AsVector3();
             Landed?.Invoke(owner.GetInstanceID(), global.x, global.z, landingShellId);
+            // Roped onto a roof: hold that building, as a HALO stick landing on one does.
+            if (shell != null && ZoneGarrisonManager.Instance != null && ZoneGarrisonManager.Instance.TryOccupyBuilding(shell, owner))
+            {
+                Plugin.Logger.LogInfo($"[AIR ASSAULT] Roped squad secured and fortified building: {shell.name}!");
+                return;
+            }
             if (rappelWaves >= MaximumRappelWaves)
             {
                 bool deployed = InfantryEncampmentBuilder.DeployRappelEncampment(landing.ToLocalPosition(), owner, airbase);
@@ -541,7 +547,12 @@ namespace BoscaliSummer.Garrisons
             return null;
         }
 
-        private static Airbase FindNearestAirbase(Vector3 pos)
+        /// <summary>
+        /// The nearest airbase <paramref name="owner"/> holds, or null. Never another faction's: vanilla
+        /// <c>Airbase.AddBuilding</c> hands every member building to the base's CurrentHQ, so a camp joined
+        /// to an enemy base spawned as the enemy's.
+        /// </summary>
+        private static Airbase FindNearestAirbase(Vector3 pos, FactionHQ owner)
         {
             if (cachedAirbases == null || cachedAirbases.Length == 0)
             {
@@ -563,7 +574,7 @@ namespace BoscaliSummer.Garrisons
             for (int i = 0; i < cachedAirbases.Length; i++)
             {
                 Airbase ab = cachedAirbases[i];
-                if (ab == null || !ab.gameObject.scene.IsValid() || ab.AttachedAirbase) continue;
+                if (ab == null || !ab.gameObject.scene.IsValid() || ab.AttachedAirbase || ab.CurrentHQ != owner) continue;
                 Vector3 center = ab.center != null ? ab.center.position : ab.transform.position;
                 float dSq = (center - pos).sqrMagnitude;
                 if (dSq < bestDistSq)

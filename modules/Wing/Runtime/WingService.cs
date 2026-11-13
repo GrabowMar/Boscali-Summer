@@ -183,6 +183,9 @@ namespace BoscaliSummer.Modules.Wing.Runtime
         /// <summary>Take over an initialised aircraft as the next member (host only; fixed-wing only in M1).</summary>
         public bool Adopt(Aircraft a) => AdoptMember(a, null) != null;
 
+        /// <summary>An air-started requisition (a jet off a carrier) with its reserved pilot: joins straight into formation.</summary>
+        public bool AdoptAir(Aircraft a, WingPilot pilot) => AdoptMember(a, null, pilot) != null;
+
         /// <summary>The new member, its ground pilot (if any) attached before its state is entered: entering reads
         /// <see cref="WingMember.OnGround"/> to keep the gear down.</summary>
         private WingMember AdoptMember(Aircraft a, Func<WingMember, GroundPilot> ground, WingPilot pilot = null)
@@ -620,12 +623,14 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return fields;
         }
 
-        /// <summary>Fields <paramref name="type"/> can launch from: a jet not from a carrier (spike S6: assault carriers have
-        /// no taxi network and narrow deck runways; deck operations are M3d's), a helicopter from any.</summary>
+        /// <summary>Fields <paramref name="type"/> can launch from: a helicopter from any; a jet from a land field, or from a
+        /// carrier only when no land field is left (issue #37: it air-starts astern of the ship, since assault carriers have no
+        /// taxi network and narrow deck runways; deck operations are M3d's).</summary>
         private static List<Airbase> LaunchFields(Aircraft caller, AircraftDefinition type)
         {
             List<Airbase> fields = FriendlyFields(caller);
-            if (ProfileReader.ClassOf(type ?? caller.definition) == AirframeClass.FixedWing) fields.RemoveAll(b => b.AttachedAirbase);
+            if (ProfileReader.ClassOf(type ?? caller.definition) == AirframeClass.FixedWing && fields.Exists(b => !b.AttachedAirbase))
+                fields.RemoveAll(b => b.AttachedAirbase);
             return fields;
         }
 

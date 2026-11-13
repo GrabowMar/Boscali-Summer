@@ -223,9 +223,33 @@ namespace BoscaliSummer.Core.Ui
             infoHead.Set(icon, title, core ? "CORE / ALWAYS ON" : on ? "ON IN THIS MISSION" : "OFF IN THIS MISSION", on);
             bool battlefield = MissionProfile.IsBattlefield(id);
             infoBody.Set(info + (core ? " Other systems lean on it, so it cannot be switched off."
-                : battlefield ? " Switched on mid-mission, it joins the fight under way." : ""));
+                : battlefield ? " Switched on mid-mission, it joins the fight under way." : "") + Links(id));
             infoEffect.Set(core ? "ALWAYS ON" : battlefield ? "CHANGES THE MISSION" : "LEAVES THE MISSION ALONE",
                 core ? AvState.Info : battlefield ? AvState.Caution : AvState.Ready);
+        }
+
+        /// <summary>
+        /// " Needs X. Switching it off also turns off Y, Z." for the card, so a cascade from <see cref="Set"/>
+        /// is never a surprise (a tester read Trenches + THEATER/OPS going dark together as a bug).
+        /// </summary>
+        private string Links(string id)
+        {
+            ModuleMetadata self = Array.Find(Offered, module => module.Id == id);
+            var needs = new List<string>();
+            if (self != null)
+                foreach (string dependency in self.Dependencies)
+                    if (!MissionProfile.IsCore(dependency)) needs.Add(NameOf(dependency));
+            var neededBy = new List<string>();
+            foreach (ModuleMetadata module in Offered)
+                if (Array.IndexOf(module.Dependencies, id) >= 0) neededBy.Add(module.DisplayName);
+            return (needs.Count > 0 ? " Needs " + string.Join(", ", needs) + "." : "") +
+                (neededBy.Count > 0 ? " Switching it off also turns off " + string.Join(", ", neededBy) + "." : "");
+        }
+
+        private string NameOf(string id)
+        {
+            ModuleMetadata module = Array.Find(Offered, m => m.Id == id);
+            return module != null ? module.DisplayName : id;
         }
 
         /// <summary>Switching a module on brings what it needs; switching one off takes what needs it.</summary>

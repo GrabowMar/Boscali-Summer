@@ -207,9 +207,29 @@ namespace BoscaliSummer.Modules.Progression.Runtime
 
         internal int EarnedPoints(Player player) => PerkPoints.EarnedForPilot(Mathf.RoundToInt(Score(player)),
             squad.GetScoreOrigin(PlayerIdentity.Of(player)), settings.ScorePerPoint.Value,
-            settings.MaximumPoints.Value, squad.GetBonusPoints(PlayerIdentity.Of(player)));
+            settings.MaximumPoints.Value, squad.GetBonusPoints(PlayerIdentity.Of(player)) + GrantedRanks(player));
 
         private static float Score(Player player) => player == null ? 0f : player.PlayerScore;
+
+        private static readonly System.Reflection.FieldInfo RankThresholdsField =
+            HarmonyLib.AccessTools.Field(typeof(Player), "rankThresholds");
+
+        /// <summary>
+        /// Ranks a mission objective granted beyond what the pilot's score earned: one pick each. Vanilla
+        /// <c>Player.SetRank</c> (the objective's rank reward) moves rank but never score, so the score
+        /// ladder alone paid nothing for it. The baseline is the rank vanilla would show without objectives:
+        /// the mission's starting rank (also applied through SetRank, with its score offset) plus score.
+        /// </summary>
+        private static int GrantedRanks(Player player)
+        {
+            if (player == null || !(RankThresholdsField?.GetValue(player) is float[] thresholds) || thresholds.Length == 0 ||
+                MissionManager.CurrentMission?.missionSettings == null) return 0;
+            int start = Mathf.Clamp(MissionManager.CurrentMission.missionSettings.playerStartingRank, 0, thresholds.Length - 1);
+            float rankScore = (player.PlayerScore + thresholds[start]) * MissionHelper.RankMultiplier;
+            int earned = start;
+            for (int i = 0; i < thresholds.Length && thresholds[i] <= rankScore; i++) earned = Mathf.Max(earned, i);
+            return Mathf.Max(0, player.PlayerRank - earned);
+        }
         internal int Generation(Player player) => GetGeneration(PlayerIdentity.Of(player));
 
         // ---- Client ----------------------------------------------------------------------

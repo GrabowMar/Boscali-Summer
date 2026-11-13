@@ -45,10 +45,17 @@ namespace BoscaliSummer.Core.Game
         public static bool DryGround(Vector3 desired, out Vector3 point)
         {
             point = default;
-            if (!Finite(desired) || GameAssets.i?.terrainMaterial == null ||
-                !Physics.Raycast(desired + Vector3.up * 500f, Vector3.down, out RaycastHit hit, 2000f,
-                    Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore) ||
-                hit.collider == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial ||
+            if (!Finite(desired) || GameAssets.i?.terrainMaterial == null) return false;
+            // An aircraft overhead (the Ibis hovering over its own rope drop) is not the ground: look past it.
+            Vector3 from = desired + Vector3.up * 500f;
+            RaycastHit hit = default;
+            bool landed = false;
+            for (int i = 0; i < 4 && Physics.Raycast(from, Vector3.down, out hit, 2000f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore); i++)
+            {
+                if (hit.collider == null || hit.collider.GetComponentInParent<Aircraft>() == null) { landed = true; break; }
+                from = hit.point + Vector3.down * 0.05f;
+            }
+            if (!landed || hit.collider == null || hit.collider.sharedMaterial != GameAssets.i.terrainMaterial ||
                 hit.normal.y < 0.96f || hit.point.y <= Datum.LocalSeaY + 1f) return false;
             point = hit.point;
             return Finite(point);

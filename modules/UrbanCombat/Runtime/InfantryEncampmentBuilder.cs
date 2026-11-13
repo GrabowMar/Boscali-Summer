@@ -52,6 +52,8 @@ namespace BoscaliSummer.Garrisons
         }
 
         private static readonly List<EncampmentSite> ActiveSites = new List<EncampmentSite>();
+        /// <summary>Read-only view for the sim hook (AirborneAutomation "camps").</summary>
+        internal static IReadOnlyList<EncampmentSite> Sites => ActiveSites;
         private static readonly Dictionary<string, BuildingDefinition> CachedDefs =
             new Dictionary<string, BuildingDefinition>(StringComparer.OrdinalIgnoreCase);
         private static bool catalogInitialized;
@@ -163,7 +165,8 @@ namespace BoscaliSummer.Garrisons
             // A fallen site no longer counts toward the cap, blocks placement or absorbs a drop.
             PruneFallenSites();
             EncampmentSite existing = FindNearbySite(dropPos, 150f);
-            if (existing != null && existing.Owner == owner)
+            // A seeded AA camp is already at full strength: reinforcing it would put nothing new on the ground.
+            if (existing != null && existing.Owner == owner && !existing.Seeded)
             {
                 ReinforceSite(existing, troopCount);
                 return true;
@@ -439,7 +442,12 @@ namespace BoscaliSummer.Garrisons
         {
             BuildingDefinition def = Resolve(preferredKey, fallbackKeyword);
             if (def == null || spawner == null || !GameAccess.IsServer() || site.Owner == null ||
-                !GroundPlacement.TryPlace(def, position, rotation, out Vector3 placed)) return null;
+                !TryPlaceNear(def, position, rotation, out Vector3 placed))
+            {
+                // Seeding tries many candidates at game start; only a drop's miss is worth a line.
+                if (!site.Seeded) Plugin.Logger.LogInfo($"[ENCAMPMENT] No level open ground for {label} within {PlacementRadii[PlacementRadii.Length - 1]:0} m of ({position.x:0}, {position.z:0}).");
+                return null;
+            }
 
             return spawner.SpawnBuilding(
                 def.unitPrefab,
@@ -452,6 +460,25 @@ namespace BoscaliSummer.Garrisons
                 null);
         }
 
+
+        private static readonly float[] PlacementRadii = { 0f, 6f, 12f, 20f, 30f };
+
+        /// <summary>
+        /// The drop point itself is often a slope, a road or a treeline where the strict shared rule
+        /// fits no emplacement; walk short rings out before giving up (at most 33 tries).
+        /// </summary>
+        private static bool TryPlaceNear(BuildingDefinition def, Vector3 position, Quaternion rotation, out Vector3 placed)
+        {
+            for (int r = 0; r < PlacementRadii.Length; r++)
+                for (int k = 0; k < (r == 0 ? 1 : 8); k++)
+                {
+                    float a = k * (Mathf.PI * 0.25f) + r * 0.4f;
+                    Vector3 candidate = position + new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a)) * PlacementRadii[r];
+                    if (GroundPlacement.TryPlace(def, candidate, rotation, out placed)) return true;
+                }
+            placed = default;
+            return false;
+        }
 
         private static void ReplenishFirebase(EncampmentSite site)
         {

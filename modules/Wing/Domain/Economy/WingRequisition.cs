@@ -168,7 +168,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 FactionStock = hq != null ? hq.GetUnitSupply(d) : 0,
             };
             foreach (Airbase f in Fields)
-                if (f != null && IsOn(f) && !(a.Jet && f.AttachedAirbase)) a.BasesForClass++;
+                if (f != null && IsOn(f)) a.BasesForClass++;
             return a;
         }
 
@@ -217,10 +217,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
             return false;
         }
 
-        /// <summary>A field's row status: OFF, NO JETS (a carrier for a jet), SHORT (its departure runway is shorter than the airframe
+        /// <summary>A field's row status: OFF, AIR START (a carrier for a jet: it spawns in the air astern), SHORT (its departure runway is shorter than the airframe
         /// needs at the chosen fuel, <see cref="TakeoffRuns"/>), READY (a hangar can spawn it), else APRON (a service-point spawn).</summary>
         public static string Status(Airbase f, AircraftDefinition d) =>
-            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "NO JETS" : d != null && TakeoffRuns.Short(d.unitName, RunwayOf(f), FuelPercent) ? "SHORT"
+            !IsOn(f) ? "OFF" : IsJet(d) && f.AttachedAirbase ? "AIR START" : d != null && TakeoffRuns.Short(d.unitName, RunwayOf(f), FuelPercent) ? "SHORT"
             : d != null && HangarReady(f, d) ? "READY" : "APRON";
 
         /// <summary>The length of the runway Wing departs from there (the first usable for takeoff, as FieldTraffic picks it); 0: none.</summary>

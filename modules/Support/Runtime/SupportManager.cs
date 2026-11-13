@@ -477,7 +477,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (!CallSheet.TryGet(id, out CallRow row) || catalog == null) return "";
             SupportActionDefinition def = catalog.Find(id);
             if (def == null || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null) return "";
-            if (!IsAuthorised(def)) return CallGate.LockWord(row);
+            // Ranking up opens nothing by itself: a pick waits to be spent in SQD > SKILLS, so say so.
+            if (!IsAuthorised(def))
+                return CallGate.LockWord(row) + (ModuleServices.TryGet(out IProgressionView view) && view != null && view.AvailablePoints > 0
+                    ? " · PICK READY IN SQD" : "");
             if (def.RequiredBird != SpaceBirdRequirement.None && !BirdsUpFor(def.RequiredBird))
                 return (opsMirror.State.BirdsLaunched & BirdMask(def.RequiredBird)) != 0 ? "SATELLITE LOST · RELAUNCH IT" : "NO SATELLITE · LAUNCH ONE";
             return "";
