@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly AvIcon[] SubIcons = { AvIcon.Flag, AvIcon.LayersSubtract, AvIcon.MapPin };
         private static readonly string[] SubHelp =
         {
-            "Stances and every order.",
+            "Profiles and every order.",
             "The Station Board: the shape each element flies and how well it holds it, spacing and stack.",
             "The Flight Plan: the scope's route as legs, and your own autopilot with NAV.",
         };
@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
             : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
             : last != null && last.Client ? "Orders are host only for now."
-            : "Click the table to choose who orders go to; a stance sets how the scope fights.";
+            : "Click the table to choose who orders go to; a profile sets how the scope fights.";
 
         public string Alert => alertText;
 
@@ -57,6 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
+            flow.Links(("TARGETS", "TGT", "TARGETS"), ("MAP", "MAP", null));
             ShowSub(SubOrders);
         }
 

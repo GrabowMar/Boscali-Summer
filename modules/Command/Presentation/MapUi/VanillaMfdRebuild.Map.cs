@@ -82,10 +82,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public MapPresenter(MFDScreen screen, MapOptions options)
                 : base(screen, VanillaMfdPanelId.Map) { this.options = options; }
 
-            protected override string Title => PageTitles[0];
-
-            private static readonly string[] PageTitles = { "TACTICAL PLOT / LAYER CONTROL", "TACTICAL PLOT / SYMBOLOGY" };
-
             protected override (AvIcon Icon, string Label)[] TabItems => new[]
             {
                 (AvIcon.LayersSubtract, "LAYERS"),
@@ -142,7 +138,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             protected override void OnPageChanged(int index)
             {
-                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 selectedPage = index;
                 RequestRefresh();
             }
@@ -180,6 +175,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 // The overlay legend sits under the overlay toggles it explains (it used to live on READABILITY).
                 page.Add(new LegendCard(page.Content));
+                page.Links(("FRONTS", "STR", "BOARD"), ("TARGETS", "TGT", "TARGETS"));
             }
             private bool NativeLayer(int index)
             {
@@ -279,7 +275,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildReadability(AvFlow page)
             {
                 page.Section(AvIcon.Focus2, "SYMBOL SAMPLE", "THE MAP'S OWN SPRITES");
-                var preview = new AvCard(page.Content, page.Ticker, page.Inner, "UNIT SIGNATURE  /  SCALE SAMPLE");
+                var preview = new AvCard(page.Content, page.Ticker, page.Inner, "UNIT SIGNATURE · SCALE SAMPLE");
                 page.Add(preview);
                 AvFlow previewFlow = preview.Flow;
                 previewTiles[0] = new SymbolTile(previewFlow.Content, "AIR", "AIRCRAFT");
@@ -304,6 +300,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Focus2, "SYMBOL KEY", "FRAME = SIDE · GLYPH = TYPE");
                 page.Add(new SymbolKey(page.Content));
+                page.Links(("CONTACT PRIORITY", "HUD", null), ("DISPLAY SETTINGS", "SET", null));
             }
             /// <summary>The colour a contact side wears on the map: the tints the game gives friendly and
             /// hostile icons, and a neutral grey. Shape carries the same distinction without colour.</summary>

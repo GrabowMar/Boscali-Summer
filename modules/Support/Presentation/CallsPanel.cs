@@ -5,6 +5,7 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Support.Configuration;
 using BoscaliSummer.Modules.Support.Domain.C2;
 using BoscaliSummer.Modules.Support.Domain.Calls;
@@ -23,7 +24,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
     internal enum OpsTab : byte { Fronts = 1, Perks = 2, Tasked = 3 }
 
     /// <summary>
-    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, four metrics, three icon
+    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, the country strip, three icon
     /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards (status stamp, blocker,
     /// readiness, superiority, your support, programme phase) with an OPEN button each (the windows are <see cref="FrontController"/>'s);
     /// PERKS lists the pilot's perks by front as call cards (clicking one ARMS it: arming spends nothing) and TASKED the faction's posted strikes as
@@ -36,7 +37,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.2f;
-        private static readonly string[] PageTitles = { "FRONTS / FACTION STRATEGY", "PERKS / YOUR SUPPORT", "TASKED / FACTION STRIKE PACKAGES" };
 
         private readonly OpsPageView view = new OpsPageView();
         private readonly List<CallTile> tiles = new List<CallTile>(16);
@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             new MfdPanelInstaller(MfdSlots.Ops, "OPS", "BoscaliOperations.Screen", preferLeft: true);
         private MFDScreen screen => installer.Screen;
         private AvConsole console;
-        private AvMetric[] metrics;
+        private AvRow allocationRow;
         private readonly FrontCardPart[] cards = new FrontCardPart[FrontRules.FrontCount];
         private readonly Dictionary<SupportActionId, PerkRowPart> perkRows = new Dictionary<SupportActionId, PerkRowPart>(16);
         private OrderStrip strip;
@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             installer.Reset();
             console = null;
-            metrics = null;
+            allocationRow = null;
             groups = null; strip = null; cruisePart = null;
             taskedGroup = null;
             for (int i = 0; i < taskedRows.Length; i++) taskedRows[i] = null;
@@ -174,7 +174,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void BuildConsole(RectTransform host, float height)
         {
-            console = AvConsole.Build(host, "OPS", PageTitles[0], 3, Width, height);
+            console = AvConsole.Build(host, "OPS", "SUPPORT", 3, Width, height);
             AvTabBar tabs = console.Tabs((AvIcon.Flag, "FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
             string[] hints =
             {
@@ -184,14 +184,18 @@ namespace BoscaliSummer.Modules.Support.Presentation
             };
             AvControl[] tabButtons = tabs.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabButtons.Length && i < hints.Length; i++) tabButtons[i].Help = hints[i];
-            metrics = console.Metrics("YOUR ALLOCATION", "PERKS READY", "FRONTS AHEAD", "ALERTS");
+            CountryStrip.Mount(console);
             console.PageChanged += OnPage;
 
-            // FRONTS: three cards. A short panel drops their secondary lines (programme, queue, directive, latest event) before anything else.
+            // FRONTS: the player's allocation (their own share; the strip above is the faction's), then three cards. A short panel drops
+            // the cards' secondary lines (programme, queue, directive, latest event) before anything else.
             float body = height - (AvGridTokens.Header + 4f + AvGridTokens.Metric + 6f + AvGridTokens.Tab + 4f + AvGridTokens.Footer);
             CardTier tier = body >= 540f ? CardTier.Full : body >= 360f ? CardTier.Mid : CardTier.Core;
             AvFlow p0 = console.Page(0);
+            allocationRow = p0.Add(new AvRow(p0.Content));
+            allocationRow.Help = "ALLOCATION: your own share, spent on perks, programmes and posted strikes. AHEAD counts the fronts where your side holds superiority; ALERTS the blockers on the cards below.";
             for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront, tier));
+            p0.Links(("WAR PLAN", "STR", "BOARD"), ("FUNDS", "FAC", "ECONOMY"));
 
             // PERKS: the perks grouped by front as call cards. The pinned strip sits over the top of the page.
             float stripSpace = OrderStrip.Height - AvGridTokens.Gap;
@@ -205,6 +209,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 foreach (CallRow r in CallSheet.Rows)
                     if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, InspectPerk, r.Id));
             }
+            p1.Links(("TARGETS", "TGT", "TARGETS"), ("CAMERA MARK", "TGT", "MARK"));
 
             // TASKED: the flying cruise's block (only while one flies), then the posted strikes as package cards. Only real posts are drawn.
             AvFlow p2 = console.Page(2);
@@ -218,6 +223,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 taskedRows[i] = p2.Add(new TaskedCardPart(p2.Content, InspectPost, "Perk Tasked " + i));
                 taskedRows[i].SetShown(false);
             }
+            p2.Links(("JOBS", "MIS", "CONTRACTS"), ("SORTIES", "STR", "BOARD"));
 
             console.Orders(0,
                 "OPEN a front for its map, programmes and perks.",
@@ -289,7 +295,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             tab = (OpsTab)(page + 1);
             nextRefresh = 0f;
-            console?.SetTitle(PageTitles[Mathf.Clamp(page, 0, PageTitles.Length - 1)]);
             if (strip != null) strip.Rect.gameObject.SetActive(tab != OpsTab.Fronts);
         }
 
@@ -370,18 +375,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return aimGrid;
         }
 
-        /// <summary>Paints the metrics, the open page, the pinned strip and the footer from <paramref name="v"/> (the harness feeds fixtures here).</summary>
+        /// <summary>Paints the open page (FRONTS' allocation line included), the pinned strip and the footer from <paramref name="v"/> (the harness feeds fixtures here).</summary>
         internal void Paint(OpsPageView v)
         {
             if (console == null) return;
-            metrics[0].Set(v.Allocation.ToString(), "AP", Mathf.Clamp01(v.Allocation / 100f), v.Allocation > 0 ? AvState.Ready : AvState.Caution);
-            metrics[1].Set(v.PerksReady + "/" + v.PerksTotal, "READY", v.PerksTotal > 0 ? v.PerksReady / (float)v.PerksTotal : 0f, v.PerksReady > 0 ? AvState.Ready : AvState.Caution);
-            metrics[2].Set(v.FrontsAhead + "/" + FrontRules.FrontCount, "AHEAD", v.FrontsAhead / (float)FrontRules.FrontCount, v.FrontsAhead > 0 ? AvState.Ready : AvState.Caution);
-            metrics[3].Set(v.Alerts.ToString(), v.Alerts == 0 ? "CLEAR" : "ACTIVE", Mathf.Clamp01(v.Alerts / 3f), v.Alerts > 0 ? AvState.Danger : AvState.Ready);
-
             // Only the open page is painted; OnPage forces a refresh the moment another one is picked, so it repaints then.
             if (tab == OpsTab.Fronts)
+            {
+                allocationRow?.Set("ALLOCATION", v.FrontsAhead + "/" + FrontRules.FrontCount + " FRONTS AHEAD · " + (v.Alerts == 0 ? "NO ALERTS" : v.Alerts + (v.Alerts == 1 ? " ALERT" : " ALERTS")),
+                    v.Allocation + " AP", v.Alerts > 0 ? AvState.Danger : v.Allocation > 0 ? AvState.Ready : AvState.Caution);
                 for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
+            }
 
             if (tab == OpsTab.Perks)
             {

@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             ButtonGrid(p, callSpecs, 3, callHelps);
 
             BuildLogPage(p);
+            p.Links(("EVENTS", "EVN", "DISPATCH"), ("RADIO", "RAD", null));
         }
     }
 }

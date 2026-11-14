@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             queue = f.Add(new WmcQueueLane(f.Content, ToggleQueue, RunQueue, ClearQueue));
             queue.Toggle.Help = "Add the next map orders to the scope's element lane instead of replacing its task (holding shift does the same).";
-            queue.Run.Help = "Run the queued plan steps (the plan on BEHAVIOUR › SORTIE).";
+            queue.Run.Help = "Run the plan steps queued in this lane, element by element.";
             queue.Clear.Help = "Empty the queued plan (a running one stops first: press twice).";
         }
 

@@ -48,6 +48,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return rail != null && rail.gameObject.activeInHierarchy;
         }
 
+        /// <summary>Opens the screen behind <paramref name="code"/> unless it is already up (a second press would close it); false when no such key.</summary>
+        public static bool Open(string code)
+        {
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i].Entry.Code != code) continue;
+                if (!keys[i].Latched) keys[i].Press();
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>False when even bare 44px keys would not fit; the caller then leaves the stock bezel alone.</summary>
         public static bool Fits(float railHeight, int keyCount) => MfdRailPlan.Resolve(railHeight, keyCount, 0).Fits;
 

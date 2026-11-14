@@ -144,6 +144,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int i = 0; i < PlaneFaultRows; i++) planeFaults[i] = Live(new SqdRosterRow(p.Content));
             p.Row(planeFaults[0], planeFaults[1]);
             p.Row(planeFaults[2], planeFaults[3]);
+            p.Links(("WING", "WMC", null), ("LOADOUT", "WMC", "LOADOUT"));
 
             // Start on the empty card: there is no aircraft until the first refresh proves otherwise.
             planeLive = true;

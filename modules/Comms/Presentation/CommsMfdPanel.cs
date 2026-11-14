@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private const int TabComms = 1;
 
         /// <summary>The console title; the harness builds its console with the same words.</summary>
-        internal const string Title = "MULTIPLAYER DATA LINK";
+        internal const string Title = "COMMS";
 
         private static readonly (AvIcon Icon, string Label)[] TabSpecs =
         {

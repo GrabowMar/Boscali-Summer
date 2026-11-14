@@ -76,6 +76,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Section(AvIcon.Stack2, "OPS SKILLS", "FORM 3-C · GRADES HELD");
             committedLanes = p.Add(new SkillLaneStrip(p.Content, committedLaneNames, PerkCatalog.MaximumDepth) { Grow = 1f });
             committedLanes.Help = "HELD: every OPS lane and its six grades. A lit pip is a grade you hold; grade 1 of every lane is free.";
+            p.Links(("WING", "WMC", null), ("MISSION", "MIS", "MISSION"));
         }
 
         // ---- PILOT refresh ---------------------------------------------------------------

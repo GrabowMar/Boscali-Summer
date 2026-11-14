@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly string[] ovName = new string[MaxOverrides], ovSub = new string[MaxOverrides];
         private readonly uint[] ovMember = new uint[MaxOverrides];
 
-        public string Hint => "Tap a scenario to fly it. TUNE changes fly at once; SAVE NEW keeps them as a scenario.";
+        public string Hint => "Tap a profile to fly it. TUNE changes fly at once; SAVE NEW keeps them as a profile.";
 
         public string Alert => null;
 
@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             says = flow.Add(new WmcLines(flow.Content, 1));
 
             // ---- the presets
-            flow.Section(AvIcon.ListDetails, "SCENARIOS", "TAP TO FLY · WING KEY + 1-6");
+            flow.Section(AvIcon.ListDetails, "PROFILES", "TAP TO FLY · WING KEY + 1-6");
             plates = flow.Add(new WmcStanceSlots(flow.Content, PickPreset, null, StanceBook.MaxStances, true));
             AvControl[] bar = flow.Buttons(
                 new AvControl.Spec("SAVE NEW", SaveNew, AvButtonStyle.Default, AvIcon.Bookmark),
@@ -82,11 +82,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             saveButton = bar[0];
             updateButton = bar[1];
             deleteButton = bar[2];
-            nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The scenario's name: Enter keeps it (16 characters at most).");
+            nameField = new WmcNameField(flow.Content, "NAME", MaxNameChars, CommitName, "The profile's name: Enter keeps it (16 characters at most).");
             nameGate = flow.Add(new WmcCollapsible(nameField));
             var keys = new[] { "W+1", "W+2", "W+3", "W+4", "W+5", "W+6" };
             keyRow = flow.Add(new WmcTuneRow(flow.Content, "WING KEY", keys, PickKey));
-            for (int i = 0; i < keys.Length; i++) keyRow.Options[i].Help = "Wing key + " + (i + 1) + " flies the lit scenario (ORDERS' slot " + (i + 1) + ").";
+            for (int i = 0; i < keys.Length; i++) keyRow.Options[i].Help = "Wing key + " + (i + 1) + " flies the lit profile (ORDERS' slot " + (i + 1) + ").";
 
             // ---- live tuning of the scope's AI
             tuneSection = flow.Section(AvIcon.AdjustmentsHorizontal, "TUNE", "");
@@ -144,6 +144,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             overrideSection = flow.Section(AvIcon.Target, "OVERRIDES", "");
             overrides = flow.Add(new OverrideView(flow.Content, ticker, MaxOverrides, BindOverride));
             overrides.Prime(MaxOverrides);
+            flow.Links(("SORTIES", "STR", "BOARD"), ("JOBS", "MIS", "CONTRACTS"));
         }
 
         private void Add(string key, string[] labels, string[] tips, Kind kind, DoctrineAxis axis)
@@ -175,7 +176,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             WingConfig cfg = WingSettings.Instance;
             string now = !host ? (c.Client ? "The host tunes the wing." : "Wing Command is not ready.")
-                : live == null ? "The aircraft in scope fly different settings: tap a scenario or a TUNE setting to line them up."
+                : live == null ? "The aircraft in scope fly different settings: tap a profile or a TUNE setting to line them up."
                 : StanceWords.Says(live, FallBackIndex(cfg), cfg != null ? (int)cfg.AfterWinchester.Value : -1, cfg != null ? (int)cfg.AfterBingo.Value : -1);
             if (now != saysShown)
             {
@@ -217,14 +218,14 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
 
             Enable(saveButton, host && live != null && Book.All.Count < StanceBook.MaxStances,
-                !host ? WmcPostureActions.Cannot(c) : live == null ? "Line the scope up on one setting first." : "The scenario list is full.",
-                "Keep what the scope flies now (and the wing rules) as a new scenario.");
+                !host ? WmcPostureActions.Cannot(c) : live == null ? "Line the scope up on one setting first." : "The profile list is full.",
+                "Keep what the scope flies now (and the wing rules) as a new profile.");
             bool canUpdate = host && live != null && nearest != null && !nearest.BuiltIn && nearMask != 0;
             updateButton.Label = canUpdate ? "UPDATE " + nearest.Name : "UPDATE";
-            Enable(updateButton, canUpdate, "Tune one of your scenarios, then UPDATE writes the changes into it (built-ins stay as they are).",
+            Enable(updateButton, canUpdate, "Tune one of your profiles, then UPDATE writes the changes into it (built-ins stay as they are).",
                 "Write what the scope flies now into " + (nearest?.Name ?? "") + ".");
             deleteButton.Label = own && gate.IsArmed("del" + lit.Id, Time.unscaledTime) ? "DELETE?" : "DELETE";
-            Enable(deleteButton, own, "Fly one of your scenarios to delete it (built-ins stay).", "Remove the lit scenario (asks first).");
+            Enable(deleteButton, own, "Fly one of your profiles to delete it (built-ins stay).", "Delete the lit profile (asks first).");
 
             changed |= nameGate.Set(own);
             if (own)
@@ -391,7 +392,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.Name = NewName(nearest != null ? nearest.Name : "CUSTOM");
             if (!Book.Add(s))
             {
-                WingToast.Show("The scenario list is full (" + StanceBook.MaxStances + ")");
+                WingToast.Show("The profile list is full (" + StanceBook.MaxStances + ")");
                 return;
             }
             WingToast.Show("Saved " + s.Name);
@@ -416,7 +417,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (s == null || s.BuiltIn) return;
             if (!gate.Press("del" + s.Id, Time.unscaledTime))
             {
-                WingToast.Show("DELETE again to remove " + s.Name);
+                WingToast.Show("DELETE again to delete " + s.Name);
                 plateKey = long.MinValue;
                 if (last != null) Refresh(last);
                 return;
@@ -437,7 +438,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void Saved()
         {
-            if (!WmcStanceFiles.Save()) WingToast.Show("Could not save your scenarios (see the log)");
+            if (!WmcStanceFiles.Save()) WingToast.Show("Could not save your profiles (see the log)");
             version++;
             plateKey = long.MinValue;
             saysShown = null;

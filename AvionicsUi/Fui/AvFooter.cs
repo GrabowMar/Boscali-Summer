@@ -50,7 +50,7 @@ namespace NOAvionics
             AvText.Fit(name, false);
             text = AvText.Make(Rect, "Text", AvTextRole.Prose, "", TextAlignmentOptions.TopLeft, true);
             AvText.Fit(text, true);
-            sop = AvText.Make(Rect, "OrdersTag", AvTextRole.Micro, "SOP");
+            sop = AvText.Make(Rect, "OrdersTag", AvTextRole.Micro, "TIP");
             AvText.Fit(sop, false);
             order = AvText.Make(Rect, "Order", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             for (int i = 0; i < status.Length; i++)

@@ -23,7 +23,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             this.refresh=refresh;this.exposeMap=exposeMap;
             Rect=AvLay.Child(parent,"Mission actions");
             primary=AvControl.Make(Rect,new AvControl.Spec("SELECT TASK",Primary,AvButtonStyle.Primary));
-            map=AvControl.Make(Rect,new AvControl.Spec("VIEW MAP",Map));
+            map=AvControl.Make(Rect,new AvControl.Spec("LOCATE",Map));
             close=AvControl.Make(Rect,new AvControl.Spec("DISMISS",Cancel,AvButtonStyle.Quiet));
             feedback=AvText.Make(Rect,"Action feedback",AvTextRole.ProseSmall,"",TextAlignmentOptions.TopLeft,true);
             feedback.raycastTarget=false;

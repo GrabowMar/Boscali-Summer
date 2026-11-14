@@ -46,6 +46,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildHardpoints(flow);
             BuildLivery(flow);
             BuildFly(flow);
+            flow.Links(("PILOT", "PILOT", null), ("SUPPLY", "WMC", "SUPPLY"));
         }
 
         /// <summary>LOADOUT came on screen: the airframes SUPPLY offers and the faction's liveries are read again.</summary>

@@ -110,39 +110,6 @@ namespace BoscaliSummer.Modules.Command.Domain
             return "";
         }
 
-        /// <summary>FACTORIES tile: plants/slots and its fill.</summary>
-        public static StrTile Factories(NationView v)
-        {
-            int plants = PlantCount(v);
-            return new StrTile
-            {
-                Key = "FACTORIES", Value = plants.ToString(CultureInfo.InvariantCulture) + "/" + v.Slots.ToString(CultureInfo.InvariantCulture),
-                Caption = v.Building ? "BUILDING" : "", Bar = v.Slots > 0 ? Clamp01((float)plants / v.Slots) : 0f, State = NOAvionics.AvState.Info,
-                Help = "Plants working and the slots the nation has. A plant turns out a unit of its stock row at every interval.",
-            };
-        }
-
-        public static StrTile Focus(NationView v)
-        {
-            bool running = v.Running >= 0;
-            return new StrTile
-            {
-                Key = "FOCUS", Value = running ? NationWords.Focus(v.Running) : "STAFF PICKING",
-                Caption = running ? (v.RunningTotal > 0f ? ((int)(100f * Clamp01(1f - v.RunningLeft / v.RunningTotal))).ToString(CultureInfo.InvariantCulture) + "% " : "") + Clock(v.RunningLeft) : "",
-                Bar = running && v.RunningTotal > 0f ? Clamp01(1f - v.RunningLeft / v.RunningTotal) : 0f,
-                State = running ? NOAvionics.AvState.Ready : NOAvionics.AvState.Inert,
-                Help = "The national focus now running. When none is chosen the staff picks the next.",
-            };
-        }
-
-        public static StrTile Stability(NationView v) => new StrTile
-        {
-            Key = "STABILITY", Value = ((int)Math.Round(v.Stability)).ToString(CultureInfo.InvariantCulture),
-            Caption = "x" + v.Output.ToString("0.00", CultureInfo.InvariantCulture), Bar = Clamp01(v.Stability / 100f),
-            State = v.Stability < 30f ? NOAvionics.AvState.Danger : v.Stability < 45f ? NOAvionics.AvState.Caution : NOAvionics.AvState.Ready,
-            Help = "How steady the home front is, and the output multiplier it gives the plants.",
-        };
-
         private static float Clamp01(float x) => x < 0f ? 0f : x > 1f ? 1f : x;
     }
 }

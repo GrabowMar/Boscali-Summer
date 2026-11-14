@@ -180,7 +180,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             int current = task?.CurrentPhase ?? -1;
             string condition = current >= 0 ? Clean(task.Phases[current].Condition) : Clean(entry.Description);
             if (!string.IsNullOrWhiteSpace(condition)) sb.Append(condition);
-            if (fresh && !string.IsNullOrWhiteSpace(task?.Blocker)) sb.Append("\nHOLD  /  ").Append(Clean(task.Blocker));
+            if (fresh && !string.IsNullOrWhiteSpace(task?.Blocker)) sb.Append("\nHOLD · ").Append(Clean(task.Blocker));
             if (task != null && task.Phases.Length > 1)
                 for (int i = 0; i < task.Phases.Length; i++)
                 {
@@ -188,8 +188,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
                     string mark = p.Status == ObjectivePhaseStatus.Done ? "DONE" : p.Status == ObjectivePhaseStatus.Current ? "NOW" : "NEXT";
                     sb.Append(i == 0 ? "\n\n" : "\n").Append(i + 1).Append("  ").Append(Clean(p.Title)).Append("  ·  ").Append(mark);
                 }
-            if (!string.IsNullOrWhiteSpace(task?.Effect)) sb.Append("\n\nPAYS OFF  /  ").Append(Clean(task.Effect));
-            sb.Append("\nLEAD  /  ").Append(string.IsNullOrWhiteSpace(entry.AcceptedBy) ? entry.IsOffered ? "UNASSIGNED" : "NOT REPORTED" : Clean(entry.AcceptedBy));
+            if (!string.IsNullOrWhiteSpace(task?.Effect)) sb.Append("\n\nPAYS OFF · ").Append(Clean(task.Effect));
+            sb.Append("\nLEAD · ").Append(string.IsNullOrWhiteSpace(entry.AcceptedBy) ? entry.IsOffered ? "UNASSIGNED" : "NOT REPORTED" : Clean(entry.AcceptedBy));
             return sb.ToString();
         }
 

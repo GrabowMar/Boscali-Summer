@@ -76,6 +76,24 @@ namespace NOAvionics
 
         public AvButtons Buttons(params AvControl.Spec[] specs) => Add(new AvButtons(Content, specs));
 
+        /// <summary>
+        /// A page's closing link row: each chip names a fact and the key it lives on ("WAR PLAN · STR") and opens that key, on
+        /// <c>page</c> when given (a tab label of that console).
+        /// </summary>
+        public AvButtons Links(params (string what, string key, string page)[] links)
+        {
+            var specs = new AvControl.Spec[links.Length];
+            for (int i = 0; i < links.Length; i++)
+            {
+                (string what, string key, string page) l = links[i];
+                specs[i] = new AvControl.Spec(l.what + " · " + l.key, () => AvConsole.Open(l.key, l.page), AvButtonStyle.Default, AvIcon.ArrowUpRight, true);
+            }
+            AvButtons row = Buttons(specs);
+            for (int i = 0; i < links.Length; i++)
+                row.Controls[i].Help = "Opens " + links[i].key + (string.IsNullOrEmpty(links[i].page) ? "" : " on " + links[i].page) + ".";
+            return row;
+        }
+
         internal void AppendToGrid(AvPart part, int columns)
         {
             Adopt(part);

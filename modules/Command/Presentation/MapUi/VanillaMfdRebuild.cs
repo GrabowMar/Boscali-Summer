@@ -435,9 +435,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected AvConsole Console { get; private set; }
             internal AvConsole ConsoleForAutomation => Console;
 
-            /// <summary>The console's full header title (the id plate carries the short tag).</summary>
-            protected abstract string Title { get; }
-
             /// <summary>
             /// One (icon, label) per page, in <see cref="CreatePage"/> order. An empty or
             /// single-entry array means no tab bar and exactly one page — the old
@@ -452,7 +449,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 (AvIcon Icon, string Label)[] tabs = TabItems ?? Array.Empty<(AvIcon, string)>();
                 int pageCount = Mathf.Max(1, tabs.Length);
-                Console = AvConsole.Build(root, VanillaMfdPanelCatalog.Label(Id), Title, pageCount,
+                string key = VanillaMfdPanelCatalog.Label(Id);
+                Console = AvConsole.Build(root, key, MfdRailCatalog.For(key).Name ?? key, pageCount,
                     root.rect.width, root.rect.height);
                 if (tabs.Length > 1)
                 {

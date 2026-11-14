@@ -150,6 +150,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             // No grow: the note is the last line of the job sheet; below it the console ground shows.
             studioMessageText = p.Add(new SqdQuote(p.Content, "SHOP NOTE"));
             studioMessageText.Set(StudioQuietLine);
+            p.Links(("WING", "WMC", null), ("SQUADRON", "WMC", "WING"));
         }
 
         private static void StepperHelp(AvStepper stepper, string what)

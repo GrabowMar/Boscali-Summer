@@ -83,8 +83,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 tabs.Add((AvIcon.Skull, extras.ExtraTabLabel));
             }
 
-            AvConsole c = AvConsole.Build(host, MfdSlots.Misc, titles[0], titles.Count, AvTokens.PanelWidth, height);
-            c.PageChanged += index => c.SetTitle(titles[index]);
+            AvConsole c = AvConsole.Build(host, MfdSlots.Misc, "EXTRAS", titles.Count, AvTokens.PanelWidth, height);
 #if !PUBLIC_RELEASE
             console = c;
 #endif

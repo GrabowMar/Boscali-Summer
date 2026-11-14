@@ -113,13 +113,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             var clearRow = new AvButtons(p.Content,
                 new[]
                 {
-                    new AvControl.Spec("CLEAR MINE", () => comms.ClearMine(), AvButtonStyle.Danger, AvIcon.Eraser),
-                    new AvControl.Spec("CLEAR MAP", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR", () => comms.ClearMine(), AvButtonStyle.Danger, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
                 });
             clearAllButton = clearRow.Controls[1];
-            clearRow.Controls[0].Help = "Remove everything you have put on the map.";
-            clearAllButton.Help = "Host only: wipe every mark from the shared map.";
+            clearRow.Controls[0].Help = "Clear yours: remove everything you have put on the map.";
+            clearAllButton.Help = "Clear all (host only): wipe every mark from the shared map.";
             p.Add(clearRow);
+            p.Links(("MAP", "MAP", null), ("TARGETS", "TGT", "TARGETS"));
 
             console.Orders(TabMap,
                 "Arm a tool, then right-click or right-drag on the map. ESC puts it down.",

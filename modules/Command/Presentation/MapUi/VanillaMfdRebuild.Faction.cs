@@ -34,7 +34,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ClassLabels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
             private static readonly string[] LedgerLabels = { "RESERVES", "LOSSES", "VALUE", "MANPOWER" };
-            private static readonly string[] PageTitles = { "TREASURY RETURNS", "ORDER OF BATTLE", "LOSS RETURN", "THE MANDATE" };
             private static readonly string[] LedgerTitles = { "RESERVE RETURN", "LOSS RETURN", "VALUE RETURN", "MANPOWER RETURN" };
             private const int AttritionLimit = 32;
 
@@ -52,7 +51,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly float[] chartSecondary = new float[4];
             private readonly float[] resourceBuffer = new float[MfdResourceHistory.Capacity];
 
-            private AvMetric[] resourceMetrics;
             private UnitRosterPart definitionGrid;
             private MfdPagingGrid infoGrid;
             private ChoiceRow definitionTabs;
@@ -91,7 +89,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly List<AvPart> nationPoliticsParts = new List<AvPart>(2);
             private readonly List<AvPart> nationEconomyParts = new List<AvPart>(8);
             private readonly List<AvPart> mandateParts = new List<AvPart>(3);
-            private string factionTitle = "";
             private int selectedFaction;
             private int definitionGroup;
             private bool definitionsLoaded;
@@ -111,8 +108,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 this.otherSource = otherSource;
             }
 
-            protected override string Title => "FACTION  /  TREASURY RETURNS";
-
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
                 (AvIcon.Coins, "ECONOMY"),
@@ -131,18 +126,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                // Stockpile telemetry is faction-wide, so it rides the console header on every page. The
-                // score / funds / warhead chips that used to sit above it repeated the same numbers and are gone.
-                resourceMetrics = Console.Metrics(ResourceLabels);
-                string[] metricTips =
-                {
-                    "Funds: the faction's spendable balance. It pays for support call-ins and reinforcements.",
-                    "Warheads: stockpiled strategic warheads. Losing airbases and depots drains them.",
-                    "Manpower: personnel embodied in the faction's living assets.",
-                    "Morale: the host's 0-100 mandate. Below 50 contracts pay less; above it they pay more."
-                };
-                for (int i = 0; i < resourceMetrics.Length; i++)
-                    AvHelpTip.Attach(resourceMetrics[i].Rect.gameObject, metricTips[i]);
+                // The country strip, as on STR, MIS, OPS and EVN. Warheads, manpower and morale of the selected side are
+                // on the TREASURY RETURNS chart (ECONOMY) and the mandate bar (POLITICS).
+                BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
                 BuildResourcesPage(CreatePage());
                 BuildForcesPage(CreatePage());
                 BuildLedgerPage(CreatePage());
@@ -168,22 +154,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Events and contract results move it. Below 50 new contracts pay less; above, more.",
                     "AIRBASES lists the faction's bases. PLAYERS lists crews by score.",
                     "A dispatch is the event in force. A directive is the faction's lead contract.");
-                ShowTitle();
             }
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
-                ShowTitle();
                 RequestRefresh();
-            }
-
-            // The header names the faction and the return on this page; a name too long to share the line goes.
-            private void ShowTitle()
-            {
-                string page = selectedPage == 2 ? LedgerTitles[(int)ledgerMode] : PageTitles[Mathf.Clamp(selectedPage, 0, 3)];
-                // ponytail: 48 characters is what the header holds above the 11 px floor; longer names drop out.
-                Console.SetTitle(string.IsNullOrEmpty(factionTitle) || factionTitle.Length + 5 + page.Length > 48
-                    ? page : factionTitle + "  /  " + page);
             }
 
             protected override void RefreshContent()
@@ -203,10 +178,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 if (hq == null)
                 {
-                    for (int i = 0; i < resourceMetrics.Length; i++)
-                        resourceMetrics[i].Set("—", "NO HQ", 0f, AvState.Inert);
-                    factionTitle = "";
-                    ShowTitle();
                     factionHeader.Set("NO RETURN FROM FACTION HQ",
                         "Standing by for the selected faction and its live mission data.");
                     factionHeader.SetLogo(null);
@@ -239,8 +210,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
-                string upperName = (name ?? "FACTION").ToUpperInvariant();
-                if (upperName != factionTitle) { factionTitle = upperName; ShowTitle(); }
 
                 string extended = hq.faction == null ? null : hq.faction.factionExtendedName;
                 factionHeader.Set(name ?? "FACTION", (string.IsNullOrEmpty(extended)
@@ -270,10 +239,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (observedHq == null) return "STANDING BY FOR FACTION HQ";
                 switch (selectedPage)
                 {
-                    case 0: return "TREASURY • OBSERVED RETURNS";
-                    case 1: return "ORDER OF BATTLE • LIVE / LOST";
-                    case 2: return LedgerTitles[(int)ledgerMode] + " • FORM 12-B";
-                    default: return "THE MANDATE • MORALE 0-100";
+                    case 0: return "TREASURY · OBSERVED RETURNS";
+                    case 1: return "ORDER OF BATTLE · LIVE / LOST";
+                    case 2: return LedgerTitles[(int)ledgerMode] + " · FORM 12-B";
+                    default: return "THE MANDATE · MORALE 0-100";
                 }
             }
 
@@ -345,7 +314,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                                       "time left; when it empties, prices return to baseline.";
 
                 // NATION blocks sit above the treasury chart and stay out of the flow until the layer is Active.
-                nationEconomyParts.Add(page.Section(AvIcon.Coins, "MONEY", "READ ONLY"));
+                nationEconomyParts.Add(page.Section(AvIcon.Coins, "MONEY", "SPENT ON STR · LINK BELOW"));
                 moneyNote = page.Add(new AvNote(page.Content, AvTextRole.DataSmall, true));
                 nationEconomyParts.Add(moneyNote);
                 nationEconomyParts.Add(page.Section(AvIcon.Tank, "STOCK", "WHAT THE FACTION CAN FIELD NOW"));
@@ -365,34 +334,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     AvNum.Seconds(MfdResourceHistory.Interval, 0) + "; up to " +
                     AvNum.Seconds(MfdResourceHistory.Capacity * MfdResourceHistory.Interval, 0) +
                     " retained. Missing observations break each resource trace; no backfill.";
+                page.Links(("PRODUCTION", "STR", "SUPPLY"), ("SUPPORT PRICES", "OPS", null));
             }
             private void RefreshResources(FactionHQ hq)
             {
-                float manpower = FactionResourceHistoryStore.Manpower(hq);
-                float morale = FactionResourceHistoryStore.Morale(hq);
-                float funds = hq.factionFunds;
-                int warheads = hq.GetWarheadStockpile();
-                bool manpowerKnown = float.IsFinite(manpower);
-                bool moraleKnown = float.IsFinite(morale);
-
-                resourceMetrics[0].Set(AvNum.Money(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE",
-                    0f, funds < 0f ? AvState.Caution : AvState.Ready);
-                resourceMetrics[1].Set(AvNum.Fixed(warheads, 0), "STOCKPILE", 0f, AvState.Ready);
-                resourceMetrics[2].Set(manpowerKnown ? AvNum.Thousands(manpower) : "—",
-                    manpowerKnown ? "IN ASSETS" : "UNAVAILABLE", 0f,
-                    manpowerKnown ? AvState.Ready : AvState.Inert);
-                // Only morale has a meaningful maximum; the other resources are absolute stocks.
-                resourceMetrics[3].Set(moraleKnown ? AvNum.Fixed(morale, 1) : "—",
-                    moraleKnown
-                        ? "CONTRACTS " + AvNum.Fixed(FactionMoraleState.ContractMultiplier(morale), 2) + "x"
-                        : "HOST DATA UNAVAILABLE",
-                    moraleKnown ? morale / 100f : 0f,
-                    !moraleKnown ? AvState.Inert : morale < 50f ? AvState.Caution : AvState.Ready);
-                AvHelpTip.Attach(resourceMetrics[3].Rect.gameObject,
-                    "Morale: the host's 0-100 mandate. Below 50 contracts pay less; above it they pay more." +
-                    (moraleKnown ? " Live contract multiplier " +
-                        AvNum.Fixed(FactionMoraleState.ContractMultiplier(morale), 2) + "x." : " Host morale is unavailable."));
-
                 ModuleServices.TryGet(out IActiveEventsView events);
                 ActiveEventView current = events?.Current;
                 bool applies = current != null && events.AffectsFaction(hq.faction?.factionName);
@@ -490,6 +435,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         "counts, busiest first.";
 
                 definitionGrid = page.Add(new UnitRosterPart(page.Content, false), 1f);
+                page.Links(("FORCE BALANCE", "STR", "SITREP"), ("WING", "WMC", null));
             }
             private void SetForceTotals(MissionStatsTracker tracker)
             {
@@ -558,7 +504,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (definition == null) return "UNIT";
                 string full = !string.IsNullOrEmpty(definition.unitName) ? definition.unitName : definition.code;
-                return (full ?? "UNIT").ToUpperInvariant() + " • " + DefinitionDetail(definition, hq);
+                return (full ?? "UNIT").ToUpperInvariant() + " · " + DefinitionDetail(definition, hq);
             }
 
             private static string DefinitionDetail(UnitDefinition definition, FactionHQ hq)
@@ -623,11 +569,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ledgerChart = page.Add(new LedgerChartPart(page.Content, page.Inner));
 
                 attritionRoster = page.Add(new UnitRosterPart(page.Content, true), 1f);
+                page.Links(("FRONTS", "STR", "BOARD"), ("MISSION", "MIS", "MISSION"));
             }
             private void SelectLedger(int selected)
             {
                 ledgerMode = (LedgerMode)Mathf.Clamp(selected, 0, 3);
-                ShowTitle();
                 RequestRefresh();
             }
 
@@ -799,6 +745,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
                 mandateParts.Add(bandList);
                 bandList.SetCount(BandNames.Length);
+                page.Links(("FIELD ORDERS", "EVN", "DISPATCH"), ("JOBS", "MIS", "CONTRACTS"));
             }
 
             private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };
@@ -853,11 +800,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 politicalEvent.Set(current == null ? "NO ACTIVE EVENT" : current.Title.ToUpperInvariant());
                 politicalEffect.Set(current == null ? "CALM" :
                     !current.TargetResolved ? "TARGET LOST" :
-                    (applies ? IsLocalFaction(hq) ? "LOCAL EVENT" : "BASE EVENT" : "OTHER SIDE") + " • " + price +
-                    " • " + EventClock(current), PriceState(applies, price));
+                    (applies ? IsLocalFaction(hq) ? "LOCAL EVENT" : "BASE EVENT" : "OTHER SIDE") + " · " + price +
+                    " · " + EventClock(current), PriceState(applies, price));
                 politicalBrief.Set(current == null ? "—" :
                     !current.TargetResolved ? "—" :
-                    current.IsSuper ? current.Target + " • " + NextEventBeat(current) :
+                    current.IsSuper ? current.Target + " · " + NextEventBeat(current) :
                     current.Tier + " / " + current.Target);
                 politicalMission.Set(contract == null ?
                     IsLocalFaction(hq) ? ContractsDisabled() ? "DIRECTIVES OFF" :
@@ -865,7 +812,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     (contract.IsActive ? "ACTIVE / " : "OFFERED / ") +
                     MfdSecondaryObjectives.PlainObjective(contract.Title).ToUpperInvariant());
                 politicalMissionDetail.Set(contract == null ? "—" :
-                    MfdSecondaryObjectives.PayoutLabel(contract) + "  •  +3 MORALE");
+                    MfdSecondaryObjectives.PayoutLabel(contract) + " · +3 MORALE");
                 dispatchBlock.Changed();
                 directiveBlock.Changed();
                 mandateStrip.Changed();
@@ -971,16 +918,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static string NextEventBeat(ActiveEventView active)
             {
                 MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (mission == null || active?.Steps == null) return "OPEN EVN FOR FIELD ORDERS";
+                if (mission == null || active?.Steps == null) return "FIELD ORDERS · EVN LINK BELOW";
                 float elapsed = mission.MissionTime - active.StartedAtMissionTime;
                 for (int i = 0; i < active.Steps.Count; i++)
                 {
                     ActiveEventStep step = active.Steps[i];
                     if (step.AtSeconds <= elapsed) continue;
                     int remaining = Mathf.CeilToInt(step.AtSeconds - elapsed);
-                    return "NEXT ORDER " + AvNum.Clock(remaining) + " / " + step.Label;
+                    return "NEXT ORDER " + AvNum.Clock(remaining) + " · " + step.Label;
                 }
-                return "FIELD ORDERS ISSUED • OPEN EVN FOR DISPATCH";
+                return "FIELD ORDERS ISSUED · EVN LINK BELOW";
             }
 
             private static bool ContractsDisabled() =>
@@ -1168,7 +1115,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     RenderTotals();
                     previous.Interactable = page > 0;
                     next.Interactable = page + 1 < pages;
-                    pageText.text = "PAGE " + (page + 1) + "/" + pages + "  /  " + count + " TYPES";
+                    pageText.text = "PAGE " + (page + 1) + "/" + pages + " · " + count + " TYPES";
                 }
 
                 // Sums over every record of the form, not just the page on show; a type with no figure adds nothing.

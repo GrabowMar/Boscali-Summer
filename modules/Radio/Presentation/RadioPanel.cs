@@ -80,6 +80,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static AvKeyHeader wireHeader;
         private static RadioWirePart wirePart;
         private static int wireShownRevision = -1;
+        private static AvButtons receiverLinks, deckLinks;
 
         // ----------------------------------------------------------------------- deck widgets
         private static AvRow nowRow;
@@ -159,6 +160,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             wireHeader = null;
             wirePart = null;
             wireShownRevision = -1;
+            receiverLinks = deckLinks = null;
 
             nowRow = null;
             deckEq = null;
@@ -263,6 +265,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             wirePart = p.Add(new RadioWirePart(p.Content), 1f);
             wirePart.Help = "The wire: what the receiver picked up, newest on top - station talk and bulletins, intercepted " +
                 "enemy chatter, base alarms. The tag is the station that aired it; RX is the set itself.";
+            receiverLinks = p.Links(("EVENTS", "EVN", "DISPATCH"), ("CALLS", "COM", "COMMS"));
 
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
@@ -459,10 +462,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             // Measure the same inner width and six fixed lines used by AvFlow. Programme copy can
             // wrap when a tower goes off air, so this runs after the current tune data is applied.
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 8f * AvGridTokens.Gap +
+            float fixedHeight = 2f * AvGridTokens.Pad + 9f * AvGridTokens.Gap +
                 onAirPart.Measure(width) + readoutPart.Measure(width) + dialStrip.Measure(width) +
                 scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width) +
-                wireHeader.Measure(width) + wirePart.Measure(width);
+                wireHeader.Measure(width) + wirePart.Measure(width) + receiverLinks.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
@@ -630,6 +633,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 int captured = i;
                 trackRows[i] = p.Add(new AvRow(p.Content, () => OnTrackRowClick(captured)));
             }
+            deckLinks = p.Links(("SETTINGS", "SET", null), ("EVENTS", "EVN", "DISPATCH"));
 
             p.Ticker.Add(TabDeck, AvTickRate.Fast, RefreshDeck);
 
@@ -774,9 +778,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             AvFlow page = console.Page(TabDeck);
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 5f * AvGridTokens.Gap +
+            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap +
                 deckEq.Measure(width) + nowRow.Measure(width) + deckBar.Measure(width) +
-                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width);
+                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width) + deckLinks.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in trackRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);

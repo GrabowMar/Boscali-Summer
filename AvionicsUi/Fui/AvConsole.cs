@@ -35,8 +35,9 @@ namespace NOAvionics
         private readonly AvFlow[] flows;
         private readonly Image scanCover;
         private readonly AvDecorGraphic decor;
-        private readonly TMP_Text serial;
-        private string baseTitle;
+        private readonly string name;
+        private string pageTitle;
+        private string[] pageNames;
         private AvFx scanFx;
         private AvChip[] chips = new AvChip[0];
         private AvMetric[] metrics = new AvMetric[0];
@@ -66,6 +67,8 @@ namespace NOAvionics
         {
             width = w; height = h; PageCount = Math.Max(1, pages);
             this.id = id ?? "";
+            name = title ?? "";
+            if (this.id.Length > 0) byId[this.id] = this;
             orders = new string[PageCount][];
             Root = AvLay.Child(host, "AvConsole " + id);
             AvLay.Place(Root, 0f, 0f, w, h);
@@ -97,9 +100,9 @@ namespace NOAvionics
             titleText.fontSize = 15f;
             titleText.characterSpacing = 5f;
             AvText.Fit(titleText, false);
-            pageIndex = AvText.Make(Root, "PageIndex", AvTextRole.DataSmall, "", TextAlignmentOptions.Center);
-            baseTitle = title;
-            serial = AvText.Make(Root, "Serial", AvTextRole.Micro, AvPortalMath.Serial(id), TextAlignmentOptions.MidlineRight);
+            // Right end: the console's name (the rail key's words) and the page count, "MISSIONS  01/03".
+            pageIndex = AvText.Make(Root, "PageIndex", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+            AvText.Fit(pageIndex, false);
 
             live = AvLay.Child(Root, "Live");
             AvLay.Nest(live, false);
@@ -153,12 +156,61 @@ namespace NOAvionics
             float width = AvTokens.PanelWidth, float height = AvTokens.PanelHeight) =>
             new AvConsole(host, id, title, pages, width, height);
 
-        public void SetTitle(string t) { baseTitle = t ?? ""; ShowTitle(); }
+        /// <summary>Overrides the page title (the left of the header); null or empty goes back to the open tab's label.</summary>
+        public void SetTitle(string t) { pageTitle = t; ShowTitle(); }
 
+        // Left: the page (the open tab's label unless overridden). Right: the console's name, which is the rail key's own words
+        // when the host mod supplies them, and the page count.
         private void ShowTitle()
         {
-            string t = baseTitle;
+            string t = !string.IsNullOrEmpty(pageTitle) ? pageTitle
+                : pageNames != null && CurrentPage >= 0 ? pageNames[CurrentPage] : name;
             if (titleText.text != t) titleText.text = t;
+            string n = (KeyName?.Invoke(id) ?? name) + "  " +
+                       (Math.Max(0, CurrentPage) + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture) + "/" +
+                       PageCount.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
+            if (pageIndex.text != n) pageIndex.text = n;
+        }
+
+        // ---- rail wiring: every console can be opened on a page from any other (link chips) ------------------------------------
+
+        /// <summary>The words on a rail key for a console id ("MIS" -> "MISSIONS"); null keeps the console's own name.</summary>
+        public static Func<string, string> KeyName;
+
+        /// <summary>Opens the screen behind a rail key (no-op when it is already open); false when no such key is up.</summary>
+        public static Func<string, bool> PressKey;
+
+        private static readonly System.Collections.Generic.Dictionary<string, AvConsole> byId =
+            new System.Collections.Generic.Dictionary<string, AvConsole>(16);
+        private static readonly System.Collections.Generic.Dictionary<string, string> pendingPage =
+            new System.Collections.Generic.Dictionary<string, string>(4);
+
+        // ponytail: one console per id; SET's CLIENT and SERVER consoles share "SET", so the newer one answers. Key by mode if that bites.
+        public static AvConsole Find(string id) =>
+            id != null && byId.TryGetValue(id, out AvConsole c) && c.Root != null ? c : null;
+
+        /// <summary>Opens a rail key and, when <paramref name="page"/> names one of its tabs, that page. A console not built yet takes the page when it finishes.</summary>
+        public static void Open(string key, string page = null)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            PressKey?.Invoke(key);
+            if (string.IsNullOrEmpty(page)) return;
+            AvConsole c = Find(key);
+            if (c == null) pendingPage[key] = page;
+            else c.ShowPage(page);
+        }
+
+        /// <summary>Selects the tab labelled <paramref name="page"/> (any case), as a press on it would; false when there is none.</summary>
+        public bool ShowPage(string page)
+        {
+            if (pageNames == null || string.IsNullOrEmpty(page)) return false;
+            for (int i = 0; i < pageNames.Length; i++)
+            {
+                if (!string.Equals(pageNames[i], page, StringComparison.OrdinalIgnoreCase)) continue;
+                if (tabs != null) tabs.Select(i); else SetPage(i);
+                return true;
+            }
+            return false;
         }
 
         public AvChip[] Chips(int count)
@@ -182,6 +234,11 @@ namespace NOAvionics
         {
             tabs = new AvTabBar(Root, items, SetPage);
             tabs.HeightChanged += Layout;
+            if (items.Length == PageCount)
+            {
+                pageNames = new string[items.Length];
+                for (int i = 0; i < items.Length; i++) pageNames[i] = items[i].label ?? "";
+            }
             Ticker.Register(tabs);
             Layout();
             return tabs;
@@ -214,10 +271,9 @@ namespace NOAvionics
             scrollView.Scroll.content = pageRects[index];
             Ticker.ActivePage = index;
             if (tabs != null && tabs.Selected != index) tabs.Select(index, false);
-            pageIndex.text = (index + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture) + "/" +
-                             PageCount.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
             bool changed = CurrentPage != index;
             CurrentPage = index;
+            ShowTitle();
             if (changed) { StartScan(); Footer.SetOrders(orders[index]); PageChanged?.Invoke(index); }
             // Flush deferred layout after page callbacks, including a same-page reopen.
             flows[CurrentPage].Relayout();
@@ -238,6 +294,7 @@ namespace NOAvionics
             Layout();
             foreach (AvFlow f in flows) f.Relayout();
             SetPage(CurrentPage < 0 ? 0 : CurrentPage);
+            if (pendingPage.TryGetValue(id, out string wanted)) { pendingPage.Remove(id); ShowPage(wanted); }
         }
 
         private void Layout()
@@ -246,11 +303,10 @@ namespace NOAvionics
             AvLay.Place(headerBack.rectTransform, 0f, 0f, width, AvGridTokens.Header);
             AvLay.Place(idPlate.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
             AvLay.Place(idText.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
-            serial.enabled = width >= 360f;
-            AvLay.Place(titleText.rectTransform, 66f, 0f, Mathf.Max(0f, width - 66f - (serial.enabled ? 116f : 60f)), AvGridTokens.Header);
-            AvLay.Place(serial.rectTransform, width - 116f, 0f, 54f, AvGridTokens.Header);
+            float right = width >= 360f ? 150f : 60f;
+            AvLay.Place(titleText.rectTransform, 66f, 0f, Mathf.Max(0f, width - 66f - right - 6f), AvGridTokens.Header);
             decor.RulerTop = AvGridTokens.Header; decor.SetVerticesDirty();
-            AvLay.Place(pageIndex.rectTransform, width - 60f, 0f, 56f, AvGridTokens.Header);
+            AvLay.Place(pageIndex.rectTransform, width - right - 4f, 0f, right, AvGridTokens.Header);
             y += AvGridTokens.Header + 4f;
 
             AvLay.Place(live, 0f, 0f, width, height);
@@ -385,7 +441,6 @@ namespace NOAvionics
             titleText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
             pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
             decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
-            serial.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
             bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
             if (groundArt != null)
             {

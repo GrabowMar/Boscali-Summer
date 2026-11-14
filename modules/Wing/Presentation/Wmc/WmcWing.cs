@@ -69,6 +69,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
             BuildRoster(subPages.Flow(SubRoster));
             inspectPage.Build(subPages.Flow(SubAircraft), ticker, pageIndex);
+            // The page's last part; added before the studio's popup so the popup still draws over it.
+            flow.Links(("PILOT", "PILOT", null), ("FORCES", "FAC", "FORCES"));
             BuildStudio(subPages.Flow(SubStudio));
             ShowSub(SubRoster);
         }

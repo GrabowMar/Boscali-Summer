@@ -152,11 +152,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 this.options = options;
             }
 
-            protected override string Title => PageTitles[0];
-
-            private static readonly string[] PageTitles =
-                { "HUD SYMBOLOGY / MODE & GATES", "HUD SYMBOLOGY / GROUND PRIORITY", "HUD SYMBOLOGY / STRUCTURE PRIORITY" };
-
             protected override (AvIcon Icon, string Label)[] TabItems => new[]
             {
                 (AvIcon.Focus2, "MODE"),
@@ -194,7 +189,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override void OnPageChanged(int index)
             {
-                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 selectedPage = index;
                 RequestRefresh();
             }
@@ -228,6 +222,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     modeBrief[i] = page.Add(new AvRow(page.Content));
                     modeBrief[i].Set(names[i], "Waiting for the HUD.", "—", AvState.Inert);
                 }
+                page.Links(("TARGET FILTER", "TGT", "FILTER"), ("HUD LOOK", "SET", null));
             }
 
             /// <summary>The MODE page brief for one mode. Takes plain values, so a layout preview can fill it without a HUD.</summary>
@@ -309,6 +304,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 page.Row(airDefRing, armorRing, shownVehRing);
 
                 vehicleBrief = BuildBrief(page, "GROUND");
+                page.Links(("TARGET FILTER", "TGT", "FILTER"), ("TARGETS", "TGT", "TARGETS"));
             }
 
             // ------------------------------------------------------------ buildings page
@@ -343,6 +339,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 page.Row(strikeRing, militaryRing, civilianRing);
 
                 buildingBrief = BuildBrief(page, "STRUCTURE");
+                page.Links(("TARGET FILTER", "TGT", "FILTER"), ("TARGETS", "TGT", "TARGETS"));
             }
 
             // ------------------------------------------------------------ priority brief

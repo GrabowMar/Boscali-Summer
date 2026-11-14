@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     internal sealed class DroneMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth, RefreshInterval = 0.25f;
-        internal const string Title = "VANGUARD UAV LINK";
+        internal const string Title = "DRONE LINK";
 
         private DroneLinkService link;
         private readonly MfdPanelInstaller installer =
@@ -102,6 +102,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             page.Row(mAlt, mSpd, mLink, mSpi);
             page.Section(AvIcon.Drone, "ASSETS ON LINK", "CLICK TO LINK");
             list = page.Add(new AvList(page.Content, console.Ticker, 5, BindRow) { RowClicked = i => { link.Link(i); Refresh(); } });
+            page.Links(("TARGETS", "TGT", "TARGETS"), ("MAP", "MAP", null));
             console.Orders(0,
                 "IN FLIGHT: C › WEAPONS › DRONES › SEND WHERE I LOOK",
                 "ORDERS STAY WITH THEIR DRONE WHEN YOU LINK ANOTHER",

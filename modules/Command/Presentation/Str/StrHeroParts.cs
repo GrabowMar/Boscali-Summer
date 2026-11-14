@@ -337,7 +337,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             data = Text(Rect, "Data", AvTextRole.DataSmall, TextAlignmentOptions.MidlineLeft);
             note = Text(Rect, "Note", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             accept = new StrButton(Rect, "ACCEPT", AvButtonStyle.Primary, () => Hub.Run(StrActionKind.Accept, row.Id));
-            locate = new StrButton(Rect, "LOCATE ON MAP", AvButtonStyle.Quiet, () => Locate(row.Id));
+            locate = new StrButton(Rect, "LOCATE", AvButtonStyle.Quiet, () => Locate(row.Id));
             Restyle();
         }
 
@@ -378,7 +378,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (r.Offered)
                 accept.Bind(Controls, StrControlIds.Sortie(index + 1, "accept"), "ACCEPT", () => Vm.Sorties[index].Accept, "Take this sortie. Finishing it counts toward the reinforcement wave.");
             else state.SetOutline(r.StateText.Length > 0 ? r.StateText : "DONE", r.Active ? AvInk.Effort : AvInk.Dim);
-            locate.Bind(Controls, StrControlIds.Sortie(index + 1, "locate"), "LOCATE ON MAP", () => LocateGate(Vm.Sorties[index].Id), "Fly the map to this sortie.");
+            locate.Bind(Controls, StrControlIds.Sortie(index + 1, "locate"), "LOCATE", () => LocateGate(Vm.Sorties[index].Id), "Fly the map to this sortie.");
             Paint();
             Changed();
         }

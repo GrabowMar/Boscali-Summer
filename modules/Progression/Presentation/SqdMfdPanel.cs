@@ -43,7 +43,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             { Wrap = true, Plate = true, ShortName = "PILOT" };
         private MFDScreen screen => installer.Screen;
         private AvConsole console;
-        private AvMetric[] metrics;
 
         // ---- Cockpit cosmetics (client-local) ---------------------------------------------
 
@@ -84,7 +83,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             installer.Reset();
             console = null;
-            metrics = null;
 
             ResetSkillRows();
             ResetPilotPage();
@@ -137,9 +135,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private RectTransform BuildScreen(RectTransform content, float height)
         {
-            console = AvConsole.Build(content, "PILOT", "SQUADRON DOSSIER", 5, Width, height);
+            console = AvConsole.Build(content, "PILOT", "PERSONNEL", 5, Width, height);
             console.PageChanged += OnTabChanged;
-            metrics = console.Metrics("SCORE", "RANK", "PICKS");
+            // No header tiles: SCORE, RANK and PICKS are on the PILOT page (ID card, PICK LEDGER) and SKILLS says the picks in hand.
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.User, "PILOT"),
                 (AvIcon.Star, "SKILLS"),
@@ -222,7 +220,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void Refresh()
         {
-            if (metrics == null || progression == null) return;
+            if (console == null || progression == null) return;
 
             bool bypass = progression.BypassRequirements;
             int score = Progress.Score;
@@ -235,7 +233,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
 
             RefreshCosmetics();
-            RefreshMetrics(bypass, score);
 
             switch (console.CurrentPage)
             {
@@ -247,33 +244,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
 
             UpdateFooter();
-        }
-
-        private void RefreshMetrics(bool bypass, int score)
-        {
-            IProgressionView view = Progress;
-            int ceiling = Mathf.Max(1, view.MaximumPoints);
-            int available = view.AvailablePoints;
-            bool capped = view.EarnedPoints >= ceiling;
-            // The same ramp the host pays out, so the header never divides score itself.
-            int remaining = PerkPoints.RemainingToNext(score, view.ScorePerPoint);
-
-            metrics[0].Set(
-                bypass ? "BYPASS" : AvNum.Thousands(score),
-                bypass ? "OPEN" : capped ? "MAX" : remaining < 0 ? "DONE" : "NEXT " + AvNum.Thousands(remaining),
-                bypass || capped || remaining < 0 ? 1f
-                    : 1f - remaining / (float)Mathf.Max(1, view.ScorePerPoint * Mathf.Max(1, PerkCatalog.MaximumDepth)),
-                bypass ? AvState.Caution : AvState.Ready);
-
-            PilotView pilot = squad != null ? squad.Pilot : default;
-            metrics[1].Set(AvNum.Thousands(view.Rank), "GEN " + AvNum.Thousands(pilot.Generation), 1f, AvState.Info);
-
-            int earned = view.EarnedPoints;
-            metrics[2].Set(
-                bypass ? "FREE" : AvNum.Thousands(available),
-                bypass ? "ALL" : earned + "/" + ceiling,
-                bypass ? 1f : earned / (float)ceiling,
-                available > 0 || bypass ? AvState.Ready : AvState.Info);
         }
 
         private void UpdateFooter()

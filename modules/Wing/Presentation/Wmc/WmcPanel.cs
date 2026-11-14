@@ -16,8 +16,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · WING (the
     /// user cut seven tabs to five on 2026-09-28: FORM and PLAN are BEHAVIOUR's sub-pages, INSPECT is WING's) on a kit v2
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
-    /// 5 Hz. The header is the wing's title, a FUNDS chip beside it, and three vitals chips (FUEL MIN · AMMO MIN · THREAT) on every
-    /// tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
+    /// 5 Hz. The header names the open tab (the live wing count leads the footer status), a FUNDS chip beside it, and three vitals
+    /// chips (FUEL MIN · AMMO MIN · THREAT) on every tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
     /// <see cref="AvFlow"/>.</summary>
     internal sealed class WmcPanel : IWingService
     {
@@ -256,7 +256,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvLay.Fill(content);
 
             // Spec bezel v2 §3: no metric row; the chips carry the vitals on every tab.
-            shell = AvConsole.Build(content, "WMC", "WING", WmcTabs.Labels.Length, AvTokens.PanelWidth, height);
+            shell = AvConsole.Build(content, "WMC", "WING CMD", WmcTabs.Labels.Length, AvTokens.PanelWidth, height);
             chips = shell.Chips(3);
             var items = new (AvIcon icon, string label)[WmcTabs.Labels.Length];
             for (int i = 0; i < items.Length; i++) items[i] = (TabIcons[i], WmcTabs.Labels[i]);
@@ -448,8 +448,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             int max = WingService.MaxMembers;
             int pending = !context.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
+            // The live count leads the footer status (the header's left is the tab's own name).
             if (Changed(0, context.Count * 100000 + max * 1000 + airborne * 100 + pending * 4 + (context.Client ? 2 : 0) + (context.Stale ? 1 : 0)))
-                shell.SetTitle(WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string _));
+            {
+                wingWords = WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string _);
+                statusAmbient = null; // the footer repaints with the new count
+            }
             WingVitals v = WingVitals.Of(context.Rows, context.Count);
             int fuelKey = v.Count * 100000 + Percent(v.MinFuel) * 100 + (v.BingoSlot + 1) * 10 + v.JokerSlot + 1;
             if (Changed(1, fuelKey)) Chip(0, WmcHeader.Fuel(v, out string s0), s0);
@@ -494,16 +498,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>The footer line: the armed-order prompt first, then an alert, else the page's ambient hint. Hover help replaces it
         /// while a control is hovered: kit v2 controls publish theirs to the console footer themselves (<see cref="AvHelpTip"/>).</summary>
-        private string statusAlert, statusPrompt, statusAmbient;
+        private string statusAlert, statusPrompt, statusAmbient, wingWords = "";
 
         private void WriteStatus(string alert, string prompt, string ambient)
         {
-            // Same inputs as the last refresh: skip the three concatenations the footer would compare and drop.
+            // Same inputs as the last refresh: skip the concatenation the footer would compare and drop.
             if (alert == statusAlert && prompt == statusPrompt && ambient == statusAmbient) return;
             statusAlert = alert; statusPrompt = prompt; statusAmbient = ambient;
-            if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set("ACTION  ·  " + prompt, AvState.Caution);
-            else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set("ALERT  ·  " + alert, AvState.Danger);
-            else shell.Footer.Set("STATUS  ·  " + (ambient ?? ""), AvState.Inert);
+            if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set(prompt, AvState.Caution);
+            else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set(alert, AvState.Danger);
+            else shell.Footer.Set(string.IsNullOrEmpty(ambient) ? wingWords : wingWords + " · " + ambient, AvState.Inert);
         }
     }
 }

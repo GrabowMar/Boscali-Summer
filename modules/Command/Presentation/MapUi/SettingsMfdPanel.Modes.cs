@@ -20,8 +20,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private AvConsole BuildConsole(RectTransform body, float height, bool server)
         {
             string[] names = server ? ServerPageNames : ClientPageNames;
-            AvConsole c = AvConsole.Build(body, "SET", names[0], names.Length, AvTokens.PanelWidth, height);
-            c.PageChanged += index => c.SetTitle(names[index]);
+            AvConsole c = AvConsole.Build(body, "SET", "SETTINGS", names.Length, AvTokens.PanelWidth, height);
 
             // The kit has no slot for a control between the header and the tabs. A hidden metric reserves one
             // metric-height strip there and the mode switch (a module-local part) is drawn over exactly that strip.

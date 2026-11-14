@@ -87,13 +87,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            protected override string Title => PageTitles[0];
             protected override (AvIcon Icon, string Label)[] TabItems => Pages;
-
-            private static readonly string[] PageTitles =
-            {
-                "TARGETING / TARGET LIST", "TARGETING / LIST FILTER", "TARGETING / CAMERA MARK",
-            };
+            private AvMetric[] tiles;
 
             protected override string[] TabTips { get; } = new[]
             {
@@ -104,6 +99,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
+                // Four readouts of what this console controls: the held list, the contact list, the filter profile and the camera mark.
+                tiles = Console.Metrics("HELD", "CONTACTS", "PROFILE", "MARK");
+                foreach (AvMetric t in tiles) t.Set("—", "", 0f, AvState.Inert);
                 BuildTargetsPage(CreatePage());
                 BuildFilterPage(CreatePage());
                 BuildMarkPage(CreatePage());
@@ -122,12 +120,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Console.Orders(2,
                     "MARK records the surface point under the targeting camera cross-hair.",
                     "A mark lapses 120 seconds after it is taken. MARK again to refresh it.",
-                    "Arm an operation on OPS / SUPPORT, then CALL AT MARK to deliver it.");
+                    "Arm an operation on OPS PERKS (the link below), then CALL AT MARK to deliver it.");
             }
 
             protected override void OnPageChanged(int index)
             {
-                Console.SetTitle(PageTitles[Mathf.Clamp(index, 0, PageTitles.Length - 1)]);
                 CancelDeleteConfirm();
                 CloseEditor();
                 RequestRefresh();
@@ -164,6 +161,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 string words = FilterSentence();
                 filterNote.Set(words);
                 listNote.Set(words + "  Change it on the FILTER page.");
+                tiles[0].Set(selectedUnits.Count.ToString(), "", 0f, selectedUnits.Count > 0 ? AvState.Ready : AvState.Inert);
+                tiles[1].Set(candidates.Count.ToString(), "", 0f, AvState.Info);
+                tiles[2].Set(activePreset, "", 0f, AvState.Ready);
             }
 
             protected override string AmbientStatus()
@@ -198,7 +198,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 selectedGrid.SetEmptyMessage("NO TARGETS HELD. ADD ONE FROM THE CONTACTS BELOW.");
 
                 AvControl[] store = page.Buttons(
-                    new AvControl.Spec("DROP ALL", () => { if (Ready) { selector.DeselectAll(); RequestRefresh(); } },
+                    new AvControl.Spec("CLEAR",() => { if (Ready) { selector.DeselectAll(); RequestRefresh(); } },
                         AvButtonStyle.Default, AvIcon.Eraser),
                     new AvControl.Spec("STORE 1", () => StoreGroup(0), AvButtonStyle.Default, AvIcon.Plus),
                     new AvControl.Spec("STORE 2", () => StoreGroup(1), AvButtonStyle.Default, AvIcon.Plus),
@@ -233,6 +233,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, ContactsVisible, rowHeight: 40f, words: false));
                 candidateGrid.SetEmptyMessage("NO CONTACTS");
                 listNote = page.Add(new AvNote(page.Content, "Waiting for the target filters."));
+                page.Links(("MAP", "MAP", null), ("JOBS", "MIS", "CONTRACTS"));
             }
 
             private void SetRange(int step)
@@ -528,6 +529,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 resetFilters.Help = "List everything: light every side, type and vehicle and turn LASED ONLY off.";
 
                 filterNote = page.Add(new AvNote(page.Content, "Waiting for the target filters."));
+                page.Links(("CONTACT PRIORITY", "HUD", null), ("MAP LAYERS", "MAP", "LAYERS"));
             }
 
             private void RefreshFilter()
@@ -982,6 +984,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 cameraCapture = actions[0];
                 cameraCall = actions[1];
                 cameraClear = actions[2];
+                page.Links(("ARM AN OPERATION", "OPS", "PERKS"), ("MAP", "MAP", null));
             }
 
             private void RefreshMark()
@@ -997,6 +1000,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     cameraRows[0].Set(MarkSteps[0], offline, "OFFLINE", AvState.Inert);
                     cameraRows[1].Set(MarkSteps[1], "Needs the camera marking service.", "—", AvState.Inert);
                     cameraRows[2].Set(MarkSteps[2], "Needs the camera marking service.", "—", AvState.Inert);
+                    tiles[3].Set("—", "OFF", 0f, AvState.Inert);
                     return;
                 }
 
@@ -1014,7 +1018,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         AvNum.Fixed(Mathf.Max(0f, 120f - age), 0) + " S LEFT", age > 90f ? AvState.Caution : AvState.Ready);
                 }
                 else cameraRows[1].Set(MarkSteps[1], "No point recorded yet.", "NONE", AvState.Inert);
-                cameraRows[2].Set(MarkSteps[2], armed ? armedName : "None armed. Arm one on OPS / SUPPORT.",
+                tiles[3].Set(marked ? AvNum.Fixed(Mathf.Max(0f, 120f - service.AgeSeconds), 0) : "NONE", marked ? "S LEFT" : "",
+                    marked ? Mathf.Clamp01(1f - service.AgeSeconds / 120f) : 0f, marked ? AvState.Ready : AvState.Inert);
+                cameraRows[2].Set(MarkSteps[2], armed ? armedName : "None armed. Arm one on OPS PERKS (link below).",
                     armed ? "ARMED" : "NONE", armed ? AvState.Ready : AvState.Inert);
 
                 cameraCapture.Interactable = view;
@@ -1023,7 +1029,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 cameraCapture.Help = view ? "Record the surface point under the targeting camera."
                     : "Needs a live targeting camera view on your aircraft.";
                 cameraCall.Help = !marked ? "Take a mark first."
-                    : !armed ? "Arm an operation on OPS / SUPPORT first."
+                    : !armed ? "Arm an operation on OPS PERKS first."
                     : "Deliver the armed operation onto this mark.";
                 cameraClear.Help = marked ? "Clear the mark." : "No mark to clear.";
             }

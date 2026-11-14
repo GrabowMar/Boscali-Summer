@@ -427,13 +427,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (point.HasValue) zone.SetLocal(point.Value);
                 else zone.ClearLocal();
             }
-            Echo(point.HasValue ? "LANDING ZONE SET  /  PARATROOPERS AND GLIDERS AIM THERE" : "LANDING ZONE CLEARED");
+            Echo(point.HasValue ? "LANDING ZONE SET · PARATROOPERS AND GLIDERS AIM THERE" : "LANDING ZONE CLEARED");
         }
 
         private static void SetMark(GlobalPosition? point)
         {
             mark = point;
-            Echo(point.HasValue ? "RANGE MARK SET  /  CURSOR LINE READS FROM IT" : "RANGE MARK CLEARED");
+            Echo(point.HasValue ? "RANGE MARK SET · CURSOR LINE READS FROM IT" : "RANGE MARK CLEARED");
         }
 
         private static void DrawMark(DynamicMap map)

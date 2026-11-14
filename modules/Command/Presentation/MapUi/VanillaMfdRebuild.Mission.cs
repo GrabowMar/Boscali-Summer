@@ -101,12 +101,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
-            private static readonly string[] PageTitles = { "OPERATION ORDER", "TASK LIST", "TASKING BOARD" };
-
-            protected override string Title => "MISSION CONTROL  /  OPERATION ORDER";
-
-            private void ShowTitle() => Console.SetTitle("MISSION CONTROL  /  " + PageTitles[Mathf.Clamp(selectedPage, 0, 2)]);
-
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
                 (AvIcon.Flag, "MISSION"),
@@ -123,8 +117,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override void BuildContent()
             {
-                // The objective / contract / clock chips repeated the rings and the hero clock, so the header now
-                // carries only the tab bar.
+                BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
                 briefFlow = CreatePage();
                 objectivesFlow = CreatePage();
                 contractsFlow = CreatePage();
@@ -145,7 +138,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Click a slip to open it. Click it again to close it.",
                     "ACCEPT shares a job with the whole faction. HUD selection stays with this pilot.",
                     "ABORT asks for confirmation, then the host applies the job's failure consequence.");
-                ShowTitle();
             }
 
             protected override void RefreshContent()
@@ -162,7 +154,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
-                ShowTitle();
                 taskActions?.CancelConfirmation();
                 RequestRefresh();
             }
@@ -201,6 +192,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
                 trendChart.SetShown(false);   // an empty plot says nothing the caption does not; it appears with its first trace
                 page.Add(trendChart, 1f);
+                page.Links(("WAR PLAN", "STR", "BOARD"), ("ALLOCATION", "OPS", null));
             }
 
             /// <summary>The faction's funds over the observed window, fed by the same recorder the FAC history uses.</summary>
@@ -342,6 +334,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 objectivesEmpty.SetShown(false);
                 typeSection = page.Section(AvIcon.Stack2, "BY TASK TYPE", "DONE / ISSUED");
                 typeTally = page.Add(new TaskTypeTally(page.Content));
+                page.Links(("FRONTS", "STR", "BOARD"), ("TARGETS", "TGT", "TARGETS"));
             }
 
             private void RenderObjectives()
@@ -411,6 +404,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 taskPlot=new MissionTaskPlot(page.Content);taskPlot.Rect.gameObject.SetActive(false);
                 taskActions=new MissionTaskActions(page.Content,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
                 taskActions.Rect.gameObject.SetActive(false);
+                page.Links(("FUNDS", "FAC", "ECONOMY"), ("SUPPORT", "OPS", null));
             }
             private void ToggleSlip(int id)
             {
