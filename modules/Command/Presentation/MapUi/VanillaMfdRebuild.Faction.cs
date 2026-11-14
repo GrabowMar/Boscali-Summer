@@ -82,6 +82,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvNote politicalMissionDetail;
             private AvSection historySection;
             private AvList bandList;
+            // NATION layer: shown instead of the morale mandate while the service reports Active (see RefreshNation).
+            private FocusTreePart focusTree;
+            private FacStockPart stockPart;
+            private FacPlantsPart plantsPart;
+            private FacForcePart forcePart;
+            private AvNote moneyNote;
+            private readonly List<AvPart> nationPoliticsParts = new List<AvPart>(2);
+            private readonly List<AvPart> nationEconomyParts = new List<AvPart>(8);
+            private readonly List<AvPart> mandateParts = new List<AvPart>(3);
             private string factionTitle = "";
             private int selectedFaction;
             private int definitionGroup;
@@ -241,6 +250,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 factionHeader.SetLogo(logo);
 
                 RefreshResources(hq);
+                RefreshNation(hq);
                 if (selectedPage == 1)
                 {
                     SetForceTotals(hq.missionStatsTracker);
@@ -333,6 +343,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 economyContract.Set("—");
                 eventStrip.Bar.Help = "Order in force: the share of the current local event still to run. The clock beside it is the " +
                                       "time left; when it empties, prices return to baseline.";
+
+                // NATION blocks sit above the treasury chart and stay out of the flow until the layer is Active.
+                nationEconomyParts.Add(page.Section(AvIcon.Coins, "MONEY", "READ ONLY"));
+                moneyNote = page.Add(new AvNote(page.Content, AvTextRole.DataSmall, true));
+                nationEconomyParts.Add(moneyNote);
+                nationEconomyParts.Add(page.Section(AvIcon.Tank, "STOCK", "WHAT THE FACTION CAN FIELD NOW"));
+                stockPart = page.Add(new FacStockPart(page.Content));
+                nationEconomyParts.Add(stockPart);
+                nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PLANTS", "FACTORIES AND FREE SLOTS"));
+                plantsPart = page.Add(new FacPlantsPart(page.Content));
+                nationEconomyParts.Add(plantsPart);
+                nationEconomyParts.Add(page.Section(AvIcon.ListDetails, "IN FORCE", "POLICIES AND FOCUS BONUSES"));
+                forcePart = page.Add(new FacForcePart(page.Content));
+                nationEconomyParts.Add(forcePart);
+                foreach (AvPart p in nationEconomyParts) p.SetShown(false);
 
                 historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "FORM 31-T / NO OBSERVATIONS");
                 history = page.Add(new HistoryCard(page.Content), 1f);
@@ -731,7 +756,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildStatusPage(AvFlow page)
             {
                 BuildFactionSelector(page);
+                nationPoliticsParts.Add(page.Section(AvIcon.Flag, "NATIONAL FOCUS", "ONE AT A TIME · 4:00 EACH"));
+                focusTree = page.Add(new FocusTreePart(page.Content));
+                nationPoliticsParts.Add(focusTree);
+                foreach (AvPart p in nationPoliticsParts) p.SetShown(false);
                 mandateStrip = page.Add(new MandateStrip(page.Content));
+                mandateParts.Add(mandateStrip);
                 moraleBar = mandateStrip.Bar;
                 mandateHeadline = mandateStrip.Headline;
                 mandateEffect = mandateStrip.Effect;
@@ -765,8 +795,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 // The bands are the mandate's own rule (names and thresholds from MandateName, prices from the
                 // contract multiplier), so the table reads the same on every faction.
-                page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE");
+                mandateParts.Add(page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE"));
                 bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
+                mandateParts.Add(bandList);
                 bandList.SetCount(BandNames.Length);
             }
 
@@ -838,6 +869,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 dispatchBlock.Changed();
                 directiveBlock.Changed();
                 mandateStrip.Changed();
+            }
+
+            // The NATION layer takes the ECONOMY and POLITICS pages for the player's own faction while it runs; otherwise both read as before.
+            // Nation installs after Command, so the service is looked up on every refresh rather than cached at build.
+            private void RefreshNation(FactionHQ hq)
+            {
+                INationView nation = null;
+                bool on = selectedFaction == 0 && IsLocalFaction(hq) && ModuleServices.TryGet(out nation) && nation.Active && nation.Local != null;
+                foreach (AvPart p in nationEconomyParts) p.SetShown(on);
+                foreach (AvPart p in nationPoliticsParts) p.SetShown(on);
+                foreach (AvPart p in mandateParts) p.SetShown(!on);
+                if (!on) return;
+                NationView v = nation.Local;
+                if (selectedPage == 0)
+                {
+                    moneyNote.Set("FUNDS " + AvNum.Thousands(Mathf.Round(v.Funds)) + "   ·   NEW FACTORY " +
+                                  AvNum.Thousands(Mathf.Round(v.FactoryCost)) + "   ·   OUTPUT x" + AvNum.Fixed(v.Output, 2));
+                    stockPart.Set(v);
+                    plantsPart.Set(v);
+                    forcePart.Set(v);
+                }
+                else if (selectedPage == 3) focusTree.Set(nation);
             }
 
             private void RefreshInfo(FactionHQ hq)

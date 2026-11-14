@@ -18,13 +18,17 @@ namespace BoscaliSummer.Modules.Command.Runtime
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && !DynamicMap.mapMaximized) map.Maximize();
             MfdRailKey key = null;
-            foreach (MfdRailKey k in MfdRail.Keys) if (k.Entry.Code == "MIS") key = k;
+            // "code": another rail key (FAC for the faction console); the page index is that console's tab.
+            string code = args != null && args.TryGetValue("code", out object given) && given != null ? given.ToString() : "MIS";
+            VanillaMfdPanelId panel = code == "FAC" ? VanillaMfdPanelId.Bdf : VanillaMfdPanelId.Mis;
+            foreach (MfdRailKey k in MfdRail.Keys) if (k.Entry.Code == code) key = k;
             if (key == null) return Failure("MisAutomation", "Open", "no MIS rail key");
             if (key.Screen != null && !key.Screen.isActive) key.Source.onClick.Invoke();
-            AvConsole console = VanillaMfdRebuild.ConsoleForAutomation(VanillaMfdPanelId.Mis);
+            AvConsole console = VanillaMfdRebuild.ConsoleForAutomation(panel);
             if (console == null) return Failure("MisAutomation", "Open", "MIS console not bound yet");
             console.SetPage((int)Number(args, "page", 2));
             console.Ticker.TickNow();
+            if (panel != VanillaMfdPanelId.Mis) return new Dictionary<string, object> { ["ok"] = true, ["page"] = console.CurrentPage };
             return Read(null);
         }
 

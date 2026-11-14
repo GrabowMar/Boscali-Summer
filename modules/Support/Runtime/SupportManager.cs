@@ -956,7 +956,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 TryGetSpaceFamily(player.HQ, out SpaceFamilyState family) && family == SpaceFamilyState.Degraded;
             // Every factor is readable on a client too (the Events and Progression mirrors, and the host's replicated PerkPriceScale), so the panel quotes what the host charges.
             var inputs = new PriceInputs(degraded, "UPLINK DOWN", row.Front == Front.Cyber && CyberExploit(player.HQ),
-                EventsCostMultiplier(player), settings.PerkPriceScale.Value);
+                EventsCostMultiplier(player), settings.PerkPriceScale.Value * NationScale.Of(player.HQ, NationStat.PerkPrice));
             return CallPricing.Quote(row.Tier, inputs);
         }
 

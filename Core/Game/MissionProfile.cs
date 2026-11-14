@@ -14,7 +14,7 @@ namespace BoscaliSummer.Core.Game
         {
             "fire-and-destruction", "urban-combat", "player-spawn-priority", "squad", "progression", "support",
             "dynamic-operations", "high-command", "intel", "theater-ops", "air-survival", "trenches", "events",
-            "weather", "vanguard", "strategic-command", "combat"
+            "weather", "vanguard", "strategic-command", "combat", "nation"
         };
 
         private static HashSet<string> disabled = new HashSet<string>(StringComparer.Ordinal);

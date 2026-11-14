@@ -131,6 +131,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
                 Plugin.Logger?.LogWarning("[TheaterOps] Reinforcement " + group.Name + " refused: " + error.Message);
                 return false;
             }
+            cost *= NationScale.Of(hq, NationStat.ConvoyCost); // SUPPLY CORPS: convoys a quarter cheaper
             hq.AddFunds(-cost);
             lastGroup[hq.GetInstanceID()] = quote.GroupIndex;
             LastPoolBefore = before; LastPoolAfter = hq.factionFunds; LastCost = cost; LastGrant = grant;

@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "board": return 0;
                 case "sitrep": return 1;
                 case "info": return 2;
-                default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 2);
+                default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 3);
             }
         }
 

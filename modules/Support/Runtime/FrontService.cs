@@ -69,6 +69,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private OpsService ops;
         private PhasedGate worldGate;
         private float nextShare = -1f, nextWarning;
+        /// <summary>Finished programmes waiting for their effect: one is applied per frame, because each one searches a site and spawns a group (15-20 ms; two in one tick was a 38 ms hitch).</summary>
+        private readonly Queue<(FactionFront Side, FrontEvent Event)> pending = new Queue<(FactionFront Side, FrontEvent Event)>();
 
         internal static FrontService Active { get; private set; }
 
@@ -86,6 +88,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         public void ResetForScene()
         {
             ClearPressure();
+            pending.Clear();
             factions.Clear();
             order.Clear();
             Running = false;
@@ -180,6 +183,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (!GameAccess.IsServer() || (GameManager.gameState != GameState.SinglePlayer && GameManager.gameState != GameState.Multiplayer)) { Running = false; return; }
             float now = SupportManager.MissionNow();
+            if (pending.Count > 0) { ApplyPending(now); return; }
             if (!SpaceRules.MissionTime(now) || !worldGate.Due(now, WorldSeconds, 0.1875f, 1f)) return;   // every 5 s, at .1875 of the second (the first within a second): clear of the 1 Hz slots (table in HighCommandManager)
             try
             {
@@ -214,7 +218,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (FactionFront f in order)
                 {
                     if (f.Owner == null) continue;
-                    float taken = f.Book.ShareTick(f.Owner.factionFunds, share, now, manager.Settings.FrontShareCap.Value);
+                    float focus = NationScale.Of(f.Owner, NationStat.FrontIncome); // SIGNALS BUREAU: the fronts draw half as much again
+                    float taken = f.Book.ShareTick(f.Owner.factionFunds, share * focus, now, manager.Settings.FrontShareCap.Value * focus);
                     if (taken > 0f) f.Owner.AddFunds(-taken);
                 }
             }
@@ -228,9 +233,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 try
                 {
                     Quartermaster(f, now);
-                    foreach (FrontEvent e in f.Book.Tick(now, f.World)) Apply(f, e, now);
-                    float excess = f.Book.TrimToCap(); // ruling R22: refunds and SIPHON never leave a budget above the cap past this tick
-                    if (excess > 0f) f.Owner.AddFunds(excess);
+                    foreach (FrontEvent e in f.Book.Tick(now, f.World)) pending.Enqueue((f, e));
+                    Trim(f);
                 }
                 catch (Exception ex)
                 {
@@ -238,6 +242,28 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 }
             }
             Superiority(now);
+        }
+
+        /// <summary>Ruling R22: refunds and SIPHON never leave a budget above the cap past this tick (or past a deferred effect's refund).</summary>
+        private static void Trim(FactionFront f)
+        {
+            float excess = f.Book.TrimToCap();
+            if (excess > 0f && f.Owner != null) f.Owner.AddFunds(excess);
+        }
+
+        private void ApplyPending(float now)
+        {
+            (FactionFront f, FrontEvent e) = pending.Dequeue();
+            if (f.Owner == null) return;
+            try
+            {
+                Apply(f, e, now);
+                Trim(f);
+            }
+            catch (Exception ex)
+            {
+                if (Time.unscaledTime >= f.NextWarning) { f.NextWarning = Time.unscaledTime + 10f; Plugin.Logger?.LogWarning("[Support.Fronts] " + f.Owner.name + " effect failed: " + ex.Message); }
+            }
         }
 
         // ---- The world, read from the real services --------------------------------------------------
