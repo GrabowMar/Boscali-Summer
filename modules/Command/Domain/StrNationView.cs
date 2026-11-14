@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>Pure: the NATION view as the STR rows, tiles and ticker words (annex: nation desk section 4). No clock, no service.</summary>
     internal static class StrNationView
     {
-        public const int MaxLines = 8;
+        public const int MaxLines = 2;
 
         public static string Clock(float seconds)
         {
@@ -36,79 +36,78 @@ namespace BoscaliSummer.Modules.Command.Domain
 
         public static bool IsLow(StockView s) => s.Target > 0 && s.Count * 2 < s.Target;
 
-        /// <summary>Fills <paramref name="rows"/> (pooled, length MaxLines): lines with plants in stock order, then LOW rows with none. Returns the count.</summary>
+        /// <summary>
+        /// Fills <paramref name="rows"/> (pooled, length MaxLines) with the two arms, AIR FORCE then GROUND FORCES: every aircraft
+        /// (vehicle) stock row summed, each counted up to its target. An arm the faction has no stock rows for is left out. Returns the count.
+        /// <c>Row</c> is the PRIORITY policy that favours the arm and <c>Pinned</c> says it is the favoured one.
+        /// </summary>
         public static int Lines(NationView v, StrLineRow[] rows)
         {
             int n = 0;
-            for (int pass = 0; pass < 2 && n < MaxLines; pass++)
-                for (int r = 0; r < v.Stock.Count && n < MaxLines; r++)
+            for (int arm = 0; arm < 2 && n < rows.Length; arm++)
+            {
+                bool aircraft = arm == 0;
+                int count = 0, target = 0, plants = 0;
+                float next = float.MaxValue, interval = 0f;
+                for (int r = 0; r < v.Stock.Count; r++)
                 {
-                    int plants = 0, pinned = 0;
-                    float next = float.MaxValue, interval = 0f;
-                    for (int i = 0; i < v.Plants.Count; i++)
-                    {
-                        PlantView p = v.Plants[i];
-                        if (p.Row != r || (p.Kind != LineKind.Aircraft && p.Kind != LineKind.Vehicle)) continue;
-                        plants++;
-                        if (p.Pinned) pinned++;
-                        if (p.NextIn > 0f && p.NextIn < next) { next = p.NextIn; interval = p.Interval; }
-                    }
                     StockView s = v.Stock[r];
-                    if (pass == 0 ? plants == 0 : plants > 0 || !IsLow(s)) continue;
-                    StrLineRow row = rows[n++] ?? (rows[n - 1] = new StrLineRow());
-                    row.Name = s.Name ?? "";
-                    row.Aircraft = s.Aircraft;
-                    row.Row = r;
-                    row.Plants = plants;
-                    row.Count = s.Count;
-                    row.Target = s.Target;
-                    row.Pinned = pinned > 0;
-                    row.NoPlant = plants == 0;
-                    row.Low = IsLow(s);
-                    row.Resting = plants > 0 && next == float.MaxValue;
-                    row.Progress = plants > 0 && !row.Resting && interval > 0f ? Clamp01(1f - next / interval) : 0f;
-                    row.Time = plants == 0 ? "LOW" : row.Resting ? "RESTING" : Clock(next);
+                    if (s.Aircraft != aircraft) continue;
+                    target += s.Target;
+                    count += s.Count < s.Target ? s.Count : s.Target;
                 }
+                if (target <= 0) continue;
+                for (int i = 0; i < v.Plants.Count; i++)
+                {
+                    PlantView p = v.Plants[i];
+                    if (p.Kind != (aircraft ? LineKind.Aircraft : LineKind.Vehicle)) continue;
+                    plants++;
+                    if (p.NextIn > 0f && p.NextIn < next) { next = p.NextIn; interval = p.Interval; }
+                }
+                StrLineRow row = rows[n++] ?? (rows[n - 1] = new StrLineRow());
+                row.Name = aircraft ? "AIR FORCE" : "GROUND FORCES";
+                row.Aircraft = aircraft;
+                row.Row = (int)(aircraft ? PriorityPolicy.Air : PriorityPolicy.Ground);
+                row.Plants = plants;
+                row.Count = count;
+                row.Target = target;
+                row.Pinned = v.Priority == (aircraft ? PriorityPolicy.Air : PriorityPolicy.Ground);
+                row.NoPlant = plants == 0;
+                row.Low = count * 2 < target;
+                row.Resting = plants > 0 && next == float.MaxValue;
+                row.Progress = plants > 0 && !row.Resting && interval > 0f ? Clamp01(1f - next / interval) : 0f;
+                row.Time = count >= target ? "FULL" : plants == 0 ? "NO PLANT" : row.Resting ? "RESTING" : "NEXT " + Clock(next);
+            }
             return n;
         }
 
-        /// <summary>Line 1 of the BOARD ticker, always present.</summary>
+        private static readonly StrLineRow[] arms = new StrLineRow[MaxLines];
+
+        /// <summary>Line 1 of the BOARD ticker, always present: when each arm gets its next delivery.</summary>
         public static string NextLine(NationView v)
         {
-            int a = -1, b = -1;
-            for (int i = 0; i < v.Plants.Count; i++)
-            {
-                PlantView p = v.Plants[i];
-                if (p.Row < 0 || p.Row >= v.Stock.Count || p.NextIn <= 0f) continue;
-                if (a < 0 || p.NextIn < v.Plants[a].NextIn) { b = a; a = i; }
-                else if (b < 0 || p.NextIn < v.Plants[b].NextIn) b = i;
-            }
-            string t = "NEXT OFF THE LINE: ";
+            int n = Lines(v, arms);
+            string t = "NEXT DELIVERY: ";
             bool any = false;
-            if (a >= 0) { t += Entry(v, a); any = true; }
-            if (b >= 0) t += StrWords.Dot + Entry(v, b);
+            for (int i = 0; i < n; i++)
+            {
+                if (!arms[i].Time.StartsWith("NEXT ", StringComparison.Ordinal)) continue;
+                t += (any ? StrWords.Dot : "") + arms[i].Name + " " + arms[i].Time.Substring(5);
+                any = true;
+            }
             if (v.Building) t += (any ? StrWords.Dot : "") + "PLANT OPENS " + Clock(v.BuildLeft);
-            else if (!any) t += "NONE";
+            else if (!any) t += "NONE DUE";
             return t;
         }
 
-        private static string Entry(NationView v, int plant) => v.Stock[v.Plants[plant].Row].Name + " " + Clock(v.Plants[plant].NextIn);
-
-        /// <summary>Line 2: the stock furthest below its target, or "".</summary>
+        /// <summary>Line 2: the arm under half strength, or "".</summary>
         public static string LowLine(NationView v)
         {
-            int worst = -1;
-            float ratio = 1f;
-            for (int r = 0; r < v.Stock.Count; r++)
-            {
-                StockView s = v.Stock[r];
-                if (!IsLow(s)) continue;
-                float q = (float)s.Count / s.Target;
-                if (q < ratio) { ratio = q; worst = r; }
-            }
-            if (worst < 0) return "";
-            StockView w = v.Stock[worst];
-            return (w.Name ?? "") + " STOCK LOW (" + w.Count.ToString(CultureInfo.InvariantCulture) + "/" + w.Target.ToString(CultureInfo.InvariantCulture) + ")";
+            int n = Lines(v, arms);
+            for (int i = 0; i < n; i++)
+                if (arms[i].Low)
+                    return arms[i].Name + " LOW (" + arms[i].Count.ToString(CultureInfo.InvariantCulture) + "/" + arms[i].Target.ToString(CultureInfo.InvariantCulture) + ")";
+            return "";
         }
 
         /// <summary>FACTORIES tile: plants/slots and its fill.</summary>

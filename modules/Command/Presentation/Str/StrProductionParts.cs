@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     /// <summary>One production line: the stock row's name, plants on it, progress to the next unit, stock against target, time, and AUTO / PINNED.</summary>
     internal sealed class StrLineRowPart : StrLaidPart
     {
-        private const float Pad = 8f, ButtonW = 78f, ButtonH = 26f, StockW = 56f, PlantsW = 34f, TimeW = 56f, H = 60f;
+        private const float Pad = 8f, ButtonW = 96f, ButtonH = 26f, StockW = 64f, PlantsW = 40f, TimeW = 76f, H = 60f;
 
         private readonly int index;
         private readonly AvFrame frame;
@@ -98,30 +98,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Restyle();
         }
 
-        // Reads the live view at press time. PINNED hands every pinned plant of the line back; AUTO pins one plant of the line; a LOW line
-        // (no plant) takes the first free plant of its kind, or an idle one.
+        // FAVOUR sets the PRIORITY policy to this arm; pressing the favoured arm goes back to BALANCED. The host judges the policy lock.
         private StrAct Press()
         {
-            NationView v = StrNation.View;
             StrLineRow r = row;
-            if (v == null || r == null) return new StrAct(StrWhy.NoBoard, "NATION OFF");
-            if (r.Pinned)
-            {
-                StrAct last = default;
-                for (int i = 0; i < v.Plants.Count; i++)
-                    if (v.Plants[i].Row == r.Row && v.Plants[i].Pinned) last = StrNation.Ask(NationVerb.Unpin, v.Plants[i].Id);
-                return last;
-            }
-            LineKind want = r.Aircraft ? LineKind.Aircraft : LineKind.Vehicle;
-            int pick = -1;
-            for (int i = 0; i < v.Plants.Count && pick < 0; i++)
-            {
-                PlantView p = v.Plants[i];
-                bool fits = r.NoPlant ? !p.Pinned && (p.Kind == want || p.Kind == LineKind.Idle) : p.Row == r.Row && p.Kind != LineKind.Construction;
-                if (fits) pick = i;
-            }
-            if (pick < 0) return new StrAct(StrWhy.Gone, NationWords.Outcome(NationOutcome.NoSlot));
-            return StrNation.Ask(NationVerb.Line, v.Plants[pick].Id, r.Row);
+            if (StrNation.View == null || r == null) return new StrAct(StrWhy.NoBoard, "NATION OFF");
+            return StrNation.Ask(NationVerb.Priority, r.Pinned ? (int)PriorityPolicy.Balanced : r.Row);
         }
 
         protected override void Apply(StrViewModel vm)
@@ -132,13 +114,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvIcons.Set(icon, row.Aircraft ? AvIcon.Plane : AvIcon.Truck, 18f);
             AvText.Set(name, row.Name);
             AvText.Set(stock, row.Count.ToString(CultureInfo.InvariantCulture) + "/" + row.Target.ToString(CultureInfo.InvariantCulture));
-            AvText.Set(plants, row.NoPlant ? "" : "x" + row.Plants.ToString(CultureInfo.InvariantCulture));
+            AvText.Set(plants, row.Plants.ToString(CultureInfo.InvariantCulture) + " PL");
             AvText.Set(time, row.Time);
             bar.SetProgress((int)(row.Progress * 1000f), 1000);
             button.Control.SetIcon(row.Pinned ? AvIcon.Lock : AvIcon.Settings);
-            button.Bind(Controls, "nation.line." + (index + 1).ToString(CultureInfo.InvariantCulture), row.NoPlant ? "SET" : row.Pinned ? "PINNED" : "AUTO",
+            button.Bind(Controls, "nation.line." + (index + 1).ToString(CultureInfo.InvariantCulture), row.Pinned ? "FAVOURED" : "FAVOUR",
                 () => new StrAct(StrWhy.None, ""),
-                row.Pinned ? "Hand the pinned plants of this line back to the staff." : row.NoPlant ? "Nothing makes this. Put a free plant on it." : "The staff runs this line. Press to pin one plant to it.",
+                row.Pinned ? "The staff gives this arm two plants in three. Press to go back to an even split." : "Press to favour this arm: the staff gives it two plants in three.",
                 row.Pinned);
             Paint();
             Changed();

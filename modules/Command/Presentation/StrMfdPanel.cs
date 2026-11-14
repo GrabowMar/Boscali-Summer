@@ -230,13 +230,12 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             // NATION parts (hidden while the layer is off): the production lines, a plant going up, BUILD FACTORY, then the three policy rows.
             Add(p, new StrNationReply(p.Content, Controls, hub));
-            returnSection = p.Section(AvIcon.BuildingFactory, "PRODUCTION RETURN", "STOCK AGAINST TARGET" + StrWords.Dot + "PRESS A LINE TO PIN IT");
+            returnSection = p.Section(AvIcon.BuildingFactory, "PRODUCTION", "THE STAFF RUNS THE PLANTS" + StrWords.Dot + "FAVOUR ONE ARM IF YOU WISH");
             for (int i = 0; i < StrNationView.MaxLines; i++) Add(p, new StrLineRowPart(p.Content, Controls, hub, i));
             Add(p, new StrConstructionRow(p.Content, Controls, hub));
             Add(p, new StrBuildRow(p.Content, Controls, hub));
             policySection = p.Section(AvIcon.Scale, "ECONOMIC POLICY", "THE NATION AND THE STAFF");
             Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Economy));
-            Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Priority));
             Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Plan));
             p.Section(AvIcon.Coins, "FACTION POOL", "A SHARE OF YOUR FUNDS" + StrWords.Dot + "ONE DONATION A MINUTE");
             Add(p, new StrDonateRow(p.Content, Controls, hub));
