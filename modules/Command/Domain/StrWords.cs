@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case WaveBlock.NoDepot: return "NO DEPOT";
                 case WaveBlock.NoGroup: return "NO GROUP";
                 case WaveBlock.Cooling: return "COOLING DOWN";
-                case WaveBlock.PoolShort: return "POOL SHORT";
+                case WaveBlock.PoolShort: return "FUNDS SHORT";
                 default: return "";
             }
         }

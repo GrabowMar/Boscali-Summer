@@ -1,6 +1,7 @@
 using System;
 using System.Globalization;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
 using TMPro;
@@ -9,8 +10,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The nation layer as the STR desk sees it: set by the panel each tick (resolved late, the Nation module installs after Command) and read by
-    /// the parts below, which hide themselves while <see cref="View"/> is null.
+    /// The nation layer as the STR hub's parts see it, on STR BOARD and FAC ECONOMY alike: refreshed by whichever console binds (resolved late, the
+    /// Nation module installs after Command) and read by the parts below, which hide themselves while <see cref="View"/> is null.
     /// </summary>
     internal static class StrNation
     {
@@ -20,6 +21,40 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         internal static readonly StrLineRow[] Lines = new StrLineRow[StrNationView.MaxLines];
         internal static int LineCount;
+
+        /// <summary>Reads the service now and returns a key of what the parts show; a console rebinds when its key moves (whole seconds, so once a second at most).</summary>
+        internal static int Refresh()
+        {
+            Service = ModuleServices.TryGet(out INationView found) ? found : null;
+            View = Service != null && Service.Active ? Service.Local : null;
+            return Key(View);
+        }
+
+        // A hash of what the parts show, timers by whole second. No allocation.
+        private static int Key(NationView v)
+        {
+            if (v == null) return 1;
+            unchecked
+            {
+                int h = 17;
+                h = h * 31 + v.Slots;
+                h = h * 31 + Mathf.RoundToInt(v.Funds);
+                h = h * 31 + Mathf.RoundToInt(v.Stability * 10f);
+                h = h * 31 + Mathf.RoundToInt(v.Output * 100f);
+                h = h * 31 + (int)v.Economy * 3 + (int)v.Priority;
+                h = h * 31 + Mathf.CeilToInt(v.EconomyLock) * 7 + Mathf.CeilToInt(v.PriorityLock);
+                h = h * 31 + v.Running * 13 + Mathf.CeilToInt(v.RunningLeft);
+                h = h * 31 + (v.Building ? Mathf.CeilToInt(v.BuildLeft) + 1 : 0);
+                for (int i = 0; i < v.Plants.Count; i++)
+                {
+                    PlantView p = v.Plants[i];
+                    h = h * 31 + p.Id * 5 + p.Row + (p.Pinned ? 1000 : 0) + Mathf.CeilToInt(p.NextIn) * 3 + (int)p.Kind;
+                }
+                for (int i = 0; i < v.Stock.Count; i++) h = h * 31 + v.Stock[i].Count * 7 + v.Stock[i].Target;
+                string reply = ReplyWords();
+                return h * 31 + (reply.Length == 0 ? 0 : reply.GetHashCode());
+            }
+        }
 
         /// <summary>Refills the pooled line rows; the panel calls it once before each bind.</summary>
         internal static void Fill() => LineCount = View == null ? 0 : StrNationView.Lines(View, Lines);
@@ -261,7 +296,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
     }
 
-    /// <summary>A three-way policy row: ECONOMY and PRIORITY go to the nation, WAR PLAN is the staff posture through the desk's own verb.</summary>
+    /// <summary>A three-way policy row: ECONOMY (FAC ECONOMY) and PRIORITY go to the nation, WAR PLAN (STR BOARD) is the staff posture through the desk's own verb.</summary>
     internal sealed class StrPolicyRow : StrLaidPart
     {
         internal enum Kind : byte { Economy, Priority, Plan }
@@ -395,37 +430,5 @@ namespace BoscaliSummer.Modules.Command.Presentation
             next.color = AvInk.Dim;
             low.color = AvInk.State(AvState.Danger);
         }
-    }
-
-    /// <summary>BOARD: one WAR PLAN chip in place of the posture row; pressing it opens the PRODUCTION tab where the plan is set.</summary>
-    internal sealed class StrWarPlanChip : StrPart
-    {
-        private const float ButtonH = 26f;
-        private readonly StrButton chip;
-
-        internal StrWarPlanChip(RectTransform parent, StrControls controls, IStrHub hub, Func<StrAct> open) : base(parent, "War plan chip", controls, hub)
-        {
-            chip = new StrButton(Rect, "WAR PLAN", AvButtonStyle.Default, open, AvIcon.Flag);
-            Restyle();
-        }
-
-        protected override void Apply(StrViewModel vm)
-        {
-            SetShown(StrNation.Active);
-            if (!Shown) return;
-            chip.Bind(Controls, "nation.warplan", "WAR PLAN" + StrWords.Dot + vm.Posture.ToString().ToUpperInvariant(), () => new StrAct(StrWhy.None, ""),
-                "The staff's war plan. Press to open PRODUCTION, where it is set.");
-            Changed();
-        }
-
-        public override float Measure(float width) => Shown ? ButtonH + 4f : 0f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            if (Shown) chip.Place(2f, 0f, s.W - 4f, ButtonH);
-        }
-
-        public override void Restyle() => chip.Restyle();
     }
 }

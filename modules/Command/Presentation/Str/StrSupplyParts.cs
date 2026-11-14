@@ -6,8 +6,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The pilot's own funds and four shares of them to give to the faction pool. A press is the game's own donation; the host takes one a minute,
-    /// which the gate says before it is pressed.
+    /// The pilot's allocation and four shares of it to give to the faction's funds (FAC ECONOMY). A press is the game's own donation; the host takes
+    /// one a minute, which the gate says before it is pressed.
     /// </summary>
     internal sealed class StrDonateRow : StrPart
     {
@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         internal StrDonateRow(RectTransform parent, StrControls controls, IStrHub hub) : base(parent, "Donate", controls, hub)
         {
             label = Text(Rect, "Label", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
-            label.text = "YOUR FUNDS";
+            label.text = "ALLOCATION";
             funds = Text(Rect, "val.funds", AvTextRole.DataStrong, TextAlignmentOptions.MidlineLeft);
             caption = Text(Rect, "Caption", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             for (int i = 0; i < buttons.Length; i++)
@@ -40,9 +40,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
             {
                 int share = Shares[i];
                 buttons[i].Bind(Controls, StrControlIds.SupplyGive(share), Words[i], () => StrGate.Check(Vm, StrActionKind.Donate, StrItemId.None, share),
-                    "Give " + (share == 100 ? "all" : share + "%") + " of your funds to the faction pool. The staff pays its reinforcement waves from the pool.");
+                    "Give " + (share == 100 ? "all" : share + "%") + " of your allocation to the faction's funds. The staff pays its reinforcement waves from them.");
             }
-            AvText.Set(caption, s.Note.Length > 0 ? s.Note : "GIVE A SHARE TO THE POOL, OR BUY A GROUP BELOW");
+            AvText.Set(caption, s.Note.Length > 0 ? s.Note : "GIVE A SHARE TO FUNDS, OR BUY A CONVOY BELOW");
             Changed();
         }
 
@@ -105,7 +105,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Set(cost, row.CostText);
             AvText.Set(state, row.StateText);
             buy.Bind(Controls, StrControlIds.SupplyBuy(index + 1), "BUY", () => StrGate.Check(Vm, StrActionKind.BuyConvoy, StrItemId.None, index),
-                "Buy this group with your own funds. A depot of your side delivers it and the AI takes it to the front.");
+                "Buy this group from your allocation. A depot of your side delivers it and the AI takes it to the front.");
             Paint();
             Changed();
         }

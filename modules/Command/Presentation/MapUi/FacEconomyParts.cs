@@ -288,7 +288,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Line("PRIORITY", pri, AvTheme.RailInfo);
             for (int id = 0; id < FocusTreeModel.Count; id++)
                 if (FocusTreeModel.IsDone(v, id))
-                    Line(NationWords.Focus(id), NationWords.FocusEffect(id), id < 4 ? AvTheme.RailReady : id < 8 ? AvTheme.RailInfo : new Color(1f, .44f, .66f));
+                    Line(NationWords.Focus(id), NationWords.FocusEffect(id), id < 4 ? AvTheme.RailReady : id < 8 ? AvTheme.RailInfo : AvInk.Select);
             Line("STABILITY " + Mathf.RoundToInt(v.Stability), "", AvInk.Dim);
             Line("TOTAL OUTPUT", "x" + AvNum.Fixed(v.Output, 2), AvTheme.RailCaution);
             for (int i = n; i < MaxRows; i++) { AvText.Set(left[i], ""); AvText.Set(right[i], ""); }

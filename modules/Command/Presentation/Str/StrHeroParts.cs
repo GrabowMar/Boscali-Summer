@@ -424,8 +424,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>
-    /// The reinforcement wave with its price up front (R4): earned pips, state and whether the pool covers it on the first line; group, cost and the pool before
-    /// and after (or the held reason) on the second. A skipped wave is a persistent state on this strip, not a toast. The last purchase rides on its hover help.
+    /// The reinforcement wave with its price up front (R4): earned pips, state and whether the faction's funds cover it on the first line; group and cost
+    /// (or the held reason) on the second. A skipped wave is a persistent state on this strip, not a toast. The last purchase rides on its hover help.
     /// </summary>
     internal sealed class StrWaveStrip : StrLaidPart
     {
@@ -464,7 +464,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvText.Set(line, StrPanelText.WaveLine(vm));
             AvText.Set(check, StrPanelText.WaveCheck(vm));
             for (int i = 0; i < pips.Length; i++) pips[i].gameObject.SetActive(w.Present && i < Mathf.Clamp(w.PerWave, 1, pips.Length));
-            AvHelpTip.Attach(frame.gameObject, "Reinforcement wave: bought from the faction pool after finished sorties." + (w.LastText.Length > 0 ? " " + w.LastText + "." : ""));
+            AvHelpTip.Attach(frame.gameObject, "Reinforcement wave: bought from the faction's funds after finished sorties." + (w.LastText.Length > 0 ? " " + w.LastText + "." : ""));
             Paint();
             Changed();
         }

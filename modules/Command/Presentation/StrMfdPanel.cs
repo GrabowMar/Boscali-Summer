@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2, PageSupply = 3, PageCount = 4;
+        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2, PageCount = 3;
         private const int MaxLanes = StrViewModel.MaxFronts;
 
         // ---- Dependencies ----------------------------------------------------------------
@@ -36,11 +36,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             new MfdPanelInstaller(MfdSlots.Str, "STR", "BoscaliStrategic.Screen", preferLeft: true);
         private MFDScreen screen => installer.Screen;
         private AvConsole console;
-        private AvTabBar tabBar;
         // NATION: the desk shows the nation layer while the service says it is active; the key moves when a shown value does (whole seconds) and forces one rebind.
-        private AvSection returnSection, policySection;
         private int nationKey;
-        private bool nationLook;
 
         private readonly List<StrPart> parts = new List<StrPart>(32);
         private StrViewModel boundModel;
@@ -87,9 +84,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void ResetContent()
         {
             console = null;
-            tabBar = null;
-            returnSection = policySection = null;
-            nationLook = false;
             nationKey = 0;
             StrNation.View = null;
             parts.Clear();
@@ -157,22 +151,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             ResetContent();
             console = AvConsole.Build(rootRect, "STR", "THEATER", PageCount, Width, height);
-            tabBar = console.Tabs(
+            TabHelp.Apply(console.Tabs(
                 (AvIcon.Stack2, "BOARD"),
                 (AvIcon.Radar2, "SITREP"),
-                (AvIcon.InfoCircle, "INFO"),
-                (AvIcon.Coins, "SUPPLY"));
-            TabHelp.Apply(tabBar,
-                "The live operation, the staff's proposals, the platforms and the posture.",
-                "Force balance, sensors and the alert level.",
-                "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.",
-                "Spend your own funds: buy a ground group for your side, or give to the faction pool.");
+                (AvIcon.InfoCircle, "INFO")),
+                "The live operation, the staff's proposals, the platforms, the war plan and the force balance.",
+                "Sensors and the alert level.",
+                "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.");
             BoscaliSummer.Core.Ui.CountryStrip.Mount(console);
 
             BuildBoard(console.Page(PageBoard));
             BuildSitrep(console.Page(PageSitrep));
             BuildInfo(console.Page(PageInfo));
-            BuildSupply(console.Page(PageSupply));
             console.Finish();
             console.SetPage(PageBoard);
             return console.Root;
@@ -189,7 +179,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             Add(p, new StrNationTicker(p.Content, Controls, hub));
             Add(p, new StrBannerPart(p.Content, Controls, hub));
-            Add(p, new StrWarPlanChip(p.Content, Controls, hub, () => { console.SetPage(PageSupply); return new StrAct(StrWhy.None, "", true); }));
+            // WAR PLAN: with the nation layer on, the plan row (it keeps its lock) stands in for the posture rows.
+            Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Plan));
             Add(p, new StrPostureRow(p.Content, Controls, hub, false));
             Add(p, new StrHeroLane(p.Content, Controls, hub));
             for (int i = 0; i < StrViewModel.MaxProposals; i++) Add(p, new StrProposalTicket(p.Content, Controls, hub, i));
@@ -197,16 +188,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
             allSection = p.Section(AvIcon.Map2, "PLATFORMS", StrPanelText.NotchCaption);
             for (int i = 0; i < MaxLanes; i++) lanes[i] = Add(p, new StrFrontLane(p.Content, Controls, hub, i));
             Add(p, new StrPostureRow(p.Content, Controls, hub, true));
-            p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
-        }
-
-        private void BuildSitrep(AvFlow p)
-        {
             p.Section(AvIcon.Scale, "FORCE BALANCE", "OWN : HOSTILE, TRK = TRACKED ONLY");
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Sectors));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Air));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Ground));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Airbases));
+            p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
+        }
+
+        private void BuildSitrep(AvFlow p)
+        {
             p.Section(AvIcon.Antenna, "SENSORS AND FRONT", "WHAT WE KNOW, NOT WHAT EXISTS");
             for (int i = 0; i < sensors.Length; i++) sensors[i] = p.Add(new AvRow(p.Content));
             p.Section(AvIcon.AlertTriangle, "ALERT LEVEL", "FROM THE HOST'S OWN COUNTS");
@@ -223,25 +214,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             p.Links(("POLITICS", "FAC", "POLITICS"), ("EVENTS", "EVN", "DISPATCH"));
         }
 
-        // The game's own contribute menu on the map: the same two commands, the same gates.
-        private void BuildSupply(AvFlow p)
-        {
-            // NATION parts (hidden while the layer is off): the production lines, a plant going up, BUILD FACTORY, then the three policy rows.
-            Add(p, new StrNationReply(p.Content, Controls, hub));
-            returnSection = p.Section(AvIcon.BuildingFactory, "PRODUCTION", "THE STAFF RUNS THE PLANTS" + StrWords.Dot + "FAVOUR ONE ARM IF YOU WISH");
-            for (int i = 0; i < StrNationView.MaxLines; i++) Add(p, new StrLineRowPart(p.Content, Controls, hub, i));
-            Add(p, new StrConstructionRow(p.Content, Controls, hub));
-            Add(p, new StrBuildRow(p.Content, Controls, hub));
-            policySection = p.Section(AvIcon.Scale, "ECONOMIC POLICY", "THE NATION AND THE STAFF");
-            Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Economy));
-            Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Plan));
-            p.Section(AvIcon.Coins, "FACTION POOL", "A SHARE OF YOUR FUNDS" + StrWords.Dot + "ONE DONATION A MINUTE");
-            Add(p, new StrDonateRow(p.Content, Controls, hub));
-            p.Section(AvIcon.Shield, "GROUND UNITS", "PAID FROM YOUR FUNDS" + StrWords.Dot + "A DEPOT DELIVERS");
-            for (int i = 0; i < StrViewModel.MaxConvoys; i++) Add(p, new StrConvoyRow(p.Content, Controls, hub, i));
-            p.Links(("FUNDS", "FAC", "ECONOMY"), ("WING SUPPLY", "WMC", "SUPPLY"));
-        }
-
         // ---- Binding ---------------------------------------------------------------------
 
         /// <summary>Binds the hub's current model now (the harness and the automation use it).</summary>
@@ -254,7 +226,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             RegisterTabs();
             for (int i = 0; i < parts.Count; i++) parts[i].Bind(vm);
             BindSections(vm);
-            BindNationLook();
             BindSensors(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
@@ -284,63 +255,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
             string laneCaption = StrPanelText.LaneCaption(vm);
             otherSection.SetCaption(laneCaption);
             allSection.SetCaption(laneCaption);
-            returnSection.SetShown(StrNation.Active);
-            policySection.SetShown(StrNation.Active);
         }
 
         // ---- Nation ----------------------------------------------------------------------
 
         private void TickNation()
         {
-            INationView svc = ModuleServices.TryGet(out INationView found) ? found : null;
-            StrNation.Service = svc;
-            StrNation.View = svc != null && svc.Active ? svc.Local : null;
-            int key = NationKey(StrNation.View);
+            int key = StrNation.Refresh();
             if (key == nationKey) return;
             nationKey = key;
             boundRevision = -1;   // one rebind: the parts read the nation through StrNation
-        }
-
-        // A hash of what the desk shows, timers by whole second, so it moves once a second at most. No allocation.
-        private static int NationKey(NationView v)
-        {
-            if (v == null) return 1;
-            unchecked
-            {
-                int h = 17;
-                h = h * 31 + v.Slots;
-                h = h * 31 + Mathf.RoundToInt(v.Funds);
-                h = h * 31 + Mathf.RoundToInt(v.Stability * 10f);
-                h = h * 31 + Mathf.RoundToInt(v.Output * 100f);
-                h = h * 31 + (int)v.Economy * 3 + (int)v.Priority;
-                h = h * 31 + Mathf.CeilToInt(v.EconomyLock) * 7 + Mathf.CeilToInt(v.PriorityLock);
-                h = h * 31 + v.Running * 13 + Mathf.CeilToInt(v.RunningLeft);
-                h = h * 31 + (v.Building ? Mathf.CeilToInt(v.BuildLeft) + 1 : 0);
-                for (int i = 0; i < v.Plants.Count; i++)
-                {
-                    PlantView p = v.Plants[i];
-                    h = h * 31 + p.Id * 5 + p.Row + (p.Pinned ? 1000 : 0) + Mathf.CeilToInt(p.NextIn) * 3 + (int)p.Kind;
-                }
-                for (int i = 0; i < v.Stock.Count; i++) h = h * 31 + v.Stock[i].Count * 7 + v.Stock[i].Target;
-                string reply = StrNation.ReplyWords();
-                return h * 31 + (reply.Length == 0 ? 0 : reply.GetHashCode());
-            }
-        }
-
-        // The SUPPLY tab's word follows the layer.
-        private void BindNationLook()
-        {
-            bool on = StrNation.Active;
-            if (on == nationLook || tabBar == null) return;
-            nationLook = on;
-            AvControl[] tabs = tabBar.Rect.GetComponentsInChildren<AvControl>(true);
-            if (tabs.Length > PageSupply)
-            {
-                tabs[PageSupply].Label = on ? "PRODUCTION" : "SUPPLY";
-                tabs[PageSupply].Help = on
-                    ? "The nation's plants and stock, the economic policy and the war plan, then your own funds: a ground group for your side or a gift to the faction pool."
-                    : "Spend your own funds: buy a ground group for your side, or give to the faction pool.";
-            }
         }
 
         private void BindSensors(StrViewModel vm)

@@ -16,7 +16,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal sealed class FocusTreePart : AvPart
     {
         private const float StripH = 16f, HeroH = 74f, LaneHeadH = 20f, NodeH = 64f, LinkH = 12f, CardH = 150f, RemarkH = 28f, Gap = 6f, Pad = 10f, ColGap = 8f;
-        private static readonly Color Pink = new Color(1f, .44f, .66f);
+        private static Color Pink => AvInk.Select;
         private static readonly AvIcon[] Icons =
         {
             AvIcon.BuildingFactory, AvIcon.Gauge, AvIcon.Coins, AvIcon.Bolt,

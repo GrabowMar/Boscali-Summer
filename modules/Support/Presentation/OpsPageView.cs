@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Power;
         /// <summary>The pilot's perks of this front: free to arm now (an armed or pending one is counted apart).</summary>
         public int Available, ArmedPerks, PendingPerks, Unlocked, QueueCount, FundingPct;
-        public ushort Budget;
         public AvState Tone, AlertTone;
         public ProgrammePhase Phase;
         public float BuildProgress;
@@ -111,7 +110,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     continue;
                 }
                 c.Superiority = row.Superiority;
-                c.FundingPct = row.PriorityPct; c.Budget = row.Budget;
+                c.FundingPct = row.PriorityPct;
                 c.QueueCount = row.Queue.Count;
                 foreach (CallRow r in CallSheet.Rows) if (r.Front == f && CallGate.Open(r, c.Grade)) c.Unlocked++;
                 c.Word = FrontSuperiority.Word(row.Superiority);

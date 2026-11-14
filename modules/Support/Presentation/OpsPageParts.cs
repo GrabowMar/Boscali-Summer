@@ -115,7 +115,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private readonly float height;
         private readonly AvFrame back;
         private readonly Image rail;
-        private readonly TMP_Text icon, name, codename, stampIcon, blocker, readiness, supLabel, supWord, supValue, support, funds;
+        private readonly TMP_Text icon, name, codename, stampIcon, blocker, readiness, supLabel, supWord, supValue, support;
         private readonly TMP_Text buildName, buildNote, queueLabel, queueCount, queueLine, dirLabel, dirValue;
         private readonly OpsTag stamp, phase;
         private readonly Image supWell, supFill, supNeedle;
@@ -162,7 +162,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             supValue = FrontKit.Mono(Rect, "SupValue", 0f, 51f, 42f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
 
             support = FrontKit.Mono(Rect, "Support", PadX, 71f, 280f, 16f, 11f, TextAlignmentOptions.MidlineLeft);
-            funds = FrontKit.Mono(Rect, "Funds", 0f, 71f, 150f, 16f, 10.5f, TextAlignmentOptions.MidlineRight);
 
             if (mid)
             {
@@ -209,8 +208,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AvLay.Place(supWell.rectTransform, barX, 54f, barW, 12f);
             AvLay.Place(supWord.rectTransform, barX + barW + 8f, 51f, 84f, 18f);
             AvLay.Place(supValue.rectTransform, w - 54f, 51f, 42f, 18f);
-            AvLay.Place(support.rectTransform, PadX, 71f, w - 178f, 16f);
-            AvLay.Place(funds.rectTransform, w - 162f, 71f, 150f, 16f);
+            AvLay.Place(support.rectTransform, PadX, 71f, w - 2f * PadX, 16f);
             if (mid)
             {
                 phase.Place(PadX, 90f, 62f, 16f);
@@ -280,7 +278,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FrontKit.Set(support, c.Known
                 ? "YOUR SUPPORT " + c.Available + " AVAILABLE" + (c.ArmedPerks > 0 ? " · " + c.ArmedPerks + " ARMED" : "") + (c.PendingPerks > 0 ? " · " + c.PendingPerks + " PENDING" : "")
                 : "YOUR SUPPORT —", AvInk.Ink);
-            FrontKit.Set(funds, c.Known ? c.Budget + " FUNDS" : "", AvInk.Dim);
 
             if (mid)
             {

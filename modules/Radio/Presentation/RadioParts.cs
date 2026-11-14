@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private readonly Image back, crestBack, crestIcon, rule, barBack, barFill, slabBack, hit;
         private readonly RadioOutline outline, crestOutline;
         private readonly TMP_Text crestCode, station, slab, show, label, title, clock, next, nextIn;
-        private Color tint = new Color(0.45f, 0.95f, 0.55f);
+        private Color tint = AvTheme.Friendly;
         private float placedW = -1f, progress;
         private bool slabLive;
 
@@ -204,7 +204,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         public override void Restyle()
         {
-            Color dark = AvStyleHost.FuiFill("panel", new Color(0.06f, 0.08f, 0.1f));
+            Color dark = AvStyleHost.FuiFill("panel", AvTheme.Surface);
             back.color = Color.Lerp(dark, tint, 0.07f);
             outline.Color = tint.WithAlpha(0.45f);
             crestBack.color = Color.Lerp(dark, tint, 0.14f);

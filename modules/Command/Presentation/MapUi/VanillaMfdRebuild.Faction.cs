@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string[] TabTips { get; } = new[]
             {
-                "Economy: the way to the order in force on EVN, and four simultaneous compact histories of funds, warheads, manpower and morale.",
+                "Economy: the country's funds, production, plants and policies, your donations and convoy purchases, and the histories of funds, warheads, manpower and morale.",
                 "Forces: live unit counts by class, then every unit type of the chosen class with its live and lost counts, busiest first.",
                 "Ledger: reserves, losses, value or manpower per class, plus a named loss ledger of the unit types hit hardest.",
                 "Politics: the morale mandate, the way to the order in force on EVN, and a directory of airbases or players.",
@@ -281,25 +281,58 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // ---------------------------------------------------------- ECONOMY page
 
+            // What STR SUPPLY held (panels fold phase 3): the STR hub's own parts, bound here from the hub's model with FAC's own control ids.
+            // The nation rows hide with the layer (one dim line instead); DONATE and BUY hide only while STR is off. The opposition shows none.
+            private readonly List<StrPart> supplyParts = new List<StrPart>(12), nationSupplyParts = new List<StrPart>(6);
+            private readonly StrControls supplyControls = new StrControls();
+            private IStrHub supplyHub;
+            private StrViewModel supplyBound;
+            private int supplyRevision = -1, supplyKey;
+            private bool supplyNation;
+            private AvSection donateSection, convoySection;
+            private AvNote nationOffNote, strOffNote;
+
+            private void AddSupply(AvFlow page, StrPart part, bool nation)
+            {
+                page.Add(part);
+                part.SetShown(false);
+                (nation ? nationSupplyParts : supplyParts).Add(part);
+            }
+
             private void BuildResourcesPage(AvFlow page)
             {
                 BuildFactionSelector(page);
                 economyOrder = OrderLink(page);
+                supplyHub = Runtime.StrViewHub.Active;
 
                 // NATION blocks sit above the treasury chart and stay out of the flow until the layer is Active.
-                nationEconomyParts.Add(page.Section(AvIcon.Coins, "MONEY", "SPENT ON STR · LINK BELOW"));
+                nationEconomyParts.Add(page.Section(AvIcon.Coins, "FUNDS", "WHAT THE COUNTRY HAS TO SPEND"));
                 moneyNote = page.Add(new AvNote(page.Content, AvTextRole.DataSmall, true));
                 nationEconomyParts.Add(moneyNote);
+                nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PRODUCTION", "THE STAFF RUNS THE PLANTS · FAVOUR ONE ARM"));
+                AddSupply(page, new StrNationReply(page.Content, supplyControls, supplyHub), true);
+                for (int i = 0; i < StrNationView.MaxLines; i++) AddSupply(page, new StrLineRowPart(page.Content, supplyControls, supplyHub, i), true);
                 nationEconomyParts.Add(page.Section(AvIcon.Tank, "STOCK", "WHAT THE FACTION CAN FIELD NOW"));
                 stockPart = page.Add(new FacStockPart(page.Content));
                 nationEconomyParts.Add(stockPart);
                 nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PLANTS", "FACTORIES AND FREE SLOTS"));
                 plantsPart = page.Add(new FacPlantsPart(page.Content));
                 nationEconomyParts.Add(plantsPart);
+                AddSupply(page, new StrConstructionRow(page.Content, supplyControls, supplyHub), true);
+                AddSupply(page, new StrBuildRow(page.Content, supplyControls, supplyHub), true);
+                nationEconomyParts.Add(page.Section(AvIcon.Scale, "POLICIES", "HOW HARD THE COUNTRY WORKS"));
+                AddSupply(page, new StrPolicyRow(page.Content, supplyControls, supplyHub, StrPolicyRow.Kind.Economy), true);
                 nationEconomyParts.Add(page.Section(AvIcon.ListDetails, "IN FORCE", "POLICIES AND FOCUS BONUSES"));
                 forcePart = page.Add(new FacForcePart(page.Content));
                 nationEconomyParts.Add(forcePart);
                 foreach (AvPart p in nationEconomyParts) p.SetShown(false);
+                nationOffNote = page.Add(new AvNote(page.Content, "NATION OFF · PRODUCTION, PLANTS AND POLICIES SHOW WHILE IT RUNS"));
+
+                donateSection = page.Section(AvIcon.Coins, "HELP THE COUNTRY", "FROM YOUR ALLOCATION · ONE DONATION A MINUTE");
+                AddSupply(page, new StrDonateRow(page.Content, supplyControls, supplyHub), false);
+                convoySection = page.Section(AvIcon.Shield, "CONVOYS", "BOUGHT FROM YOUR ALLOCATION · A DEPOT DELIVERS");
+                for (int i = 0; i < StrViewModel.MaxConvoys; i++) AddSupply(page, new StrConvoyRow(page.Content, supplyControls, supplyHub, i), false);
+                strOffNote = page.Add(new AvNote(page.Content, "STRATEGIC COMMAND OFF · FACTORY, POLICY, DONATE AND BUY SHOW WHILE IT RUNS"));
 
                 historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "FORM 31-T / NO OBSERVATIONS");
                 history = page.Add(new HistoryCard(page.Content), 1f);
@@ -307,13 +340,43 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     AvNum.Seconds(MfdResourceHistory.Interval, 0) + "; up to " +
                     AvNum.Seconds(MfdResourceHistory.Capacity * MfdResourceHistory.Interval, 0) +
                     " retained. Missing observations break each resource trace; no backfill.";
-                page.Links(("PRODUCTION", "STR", "SUPPLY"), ("SUPPORT PRICES", "OPS", null));
+                page.Links(("FRONTS AND WAR PLAN", "STR", "BOARD"), ("WHAT ALLOCATION BUYS", "OPS", null));
             }
             private void RefreshResources(FactionHQ hq)
             {
                 SetOrderLink(economyOrder);
                 if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
                 RefreshResourceChart();
+                RefreshSupply(hq);
+            }
+
+            /// <summary>Binds the folded STR parts when the hub built something new, the nation moved or the layer turned; the same key STR uses.</summary>
+            private void RefreshSupply(FactionHQ hq)
+            {
+                Runtime.StrViewHub live = Runtime.StrViewHub.Active;
+                bool own = selectedFaction == 0;
+                bool str = own && live != null && ReferenceEquals(live, supplyHub) && live.Current.Built;
+                int key = StrNation.Refresh();
+                bool nation = str && IsLocalFaction(hq) && StrNation.Active;
+                nationOffNote.SetShown(own && !StrNation.Active);
+                strOffNote.SetShown(own && !str);
+                donateSection.SetShown(str);
+                if (!nation) foreach (StrPart p in nationSupplyParts) p.SetShown(false);
+                if (!str)
+                {
+                    foreach (StrPart p in supplyParts) p.SetShown(false);
+                    convoySection.SetShown(false);
+                    supplyBound = null;
+                    return;
+                }
+                StrViewModel vm = live.Current;
+                convoySection.SetShown(vm.Supply.RowCount > 0);
+                if (ReferenceEquals(vm, supplyBound) && live.Revision == supplyRevision && key == supplyKey && nation == supplyNation) return;
+                supplyBound = vm; supplyRevision = live.Revision; supplyKey = key; supplyNation = nation;
+                supplyControls.Clear();
+                StrNation.Fill();
+                foreach (StrPart p in supplyParts) { p.SetShown(true); p.Bind(vm); }
+                if (nation) foreach (StrPart p in nationSupplyParts) { p.SetShown(true); p.Bind(vm); }
             }
 
             /// <summary>Each resource gets its own scale and trailing finite run; gaps never bridge.</summary>
@@ -385,7 +448,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         "counts, busiest first.";
 
                 definitionGrid = page.Add(new UnitRosterPart(page.Content, false), 1f);
-                page.Links(("FORCE BALANCE", "STR", "SITREP"), ("WING", "WMC", null));
+                page.Links(("FORCE BALANCE", "STR", "BOARD"), ("WING", "WMC", null));
             }
             private void SetForceTotals(MissionStatsTracker tracker)
             {
