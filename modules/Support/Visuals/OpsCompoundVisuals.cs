@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Threading.Tasks;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Support.Runtime;
@@ -79,9 +80,10 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void Dress(Unit unit, string kind)
         {
+            if (!TryModel(kind, out Mesh mesh, out Material[] materials, out bool decoding) && decoding) return; // still unpacking: the next scan dresses it
             var entry = new Dressed();
             dressed[unit] = entry; // a failed load is remembered too, so it is not retried every scan
-            if (!TryModel(kind, out Mesh mesh, out Material[] materials)) return;
+            if (mesh == null) return;
 
             float ground = float.MaxValue;
             foreach (Renderer r in unit.GetComponentsInChildren<Renderer>(true))
@@ -110,7 +112,13 @@ namespace BoscaliSummer.Modules.Support.Visuals
         }
 
         private static OpsCompoundVisuals live;
-        private void Awake() => live = this;
+        private void Awake()
+        {
+            live = this;
+            // Unpacking a blob (gunzip + ~150 kB of floats) was a 16-40 ms frame on the first compound of each kind: do it off the main thread, ahead of need.
+            if (!Application.isBatchMode)
+                foreach (string[] kind in Kinds) Unpacking(kind[1]);
+        }
 
         /// <summary>
         /// Sim hook (tests/ingame/ops-compounds.json): the dressed anchors, each with its kind, whether the model drew and how many
@@ -147,27 +155,55 @@ namespace BoscaliSummer.Modules.Support.Visuals
             return new Dictionary<string, object> { ["ok"] = true, ["count"] = rows.Count, ["dressed"] = rows };
         }
 
-        private static bool TryModel(string kind, out Mesh mesh, out Material[] materials)
+        /// <summary>A compound blob unpacked off the main thread: plain arrays, no Unity objects.</summary>
+        private sealed class Unpacked
         {
+            public readonly List<Vector3> Positions = new List<Vector3>();
+            public readonly List<Vector3> Normals = new List<Vector3>();
+            public List<int>[] Indices;
+            public string[] Names;
+            public Color[] Linear;
+            public float[] Smoothness, Metallic;
+        }
+
+        private static readonly Dictionary<string, Task<Unpacked>> unpacking = new Dictionary<string, Task<Unpacked>>();
+
+        private static Task<Unpacked> Unpacking(string kind)
+        {
+            if (!unpacking.TryGetValue(kind, out Task<Unpacked> task))
+                unpacking[kind] = task = Task.Run(() =>
+                {
+                    byte[] packed = EmbeddedResources.ReadAll(typeof(OpsCompoundVisuals).Assembly, "BoscaliSummer.Support.Compounds." + kind + ".opsc", 4 << 20);
+                    return packed != null ? Unpack(packed) : null;
+                });
+            return task;
+        }
+
+        /// <summary>False with <paramref name="decoding"/> set while the blob is still unpacking; false without it when the model is unusable for good.</summary>
+        private static bool TryModel(string kind, out Mesh mesh, out Material[] materials, out bool decoding)
+        {
+            decoding = false;
             if (models.TryGetValue(kind, out var cached)) { mesh = cached.Key; materials = cached.Value; return mesh != null; }
             mesh = null;
             materials = null;
+            Task<Unpacked> task = Unpacking(kind);
+            if (!task.IsCompleted) { decoding = true; return false; }
             try
             {
-                byte[] packed = EmbeddedResources.ReadAll(typeof(OpsCompoundVisuals).Assembly, "BoscaliSummer.Support.Compounds." + kind + ".opsc", 4 << 20);
-                if (packed != null) Load(packed, kind, out mesh, out materials);
+                Unpacked data = task.Result; // a faulted task rethrows here
+                if (data != null) Build(data, kind, out mesh, out materials);
             }
             catch (Exception e)
             {
-                Plugin.Logger?.LogWarning("[Support.Compounds] " + kind + " model unreadable: " + e.Message);
+                Plugin.Logger?.LogWarning("[Support.Compounds] " + kind + " model unreadable: " + (e.InnerException ?? e).Message);
                 mesh = null;
             }
             models[kind] = new KeyValuePair<Mesh, Material[]>(mesh, materials);
             return mesh != null;
         }
 
-        /// <summary>Reads the blob build_compounds.py writes (layout in its export_game_blob docstring).</summary>
-        private static void Load(byte[] packed, string kind, out Mesh mesh, out Material[] materials)
+        /// <summary>Reads the blob build_compounds.py writes (layout in its export_game_blob docstring). Thread-safe: no Unity objects.</summary>
+        private static Unpacked Unpack(byte[] packed)
         {
             using (var gz = new GZipStream(new MemoryStream(packed), CompressionMode.Decompress))
             using (var read = new BinaryReader(gz))
@@ -175,38 +211,47 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 if (new string(read.ReadChars(4)) != "OPSC" || read.ReadInt32() != 1) throw new InvalidDataException("not an OPSC v1 blob");
                 int subs = read.ReadInt32();
                 if (subs < 1 || subs > 32) throw new InvalidDataException("bad submesh count");
-                var positions = new List<Vector3>();
-                var normals = new List<Vector3>();
-                var indices = new List<int>[subs];
-                materials = new Material[subs];
+                var data = new Unpacked
+                {
+                    Indices = new List<int>[subs], Names = new string[subs], Linear = new Color[subs],
+                    Smoothness = new float[subs], Metallic = new float[subs],
+                };
                 for (int s = 0; s < subs; s++)
                 {
                     int nameLength = read.ReadInt32();
                     if (nameLength < 0 || nameLength > 128) throw new InvalidDataException("bad name");
-                    string name = System.Text.Encoding.UTF8.GetString(read.ReadBytes(nameLength));
-                    var linear = new Color(read.ReadSingle(), read.ReadSingle(), read.ReadSingle());
-                    float smoothness = read.ReadSingle(), metallic = read.ReadSingle();
+                    data.Names[s] = System.Text.Encoding.UTF8.GetString(read.ReadBytes(nameLength));
+                    data.Linear[s] = new Color(read.ReadSingle(), read.ReadSingle(), read.ReadSingle());
+                    data.Smoothness[s] = read.ReadSingle();
+                    data.Metallic[s] = read.ReadSingle();
                     int vertices = read.ReadInt32(), count = read.ReadInt32();
-                    if (vertices < 0 || count < 0 || positions.Count + vertices > 1 << 20 || count > 3 << 20) throw new InvalidDataException("bad sizes");
-                    int baseVertex = positions.Count;
+                    if (vertices < 0 || count < 0 || data.Positions.Count + vertices > 1 << 20 || count > 3 << 20) throw new InvalidDataException("bad sizes");
+                    int baseVertex = data.Positions.Count;
                     for (int v = 0; v < vertices; v++)
                     {
-                        positions.Add(new Vector3(read.ReadSingle(), read.ReadSingle(), read.ReadSingle()));
-                        normals.Add(new Vector3(read.ReadSingle(), read.ReadSingle(), read.ReadSingle()));
+                        data.Positions.Add(new Vector3(read.ReadSingle(), read.ReadSingle(), read.ReadSingle()));
+                        data.Normals.Add(new Vector3(read.ReadSingle(), read.ReadSingle(), read.ReadSingle()));
                     }
                     var list = new List<int>(count);
                     for (int t = 0; t < count; t++) list.Add(baseVertex + read.ReadInt32());
-                    indices[s] = list;
-                    materials[s] = Palette(name, linear, smoothness, metallic);
+                    data.Indices[s] = list;
                 }
-                mesh = new Mesh { name = "OpsCompound_" + kind, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-                mesh.SetVertices(positions);
-                mesh.SetNormals(normals);
-                mesh.subMeshCount = subs;
-                for (int s = 0; s < subs; s++) mesh.SetTriangles(indices[s], s, false);
-                mesh.RecalculateBounds();
-                mesh.UploadMeshData(true);
+                return data;
             }
+        }
+
+        private static void Build(Unpacked data, string kind, out Mesh mesh, out Material[] materials)
+        {
+            int subs = data.Indices.Length;
+            materials = new Material[subs];
+            for (int s = 0; s < subs; s++) materials[s] = Palette(data.Names[s], data.Linear[s], data.Smoothness[s], data.Metallic[s]);
+            mesh = new Mesh { name = "OpsCompound_" + kind, indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
+            mesh.SetVertices(data.Positions);
+            mesh.SetNormals(data.Normals);
+            mesh.subMeshCount = subs;
+            for (int s = 0; s < subs; s++) mesh.SetTriangles(data.Indices[s], s, false);
+            mesh.RecalculateBounds();
+            mesh.UploadMeshData(true);
         }
 
         private static Material Palette(string name, Color linear, float smoothness, float metallic)
