@@ -86,7 +86,8 @@ namespace NOAvionics
             for (int i = 0; i < links.Length; i++)
             {
                 (string what, string key, string page) l = links[i];
-                specs[i] = new AvControl.Spec(l.what + " · " + l.key, () => AvConsole.Open(l.key, l.page), AvButtonStyle.Default, AvIcon.ArrowUpRight, true);
+                AvConsole.LinkTargets.Add(l.key + "|" + (l.page ?? ""));
+                specs[i] =new AvControl.Spec(l.what + " · " + l.key, () => AvConsole.Open(l.key, l.page), AvButtonStyle.Default, AvIcon.ArrowUpRight, true);
             }
             AvButtons row = Buttons(specs);
             for (int i = 0; i < links.Length; i++)

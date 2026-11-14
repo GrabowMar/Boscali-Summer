@@ -184,6 +184,9 @@ namespace NOAvionics
 
         private static readonly System.Collections.Generic.Dictionary<string, AvConsole> byId =
             new System.Collections.Generic.Dictionary<string, AvConsole>(16);
+        /// <summary>Every "KEY|PAGE" a link chip targets (filled by <see cref="AvFlow.Links"/>), for the dev link audit.</summary>
+        public static readonly System.Collections.Generic.HashSet<string> LinkTargets = new System.Collections.Generic.HashSet<string>();
+
         private static readonly System.Collections.Generic.Dictionary<string, string> pendingPage =
             new System.Collections.Generic.Dictionary<string, string>(4);
 
