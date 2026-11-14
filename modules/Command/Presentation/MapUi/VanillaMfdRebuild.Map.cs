@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Modules.Command.Domain;
 using BoscaliSummer.Modules.Command.Runtime;
 using BoscaliSummer.Core.Services;
 using NOAvionics;
@@ -10,8 +13,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     internal static partial class VanillaMfdRebuild
     {
         /// <summary>
-        /// The MAP bezel: which map layers and Boscali overlays are drawn and how its
-        /// symbols read.
+        /// The MAP bezel: every map tool (TOOLS), which map layers and Boscali overlays are drawn
+        /// (LAYERS) and how its symbols read (READABILITY). TOOLS only surfaces what the map input
+        /// already owns (<see cref="MfdMapInteractions"/>, <see cref="ReliefNavigator"/>, the MARK tools)
+        /// and COM's shared plot through <see cref="ICommsPlot"/>.
         ///
         /// Every control calls the authority that already owns the value — the native
         /// <see cref="MapOptions"/> for the six stock layers, or Command's own
@@ -65,8 +70,32 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly AvIcon[] SizeGlyphs =
                 { AvIcon.Minimize, AvIcon.Circle, AvIcon.Maximize };
 
+            private const int ToolsPage = 0, LayersPage = 1;
+            // TOOLS: the quick layers are overlay indices (FRONTS, SECTORS, ROADS, INDUSTRY, CONVOYS), then COM's plot ink.
+            private static readonly int[] QuickOverlays = { 1, 0, RoadsLayer, 2, 3 };
+            private static readonly string[] QuickNames = { "FRONTS", "SECTORS", "ROADS", "INDUSTRY", "CONVOYS", "PLOT" };
+            // In MapRightClick order: the first claim wins (rule B).
+            private static readonly string[] RuleNames = { "1 · ARMED TOOL", "2 · MOVE WING", "3 · WAYPOINT", "4 · PIN THE SPOT" };
+            private static readonly string[] RuleNotes =
+            {
+                "A MARK, PLOT, support or wing tool you armed places where you click.",
+                "A WMC wingman selection flies there.",
+                "A friendly unit that takes orders gets the game's own waypoint.",
+                "Nothing else claims it: the card opens on that spot.",
+            };
+            private const int CursorRows = 10;
+
             private readonly MapOptions options;
             private readonly SymbolTile[] previewTiles = new SymbolTile[3];
+            private MfdPagingGrid quick;
+            private readonly AvRow[] ruleRows = new AvRow[RuleNames.Length];
+            private AvSection selectSection, markSection, cursorSection;
+            private AvControl[] markTools, viewTools;
+            private ICommsPlot plot;
+            private AvPart[] plotParts;
+            private AvNote plotOff;
+            private readonly AvRow[] cursorRows = new AvRow[CursorRows];
+            private readonly List<MapMenuRow> cursorFacts = new List<MapMenuRow>(12);
 
             private ComMapOverlay overlay;
             private LogisticsMapOverlay logistics;
@@ -84,12 +113,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override (AvIcon Icon, string Label)[] TabItems => new[]
             {
+                (AvIcon.Ruler2, "TOOLS"),
                 (AvIcon.LayersSubtract, "LAYERS"),
                 (AvIcon.Focus2, "READABILITY"),
             };
 
             protected override string[] TabTips { get; } = new[]
             {
+                "Tools: quick layers, what right mouse does, selection, marks, the shared plot, the view and what lies under the cursor.",
                 "Layers: show or hide the game's map layers and the Boscali overlays, with the overlay legend beneath them.",
                 "Readability: hover tooltip mode, symbol size with a live sample, and the key to every contact symbol.",
             };
@@ -121,16 +152,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 };
                 for (int i = 0; i < metrics.Length; i++) AvHelpTip.Attach(metrics[i].Rect.gameObject, metricTips[i]);
 
+                BuildTools(CreatePage());
                 BuildLayers(CreatePage());
                 BuildReadability(CreatePage());
 
                 // The footer shows these one at a time under the status line, most important first.
-                Console.Orders(0,
+                Console.Orders(ToolsPage,
+                    "Arm a MARK or PLOT tool here, then right-click the map. ESC puts it down.",
+                    "Right mouse goes to the first claim: an armed tool, a wing move, a waypoint, then the card.",
+                    "Left mouse selects: click a contact, SHIFT drag boxes in, CTRL drag boxes out.");
+                Console.Orders(LayersPage,
                     "Left-click a tile to show or hide that layer.",
                     "ALL ON and HIDE ALL act on the game layers and the Boscali overlays together.",
                     "DEFAULTS restores the game's own settings: every layer on, unit tooltips, full-size symbols.",
                     "An overlay that reads WAIT has no map or faction headquarters to draw from yet.");
-                Console.Orders(1,
+                Console.Orders(LayersPage + 1,
                     "Frame shape names the side; the glyph names the platform class.",
                     "Shape carries the side without colour, so a symbol reads on any display scheme.",
                     "Symbol size scales every contact on the map. The sample above shows the change.",
@@ -140,6 +176,129 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 selectedPage = index;
                 RequestRefresh();
+            }
+
+            // -------------------------------------------------------------- tools
+
+            private void BuildTools(AvFlow page)
+            {
+                page.Section(AvIcon.LayersSubtract, "QUICK LAYERS", "EVERY LAYER ON LAYERS");
+                quick = AddGrid(page, new MfdPagingGrid(page.Content, QuickNames.Length, 1, pager: false, rowHeight: 56f, tile: true, words: false));
+                quick.SetGlyphs(i => i < QuickOverlays.Length ? OverlayGlyphs[QuickOverlays[i]] : AvIcon.Pencil);
+
+                page.Section(AvIcon.ListDetails, "WHAT RIGHT MOUSE DOES", "FIRST ONE THAT FITS WINS");
+                for (int i = 0; i < ruleRows.Length; i++)
+                {
+                    ruleRows[i] = page.Add(new AvRow(page.Content));
+                    ruleRows[i].Set(RuleNames[i], RuleNotes[i], "", AvState.Inert);
+                }
+
+                selectSection = page.Section(AvIcon.Target, "SELECT", "THE LIST LIVES ON TGT");
+                page.Add(new AvRow(page.Content)).Set("LEFT MOUSE",
+                    "Click a contact to add or drop it. SHIFT drag boxes contacts in, CTRL drag boxes them out.", "", AvState.Inert);
+                AvControl[] select = page.Buttons(
+                    new AvControl.Spec("FRAME", MfdMapInteractions.FrameSelection, AvButtonStyle.Default, AvIcon.Focus2),
+                    new AvControl.Spec("SAME TYPE", MfdMapInteractions.SelectSameType, AvButtonStyle.Default, AvIcon.Filter),
+                    new AvControl.Spec("CLEAR", MfdMapInteractions.ClearSelectionTool, AvButtonStyle.Default, AvIcon.Eraser)).Controls;
+                select[0].Help = "Frame: centre the map on what is selected.";
+                select[1].Help = "Same type: select every visible contact of the first selected one's type and side.";
+                select[2].Help = "Clear: empty the selection, and with it your target list while flying.";
+
+                markSection = page.Section(AvIcon.Ruler2, "MARK", "ARM ONE · RMB PLACES IT · ONLY YOU SEE IT");
+                markTools = page.Buttons(
+                    new AvControl.Spec("RANGE", () => ArmMark(MfdMapInteractions.MarkTool.Range), AvButtonStyle.Toggle, AvIcon.Ruler2),
+                    new AvControl.Spec("LANDING ZONE", () => ArmMark(MfdMapInteractions.MarkTool.Zone), AvButtonStyle.Toggle, AvIcon.Parachute),
+                    new AvControl.Spec("COPY FIX", () => ArmMark(MfdMapInteractions.MarkTool.Fix), AvButtonStyle.Toggle, AvIcon.Copy),
+                    new AvControl.Spec("CLEAR", () => { MfdMapInteractions.ClearMarks(); RequestRefresh(); }, AvButtonStyle.Default, AvIcon.Eraser)).Controls;
+                markTools[0].Help = "Range: right-click the map to drop your range mark; the cursor line and AT THE CURSOR read from it.";
+                markTools[1].Help = "Landing zone: right-click the map; every HALO stick and glider you release aims there.";
+                markTools[2].Help = "Copy fix: right-click the map to copy that ground's X and Z to the clipboard.";
+                markTools[3].Help = "Clear: remove your range mark and your landing zone.";
+
+                // COM's shared plot, built by Comms on this page; one dim line while Comms is off.
+                plotOff = page.Add(new AvNote(page.Content, "PLOT off: COMMS is switched off in F1."));
+                if (ModuleServices.TryGet(out plot)) plotParts = plot.Build(page);
+
+                page.Section(AvIcon.Focus2, "VIEW", "THE RELIEF CAMERA");
+                viewTools = page.Buttons(
+                    new AvControl.Spec("NORTH UP", ReliefNavigator.North, AvButtonStyle.Default, AvIcon.CurrentLocation),
+                    new AvControl.Spec("FIT MAP", ReliefNavigator.Fit, AvButtonStyle.Default, AvIcon.Maximize),
+                    new AvControl.Spec("FOLLOW", ReliefNavigator.ToggleFollow, AvButtonStyle.Toggle, AvIcon.Plane),
+                    new AvControl.Spec("WASD", ReliefNavigator.ToggleFly, AvButtonStyle.Toggle, AvIcon.Eye)).Controls;
+                viewTools[0].Help = "North up at the default terrain tilt.";
+                viewTools[1].Help = "Fit the whole mission map. Double-click the ground to zoom in there.";
+                viewTools[2].Help = "Follow your aircraft, or drag the map to move freely.";
+                viewTools[3].Help = "Keyboard camera flight: W/A/S/D moves relative to the view heading while the map is open.";
+
+                cursorSection = page.Section(AvIcon.Crosshair, "AT THE CURSOR", "THE LAST GROUND THE POINTER CROSSED");
+                for (int i = 0; i < cursorRows.Length; i++)
+                {
+                    cursorRows[i] = page.Add(new AvRow(page.Content));
+                    cursorRows[i].SetShown(false);
+                }
+                page.Links(("HELD TARGETS", "TGT", "TARGETS"), ("WHO IS ON THE NET", "COM", "NET"));
+            }
+
+            private void ArmMark(MfdMapInteractions.MarkTool tool)
+            {
+                MfdMapInteractions.ArmMark(tool);
+                RequestRefresh();
+            }
+
+            private bool QuickReady(int i) => i < QuickOverlays.Length ? OverlayReady(QuickOverlays[i]) : plot != null && plot.On;
+
+            private bool QuickOn(int i) => QuickReady(i) && (i < QuickOverlays.Length ? OverlayLayer(QuickOverlays[i]) : plot.ShowOnMap);
+
+            private void ToggleQuick(int i)
+            {
+                if (!ToggleReady() || !QuickReady(i)) return;
+                if (i < QuickOverlays.Length) SetOverlayLayer(QuickOverlays[i], !OverlayLayer(QuickOverlays[i]));
+                else plot.ShowOnMap = !plot.ShowOnMap;
+            }
+
+            private void RefreshTools()
+            {
+                quick.SetData(QuickNames.Length, i => QuickNames[i], QuickOn, i => { ToggleQuick(i); RequestRefresh(); }, QuickReady,
+                    details: i => i < QuickOverlays.Length
+                        ? OverlayNames[QuickOverlays[i]] + ": " + OverlaySubtitles[QuickOverlays[i]].ToLowerInvariant() + ". Tap to show or hide."
+                        : "Plot: the pings, drawings and text your net team puts on the map. Tap to show or hide.");
+
+                DynamicMap map = SceneSingleton<DynamicMap>.i;
+                int rule = map != null ? (int)MfdMapInteractions.RightRule(map) : (int)MapRightClick.Card;
+                for (int i = 0; i < ruleRows.Length; i++)
+                    ruleRows[i].Set(RuleNames[i], RuleNotes[i], i == rule ? "NOW" : "", i == rule ? AvState.Caution : AvState.Inert);
+
+                selectSection.SetCaption((map != null && map.selectedIcons != null ? map.selectedIcons.Count : 0) + " SELECTED · THE LIST LIVES ON TGT");
+
+                MfdMapInteractions.MarkTool armed = MfdMapInteractions.ArmedMark;
+                bool marked = MfdMapInteractions.Mark.HasValue, zoned = MfdMapInteractions.Zoned;
+                markTools[0].Latched = armed == MfdMapInteractions.MarkTool.Range;
+                markTools[1].Latched = armed == MfdMapInteractions.MarkTool.Zone;
+                markTools[2].Latched = armed == MfdMapInteractions.MarkTool.Fix;
+                markTools[1].Interactable = MfdMapInteractions.ZoneOffered;
+                markTools[3].Interactable = marked || zoned;
+                markSection.SetCaption((marked ? "RANGE MARK SET" : "NO RANGE MARK") + " · " + (zoned ? "LZ SET" : "NO LZ") + " · ONLY YOU SEE THEM");
+
+                bool plotOn = plot != null && plot.On;
+                plotOff.SetShown(!plotOn);
+                for (int i = 0; plotParts != null && i < plotParts.Length; i++) plotParts[i]?.SetShown(plotOn);
+                if (plotOn) plot.Refresh();
+
+                bool relief = MfdTerrainRelief.IsDrawing;
+                foreach (AvControl c in viewTools) c.Interactable = relief;
+                viewTools[2].Latched = ReliefNavigator.Following;
+                viewTools[3].Latched = ReliefNavigator.Flying;
+
+                GlobalPosition? at = MfdMapInteractions.Cursor;
+                if (map != null && at.HasValue) MapContextRead.Fill(map, at.Value, MfdMapInteractions.Mark, cursorFacts);
+                else cursorFacts.Clear();
+                cursorSection.SetCaption(at.HasValue ? "THE LAST GROUND THE POINTER CROSSED" : "MOVE THE POINTER OVER THE MAP");
+                for (int i = 0; i < cursorRows.Length; i++)
+                {
+                    bool shown = i < cursorFacts.Count;
+                    cursorRows[i].SetShown(shown);
+                    if (shown) cursorRows[i].Set(cursorFacts[i].Key, cursorFacts[i].Value, "", cursorFacts[i].Value == "—" ? AvState.Inert : AvState.Info);
+                }
             }
 
             // ------------------------------------------------------------- layers
@@ -300,7 +459,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Focus2, "SYMBOL KEY", "FRAME = SIDE · GLYPH = TYPE");
                 page.Add(new SymbolKey(page.Content));
-                page.Links(("CONTACT PRIORITY", "HUD", null), ("DISPLAY SETTINGS", "SET", null));
+                page.Links(("CONTACT PRIORITY", "TGT", "FILTER"), ("DISPLAY SETTINGS", "SET", null));
             }
             /// <summary>The colour a contact side wears on the map: the tints the game gives friendly and
             /// hostile icons, and a neutral grey. Shape carries the same distinction without colour.</summary>
@@ -601,6 +760,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ? Mathf.Clamp(options.iconSize, .1f, 2f) : 1f;
                 foreach (SymbolTile tile in previewTiles) tile.SetState(available, scale);
                 previewCaption.Set(available ? SizeLabel() : "—");
+                if (selectedPage == ToolsPage) RefreshTools();
             }
 
             /// <summary>One overlay's brief row. The control field also states whether it has ground presence to draw from.</summary>
@@ -649,7 +809,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string AmbientStatus() => !Available
                 ? "WAITING FOR MAP"
-                : selectedPage == 0
+                : selectedPage == ToolsPage
+                    ? MfdMapInteractions.Feedback ?? "ARM A TOOL HERE, THEN RIGHT-CLICK THE MAP"
+                    : selectedPage == LayersPage
                     ? AvNum.Fixed(visibleLayers, 0) + "/" + AvNum.Fixed(ShownLayerTarget(), 0) + " LAYERS"
                     : "SYMBOLOGY · LIT = SELECTED";
         }

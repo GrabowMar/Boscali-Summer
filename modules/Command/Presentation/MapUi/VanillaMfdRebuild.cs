@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// fixed, fully owned avionics surface. Native state and actions therefore remain the
     /// authority, while no native layout participates in the rendered panel.
     ///
-    /// HUD and mission surfaces attach when first shown, so their card trees cost nothing
+    /// Mission surfaces attach when first shown, so their card trees cost nothing
     /// while the player stays on other pages.
     /// </summary>
     internal static partial class VanillaMfdRebuild
@@ -153,9 +153,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MapOptions map = screen.GetComponent<MapOptions>();
             if (map != null) return new MapPresenter(screen, map);
 
-            HUDOptions hud = screen.GetComponent<HUDOptions>();
-            if (hud != null) return screen.isActive ? new HudPresenter(screen, hud) : null;
-
+            // HUD keeps its native view: it has no rail key (its priority lists are TGT FILTER sections) and MfdBezel measures it.
             TargetListSelector target = screen.GetComponent<TargetListSelector>();
             if (target != null) return new TargetPresenter(screen, target);
 
@@ -433,6 +431,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected readonly MFDScreen Screen;
             public readonly VanillaMfdPanelId Id;
             protected AvConsole Console { get; private set; }
+            protected AvTabBar TabBar { get; private set; }
             internal AvConsole ConsoleForAutomation => Console;
 
             /// <summary>
@@ -454,13 +453,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     root.rect.width, root.rect.height);
                 if (tabs.Length > 1)
                 {
-                    AvTabBar tabBar = Console.Tabs(tabs);
+                    TabBar = Console.Tabs(tabs);
                     var hints = new string[tabs.Length];
                     string[] custom = TabTips;
                     for (int i = 0; i < hints.Length; i++)
                         hints[i] = custom != null && i < custom.Length && !string.IsNullOrEmpty(custom[i])
                             ? custom[i] : "Open the " + tabs[i].Label.ToLowerInvariant() + " page.";
-                    TabHelp.Apply(tabBar, hints);
+                    TabHelp.Apply(TabBar, hints);
                 }
                 Console.PageChanged += OnPageChanged;
                 BuildContent();

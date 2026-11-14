@@ -61,6 +61,8 @@ namespace NOAvionics
         public AvFooter Footer { get; }
         public int PageCount { get; }
         public int CurrentPage { get; private set; } = -1;
+        /// <summary>The open tab's label, null without tabs.</summary>
+        public string CurrentPageName => pageNames != null && CurrentPage >= 0 ? pageNames[CurrentPage] : null;
         public event Action<int> PageChanged;
 
         private AvConsole(RectTransform host, string id, string title, int pages, float w, float h)

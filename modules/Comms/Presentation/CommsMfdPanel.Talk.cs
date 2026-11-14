@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             AvIcon.Clock, AvIcon.ArrowBackUp, AvIcon.CircleCheck, AvIcon.InfoCircle, AvIcon.X, AvIcon.Heart, AvIcon.Flag,
         };
 
-        private void BuildCommsPage(AvFlow p)
+        private void BuildCallsPage(AvFlow p)
         {
             p.Section(AvIcon.Message2, "BREVITY CALLS", "ALWAYS TO TEAM");
             var callSpecs = new AvControl.Spec[CommsCatalog.Calls.Length];
@@ -26,9 +26,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     " Always goes to your team.";
             }
             ButtonGrid(p, callSpecs, 3, callHelps);
-
-            BuildLogPage(p);
             p.Links(("EVENTS", "EVN", "DISPATCH"), ("RADIO", "RAD", null));
+            console.Orders(TabCalls,
+                "Calls go to your team. Those that mean 'here' also ping your aircraft's position.",
+                "The shared plot (pings, drawings, text) is on MAP TOOLS.");
         }
     }
 }

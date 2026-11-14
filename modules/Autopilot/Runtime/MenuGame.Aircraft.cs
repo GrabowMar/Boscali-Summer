@@ -250,7 +250,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "weapons/cargo/next": return With(NextCargo);
                 case "weapons/cargo/setzone": return SetCargoZone;
                 case "weapons/cargo/clearzone": return () => Service<ILandingZone>()?.ClearLocal();
-                case "weapons/cargo/map": return OpenMap;
+                case "weapons/cargo/map": return () => { OpenMap(); NOAvionics.AvConsole.Open("MAP", "TOOLS"); };   // LANDING ZONE is a MARK tool there
                 case "targets/threat": return With(LockNearestThreat);
                 case "targets/inbound": return With(TargetInbound);
                 case "targets/keep": return With(KeepNearest);

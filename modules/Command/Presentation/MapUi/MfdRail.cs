@@ -169,12 +169,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < buttons.Count && i < screens.Count; i++)
             {
                 if (buttons[i] == null || screens[i] == null) continue;
-                into.Add(new Slot
-                {
-                    Button = buttons[i],
-                    Screen = screens[i],
-                    Entry = MfdRailCatalog.For(CodeOf(buttons[i], screens[i])),
-                });
+                MfdRailEntry entry = MfdRailCatalog.For(CodeOf(buttons[i], screens[i]));
+                if (MfdRailCatalog.OffRail(entry.Code)) continue;
+                into.Add(new Slot { Button = buttons[i], Screen = screens[i], Entry = entry });
             }
         }
 

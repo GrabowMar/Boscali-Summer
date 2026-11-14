@@ -13,7 +13,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         Unknown,
         Bdf,
         Map,
-        Hud,
         Pala,
         Tgt,
         Mis,
@@ -28,7 +27,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 case VanillaMfdPanelId.Bdf: return "FAC";
                 case VanillaMfdPanelId.Map: return "MAP";
-                case VanillaMfdPanelId.Hud: return "HUD";
                 case VanillaMfdPanelId.Pala: return "PALA";
                 case VanillaMfdPanelId.Tgt: return "TGT";
                 case VanillaMfdPanelId.Mis: return "MIS";

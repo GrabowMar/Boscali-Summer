@@ -160,6 +160,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
 
         // ---- IDroneCommand -----------------------------------------------------------------------------------------------------
 
+        public Texture WantFeed() { Want(); return Feed; }
+
         public bool Striking => net != null && net.Striking;
         public bool CanStrike => net != null && net.CanStrike;
 
