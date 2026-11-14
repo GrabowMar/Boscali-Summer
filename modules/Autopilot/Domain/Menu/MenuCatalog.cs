@@ -219,7 +219,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                 kids.Add(clear);
             }
             if (w.MapAvailable && w.CargoZoneAvailable && w.CargoZoneCapable) kids.Add(MenuRow.Action("weapons/cargo/map", "map", "OPEN DROP ZONE MAP",
-                "MAP: RIGHT-CLICK GROUND", "SET OR MOVE THE DROP ZONE ON THE MAP", "MAP OPEN"));
+                "MAP TOOLS · LANDING ZONE", "ARM LANDING ZONE ON MAP TOOLS, THEN RIGHT-CLICK THE GROUND", "MAP OPEN"));
             return MenuRow.Submenu("weapons/cargo", "hardpoint", "CARGO / AIRDROP",
                 w.CargoZoneSet ? "DZ: " + Cut(w.CargoZoneLeg, 26) : "LOADS: " + loads,
                 "LOAD SELECTION AND DROP-ZONE CONTROLS", "CARGO / AIRDROP", "LOADS", kids);

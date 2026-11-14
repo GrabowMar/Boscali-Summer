@@ -265,7 +265,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             wirePart = p.Add(new RadioWirePart(p.Content), 1f);
             wirePart.Help = "The wire: what the receiver picked up, newest on top - station talk and bulletins, intercepted " +
                 "enemy chatter, base alarms. The tag is the station that aired it; RX is the set itself.";
-            receiverLinks = p.Links(("EVENTS", "EVN", "DISPATCH"), ("CALLS", "COM", "COMMS"));
+            receiverLinks = p.Links(("EVENTS", "EVN", "DISPATCH"), ("CALLS", "COM", "CALLS"));
 
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
