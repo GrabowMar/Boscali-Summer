@@ -1,7 +1,7 @@
 using NOAvionics;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>TACTICAL (spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
+    /// <summary>ROSTER (was TACTICAL; spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
     /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (the stance
     /// slots, the command card with REACT, the queue), FORMATION (the Station Board) and ROUTE · AP (the Flight Plan). The wing table is
     /// full on ORDERS and one summary line on the others (a tap expands it). The console body scrolls, so nothing pages or clips.</summary>
@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
-            flow.Links(("TARGETS", "TGT", "TARGETS"), ("MAP", "MAP", null));
+            flow.Links(("IDENTITY AND STUDIO", "PILOT", "STUDIO"), ("JOBS FOR THE WING", "MIS", null));
             ShowSub(SubOrders);
         }
 

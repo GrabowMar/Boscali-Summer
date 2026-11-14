@@ -10,10 +10,10 @@ namespace BoscaliSummer.Modules.Wing.Domain
     {
         public const int SlotChars = 90;
         public const string ClientWhy = "THE HOST KEEPS THE SQUADRON ROSTER";
-        public const string Empty = "NO PILOTS · RECRUIT below, or requisition on SUPPLY";
+        public const string Empty = "NO PILOTS · RECRUIT below, or requisition on WMC SUPPLY";
         public const string StudioTip = "Open this pilot in STUDIO: save them for every mission, edit the look and bio.";
         public const string PerksTitle = "PERKS";
-        public const string RowTip = "Open this pilot's dossier (SUPPLY's pilot card picks who flies next).";
+        public const string RowTip = "Open this pilot's dossier (WMC SUPPLY's pilot card picks who flies next).";
         public const string RecruitTip = "Recruit a pilot into the squadron (free). A new pilot starts at 0 XP.";
         public const string AirTip = "Send the nearest helicopter able to pick this pilot up (free; the rescue pays a bounty).";
         public const string ReleaseTip = "Hand this aircraft to the game's AI (press twice): the pilot reads FREE, the jet flies on.";
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string InboundSlot(string phase, string field) => Cap(phase + (string.IsNullOrEmpty(field) ? "" : " · FROM " + field));
 
-        public static string FreeSlot(bool next) => next ? "NEXT UP · FLIES THE NEXT LAUNCH" : "FREE · SUPPLY SEATS THE NEXT UP FIRST";
+        public static string FreeSlot(bool next) => next ? "NEXT UP · FLIES THE NEXT LAUNCH" : "FREE · WMC SUPPLY SEATS THE NEXT UP FIRST";
 
         /// <summary>A downed pilot's options: AIR SAR only when a helicopter can go (review R6: an all fixed-wing wing has none).</summary>
         public static string DownedSlot(string localCost, bool air) =>
@@ -166,8 +166,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Hint(bool client, int pilots) =>
             client ? "The host keeps the squadron roster; you can look."
-            : pilots == 0 ? "Recruit a pilot, or requisition on SUPPLY: a new pilot is drafted at launch."
-            : "A row opens the dossier; SUPPLY's pilot card picks who flies next.";
+            : pilots == 0 ? "Recruit a pilot, or requisition on WMC SUPPLY: a new pilot is drafted at launch."
+            : "A row opens the dossier; WMC SUPPLY's pilot card picks who flies next.";
 
         public static string Recruited(string callsign, string name) => "Recruited " + callsign + (string.IsNullOrEmpty(name) ? "" : " (" + name + ")");
 

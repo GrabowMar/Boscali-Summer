@@ -6,22 +6,21 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>SQUADRON (spec bezel v2 §5; WING renamed so "wing" keeps meaning the aircraft), in three sub-pages on kit v2 (the 2026-10-05
+    /// <summary>SQUADRON (spec bezel v2 §5; was WMC's WING tab, PILOT STUDIO hosts it since the 2026-11-14 panels fold through
+    /// <see cref="Runtime.WingSquadService.BuildSquadron"/>), in two sub-pages on kit v2 (the 2026-10-05
     /// Personnel File redesign): ROSTER is the squadron header and table (rank insignia, callsign, name, kills, sorties, a status tag) above a
     /// personnel file card for the selected pilot (portrait, rotated status stamp, rank ladder with XP, record, ribbon rack, the assignment
-    /// line, four perk badges, AIR SAR · LOCAL SAR · RELEASE); AIRCRAFT is one aircraft in depth (member chips, FUEL · AMMO · HULL gauges,
-    /// stores, its pilot, RELEASE); STUDIO is the pilot studio with a live aircrew ID card. A row inspects only (R6 ruling): SUPPLY's pilot
-    /// card picks who flies, and turning the roster's page does not change the pilot on the file. The roster is the host's; a client sees
-    /// the empty table.</summary>
-    internal sealed partial class WmcWing : IWmcPage
+    /// line, four perk badges, AIR SAR · LOCAL SAR · RELEASE); STUDIO is the pilot studio with a live aircrew ID card. A row inspects only
+    /// (R6 ruling): SUPPLY's pilot card picks who flies, and turning the roster's page does not change the pilot on the file. The roster is
+    /// the host's; a client sees the empty table. The aircraft themselves are WMC's (ROSTER table, SUPPLY, LOADOUT).</summary>
+    internal sealed partial class WmcWing
     {
-        public const int SubRoster = 0, SubAircraft = 1, SubStudio = 2;
-        private static readonly string[] SubLabels = { "ROSTER", "AIRCRAFT", "STUDIO" };
-        private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Plane, AvIcon.Pencil };
+        public const int SubRoster = 0, SubStudio = 1;
+        private static readonly string[] SubLabels = { "ROSTER", "STUDIO" };
+        private static readonly AvIcon[] SubIcons = { AvIcon.UsersGroup, AvIcon.Pencil };
         private const int PerPage = 6;
 
         private readonly WmcStudio studioPage = new WmcStudio();
-        private readonly WmcInspect inspectPage = new WmcInspect();
         private AvFlow flow, rosterFlow;
         private AvTicker ticker;
         private int pageIndex;
@@ -50,9 +49,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private string hint, alert;
         private int rowsKey = int.MinValue, alertVersion = int.MinValue;
 
-        public int Sub => sub;
-
-        public string Hint => sub == SubStudio ? studioPage.Hint : sub == SubAircraft ? InspectWords.Hint(client) : hint;
+        public string Hint => sub == SubStudio ? studioPage.Hint : hint;
 
         public string Alert => alert;
 
@@ -63,32 +60,27 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             pageIndex = index;
             subTabs = WmcSubPages.Tabs(flow, SubLabels, SubIcons, ShowSub);
             subTabs[SubRoster].Help = "This mission's pilots and the selected pilot's personnel file: rank, record, ribbons, perks, SAR.";
-            subTabs[SubAircraft].Help = "One aircraft in depth: fuel, ammo, hull, stores and its pilot.";
             subTabs[SubStudio].Help = "The saved pilots and the pilot studio: identity, look, radio and bio.";
 
             subPages = flow.Add(new WmcSubPages(flow, ticker, pageIndex, SubLabels.Length));
             BuildRoster(subPages.Flow(SubRoster));
-            inspectPage.Build(subPages.Flow(SubAircraft), ticker, pageIndex);
-            // The page's last part; added before the studio's popup so the popup still draws over it.
-            flow.Links(("PILOT", "PILOT", null), ("FORCES", "FAC", "FORCES"));
             BuildStudio(subPages.Flow(SubStudio));
             ShowSub(SubRoster);
         }
 
-        /// <summary>The pilot studio (kit v2) builds into its sub-page's flow; its picker's list opens the page's popup.</summary>
+        /// <summary>The pilot studio (kit v2) builds into its sub-page's flow; its picker's list opens the page's popup (which puts
+        /// itself on top when it opens).</summary>
         private void BuildStudio(AvFlow f)
         {
             studioPage.Build(f, ticker, pageIndex);
-            // Last, so its list draws over the page.
             studioPage.UsePopup(new AvPopup(flow.Content, flow.Width), flow.Content);
         }
 
-        /// <summary>A sub-page (the tabs, STUDIO ›, automation). Leaving STUDIO lets go of the keyboard; its draft stays.</summary>
+        /// <summary>A sub-page (the tabs, STUDIO ›, PILOT STUDIO's opener). Leaving STUDIO lets go of the keyboard; its draft stays.</summary>
         public void ShowSub(int k)
         {
             if (subPages == null || k < 0 || k >= SubLabels.Length) return;
             if (sub == SubStudio && k != SubStudio) studioPage.Hide();
-            if (k == SubAircraft && sub != SubAircraft) inspectPage.Shown();
             sub = k;
             subPages.Show(k);
             for (int i = 0; i < subTabs.Length; i++) subTabs[i].Latched = i == k;
@@ -154,7 +146,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private int IndexOf(WingPilot p) => p != null ? roster.IndexOf(p) : -1;
 
-        /// <summary>A sub-page by its label (automation).</summary>
+        /// <summary>A sub-page by its label (PILOT STUDIO's opener).</summary>
         public bool ShowSubNamed(string name)
         {
             for (int i = 0; i < SubLabels.Length; i++)
@@ -166,12 +158,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return false;
         }
 
-        public void Shown(WmcContext c)
-        {
-            Snapshot(c);
-            if (sub == SubAircraft) inspectPage.Shown();
-        }
-
         public void Refresh(WmcContext c)
         {
             Snapshot(c);
@@ -179,12 +165,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 RefreshAlert();
                 studioPage.Refresh(c);
-                return;
-            }
-            if (sub == SubAircraft)
-            {
-                RefreshAlert();
-                inspectPage.Refresh(c);
                 return;
             }
             // ROSTER: the table, the personnel file and what hangs on it. Review U1-U2: every refresh (the panel passes the same context

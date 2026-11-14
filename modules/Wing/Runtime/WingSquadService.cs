@@ -1,12 +1,13 @@
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Presentation;
+using NOAvionics;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Wing.Runtime
 {
     /// <summary>IWingSquad over the in-tree squadron: pilot generation, portraits, the
-    /// saved-pilot lookup, the WMC studio launcher, adversary flights and survivor tracking. Survivors, portraits and adversary flights live in
+    /// saved-pilot lookup, the squadron page PILOT STUDIO hosts, adversary flights and survivor tracking. Survivors, portraits and adversary flights live in
     /// WingSquad; the pilot generator and the saved-pilot view are built here.</summary>
     internal sealed class WingSquadService : IWingSquad
     {
@@ -85,12 +86,31 @@ namespace BoscaliSummer.Modules.Wing.Runtime
 
         public bool OpenPilotStudio()
         {
-            WmcPanel panel = WmcPanel.Instance;
-            if (panel == null) return false;
-            panel.Open();
-            panel.Show(WmcTabs.Wing);
-            panel.WingPage?.ShowSubNamed("STUDIO");
+            AvConsole.Open("PILOT", "STUDIO");
+            squadron?.ShowSubNamed("STUDIO");
             return true;
         }
+
+        // ponytail: one hosted squadron (the latest PILOT build); the console it lived on takes the old one with it.
+        private WmcWing squadron;
+
+        public void BuildSquadron(int page, AvFlow flow, AvConsole console)
+        {
+            var s = squadron = new WmcWing();
+            s.Build(flow, flow.Ticker, page);
+            // The WMC's context (rows, wing, client) is filled bezel or not; the page refreshes at the ticker's rate while it shows.
+            flow.Ticker.Add(page, AvTickRate.Fast, () =>
+            {
+                WmcPanel panel = WmcPanel.Instance;
+                if (panel == null) return;
+                panel.FillContext();
+                s.Refresh(panel.Context);
+            });
+            // As the WMC did on a tab change: a studio field lets go of the keyboard and a pick list closes.
+            console.PageChanged += _ => { WmcNameField.BlurAny(); AvPopup.CloseAny(); };
+        }
+
+        public string SquadronLine => squadron == null ? null
+            : squadron.Alert ?? (WingToast.Last != null && Time.unscaledTime - WingToast.LastAt < 6f ? WingToast.Last : squadron.Hint);
     }
 }

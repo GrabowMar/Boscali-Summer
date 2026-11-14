@@ -47,27 +47,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             "Tap any airframe tile to edit its one custom loadout (CUSTOM tiles already have one).",
             "Click a hardpoint, then a store; the first change saves the standard stores as your own.",
             "FLY IT ON SUPPLY sends this airframe and loadout to SUPPLY. Saved on this PC; in multiplayer only the host edits.",
-        };
-
-        public static readonly string[] Roster =
-        {
-            "Every pilot starts a mission a ROOKIE; kills and sorties earn XP, rank, ribbons and a perk per rank.",
-            "‹ › pages the roster; RECRUIT adds a pilot, STUDIO changes their look and identity.",
-            "A downed pilot: AIR SAR sends a helicopter, LOCAL SAR waits them out. RELEASE lets one go.",
-        };
-
-        public static readonly string[] Aircraft =
-        {
-            "A chip picks one wingman: fuel, ammo, hull, stores and its pilot.",
-            "CENTER puts the picked aircraft in the middle of the map; RELEASE hands it to the game's AI.",
-            "Only the host sees wingman details; a client sees the chips.",
-        };
-
-        public static readonly string[] Studio =
-        {
-            "NEW starts a pilot; ‹ › picks one. SAVE keeps identity and look for every mission.",
-            "LOOK steps the portrait; RANDOM rolls a callsign or name; GENERATE writes a bio.",
-            "IMPORT, EXPORT and FOLDER share pilot files. Every pilot starts a mission a ROOKIE.",
+            "MY AIRCRAFT is the jet you fly: choose an engine map, then land to apply it.",
         };
     }
 }

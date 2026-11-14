@@ -247,7 +247,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (parts != null)
                 for (int i = 0, limit = Math.Min(parts.Count, HullPartScan); i < limit; i++)
                 {
-                    float condition = PartCondition(parts[i]);
+                    float condition = PlaneDossier.PartCondition(parts[i]);
                     if (float.IsNaN(condition)) continue;
                     sum += condition;
                     n++;

@@ -44,6 +44,7 @@ namespace BoscaliSummer.Modules.Progression
                 context.AddSceneService<SqdMfdPanel>(54).Configure(
                     manager, squad, context.Settings.Progression, context.Logger);
                 context.AddSceneService<AceHuntHud>(54).Configure(squad);
+                context.AddService<IMyAircraft>(new PlaneDossier(manager));
                 context.AddService<ISquadronInsignia>(new SquadronInsignia(context.Settings.Progression));
                 context.AddSceneService<Visuals.TailPaint>(56).Configure(
                     context.Settings.Progression, context.Logger, network.Crests, network);
