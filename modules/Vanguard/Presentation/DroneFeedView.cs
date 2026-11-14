@@ -8,7 +8,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Vanguard.Presentation
 {
     /// <summary>
-    /// The linked drone's video as every drone view shows it (UAV terminal hero, UAV MFD, HUD feed card): the feed picture under
+    /// The linked drone's video as every drone view shows it (UAV terminal hero, HUD feed card): the feed picture under
     /// analogue static that thickens as the link weakens, bursts on every switch and fills the screen with no signal, and a sensor-ball
     /// overlay as dense as the MISSILE CAM page (2026-10-20): REC lamp, callsign, REMORA stores, order and lens mode, a numbered heading
     /// tape, scrolling ALT and SPD tapes, horizon bars where the stabilised lens puts the horizon, a gimbal box (azimuth off the nose,

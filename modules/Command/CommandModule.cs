@@ -79,7 +79,9 @@ namespace BoscaliSummer.Modules.Command
             context.AddSceneService<SettingsMfdPanel>(58)
                 .Configure(context.Settings.Command, context.Logger, overlay,
                     context.HostSettings, context.ClientSettings);
-            context.AddSceneService<MiscMfdPanel>(58).Configure(context.Settings, context.Logger);
+#if !PUBLIC_RELEASE
+            context.AddSceneService<MiscMfdPanel>(58).Configure(context.Settings, context.Logger); // EXTRAS: dev builds only
+#endif
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
             context.AddSceneService<MapHoldKey>(62).Configure(context.Settings.Command);
 

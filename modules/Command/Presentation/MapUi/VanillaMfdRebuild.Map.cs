@@ -300,7 +300,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 page.Section(AvIcon.Focus2, "SYMBOL KEY", "FRAME = SIDE · GLYPH = TYPE");
                 page.Add(new SymbolKey(page.Content));
-                page.Links(("CONTACT PRIORITY", "HUD", null), ("DISPLAY SETTINGS", "SET", null));
+                page.Links(("CONTACT PRIORITY", "TGT", "FILTER"), ("DISPLAY SETTINGS", "SET", null));
             }
             /// <summary>The colour a contact side wears on the map: the tints the game gives friendly and
             /// hostile icons, and a neutral grey. Shape carries the same distinction without colour.</summary>

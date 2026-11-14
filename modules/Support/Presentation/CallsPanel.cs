@@ -175,10 +175,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void BuildConsole(RectTransform host, float height)
         {
             console = AvConsole.Build(host, "OPS", "SUPPORT", 3, Width, height);
-            AvTabBar tabs = console.Tabs((AvIcon.Flag, "FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
+            AvTabBar tabs = console.Tabs((AvIcon.Flag, "OPS FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
             string[] hints =
             {
-                "[1] Fronts: status, blocker, your skill grade, superiority, your support, what is building. OPEN for its window.",
+                "[1] Ops fronts: status, blocker, your skill grade, superiority, your support, what is building. OPEN for its window.",
                 "[2] Click a perk to arm it, aim (pod, map right-click or a team laser), then FIRE.",
                 "[3] Click a posted strike to arm it, then FIRE claims and launches it. The cruise block steers your salvo."
             };
@@ -209,7 +209,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 foreach (CallRow r in CallSheet.Rows)
                     if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, InspectPerk, r.Id));
             }
-            p1.Links(("TARGETS", "TGT", "TARGETS"), ("CAMERA MARK", "TGT", "MARK"));
+            p1.Links(("TARGETS", "TGT", "TARGETS"), ("CAMERA MARK", "TGT", "CAMERA MARK"));
 
             // TASKED: the flying cruise's block (only while one flies), then the posted strikes as package cards. Only real posts are drawn.
             AvFlow p2 = console.Page(2);
