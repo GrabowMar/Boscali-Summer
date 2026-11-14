@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Nation
 
         public ModuleMetadata Metadata => Module;
 
-        public Type[] PatchTypes => new[] { typeof(NationFactoryPatch) };
+        public Type[] PatchTypes => new[] { typeof(NationFactoryPatch), typeof(NationConvoyDrawPatch), typeof(NationConvoyGatePatch) };
 
         public void Install(ModuleContext context)
         {

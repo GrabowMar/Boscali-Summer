@@ -27,6 +27,9 @@ namespace BoscaliSummer.Core.Contracts
     internal interface INationModifiers
     {
         float Scale(FactionHQ hq, NationStat stat);
+
+        /// <summary>Host only: the vehicle reserve covers this convoy group (always true where the layer does not run).</summary>
+        bool CanSupply(FactionHQ hq, Faction.ConvoyGroup group);
     }
 
     /// <summary>The one-line read for the owners of those numbers: 1 when the Nation module is absent or off.</summary>
@@ -34,5 +37,8 @@ namespace BoscaliSummer.Core.Contracts
     {
         public static float Of(FactionHQ hq, NationStat stat) =>
             Services.ModuleServices.TryGet(out INationModifiers nation) ? nation.Scale(hq, stat) : 1f;
+
+        public static bool CanConvoy(FactionHQ hq, Faction.ConvoyGroup group) =>
+            !Services.ModuleServices.TryGet(out INationModifiers nation) || nation.CanSupply(hq, group);
     }
 }

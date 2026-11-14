@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             public readonly List<UnitDefinition> Rows = new List<UnitDefinition>(NationRules.MaxStockRows);
             public readonly int[] Stock = new int[NationRules.MaxStockRows], Target = new int[NationRules.MaxStockRows];
             public readonly bool[] Air = new bool[NationRules.MaxStockRows];
+            /// <summary>Vehicles made and not yet sent: a convoy draws from here (the game's own vehicle stock deploys at once, so it cannot hold them).</summary>
+            public readonly int[] Reserve = new int[NationRules.MaxStockRows];
             public readonly Dictionary<int, PlantRef> Plants = new Dictionary<int, PlantRef>(NationRules.MaxPlants);
             public readonly NationView View = new NationView();
             public string Holder = "";
@@ -137,6 +139,40 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             return mirrorReady && GameAccess.TryGetLocalFaction(out FactionHQ local) && local == hq ? NationRules.Scale(stat, mirror.Done) : 1f;
         }
 
+        public bool CanSupply(FactionHQ hq, Faction.ConvoyGroup group) => Covers(hq, group);
+
+        // ---- Convoys draw on the vehicle reserve -------------------------------------------------------
+
+        private static bool Row(Side side, UnitDefinition type, out int row)
+        {
+            for (row = 0; row < side.Rows.Count; row++) if (!side.Air[row] && side.Rows[row] == type) return true;
+            row = -1;
+            return false;
+        }
+
+        /// <summary>True when the reserve holds every vehicle of the group, and wherever the layer does not run this faction.</summary>
+        internal static bool Covers(FactionHQ hq, Faction.ConvoyGroup group)
+        {
+            if (live == null || !live.layerOn || hq == null || group?.Constituents == null || !live.sides.TryGetValue(hq, out Side side) || side.Rows.Count == 0) return true;
+            foreach (Faction.ConvoyUnit unit in group.Constituents)
+                if (unit?.Type != null && Row(side, unit.Type, out int row) && side.Reserve[row] < unit.Count) return false;
+            return true;
+        }
+
+        /// <summary>The group leaves: its vehicles come out of the reserve (never below zero, so a free or scripted convoy still goes).</summary>
+        internal static void Draw(FactionHQ hq, Faction.ConvoyGroup group)
+        {
+            if (live == null || !live.layerOn || hq == null || group?.Constituents == null || !live.sides.TryGetValue(hq, out Side side)) return;
+            foreach (Faction.ConvoyUnit unit in group.Constituents)
+                if (unit?.Type != null && Row(side, unit.Type, out int row)) side.Reserve[row] = Mathf.Max(0, side.Reserve[row] - unit.Count);
+            side.Book.Dirty = true;
+        }
+
+        internal static void Refuse(Player player, NationOutcome outcome)
+        {
+            if (live != null && live.net != null) live.net.Reply(player, outcome);
+        }
+
         // ---- Client mirror ---------------------------------------------------------------------------
 
         internal void Receive(byte[] payload, int count)
@@ -228,7 +264,21 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             FactionHQ hq = side.Owner;
             foreach (var pair in hq.AircraftSupply) if (pair.Key != null && pair.Value.Count > 0) seed.Add(new KeyValuePair<UnitDefinition, int>(pair.Key, pair.Value.Count));
             int aircraft = seed.Count;
-            foreach (var pair in hq.VehicleSupply) if (pair.Key != null && pair.Value.Count > 0) seed.Add(new KeyValuePair<UnitDefinition, int>(pair.Key, pair.Value.Count));
+            // Vehicle lines are what the faction's convoy groups are made of; a line's target is two of the largest group's worth.
+            List<Faction.ConvoyGroup> groups = hq.faction != null ? hq.faction.GetConvoyGroups() : null;
+            if (groups != null)
+                foreach (Faction.ConvoyGroup group in groups)
+                {
+                    if (group?.Constituents == null) continue;
+                    foreach (Faction.ConvoyUnit unit in group.Constituents)
+                    {
+                        if (unit?.Type == null || unit.Count <= 0 || unit.Type is AircraftDefinition) continue;
+                        int at = -1;
+                        for (int i = aircraft; i < seed.Count; i++) if (seed[i].Key == unit.Type) at = i;
+                        if (at < 0) seed.Add(new KeyValuePair<UnitDefinition, int>(unit.Type, unit.Count * 2));
+                        else if (unit.Count * 2 > seed[at].Value) seed[at] = new KeyValuePair<UnitDefinition, int>(unit.Type, unit.Count * 2);
+                    }
+                }
             if (seed.Count == 0) return false;
             float share = Mathf.Clamp(settings.StartingStock.Value, 0.25f, 1f);
             for (int i = 0; i < seed.Count && side.Rows.Count < NationRules.MaxStockRows; i++)
@@ -238,7 +288,8 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                 side.Air[row] = i < aircraft;
                 side.Target[row] = seed[i].Value;
                 int keep = Mathf.Max(1, Mathf.CeilToInt(seed[i].Value * share));
-                if (keep < seed[i].Value) hq.ModifyUnitSupply(seed[i].Key, keep - seed[i].Value);
+                if (!side.Air[row]) side.Reserve[row] = keep;
+                else if (keep < seed[i].Value) hq.ModifyUnitSupply(seed[i].Key, keep - seed[i].Value);
             }
             Plugin.Logger?.LogInfo("[Nation] " + hq.name + ": " + side.Rows.Count + " stock lines, starting stock " + Mathf.RoundToInt(share * 100f) + " %.");
             adoptNow = true;
@@ -248,7 +299,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
         private NationWorld Read(Side side)
         {
             FactionHQ hq = side.Owner;
-            for (int i = 0; i < side.Rows.Count; i++) side.Stock[i] = hq.GetUnitSupply(side.Rows[i]);
+            for (int i = 0; i < side.Rows.Count; i++) side.Stock[i] = side.Air[i] ? hq.GetUnitSupply(side.Rows[i]) : side.Reserve[i];
             int held = 0;
             foreach (Airbase airbase in hq.GetAirbases())
                 if (airbase != null && !airbase.disabled && !airbase.AttachedAirbase) held++;
@@ -317,7 +368,9 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             switch (e.Kind)
             {
                 case NationEventKind.Produced:
-                    if (e.B >= 0 && e.B < side.Rows.Count) hq.AddSupplyUnit(side.Rows[e.B], 1);
+                    if (e.B < 0 || e.B >= side.Rows.Count) break;
+                    if (side.Air[e.B]) hq.AddSupplyUnit(side.Rows[e.B], 1);
+                    else side.Reserve[e.B]++;
                     break;
                 case NationEventKind.FactoryBuilt:
                     if (SpawnFactory(side)) break;
@@ -351,7 +404,9 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                 else if (second < 0 || side.Target[i] > side.Target[second]) second = i;
             }
             int row = rank == 0 ? best : second >= 0 ? second : best;
-            if (row >= 0) side.Owner.AddSupplyUnit(side.Rows[row], count);
+            if (row < 0) return;
+            if (aircraft) side.Owner.AddSupplyUnit(side.Rows[row], count);
+            else side.Reserve[row] += count;
         }
 
         // ponytail: income law as a correction on the treasury's own growth, once a minute. The game has no single income call to
@@ -640,6 +695,23 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                     ["funds"] = Mathf.RoundToInt(v.Funds), ["output"] = v.Output,
                 });
             }
+            if (args != null && args.TryGetValue("convoy", out object convoy) && GameAccess.TryGetLocalFaction(out FactionHQ mine) &&
+                mine.faction.TryGetConvoyGroup(Convert.ToInt32(convoy), out Faction.ConvoyGroup group) && live.sides.TryGetValue(mine, out Side own))
+            {
+                // Draw convoys of this group until the reserve refuses one: proves the draw and the NOT PRODUCED gate together.
+                int sent = 0;
+                while (sent < 8 && Covers(mine, group)) { mine.AddConvoy(group); sent++; }
+                int left = 0;
+                for (int i = 0; i < own.Rows.Count; i++) if (!own.Air[i]) left += own.Reserve[i];
+                result["convoysSent"] = sent;
+                result["convoyRefused"] = !Covers(mine, group);
+                result["reserveLeft"] = left;
+            }
+            int vehicleRows = 0, reserve = 0;
+            foreach (Side side in live.sides.Values)
+                for (int i = 0; i < side.Rows.Count; i++) if (!side.Air[i]) { vehicleRows++; reserve += side.Reserve[i]; }
+            result["vehicleRows"] = vehicleRows;
+            result["reserve"] = reserve;
             int focuses = 0, plants = 0, stock = 0;
             foreach (Side side in live.sides.Values)
             {

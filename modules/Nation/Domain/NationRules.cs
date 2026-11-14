@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Nation.Domain
         public const int MaxPlants = 16;
         public const int MaxStockRows = 24;
         public const int BaseSlots = 2;
-        public const float FactoryCost = 4000f;
+        public const float FactoryCost = 2500f;
         public const float FactoryBuildSeconds = 240f;
         public const float MinBuildSeconds = 60f;
         /// <summary>Each plant on CONSTRUCTION cuts the build time by this share.</summary>
@@ -17,12 +17,12 @@ namespace BoscaliSummer.Modules.Nation.Domain
         public const float PolicyLockSeconds = 300f;
         public const float PickLockSeconds = 60f;
         public const float FocusSeconds = 240f;
-        public const float AircraftSeconds = 150f;
-        public const float VehicleSeconds = 75f;
+        public const float AircraftSeconds = 420f;
+        public const float VehicleSeconds = 150f;
         public const float WarBondsFunds = 5000f;
         public const float UnityMorale = 15f;
         /// <summary>The staff builds only with this multiple of the cost in the treasury, so a build never starves convoys.</summary>
-        public const float StaffBuildReserve = 1.5f;
+        public const float StaffBuildReserve = 1.25f;
 
         public static bool Has(ushort done, FocusId id) => (done & (1 << (int)id)) != 0;
 

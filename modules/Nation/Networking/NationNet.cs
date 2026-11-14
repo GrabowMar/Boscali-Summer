@@ -152,9 +152,19 @@ namespace BoscaliSummer.Modules.Nation.Networking
             sender.Send(new NationReply { Protocol = ProtocolVersion, Outcome = (byte)outcome });
         }
 
+        /// <summary>Host: tells one member the answer to something they asked outside this wire (a refused convoy purchase).</summary>
+        internal void Reply(Player player, NationOutcome outcome)
+        {
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
+            INetworkPlayer connection = player != null ? player.Owner : null;
+            if (server == null || connection == null) return;
+            if (connection == server.LocalPlayer) owner?.Answer(outcome);
+            else connection.Send(new NationReply { Protocol = ProtocolVersion, Outcome = (byte)outcome });
+        }
+
         private void ReceiveReply(INetworkPlayer _, NationReply reply)
         {
-            if (owner == null || GameAccess.IsServer() || reply.Protocol != ProtocolVersion || reply.Outcome > (byte)NationOutcome.NotMember) return;
+            if (owner == null || GameAccess.IsServer() || reply.Protocol != ProtocolVersion || reply.Outcome > (byte)NationOutcome.NotProduced) return;
             owner.Answer((NationOutcome)reply.Outcome);
         }
 

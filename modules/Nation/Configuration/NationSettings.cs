@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Nation.Configuration
             StartingStock = config.Bind(section, "StartingStock", 0.5f,
                 new ConfigDescription("Share of the mission's own aircraft and vehicle stock each faction starts with. The rest has to be produced.",
                     new AcceptableValueRange<float>(0.25f, 1f)));
-            FactoryCost = config.Bind(section, "FactoryCost", 4000,
+            FactoryCost = config.Bind(section, "FactoryCost", 2500,
                 new ConfigDescription("Faction funds a new factory costs.", new AcceptableValueRange<int>(1000, 20000)));
             FocusSeconds = config.Bind(section, "FocusSeconds", 240,
                 new ConfigDescription("Seconds one national focus takes.", new AcceptableValueRange<int>(120, 600)));

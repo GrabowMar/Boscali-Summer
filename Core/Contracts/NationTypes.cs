@@ -23,7 +23,7 @@ namespace BoscaliSummer.Core.Contracts
 
     internal enum NationOutcome : byte
     {
-        Ok, Off, Locked, NotOpen, NoFunds, NoSlot, NoSite, Busy, Unknown, NotMember,
+        Ok, Off, Locked, NotOpen, NoFunds, NoSlot, NoSite, Busy, Unknown, NotMember, NotProduced,
     }
 
     /// <summary>What a client may ask of the host. A and B are small integers whose meaning the kind fixes.</summary>

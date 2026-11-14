@@ -41,6 +41,7 @@ namespace BoscaliSummer.Core.Contracts
                 case NationOutcome.Busy: return "BUSY";
                 case NationOutcome.Unknown: return "UNKNOWN";
                 case NationOutcome.NotMember: return "NOT YOUR FACTION";
+                case NationOutcome.NotProduced: return "NOT PRODUCED";
                 default: return "";
             }
         }
