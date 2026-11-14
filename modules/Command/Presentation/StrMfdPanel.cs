@@ -193,6 +193,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Air));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Ground));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Airbases));
+            BuildOrders(p);
             p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
         }
 
@@ -226,6 +227,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             RegisterTabs();
             for (int i = 0; i < parts.Count; i++) parts[i].Bind(vm);
             BindSections(vm);
+            BindOrders();
             BindSensors(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
@@ -261,7 +263,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void TickNation()
         {
-            int key = StrNation.Refresh();
+            int key = unchecked(StrNation.Refresh() * 31 + OrdersKey(StrNation.View));   // ORDERS IN FORCE rebinds with the nation
             if (key == nationKey) return;
             nationKey = key;
             boundRevision = -1;   // one rebind: the parts read the nation through StrNation

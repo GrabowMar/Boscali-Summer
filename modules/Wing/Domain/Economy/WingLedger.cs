@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static CallQuote Quote(AircraftDefinition definition, FactionHQ hq, bool viaHangar, bool sandbox, float price = -1f)
         {
             GameManager.GetLocalPlayer(out Player player);
-            return CallCost.Quote((price >= 0f ? price : definition != null ? definition.value : 0f) * BoscaliSummer.Core.Contracts.NationScale.Of(hq, BoscaliSummer.Core.Contracts.NationStat.WingCallCost), player != null ? player.Allocation : 0f,
+            return CallCost.Quote((price >= 0f ? price : definition != null ? definition.value : 0f), player != null ? player.Allocation : 0f,
                 hq != null && definition != null ? hq.GetUnitSupply(definition) : 0, sandbox, viaHangar);
         }
 

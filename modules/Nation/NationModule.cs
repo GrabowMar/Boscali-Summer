@@ -10,14 +10,14 @@ using BoscaliSummer.Modules.Nation.Runtime;
 
 namespace BoscaliSummer.Modules.Nation
 {
-    /// <summary>Factories, policies and the focus tree over the vanilla economy. Rules: <c>modules/Nation/AGENTS.md</c>.</summary>
+    /// <summary>Factories and policies over the vanilla economy, and politics: war support, one doctrine, decisions, the cabinet. Rules: <c>modules/Nation/AGENTS.md</c>.</summary>
     internal sealed class NationModule : IModule
     {
-        private static readonly ModuleMetadata Module = new ModuleMetadata("nation", "Factories, policies and the national focus tree");
+        private static readonly ModuleMetadata Module = new ModuleMetadata("nation", "Factories, policies, war support, doctrine and the cabinet");
 
         public ModuleMetadata Metadata => Module;
 
-        public Type[] PatchTypes => new[] { typeof(NationFactoryPatch), typeof(NationConvoyDrawPatch), typeof(NationConvoyGatePatch) };
+        public Type[] PatchTypes => new[] { typeof(NationFactoryPatch), typeof(NationConvoyDrawPatch), typeof(NationConvoyGatePatch), typeof(NationKillPatch) };
 
         public void Install(ModuleContext context)
         {
@@ -30,13 +30,12 @@ namespace BoscaliSummer.Modules.Nation
             context.AddService<INationModifiers>(service);
 
             context.AddHostSettings(new HostSettingsTable("NATION")
-                .Toggle(1, settings.Enabled, "FACTORIES AND FOCUS TREE",
-                    "Run the nation layer in Escalation, Terminal Control and Domination. Factories produce the stock; each faction has three policies and a focus tree. The staff runs it when nobody does.")
+                .Toggle(1, settings.Enabled, "FACTORIES AND POLITICS",
+                    "Run the nation layer in Escalation, Terminal Control and Domination. Factories produce the stock; war support, one doctrine and the cabinet move the war. The staff runs it when nobody does.")
                 .Number(2, settings.StartingStock, "STARTING STOCK",
                     "Share of the mission's own aircraft and vehicle stock a faction starts with; the rest is produced. Read at mission start.", 0.05f,
                     value => Math.Round(value * 100f) + " %")
-                .Number(3, settings.FactoryCost, "FACTORY COST", "Faction funds a new factory costs.", 500)
-                .Number(4, settings.FocusSeconds, "FOCUS TIME", "Seconds one national focus takes.", 30, value => value + " S"));
+                .Number(3, settings.FactoryCost, "FACTORY COST", "Faction funds a new factory costs.", 500));
         }
     }
 

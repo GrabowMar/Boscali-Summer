@@ -58,6 +58,8 @@ namespace BoscaliSummer.Modules.Command
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
             context.AddService<ITacticalLog>(new TacticalLog());
+            // Doctrines, decisions and cabinet answers of both sides (Nation) are NEWS lines of the one log.
+            PoliticsWire.Posted += headline => TacticalLog.Add(TacticalLogEntry.News, headline);
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);

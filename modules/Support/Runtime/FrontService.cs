@@ -218,8 +218,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 foreach (FactionFront f in order)
                 {
                     if (f.Owner == null) continue;
-                    float focus = NationScale.Of(f.Owner, NationStat.FrontIncome); // SIGNALS BUREAU: the fronts draw half as much again
-                    float taken = f.Book.ShareTick(f.Owner.factionFunds, share * focus, now, manager.Settings.FrontShareCap.Value * focus);
+                    float taken = f.Book.ShareTick(f.Owner.factionFunds, share, now, manager.Settings.FrontShareCap.Value);
                     if (taken > 0f) f.Owner.AddFunds(-taken);
                 }
             }

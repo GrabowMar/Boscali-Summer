@@ -237,11 +237,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
     }
 
-    /// <summary>In force: the economy and priority policies, every finished focus with what it gives, stability, and the total output.</summary>
+    /// <summary>In force: the economy and priority policies, stability, and the total output (politics' SURGE PRODUCTION included).</summary>
     internal sealed class FacForcePart : AvPart
     {
         private const float RowH = 20f;
-        private const int MaxRows = 2 + FocusTreeModel.Count + 2;
+        private const int MaxRows = 4;
 
         private readonly TMP_Text[] left = new TMP_Text[MaxRows], right = new TMP_Text[MaxRows];
         private int shown = 3;
@@ -286,9 +286,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             string pri = NationWords.PriorityWord(v.Priority) + (v.PriorityLock > 0f ? "  ·  " + AvNum.Clock(Mathf.Ceil(v.PriorityLock)) : "");
             Line("ECONOMY", eco, AvTheme.RailInfo);
             Line("PRIORITY", pri, AvTheme.RailInfo);
-            for (int id = 0; id < FocusTreeModel.Count; id++)
-                if (FocusTreeModel.IsDone(v, id))
-                    Line(NationWords.Focus(id), NationWords.FocusEffect(id), id < 4 ? AvTheme.RailReady : id < 8 ? AvTheme.RailInfo : AvInk.Select);
             Line("STABILITY " + Mathf.RoundToInt(v.Stability), "", AvInk.Dim);
             Line("TOTAL OUTPUT", "x" + AvNum.Fixed(v.Output, 2), AvTheme.RailCaution);
             for (int i = n; i < MaxRows; i++) { AvText.Set(left[i], ""); AvText.Set(right[i], ""); }

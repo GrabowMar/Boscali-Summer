@@ -43,7 +43,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 h = h * 31 + Mathf.RoundToInt(v.Output * 100f);
                 h = h * 31 + (int)v.Economy * 3 + (int)v.Priority;
                 h = h * 31 + Mathf.CeilToInt(v.EconomyLock) * 7 + Mathf.CeilToInt(v.PriorityLock);
-                h = h * 31 + v.Running * 13 + Mathf.CeilToInt(v.RunningLeft);
                 h = h * 31 + (v.Building ? Mathf.CeilToInt(v.BuildLeft) + 1 : 0);
                 for (int i = 0; i < v.Plants.Count; i++)
                 {

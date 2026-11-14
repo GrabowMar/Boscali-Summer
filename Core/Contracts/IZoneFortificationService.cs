@@ -12,5 +12,8 @@ namespace BoscaliSummer.Core.Contracts
         /// least one was placed.
         /// </summary>
         bool TryFortify(Airbase airbase, FactionHQ owner, Player requester, int shells);
+
+        /// <summary>The same for a faction's own policy (no requesting pilot; AI factions too): host only, same ceilings.</summary>
+        bool TryFortifyFor(Airbase airbase, FactionHQ owner, int shells);
     }
 }
