@@ -115,6 +115,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>Test and showcase hook (dev sims): pretend the pull is this hard, so the path draws in level flight; NaN off.</summary>
         internal float ForcePullG = float.NaN;
+        /// <summary>Test and showcase hook: predict as if the flight path turned right at this many degrees a second (a level turn); NaN off.</summary>
+        internal float ForceTurnDegS = float.NaN;
+        /// <summary>Test and showcase hook: predict as if the flight path pointed this many degrees further nose-down (no G on the pilot); NaN off.</summary>
+        internal float ForcePitchDeg = float.NaN;
         /// <summary>Test and showcase hook: stand the home beacon whatever the fuel and damage.</summary>
         internal bool ForceHome;
 
@@ -198,6 +202,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             lastVelocity = v;
             lastVelocityAt = t;
+            if (!float.IsNaN(ForceTurnDegS)) { wx = 0f; wy = ForceTurnDegS * Mathf.Deg2Rad; wz = 0f; }
+            if (!float.IsNaN(ForcePitchDeg)) v = Quaternion.AngleAxis(ForcePitchDeg, own.transform.right) * v;      // the prediction only; the aircraft flies on
             ArRules.Predict(v.x, v.y, v.z, wx, wy, wz, ArRules.PathStepS, ArRules.PathSamples, path);
 
             // The first leg that meets the ground (or the sea) ends the path there.
@@ -385,18 +391,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool alert = !float.IsNaN(collisionS);
             Rgba ink = (alert ? palette.Alert : palette.AllClear).ToRgba();
             Vector3 origin = aircraft.transform.position, prev = origin;
-            float baseAlpha = alert ? 1f : 0.55f;
+            float baseAlpha = alert ? 1f : 0.85f;
             for (int i = 0; i < pathReach; i++)
             {
                 Vector3 p = origin + new Vector3(path[i * 3], path[i * 3 + 1], path[i * 3 + 2]);
                 float fade = baseAlpha * (1f - 0.6f * i / ArRules.PathSamples);
-                if (i > 0) Seg(b, prev, p, Wire, ink.WithAlpha(fade * 0.6f));
+                if (i > 0) Seg(b, prev, p, 1.8f, ink.WithAlpha(fade * 0.85f));
                 if (Project(p, out float x, out float y))
                 {
                     // A chevron each second pointing along the path, a bead between: the eye reads direction and pace at once.
                     if ((i & 1) == 1 && Project(prev, out float px, out float py))
-                        AvStrokes.Chevron(b, x, y, 9f, Mathf.Atan2(y - py, x - px) * Mathf.Rad2Deg + 180f, 1.6f, ink.WithAlpha(fade));
-                    else AvStrokes.Diamond(b, x, y, 2.5f, 1.4f, ink.WithAlpha(fade));
+                        AvStrokes.Chevron(b, x, y, 11f, Mathf.Atan2(y - py, x - px) * Mathf.Rad2Deg, 2.2f, ink.WithAlpha(fade));
+                    else AvStrokes.Diamond(b, x, y, 3.5f, 1.8f, ink.WithAlpha(fade));
                 }
                 prev = p;
             }
@@ -515,7 +521,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Seg(b, a, c, Bold, gate); Seg(b, c, e, Bold, gate); Seg(b, e, f, Bold, gate); Seg(b, f, a, Bold, gate);
             if (Project(exit, out float gx, out float gy) && Project(exit + away * 400f, out float ox, out float oy))
             {
-                float angle = Mathf.Atan2(oy - gy, ox - gx) * Mathf.Rad2Deg + 180f;
+                float angle = Mathf.Atan2(oy - gy, ox - gx) * Mathf.Rad2Deg;
                 AvStrokes.Chevron(b, gx, gy, 12f, angle, 2f, gate);
                 LabelDistance(gx, gy + 18f, 2_100_000 + slot * 100_000, ink, "SAM EXIT ", Mathf.Max(0f, reach - Vector3.Distance(own, centre)), TopCentre.DetailPt);
             }
@@ -533,7 +539,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 Vector3 at = home.center.position;
                 Pillar(b, at, palette.AllClear.ToRgba(), eye, diamond: true);
-                if (Project(at + Vector3.up * PillarM, out float x, out float y))
+                if (Project(at + Vector3.up * PillarHeight(Vector3.Distance(eye, at)), out float x, out float y))
                     LabelDistance(x, y + 12f, 4_000_000, palette.AllClear.ToRgba(), "HOME ", Vector3.Distance(aircraft.transform.position, at));
                 HomeShown = true;
             }
@@ -542,20 +548,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Vector3 at = new GlobalPosition(objectiveX, Ground(objectiveX, objectiveZ), objectiveZ).ToLocalPosition();
                 Rgba ink = palette.Warning.ToRgba();
                 Pillar(b, at, ink, eye, diamond: false);
-                if (Project(at + Vector3.up * PillarM, out float x, out float y))
+                if (Project(at + Vector3.up * PillarHeight(Vector3.Distance(eye, at)), out float x, out float y))
                     LabelDistance(x, y + 12f, 5_000_000, ink, "OBJ ", Vector3.Distance(aircraft.transform.position, at));
                 ObjectiveShown = true;
             }
         }
 
+        /// <summary>A pillar's height: about 2.5 degrees tall from far out, never under <see cref="PillarM"/> nor over 6 km.</summary>
+        private static float PillarHeight(float distance) => Mathf.Clamp(distance * 0.045f, PillarM, 6000f);
+
         /// <summary>A beam of light from the ground: the line, three ticks up it, a diamond (home) or a square (objective) on top; whole up close, a third far out.</summary>
         private void Pillar(AvQuadBuffer b, Vector3 foot, Rgba ink, Vector3 eye, bool diamond)
         {
-            ink = ink.WithAlpha(ArRules.Fade(Vector3.Distance(eye, foot), 3000f, 50000f));
-            Vector3 top = foot + Vector3.up * PillarM;
+            float far = Vector3.Distance(eye, foot);
+            ink = ink.WithAlpha(ArRules.Fade(far, 3000f, 50000f));
+            float height = PillarHeight(far);
+            Vector3 top = foot + Vector3.up * height;
             Seg(b, foot, top, Bold, ink);
             for (int t = 1; t <= 3; t++)
-                if (Project(foot + Vector3.up * (PillarM * t / 4f), out float x, out float y))
+                if (Project(foot + Vector3.up * (height * t / 4f), out float x, out float y))
                     AvStrokes.Line(b, x - 5f, y, x + 5f, y, Wire, ink.WithAlpha(ink.A * 0.7f));
             if (!Project(top, out float tx, out float ty)) return;
             if (diamond)
@@ -585,7 +596,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Vector3 pos = m.transform.position;
                 Vector3 velocity = m.rb != null ? m.rb.velocity : Vector3.zero;
                 if (Project(pos, out float mx, out float my) && Project(pos + velocity * 0.2f, out float ax, out float ay))
-                    AvStrokes.Chevron(b, mx, my, 8f, Mathf.Atan2(ay - my, ax - mx) * Mathf.Rad2Deg + 180f, 1.6f, ink);
+                    AvStrokes.Chevron(b, mx, my, 9f, Mathf.Atan2(ay - my, ax - mx) * Mathf.Rad2Deg, 1.8f, ink);
                 Unit target = NativeRefs.Get(TargetRef, m);
                 if (target != null && !target.disabled)
                 {

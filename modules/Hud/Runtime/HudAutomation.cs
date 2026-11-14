@@ -223,6 +223,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             if (ar == null) return Failure("HudAutomation", "Ar", "no AR layer yet (the board builds it on its first tick)");
             if (Has(args, "pull")) { float g = Number(args, "pull", 0f); ar.ForcePullG = g > 0f ? g : float.NaN; }
             if (Has(args, "home")) ar.ForceHome = Bool(args, "home");
+            if (Has(args, "turn")) { float turn = Number(args, "turn", 0f); ar.ForceTurnDegS = turn != 0f ? turn : float.NaN; }      // deg/s right; 0 gives it back
+            if (Has(args, "pitch")) { float pitch = Number(args, "pitch", 0f); ar.ForcePitchDeg = pitch != 0f ? pitch : float.NaN; }      // deg nose-down, prediction only
             if (Bool(args, "glitch")) ar.Glitch(Time.unscaledTime);
             // dive (degrees): pitch the seated aircraft and its velocity nose-down at once, so a scripted run can meet the ground with the pilot still flying
             // (the sim's own fly op hands the aircraft to an AI pilot, and the game drops the HUD with it).
