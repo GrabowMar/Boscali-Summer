@@ -92,7 +92,9 @@ namespace BoscaliSummer.Core.Game
                 string name = mission.Name ?? "";
                 bool remembered = Remembered().TryGetValue(name, out string list);
                 MissionProfile.SetDisabled(MissionProfile.Parse(remembered ? list : settings.MissionDisabledModules.Value));
-                PendingMission = !remembered && settings.MissionAskAtStart.Value && name != answered ? name : null;
+                // A nomodkit sim has no one to answer the prompt, and it would cover the mission it drives.
+                bool sim = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
+                PendingMission = !sim && !remembered && settings.MissionAskAtStart.Value && name != answered ? name : null;
             }
             catch (Exception e) { PatchGuard.Report("MissionProfile", e); }
         }
