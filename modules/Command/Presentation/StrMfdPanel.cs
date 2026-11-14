@@ -197,6 +197,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             allSection = p.Section(AvIcon.Map2, "PLATFORMS", StrPanelText.NotchCaption);
             for (int i = 0; i < MaxLanes; i++) lanes[i] = Add(p, new StrFrontLane(p.Content, Controls, hub, i));
             Add(p, new StrPostureRow(p.Content, Controls, hub, true));
+            BuildOrders(p);
             p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
         }
 
@@ -255,6 +256,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             for (int i = 0; i < parts.Count; i++) parts[i].Bind(vm);
             BindSections(vm);
             BindNationLook();
+            BindOrders();
             BindSensors(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
@@ -314,7 +316,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 h = h * 31 + Mathf.RoundToInt(v.Output * 100f);
                 h = h * 31 + (int)v.Economy * 3 + (int)v.Priority;
                 h = h * 31 + Mathf.CeilToInt(v.EconomyLock) * 7 + Mathf.CeilToInt(v.PriorityLock);
-                h = h * 31 + v.Running * 13 + Mathf.CeilToInt(v.RunningLeft);
+                h = h * 31 + OrdersKey(v);
                 h = h * 31 + (v.Building ? Mathf.CeilToInt(v.BuildLeft) + 1 : 0);
                 for (int i = 0; i < v.Plants.Count; i++)
                 {

@@ -40,11 +40,13 @@ namespace BoscaliSummer.Modules.Nation.Networking
     /// <summary>
     /// The nation layer's wire: a member's intent up, the host's answer back to that member, and the faction snapshot down to
     /// every member when it changed (at most once a second) plus a heartbeat for late joiners. Message names and field order are
-    /// protocol identity; a layout change bumps <see cref="ProtocolVersion"/>.
+    /// protocol identity; a layout change bumps <see cref="ProtocolVersion"/>. Protocol 2 (politics v2): verbs Answer and Decide, outcome
+    /// NoSupport, snapshot <see cref="NationWire"/> v2. A message of another protocol is dropped after its first byte and said once in the log.
     /// </summary>
     internal sealed class NationNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 2;
+        private byte warnedProtocol;
         private const float SendInterval = 1f, HeartbeatInterval = 15f, IntentInterval = 0.4f;
 
         private NationService owner;
@@ -143,13 +145,25 @@ namespace BoscaliSummer.Modules.Nation.Networking
 
         private void ReceiveIntent(INetworkPlayer sender, NationIntent intent)
         {
-            if (owner == null || !GameAccess.IsServer() || intent.Protocol != ProtocolVersion || sender == null ||
+            if (!Same(intent.Protocol) || owner == null || !GameAccess.IsServer() || sender == null ||
                 !sender.TryGetPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
             // The faction and the identity come from the transport, never from the message.
             NationOutcome outcome = !intents.Allow(PlayerIdentity.Of(player), Time.unscaledTime, IntentInterval) ? NationOutcome.Busy
-                : intent.Verb > (byte)NationVerb.Build ? NationOutcome.Unknown
+                : intent.Verb > (byte)NationVerb.Decide ? NationOutcome.Unknown
                 : owner.Apply(player.HQ, player, (NationVerb)intent.Verb, intent.A, intent.B);
             sender.Send(new NationReply { Protocol = ProtocolVersion, Outcome = (byte)outcome });
+        }
+
+        /// <summary>A peer on another protocol (an older or newer mod) is refused: its messages are dropped, and the log says so once per version.</summary>
+        private bool Same(byte protocol)
+        {
+            if (protocol == ProtocolVersion) return true;
+            if (warnedProtocol != protocol)
+            {
+                warnedProtocol = protocol;
+                Plugin.Logger?.LogWarning("[Nation] a peer speaks nation protocol " + protocol + ", this mod " + ProtocolVersion + ": its nation messages are ignored (update both to the same build).");
+            }
+            return false;
         }
 
         /// <summary>Host: tells one member the answer to something they asked outside this wire (a refused convoy purchase).</summary>
@@ -164,13 +178,13 @@ namespace BoscaliSummer.Modules.Nation.Networking
 
         private void ReceiveReply(INetworkPlayer _, NationReply reply)
         {
-            if (owner == null || GameAccess.IsServer() || reply.Protocol != ProtocolVersion || reply.Outcome > (byte)NationOutcome.NotProduced) return;
+            if (!Same(reply.Protocol) || owner == null || GameAccess.IsServer() || reply.Outcome > (byte)NationOutcome.NoSupport) return;
             owner.Answer((NationOutcome)reply.Outcome);
         }
 
         private void ReceiveSnapshot(INetworkPlayer _, NationSnapshot snapshot)
         {
-            if (owner == null || GameAccess.IsServer() || snapshot.Protocol != ProtocolVersion || snapshot.Payload == null) return;
+            if (!Same(snapshot.Protocol) || owner == null || GameAccess.IsServer() || snapshot.Payload == null) return;
             // A snapshot of another faction (a member who just switched sides) is not this player's to read.
             if (!GameAccess.TryGetLocalFaction(out FactionHQ hq) || Hash(hq.faction.factionName) != snapshot.FactionHash) return;
             owner.Receive(snapshot.Payload, snapshot.Count);

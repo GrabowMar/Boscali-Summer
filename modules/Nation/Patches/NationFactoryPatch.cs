@@ -47,4 +47,13 @@ namespace BoscaliSummer.Modules.Nation.Patches
             return false;
         }
     }
+
+    /// <summary>Every kill message (host execution and received alike; the service counts it on the host only) moves war support.</summary>
+    [HarmonyPatch]
+    internal static class NationKillPatch
+    {
+        private static System.Reflection.MethodBase TargetMethod() => BoscaliSummer.Core.Game.KillMessageRpc.Target();
+
+        private static void Prefix(PersistentID killerID, PersistentID killedID) => NationService.NoteKill(killerID, killedID);
+    }
 }

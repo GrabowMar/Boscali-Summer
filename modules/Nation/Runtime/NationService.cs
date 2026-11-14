@@ -14,11 +14,11 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Nation.Runtime
 {
     /// <summary>
-    /// The nation layer's owner. Host: one <see cref="NationBook"/> per faction over the vanilla economy (the game's factory
-    /// buildings, its stock dictionaries and faction funds), ticked once a second; the staff runs every faction every 30 s.
-    /// Client: a mirror of the local faction's snapshot. Screens read <see cref="INationView"/>, other modules <see cref="INationModifiers"/>.
+    /// The nation layer's owner. Host: one <see cref="NationBook"/> and one <see cref="PoliticsBook"/> per faction over the vanilla economy
+    /// (the game's factory buildings, its stock dictionaries and faction funds), ticked once a second; the staff runs every faction every 30 s.
+    /// Client: a mirror of the local faction's snapshot. Screens read <see cref="INationView"/>, the convoy owners <see cref="INationModifiers"/>.
     /// </summary>
-    internal sealed class NationService : MonoBehaviour, ISceneService, INationView, INationModifiers
+    internal sealed partial class NationService : MonoBehaviour, ISceneService, INationView, INationModifiers
     {
         private static readonly string[] Missions = { "Escalation", "Terminal Control", "Domination" };
         private static readonly float[] SiteRings = { 1500f, 2000f, 2600f };
@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
         {
             public FactionHQ Owner;
             public readonly NationBook Book = new NationBook();
+            public readonly PoliticsBook Politics = new PoliticsBook();
             public readonly List<UnitDefinition> Rows = new List<UnitDefinition>(NationRules.MaxStockRows);
             public readonly int[] Stock = new int[NationRules.MaxStockRows], Target = new int[NationRules.MaxStockRows];
             public readonly bool[] Air = new bool[NationRules.MaxStockRows];
@@ -44,7 +45,6 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             public readonly int[] Reserve = new int[NationRules.MaxStockRows];
             public readonly Dictionary<int, PlantRef> Plants = new Dictionary<int, PlantRef>(NationRules.MaxPlants);
             public readonly NationView View = new NationView();
-            public string Holder = "";
             public int FreeBuilds;
             public Vector3 Site;      // GLOBAL metres, valid while Book.Building
             public Quaternion SiteRotation = Quaternion.identity;
@@ -52,6 +52,13 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             public float LastFunds = -1f, NextIncome;
             public NationOutcome LastRefusal;
             public int Initial = -1;
+            /// <summary>GENERAL OFFENSIVE's objective while it runs (taking it pays war support back).</summary>
+            public Airbase OffensiveAt;
+            /// <summary>The airbase this side lost last (COUNTERATTACK).</summary>
+            public Airbase LastLost;
+            /// <summary>The enemy plant our SABOTAGE stopped (destroying it pays), until when.</summary>
+            public int SabotagedPlant;
+            public float SabotagedUntil;
         }
 
         private static NationService live;
@@ -87,16 +94,22 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             sides.Clear();
             managed.Clear();
             events.Clear();
+            owners.Clear();
             mirror.Plants.Clear();
             mirror.Stock.Clear();
+            mirror.Moves.Clear();
             mirrorReady = layerOn = factorySearched = adoptNow = false;
             factoryDefinition = null;
             nextLayerCheck = 0f;
             clock.Reset(); staffGate.Reset(); adoptGate.Reset();
+            ClosePresented();
+            newsReady = false;
+            newsPosted = 0;
         }
 
         private void OnDestroy()
         {
+            ReleasePolicy();
             ResetForScene();
             if (live == this) live = null;
         }
@@ -111,7 +124,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             {
                 if (!layerOn) return null;
                 if (!GameAccess.IsServer()) return mirrorReady ? mirror : null;
-                return GameAccess.TryGetLocalFaction(out FactionHQ hq) && sides.TryGetValue(hq, out Side side) ? side.View : null;
+                return GameAccess.TryGetLocalFaction(out FactionHQ hq) && sides.TryGetValue(hq, out Side side) && side.Rows.Count > 0 ? side.View : null;
             }
         }
 
@@ -130,13 +143,6 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             LastOutcome = outcome;
             LastOutcomeAt = Time.unscaledTime;
             return outcome;
-        }
-
-        public float Scale(FactionHQ hq, NationStat stat)
-        {
-            if (!layerOn || hq == null) return 1f;
-            if (sides.TryGetValue(hq, out Side side)) return NationRules.Scale(stat, side.Book.Done);
-            return mirrorReady && GameAccess.TryGetLocalFaction(out FactionHQ local) && local == hq ? NationRules.Scale(stat, mirror.Done) : 1f;
         }
 
         public bool CanSupply(FactionHQ hq, Faction.ConvoyGroup group) => Covers(hq, group);
@@ -186,9 +192,23 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             if (!mirrorReady) return;
             mirror.EconomyLock = Mathf.Max(0f, mirror.EconomyLock - dt);
             mirror.PriorityLock = Mathf.Max(0f, mirror.PriorityLock - dt);
-            mirror.RunningLeft = Mathf.Max(0f, mirror.RunningLeft - dt);
-            mirror.PickLock = Mathf.Max(0f, mirror.PickLock - dt);
             mirror.BuildLeft = Mathf.Max(0f, mirror.BuildLeft - dt);
+            mirror.CabinetLeft = Mathf.Max(0f, mirror.CabinetLeft - dt);
+            mirror.EnemyDecidedLeft = Mathf.Max(0f, mirror.EnemyDecidedLeft - dt);
+            mirror.DecidedAge += dt;
+            mirror.EnemyDecidedAge += dt;
+            if (mirror.DoctrineAge >= 0f) mirror.DoctrineAge += dt;
+            for (int i = 0; i < Decisions.Count; i++)
+            {
+                mirror.Cooldown[i] = Mathf.Max(0f, mirror.Cooldown[i] - dt);
+                mirror.InForce[i] = Mathf.Max(0f, mirror.InForce[i] - dt);
+            }
+            for (int i = 0; i < mirror.Moves.Count; i++)
+            {
+                SupportMove m = mirror.Moves[i];
+                m.Age += dt;
+                mirror.Moves[i] = m;
+            }
             for (int i = 0; i < mirror.Plants.Count; i++)
             {
                 PlantView p = mirror.Plants[i];
@@ -206,10 +226,11 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             {
                 nextLayerCheck = Time.unscaledTime + 1f;
                 bool on = settings != null && settings.Enabled.Value && MissionManager.IsRunning && LayerMission(MissionManager.CurrentMission?.Name);
-                if (!on && layerOn) ResetForScene();
+                if (!on && layerOn) { ReleasePolicy(); ResetForScene(); }
                 layerOn = on;
             }
             if (!layerOn) return;
+            Present();
             if (!GameAccess.IsServer()) { AgeMirror(Time.deltaTime); return; }
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             if (mission == null) return;
@@ -237,6 +258,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                 if (hq != null && hq.faction != null && !sides.ContainsKey(hq) && sides.Count < NationRules.MaxFactions)
                     sides.Add(hq, new Side { Owner = hq });
             if (adoptGate.Due(now, 10f, 0.9375f, 1f) || adoptNow) { adoptNow = false; Adopt(); }
+            PollAirbases(now);
             bool staff = staffGate.Due(now, 30f, 0.6875f, 1f);
             foreach (Side side in sides.Values)
             {
@@ -249,10 +271,12 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                     if (AutoStaff.Run(side.Book, w, now)) StaffBuild(side, w, now, false);
                 }
                 events.Clear();
+                side.Book.Boost = side.Politics.Output(now);
                 side.Book.Tick(now, w, events);
-                for (int i = 0; i < events.Count; i++) Effect(side, events[i], w, now);
+                for (int i = 0; i < events.Count; i++) Effect(side, events[i]);
                 Income(side, now);
                 SyncFactories(side);
+                Politics(side, w, now, staff);
                 Fill(side, w, now);
             }
         }
@@ -309,7 +333,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             {
                 Stock = side.Stock, Target = side.Target, Aircraft = side.Air, Rows = side.Rows.Count, HeldAirbases = held,
                 Funds = hq.factionFunds, Stability = stability, Escalation = stage, InitialPlants = side.Initial > 0 ? side.Initial : 0,
-                FocusSeconds = settings.FocusSeconds.Value, FactoryCost = settings.FactoryCost.Value, BuildSeconds = NationRules.FactoryBuildSeconds,
+                FactoryCost = settings.FactoryCost.Value, BuildSeconds = NationRules.FactoryBuildSeconds,
             };
         }
 
@@ -362,7 +386,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
 
         // ---- Effects ---------------------------------------------------------------------------------
 
-        private void Effect(Side side, NationEvent e, in NationWorld w, float now)
+        private void Effect(Side side, NationEvent e)
         {
             FactionHQ hq = side.Owner;
             switch (e.Kind)
@@ -377,36 +401,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                     if (side.Charged > 0f) hq.AddFunds(side.Charged);
                     Plugin.Logger?.LogInfo("[Nation] " + hq.name + ": the factory site was lost; " + Mathf.RoundToInt(side.Charged) + " funds returned.");
                     break;
-                case NationEventKind.FocusDone:
-                    Plugin.Logger?.LogInfo("[Nation] " + hq.name + " focus complete: " + FocusTree.Name((FocusId)e.A) + ".");
-                    switch ((FocusId)e.A)
-                    {
-                        case FocusId.NewWorks: side.FreeBuilds++; break;
-                        case FocusId.FighterReserve: Grant(side, true, 0, 4); break;
-                        case FocusId.ArmouredReserve: Grant(side, false, 0, 6); Grant(side, false, 1, 3); break;
-                        case FocusId.WarBonds: hq.AddFunds(NationRules.WarBondsFunds); break;
-                        case FocusId.NationalUnity:
-                            if (ModuleServices.TryGet(out IFactionMoraleView morale)) morale.AwardMorale(hq.GetInstanceID(), NationRules.UnityMorale);
-                            break;
-                    }
-                    break;
             }
-        }
-
-        /// <summary>Adds <paramref name="count"/> units to the faction's <paramref name="rank"/>-th largest line of that class (by target).</summary>
-        private static void Grant(Side side, bool aircraft, int rank, int count)
-        {
-            int best = -1, second = -1;
-            for (int i = 0; i < side.Rows.Count; i++)
-            {
-                if (side.Air[i] != aircraft) continue;
-                if (best < 0 || side.Target[i] > side.Target[best]) { second = best; best = i; }
-                else if (second < 0 || side.Target[i] > side.Target[second]) second = i;
-            }
-            int row = rank == 0 ? best : second >= 0 ? second : best;
-            if (row < 0) return;
-            if (aircraft) side.Owner.AddSupplyUnit(side.Rows[row], count);
-            else side.Reserve[row] += count;
         }
 
         // ponytail: income law as a correction on the treasury's own growth, once a minute. The game has no single income call to
@@ -437,7 +432,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
         private NationOutcome TryBuild(Side side, in NationWorld w, float now, bool free)
         {
             if (side.Book.Building) return NationOutcome.Busy;
-            if (side.Book.Plants.Count >= NationRules.Slots(w.HeldAirbases, side.Book.Done, w.InitialPlants)) return NationOutcome.NoSlot;
+            if (side.Book.Plants.Count >= NationRules.Slots(w.HeldAirbases, w.InitialPlants)) return NationOutcome.NoSlot;
             if (!FindSite(side, out Vector3 site, out Quaternion rotation)) return NationOutcome.NoSite;
             NationOutcome outcome = side.Book.StartBuild(now, w, free, out float charged);
             if (outcome != NationOutcome.Ok) return outcome;
@@ -564,22 +559,15 @@ namespace BoscaliSummer.Modules.Nation.Runtime
         {
             NationBook book = side.Book;
             NationView v = side.View;
-            v.Slots = NationRules.Slots(w.HeldAirbases, book.Done, w.InitialPlants);
-            v.Output = NationRules.Output(book.Economy, w.Stability, book.Done);
+            v.Slots = NationRules.Slots(w.HeldAirbases, w.InitialPlants);
+            v.Output = NationRules.Output(book.Economy, w.Stability) * book.Boost;
             v.Stability = w.Stability;
             v.Funds = w.Funds;
-            v.FactoryCost = NationRules.Cost(book.Done, w.FactoryCost);
+            v.FactoryCost = w.FactoryCost;
             v.Economy = book.Economy;
             v.Priority = book.Priority;
             v.EconomyLock = Mathf.Max(0f, book.EconomyLockUntil - now);
             v.PriorityLock = Mathf.Max(0f, book.PriorityLockUntil - now);
-            v.Done = book.Done;
-            v.Running = book.Running;
-            v.Queued = book.Queued;
-            v.RunningLeft = book.Running >= 0 ? Mathf.Max(0f, book.RunningEnd - now) : 0f;
-            v.RunningTotal = book.Running >= 0 ? book.RunningEnd - book.RunningStart : 0f;
-            v.PickLock = Mathf.Max(0f, book.PickLockUntil - now);
-            v.PickHolder = v.PickLock > 0f ? side.Holder : "";
             v.Building = book.Building;
             v.BuildLeft = book.Building ? Mathf.Max(0f, book.BuildEnd - now) : 0f;
             v.BuildTotal = book.Building ? book.BuildEnd - book.BuildStart : 0f;
@@ -589,7 +577,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             {
                 var view = new PlantView
                 {
-                    Id = plant.Id, Kind = plant.Kind, Row = plant.Row, Pinned = plant.Pinned, Interval = plant.Interval,
+                    Id = plant.Id, Kind = plant.Kind, Row = plant.Row, Pinned = plant.Pinned, Interval = plant.Interval, Raided = now < plant.RaidedUntil,
                     NextIn = plant.Resting || plant.NextAt <= 0f ? 0f : Mathf.Max(0f, plant.NextAt - now), Health01 = 1f,
                 };
                 if (side.Plants.TryGetValue(plant.Id, out PlantRef reference) && reference.Unit != null)
@@ -608,11 +596,12 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                     Name = side.Rows[i].unitName ?? "", Code = side.Rows[i].code ?? "", Aircraft = side.Air[i],
                     Count = side.Stock[i], Target = side.Target[i],
                 });
+            FillPolitics(side, now);
         }
 
         // ---- Verbs (host) ----------------------------------------------------------------------------
 
-        /// <summary>A faction member's request, judged by the book. <paramref name="player"/> null is the host's own console.</summary>
+        /// <summary>A faction member's request, judged by the books. <paramref name="player"/> null is the host's own console.</summary>
         internal NationOutcome Apply(FactionHQ hq, Player player, NationVerb verb, int a, int b)
         {
             if (!layerOn || !GameAccess.IsServer()) return NationOutcome.Off;
@@ -620,23 +609,21 @@ namespace BoscaliSummer.Modules.Nation.Runtime
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
             if (mission == null) return NationOutcome.Off;
             float now = mission.MissionTime;
-            int pilot = player == null ? 1 : (int)(PlayerIdentity.Of(player) % 2147483629UL) + 1;
             NationWorld w = Read(side);
             NationOutcome outcome;
             switch (verb)
             {
                 case NationVerb.Economy: outcome = side.Book.SetEconomy((EconomyPolicy)(byte)a, now); break;
                 case NationVerb.Priority: outcome = side.Book.SetPriority((PriorityPolicy)(byte)a, now); break;
-                case NationVerb.Focus: outcome = side.Book.Focus(a, pilot, now, stage, w.FocusSeconds); break;
-                case NationVerb.Unqueue: outcome = side.Book.Unqueue(pilot, now); break;
                 case NationVerb.Line:
                     outcome = side.Book.SetLine(a, b < 0 ? LineKind.Construction : LineKind.Aircraft, b, b >= 0 && b < side.Rows.Count && side.Air[b], side.Rows.Count);
                     break;
                 case NationVerb.Unpin: outcome = side.Book.Unpin(a); break;
                 case NationVerb.Build: outcome = TryBuild(side, w, now, false); break;
+                case NationVerb.Answer: outcome = AnswerCard(side, a, b, NameOf(player), now); break;
+                case NationVerb.Decide: outcome = Decide(side, a, NameOf(player), now); break;
                 default: outcome = NationOutcome.Unknown; break;
             }
-            if (outcome == NationOutcome.Ok && (verb == NationVerb.Focus || verb == NationVerb.Unqueue)) side.Holder = NameOf(player);
             if (outcome == NationOutcome.Ok) Fill(side, w, now);
             return outcome;
         }
@@ -655,7 +642,8 @@ namespace BoscaliSummer.Modules.Nation.Runtime
                     name = name.Remove(tag, end - tag + 1);
                     tag = name.IndexOf('<');
                 }
-                return name.Length > 24 ? name.Substring(0, 24) : name;
+                name = name.Trim().ToUpperInvariant();
+                return name.Length > 20 ? name.Substring(0, 20) : name;
             }
             catch (Exception) { return "PILOT"; }
         }
@@ -667,64 +655,10 @@ namespace BoscaliSummer.Modules.Nation.Runtime
         {
             bytes = null;
             if (!layerOn || hq == null || !sides.TryGetValue(hq, out Side side) || side.Rows.Count == 0) return false;
-            if (!force && !side.Book.Dirty) return false;
-            side.Book.Dirty = false;
+            if (!force && !side.Book.Dirty && !side.Politics.Dirty) return false;
+            side.Book.Dirty = side.Politics.Dirty = false;
             bytes = NationWire.Pack(side.View);
             return true;
-        }
-
-        /// <summary>Sim hook: the local faction's nation as plain values, and with "verb" a request made as the local player.</summary>
-        public static Dictionary<string, object> Probe(Dictionary<string, object> args)
-        {
-            var result = new Dictionary<string, object> { ["ok"] = live != null && live.layerOn };
-            if (live == null) return result;
-            if (args != null && args.TryGetValue("verb", out object verb) && Enum.TryParse(Convert.ToString(verb), true, out NationVerb parsed))
-                result["outcome"] = live.Request(parsed, args.TryGetValue("a", out object a) ? Convert.ToInt32(a) : 0,
-                    args.TryGetValue("b", out object b) ? Convert.ToInt32(b) : 0).ToString();
-            var factions = new List<object>();
-            foreach (Side side in live.sides.Values)
-            {
-                NationView v = side.View;
-                int produced = 0;
-                for (int i = 0; i < v.Stock.Count; i++) produced += v.Stock[i].Count;
-                factions.Add(new Dictionary<string, object>
-                {
-                    ["faction"] = side.Owner != null ? side.Owner.name : "", ["plants"] = v.Plants.Count, ["slots"] = v.Slots,
-                    ["done"] = (int)v.Done, ["running"] = v.Running, ["queued"] = v.Queued, ["economy"] = v.Economy.ToString(),
-                    ["priority"] = v.Priority.ToString(), ["building"] = v.Building, ["stock"] = produced, ["rows"] = v.Stock.Count,
-                    ["funds"] = Mathf.RoundToInt(v.Funds), ["output"] = v.Output,
-                });
-            }
-            if (args != null && args.TryGetValue("convoy", out object convoy) && GameAccess.TryGetLocalFaction(out FactionHQ mine) &&
-                mine.faction.TryGetConvoyGroup(Convert.ToInt32(convoy), out Faction.ConvoyGroup group) && live.sides.TryGetValue(mine, out Side own))
-            {
-                // Draw convoys of this group until the reserve refuses one: proves the draw and the NOT PRODUCED gate together.
-                int sent = 0;
-                while (sent < 8 && Covers(mine, group)) { mine.AddConvoy(group); sent++; }
-                int left = 0;
-                for (int i = 0; i < own.Rows.Count; i++) if (!own.Air[i]) left += own.Reserve[i];
-                result["convoysSent"] = sent;
-                result["convoyRefused"] = !Covers(mine, group);
-                result["reserveLeft"] = left;
-            }
-            int vehicleRows = 0, reserve = 0;
-            foreach (Side side in live.sides.Values)
-                for (int i = 0; i < side.Rows.Count; i++) if (!side.Air[i]) { vehicleRows++; reserve += side.Reserve[i]; }
-            result["vehicleRows"] = vehicleRows;
-            result["reserve"] = reserve;
-            int focuses = 0, plants = 0, stock = 0;
-            foreach (Side side in live.sides.Values)
-            {
-                for (int bit = 0; bit < FocusTree.Count; bit++) if ((side.View.Done & (1 << bit)) != 0) focuses++;
-                plants += side.View.Plants.Count;
-                for (int i = 0; i < side.View.Stock.Count; i++) stock += side.View.Stock[i].Count;
-            }
-            result["sides"] = live.sides.Count;
-            result["focusesDone"] = focuses;
-            result["plantsTotal"] = plants;
-            result["stockTotal"] = stock;
-            result["factions"] = factions;
-            return result;
         }
     }
 }

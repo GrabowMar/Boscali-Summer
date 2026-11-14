@@ -117,6 +117,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             boundAimed = false;
             boundResolved = false;
             nextRefresh = 0f;
+            cabinetSection = decisionsSection = null;
+            cabinetCard = null;
+            boundCard = -1;
             ResetLog();
         }
 
@@ -179,7 +182,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDispatchPage(AvFlow p)
         {
-            // Phase 7 puts the cabinet's answer card (FOR THE CABINET) here, above the live dispatch.
+            // The cabinet's answer card (FOR THE CABINET) and the latest decisions, above the live dispatch (EventsMfdPanel.Cabinet).
+            BuildCabinet(p);
             // The live dispatch under one readout line (what the header tiles used to say). A quiet theater shows one standby row and
             // leaves the rest to the console ground. FAC's ECONOMY and POLITICS link here for the order in force.
             liveSection = p.Section(AvIcon.AlertTriangle, "LIVE DISPATCH", "");
@@ -361,9 +365,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
             RefreshTimeline(current, history, now, historyOff);
             RefreshDesk(current, history, now);
             RefreshLog();
+            string cabinet = RefreshCabinet();
 
             string ambient = console.CurrentPage == TabLog
                 ? "THE LOG · " + AvNum.Fixed(logShown.Count, 0) + (logCategory > 0 ? " " + TacticalLogEntry.Categories[logCategory - 1] : "") + " LINES"
+                : cabinet.Length > 0 ? cabinet
                 : current != null
                 ? "DISPATCH LIVE · " + current.Title.ToUpperInvariant()
                 : events.Available ? "THEATER QUIET · DIRECTOR SCANNING" : "NO MISSION ON THE NET";

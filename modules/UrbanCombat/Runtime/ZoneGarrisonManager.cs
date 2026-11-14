@@ -384,10 +384,16 @@ namespace BoscaliSummer.Garrisons
         }
 
         bool IZoneFortificationService.TryFortify(
-            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, int shells)
+            Airbase airbase, FactionHQ owner, NuclearOption.Networking.Player requester, int shells) =>
+            requester != null && requester.HQ == owner && Fortify(airbase, owner, shells);
+
+        /// <summary>HOLD THE LINE (Nation): the same strongpoints for the faction's own policy, no requesting pilot.</summary>
+        bool IZoneFortificationService.TryFortifyFor(Airbase airbase, FactionHQ owner, int shells) => Fortify(airbase, owner, shells);
+
+        private bool Fortify(Airbase airbase, FactionHQ owner, int shells)
         {
-            if (!BoscaliMission.FortificationsAllowed || !GameAccess.IsServer() || airbase == null || owner == null || requester == null ||
-                airbase.AttachedAirbase || airbase.CurrentHQ != owner || requester.HQ != owner)
+            if (!BoscaliMission.FortificationsAllowed || !GameAccess.IsServer() || airbase == null || owner == null ||
+                airbase.AttachedAirbase || airbase.CurrentHQ != owner)
                 return false;
 
             if (!Urban.GarrisonsEnabled.Value || NetworkSceneSingleton<Spawner>.i == null)

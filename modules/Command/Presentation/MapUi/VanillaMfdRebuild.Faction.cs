@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvSection historySection;
             private AvList bandList;
             // NATION layer: shown instead of the morale mandate while the service reports Active (see RefreshNation).
-            private FocusTreePart focusTree;
+            private FacPolitics politics;
             private FacStockPart stockPart;
             private FacPlantsPart plantsPart;
             private FacForcePart forcePart;
@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Economy: the way to the order in force on EVN, and four simultaneous compact histories of funds, warheads, manpower and morale.",
                 "Forces: live unit counts by class, then every unit type of the chosen class with its live and lost counts, busiest first.",
                 "Ledger: reserves, losses, value or manpower per class, plus a named loss ledger of the unit types hit hardest.",
-                "Politics: the morale mandate, the way to the order in force on EVN, and a directory of airbases or players.",
+                "Politics: war support and why it moved, the doctrine and its ranks, the decisions and the cabinet minutes (the morale mandate while the nation layer is off), and a directory of airbases or players.",
             };
 
             protected override void BuildContent()
@@ -140,6 +140,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Losses are the host's mission accounting, not an estimate.",
                     "The loss form lists the hardest-hit unit types, heaviest first.");
                 Console.Orders(3,
+                    "Sorties earn war support: +10 a base taken, +1 a kill, +3 a plant, depot or air defence. Losses drain it.",
+                    "Decisions cost war support; the first press wins. Nobody pressing? The staff spends above 60.",
+                    "The doctrine is chosen once, on the WAR CABINET card on EVN DISPATCH. Its ranks open by themselves.",
                     "The mandate is the host's 0-100 morale. It starts at 50.",
                     "Events and contract results move it. Below 50 new contracts pay less; above, more.",
                     "AIRBASES lists the faction's bases. PLAYERS lists crews by score.",
@@ -223,7 +226,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     case 0: return "TREASURY · OBSERVED RETURNS";
                     case 1: return "ORDER OF BATTLE · LIVE / LOST";
                     case 2: return LedgerTitles[(int)ledgerMode] + " · FORM 12-B";
-                    default: return "THE MANDATE · MORALE 0-100";
+                    default: return nationPoliticsParts.Count > 0 && nationPoliticsParts[0].Shown ? "POLITICS · WAR SUPPORT AND THE CABINET" : "THE MANDATE · MORALE 0-100";
                 }
             }
 
@@ -296,7 +299,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PLANTS", "FACTORIES AND FREE SLOTS"));
                 plantsPart = page.Add(new FacPlantsPart(page.Content));
                 nationEconomyParts.Add(plantsPart);
-                nationEconomyParts.Add(page.Section(AvIcon.ListDetails, "IN FORCE", "POLICIES AND FOCUS BONUSES"));
+                nationEconomyParts.Add(page.Section(AvIcon.ListDetails, "IN FORCE", "POLICIES AND OUTPUT"));
                 forcePart = page.Add(new FacForcePart(page.Content));
                 nationEconomyParts.Add(forcePart);
                 foreach (AvPart p in nationEconomyParts) p.SetShown(false);
@@ -652,9 +655,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildStatusPage(AvFlow page)
             {
                 BuildFactionSelector(page);
-                nationPoliticsParts.Add(page.Section(AvIcon.Flag, "NATIONAL FOCUS", "ONE AT A TIME · 4:00 EACH"));
-                focusTree = page.Add(new FocusTreePart(page.Content));
-                nationPoliticsParts.Add(focusTree);
+                politics = new FacPolitics(page, nationPoliticsParts);
                 foreach (AvPart p in nationPoliticsParts) p.SetShown(false);
                 mandateStrip = page.Add(new MandateStrip(page.Content));
                 mandateParts.Add(mandateStrip);
@@ -683,7 +684,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
                 mandateParts.Add(bandList);
                 bandList.SetCount(BandNames.Length);
-                page.Links(("WAR PLAN", "STR", "BOARD"), ("JOBS", "MIS", "JOBS"));
+                page.Links(("ORDERS IN FORCE", "STR", "BOARD"), ("CABINET", "EVN", "DISPATCH"));
             }
 
             private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };
@@ -750,7 +751,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     plantsPart.Set(v);
                     forcePart.Set(v);
                 }
-                else if (selectedPage == 3) focusTree.Set(nation);
+                else if (selectedPage == 3) politics.Set(nation);
             }
 
             private void RefreshInfo(FactionHQ hq)

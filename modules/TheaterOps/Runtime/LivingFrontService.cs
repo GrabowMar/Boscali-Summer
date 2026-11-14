@@ -174,7 +174,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
 
         public void ResetForScene()
         {
-            wars.Clear(); hqs.Clear(); placeNames.Clear(); ranked.Clear(); offers.Clear(); fixes.Clear(); seeds.Clear();
+            wars.Clear(); hqs.Clear(); placeNames.Clear(); ranked.Clear(); offers.Clear(); fixes.Clear(); seeds.Clear(); held.Clear();
             territory = null; picture = null; excluded = null; censusSource = null;
             UnbindSorties();
             reviewWar = holdWar = vetoWar = null;
