@@ -288,11 +288,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>DEFCON level 1..5 (0 = not measured), its word and the rule that set it.</summary>
         public int AlertLevel;
         public string AlertWord = "NOT MEASURED", AlertRule = "";
-        /// <summary>The AI sortie board: code, count (-1 unknown), share 0..1 (NaN unknown); caption names whom it counts.</summary>
-        public string[] SortieCodes = { "CAP", "SEAD", "CAS", "STRIKE", "TRANSIT" };
-        public int[] SortieCounts = { -1, -1, -1, -1, -1 };
-        public float[] SortieShares = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
-        public string SortieBoardCaption = "";
         /// <summary>Footer strip: line 1 states status and age, line 2 is the flavour or the latest result.</summary>
         public string FooterStatus = "", FooterNote = "";
         /// <summary>Selected and hovered ids resolved against the rows; SelectionVanished asks the hub to clear its copy.</summary>

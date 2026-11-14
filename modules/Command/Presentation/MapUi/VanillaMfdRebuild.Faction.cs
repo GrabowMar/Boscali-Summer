@@ -519,7 +519,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ledgerChart = page.Add(new LedgerChartPart(page.Content, page.Inner));
 
                 attritionRoster = page.Add(new UnitRosterPart(page.Content, true), 1f);
-                page.Links(("FRONTS", "STR", "BOARD"), ("MISSION", "MIS", "MISSION"));
+                page.Links(("FRONTS", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
             }
             private void SelectLedger(int selected)
             {
@@ -683,7 +683,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
                 mandateParts.Add(bandList);
                 bandList.SetCount(BandNames.Length);
-                page.Links(("WAR PLAN", "STR", "BOARD"), ("JOBS", "MIS", "CONTRACTS"));
+                page.Links(("WAR PLAN", "STR", "BOARD"), ("JOBS", "MIS", "JOBS"));
             }
 
             private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };

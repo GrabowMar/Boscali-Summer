@@ -102,8 +102,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Put(ref m.AlertLevel, level);
                 Put(ref m.AlertWord, StrWords.Alert(level));
                 Put(ref m.AlertRule, level > 0 ? TheaterWords.ThreatTitle(c.ThreatWhy) : "");
-
-                SortieBoard(c);
             }
 
             private string FrontLine(in TheaterCensus c)
@@ -129,23 +127,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 dst = new StrBalance { Key = key, Text = text, Caption = caption, Own = own, Middle = middle, Hostile = hostile };
                 Changed = true;
             }
-
-            // The AI sortie board: friendly AI sorties by kind and their share of the total. A share needs every count; one unknown makes all unknown.
-            private void SortieBoard(in TheaterCensus c)
-            {
-                int cap = c.Known ? c.SortieCap : -1, sead = c.Known ? c.SortieSead : -1, cas = c.Known ? c.SortieCas : -1,
-                    strike = c.Known ? c.SortieStrike : -1, transit = c.Known ? c.SortieTransit : -1;
-                bool all = cap >= 0 && sead >= 0 && cas >= 0 && strike >= 0 && transit >= 0;
-                int sum = all ? cap + sead + cas + strike + transit : 0;
-                SortieRow(0, cap, all, sum); SortieRow(1, sead, all, sum); SortieRow(2, cas, all, sum);
-                SortieRow(3, strike, all, sum); SortieRow(4, transit, all, sum);
-                Put(ref m.SortieBoardCaption, "FRIENDLY AI ONLY" + StrWords.Dot + "NOT YOU OR YOUR WING");
-            }
-
-            private void SortieRow(int i, int count, bool all, int sum)
-            {
-                Put(ref m.SortieCounts[i], count < 0 ? -1 : count);
-                Put(ref m.SortieShares[i], all && sum > 0 ? count / (float)sum : float.NaN);
-            }        }
+        }
     }
 }

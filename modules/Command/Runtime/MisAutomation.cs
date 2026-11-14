@@ -9,7 +9,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Hook for the unattended MIS check: <c>Open {page}</c> maximises the map, presses the MIS rail key (the click path) and
-    /// shows that page; <c>Pick {index}</c> clicks a job-board slip; <c>Read</c> reports the page and its text. Dev tooling.
+    /// shows that page (0 JOBS, 1 OBJECTIVES, 2 BRIEF); <c>Pick {index}</c> clicks a job card, <c>Act {index}</c> its act button; <c>Read</c>
+    /// reports the page and its text. Dev tooling.
     /// </summary>
     public static class MisAutomation
     {
@@ -26,15 +27,20 @@ namespace BoscaliSummer.Modules.Command.Runtime
             if (key.Screen != null && !key.Screen.isActive) key.Source.onClick.Invoke();
             AvConsole console = VanillaMfdRebuild.ConsoleForAutomation(panel);
             if (console == null) return Failure("MisAutomation", "Open", "MIS console not bound yet");
-            console.SetPage((int)Number(args, "page", 2));
+            console.SetPage((int)Number(args, "page", 0));
             console.Ticker.TickNow();
             if (panel != VanillaMfdPanelId.Mis) return new Dictionary<string, object> { ["ok"] = true, ["page"] = console.CurrentPage };
             return Read(null);
         }
 
-        public static Dictionary<string, object> Pick(Dictionary<string, object> args)
+        public static Dictionary<string, object> Pick(Dictionary<string, object> args) => Click(args, false);
+
+        /// <summary><c>Act {index}</c>: presses that job card's act button (ACCEPT, SELECT, FIRE) as drawn.</summary>
+        public static Dictionary<string, object> Act(Dictionary<string, object> args) => Click(args, true);
+
+        private static Dictionary<string, object> Click(Dictionary<string, object> args, bool act)
         {
-            bool ok = VanillaMfdRebuild.PickContractForAutomation((int)Number(args, "index", 0));
+            bool ok = VanillaMfdRebuild.JobCardForAutomation((int)Number(args, "index", 0), act);
             VanillaMfdRebuild.ConsoleForAutomation(VanillaMfdPanelId.Mis)?.Ticker.TickNow();
             Dictionary<string, object> result = Read(null);
             result["picked"] = ok;

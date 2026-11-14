@@ -51,7 +51,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private AvSection otherSection, allSection;
         private readonly StrFrontLane[] lanes = new StrFrontLane[MaxLanes];
         // SITREP
-        private AvSection sortieSection;
         private readonly AvRow[] sensors = new AvRow[4];
 
         /// <summary>The scene's panel, for the automation hooks.</summary>
@@ -97,7 +96,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Controls.Clear();
             boundModel = null;
             boundRevision = -1;
-            otherSection = allSection = sortieSection = null;
+            otherSection = allSection = null;
             for (int i = 0; i < lanes.Length; i++) lanes[i] = null;
             for (int i = 0; i < sensors.Length; i++) sensors[i] = null;
             nextLog = 0f;
@@ -165,7 +164,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 (AvIcon.Coins, "SUPPLY"));
             TabHelp.Apply(tabBar,
                 "The live operation, the staff's proposals, the platforms and the posture.",
-                "Force balance, sensors, the alert level and the AI sortie board.",
+                "Force balance, sensors and the alert level.",
                 "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.",
                 "Spend your own funds: buy a ground group for your side, or give to the faction pool.");
             BoscaliSummer.Core.Ui.CountryStrip.Mount(console);
@@ -198,7 +197,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             allSection = p.Section(AvIcon.Map2, "PLATFORMS", StrPanelText.NotchCaption);
             for (int i = 0; i < MaxLanes; i++) lanes[i] = Add(p, new StrFrontLane(p.Content, Controls, hub, i));
             Add(p, new StrPostureRow(p.Content, Controls, hub, true));
-            p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "CONTRACTS"));
+            p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
         }
 
         private void BuildSitrep(AvFlow p)
@@ -212,8 +211,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             for (int i = 0; i < sensors.Length; i++) sensors[i] = p.Add(new AvRow(p.Content));
             p.Section(AvIcon.AlertTriangle, "ALERT LEVEL", "FROM THE HOST'S OWN COUNTS");
             Add(p, new StrAlertRow(p.Content, Controls, hub));
-            sortieSection = p.Section(AvIcon.Plane, "AI SORTIE BOARD", "");
-            Add(p, new StrSortieBoard(p.Content, Controls, hub));
             p.Links(("FORCES", "FAC", "FORCES"), ("SUPPORT", "OPS", null));
         }
 
@@ -287,7 +284,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             string laneCaption = StrPanelText.LaneCaption(vm);
             otherSection.SetCaption(laneCaption);
             allSection.SetCaption(laneCaption);
-            sortieSection.SetCaption(vm.SortieBoardCaption);
             returnSection.SetShown(StrNation.Active);
             policySection.SetShown(StrNation.Active);
         }

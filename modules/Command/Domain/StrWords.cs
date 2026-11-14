@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 case StrBoardMode.Operation: return "The staff runs the plan and the ground force carries it out.";
                 case StrBoardMode.Proposals: return "A pick sets the main effort for every pilot of your side.";
                 case StrBoardMode.Assessing: return "The staff reads every front before it proposes anything.";
-                case StrBoardMode.NoOpening: return "Sorties from the MIS contract desk are still offered while the board waits.";
+                case StrBoardMode.NoOpening: return "Sorties on MIS JOBS are still offered while the board waits.";
                 case StrBoardMode.Reduced: return "Nothing is broken. The staff has no fronts to plan here.";
                 case StrBoardMode.StaffOff: return "SITREP reads live counts only when you host the game. The staff log needs the staff.";
                 case StrBoardMode.HostLacksStaff: return "Nothing is wrong on your side. SITREP and LOG show dashes until the host turns the staff on.";

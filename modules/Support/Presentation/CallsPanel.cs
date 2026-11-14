@@ -20,17 +20,17 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {
-    /// <summary>The three tabs of the OPS bezel page.</summary>
-    internal enum OpsTab : byte { Fronts = 1, Perks = 2, Tasked = 3 }
+    /// <summary>The two tabs of the OPS bezel page.</summary>
+    internal enum OpsTab : byte { Fronts = 1, Perks = 2 }
 
     /// <summary>
-    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, the country strip, three icon
+    /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, the country strip, two icon
     /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards (status stamp, blocker,
     /// readiness, superiority, your support, programme phase) with an OPEN button each (the windows are <see cref="FrontController"/>'s);
-    /// PERKS lists the pilot's perks by front as call cards (clicking one ARMS it: arming spends nothing) and TASKED the faction's posted strikes as
-    /// package cards (clicking one inspects it). A strip pinned under the tabs (outside the scroller) shows the armed or inspected perk or package and
-    /// carries ARM / FIRE / DISARM, so those never scroll away; the cruise block (ADD LEG, CANCEL PICK, CLEAR ROUTE) sits in its page. Keys 1-3
-    /// switch tabs only while the pointer is over the page, and never a key a favourite is bound to. The panel owns no policy: every figure
+    /// PERKS lists the pilot's perks by front as call cards (clicking one ARMS it: arming spends nothing). A strip pinned under the tabs (outside
+    /// the scroller) shows the armed or inspected perk and carries ARM / FIRE / DISARM, so those never scroll away; the cruise block (ADD LEG,
+    /// CANCEL PICK, CLEAR ROUTE) heads the PERKS page while a salvo flies. The posted strike packages are jobs on MIS JOBS (<see cref="SupportJobs"/>).
+    /// Keys 1-2 switch tabs only while the pointer is over the page, and never a key a favourite is bound to. The panel owns no policy: every figure
     /// comes from <see cref="SupportManager"/> and every press goes through <see cref="CallsController"/> or <see cref="FrontController"/>.
     /// </summary>
     internal sealed class CallsPanel : MonoBehaviour, ISceneService
@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private SupportManager manager;
         private CallsController calls;
         private FrontController fronts;
-        private SpaceFeedController feed;
         private ManualLogSource logger;
 
         private readonly MfdPanelInstaller installer =
@@ -57,14 +56,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private OrderStrip strip;
         private CruisePart cruisePart;
         private AvSection[] groups;
-        private AvSection taskedGroup;
-        private readonly TaskedCardPart[] taskedRows = new TaskedCardPart[OpsPageView.MaxTaskedRows];
         private readonly int[] readyByFront = new int[FrontRules.FrontCount];
         private OpsTab tab = OpsTab.Fronts;
 
-        // Local inspection state: which perk and which post the strip shows. Inspecting never arms, spends or claims.
+        // Local inspection state: which perk the strip shows. Inspecting never arms or spends.
         private SupportActionId? inspectedPerk, lastArmed;
-        private int inspectedPost, lastArmedPost;
 
         private float nextRefresh, failedUntil;
         private bool refreshFaulted;
@@ -72,12 +68,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private int aimCellX = int.MinValue, aimCellZ;
         private string aimGrid = "";
 
-        public void Configure(SupportManager supportManager, CallsController callsController, FrontController frontController, SpaceFeedController feedController)
+        public void Configure(SupportManager supportManager, CallsController callsController, FrontController frontController)
         {
             manager = supportManager;
             calls = callsController;
             fronts = frontController;
-            feed = feedController;
             logger = installer.Log = ((ISupportHost)supportManager).Logger;
             installer.Builder = BuildScreen;
         }
@@ -88,14 +83,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
             console = null;
             allocationRow = null;
             groups = null; strip = null; cruisePart = null;
-            taskedGroup = null;
-            for (int i = 0; i < taskedRows.Length; i++) taskedRows[i] = null;
-            if (feed != null) feed.PanelWatch = false;
             for (int i = 0; i < cards.Length; i++) cards[i] = null;
             perkRows.Clear();
             tab = OpsTab.Fronts;
             inspectedPerk = lastArmed = null;
-            inspectedPost = lastArmedPost = 0;
             nextRefresh = failedUntil = 0f;
             pageCanvas = null;
         }
@@ -111,7 +102,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             if (Time.unscaledTime < failedUntil) return; // a fault backs the page off for a moment instead of killing it
 
             bool visible = console != null && screen.isActive && SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            if (feed != null) feed.PanelWatch = visible && tab == OpsTab.Tasked; // the TASKED rows need the SPACE posts
             if (visible) PollTabKeys();
             if (!visible || Time.unscaledTime < nextRefresh) return;
 
@@ -127,7 +117,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         // ---- Tab keys ---------------------------------------------------------------------------------
 
-        /// <summary>Digit keys 1-3 pick a tab, only with the pointer over the page (in flight the keys belong to the weapons), never while typing or with a modifier held.</summary>
+        /// <summary>Digit keys 1-2 pick a tab, only with the pointer over the page (in flight the keys belong to the weapons), never while typing or with a modifier held.</summary>
         private void PollTabKeys()
         {
             if (!Input.anyKeyDown) return;
@@ -135,7 +125,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) return;
             if (GameplayUI.GameIsPaused || !Application.isFocused) return;
             if (!C2Tabs.KeyAllowed(PointerOverPage(), false, InputFieldChecker.InsideInputField)) return;
-            for (int d = 1; d <= 3; d++)
+            for (int d = 1; d <= 2; d++)
             {
                 if (!Input.GetKeyDown(KeyCode.Alpha0 + d) && !Input.GetKeyDown(KeyCode.Keypad0 + d)) continue;
                 if (FavouriteOwns(KeyCode.Alpha0 + d) || FavouriteOwns(KeyCode.Keypad0 + d)) return; // one keypress, one action: a bound favourite wins, the tab does not switch
@@ -174,13 +164,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private void BuildConsole(RectTransform host, float height)
         {
-            console = AvConsole.Build(host, "OPS", "SUPPORT", 3, Width, height);
-            AvTabBar tabs = console.Tabs((AvIcon.Flag, "OPS FRONTS"), (AvIcon.Target, "PERKS"), (AvIcon.Clipboard, "TASKED"));
+            console = AvConsole.Build(host, "OPS", "SUPPORT", 2, Width, height);
+            AvTabBar tabs = console.Tabs((AvIcon.Flag, "OPS FRONTS"), (AvIcon.Target, "PERKS"));
             string[] hints =
             {
                 "[1] Ops fronts: status, blocker, your skill grade, superiority, your support, what is building. OPEN for its window.",
-                "[2] Click a perk to arm it, aim (pod, map right-click or a team laser), then FIRE.",
-                "[3] Click a posted strike to arm it, then FIRE claims and launches it. The cruise block steers your salvo."
+                "[2] Click a perk to arm it, aim (pod, map right-click or a team laser), then FIRE. The cruise block steers your salvo."
             };
             AvControl[] tabButtons = tabs.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabButtons.Length && i < hints.Length; i++) tabButtons[i].Help = hints[i];
@@ -197,10 +186,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
             for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront, tier));
             p0.Links(("WAR PLAN", "STR", "BOARD"), ("FUNDS", "FAC", "ECONOMY"));
 
-            // PERKS: the perks grouped by front as call cards. The pinned strip sits over the top of the page.
+            // PERKS: the flying cruise's block (only while one flies), then the perks grouped by front as call cards. The pinned strip sits over the top of the page.
             float stripSpace = OrderStrip.Height - AvGridTokens.Gap;
             AvFlow p1 = console.Page(1);
             p1.Space(stripSpace);
+            cruisePart = p1.Add(new CruisePart(p1.Content, () => calls?.AddLeg(), () => calls?.CancelPick(), () => calls?.ClearRoute()));
+            cruisePart.SetShown(false);
             groups = new AvSection[FrontRules.FrontCount];
             for (int f = 0; f < FrontRules.FrontCount; f++)
             {
@@ -209,21 +200,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 foreach (CallRow r in CallSheet.Rows)
                     if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, InspectPerk, r.Id));
             }
-            p1.Links(("TARGETS", "TGT", "TARGETS"), ("CAMERA MARK", "TGT", "CAMERA MARK"));
-
-            // TASKED: the flying cruise's block (only while one flies), then the posted strikes as package cards. Only real posts are drawn.
-            AvFlow p2 = console.Page(2);
-            p2.Space(stripSpace);
-            cruisePart = p2.Add(new CruisePart(p2.Content, () => calls?.AddLeg(), () => calls?.CancelPick(), () => calls?.ClearRoute()));
-            cruisePart.SetShown(false);
-            taskedGroup = p2.Section(AvIcon.Clipboard, "POSTED PACKAGES", "");
-            taskedGroup.SetShown(false);
-            for (int i = 0; i < taskedRows.Length; i++)
-            {
-                taskedRows[i] = p2.Add(new TaskedCardPart(p2.Content, InspectPost, "Perk Tasked " + i));
-                taskedRows[i].SetShown(false);
-            }
-            p2.Links(("JOBS", "MIS", "CONTRACTS"), ("SORTIES", "STR", "BOARD"));
+            p1.Links(("TARGETS", "TGT", "TARGETS"), ("JOBS", "MIS", "JOBS"));
 
             console.Orders(0,
                 "OPEN a front for its map, programmes and perks.",
@@ -232,10 +209,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             console.Orders(1,
                 "Click a perk to arm it. Nothing is spent until FIRE.",
                 "Aim with your pod or a team laser, or right-click the map (that fires at once). Otherwise press FIRE.",
-                "DISARM spends nothing. Keys: bind CallSlot 1-4 in the mod settings (Support Keys).");
-            console.Orders(2,
-                "Click a package to arm it (nothing is claimed yet); FIRE claims it and launches.",
-                "ADD LEG, then right-click the map: one leg per press. CANCEL PICK keeps the route; CLEAR ROUTE drops it.");
+                "DISARM spends nothing. Keys: bind CallSlot 1-4 in the mod settings (Support Keys).",
+                "A flying cruise: ADD LEG, then right-click the map, one leg per press. CANCEL PICK keeps the route; CLEAR ROUTE drops it.");
             console.Finish();
 
             // The strip is a direct child of the console, after every page canvas, so it draws and takes clicks over scrolled content. It is
@@ -253,19 +228,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
             fronts?.Open(front);
         }
 
-        /// <summary>The strip's primary button: ARM prepares (and never fires), FIRE sends only the exact perk or post armed right now.</summary>
+        /// <summary>The strip's primary button: ARM prepares (and never fires), FIRE sends only the exact perk armed right now.</summary>
         private void StripPress(bool fire, int id)
         {
             if (calls == null) return;
-            if (tab == OpsTab.Tasked)
-            {
-                if (fire) calls.FireTasked(id); else calls.ArmTasked(id);
-            }
-            else
-            {
-                var perk = (SupportActionId)id;
-                if (fire) calls.FireArmed(perk); else calls.Arm(perk);
-            }
+            var perk = (SupportActionId)id;
+            if (fire) calls.FireArmed(perk); else calls.Arm(perk);
             nextRefresh = 0f; // repaint on the next frame: the press feedback does not wait for the 0.2 s tick
         }
 
@@ -274,14 +242,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         {
             inspectedPerk = id;
             calls?.Arm(id);
-            nextRefresh = 0f;
-        }
-
-        /// <summary>A package card click arms it (local only: nothing is claimed or spent until FIRE); a refused arm still shows the package and why.</summary>
-        private void InspectPost(int postId)
-        {
-            inspectedPost = postId;
-            calls?.ArmTasked(postId);
             nextRefresh = 0f;
         }
 
@@ -312,12 +272,10 @@ namespace BoscaliSummer.Modules.Support.Presentation
 #if !PUBLIC_RELEASE
         /// <summary>Automation: what a perk card click does.</summary>
         internal void ClickPerk(SupportActionId id) => InspectPerk(id);
-        /// <summary>Automation: what a package card click does.</summary>
-        internal void ClickPost(int postId) => InspectPost(postId);
-        /// <summary>Automation: the strip's primary button (ARM or FIRE, as painted) on the open tab.</summary>
+        /// <summary>Automation: the strip's primary button (ARM or FIRE, as painted).</summary>
         internal void PressStrip()
         {
-            StripView sv = tab == OpsTab.Tasked ? view.PostStrip : view.PerkStrip;
+            StripView sv = view.PerkStrip;
             if (sv.Has && sv.PrimaryEnabled) StripPress(sv.PrimaryFire, sv.Id);
         }
         /// <summary>Automation: the strip's DISARM button.</summary>
@@ -346,10 +304,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             FrontMirror fm = manager.FrontMirror;
             OpsPageViews.Cards(view, fm.State, fm.Known, now, manager.Online, manager.LocalGrades());
             OpsPageViews.Order(view, tiles, calls.AimNow, AimGridNow(), calls.Pending, calls.LastWords, inspectedPerk);
-            SpaceFeedMirror sm = manager.SpaceMirror;
-            if (!sm.Known) inspectedPost = 0; // post ids restart with each faction's desk and each mission: a pick must not outlive the mirror it was made on and land on another faction's post
-            OpsPageViews.Tasked(view, sm.State.Posts, sm.Known, now, calls.TaskedArmedId, calls.TaskedClaimPending, inspectedPost);
-            if (view.PostGone) inspectedPost = OpsPageViews.PostGone; // the strip keeps saying so; nothing else is selected in its place
             view.CruiseFlying = manager.TryFlyingCruise(out int cruiseId, out view.CruiseLegs);
             view.CruiseRoute = view.CruiseFlying ? RouteLine(manager.CruiseLegs(cruiseId)) : "";
             view.Steering = calls.SteeringCruise;
@@ -358,13 +312,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             Paint(view);
         }
 
-        /// <summary>The strip follows the live order: a perk or post that just became armed (here or from a hotkey) is the one inspected.</summary>
+        /// <summary>The strip follows the live order: a perk that just became armed (here or from a hotkey) is the one inspected.</summary>
         private void FollowArm()
         {
             SupportActionId? armed = calls.Armed;
             if (armed != lastArmed) { lastArmed = armed; if (armed.HasValue) inspectedPerk = armed; }
-            int post = calls.TaskedArmedId;
-            if (post != lastArmedPost) { lastArmedPost = post; if (post != 0) inspectedPost = post; }
         }
 
         private string AimGridNow()
@@ -389,6 +341,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
             if (tab == OpsTab.Perks)
             {
+                bool cruiseOn = v.CruiseFlying || v.Steering; // the block exists only while there is a salvo to steer
+                cruisePart.SetShown(cruiseOn);
+                if (cruiseOn) cruisePart.Paint(v);
                 Array.Clear(readyByFront, 0, readyByFront.Length);
                 foreach (PerkRowView p in v.Perks)
                 {
@@ -398,15 +353,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 for (int f = 0; f < groups.Length; f++) groups[f].SetCaption((v.PowerLine[f].Length > 0 ? v.PowerLine[f] + " · " : "") + readyByFront[f] + " READY");
                 strip?.Paint(v.PerkStrip.Has ? v.PerkStrip : OpsPageViews.Idle("WAITING FOR HOST", "NO PERKS READ YET", "", AvState.Inert));
             }
-            if (tab == OpsTab.Tasked)
-            {
-                PaintTasked(v);
-                strip?.Paint(v.PostStrip.Has ? v.PostStrip : OpsPageViews.Idle("WAITING FOR HOST", "THE SPACE FEED HAS NOT ANSWERED YET", "", AvState.Inert));
-            }
 
             string words; AvState tone;
             if (tab == OpsTab.Perks) { words = v.Words.Length > 0 ? v.Words : "CLICK A PERK TO ARM IT, AIM, THEN FIRE"; tone = v.WordsTone; }
-            else if (tab == OpsTab.Tasked) { words = v.Words.Length > 0 ? v.Words : "CLICK A POSTED STRIKE TO ARM IT, THEN FIRE"; tone = v.WordsTone; }
             else if (v.FrontWords.Length > 0) { words = v.FrontWords; tone = v.FrontWordsTone; }
             else { words = "OPEN A FRONT FOR ITS MAP, PROGRAMMES AND PERKS"; tone = AvState.Ready; }
             console.Footer.Set(words, tone);
@@ -418,21 +367,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             var parts = new string[legs.Count];
             for (int i = 0; i < legs.Count; i++) parts[i] = OpsKit.Grid((float)legs[i].x, (float)legs[i].z);
             return string.Join(" › ", parts);
-        }
-
-        private void PaintTasked(OpsPageView v)
-        {
-            bool cruiseOn = v.CruiseFlying || v.Steering; // the block exists only while there is a salvo to steer
-            cruisePart.SetShown(cruiseOn);
-            if (cruiseOn) cruisePart.Paint(v);
-            taskedGroup.SetShown(v.Tasked.Count > 0);
-            taskedGroup.SetCaption(v.TaskedTotal > v.Tasked.Count ? v.Tasked.Count + " OF " + v.TaskedTotal + " OPEN" : v.TaskedTotal + " OPEN");
-            for (int i = 0; i < taskedRows.Length; i++)
-            {
-                bool has = i < v.Tasked.Count; // only real posts are drawn: an empty slot is hidden, not painted as a dead row
-                taskedRows[i].SetShown(has);
-                if (has) taskedRows[i].Paint(v.Tasked[i]);
-            }
         }
     }
 }
