@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
-            flow.Links(("IDENTITY AND STUDIO", "PILOT", "STUDIO"), ("JOBS FOR THE WING", "MIS", null));
+            flow.Links(("IDENTITY AND STUDIO", "PILOT", "STUDIO"), ("JOBS FOR THE WING", "MIS", "JOBS"));
             ShowSub(SubOrders);
         }
 

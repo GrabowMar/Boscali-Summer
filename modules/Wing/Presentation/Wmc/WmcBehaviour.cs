@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             overrideSection = flow.Section(AvIcon.Target, "OVERRIDES", "");
             overrides = flow.Add(new OverrideView(flow.Content, ticker, MaxOverrides, BindOverride));
             overrides.Prime(MaxOverrides);
-            flow.Links(("SORTIES", "STR", "BOARD"), ("JOBS", "MIS", "CONTRACTS"));
+            flow.Links(("SORTIES", "STR", "BOARD"), ("JOBS", "MIS", "JOBS"));
         }
 
         private void Add(string key, string[] labels, string[] tips, Kind kind, DoctrineAxis axis)
