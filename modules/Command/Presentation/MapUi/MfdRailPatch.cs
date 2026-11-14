@@ -255,7 +255,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureNewsTicker(canvas, columns);
-            EnsureLogPanel(canvas, columns);
             MfdScreenFinish.Ensure(canvas);
 
             applied = true;
@@ -558,7 +557,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdMapDeck.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureNewsTicker(canvas, columns);
-            EnsureLogPanel(canvas, columns);
             MfdScreenFinish.Ensure(canvas);
 
             appliedCanvasSize = columns.Canvas;
@@ -568,12 +566,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
             if (mfd != null) MfdMapFooter.Ensure(canvas, columns, mfd);
-        }
-
-        private static void EnsureLogPanel(Canvas canvas, MfdLayout.Columns columns)
-        {
-            VirtualMFD mfd = MapMfdLookup.Resolve(canvas);
-            if (mfd != null) MfdLogPanel.Ensure(canvas, columns, mfd);
         }
 
         private static void EnsureNewsTicker(Canvas canvas, MfdLayout.Columns columns)
@@ -607,7 +599,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
             MfdNewsTicker.Restore();
-            MfdLogPanel.Park();
             MfdMapFooter.Restore();
             MfdMapDeck.Restore();
             MfdScreenFinish.Restore();
@@ -640,7 +631,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             containers.Clear();
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
             MfdNewsTicker.Reset();
-            MfdLogPanel.Reset();
+            TacticalLog.Reset();
             MfdMapFooter.Reset();
             MfdMapDeck.Reset();
             map = null;

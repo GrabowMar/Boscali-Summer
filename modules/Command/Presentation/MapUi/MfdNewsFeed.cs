@@ -428,9 +428,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>
         /// Periodic theater color from CommandManager. The numbers only choose which
         /// qualitative dispatch runs — the wire never prints tallies, percentages or
-        /// unit counts, because the desk is writing for morale, not for the staff.
+        /// unit counts, because the desk is writing for morale, not for the staff. Returns the breaking headline it pushed, else null:
+        /// the ticker files that one in the game log (EVN LOG).
         /// </summary>
-        public void UpdateTheaterStatus(
+        public HeadlineItem UpdateTheaterStatus(
             float now,
             int defcon,
             float territoryRatio,
@@ -438,48 +439,39 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int activeClashes,
             int contestedAirbases)
         {
-            if (now - lastTheaterHeadlineTime < TheaterHeadlineSeconds) return;
+            if (now - lastTheaterHeadlineTime < TheaterHeadlineSeconds) return null;
             lastTheaterHeadlineTime = now;
 
-            if (contestedAirbases > 0)
+            if (contestedAirbases > 0 || (defcon >= 1 && defcon <= 2))
             {
-                PushUrgent(new HeadlineItem(
-                    "SITREP",
-                    "#FF5533",
-                    "FORWARD CONTEST: RESISTANCE REPORTED AT CONTESTED BASE PERIMETERS — CIVIL AFFAIRS TEAMS STANDING BY",
-                    Priority.Major), now);
-                return;
-            }
-
-            if (defcon >= 1 && defcon <= 2)
-            {
-                PushUrgent(new HeadlineItem(
-                    "DEFCON ALERT",
-                    "#FF2222",
-                    "THEATER DEFCON RAISED — STRATEGIC ALERT IN EFFECT ACROSS ALL SECTORS",
-                    Priority.Major), now);
-                return;
+                HeadlineItem breaking = contestedAirbases > 0
+                    ? new HeadlineItem("SITREP", "#FF5533",
+                        "FORWARD CONTEST: RESISTANCE REPORTED AT CONTESTED BASE PERIMETERS — CIVIL AFFAIRS TEAMS STANDING BY", Priority.Major)
+                    : new HeadlineItem("DEFCON ALERT", "#FF2222",
+                        "THEATER DEFCON RAISED — STRATEGIC ALERT IN EFFECT ACROSS ALL SECTORS", Priority.Major);
+                PushUrgent(breaking, now);
+                return breaking;
             }
 
             if (activeClashes > 3)
             {
                 Enqueue(new HeadlineItem("HOT ZONE", "#FFAA22",
                     "FRONT ENGAGEMENTS REPORTED ACROSS THE THEATER — FIELD DESKS FILING AROUND THE CLOCK"));
-                return;
+                return null;
             }
 
             if (!float.IsNaN(territoryRatio) && territoryRatio > 0.65f)
             {
                 Enqueue(new HeadlineItem("FRONT ADVANCE", "#44EE88",
                     "STRATEGIC ASSESSMENT: ALLIED GROUND FORCES PRESSING THE ADVANTAGE ALONG THE FRONT"));
-                return;
+                return null;
             }
 
             if (!float.IsNaN(territoryRatio) && territoryRatio < 0.35f)
             {
                 Enqueue(new HeadlineItem("DEFENSE ALERT", "#FF6644",
                     "FRONT ASSESSMENT: ALLIED FORCES YIELDING GROUND — DEFENSE CORRIDORS UNDER STRAIN"));
-                return;
+                return null;
             }
 
             switch (theaterIndex++ % 3)
@@ -505,6 +497,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         "NO DECISIVE MOVEMENT ON THE FRONT — RECON PATROLS REPORT EMPTY SKIES OVER THE SECTOR"));
                     break;
             }
+            return null;
         }
 
         /// <summary>
@@ -623,7 +616,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return false;
         }
 
-        private static string CleanTags(string input)
+        internal static string CleanTags(string input)
         {
             if (string.IsNullOrEmpty(input)) return "";
             // Untagged lines are the common case and are already clean.

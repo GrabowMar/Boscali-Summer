@@ -171,8 +171,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
-            float height = AvLay.ResolveHeight(
-                parent.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.BayHeight(parent);
             rt.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
             rt.localScale = Vector3.one;
             rt.SetAsLastSibling();

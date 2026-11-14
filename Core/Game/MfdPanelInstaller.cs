@@ -201,7 +201,8 @@ namespace BoscaliSummer.Core.Game
 
         /// <summary>
         /// A screen root in the stock screen's bay: the template's anchors, pivot and scale, the
-        /// height the bay gives it, and the kit panel width. Position is deliberately not
+        /// height the map's left bay gives it (<see cref="AvLay.BayHeight"/>; the stock column is
+        /// shorter than the bay), and the kit panel width. Position is deliberately not
         /// copied: <c>MFDScreen.ShowScreen</c> assigns <c>VirtualMFD.showPos</c> (zero) straight
         /// to localPosition, so a screen is placed by its parent and anchors.
         /// </summary>
@@ -219,7 +220,7 @@ namespace BoscaliSummer.Core.Game
             rect.pivot = templateRect.pivot;
             rect.localScale = templateRect.localScale;
 
-            height = AvLay.ResolveHeight(templateRect.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            height = AvLay.BayHeight(templateRect);
             rect.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
             if (clamp) AvLay.ClampIntoCanvas(rect);
 

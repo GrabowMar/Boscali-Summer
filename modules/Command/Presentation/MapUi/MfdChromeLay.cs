@@ -5,7 +5,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// Placement helper for the Theater Wire (<see cref="MfdNewsTicker"/>, <see cref="MfdLogPanel"/>)
+    /// Placement helper for the Theater Wire (<see cref="MfdNewsTicker"/>)
     /// and the MFD index rail (<see cref="MfdRail"/>): kit v2 chrome built on kit v2 primitives
     /// (<see cref="AvFrame"/>, <see cref="AvLay"/>), kept local to this module.
     ///

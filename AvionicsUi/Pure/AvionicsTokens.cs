@@ -107,12 +107,16 @@ namespace NOAvionics
         /// <summary>
         /// The tallest a panel may grow when its column has the room.
         ///
-        /// The left bay is about 918px at 1080p once the mission clock and the spawn strip
-        /// are reserved, and the panels used to take 596 of it. This sits a module below
-        /// that bay so a panel cannot overhang the strip it was reserved away from.
+        /// The left bay runs from the canvas's bottom margin up to under the news ticker:
+        /// 1026px at 1080p (<see cref="BayReserve"/>). The map's old left log panel took the
+        /// top of it; the log is on EVN LOG now, so a panel fills the bay.
         /// <see cref="PanelHeight"/> stays the floor and the fallback, so a screen with no
-        /// measurable parent is exactly what it always was.
+        /// measurable canvas is exactly what it always was.
         /// </summary>
-        public const float PanelHeightMax = 896f;
+        public const float PanelHeightMax = 1026f;
+
+        /// <summary>What the bay keeps off the canvas height: the news ticker (8 margin + 30), one 8 px gutter under it, and the 8 px
+        /// bottom margin.</summary>
+        public const float BayReserve = 54f;
     }
 }
