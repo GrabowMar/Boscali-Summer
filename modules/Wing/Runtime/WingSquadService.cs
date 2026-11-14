@@ -84,13 +84,6 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return names;
         }
 
-        public bool OpenPilotStudio()
-        {
-            AvConsole.Open("PILOT", "STUDIO");
-            squadron?.ShowSubNamed("STUDIO");
-            return true;
-        }
-
         // ponytail: one hosted squadron (the latest PILOT build); the console it lived on takes the old one with it.
         private WmcWing squadron;
 

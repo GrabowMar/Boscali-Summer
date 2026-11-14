@@ -69,9 +69,6 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The saved pilots' callsigns in studio order.</summary>
         string[] SavedPilotCallsigns();
 
-        /// <summary>Open PILOT STUDIO on the saved-pilot editor. False when it cannot open.</summary>
-        bool OpenPilotStudio();
-
         /// <summary>Builds the squadron (pilot roster with personnel files, and the pilot studio) into another console's page, once at
         /// build; it refreshes on that page's ticker. PILOT STUDIO hosts it.</summary>
         void BuildSquadron(int page, NOAvionics.AvFlow flow, NOAvionics.AvConsole console);

@@ -153,14 +153,6 @@ namespace BoscaliSummer.Core.Game
             catch (Exception error) { FailSquad(error); return Array.Empty<string>(); }
         }
 
-        /// <summary>Open the WMC SQUADRON > STUDIO page, where saved pilots are edited.</summary>
-        public static bool OpenPilotStudio()
-        {
-            if (!ResolveSquad()) return false;
-            try { return squad.OpenPilotStudio(); }
-            catch (Exception error) { FailSquad(error); return false; }
-        }
-
         public static bool IsWingMember(int persistentIdHash)
         {
             // The in-tree wing publishes its roster on the presence board on every
