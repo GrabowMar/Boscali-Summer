@@ -54,7 +54,8 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
     internal struct ShopBase
     {
-        public bool On, Carrier, HangarReady, Picked;
+        /// <summary>Here: the caller sits on this field (a carrier's deck).</summary>
+        public bool On, Carrier, HangarReady, Picked, Here;
         public float DistSq;
     }
 
@@ -135,18 +136,24 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 if (!b.On) continue;
                 if (jet && b.Carrier)
                 {
-                    // Issue #37: a carrier is a jet's last resort (it air-starts astern), only when no land field is on.
-                    if (deck < 0 || b.Picked || (!bases[deck].Picked && b.DistSq < bases[deck].DistSq)) deck = i;
+                    // Issue #37: a jet off a carrier air-starts astern. The picked carrier, else the one the caller sits on, else the nearest.
+                    int rank = DeckRank(b), best = deck < 0 ? -1 : DeckRank(bases[deck]);
+                    if (rank > best || (rank == best && b.DistSq < bases[deck].DistSq)) deck = i;
                     continue;
                 }
                 if (nearest < 0 || b.DistSq < bases[nearest].DistSq) nearest = i;
                 if (b.Picked) picked = i;
                 if (b.HangarReady && (ready < 0 || b.DistSq < bases[ready].DistSq)) ready = i;
             }
+            // The player's carrier wins over land fields: picked on the radial, or the deck they sit on unless a land field is picked.
+            // Otherwise a carrier is the last resort, only when no land field is on.
+            if (deck >= 0 && (bases[deck].Picked || (bases[deck].Here && picked < 0))) return deck;
             if (nearest < 0) return deck;
             if (mode == LaunchMode.Any && ready >= 0) return ready;
             return picked >= 0 ? picked : nearest;
         }
+
+        private static int DeckRank(in ShopBase b) => b.Picked ? 2 : b.Here ? 1 : 0;
 
         // ---- words
 

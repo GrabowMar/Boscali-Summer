@@ -201,7 +201,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 bases[i] = f == null ? default : new ShopBase
                 {
                     On = IsOn(f), Carrier = f.AttachedAirbase, HangarReady = HangarReady(f, d), Picked = ReferenceEquals(f, picked),
-                    DistSq = (f.transform.position - at).sqrMagnitude,
+                    Here = WingService.OnDeck(caller, f), DistSq = (f.transform.position - at).sqrMagnitude,
                 };
             }
             int k = ShopRules.PickBase(Mode, IsJet(d), bases, Fields.Count);

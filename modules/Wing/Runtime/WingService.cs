@@ -623,30 +623,34 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return fields;
         }
 
-        /// <summary>Fields <paramref name="type"/> can launch from: a helicopter from any; a jet from a land field, or from a
-        /// carrier only when no land field is left (issue #37: it air-starts astern of the ship, since assault carriers have no
-        /// taxi network and narrow deck runways; deck operations are M3d's).</summary>
-        private static List<Airbase> LaunchFields(Aircraft caller, AircraftDefinition type)
-        {
-            List<Airbase> fields = FriendlyFields(caller);
-            if (ProfileReader.ClassOf(type ?? caller.definition) == AirframeClass.FixedWing && fields.Exists(b => !b.AttachedAirbase))
-                fields.RemoveAll(b => b.AttachedAirbase);
-            return fields;
-        }
-
-        /// <summary>The picked field while it is still usable, else the nearest friendly field <paramref name="type"/> can
-        /// launch from.</summary>
+        /// <summary>The picked field while it is still friendly, else the nearest friendly field. A helicopter takes any; a jet takes
+        /// the carrier <paramref name="caller"/> sits on, else the nearest land field, a carrier only when none is left (issue #37: a jet
+        /// off a carrier air-starts astern of the ship, since assault carriers have no taxi network and narrow deck runways; deck
+        /// operations are M3d's).</summary>
         public Airbase FieldFor(Aircraft caller, AircraftDefinition type = null)
         {
-            List<Airbase> fields = LaunchFields(caller, type);
+            List<Airbase> fields = FriendlyFields(caller);
             if (LaunchField != null && fields.Contains(LaunchField)) return LaunchField;
-            return fields.Count > 0 ? fields[0] : null;
+            if (fields.Count == 0 || ProfileReader.ClassOf(type ?? caller.definition) != AirframeClass.FixedWing) return fields.Count > 0 ? fields[0] : null;
+            return fields.Find(b => OnDeck(caller, b)) ?? fields.Find(b => !b.AttachedAirbase) ?? fields[0];
         }
 
-        /// <summary>Picks the next friendly field (nearest first, wrapping).</summary>
-        public Airbase NextField(Aircraft caller, AircraftDefinition type = null)
+        /// <summary>On a carrier's deck, or just over it: within its ship's radius and under <see cref="DeckHeight"/> above the
+        /// carrier. ponytail: a box test, not a deck contact check; a jet low over the bow counts as sitting on it.</summary>
+        public static bool OnDeck(Aircraft a, Airbase carrier)
         {
-            List<Airbase> fields = LaunchFields(caller, type);
+            if (a == null || carrier == null || !carrier.AttachedAirbase) return false;
+            float r = carrier.TryGetAttachedUnit(out Unit ship) && ship != null ? ship.maxRadius : DeckRadius;
+            Vector3 d = a.transform.position - carrier.transform.position;
+            return d.y < DeckHeight && d.x * d.x + d.z * d.z < r * r;
+        }
+
+        public static float DeckRadius = 150f, DeckHeight = 60f;
+
+        /// <summary>Picks the next friendly field (nearest first, wrapping); a carrier too, for any class (a jet air-starts astern).</summary>
+        public Airbase NextField(Aircraft caller)
+        {
+            List<Airbase> fields = FriendlyFields(caller);
             if (fields.Count == 0) return LaunchField = null;
             int i = LaunchField != null ? fields.IndexOf(LaunchField) : -1;
             return LaunchField = fields[(i + 1) % fields.Count];
