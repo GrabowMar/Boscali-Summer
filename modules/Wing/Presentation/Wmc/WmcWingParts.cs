@@ -467,46 +467,4 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             slot.color = AvInk.Dim;
         }
     }
-
-    /// <summary>AIRCRAFT's member chips (one per aircraft, in slot order) and CENTER.</summary>
-    internal sealed class InspectChips : AvPart
-    {
-        private const float ChipW = 40f, ChipH = 28f;
-        private readonly AvControl[] chips;
-
-        public readonly AvControl Center;
-
-        public InspectChips(RectTransform parent, int count, Action<int> pick, Action center)
-        {
-            Rect = AvLay.Child(parent, "InspectChips");
-            chips = new AvControl[count];
-            for (int i = 0; i < count; i++)
-            {
-                int k = i;
-                chips[i] = AvControl.Make(Rect, new AvControl.Spec("", () => pick(k)));
-                chips[i].gameObject.SetActive(false);
-            }
-            Center = AvControl.Make(Rect, new AvControl.Spec("CENTER", center, AvButtonStyle.Default, AvIcon.CurrentLocation));
-            Center.Help = "Centre the map on this aircraft (the view stays there until you move it or press FIT).";
-            Restyle();
-        }
-
-        public AvControl this[int i] => chips[i];
-
-        public override float Measure(float width) => AvGridTokens.Row;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float y = (s.H - ChipH) * 0.5f;
-            for (int i = 0; i < chips.Length; i++) AvLay.Place(chips[i].Rect, i * (ChipW + 3f), y, ChipW, ChipH);
-            AvLay.Place(Center.Rect, s.W - 96f, y, 96f, ChipH);
-        }
-
-        public override void Restyle()
-        {
-            foreach (AvControl c in chips) c.Restyle();
-            Center.Restyle();
-        }
-    }
 }

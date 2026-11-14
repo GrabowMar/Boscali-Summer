@@ -15,11 +15,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
     /// "PILOT" (registry id SQD) — pilot status, the shared OPS skill board (SPACE, CYBER, SOF),
-    /// enemy ace roster, and the squadron emblem page with a launcher for the Wing Command pilot studio. Reads encounter
-    /// snapshots only; Wing Command owns aircraft orders, custom-pilot files and pilot
+    /// enemy ace roster, and STUDIO: the squadron (roster and pilot studio, built by Wing through <see cref="IWingSquad"/>) above the
+    /// emblem paint shop. Reads encounter snapshots only; Wing owns aircraft orders, custom-pilot files and pilot
     /// generation. Emblems and the local pilot profile are client-local cosmetics.
     /// Built entirely from kit v2 (spec 2026-09-28-fui-panel-polish-design.md): one
-    /// <see cref="AvConsole"/> with five icon tabs over a paged <see cref="AvFlow"/> body.
+    /// <see cref="AvConsole"/> with four icon tabs over a paged <see cref="AvFlow"/> body.
     /// </summary>
     internal sealed partial class SqdMfdPanel : MonoBehaviour, ISceneService
     {
@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private const int TabSkills = 1;
         private const int TabWings = 2;
         private const int TabStudio = 3;
-        private const int TabPlane = 4;
         private const int WingRowsPerPage = 2;
 
         private ProgressionManager progression;
@@ -88,7 +87,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             ResetPilotPage();
             ResetWingsPage();
             ResetStudioPage();
-            ResetPlanePage();
 
             emblemSprite = null;
             emblemDrawnFile = null;
@@ -135,22 +133,20 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private RectTransform BuildScreen(RectTransform content, float height)
         {
-            console = AvConsole.Build(content, "PILOT", "PERSONNEL", 5, Width, height);
+            console = AvConsole.Build(content, "PILOT", "PILOT", 4, Width, height);
             console.PageChanged += OnTabChanged;
             // No header tiles: SCORE, RANK and PICKS are on the PILOT page (ID card, PICK LEDGER) and SKILLS says the picks in hand.
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.User, "PILOT"),
                 (AvIcon.Star, "SKILLS"),
                 (AvIcon.Skull, "ACES"),
-                (AvIcon.Pencil, "STUDIO"),
-                (AvIcon.Plane, "PLANE"));
+                (AvIcon.Pencil, "STUDIO"));
             AttachTabHelp(tabBar);
 
             BuildPilotPage(console.Page(TabPilot));
             BuildSkillsPage(console.Page(TabSkills));
             BuildWingsPage(console.Page(TabWings));
             studioPageFlow = console.Page(TabStudio);
-            BuildPlanePage(console.Page(TabPlane));
             SetStandingOrders();
             console.Finish();
             return null;
@@ -163,7 +159,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "Read the flight log before you taxi: fuel state, aircraft condition and life mode.",
                 "Free picks are spent on the SKILLS tab. A committed pick cannot be withdrawn.",
                 "Grade 1 of every OPS lane is free; picks buy grades 2 to 6.",
-                "Callsign, portrait and service background come from your Wing Command profile.");
+                "Callsign, portrait and service background come from the saved pilot you fly as (STUDIO).");
             console.Orders(TabSkills,
                 "Tap an open grade to read what it buys, then commit it. One pick, no undo.",
                 "A grade needs the grade before it. Grade 1 of every lane is free.",
@@ -175,15 +171,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "An ace kill earns one skill point; a returning ace has met you before.",
                 "Wing management stays in Wing Command; this board only reports.");
             console.Orders(TabStudio,
+                "ROSTER: a row opens that pilot's personnel file; RECRUIT adds a pilot, STUDIO › changes their look and identity.",
+                "STUDIO writes saved pilots and PNG portraits; SAVE keeps them for every mission, FLY AS makes one yours.",
                 "Roll fresh proofs, then tap one to adopt it; the insignia you had takes its place.",
-                "A PNG in the emblem folder overrides the generated insignia; NO ART clears it.",
-                "Tail-fin paint shows on your own aircraft only: OFF, COLOUR or LOW-VIS.",
-                "FLY AS picks the saved pilot this dossier shows; pilots and PNG portraits are made in the Wing Command studio.");
-            console.Orders(TabPlane,
-                "Read the status card on the ramp: damage, fuel state and discrepancies come first.",
-                "Choose an engine map, then land to apply it; it cannot change in the air.",
-                "STOCK gives full throttle; RANGE saves 10% fuel and caps throttle at 85%.",
-                "The crew chief's call is in the footer: low fuel, damage and missile warnings.");
+                "Tail-fin paint shows on your own aircraft only: OFF, COLOUR or LOW-VIS.");
         }
 
         /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
@@ -194,8 +185,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 "PILOT: your dossier. ID card, this sortie, the pick rings and every OPS lane at a glance.",
                 "SKILLS: the OPS skill tree, three lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
                 "ACES: your flight and the known hostile ace wings, with threat, skills and who they are hunting. Wing management stays in Wing Command.",
-                "STUDIO: design the squadron emblem and name, or open the Wing Command pilot studio to write custom pilots. Everything stays on this machine.",
-                "PLANE: a live dossier of the aircraft you fly. Damage, engine map, flight data, systems, stores and the worst parts.",
+                "STUDIO: the squadron's pilots and their files, the pilot studio, the squadron emblem and name. Saved pilots and art stay on this machine.",
             };
             AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
             for (int i = 0; i < tabs.Length && i < hints.Length; i++) tabs[i].Help = hints[i];
@@ -240,7 +230,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 case TabSkills: RefreshSkillsPage(); break;
                 case TabWings: RefreshWingsPage(); break;
                 case TabStudio: RefreshStudioPage(); break;
-                case TabPlane: RefreshPlanePage(); break;
             }
 
             UpdateFooter();
@@ -252,7 +241,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             string baseLine = console.CurrentPage == TabWings
                 ? (squad != null ? squad.Status : "No ace reports reach this console.")
                 : console.CurrentPage == TabStudio ? StudioStatusLine()
-                : console.CurrentPage == TabPlane ? planeStatus
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
             // A running ace hunt is the one alert every tab must carry; it used to live in a header chip.

@@ -5,18 +5,18 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>CENTER, FIT and FOLLOW on the game's maximized map (spec bezel v2 §6; critic §14.12). A request waits for the
+    /// <summary>FIT and FOLLOW on the game's maximized map (spec bezel v2 §6; critic §14.12). A request waits for the
     /// game's own MapControls (the patch applies it first thing), which then draws the map from the offsets in the same frame:
     /// nothing flickers about the mouse, and the view stays where it was put — the game stops following once the offset is not
-    /// zero (the old SetMapTarget glide snapped back when it ended). With the private offsets missing (a game update), CENTER
-    /// falls back to the glide and FIT does nothing, with one warning.</summary>
+    /// zero (the old SetMapTarget glide snapped back when it ended). With the private offsets missing (a game update), FIT does
+    /// nothing, with one warning.</summary>
     internal static class WmcMap
     {
         private static AccessTools.FieldRef<DynamicMap, Vector2> positionOffset, stationaryOffset;
         private static bool resolved, usable, pending, hasZoom, follow, warned;
         private static float atX, atZ, zoom;
 
-        /// <summary>FIT and a steady CENTER are available (the game's view fields were found).</summary>
+        /// <summary>FIT is available (the game's view fields were found).</summary>
         public static bool Usable
         {
             get
@@ -39,30 +39,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             catch (System.Exception e)
             {
                 usable = false;
-                WingLog.Logger.LogWarning("[WMC] map view fields not found (" + e.Message + "): FIT is off and CENTER glides.");
+                WingLog.Logger.LogWarning("[WMC] map view fields not found (" + e.Message + "): FIT is off.");
             }
-        }
-
-        public static void Center(Unit unit)
-        {
-            if (unit == null) return;
-            GlobalPosition g = unit.GlobalPosition();
-            Center(g.x, g.z);
-        }
-
-        /// <summary>Puts world point (<paramref name="x"/>, <paramref name="z"/>) at the view's centre; the zoom stays.</summary>
-        public static void Center(float x, float z)
-        {
-            if (!Usable)
-            {
-                SceneSingleton<DynamicMap>.i?.SetMapTarget(new GlobalPosition(x, 0f, z));
-                return;
-            }
-            atX = x;
-            atZ = z;
-            follow = false;
-            hasZoom = false;
-            pending = true;
         }
 
         /// <summary>Frames <paramref name="box"/> (8 km at least, 15 % margin).</summary>
