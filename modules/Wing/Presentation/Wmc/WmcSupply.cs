@@ -49,7 +49,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildPilot(flow);
             BuildFit(flow);
             BuildBase(flow);
-            flow.Links(("FUNDS", "FAC", "ECONOMY"), ("PRODUCTION", "STR", null));
+            flow.Links(("FUNDS AND PRODUCTION", "FAC", "ECONOMY"), ("LOADOUT", "WMC", "LOADOUT"));
         }
 
         /// <summary>A step header's caption: the state word, with the glyph a caution or danger carries.</summary>

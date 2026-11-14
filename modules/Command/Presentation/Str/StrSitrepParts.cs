@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>A tug-of-war balance bar of the SITREP tab: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track.</summary>
+    /// <summary>A tug-of-war balance bar of the BOARD's FORCE BALANCE: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track.</summary>
     internal sealed class StrBalanceBar : StrPart
     {
         private const float BarH = 12f;

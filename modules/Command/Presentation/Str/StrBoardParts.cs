@@ -318,7 +318,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         protected override void Apply(StrViewModel vm)
         {
             StrPagePlan plan = StrPagePlan.For(vm.Mode);
-            bool on = (bottom ? plan.PostureBottom : plan.PostureTop) && !StrNation.Active;   // the nation desk shows one WAR PLAN chip instead
+            bool on = (bottom ? plan.PostureBottom : plan.PostureTop) && !StrNation.Active;   // the nation desk shows the WAR PLAN row instead
             SetShown(on);
             if (!on) return;
             for (int i = 0; i < 3; i++)

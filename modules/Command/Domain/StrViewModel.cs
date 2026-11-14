@@ -179,7 +179,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>-1 unknown (printed as a dash).</summary>
         public int Cost = -1, Pool = -1;
         public StrTri Affordable = StrTri.Unknown;
-        /// <summary>"EARNING 2/3", "READY", "HELD, POOL SHORT"; the group name; "POOL 7,400 to 5,550" or "POOL 7,400, NEEDS 1,850"; the last-wave line.</summary>
+        /// <summary>"EARNING 2/3", "READY", "HELD, FUNDS SHORT"; the group name; "COST 1,850" or the held reason; the last-wave line.</summary>
         public string StateText = "", GroupText = "", PoolText = "", LastText = "";
         public bool Held;
         /// <summary>Depot position for the wave route line; global metres.</summary>
