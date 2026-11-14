@@ -51,6 +51,16 @@ namespace BoscaliSummer.Core.Contracts
         bool Corners { get; set; }
         /// <summary>The centre combat layer: WARNING banner, threat ring, shot callouts. Independent of <see cref="Enabled"/>.</summary>
         bool CentreAlerts { get; set; }
+        /// <summary>AR: the flight path predictor (a hard pull, or the ground ahead within 8 s).</summary>
+        bool ArPath { get; set; }
+        /// <summary>AR: the engagement envelopes of known hostile SAMs near enough to matter.</summary>
+        bool ArDomes { get; set; }
+        /// <summary>AR: own missiles to their targets, inbound missiles boxed.</summary>
+        bool ArMissiles { get; set; }
+        /// <summary>AR: the pillar over the way home (JOKER, BINGO or damage) and over a live contract zone.</summary>
+        bool ArBeacons { get; set; }
+        /// <summary>The HUD's reactions: the lock spin-in and the hit glitch.</summary>
+        bool HudFx { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
         void ResetToDefaults();
     }

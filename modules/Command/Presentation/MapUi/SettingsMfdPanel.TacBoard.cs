@@ -99,6 +99,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
 
+            flow.Section(AvIcon.Target, "AR HELMET LAYER", "DRAWN ON THE WORLD · ONLY WHILE IT MATTERS");
+            ToggleCell(flow, page, "FLIGHT PATH", "Where you will be over the next 8 s during a hard pull; red with TERRAIN and the seconds left where it meets the ground.",
+                () => board.ArPath, v => board.ArPath = v);
+            ToggleCell(flow, page, "SAM ENVELOPES", "The reach of every SAM your side knows, as a wire envelope once you are near; the ring at your height bold, IN SAM ENVELOPE inside.",
+                () => board.ArDomes, v => board.ArDomes = v);
+            ToggleCell(flow, page, "MISSILE LINES", "Your missiles joined to their targets with the seconds to impact; every missile coming at you boxed with its next two seconds.",
+                () => board.ArMissiles, v => board.ArMissiles = v);
+            ToggleCell(flow, page, "BEACONS", "A pillar over the nearest friendly field at JOKER, BINGO or with damage, and over a live contract zone.",
+                () => board.ArBeacons, v => board.ArBeacons = v);
+            ToggleCell(flow, page, "HUD REACTIONS", "Brackets spin in on a new target; the HUD glitches for a moment when a hit damages the aircraft. REDUCED MOTION keeps it still.",
+                () => board.HudFx, v => board.HudFx = v);
+
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESET");
             ToggleCell(flow, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
                 () => board.Sway, v => board.Sway = v, on, off);

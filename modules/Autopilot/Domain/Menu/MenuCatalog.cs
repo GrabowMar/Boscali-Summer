@@ -46,6 +46,16 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
+        /// <summary>VIEW > AR OVERLAYS (2026-11-14): what the helmet draws on the world and how the HUD reacts; each stays with the board off.</summary>
+        public static readonly MenuSwitch[] ArParts =
+        {
+            new MenuSwitch("alerts", "COMBAT ALERTS", "WARNING BANNER, THREAT RING, HIT CALLOUTS"),
+            new MenuSwitch("path", "FLIGHT PATH", "WHERE YOU WILL BE IN 8 S; RED AT THE GROUND"),
+            new MenuSwitch("domes", "SAM ENVELOPES", "KNOWN SAM REACH AS A WIRE DOME NEARBY"),
+            new MenuSwitch("missiles", "MISSILE LINES", "YOUR SHOTS TO TARGET, INBOUND BOXED"),
+            new MenuSwitch("beacons", "BEACONS", "HOME ON LOW FUEL OR DAMAGE, CONTRACT ZONE"),
+            new MenuSwitch("fx", "HUD REACTIONS", "LOCK SPIN-IN, GLITCH WHEN HIT", enable: true),
+        };
 
         /// <summary>Index of the step nearest <paramref name="value"/>: where a cycle row over a float option stands.</summary>
         public static int Nearest(float[] steps, float value)
@@ -702,9 +712,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (w.TerrainAvailable)
                 c.Rows.Add(b.Reg(MenuRow.Cycle("view/grid", "shape", "SET TERRAIN GRID", "TERRAIN GRID: ", Ghosts, Clamp(w.TerrainGhost, Ghosts), "TERRAIN GRID: ")));
             if (w.BoardAvailable)
-                c.Rows.Add(b.Reg(MenuRow.Toggle("view/alerts", "warning", w.CentreAlerts,
-                    F("SHOW COMBAT ALERTS", "COMBAT ALERTS: OFF", "WARNING BANNER, THREAT RING, HIT CALLOUTS", "COMBAT ALERTS ON"),
-                    F("HIDE COMBAT ALERTS", "COMBAT ALERTS: ON", "WARNING BANNER, THREAT RING, HIT CALLOUTS", "COMBAT ALERTS OFF", MenuTone.Active))));
+            {
+                List<MenuRow> ar = Switches("view/ar/", "ar/", ArParts, w.ArSwitches, out int arOn);
+                c.Rows.Add(b.Reg(MenuRow.Submenu("view/ar", "warning", "AR OVERLAYS",
+                    arOn + " OF " + ArParts.Length + " ON", "WORLD-LOCKED SYMBOLS, ALERTS AND HUD REACTIONS", "AR", "OVERLAYS", ar, iconless: true)));
+            }
             if (w.Camera == ViewKind.Orbit) Badge(c, "EXTERNAL", show: true);
             else if (w.Missiles > 0) Badge(c, w.Missiles + " MSL", show: true);
             else if (w.HasNvg && w.NvgOn) Badge(c, "NVG ON", show: true);

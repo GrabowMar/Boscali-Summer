@@ -77,6 +77,16 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
         };
 
+        private static readonly Dictionary<string, Flag<ITacBoardSettings>> ArFlags = new Dictionary<string, Flag<ITacBoardSettings>>
+        {
+            ["ar/alerts"] = new Flag<ITacBoardSettings>(b => b.CentreAlerts, (b, v) => b.CentreAlerts = v),
+            ["ar/path"] = new Flag<ITacBoardSettings>(b => b.ArPath, (b, v) => b.ArPath = v),
+            ["ar/domes"] = new Flag<ITacBoardSettings>(b => b.ArDomes, (b, v) => b.ArDomes = v),
+            ["ar/missiles"] = new Flag<ITacBoardSettings>(b => b.ArMissiles, (b, v) => b.ArMissiles = v),
+            ["ar/beacons"] = new Flag<ITacBoardSettings>(b => b.ArBeacons, (b, v) => b.ArBeacons = v),
+            ["ar/fx"] = new Flag<ITacBoardSettings>(b => b.HudFx, (b, v) => b.HudFx = v),
+        };
+
         /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
         private static void ReadBoard(MenuWorld w)
         {
@@ -92,8 +102,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardPage1 = board.Page1; w.BoardPage2 = board.Page2; w.BoardPage3 = board.Page3; w.BoardPage4 = board.Page4;
             w.BoardPagesOn = board.ScopeMode != BoardScopeMode.Off;
             w.BoardSway = board.Sway;
-            w.CentreAlerts = board.CentreAlerts;
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
+            foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in ArFlags) if (flag.Value.Get(board)) w.ArSwitches.Add(flag.Key);
         }
 
         /// <summary>The cabin: the kneeboard card, and the visor's terrain pictures (listed under VIEW).</summary>
@@ -191,7 +201,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "cockpit/receiver": return () => Service<IRadioRemote>()?.ReceiverToggle();
                 case "cockpit/seek": return () => Service<IRadioRemote>()?.ReceiverSeek(1);
                 case "cockpit/kneeboard": return () => { IKneeboardGallery cards = Service<IKneeboardGallery>(); if (cards != null) cards.Selected = cards.Selected + 1; };
-                case "view/alerts": return () => { ITacBoardSettings t = Service<ITacBoardSettings>(); if (t != null) t.CentreAlerts = !t.CentreAlerts; };
                 case "view/grid": return () => { IVisorTerrainSettings t = Service<IVisorTerrainSettings>(); if (t != null) t.TerrainGhost = Next(MenuCatalog.GhostSteps, t.TerrainGhost); };
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
@@ -230,6 +239,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, index));
             if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
+            if (row.Id.StartsWith("view/ar/", StringComparison.Ordinal) && ArFlags.TryGetValue(row.Id.Substring(5), out Flag<ITacBoardSettings> overlay))
+                return OnBoard(board => overlay.Set(board, !overlay.Get(board)));
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
             if (row.Id.StartsWith(Perks, StringComparison.Ordinal)) return BySlug<IOpsPerks>(row.Id, Perks, p => p.PerkCount, (p, i) => p.PerkLabel(i), (p, i) => p.PerkPress(i));
             if (row.Id.StartsWith(Filters, StringComparison.Ordinal))

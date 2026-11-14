@@ -19,6 +19,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private Aircraft watched;
         private float lastTime = float.NaN, nextField;
         private Airbase field, namedField;
+
+        /// <summary>The nearest friendly field as of the last once-a-second query (null: none); the AR layer's home beacon stands on it.</summary>
+        internal Airbase Field => field;
         private string fieldName;
 
         public void Read(Aircraft aircraft, BoardFrame frame)

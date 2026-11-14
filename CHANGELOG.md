@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- **AR helmet layer** (C menu VIEW > AR OVERLAYS, SET > COCKPIT > AR HELMET LAYER): symbols locked to the world outside,
+  each only while it matters.
+  - **Flight path**: where you will be over the next 8 s during a hard pull; in red with TERRAIN and the seconds left,
+    an X and a ground ring, where that path meets the ground or the sea.
+  - **SAM envelopes**: near a SAM site your side knows, a wire cage of its real engagement shape and a fence at your
+    height with the distance to it (SAM EDGE). Inside, an EXIT gate shows the shortest way out (SAM EXIT).
+  - **Missile lines**: your missiles joined to their targets with IMPACT seconds; missiles coming at you boxed with their
+    next two seconds.
+  - **Beacons**: a pillar of light over the nearest friendly field at JOKER, BINGO or with damage, and over a live
+    contract zone.
+  - **HUD reactions**: brackets spin in on a new target; the HUD and the TAC BOARD glitch for a moment when a hit damages
+    the aircraft. REDUCED MOTION keeps everything still.
+- The COMBAT ALERTS switch moved into the C menu's AR OVERLAYS.
+- Wingmen called from a carrier deck (GitHub issue 37) now checked in game: they air-start astern of the ship and join.
+
 ## 0.2.13 — update
 
 - **SET > PANELS > CONSOLE**: new options for every console: GRID, STANDING ORDERS,

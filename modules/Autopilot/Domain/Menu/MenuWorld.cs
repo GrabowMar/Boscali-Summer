@@ -163,9 +163,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public int BoardShade, BoardSize = 1;
         public int BoardPageCount = 1;
         public BoardPage BoardPage1 = BoardPage.Threat, BoardPage2 = BoardPage.Shot, BoardPage3 = BoardPage.Wing, BoardPage4 = BoardPage.Objective;
-        public bool BoardPagesOn = true, BoardSway = true, CentreAlerts = true;
+        public bool BoardPagesOn = true, BoardSway = true;
         /// <summary>The major board elements that are on, as "parts/slug" (<see cref="MenuCatalog.BoardParts"/>).</summary>
         public HashSet<string> BoardSwitches = new HashSet<string>();
+        /// <summary>The AR overlays that are on, as "ar/slug" (<see cref="MenuCatalog.ArParts"/>).</summary>
+        public HashSet<string> ArSwitches = new HashSet<string>();
 
         // COCKPIT (cabin)
         public bool KneeboardAvailable;

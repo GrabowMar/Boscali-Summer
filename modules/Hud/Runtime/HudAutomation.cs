@@ -211,6 +211,44 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return result;
         }
 
+        /// <summary>
+        /// The AR helmet layer as it stands (tests/ingame/ar-layer.json): what it drew on its last frame. Showcase switches for a capture: <c>pull</c> (g) pretends a hard pull so
+        /// the path draws in level flight (0 or less gives it back to the measured pull); <c>home</c> stands the home beacon whatever the fuel; <c>glitch</c> starts a hit glitch;
+        /// <c>select</c> selects the nearest enemy unit within <c>range</c> (default 20 km) through the game's own target list, which starts a lock spin-in.
+        /// </summary>
+        public static Dictionary<string, object> Ar(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            ArLayer ar = HudBoard.Instance != null ? HudBoard.Instance.Ar : null;
+            if (ar == null) return Failure("HudAutomation", "Ar", "no AR layer yet (the board builds it on its first tick)");
+            if (Has(args, "pull")) { float g = Number(args, "pull", 0f); ar.ForcePullG = g > 0f ? g : float.NaN; }
+            if (Has(args, "home")) ar.ForceHome = Bool(args, "home");
+            if (Bool(args, "glitch")) ar.Glitch(Time.unscaledTime);
+            // dive (degrees): pitch the seated aircraft and its velocity nose-down at once, so a scripted run can meet the ground with the pilot still flying
+            // (the sim's own fly op hands the aircraft to an AI pilot, and the game drops the HUD with it).
+            if (Has(args, "dive") && GameManager.GetLocalAircraft(out Aircraft diver) && diver != null && diver.rb != null)
+            {
+                Quaternion down = Quaternion.AngleAxis(Number(args, "dive", 30f), diver.transform.right);
+                diver.rb.rotation = down * diver.rb.rotation;
+                diver.rb.velocity = down * diver.rb.velocity;
+            }
+            string selected = "";
+            if (Bool(args, "select") && GameManager.GetLocalAircraft(out Aircraft own) && own != null)
+            {
+                Unit target = NearestEnemy(own, Number(args, "range", 20000f));
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                if (target != null && hud != null) { hud.SelectUnit(target); selected = target.definition != null ? target.definition.unitName : "TGT"; }
+            }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "selected", selected }, { "path", ar.PathShown }, { "path_alert", ar.PathAlert }, { "domes", ar.DomesShown }, { "inside_dome", ar.InsideDome },
+                { "own_missiles", ar.OwnMissilesShown }, { "inbound", ar.InboundShown }, { "home", ar.HomeShown }, { "objective", ar.ObjectiveShown },
+                { "spins", ar.SpinsShown }, { "spins_active", ar.SpinsActive }, { "rings_known", ar.RingsKnown }, { "nearest_ring_km", ar.NearestRingKm }, { "glitching", ar.Glitching }, { "quads", ar.Quads },
+            };
+            Debug.Log("[HudAutomation] Ar: " + Describe(result));
+            return result;
+        }
+
         /// <summary>Fire one own missile station at the nearest enemy aircraft (blind if none).</summary>
         public static Dictionary<string, object> Fire(Dictionary<string, object> args)
         {
