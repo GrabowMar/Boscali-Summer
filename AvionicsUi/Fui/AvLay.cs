@@ -47,20 +47,22 @@ namespace NOAvionics
             return c;
         }
 
-        /// <summary>Height available to a console mounted under <paramref name="parent"/> (walks up past zero-height anchors).</summary>
-        public static float ResolveHeight(RectTransform parent, float min, float max)
+        /// <summary>
+        /// A console's height in the map's left bay, for a screen anywhere under the map canvas: the canvas less the news ticker strip
+        /// on top and the bottom margin (<see cref="AvTokens.BayReserve"/>), between <see cref="AvTokens.PanelHeight"/> and
+        /// <see cref="AvTokens.PanelHeightMax"/>. A screen-space canvas is measured from the screen: its rect can still hold the size it had
+        /// the last time it was on.
+        /// </summary>
+        public static float BayHeight(Transform inside)
         {
-            if (max < min) max = min;
-            if (parent == null) return min;
-            float available = parent.rect.height;
-            RectTransform cursor = parent;
-            for (int i = 0; i < 4 && available <= 1f && cursor != null; i++)
-            {
-                cursor = cursor.parent as RectTransform;
-                if (cursor != null) available = cursor.rect.height;
-            }
-            if (available <= 1f) return min;
-            return Mathf.Clamp(Mathf.Floor(available), min, max);
+            Canvas canvas = null;   // the outermost canvas above the screen, active or not
+            for (Transform t = inside; t != null; t = t.parent)
+                if (t.TryGetComponent(out Canvas c)) canvas = c;
+            if (canvas == null) return AvTokens.PanelHeight;
+            float available = canvas.renderMode == RenderMode.ScreenSpaceOverlay && canvas.scaleFactor > 0f && Screen.height > 1
+                ? Screen.height / canvas.scaleFactor : ((RectTransform)canvas.transform).rect.height;
+            return available <= 1f ? AvTokens.PanelHeight
+                : Mathf.Clamp(Mathf.Floor(available - AvTokens.BayReserve), AvTokens.PanelHeight, AvTokens.PanelHeightMax);
         }
 
         /// <summary>Nudge a panel back inside its root canvas (leading edge pinned when it is larger than the canvas).</summary>

@@ -36,7 +36,9 @@ namespace BoscaliSummer.Modules.Command
             typeof(MapControlsPanelGuardPatch),
             typeof(MapBoxIconClickGuardPatch),
             typeof(MapCursorPanelGuardPatch),
-            typeof(GridLabelsPatch)
+            typeof(GridLabelsPatch),
+            typeof(TacticalLogFeedPatch),
+            typeof(TacticalLogKillPatch)
         };
 
         public void Install(ModuleContext context)
@@ -55,7 +57,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddClientKey("MAP HOLD KEY", "Hold to open the full map; let go to close it.", context.Settings.Command.MapHoldKey, false);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
-            context.AddService<ITacticalLog>(new MfdRadioLog());
+            context.AddService<ITacticalLog>(new TacticalLog());
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);

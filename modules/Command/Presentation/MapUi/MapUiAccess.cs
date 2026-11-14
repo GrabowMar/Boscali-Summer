@@ -14,11 +14,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly FieldInfo Speed = AccessTools.Field(typeof(VirtualMFD), "speed");
         private static readonly FieldInfo Airbase = AccessTools.Field(typeof(GameplayUI), "selectAirbasePanel");
         private static readonly FieldInfo Spectator = AccessTools.Field(typeof(GameplayUI), "spectatorPanel");
-        private static readonly FieldInfo Message = AccessTools.Field(typeof(MessageUI), "messageText");
-        private static readonly FieldInfo KillFeed = AccessTools.Field(typeof(MessageUI), "killFeedText");
         public static bool MfdAvailable => GameAccess.MfdAvailable;
         public static bool MfdFooterAvailable => Speed != null && Airbase != null && Spectator != null;
-        public static bool MfdLogAvailable => Message != null && KillFeed != null;
         public static List<Button> GetLeftButtons(VirtualMFD mfd) => GameAccess.GetLeftMfdButtons(mfd);
         public static List<Button> GetRightButtons(VirtualMFD mfd) => GameAccess.GetRightMfdButtons(mfd);
         public static List<MFDScreen> GetLeftScreens(VirtualMFD mfd) => GameAccess.GetLeftMfdScreens(mfd);
@@ -44,7 +41,39 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
         public static GameObject GetSelectAirbasePanel(GameplayUI ui) => ui == null ? null : Airbase?.GetValue(ui) as GameObject;
         public static GameObject GetSpectatorPanel(GameplayUI ui) => ui == null ? null : Spectator?.GetValue(ui) as GameObject;
-        public static TextMeshProUGUI GetMessageText(MessageUI ui) => ui == null ? null : Message?.GetValue(ui) as TextMeshProUGUI;
-        public static TextMeshProUGUI GetKillFeedText(MessageUI ui) => ui == null ? null : KillFeed?.GetValue(ui) as TextMeshProUGUI;
+
+        private static readonly FieldInfo Message = AccessTools.Field(typeof(MessageUI), "messageText");
+        private static readonly FieldInfo KillFeed = AccessTools.Field(typeof(MessageUI), "killFeedText");
+        private static TextMeshProUGUI feedMessage, feedKill;
+        private static bool feedHidden, messageWas, killWas;
+
+        /// <summary>The game's kill and message feed paints in the top-left, over the news ticker and the panel column; its lines are on
+        /// EVN LOG, so while the map is open its two texts are off. The game keeps writing them; only the two renderers are disabled.</summary>
+        public static void HideNativeFeed()
+        {
+            MessageUI ui = SceneSingleton<MessageUI>.i;
+            TextMeshProUGUI message = ui == null ? null : Message?.GetValue(ui) as TextMeshProUGUI;
+            TextMeshProUGUI kill = ui == null ? null : KillFeed?.GetValue(ui) as TextMeshProUGUI;
+            if (feedHidden && (message != feedMessage || kill != feedKill)) RestoreNativeFeed();
+            if (!feedHidden)
+            {
+                feedMessage = message; feedKill = kill;
+                messageWas = message != null && message.enabled;
+                killWas = kill != null && kill.enabled;
+                feedHidden = true;
+            }
+            if (message != null) message.enabled = false;
+            if (kill != null) kill.enabled = false;
+        }
+
+        /// <summary>Map closed or scene reset: the feed's texts back as they were.</summary>
+        public static void RestoreNativeFeed()
+        {
+            if (!feedHidden) return;
+            if (feedMessage != null) feedMessage.enabled = messageWas;
+            if (feedKill != null) feedKill.enabled = killWas;
+            feedMessage = feedKill = null;
+            feedHidden = false;
+        }
     }
 }

@@ -20,6 +20,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     MfdMapInteractions.Restore();
                     MfdTerrainRelief.Restore();
+                    MapUiAccess.RestoreNativeFeed();
                     mapWasMaximized = false;
                 }
                 MfdTerrainRelief.Prewarm();
@@ -46,8 +47,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                     MfdRailPatch.Reconcile();
                     VanillaMfdRebuild.Tick();
-                    MfdLogPanel.Tick();
                     MfdMapFooter.Tick();
+                    MapUiAccess.HideNativeFeed();
                 }
             }
             // Rail reconciliation can resize/reposition the viewport. Capture/render its
@@ -69,6 +70,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdTerrainRelief.Reset();
             MfdMapInteractions.Reset();
             MfdNewsTicker.Reset();
+            MapUiAccess.RestoreNativeFeed();
             MapCursor.Reset();
             MapUiPointer.ResetFloating();
             nextRefresh = 0f;

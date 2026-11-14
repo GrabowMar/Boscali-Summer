@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // mouse while it is up: the map is under it everywhere, so no map click, pick or card goes through it.
             if (WindowHoldsMouse()) return true;
             if (MfdPanelDock.ContainsScreenPoint(screenPoint)) return true;
-            if (MfdLogPanel.ContainsScreenPoint(screenPoint)) return true;
             if (MapControlRects.Contains(screenPoint)) return true;
             if (MapSelectionDeck.Contains(screenPoint)) return true;
             if (MfdMapOrbitControls.Contains(screenPoint)) return true;

@@ -158,17 +158,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static bool CanAccept(SecondaryObjectiveView objective, bool hasCapacity) =>
             hasCapacity && OfferLive(objective);
 
-        /// <summary>Pay is only reported as collected when the host reported completion.</summary>
-        public static string PayoutLabel(SecondaryObjectiveView objective)
-        {
-            if (objective == null) return "—";
-            string money = "$" + Math.Max(0, objective.Money).ToString("N0", CultureInfo.InvariantCulture);
-            string xp = Math.Max(0, objective.Xp).ToString("N0", CultureInfo.InvariantCulture) + " XP";
-            string prefix = objective.IsComplete ? "PAID  " :
-                objective.IsOffered || objective.IsActive ? "" : "UNPAID  ";
-            return prefix + money + "   +   " + xp;
-        }
-
         /// <summary>A count line that never invents a ceiling: an unknown limit reads as a plain count.</summary>
         public static string BoardSummary(int available, int active, int activeLimit, int results)
         {

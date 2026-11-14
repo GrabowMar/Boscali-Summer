@@ -303,68 +303,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
     }
 
     /// <summary>
-    /// The wire: the last lines the receiver picked up (bulletins, talk on air, intercepts, alarms), newest on top,
-    /// each with its clock and the station that aired it. It is the RECEIVER page's growing part.
-    /// </summary>
-    internal sealed class RadioWirePart : AvPart
-    {
-        public const int MaxLines = 12;
-        private const float LineH = 16f, Pad = 7f, MinLines = 3f;
-        private readonly Image back, hit;
-        private readonly RadioOutline outline;
-        private readonly TMP_Text[] lines = new TMP_Text[MaxLines];
-
-        public RadioWirePart(RectTransform parent)
-        {
-            Rect = AvLay.Child(parent, "Wire");
-            back = AvLay.Solid(Rect, "Back", Color.clear);
-            outline = new RadioOutline(Rect, "Edge");
-            hit = AvLay.Solid(Rect, "Hit", Color.clear);
-            hit.raycastTarget = true;
-            for (int i = 0; i < MaxLines; i++)
-            {
-                lines[i] = AvText.Make(Rect, "Line" + i, AvTextRole.DataSmall);
-                lines[i].richText = true;
-                lines[i].overflowMode = TextOverflowModes.Ellipsis;
-            }
-            Restyle();
-        }
-
-        public string Help { set => AvHelpTip.Attach(hit.gameObject, value); }
-
-        public override float Measure(float width) => 2f * Pad + MinLines * LineH;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            AvLay.Place(back.rectTransform, 0f, 0f, s.W, s.H);
-            AvLay.Place(hit.rectTransform, 0f, 0f, s.W, s.H);
-            outline.Place(0f, 0f, s.W, s.H);
-            int shown = Mathf.Clamp(Mathf.FloorToInt((s.H - 2f * Pad) / LineH), 1, MaxLines);
-            for (int i = 0; i < MaxLines; i++)
-            {
-                lines[i].gameObject.SetActive(i < shown);
-                AvLay.Place(lines[i].rectTransform, Pad, Pad + i * LineH, Mathf.Max(10f, s.W - 2f * Pad), LineH);
-            }
-        }
-
-        /// <summary>Rich-text line i (0 = newest); null clears it.</summary>
-        public void SetLine(int i, string richText)
-        {
-            if (i < 0 || i >= MaxLines) return;
-            string t = richText ?? string.Empty;
-            if (lines[i].text != t) lines[i].text = t;
-        }
-
-        public override void Restyle()
-        {
-            back.color = AvStyleHost.FuiFill("well", new Color(0.03f, 0.05f, 0.06f));
-            outline.Color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
-            foreach (TMP_Text line in lines) line.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-        }
-    }
-
-    /// <summary>
     /// Volume and squelch as two rings each with a stacked +/- pair, and the three receiver switches
     /// (mode, bandwidth, step) stacked beside them: one 82 px block where there used to be a ring row,
     /// a key row and a switch row.

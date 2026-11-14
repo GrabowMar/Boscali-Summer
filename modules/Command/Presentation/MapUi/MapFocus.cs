@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// Centres the open map on a ground point, on the relief or on the flat sheet. Command-internal: no other module needs it.
+    /// Centres the open map on a ground point, on the relief or on the flat sheet. Other modules reach it through IMapProjection.Focus (EVN LOG's LOCATE).
     /// The game's own SetMapTarget is no fix for the flat sheet: it lerps the image position only, and the next MapControls frame
     /// rebuilds that position from the private offsets, so the sheet snaps back. This writes the offsets instead (the pattern of
     /// Wing's map fit), with no Harmony patch.
