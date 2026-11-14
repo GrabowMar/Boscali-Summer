@@ -122,7 +122,7 @@ namespace BoscaliSummer.Core.Contracts
                 case TheaterEmptyReason.NoFronts:
                     return "NO FRONT TO WORK - no contested ground yet; move ground forces up or wait for contact";
                 case TheaterEmptyReason.NoGroundWar:
-                    return "NO GROUND WAR HERE - this mission fields no mobile ground force; fly sorties from the contract desk";
+                    return "NO GROUND WAR HERE - this mission fields no mobile ground force; fly sorties from MIS JOBS";
                 case TheaterEmptyReason.NoFriendlyGroundNearFront:
                     return "NO GROUND FORCE NEAR ANY FRONT - bring ground units within 20 km of the line";
                 case TheaterEmptyReason.FrontsQuiet:

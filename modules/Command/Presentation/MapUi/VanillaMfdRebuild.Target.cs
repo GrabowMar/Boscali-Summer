@@ -253,7 +253,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, ContactsVisible, rowHeight: 40f, words: false));
                 candidateGrid.SetEmptyMessage("NO CONTACTS");
                 listNote = page.Add(new AvNote(page.Content, "Waiting for the target filters."));
-                page.Links(("MAP", "MAP", null), ("JOBS", "MIS", "CONTRACTS"));
+                page.Links(("MAP", "MAP", null), ("JOBS", "MIS", "JOBS"));
             }
 
             private void SetRange(int step)

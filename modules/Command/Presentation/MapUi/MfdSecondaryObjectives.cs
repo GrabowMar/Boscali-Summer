@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using BoscaliSummer.Core.Contracts;
@@ -13,12 +12,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         Ready,
         Unavailable,
         LinkLost,
-        LimitReached,
-        DirectorExhausted,
     }
 
     /// <summary>
-    /// Pure ordering and copy rules for the MIS job board. Every label states only what the
+    /// Pure copy rules for the MIS job board. Every label states only what the
     /// host actually reported.
     /// </summary>
     internal static class MfdSecondaryObjectives
@@ -78,23 +75,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return "LEFT " + (seconds / 60).ToString("00") + ":" + (seconds % 60).ToString("00");
         }
 
-        /// <summary>
-        /// The board order: accepted work, then offers, then closed work. Accepted work and offers read
-        /// soonest-deadline-first; closed work reads newest-first. A missing clock never jumps the queue.
-        /// </summary>
-        public static void SortForBoard(List<SecondaryObjectiveView> entries)
-        {
-            if (entries == null || entries.Count < 2) return;
-            entries.Sort((a, b) =>
-            {
-                int byGroup = Group(a).CompareTo(Group(b));
-                if (byGroup != 0) return byGroup;
-                return Group(a) == 2 ? CompareNewest(a, b) : CompareDeadline(a, b);
-            });
-        }
-
-        private static int Group(SecondaryObjectiveView e) => e == null ? 3 : e.IsActive ? 0 : e.IsOffered ? 1 : 2;
-
         /// <summary>"12.4 KM 087°": range and true bearing from one global X/Z to another.</summary>
         public static string RangeBearing(float fromX, float fromZ, float toX, float toZ)
         {
@@ -104,33 +84,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             int bearing = (int)Math.Round((Math.Atan2(dx, dz) * 180.0 / Math.PI + 360.0) % 360.0) % 360;
             return km.ToString(km < 10 ? "0.0" : "0", CultureInfo.InvariantCulture) + " KM " + bearing.ToString("000") + "°";
         }
-
-        private static int CompareDeadline(SecondaryObjectiveView a, SecondaryObjectiveView b)
-        {
-            if (ReferenceEquals(a, b)) return 0;
-            if (a == null) return 1;
-            if (b == null) return -1;
-            int byClock = Remaining(a).CompareTo(Remaining(b));
-            return byClock != 0 ? byClock : a.Id.CompareTo(b.Id);
-        }
-
-        private static int CompareNewest(SecondaryObjectiveView a, SecondaryObjectiveView b)
-        {
-            if (ReferenceEquals(a, b)) return 0;
-            if (a == null) return 1;
-            if (b == null) return -1;
-            return b.Id.CompareTo(a.Id);
-        }
-
-        private static float Remaining(SecondaryObjectiveView objective)
-        {
-            float seconds = objective.SecondsRemaining;
-            return !float.IsFinite(seconds) ? float.MaxValue : seconds;
-        }
-
-        /// <summary>The cockpit marker's title line, shared by the HUD, the map tag and this board.</summary>
-        public static string TitleLine(int id, string title) =>
-            "#" + id + " " + (string.IsNullOrEmpty(title) ? "SECONDARY OBJECTIVE" : title);
 
         /// <summary>The cockpit marker's own countdown rule: T-45s under a minute, T-5:00 above it.</summary>
         public static string Countdown(float seconds) => AvNum.TMinus(seconds);
@@ -148,29 +101,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return objective.IsOffered ? "OFFER ENDED" : objective.IsActive ? "TIME ENDED" : "CLOSED";
         }
 
-        /// <summary>An offer is acceptable only while the host's clock is finite and still running.</summary>
-        public static bool OfferLive(SecondaryObjectiveView objective) =>
-            objective != null && objective.IsOffered &&
-            float.IsFinite(objective.SecondsRemaining) &&
-            objective.SecondsRemaining > 0f;
-
-        /// <summary>The accept action is live only when the offer is and the faction has room.</summary>
-        public static bool CanAccept(SecondaryObjectiveView objective, bool hasCapacity) =>
-            hasCapacity && OfferLive(objective);
-
-        /// <summary>A count line that never invents a ceiling: an unknown limit reads as a plain count.</summary>
-        public static string BoardSummary(int available, int active, int activeLimit, int results)
-        {
-            string offers = available == 1 ? "1 OFFER" : available + " OFFERS";
-            return offers + "  ·  " + ShortCount(active, activeLimit) + " ACTIVE  ·  " + results + " CLOSED";
-        }
-
-        /// <summary>"1/2" while the host reports a ceiling, a plain count when it does not.</summary>
-        public static string ShortCount(int active, int activeLimit) =>
-            activeLimit > 0 ? active + "/" + activeLimit : active.ToString();
-
         /// <summary>
-        /// The zero-count line. A missing director, a silent host or a full active roster is
+        /// The zero-count line. A missing director or a silent host is
         /// named for what it is; the contract-cycle copy only prints when the board is serving.
         /// </summary>
         public static string EmptyMessage(BoardEmptyReason reason)
@@ -181,10 +113,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     return "CONTRACT BOARD UNAVAILABLE\nDynamic operations are not running in this mission.";
                 case BoardEmptyReason.LinkLost:
                     return "WAITING FOR THE HOST BOARD\nNo authoritative contract state has arrived yet.";
-                case BoardEmptyReason.LimitReached:
-                    return "ACTIVE LIMIT REACHED\nFinish or abort an active contract before accepting another.";
-                case BoardEmptyReason.DirectorExhausted:
-                    return "NO CONTRACTS TO ISSUE\nThe mission director has no eligible work for this faction.";
                 default:
                     return "NO JOBS ON THE BOARD\nContracts are drawn from the live battlefield as the front moves.";
             }

@@ -274,7 +274,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             }
             recentSection.SetShown(false);
             foreach (AvRow row in recentRows) row.SetShown(false);
-            p.Links(("WAR PLAN", "STR", "BOARD"), ("MISSION", "MIS", "MISSION"));
+            p.Links(("WAR PLAN", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
         }
 
         /// <summary>The desk before the director has issued anything this mission.</summary>

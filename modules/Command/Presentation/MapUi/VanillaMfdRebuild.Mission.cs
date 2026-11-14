@@ -13,16 +13,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // ----------------------------------------------------------- mission panel
 
         /// <summary>
-        /// The MIS bezel as a briefing board. MISSION is the hero card (name, clock, lead objective,
-        /// briefing) over key numbers, the escalation ladder, the lead contract and a funds trend;
-        /// OBJECTIVES is a checklist with state glyphs and distances; CONTRACTS is a job board: contract slots, then
-        /// every contract as a slip (in the field, on offer, closed) that opens in place into its order, plot and actions. Reads happen in <see cref="Gather"/> into one reusable
-        /// <see cref="BoardModel"/>; <see cref="Render"/> only writes it to already-built parts.
+        /// The MIS bezel, home of every paid task. JOBS lists the pilot's own job (on the HUD, or an armed package) and then the open jobs of every
+        /// <see cref="IJobSource"/> (contracts and staff sorties from DynamicOperations, strike packages from Support), nearest first, each with
+        /// LOCATE and its source's own act; a contract or sortie opens in place into its order, plot and ABORT. OBJECTIVES is a checklist with
+        /// state glyphs and distances; BRIEF is the hero card (name, clock, lead objective, briefing) over SCORE, OBJECTIVES and the escalation
+        /// ladder. Reads happen in <see cref="Gather"/> into one reusable <see cref="BoardModel"/>; <see cref="Render"/> only writes it to built parts.
         /// </summary>
         private sealed class MissionPresenter : Presenter
         {
             private const int ObjectivePageSize = 10;
             private const int MaxObjectiveLines = 24;
+            private const int PageJobs = 0, MaxHudCards = 2, MaxOpenCards = 12;
 
             private struct ObjectiveLine
             {
@@ -45,11 +46,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public readonly List<ObjectiveLine> Objectives = new List<ObjectiveLine>(MaxObjectiveLines);
                 public int ObjectivesDone, ObjectivesActive;
                 public string ObjectiveSummary = "";
-                public bool Installed, Streamed;
-                public int Limit, ActiveContracts, Offers, Closed;
-                public int AtStake, Offered, Paid;
+                /// <summary>The host's contract cards, for the detail of an open contract or sortie row.</summary>
                 public readonly List<SecondaryObjectiveView> Contracts = new List<SecondaryObjectiveView>(8);
-                public SecondaryObjectiveView Lead;
+                public readonly List<JobRow> Jobs = new List<JobRow>(16);
+                public bool Installed, Sources;
             }
 
             private readonly BoardModel model = new BoardModel();
@@ -58,22 +58,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private int objectiveSummarySignature;
             private bool hasObjectiveSummary;
 
-            private AvFlow briefFlow, objectivesFlow, contractsFlow;
-            private AvSection trendSection;
-            private AvLineChart trendChart;
-            private readonly float[] trendBuffer = new float[MfdResourceHistory.Capacity];
+            private AvFlow jobsFlow, objectivesFlow, briefFlow;
             private int selectedPage;
 
-            // MISSION page.
-            private MissionHeroPart hero;
-            private AvGauge[] briefTiles;
-            private AvSection ladderSection;
-            private EscalationLadderPart ladder;
-            private AvSection leadSection;
-            private AvRow leadContractRow;
-            private AvControl leadContractOpen;
-            private AvNote boardLedger;
-            private const string BrowseHelp = "Open the contract board and browse optional missions.";
+            // JOBS page.
+            private AvSection openSection;
+            private readonly JobCard[] hudCards = new JobCard[MaxHudCards], openCards = new JobCard[MaxOpenCards];
+            private AvRow hudEmpty, openEmpty;
+            private MissionTaskPlot taskPlot;
+            private MissionTaskActions taskActions;
+            private int openSlipId = -2;   // -2 = not chosen yet: the next render opens this pilot's own contract
+            private int hudShown, openShown;
+            private bool secondaryFresh, actionPending;
+            private string actionResult = "";
+            private float selfX, selfZ;
+            private bool hasSelf;
+            private Comparison<JobRow> jobOrder;
 
             // OBJECTIVES page.
             private ObjectiveTallyPart tally;
@@ -83,61 +83,49 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvSection typeSection;
             private TaskTypeTally typeTally;
 
-            // CONTRACTS page.
-            private const int MaxSlips = 12;
-            private MissionTaskPlot taskPlot;
-            private MissionTaskActions taskActions;
-            private ContractSlots slots;
-            private AvNote boardBook;
-            private readonly ContractCard[] slips = new ContractCard[MaxSlips];
-            private readonly List<SecondaryObjectiveView> activeContracts = new List<SecondaryObjectiveView>(4);
-            private int openSlipId = -2;   // -2 = not chosen yet: the first render opens the HUD pick or the lead job
-            private bool secondaryFresh;
-            private AvSection boardSection;
-            private AvRow contractsEmpty;
-
-            private bool secondaryHasCapacity;
-            private string secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE";
+            // BRIEF page.
+            private MissionHeroPart hero;
+            private AvGauge[] briefTiles;
+            private AvSection ladderSection;
+            private EscalationLadderPart ladder;
 
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
-                (AvIcon.Flag, "MISSION"),
+                (AvIcon.Star, "JOBS"),
                 (AvIcon.ListDetails, "OBJECTIVES"),
-                (AvIcon.Star, "CONTRACTS"),
+                (AvIcon.Flag, "BRIEF"),
             };
 
             protected override string[] TabTips { get; } = new[]
             {
-                "Mission: the briefing, lead objective, escalation ladder, lead contract and a funds trend.",
+                "Jobs: the one on your HUD, then every open job (contracts, staff sorties, strike packages), nearest first. LOCATE moves the map.",
                 "Objectives: the checklist with progress and distance to each objective, and a map of how far each one has come.",
-                "Contracts: the job board. Click a slip to open its order, plot and accept or abort.",
+                "Brief: the briefing, the lead objective, the score and the escalation ladder.",
             };
 
             protected override void BuildContent()
             {
                 BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
-                briefFlow = CreatePage();
+                jobsFlow = CreatePage();
                 objectivesFlow = CreatePage();
-                contractsFlow = CreatePage();
-                BuildBriefPage(briefFlow);
+                briefFlow = CreatePage();
+                BuildJobsPage(jobsFlow);
                 BuildObjectivesPage(objectivesFlow);
-                BuildContractsPage(contractsFlow);
+                BuildBriefPage(briefFlow);
                 Console.Orders(0,
-                    "The lead task is the nearest open objective with a known fix.",
-                    "The ring under SCORE fills toward the next escalation gate.",
-                    "AT STAKE counts contracts in the field. An offer pays nothing until it is accepted.",
-                    "OPEN on the lead contract goes to the TASKING BOARD for accept and abort.");
+                    "LOCATE moves the map to the job. The act on the right is the source's own: ACCEPT, SELECT, FIRE.",
+                    "RELEASE hands your own job back: off your HUD, or a strike package disarmed.",
+                    "Click a contract or sortie to open its order, plot and ABORT. ABORT asks for confirmation.");
                 Console.Orders(1,
                     "Open tasks lead the list. Completed tasks are filed beneath them.",
                     "The figure on the right is the distance to the task's nearest fix. No fix reads percent complete.",
                     "Percent complete is the host's own figure. The strip under each task mirrors it.",
                     "BY TASK TYPE counts done against issued for each kind of task.");
                 Console.Orders(2,
-                    "Click a slip to open it. Click it again to close it.",
-                    "ACCEPT shares a job with the whole faction. HUD selection stays with this pilot.",
-                    "ABORT asks for confirmation, then the host applies the job's failure consequence.");
+                    "The lead task is the nearest open objective with a known fix.",
+                    "The ring under SCORE fills toward the next escalation gate.");
             }
 
             protected override void RefreshContent()
@@ -147,7 +135,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             protected override string AmbientStatus() =>
-                selectedPage == 2 ? secondaryStatus :
+                selectedPage == PageJobs ? (model.Sources ? openShown + " OPEN · " + hudShown + " ON HUD" : "NO JOB SOURCE RUNNING") :
                 model.ObjectivesActive == 0 ? "NO OPEN TASKS" :
                 model.ObjectivesActive + " OPEN TASKS";
 
@@ -158,168 +146,124 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 RequestRefresh();
             }
 
-            // ------------------------------------------------------------ MISSION page
+            // -------------------------------------------------------------- JOBS page
 
-            private void BuildBriefPage(AvFlow page)
+            private void BuildJobsPage(AvFlow page)
             {
-                hero = page.Add(new MissionHeroPart(page.Content));
-
-                briefTiles = new[]
-                {
-                    new AvGauge(page.Content, "SCORE"),
-                    new AvGauge(page.Content, "OBJECTIVES"),
-                    new AvGauge(page.Content, "AT STAKE"),
-                };
-                briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
-                briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";
-                briefTiles[2].Help = "At stake: the reward of contracts currently in the field. The ring shows how full the active-contract limit is.";
-                page.Row(briefTiles);
-
-                ladderSection = page.Section(MfdChromeIcon.For("CHART"), "ESCALATION");
-                ladder = page.Add(new EscalationLadderPart(page.Content));
-
-                leadSection = page.Section(AvIcon.Star, "LEAD CONTRACT");
-                leadContractRow = page.Add(new AvRow(page.Content, () => SetSelectedTab(2)));
-                leadContractOpen = leadContractRow.AddTrailing(new AvControl.Spec("OPEN", () => SetSelectedTab(2),
-                    AvButtonStyle.Primary));
-                if (leadContractOpen != null) leadContractOpen.Help = BrowseHelp;
-
-                boardLedger = page.Add(new AvNote(page.Content, AvTextRole.DataSmall));
-                boardLedger.CollapseEmpty = true;
-
-                trendSection = page.Section(AvIcon.ChartLine, "FUNDS TREND", "NO OBSERVATIONS YET");
-                trendChart = new AvLineChart(page.Content, 100f);
-                trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
-                trendChart.SetShown(false);   // an empty plot says nothing the caption does not; it appears with its first trace
-                page.Add(trendChart, 1f);
-                page.Links(("WAR PLAN", "STR", "BOARD"), ("ALLOCATION", "OPS", null));
+                page.Section(AvIcon.Target, "ON YOUR HUD", "ONE JOB AT A TIME");
+                for (int i = 0; i < MaxHudCards; i++) { hudCards[i] = page.Add(new JobCard(page.Content, Pick, Locate, Act, Release)); hudCards[i].SetShown(false); }
+                hudEmpty = page.Add(new AvRow(page.Content));
+                openSection = page.Section(AvIcon.ListDetails, "OPEN JOBS", "EVERY SOURCE · NEAREST FIRST");
+                for (int i = 0; i < MaxOpenCards; i++) { openCards[i] = page.Add(new JobCard(page.Content, Pick, Locate, Act, Release)); openCards[i].SetShown(false); }
+                openEmpty = page.Add(new AvRow(page.Content));
+                // One plot and one action bar, handed to whichever contract is open.
+                taskPlot = new MissionTaskPlot(page.Content); taskPlot.Rect.gameObject.SetActive(false);
+                taskActions = new MissionTaskActions(page.Content, RequestRefresh); Console.Ticker.Register(taskActions);
+                taskActions.Rect.gameObject.SetActive(false);
+                page.Links(("WAR PLAN", "STR", "BOARD"), ("ALLOCATION", "OPS", "PERKS"));
             }
 
-            /// <summary>The faction's funds over the observed window, fed by the same recorder the FAC history uses.</summary>
-            private void RenderTrend()
+            private void Pick(JobCard card)
             {
+                if (!card.Expandable) return;
+                openSlipId = card.Expanded ? -1 : card.Row.Id;
+                taskActions.CancelConfirmation();
+                RequestRefresh();
+            }
+
+#if !PUBLIC_RELEASE
+            /// <summary>Clicks the job card at this index (HUD cards first, then the open list), or its live act button; false when there is nothing to click.</summary>
+            internal bool PickForAutomation(int index, bool act)
+            {
+                JobCard card = index < 0 ? null : index < hudShown ? hudCards[index] : index - hudShown < openShown ? openCards[index - hudShown] : null;
+                if (card == null || (act ? string.IsNullOrEmpty(card.Row.Act) || !card.Row.ActLive : !card.Expandable)) return false;
+                if (act) Act(card); else Pick(card);
+                return true;
+            }
+#endif
+
+            /// <summary>LOCATE: the open map flies to the job's ground point (maximised first when it is not).</summary>
+            private static void Locate(JobCard card)
+            {
+                JobRow job = card.Row;
+                if (!job.HasSite) return;
                 DynamicMap map = SceneSingleton<DynamicMap>.i;
-                FactionHQ hq = map != null ? map.HQ : null;
-                MfdResourceHistory history = hq == null ? null : FactionResourceHistoryStore.For(hq);
-                int count = history != null ? history.Count : 0;
-                int runStart = 0, run = 0;
-                float lo = 0f, hi = 0f;
-                if (count > 0) run = history.FiniteRun(0, trendBuffer, out runStart, out lo, out hi);
-                if (run < 2)
-                {
-                    trendChart.SetSeries(trendBuffer, 0, "—", "—", "—");
-                    trendChart.SetShown(false);
-                    trendSection.SetCaption(count == 0 ? "NO OBSERVATIONS YET" : "NEEDS 2 OBSERVATIONS");
-                    return;
-                }
-                trendChart.SetShown(true);
-                trendChart.SetSeries(trendBuffer, run, AvNum.Money(lo), AvNum.Money(hi), AvNum.Money(trendBuffer[run - 1]));
-                trendSection.SetCaption("LAST " + AvNum.Clock(Mathf.Max(0f, history.Time(count - 1) - history.Time(runStart))) + " ON FILE");
+                if (map != null && !DynamicMap.mapMaximized) map.Maximize();
+                if (ModuleServices.TryGet(out IMapProjection projection)) projection.Focus(job.X, job.Z);
             }
 
-            private void RenderBrief()
+            private void Act(JobCard card) { SourceOf(card.Row.Kind)?.Act(card.Row.Id); RequestRefresh(); }
+
+            private void Release(JobCard card) { SourceOf(card.Row.Kind)?.Release(card.Row.Id); RequestRefresh(); }
+
+            private static IJobSource SourceOf(JobKind kind) =>
+                kind == JobKind.StrikePackage
+                    ? ModuleServices.TryGet(out ISupportJobs support) ? support : null
+                    : ModuleServices.TryGet(out IOperationJobs operations) ? (IJobSource)operations : null;
+
+            private void RenderJobs()
             {
-                hero.SetMission(model.MissionName, model.Mode, model.Clock == "—" ? "—" : "T+" + model.Clock, model.Brief, model.HasBrief);
-
-                int lead = LeadObjective();
-                if (lead >= 0)
+                List<JobRow> jobs = model.Jobs;
+                // The open contract left the board (taken, lapsed or replaced): pick again rather than leave a stale one open.
+                if (openSlipId >= 0 && !jobs.Exists(j => j.Kind != JobKind.StrikePackage && j.Id == openSlipId)) openSlipId = -2;
+                if (openSlipId == -2)
                 {
-                    ObjectiveLine line = model.Objectives[lead];
-                    hero.SetObjective(line.Title, line.Kind, line.Icon, line.Fraction,
-                        line.DistanceM >= 0f ? MfdMissionBoard.Distance(line.DistanceM) : null, AvState.Info);
+                    int own = jobs.FindIndex(j => j.Mine && j.Kind != JobKind.StrikePackage);
+                    openSlipId = own >= 0 ? jobs[own].Id : -1;
                 }
-                else hero.SetObjective(null, null, AvIcon.Flag, 0f, null, AvState.Inert);
 
-                float progress = 0f;
-                AvState holding = AvState.Ready;
-                if (model.HasEscalation)
+                hudShown = openShown = 0;
+                JobCard open = null; SecondaryObjectiveView openEntry = null;
+                for (int i = 0; i < jobs.Count; i++)
                 {
-                    int stage = MfdMissionOverview.Stage(model.Current, model.Tactical, model.Strategic);
-                    holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
-                    progress = MfdMissionOverview.NextGateProgress(model.Current, model.Tactical, model.Strategic);
+                    JobRow job = jobs[i];
+                    JobCard card = job.Mine && hudShown < MaxHudCards ? hudCards[hudShown++] : !job.Mine && openShown < MaxOpenCards ? openCards[openShown++] : null;
+                    if (card == null) continue;
+                    SecondaryObjectiveView entry = job.Kind == JobKind.StrikePackage ? null : model.Contracts.Find(c => c.Id == job.Id);
+                    bool expanded = entry != null && job.Id == openSlipId;
+                    card.Release();
+                    card.SetShown(true);
+                    card.Set(job, Range(job), entry, secondaryFresh, expanded);
+                    if (expanded) { open = card; openEntry = entry; }
                 }
-                if (!model.HasHq) briefTiles[0].Set(0f, "—", AvState.Inert);
-                else briefTiles[0].Set(progress, AvNum.Fixed(model.Score, 1), model.HasEscalation ? holding : AvState.Ready);
+                for (int i = hudShown; i < MaxHudCards; i++) { hudCards[i].Release(); hudCards[i].SetShown(false); }
+                for (int i = openShown; i < MaxOpenCards; i++) { openCards[i].Release(); openCards[i].SetShown(false); }
+                if (open != null) open.Attach(taskPlot, taskActions);
+                else { taskPlot.Rect.gameObject.SetActive(false); taskActions.Rect.gameObject.SetActive(false); }
+                taskActions.Set(openEntry, secondaryFresh, actionPending, actionResult);
 
-                int total = model.ObjectivesDone + model.ObjectivesActive;
-                if (total == 0) briefTiles[1].Set(0f, "—", AvState.Inert);
-                else briefTiles[1].Set(model.ObjectivesDone / (float)total,
-                    AvNum.Fixed(model.ObjectivesDone, 0) + "/" + AvNum.Fixed(total, 0),
-                    model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
-
-                if (!model.Installed) briefTiles[2].Set(0f, "—", AvState.Inert);
-                else briefTiles[2].Set(model.Limit > 0 ? Mathf.Clamp01(model.ActiveContracts / (float)model.Limit) : 0f,
-                    Cash(model.AtStake), model.ActiveContracts > 0 ? AvState.Ready : AvState.Inert);
-
-                RenderLadder();
-
-                SecondaryObjectiveView preview = model.Lead;
-                leadSection.SetCaption(!model.Installed ? "UNAVAILABLE" : MfdSecondaryObjectives.BoardSummary(
-                    model.Offers, model.ActiveContracts, model.Limit, model.Closed));
-                if (preview != null)
+                hudEmpty.SetShown(hudShown == 0);
+                if (hudShown == 0) hudEmpty.Set("NO JOB ON YOUR HUD", "ACCEPT OR SELECT ONE BELOW", "", AvState.Inert);
+                openEmpty.SetShown(openShown == 0);
+                if (openShown == 0)
                 {
-                    string where = preview.IsActive ? "IN FIELD" : preview.Target;
-                    string taken = string.IsNullOrWhiteSpace(preview.AcceptedBy) ? "" : "  ·  TAKEN BY " + preview.AcceptedBy;
-                    leadContractRow.Set(MfdSecondaryObjectives.TitleLine(preview.Id, preview.Title),
-                        where + taken, Cash(preview.Money), preview.IsActive ? AvState.Ready : AvState.Info);
-                    string help = MfdSecondaryObjectives.TitleLine(preview.Id, preview.Title) + "  ·  " + where + taken;
-                    leadContractRow.Help = help;
-                    if (leadContractOpen != null) leadContractOpen.Help = help;
+                    string message = !model.Sources ? "NO JOB SOURCE RUNNING\nDynamic operations and Support are off in this mission." :
+                        hudShown > 0 ? "NO OTHER JOBS OPEN\nNew work is drawn from the live battlefield as the front moves." :
+                        MfdSecondaryObjectives.EmptyMessage(!model.Installed ? BoardEmptyReason.Unavailable : !secondaryFresh ? BoardEmptyReason.LinkLost : BoardEmptyReason.Ready);
+                    int split = message.IndexOf('\n');
+                    openEmpty.Set(split < 0 ? message : message.Substring(0, split), split < 0 ? "" : message.Substring(split + 1), "",
+                        model.Installed && !secondaryFresh ? AvState.Caution : AvState.Inert);
                 }
-                else
-                {
-                    leadContractRow.Set(model.Offers + model.ActiveContracts > 0 ? "REVIEW CONTRACTS" : "NO CONTRACTS",
-                        "", "", AvState.Inert);
-                    leadContractRow.Help = BrowseHelp;
-                    if (leadContractOpen != null) leadContractOpen.Help = BrowseHelp;
-                }
-                if (leadContractOpen != null)
-                    leadContractOpen.gameObject.SetActive(preview != null || model.Offers + model.ActiveContracts > 0);
-                // The board's money, all from the same contract view the tiles above read.
-                boardLedger.Set(!model.Installed ? "" : "OFFERED " + Cash(model.Offered) + "   ·   IN FIELD " + Cash(model.AtStake) +
-                    "   ·   PAID OUT " + Cash(model.Paid));
-
-                RenderTrend();
+                openSection.SetCaption("EVERY SOURCE · NEAREST FIRST" + (openShown > 0 ? " · " + openShown + " OPEN" : ""));
             }
 
-            private int LeadObjective()
+            private string Range(in JobRow job) =>
+                hasSelf && job.HasSite ? MfdSecondaryObjectives.RangeBearing(selfX, selfZ, job.X, job.Z) : "";
+
+            /// <summary>The pilot's own jobs first, then nearest first (an unknown distance last), then by source and id.</summary>
+            private int CompareJobs(JobRow a, JobRow b)
             {
-                int best = -1;
-                float bestDistance = float.MaxValue;
-                for (int i = 0; i < model.Objectives.Count; i++)
-                {
-                    ObjectiveLine line = model.Objectives[i];
-                    if (line.Phase != MissionPhase.Active) continue;
-                    if (best < 0) best = i;
-                    if (line.DistanceM >= 0f && line.DistanceM < bestDistance)
-                    {
-                        bestDistance = line.DistanceM;
-                        best = i;
-                    }
-                }
-                return best;
+                if (a.Mine != b.Mine) return a.Mine ? -1 : 1;
+                int byDistance = Metres(a).CompareTo(Metres(b));
+                if (byDistance != 0) return byDistance;
+                return a.Kind != b.Kind ? a.Kind.CompareTo(b.Kind) : a.Id.CompareTo(b.Id);
             }
 
-            private void RenderLadder()
+            private float Metres(in JobRow job)
             {
-                // No escalation feed: say nothing rather than draw an empty ladder.
-                ladderSection.SetShown(model.HasEscalation);
-                ladder.SetShown(model.HasEscalation);
-                if (!model.HasEscalation) return;
-
-                float current = Mathf.Max(0f, model.Current);
-                float tactical = model.Tactical, strategic = model.Strategic;
-                int stage = MfdMissionOverview.Stage(current, tactical, strategic);
-                ladderSection.SetCaption(MfdMissionOverview.Caption(current, tactical, strategic));
-                AvState holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
-                for (int i = 0; i < 3; i++)
-                {
-                    bool set = i == 0 || (i == 1 ? tactical > 0f : strategic > 0f);
-                    AvState state = i == stage ? holding : i < stage ? AvState.Ready : AvState.Inert;
-                    ladder.SetRung(i, MfdMissionBoard.RungThreshold(i, tactical, strategic),
-                        MfdMissionOverview.StageState(i, stage, set), state);
-                }
-                ladder.SetFill(MfdMissionBoard.LadderFill(stage, MfdMissionOverview.NextGateProgress(current, tactical, strategic)));
+                if (!hasSelf || !job.HasSite) return float.MaxValue;
+                float dx = job.X - selfX, dz = job.Z - selfZ, d = dx * dx + dz * dz;
+                return float.IsFinite(d) ? d : float.MaxValue;
             }
 
             // -------------------------------------------------------- OBJECTIVES page
@@ -391,100 +335,106 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 row.Help = line.Title + "  —  " + detail;
             }
 
-            // ---------------------------------------------------------- CONTRACTS page
+            // ------------------------------------------------------------- BRIEF page
 
-            private void BuildContractsPage(AvFlow page)
+            private void BuildBriefPage(AvFlow page)
             {
-                boardSection=page.Section(AvIcon.ListDetails,"FACTION JOB BOARD");
-                slots=page.Add(new ContractSlots(page.Content,OpenSlip));
-                boardBook=page.Add(new AvNote(page.Content,AvTextRole.DataSmall));boardBook.CollapseEmpty=true;
-                for(int i=0;i<MaxSlips;i++){slips[i]=page.Add(new ContractCard(page.Content,ToggleSlip));slips[i].SetShown(false);}
-                contractsEmpty=page.Add(new AvRow(page.Content));contractsEmpty.SetShown(false);
-                // One plot and one action bar, handed to whichever slip is open.
-                taskPlot=new MissionTaskPlot(page.Content);taskPlot.Rect.gameObject.SetActive(false);
-                taskActions=new MissionTaskActions(page.Content,RequestRefresh,ExposeTaskMap);Console.Ticker.Register(taskActions);
-                taskActions.Rect.gameObject.SetActive(false);
-                page.Links(("FUNDS", "FAC", "ECONOMY"), ("SUPPORT", "OPS", null));
-            }
-            private void ToggleSlip(int id)
-            {
-                openSlipId=openSlipId==id?-1:id;taskActions.CancelConfirmation();RenderContracts();
-            }
-#if !PUBLIC_RELEASE
-            internal bool PickForAutomation(int index)
-            {
-                if(index<0||index>=model.Contracts.Count||index>=MaxSlips)return false;
-                ToggleSlip(model.Contracts[index].Id);return true;
-            }
-#endif
-            private void OpenSlip(int id)
-            {
-                openSlipId=id;taskActions.CancelConfirmation();RenderContracts();
-            }
-            private void ExposeTaskMap()
-            {
-                var map=SceneSingleton<DynamicMap>.i;if(map!=null&&!DynamicMap.mapMaximized)map.Maximize();
-            }
-            private void RenderContracts()
-            {
-                int hud=-1;bool pending=false;string result="";
-                if(ModuleServices.TryGet(out ISecondaryObjectivesView view)){hud=view.SelectedForHud;pending=view.IsActionPending;result=view.ActionResult;}
-                boardSection.SetCaption(!model.Installed?"DIRECTOR UNAVAILABLE":!secondaryFresh?"HOST UNAVAILABLE":
-                    MfdSecondaryObjectives.BoardSummary(model.Offers,model.ActiveContracts,model.Limit,model.Closed));
-                activeContracts.Clear();
-                foreach(var e in model.Contracts)if(e.IsActive)activeContracts.Add(e);
-                slots.Set(model.Installed?model.Limit:0,activeContracts);
-                boardBook.Set(!model.Installed?"":"ON OFFER "+Cash(model.Offered)+"   ·   IN FIELD "+Cash(model.AtStake)+"   ·   PAID OUT "+Cash(model.Paid));
+                hero = page.Add(new MissionHeroPart(page.Content));
 
-                bool empty=model.Contracts.Count==0;
-                contractsEmpty.SetShown(empty);
-                if(empty)
+                briefTiles = new[]
                 {
-                    string message=MfdSecondaryObjectives.EmptyMessage(EmptyReason(model.Installed,secondaryFresh));
-                    int split=message.IndexOf('\n');
-                    contractsEmpty.Set(split<0?message:message.Substring(0,split),split<0?"":message.Substring(split+1),"",secondaryFresh?AvState.Inert:AvState.Caution);
-                }
-                // The open job left the board (taken, lapsed or replaced): pick again rather than leave the board shut.
-                if(openSlipId>=0&&!model.Contracts.Exists(e=>e.Id==openSlipId))openSlipId=-2;
-                if(openSlipId==-2&&!empty)
-                    openSlipId=model.Contracts.Exists(e=>e.Id==hud)?hud:model.Contracts[0].IsActive||model.Contracts[0].IsOffered?model.Contracts[0].Id:-1;
+                    new AvGauge(page.Content, "SCORE"),
+                    new AvGauge(page.Content, "OBJECTIVES"),
+                };
+                briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
+                briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";
+                page.Row(briefTiles);
 
-                GlobalPosition self=default;bool hasSelf=false;
-                if(GameManager.GetLocalAircraft(out Aircraft aircraft)&&aircraft!=null&&!aircraft.disabled&&!aircraft.HasEjected())
-                {self=aircraft.transform.position.ToGlobalPosition();hasSelf=true;}
-
-                ContractCard open=null;SecondaryObjectiveView openEntry=null;
-                int group=-1;
-                for(int i=0;i<MaxSlips;i++)
-                {
-                    ContractCard slip=slips[i];
-                    bool shown=i<model.Contracts.Count;
-                    slip.Release();slip.SetShown(shown);
-                    if(!shown)continue;
-                    SecondaryObjectiveView e=model.Contracts[i];
-                    int g=e.IsActive?0:e.IsOffered?1:2;
-                    string heading=g==group?"":g==0?"IN THE FIELD  ·  "+MfdSecondaryObjectives.ShortCount(model.ActiveContracts,model.Limit)+" SLOTS":
-                        g==1?"ON OFFER  ·  "+model.Offers:"CLOSED  ·  "+model.Closed;
-                    group=g;
-                    string range=hasSelf&&e.HasMarker&&secondaryFresh?MfdSecondaryObjectives.RangeBearing(self.x,self.z,e.X,e.Z):"";
-                    bool isOpen=e.Id==openSlipId;
-                    slip.Set(e,secondaryFresh,range,heading,isOpen);
-                    if(isOpen){open=slip;openEntry=e;}
-                }
-                if(open!=null)open.Attach(taskPlot,taskActions);
-                else{taskPlot.Rect.gameObject.SetActive(false);taskActions.Rect.gameObject.SetActive(false);}
-                taskActions.Set(openEntry,secondaryFresh,secondaryHasCapacity,hud,pending,result);
+                ladderSection = page.Section(MfdChromeIcon.For("CHART"), "ESCALATION");
+                ladder = page.Add(new EscalationLadderPart(page.Content));
+                page.Links(("WAR PLAN", "STR", "BOARD"), ("FUNDS", "FAC", "ECONOMY"));
             }
-            private static BoardEmptyReason EmptyReason(bool installed,bool streamed)=>
-                !installed?BoardEmptyReason.Unavailable:!streamed?BoardEmptyReason.LinkLost:BoardEmptyReason.Ready;
+
+            private void RenderBrief()
+            {
+                hero.SetMission(model.MissionName, model.Mode, model.Clock == "—" ? "—" : "T+" + model.Clock, model.Brief, model.HasBrief);
+
+                int lead = LeadObjective();
+                if (lead >= 0)
+                {
+                    ObjectiveLine line = model.Objectives[lead];
+                    hero.SetObjective(line.Title, line.Kind, line.Icon, line.Fraction,
+                        line.DistanceM >= 0f ? MfdMissionBoard.Distance(line.DistanceM) : null, AvState.Info);
+                }
+                else hero.SetObjective(null, null, AvIcon.Flag, 0f, null, AvState.Inert);
+
+                float progress = 0f;
+                AvState holding = AvState.Ready;
+                if (model.HasEscalation)
+                {
+                    int stage = MfdMissionOverview.Stage(model.Current, model.Tactical, model.Strategic);
+                    holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
+                    progress = MfdMissionOverview.NextGateProgress(model.Current, model.Tactical, model.Strategic);
+                }
+                if (!model.HasHq) briefTiles[0].Set(0f, "—", AvState.Inert);
+                else briefTiles[0].Set(progress, AvNum.Fixed(model.Score, 1), model.HasEscalation ? holding : AvState.Ready);
+
+                int total = model.ObjectivesDone + model.ObjectivesActive;
+                if (total == 0) briefTiles[1].Set(0f, "—", AvState.Inert);
+                else briefTiles[1].Set(model.ObjectivesDone / (float)total,
+                    AvNum.Fixed(model.ObjectivesDone, 0) + "/" + AvNum.Fixed(total, 0),
+                    model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
+
+                RenderLadder();
+            }
+
+            private int LeadObjective()
+            {
+                int best = -1;
+                float bestDistance = float.MaxValue;
+                for (int i = 0; i < model.Objectives.Count; i++)
+                {
+                    ObjectiveLine line = model.Objectives[i];
+                    if (line.Phase != MissionPhase.Active) continue;
+                    if (best < 0) best = i;
+                    if (line.DistanceM >= 0f && line.DistanceM < bestDistance)
+                    {
+                        bestDistance = line.DistanceM;
+                        best = i;
+                    }
+                }
+                return best;
+            }
+
+            private void RenderLadder()
+            {
+                // No escalation feed: say nothing rather than draw an empty ladder.
+                ladderSection.SetShown(model.HasEscalation);
+                ladder.SetShown(model.HasEscalation);
+                if (!model.HasEscalation) return;
+
+                float current = Mathf.Max(0f, model.Current);
+                float tactical = model.Tactical, strategic = model.Strategic;
+                int stage = MfdMissionOverview.Stage(current, tactical, strategic);
+                ladderSection.SetCaption(MfdMissionOverview.Caption(current, tactical, strategic));
+                AvState holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
+                for (int i = 0; i < 3; i++)
+                {
+                    bool set = i == 0 || (i == 1 ? tactical > 0f : strategic > 0f);
+                    AvState state = i == stage ? holding : i < stage ? AvState.Ready : AvState.Inert;
+                    ladder.SetRung(i, MfdMissionBoard.RungThreshold(i, tactical, strategic),
+                        MfdMissionOverview.StageState(i, stage, set), state);
+                }
+                ladder.SetFill(MfdMissionBoard.LadderFill(stage, MfdMissionOverview.NextGateProgress(current, tactical, strategic)));
+            }
 
             // ---------------------------------------------------------------- render
 
             private void Render()
             {
-                RenderBrief();
+                if (selectedPage == PageJobs) RenderJobs();
                 RenderObjectives();
-                RenderContracts();
+                RenderBrief();
             }
 
             // ---------------------------------------------------------------- gather
@@ -524,7 +474,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
 
                 GatherObjectives(mission, hq);
-                GatherContracts();
+                // Only while JOBS is up: reading the strike packages holds the SPACE feed open.
+                if (selectedPage == PageJobs) GatherJobs();
             }
 
             private void GatherObjectives(Mission mission, FactionHQ hq)
@@ -599,63 +550,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 else model.ObjectivesActive++;
             }
 
-            private readonly List<SecondaryObjectiveView> allContracts = new List<SecondaryObjectiveView>(16);
-
-            private void GatherContracts()
+            /// <summary>Every source's jobs, sorted, plus the host's contract cards behind them (for the open card's detail).</summary>
+            private void GatherJobs()
             {
-                bool installed = ModuleServices.TryGet(out ISecondaryObjectivesView view);
-                IReadOnlyList<SecondaryObjectiveView> entries = null;
-                bool streamed = false;
-                secondaryFresh=false;
-                model.Installed = installed;
-                if (installed)
+                model.Contracts.Clear();
+                secondaryFresh = actionPending = false;
+                actionResult = "";
+                model.Installed = ModuleServices.TryGet(out ISecondaryObjectivesView view);
+                if (model.Installed)
                 {
                     view.Refresh();
-                    entries = view.Objectives;
-                    streamed = !string.IsNullOrWhiteSpace(view.Status);
-                    secondaryFresh=view.IsFresh;
-                    model.Limit = Math.Max(0, view.ActiveLimit);
-                    secondaryStatus = streamed ? view.Status : "SECONDARY MISSIONS — WAITING FOR HOST";
+                    secondaryFresh = view.IsFresh;
+                    actionPending = view.IsActionPending;
+                    actionResult = view.ActionResult;
+                    if (view.Objectives != null) foreach (SecondaryObjectiveView e in view.Objectives) if (e != null) model.Contracts.Add(e);
                 }
-                else
-                {
-                    model.Limit = 0;
-                    secondaryStatus = "SECONDARY MISSIONS UNAVAILABLE — DIRECTOR DISABLED OR NOT INSTALLED";
-                }
-                model.Streamed = streamed;
 
-                model.Offers = model.Closed = model.ActiveContracts = 0;
-                model.AtStake = model.Offered = model.Paid = 0;
-                SecondaryObjectiveView leadOffer = null, leadActive = null;
-                model.Contracts.Clear();
-                allContracts.Clear();
-                if (entries != null) foreach (SecondaryObjectiveView entry in entries)
+                model.Jobs.Clear();
+                bool operations = ModuleServices.TryGet(out IOperationJobs contracts), support = ModuleServices.TryGet(out ISupportJobs packages);
+                model.Sources = operations || support;
+                if (operations) contracts.CopyJobs(model.Jobs);
+                if (support) packages.CopyJobs(model.Jobs);
+
+                hasSelf = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null && !aircraft.disabled && !aircraft.HasEjected();
+                if (hasSelf)
                 {
-                    if (entry == null) continue;
-                    allContracts.Add(entry);
-                    int money = Math.Max(0, entry.Money);
-                    if (entry.IsActive)
-                    {
-                        model.ActiveContracts++;
-                        model.AtStake += money;
-                        if (leadActive == null) leadActive = entry;
-                    }
-                    else if (entry.IsOffered)
-                    {
-                        model.Offers++;
-                        model.Offered += money;
-                        if (leadOffer == null) leadOffer = entry;
-                    }
-                    else
-                    {
-                        model.Closed++;
-                        if (entry.IsComplete) model.Paid += money;
-                    }
-                    model.Contracts.Add(entry);
+                    GlobalPosition self = aircraft.transform.position.ToGlobalPosition();
+                    selfX = self.x; selfZ = self.z;
                 }
-                MfdSecondaryObjectives.SortForBoard(model.Contracts);
-                secondaryHasCapacity = model.Limit <= 0 || model.ActiveContracts < model.Limit;
-                model.Lead = leadActive ?? leadOffer;
+                model.Jobs.Sort(jobOrder ??= CompareJobs);
             }
 
             // ------------------------------------------------------------- helpers
@@ -670,9 +593,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     default: return "SINGLE / MULTIPLAYER";
                 }
             }
-
-            /// <summary>A whole-dollar amount in mono, thousands-separated ("$1,500").</summary>
-            private static string Cash(int dollars) => "$" + AvNum.Thousands(Math.Max(0, dollars));
 
             private static string MissionClock(MissionManager manager) =>
                 manager == null ? "—" : AvNum.Clock(Mathf.Max(0, Mathf.FloorToInt(manager.MissionTime)));

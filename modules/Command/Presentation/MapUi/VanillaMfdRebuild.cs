@@ -108,11 +108,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return null;
         }
 
-        /// <summary>Dev tooling: clicks the MIS job board's slip at this index (the click path), false without one.</summary>
-        internal static bool PickContractForAutomation(int index)
+        /// <summary>Dev tooling: clicks the MIS JOBS card at this index (the click path), or its act button with <paramref name="act"/>; false when there is nothing to click.</summary>
+        internal static bool JobCardForAutomation(int index, bool act)
         {
             foreach (Binding binding in bindings.Values)
-                if (binding.Presenter is MissionPresenter mission) return mission.PickForAutomation(index);
+                if (binding.Presenter is MissionPresenter mission) return mission.PickForAutomation(index, act);
             return false;
         }
 #endif

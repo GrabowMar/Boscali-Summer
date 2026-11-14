@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         {
             CallsPanel panel = Find<CallsPanel>();
             if (panel == null) return Fail("Open", "no OPS panel in this scene");
-            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 3));
+            panel.OpenForAutomation((OpsTab)Mathf.Clamp((int)Number(args, "tab", 1f), 1, 2));
             return Readout(null);
         }
 
@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     if (calls != null && m.SpaceMirror.State.Posts.Count > 0)
                     {
                         int post = m.SpaceMirror.State.Posts[0].CallId;
-                        calls.PressTasked(post); calls.PressTasked(post); // arm, then execute: the card's two presses
+                        calls.PressTasked(post); calls.PressTasked(post); // arm, then execute: the MIS job row's ACCEPT then FIRE
                         request = post;
                     }
                     break;
@@ -316,7 +316,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private static bool haveContact;
         private static float contactX, contactZ;
 
-        /// <summary>STEER on the TASKED tab, then the armed map pick 5 km off the nose, as the right-click would.</summary>
+        /// <summary>STEER (the PERKS cruise block), then the armed map pick 5 km off the nose, as the right-click would.</summary>
         private static bool Steer(SupportManager m)
         {
             CallsController calls = Find<CallsController>();
@@ -354,7 +354,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 r["perksTotal"] = pv.PerksTotal;
                 r["frontsAhead"] = pv.FrontsAhead;
                 r["alerts"] = pv.Alerts;
-                r["taskedRows"] = pv.Tasked.Count;
+                var jobs = new List<BoscaliSummer.Core.Contracts.JobRow>(8); // the posted packages as MIS JOBS lists them
+                if (BoscaliSummer.Core.Services.ModuleServices.TryGet(out BoscaliSummer.Core.Contracts.ISupportJobs posted)) posted.CopyJobs(jobs);
+                r["taskedRows"] = jobs.Count;
                 var cards = new List<object>(3);
                 foreach (FrontCardView c in pv.Cards)
                     cards.Add(new Dictionary<string, object> { { "front", (int)c.Front }, { "grade", c.Grade }, { "superiority", c.Superiority }, { "directive", c.Directive }, { "building", c.Building }, { "alert", c.Alert } });
@@ -706,8 +708,9 @@ namespace BoscaliSummer.Modules.Support.Runtime
 
 #if !PUBLIC_RELEASE
         /// <summary>
-        /// The OPS page as a pilot clicks it: <c>do</c> = <c>perk</c> (a perk card, <c>action</c> = the SupportActionId name), <c>post</c> (the first posted package's card),
-        /// <c>strip</c> (the strip's primary button as painted), <c>disarm</c>, or nothing (read only). Reads back the arm, the tab, the strip and the spoken words.
+        /// The OPS page as a pilot clicks it: <c>do</c> = <c>perk</c> (a perk card, <c>action</c> = the SupportActionId name), <c>post</c> (the first posted package's
+        /// MIS JOBS row: ACCEPT arms it), <c>fire</c> (the armed package's row: FIRE claims it), <c>strip</c> (the strip's primary button as painted), <c>disarm</c>, or
+        /// nothing (read only). Reads back the arm, the tab, the strip, the armed package's row verb and the spoken words.
         /// </summary>
         public static Dictionary<string, object> Mfd(Dictionary<string, object> args)
         {
@@ -715,6 +718,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             CallsController calls = Find<CallsController>();
             SupportManager m = SupportManager.Active;
             if (panel == null || calls == null || m == null) return Fail("Mfd", "no OPS page in this scene");
+            BoscaliSummer.Core.Services.ModuleServices.TryGet(out BoscaliSummer.Core.Contracts.ISupportJobs jobs);
             string what = Text(args, "do") ?? "";
             var r = new Dictionary<string, object>();
             switch (what)
@@ -725,12 +729,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     panel.ClickPerk(id);
                     break;
                 case "post":
-                    panel.SelectTab(OpsTab.Tasked);
                     var posts = m.SpaceMirror.State.Posts;
-                    if (posts.Count == 0) { r["found"] = 0; break; }
+                    if (posts.Count == 0 || jobs == null) { r["found"] = 0; break; }
                     r["found"] = 1; r["post"] = posts[0].CallId;
-                    panel.ClickPost(posts[0].CallId);
+                    jobs.Act(posts[0].CallId);
                     break;
+                case "fire": if (calls.TaskedArmedId != 0) jobs?.Act(calls.TaskedArmedId); break;
                 case "strip": panel.PressStrip(); break;
                 case "disarm": panel.PressDisarm(); break;
             }
@@ -745,11 +749,14 @@ namespace BoscaliSummer.Modules.Support.Runtime
             r["allocation"] = (int)m.LocalAllocation;
             r["posts"] = m.SpaceMirror.State.Posts.Count;
             OpsPageView v = panel.View;
-            StripView sv = panel.Tab == OpsTab.Tasked ? v.PostStrip : v.PerkStrip;
+            StripView sv = v.PerkStrip;
             r["stripHas"] = sv.Has ? 1 : 0;
             r["stripPrimary"] = sv.Primary ?? "";
             r["stripFire"] = sv.PrimaryFire ? 1 : 0;
             r["stripId"] = sv.Id;
+            var rows = new List<BoscaliSummer.Core.Contracts.JobRow>(8);
+            jobs?.CopyJobs(rows);
+            r["postFire"] = rows.Exists(j => j.Mine && j.Act == "FIRE") ? 1 : 0;
             SupportHudLine hud = Find<SupportHudLine>();
             r["frontNotices"] = hud != null ? hud.FrontNoticeCount : -1;
             r["frontNotice"] = hud != null ? hud.LastFrontNotice : "";
