@@ -44,7 +44,7 @@ namespace BoscaliSummer.Core.Config
 
             s.Progression.ScorePerPoint, s.Progression.MaximumPoints, s.Progression.PerkStrength,
 
-            s.Squad.PilotLives, s.Squad.EnemyAceHunts, s.Squad.DamageThreshold, s.Squad.HuntCooldown,
+            s.Squad.PilotLives, s.Squad.EnemyAceHunts, s.Squad.HeatThreshold, s.Squad.HuntCooldown,
 
             s.Support.ReconEnabled, s.Support.FortifyEnabled, s.Support.ArtilleryEnabled,
             s.Support.EmpEnabled, s.Support.ElintEnabled,

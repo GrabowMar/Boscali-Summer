@@ -21,6 +21,9 @@ namespace BoscaliSummer.Modules.Squad.Networking
         public uint Scene, Token, Event;
         public PilotView Pilot;
         public bool Hunt;
+        /// <summary>Enemy heat on the pilot, percent of the threshold; <see cref="NoHeat"/> while hunts are off.</summary>
+        public byte Heat;
+        public const byte NoHeat = 255;
         public int Bonus, Origin, ActiveIndex, HuntId;
         public string Status, Speaker, Chatter;
         public EnemyWingView[] Wings;
@@ -31,8 +34,8 @@ namespace BoscaliSummer.Modules.Squad.Networking
 
     internal sealed class SquadNet : MonoBehaviour
     {
-        /// <summary>Version 3 adds the content revision and the header-only unchanged reply.</summary>
-        internal const byte ProtocolVersion = 3;
+        /// <summary>Version 3 adds the content revision and the header-only unchanged reply; 4 adds the heat byte.</summary>
+        internal const byte ProtocolVersion = 4;
         private const float FastPoll = 1f, IdlePoll = 5f;
         private SquadManager manager;
         private HandlerSlot serverSlot, clientSlot;
@@ -147,7 +150,7 @@ namespace BoscaliSummer.Modules.Squad.Networking
                 w.WritePackedUInt32(v.Event);
                 WriteText(w, v.Pilot.Name); WriteText(w, v.Pilot.Callsign); WriteText(w, v.Pilot.Status); WriteText(w, v.Pilot.Background);
                 w.WriteByte(v.Pilot.Respawns ? (byte)1 : (byte)0); w.WritePackedInt32(v.Pilot.Deaths); w.WritePackedInt32(v.Pilot.Generation);
-                w.WriteByte(v.Hunt ? (byte)1 : (byte)0); w.WritePackedInt32(v.Bonus); w.WritePackedInt32(v.Origin);
+                w.WriteByte(v.Hunt ? (byte)1 : (byte)0); w.WriteByte(v.Heat); w.WritePackedInt32(v.Bonus); w.WritePackedInt32(v.Origin);
                 w.WritePackedInt32(v.ActiveIndex + 1); w.WritePackedInt32(v.HuntId);
                 WriteText(w, v.Status); WriteText(w, v.Speaker); WriteText(w, v.Chatter);
                 int count = Math.Min(8, v.Wings?.Length ?? 0); w.WriteByte((byte)count);
@@ -176,7 +179,7 @@ namespace BoscaliSummer.Modules.Squad.Networking
                 string name = ReadText(r), callsign = ReadText(r), status = ReadText(r), background = ReadText(r);
                 bool respawns = r.ReadByte() == 1; int deaths = ReadInt(r, 10000, ref valid), generation = ReadInt(r, 10001, ref valid);
                 v.Pilot = new PilotView(name, callsign, status, respawns, deaths, generation, background);
-                v.Hunt = r.ReadByte() == 1; v.Bonus = ReadInt(r, 20, ref valid); v.Origin = ReadInt(r, int.MaxValue, ref valid);
+                v.Hunt = r.ReadByte() == 1; v.Heat = r.ReadByte(); if (v.Heat > 100 && v.Heat != SquadSnapshot.NoHeat) valid = false; v.Bonus = ReadInt(r, 20, ref valid); v.Origin = ReadInt(r, int.MaxValue, ref valid);
                 v.ActiveIndex = ReadInt(r, 8, ref valid) - 1; v.HuntId = ReadInt(r, int.MaxValue, ref valid);
                 v.Status = ReadText(r); v.Speaker = ReadText(r); v.Chatter = ReadText(r);
                 int count = r.ReadByte();

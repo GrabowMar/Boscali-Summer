@@ -26,5 +26,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public AvUnits Units;
         /// <summary>Load factor and the airframe's G limit (0 = unknown) for the G gauge.</summary>
         public float G, GLimit;
+        /// <summary>Enemy HEAT on the pilot, 0..1 of the ace threshold (Squad's <see cref="ISquadView.Heat"/>); NaN: ace hunts off, no row. <see cref="AcesInbound"/>: an ace wing is hunting the pilot.</summary>
+        public float Heat;
+        public bool AcesInbound;
     }
 }

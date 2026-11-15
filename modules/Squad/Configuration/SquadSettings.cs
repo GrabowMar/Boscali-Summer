@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Squad.Configuration
     {
         public ConfigEntry<bool> EnemyAceHunts { get; }
         public ConfigEntry<PilotLifeMode> PilotLives { get; }
-        public ConfigEntry<float> DamageThreshold { get; }
+        public ConfigEntry<float> HeatThreshold { get; }
         public ConfigEntry<float> HuntCooldown { get; }
         public ConfigEntry<int> DebugWingTier { get; }
         internal Func<int, string> SpawnDebugWing;
@@ -25,12 +25,14 @@ namespace BoscaliSummer.Modules.Squad.Configuration
                 "OneLife retires a confirmed dead pilot; the next aircraft receives a new pilot with fresh " +
                 "perks and score progress. Ejection alone is not death. Native aircraft respawning remains available.");
             EnemyAceHunts = config.Bind("Squad", "EnemyAceHunts", true,
-                "Enemy aces lead escalating wings that hunt a player after hostile damage. Requires Wing Command's Squad API. Host authoritative.");
-            DamageThreshold = config.Bind("Squad", "DamageThreshold", 25f,
-                new ConfigDescription("Initial hostile part damage needed for an ace hunt, after native armor. " +
-                    "Threshold increases 35% per defeated ace (capped at five times this value). " +
-                    "First 60 mission seconds and active/cooling hunts do not accumulate threat. Host authoritative.",
-                    new AcceptableValueRange<float>(5f, 500f)));
+                "Enemy aces lead escalating wings that hunt a player once enemy heat is full. Requires Wing Command's Squad API. Host authoritative.");
+            // New key (was DamageThreshold, 25 part damage): heat is now kill score, so the old saved value must not carry over.
+            HeatThreshold = config.Bind("Squad", "HeatThreshold", 24f,
+                new ConfigDescription("Enemy HEAT needed before an ace wing is sent after a player. Each kill adds its vanilla kill score " +
+                    "(square root of the unit's value, split by damage share); one kill fills at most 40% of the bar. " +
+                    "Heat cools after a quiet minute. Threshold grows 35% per defeated ace (up to five times). " +
+                    "No heat builds in the first 3 mission minutes or during a hunt and its cooldown. Host authoritative.",
+                    new AcceptableValueRange<float>(4f, 200f)));
             HuntCooldown = config.Bind("Squad", "HuntCooldown", 180f,
                 new ConfigDescription("Quiet period after a hunt ends. Fresh hostile damage is required afterward. Host authoritative.",
                     new AcceptableValueRange<float>(60f, 600f)));

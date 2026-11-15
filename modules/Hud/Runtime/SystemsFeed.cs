@@ -51,6 +51,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
 
             cache.ClockS = BoscaliSummer.Core.Game.MissionTimeSource.Now();
+            bool squad = ModuleServices.TryGet(out ISquadView aces) && !(aces is Object dropped && dropped == null);
+            cache.Heat = squad ? aces.Heat : float.NaN;
+            cache.AcesInbound = squad && aces.HuntActive;
             cache.HasCloud = cache.InCloud = false;
             if (ModuleServices.TryGet(out IWeatherView view) && !(view is Object lost && lost == null))
             {

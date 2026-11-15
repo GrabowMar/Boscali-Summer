@@ -180,6 +180,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             FuelBlock(g, 142f, 31f, 156f);
             if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 142f, 79f, 156f, p.Units);
             WeatherBlock(g, 310f, 35f);
+            HeatBlock(g, 310f, 95f, 126f, p.Now);
+        }
+
+        /// <summary>
+        /// Enemy HEAT on R4 under the wind and clock: how much the enemy faction hates this pilot. Word, bar and figure, amber from 75% (an ace wing comes at 100%);
+        /// while that wing hunts the pilot the row turns into a pulsing red ACES INBOUND. Not drawn while ace hunts are off.
+        /// </summary>
+        private void HeatBlock(ScopeCanvas g, float x, float y, float w, float t)
+        {
+            if (d.AcesInbound) { g.Text("ACES INBOUND", x, y, Red, bold: true, alpha: 0.6f + 0.4f * ScopeCanvas.Pulse(t, 1.2f)); return; }
+            if (float.IsNaN(d.Heat)) return;
+            int pct = SystemsMath.Percent(d.Heat);
+            ScopeTone tone = pct >= 75 ? Amber : Ink;
+            g.Text("HEAT", x, y, Dim);
+            g.Bar(x + 34f, y - 3f, w - 72f, 6f, d.Heat, tone);
+            g.Text(ScopeStr.Pct(pct), x + w, y, tone, align: ScopeAlign.Right, bold: tone != Ink);
         }
 
         private void PaintAirframe(ScopeCanvas g, float t, float cx, float cy, float s)

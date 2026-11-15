@@ -25,7 +25,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             public bool SeatDeathObserved;
             public string Name, Callsign, Background;
             public uint Event;
-            public string Notice = "Damage hostile forces to attract an enemy ace.", Speaker = "SQUAD", Chatter = "";
+            public string Notice = "Kills raise enemy HEAT. At full heat they send an ace wing after you.", Speaker = "SQUAD", Chatter = "";
             public float NextSpawnAttempt;
         }
 
@@ -83,6 +83,8 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         public PilotView Pilot { get { lastBoardRead = Time.unscaledTime; return pilot; } }
         public string Status { get { lastBoardRead = Time.unscaledTime; return status; } }
         public bool HuntActive { get; private set; }
+        /// <summary>Enemy heat on the local pilot, 0..1; NaN while ace hunts are off or unavailable.</summary>
+        public float Heat { get; private set; } = float.NaN;
         /// <summary>Revision of the snapshot on display; zero after <see cref="ClearLocal"/>.</summary>
         internal uint AppliedRevision { get; private set; }
         public string LastChatter { get; private set; } = string.Empty;
@@ -345,9 +347,11 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             }
             if (seat != null && seat.dead) RecordPilotDeath(player, seat);
             if (career.Hq != player.HQ) { career.Hq = player.HQ; career.ProvokedHq = null; }
+            float threshold = career.Rules.Threshold(settings.HeatThreshold.Value);
+            if (career.Rules.Heat < threshold) career.Rules.Cool(now, threshold);
             if (!allowSpawn || !settings.EnemyAceHunts.Value || !WingLink.SquadAvailable || career.Rules.Hunting ||
                 !Flyable(aircraft) || !Hostile(career.ProvokedHq, player.HQ) || now < career.NextSpawnAttempt ||
-                career.Rules.Threat < career.Rules.Threshold(settings.DamageThreshold.Value)) return;
+                career.Rules.Heat < threshold) return;
             int owned = 0;
             for (int i = 0; i < hunts.Count; i++) if (hunts[i].Aircraft != null) owned++;
             if (owned >= AceCareer.MaximumWings) return;
@@ -387,11 +391,10 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 if (hunt.Owner == career && hunt.Generation == career.Rules.Generation && hunt.Aircraft != null &&
                     hunt.Aircraft.Length > 0 && hunt.Aircraft[0] == victim) hunt.PlayerHitAce = true;
             }
-            if (!settings.EnemyAceHunts.Value || !Flyable(player.Aircraft)) return;
-            float now = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0;
-            if (career.Rules.Damage(amount, now, career.Rules.Threshold(settings.DamageThreshold.Value)))
-                career.ProvokedHq = victim.NetworkHQ;
         }
+
+        private static readonly HarmonyLib.AccessTools.FieldRef<Unit, Dictionary<PersistentID, float>> DamageCredit =
+            HarmonyLib.AccessTools.FieldRefAccess<Unit, Dictionary<PersistentID, float>>("damageCredit");
 
         internal void RecordKill(Unit victim)
         {
@@ -401,6 +404,32 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 Hunt hunt = hunts[i];
                 if (hunt.Aircraft != null && hunt.Aircraft.Length > 0 && hunt.Aircraft[0] == victim)
                     hunt.KillReported = true;
+            }
+            if (GameAccess.IsServer() && MissionManager.IsRunning && settings.EnemyAceHunts.Value && !(victim is Missile)) AddKillHeat(victim);
+        }
+
+        /// <summary>
+        /// Heat for a kill is the vanilla kill score (sqrt of the unit's value times each player's share of its damage credit, Unit.ReportKilled),
+        /// so the enemy hates a pilot exactly as much as the war rewards them for hurting it.
+        /// </summary>
+        private void AddKillHeat(Unit victim)
+        {
+            Dictionary<PersistentID, float> credit = DamageCredit(victim);
+            if (credit == null || credit.Count == 0 || !UnitRegistry.TryGetPersistentUnit(victim.persistentID, out PersistentUnit dead)) return;
+            float worth = Mathf.Sqrt(Mathf.Max(0f, dead.definition != null ? dead.definition.value : 0f)), total = 0f;
+            if (worth <= 0f) return;
+            foreach (float share in credit.Values) total += share;
+            if (!(total > 0f)) return;
+            FactionHQ victimHq = dead.GetHQ();
+            float now = NetworkSceneSingleton<MissionManager>.i?.MissionTime ?? 0;
+            foreach (KeyValuePair<PersistentID, float> entry in credit)
+            {
+                if (!UnitRegistry.TryGetPersistentUnit(entry.Key, out PersistentUnit source) || source.player == null) continue;
+                Player player = source.player;
+                if (!connected.Contains(player) || !Hostile(victimHq, player.HQ) || source.GetHQ() != player.HQ || !Flyable(player.Aircraft)) continue;
+                Career career = GetCareer(player);
+                if (career != null && career.Rules.AddHeat(worth * entry.Value / total, now, career.Rules.Threshold(settings.HeatThreshold.Value)))
+                    career.ProvokedHq = victimHq;
             }
         }
 
@@ -653,6 +682,8 @@ namespace BoscaliSummer.Modules.Squad.Runtime
                 seat.dead ? "KIA — respawn available" : seat.ejected ? "EJECTED" : "ACTIVE",
                 settings.PilotLives.Value == PilotLifeMode.Respawning, career.Rules.Deaths, career.Rules.Generation, career.Background);
             result.Hunt = career.Rules.Hunting;
+            result.Heat = !settings.EnemyAceHunts.Value || !WingLink.SquadAvailable ? SquadSnapshot.NoHeat
+                : (byte)Mathf.Clamp(Mathf.FloorToInt(100f * career.Rules.Heat / career.Rules.Threshold(settings.HeatThreshold.Value)), 0, 100);
             result.Bonus = career.Rules.BonusPoints; result.Origin = career.Rules.ScoreOrigin;
             result.Status = !WingLink.SquadAvailable ? WingLink.SquadUnavailableReason : !settings.EnemyAceHunts.Value
                 ? "Enemy ace hunts disabled by host." : career.Notice;
@@ -686,7 +717,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
             revision.Add(s.Pilot.Name); revision.Add(s.Pilot.Callsign); revision.Add(s.Pilot.Status);
             revision.Add(s.Pilot.Background); revision.Add(s.Pilot.Respawns);
             revision.Add(s.Pilot.Deaths); revision.Add(s.Pilot.Generation);
-            revision.Add(s.Hunt); revision.Add(s.Bonus); revision.Add(s.Origin);
+            revision.Add(s.Hunt); revision.Add(s.Heat); revision.Add(s.Bonus); revision.Add(s.Origin);
             revision.Add(s.ActiveIndex); revision.Add(s.HuntId);
             revision.Add(s.Status); revision.Add(s.Speaker); revision.Add(s.Chatter);
             int count = s.Wings?.Length ?? 0;
@@ -704,7 +735,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
 
         internal void Apply(SquadSnapshot snapshot, ulong id)
         {
-            pilot = snapshot.Pilot; HuntActive = snapshot.Hunt; status = snapshot.Status; AppliedRevision = snapshot.Revision;
+            pilot = snapshot.Pilot; HuntActive = snapshot.Hunt; Heat = snapshot.Heat > 100 ? float.NaN : snapshot.Heat / 100f; status = snapshot.Status; AppliedRevision = snapshot.Revision;
             localIdentity = id; localBonus = snapshot.Bonus; localOrigin = snapshot.Origin;
             enemies = snapshot.Wings ?? Array.Empty<EnemyWingView>();
             ActiveEnemyWingIndex = snapshot.ActiveIndex;
@@ -737,7 +768,7 @@ namespace BoscaliSummer.Modules.Squad.Runtime
         }
 
         internal void ClearLocal(string reason)
-        { pilot = default; HuntActive = false; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); status = reason; LastChatter = string.Empty; AppliedRevision = 0; }
+        { pilot = default; HuntActive = false; Heat = float.NaN; ActiveEnemyWingIndex = -1; ActiveHuntId = 0; enemies = Array.Empty<EnemyWingView>(); status = reason; LastChatter = string.Empty; AppliedRevision = 0; }
 
         private static bool Survived(PersistentID id)
         { int status = WingLink.SurvivorStatus(id); return status == 1 || status == 2; }

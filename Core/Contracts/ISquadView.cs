@@ -27,6 +27,8 @@ namespace BoscaliSummer.Core.Contracts
     {
         PilotView Pilot { get; }
         bool HuntActive { get; }
+        /// <summary>How much the enemy faction hates the local pilot, 0..1 of the ace threshold; NaN while ace hunts are off.</summary>
+        float Heat { get; }
         string Status { get; }
 
         /// <summary>Most recent local intercept as "speaker: text"; empty when none has arrived.</summary>
