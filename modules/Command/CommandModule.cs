@@ -36,13 +36,18 @@ namespace BoscaliSummer.Modules.Command
             typeof(MapControlsPanelGuardPatch),
             typeof(MapBoxIconClickGuardPatch),
             typeof(MapCursorPanelGuardPatch),
-            typeof(GridLabelsPatch)
+            typeof(GridLabelsPatch),
+            typeof(TacticalLogFeedPatch),
+            typeof(TacticalLogKillPatch)
         };
 
         public void Install(ModuleContext context)
         {
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
             AvUiSound.Recorded = name => BoscaliSummer.Core.Fx.SfxClips.Get(name);
+            // Every console's header names it with its rail key's words, and link chips open other keys through the rail.
+            AvConsole.KeyName = code => MfdRailCatalog.For(code).Name;
+            AvConsole.PressKey = MfdRail.Open;
             context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);
@@ -52,7 +57,9 @@ namespace BoscaliSummer.Modules.Command
             context.AddClientKey("MAP HOLD KEY", "Hold to open the full map; let go to close it.", context.Settings.Command.MapHoldKey, false);
             context.AddService<IRadialMenuPage>(new TargetPresetRadialPage());
             context.AddService<IVisorTerrainSettings>(context.Settings.Command);
-            context.AddService<ITacticalLog>(new MfdRadioLog());
+            context.AddService<ITacticalLog>(new TacticalLog());
+            // Doctrines, decisions and cabinet answers of both sides (Nation) are NEWS lines of the one log.
+            PoliticsWire.Posted += headline => TacticalLog.Add(TacticalLogEntry.News, headline);
 
             MissionMapCompatibilityEngine compat = context.AddSceneService<MissionMapCompatibilityEngine>(51);
             CommandManager manager = context.AddSceneService<CommandManager>(52);
@@ -76,6 +83,7 @@ namespace BoscaliSummer.Modules.Command
             context.AddSceneService<SettingsMfdPanel>(58)
                 .Configure(context.Settings.Command, context.Logger, overlay,
                     context.HostSettings, context.ClientSettings);
+            // EXTRAS (ARES, DEBUG) for every player in dev and player builds (2026-11-15 ruling: no gate).
             context.AddSceneService<MiscMfdPanel>(58).Configure(context.Settings, context.Logger);
             context.AddSceneService<TerrainGhostOverlay>(61).Configure(context.Settings.Command);
             context.AddSceneService<MapHoldKey>(62).Configure(context.Settings.Command);
