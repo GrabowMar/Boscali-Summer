@@ -13,11 +13,11 @@ using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 using MfdPanelInstaller = BoscaliSummer.Core.Game.MfdPanelInstaller;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — TACTICAL · BEHAVIOUR ‖ SUPPLY · LOADOUT · WING (the
-    /// user cut seven tabs to five on 2026-09-28: FORM and PLAN are BEHAVIOUR's sub-pages, INSPECT is WING's) on a kit v2
+    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — ROSTER · BEHAVIOUR ‖ SUPPLY · LOADOUT (the 2026-11-14
+    /// panels fold moved the WING tab to PILOT STUDIO and PILOT's PLANE into LOADOUT) on a kit v2
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
-    /// 5 Hz. The header is the wing's title, a FUNDS chip beside it, and three vitals chips (FUEL MIN · AMMO MIN · THREAT) on every
-    /// tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
+    /// 5 Hz. The header names the open tab (the live wing count leads the footer status; funds live on FAC), and three vitals
+    /// chips (FUEL MIN · AMMO MIN · THREAT) on every tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
     /// <see cref="AvFlow"/>.</summary>
     internal sealed class WmcPanel : IWingService
     {
@@ -26,13 +26,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private readonly WmcContext context = new WmcContext();
         private readonly WmcMapOverlay overlay = new WmcMapOverlay();
-        private readonly int[] headerKeys = { -1, -1, -1, -1, -1 };
+        private readonly int[] headerKeys = { -1, -1, -1, -1 };
         private IWmcPage[] pages;
         private WmcTactical tactical;
         private WmcBehaviour behaviour;
         private WmcSupply supply;
         private WmcLoadout loadout;
-        private WmcWing wingPage;
         private int shownPage = -1;
         private readonly HashSet<int> pageFaults = new HashSet<int>();
         private MFDScreen screen;
@@ -41,7 +40,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private RectTransform content;
         private AvConsole shell;
         private AvChip[] chips;
-        private AvChip fundsChip;
         private RectTransform[] hosts;
         private float nextAttempt, nextRefresh;
         private bool wasVisible;
@@ -57,14 +55,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         /// <summary>A page with a scope row that gives orders is on show (spec bezel v2 §6: an unarmed right-click MOVE is TACTICAL's,
         /// FORM's and OPTIONS' only; ROUTE's right-click draws).</summary>
         public bool CommandShowing => Visible && shell != null
-            && ((shell.CurrentPage == WmcTabs.Tactical && tactical != null && tactical.Sub != WmcTactical.SubRoute)
+            && ((shell.CurrentPage == WmcTabs.Roster && tactical != null && tactical.Sub != WmcTactical.SubRoute)
                 || (shell.CurrentPage == WmcTabs.Behaviour && behaviour != null));
-        /// <summary>TACTICAL › ORDERS is showing: the QUEUE toggle stays on only here.</summary>
-        public bool OrdersShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Tactical && tactical != null && tactical.Sub == WmcTactical.SubOrders;
+        /// <summary>ROSTER › ORDERS is showing: the QUEUE toggle stays on only here.</summary>
+        public bool OrdersShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Roster && tactical != null && tactical.Sub == WmcTactical.SubOrders;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;
         public WmcTactical Tactical => tactical;
-        public WmcWing WingPage => wingPage;
 
         public void Activate()
         {
@@ -154,14 +151,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             bezelButton = null;
             shell = null;
             chips = null;
-            fundsChip = null;
             hosts = null;
             pages = null;
             tactical = null;
             behaviour = null;
             supply = null;
             loadout = null;
-            wingPage = null;
             shownPage = -1;
             shownGuide = null;
             pageFaults.Clear();
@@ -237,7 +232,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private static readonly AvIcon[] TabIcons =
-            { AvIcon.Target, AvIcon.AdjustmentsHorizontal, AvIcon.Coins, AvIcon.Stack2, AvIcon.UsersGroup };
+            { AvIcon.Target, AvIcon.AdjustmentsHorizontal, AvIcon.Coins, AvIcon.Stack2 };
 
         private MFDScreen Build(MFDScreen template, Button bezel, out float height)
         {
@@ -261,11 +256,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             var items = new (AvIcon icon, string label)[WmcTabs.Labels.Length];
             for (int i = 0; i < items.Length; i++) items[i] = (TabIcons[i], WmcTabs.Labels[i]);
             shell.Tabs(items);
-            fundsChip = new AvChip(shell.Root);
-            shell.Ticker.Register(fundsChip);
-            // Left of the console serial (width - 116, 54 wide): the chip used to cover it.
-            AvLay.Place(fundsChip.Rect, AvTokens.PanelWidth - 116f - 4f - 114f, 4f, 114f, AvGridTokens.ChipStrip);
-            fundsChip.Set("FUNDS " + WmcHeader.None, AvState.Inert);
             WmcMotion.Attach(root);
             BuildFitButton();
 
@@ -274,12 +264,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             behaviour = new WmcBehaviour();
             supply = new WmcSupply();
             loadout = new WmcLoadout();
-            wingPage = new WmcWing();
-            pages = new IWmcPage[]
-            {
-                tactical, behaviour, supply,
-                loadout, wingPage,
-            };
+            pages = new IWmcPage[] { tactical, behaviour, supply, loadout };
             hosts = new RectTransform[pages.Length];
             for (int i = 0; i < pages.Length; i++)
             {
@@ -298,7 +283,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             s.label = label;
             s.highlight = highlight;
             AvDisplayGlass.Attach(content);
-            shell.SetPage(WmcTabs.Tactical);
+            shell.SetPage(WmcTabs.Roster);
             return s;
         }
 
@@ -307,12 +292,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int fitStep = -1;
         private float fitAt;
 
-        /// <summary>[FIT] where the page index sat (spec bezel v2 §3): each press one step of FIT › ALL › FOLLOW; the label names the
-        /// next step, and reads FIT again once the map follows you. Hidden when the game's map view could not be reached.</summary>
+        /// <summary>[FIT] left of the console name and page count (the header's right 154 px; spec bezel v2 §3): each press one step of
+        /// FIT › ALL › FOLLOW; the label names the next step, and reads FIT again once the map follows you. Hidden when the game's map
+        /// view could not be reached.</summary>
         private void BuildFitButton()
         {
             fitButton = AvControl.Make(shell.Root, new AvControl.Spec("FIT", PressFit, AvButtonStyle.Quiet));
-            AvLay.Place(fitButton.Rect, AvTokens.PanelWidth - 60f, 3f, 56f, AvGridTokens.Header - 6f);
+            AvLay.Place(fitButton.Rect, AvTokens.PanelWidth - 154f - 4f - 56f, 3f, 56f, AvGridTokens.Header - 6f);
             fitButton.gameObject.SetActive(WmcMap.Usable);
             SetFit(0);
         }
@@ -430,7 +416,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 case WmcBehaviour _: return GuideWords.Behaviour;
                 case WmcSupply _: return GuideWords.Supply;
                 case WmcLoadout _: return GuideWords.Loadout;
-                case WmcWing w: return w.Sub == WmcWing.SubStudio ? GuideWords.Studio : w.Sub == WmcWing.SubAircraft ? GuideWords.Aircraft : GuideWords.Roster;
                 default: return null;
             }
         }
@@ -448,8 +433,12 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             int max = WingService.MaxMembers;
             int pending = !context.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
+            // The live count leads the footer status (the header's left is the tab's own name).
             if (Changed(0, context.Count * 100000 + max * 1000 + airborne * 100 + pending * 4 + (context.Client ? 2 : 0) + (context.Stale ? 1 : 0)))
-                shell.SetTitle(WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string _));
+            {
+                wingWords = WmcHeader.Title(context.Count, max, airborne, pending, context.Client, context.Stale, out string _);
+                statusAmbient = null; // the footer repaints with the new count
+            }
             WingVitals v = WingVitals.Of(context.Rows, context.Count);
             int fuelKey = v.Count * 100000 + Percent(v.MinFuel) * 100 + (v.BingoSlot + 1) * 10 + v.JokerSlot + 1;
             if (Changed(1, fuelKey)) Chip(0, WmcHeader.Fuel(v, out string s0), s0);
@@ -457,12 +446,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (Changed(2, ammoKey)) Chip(1, WmcHeader.Ammo(v, out string s1), s1);
             int hostiles = context.Wing != null && !context.Client ? context.Wing.HostilesNear() : -1;
             if (Changed(3, (hostiles + 1) * 100 + v.DefendingSlot + 1)) Chip(2, WmcHeader.Threat(v, hostiles, out string s2), s2);
-            // Spec FUI §header: FUNDS · FUEL · AMMO · THREAT (0.9's metrics as chips); the armed order is ORDERS' cue line.
-            GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player);
-            float funds = player != null && !context.Client ? player.Allocation : float.NaN;
-            bool sandbox = WingSettings.Instance.SandboxFreeCalls.Value;
-            if (Changed(4, (float.IsNaN(funds) ? -1 : Mathf.RoundToInt(funds * 10f)) * 4 + (sandbox ? 2 : 0) + (context.Client ? 1 : 0)))
-                fundsChip?.Set(WmcHeader.Funds(funds, sandbox, context.Client, out string s3), StateOf(s3));
         }
 
         private static int Percent(float f) => float.IsNaN(f) ? -1 : Mathf.RoundToInt(f * 100f);
@@ -494,16 +477,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         /// <summary>The footer line: the armed-order prompt first, then an alert, else the page's ambient hint. Hover help replaces it
         /// while a control is hovered: kit v2 controls publish theirs to the console footer themselves (<see cref="AvHelpTip"/>).</summary>
-        private string statusAlert, statusPrompt, statusAmbient;
+        private string statusAlert, statusPrompt, statusAmbient, wingWords = "";
 
         private void WriteStatus(string alert, string prompt, string ambient)
         {
-            // Same inputs as the last refresh: skip the three concatenations the footer would compare and drop.
+            // Same inputs as the last refresh: skip the concatenation the footer would compare and drop.
             if (alert == statusAlert && prompt == statusPrompt && ambient == statusAmbient) return;
             statusAlert = alert; statusPrompt = prompt; statusAmbient = ambient;
-            if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set("ACTION  ·  " + prompt, AvState.Caution);
-            else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set("ALERT  ·  " + alert, AvState.Danger);
-            else shell.Footer.Set("STATUS  ·  " + (ambient ?? ""), AvState.Inert);
+            if (!string.IsNullOrEmpty(prompt)) shell.Footer.Set(prompt, AvState.Caution);
+            else if (!string.IsNullOrEmpty(alert)) shell.Footer.Set(alert, AvState.Danger);
+            else shell.Footer.Set(string.IsNullOrEmpty(ambient) ? wingWords : wingWords + " · " + ambient, AvState.Inert);
         }
     }
 }

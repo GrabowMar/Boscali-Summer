@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Configuration
         public DynamicOperationsSettings(ConfigFile config)
         {
             Enabled = config.Bind("DynamicOperations", "Enabled", true,
-                "Pool of 17 contracts: combat, patrol, jamming, insertion, rescue/return, reconnaissance, strike assessment, supply escort/interdiction, repair cover, jammer hunts, intelligence return and aftermath surveys. Accept through MIS > SECONDARY; server-owned rewards. Restart after changing. MIS > SECONDARY requires Command.ExpandedMapUi.");
+                "Pool of 17 contracts: combat, patrol, jamming, insertion, rescue/return, reconnaissance, strike assessment, supply escort/interdiction, repair cover, jammer hunts, intelligence return and aftermath surveys. Accept through MIS > JOBS; server-owned rewards. Restart after changing. MIS > JOBS requires Command.ExpandedMapUi.");
             RewardMultiplier = config.Bind("DynamicOperations", "RewardMultiplier", 1f,
                 new ConfigDescription("Scale mission money and XP. Money uses the normal faction tax; XP is vanilla mission score.",
                     new AcceptableValueRange<float>(0.25f, 4f)));

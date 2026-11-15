@@ -485,8 +485,8 @@ namespace BoscaliSummer.Modules.Command.Domain
                         c.Cost <= funds ? "READY" : "SHORT " + N(Whole(c.Cost - funds, true)));
                 }
                 Put(ref v.RowCount, count);
-                Put(ref v.Note, !known ? "JOIN A FACTION TO SPEND YOUR FUNDS" :
-                    f.DonationForbidden ? "THIS MISSION FORBIDS BUYING UNITS" + StrWords.Dot + "FUNDS CAN STILL GO TO THE POOL" :
+                Put(ref v.Note, !known ? "JOIN A FACTION TO SPEND YOUR ALLOCATION" :
+                    f.DonationForbidden ? "THIS MISSION FORBIDS BUYING UNITS" + StrWords.Dot + "YOUR ALLOCATION CAN STILL GO TO FUNDS" :
                     count == 0 ? "THIS MISSION LISTS NO UNIT GROUPS TO BUY" : "");
             }
 
@@ -512,10 +512,9 @@ namespace BoscaliSummer.Modules.Command.Domain
                 else { held = true; state = "HELD" + StrWords.Dot + StrWords.WaveBlockCaption(w.Block); }
                 if (present && credits > perWave && w.State != WaveState.Off) state += " +" + (credits - perWave);
 
+                // The wave keeps its own price; the faction's funds are read on FAC ECONOMY and the country strip, not repeated here.
                 if (held && w.Block != WaveBlock.PoolShort) detail = TheaterWords.Wave(w.Block);
-                else if (cost >= 0 && pool >= 0)
-                    detail = waveAfford == StrTri.Yes ? "POOL " + N(pool) + " " + StrWords.Arrow + " " + N(pool - cost) : "POOL " + N(pool) + StrWords.Dot + "NEEDS " + N(cost);
-                else detail = "POOL " + (pool >= 0 ? N(pool) : StrWords.Dash) + StrWords.Dot + "COST " + (cost >= 0 ? N(cost) : StrWords.Dash);
+                else detail = "COST " + (cost >= 0 ? N(cost) : StrWords.Dash);
 
                 bool depot = present && w.DepotKnown && float.IsFinite(w.DepotX) && float.IsFinite(w.DepotZ);
                 Put(ref v.Present, present);

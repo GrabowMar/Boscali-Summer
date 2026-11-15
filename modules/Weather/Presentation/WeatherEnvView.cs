@@ -23,7 +23,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     internal sealed class EnvData
     {
         public bool HasMission = true;
-        public string Title = "METOC / BATTLEFIELD";
+        /// <summary>No longer shown: the header names the open tab. WeatherMfdPanel still writes it.</summary>
+        public string Title = "METOC / BATTLEFIELD"; // ponytail: dead field kept so WeatherMfdPanel (another agent's file set) builds; drop both together.
         public string Footer = "", Next = "";
         public AvState FooterState = AvState.Info;
         /// <summary>How far the weather is through its current step (0..1); <see cref="Next"/> is the countdown text.</summary>
@@ -60,7 +61,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     }
 
     /// <summary>
-    /// The ENV console: metrics for the top line, WEATHER (state icon row, condition card, visibility / rain /
+    /// The ENV console (no header tiles): WEATHER (state icon row, condition card, visibility / rain /
     /// turbulence / next-step rings, storm-risk bar, growing vertical profile, 60-minute icon outlook, cover trend) and SKY &amp; AIR
     /// (sun arc, moon phase, wind dial, air rings, daylight and density charts). Pure presentation over <see cref="EnvData"/>; the panel owns the game side.
     /// </summary>
@@ -68,7 +69,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     {
         public const int PageWeather = 0, PageSky = 1;
 
-        private readonly AvMetric[] metrics;
         private readonly List<AvPart>[] pageParts = { new List<AvPart>(16), new List<AvPart>(16) };
         private readonly AvRow[] emptyRows = new AvRow[2];
 
@@ -98,12 +98,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         public WeatherEnvView(RectTransform root, string id, float width, float height)
         {
-            Console = AvConsole.Build(root, id, "BATTLEFIELD ENVIRONMENT", 2, width, height);
-            metrics = Console.Metrics("COVER", "BASE", "WIND", "DENSITY");
-            HelpOn(metrics[0], "COVER: how much of the sky the cloud hides, with the sky code (CLR clear up to OVC overcast, TS storm). The bar is the cover fraction.");
-            HelpOn(metrics[1], "BASE: height of the cloud bottom above sea level, in metres. Amber under 1600 m: a low ceiling limits how far you can fly under the deck.");
-            HelpOn(metrics[2], "WIND: speed in knots and the bearing it blows from. Amber above 25 kt: expect drift on approach and a rougher ride.");
-            HelpOn(metrics[3], "DENSITY: air density at your altitude as a share of sea level. Thin air cuts lift and engine power; see the SKY & AIR page for the profile.");
+            // No header tiles: cover is on the condition card, base on the profile, wind and density on SKY & AIR.
+            Console = AvConsole.Build(root, id, "WEATHER", 2, width, height);
             Console.Tabs((AvIcon.Cloud, "WEATHER"), (AvIcon.Wind, "SKY & AIR"));
             BuildWeatherPage(Console.Page(PageWeather));
             BuildSkyPage(Console.Page(PageSky));
@@ -121,19 +117,10 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 
         private T Track<T>(int page, T part) where T : AvPart { pageParts[page].Add(part); return part; }
 
-        /// <summary>A clear hit layer over a part that shows <paramref name="text"/> in the console footer on hover.</summary>
-        private static void HelpOn(AvPart part, string text)
-        {
-            if (part == null || part.Rect == null) return;
-            Image hit = AvLay.Solid(part.Rect, "Help", Color.clear);
-            AvLay.Fill(hit.rectTransform);
-            hit.raycastTarget = true;
-            AvHelpTip.Attach(hit.gameObject, text);
-        }
-
         private void BuildWeatherPage(AvFlow p)
         {
             const int pg = PageWeather;
+            Track(pg, p.Section(AvIcon.Cloud, "SKY NOW", "OVER YOUR POSITION"));
             stateRow = Track(pg, p.Add(new EnvStateRow(p.Content)));
             briefRow = Track(pg, p.Add(new AvRow(p.Content)));
             briefRow.Help = "STORY: the weather system the tape is playing and the part of it over you. The line under it is the next front ahead: its distance across the line and the side it comes from.";
@@ -163,11 +150,13 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             forecastMissing.Set("OUTLOOK UNAVAILABLE", "Waiting for mission weather data.", "", AvState.Inert);
             forecastMissing.SetShown(false);
             AddEmpty(p, pg);
+            p.Links(("WEATHER SETTINGS", "SET", null), ("MAP", "MAP", null));
         }
 
         private void BuildSkyPage(AvFlow p)
         {
             const int pg = PageSky;
+            Track(pg, p.Section(AvIcon.Wind, "SKY · AIR", "SUN · MOON · WIND · DENSITY"));
             sun = Track(pg, p.Add(new EnvSunCard(p.Content)));
             sun.SetHelp("SUN: the strip spans midnight to midnight. Bright hourly blocks indicate daylight; the vertical cursor is the current time. Elevation, bearing and sunrise/sunset are listed beside it. Below about -6 degrees expect poor visual range.");
             moon = Track(pg, p.Add(new EnvMoonCard(p.Content)));
@@ -186,6 +175,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             densityEq.Help = "AIR DENSITY 0-12 KM: one bar per kilometre of altitude, left is sea level. The bars shrink as the air thins, so climbing costs lift and engine power.";
             densityEq.SetShown(false);
             AddEmpty(p, pg);
+            p.Links(("WEATHER SETTINGS", "SET", null), ("MAP", "MAP", null));
         }
 
         private void AddEmpty(AvFlow p, int page)
@@ -202,27 +192,14 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         public void Apply(EnvData d, bool allPages = false)
         {
             SetEmpty(!d.HasMission);
-            Console.SetTitle(d.Title);
             Console.Footer.Set(d.Footer, d.FooterState);
             if (!d.HasMission)
             {
-                for (int i = 0; i < metrics.Length; i++) metrics[i].Set("—", "", 0f, AvState.Inert);
                 stormBar.SetShown(false);
                 densityEq.SetShown(false);
                 forecastMissing.SetShown(false);
                 return;
             }
-
-            AvState regimeState = RegimeState(d.Regime);
-            metrics[0].Set(AvNum.Percent(d.Cover), d.Code, d.Cover, regimeState);
-            bool lowDeck = d.Deck < 1600f;
-            metrics[1].Set(AvNum.Fixed(d.Deck, 0), "M", Mathf.Clamp01(d.Deck / 4000f), lowDeck ? AvState.Caution : AvState.Ready);
-            metrics[2].Set(AvNum.Fixed(d.WindKts, 0), "KT " + AvNum.Fixed(d.WindFrom, 0) + "°",
-                Mathf.Clamp01(d.WindKts / 40f), d.WindKts > 25f ? AvState.Caution : AvState.Ready);
-            float density = DensityRatio(d);
-            bool hasDensity = d.HasCamera && density >= 0f;
-            metrics[3].Set(hasDensity ? AvNum.Percent(density) : "—", "SL", hasDensity ? Mathf.Clamp01(density) : 0f,
-                !hasDensity ? AvState.Inert : density < 0.6f ? AvState.Caution : AvState.Ready);
 
             if (allPages || Console.CurrentPage == PageWeather) ApplyWeather(d);
             if (allPages || Console.CurrentPage == PageSky) ApplySky(d);
@@ -252,7 +229,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                 bool wet = d.ViewRain > 0.02f;
                 bool coldWet = d.ViewTemperature < 0f && Mathf.Max(d.ViewRain, d.ViewMoisture) > 0.02f;
                 string air = coldWet ? "COLD MOISTURE" : wet ? "RAIN" : cloud ? "IN CLOUD" : "CLEAR AIR";
-                viewAirRow.Set("VIEW AIR / " + air,
+                viewAirRow.Set("VIEW AIR · " + air,
                     "CLOUD " + AvNum.Percent(d.ViewCloud) + " · RAIN " + AvNum.Percent(d.ViewRain) +
                     " · MOISTURE " + AvNum.Percent(d.ViewMoisture),
                     AvNum.Fixed(d.ViewTemperature, 0) + "°C EST", coldWet ? AvState.Caution : AvState.Info);
@@ -265,7 +242,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             stateRow.SetHelp(d.Briefing);
             briefRow.SetShown(d.Story.Length > 0);
             if (d.Story.Length > 0)
-                briefRow.Set("STORY / " + d.Story.ToUpperInvariant() + (d.Role.Length > 0 ? " · " + d.Role.ToUpperInvariant() : ""),
+                briefRow.Set("STORY · " + d.Story.ToUpperInvariant() + (d.Role.Length > 0 ? " · " + d.Role.ToUpperInvariant() : ""),
                     d.NextMarker, d.ForecastHeld ? "HELD" : "MOVING", d.ForecastHeld ? AvState.Inert : AvState.Info);
 
             card.Set(new EnvSky

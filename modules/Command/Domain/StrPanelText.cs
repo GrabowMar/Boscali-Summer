@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             return more > 0 ? "+" + more.ToString(CultureInfo.InvariantCulture) + " MORE ON THE MAP" : "";
         }
 
-        /// <summary>Second line of the wave strip: group, price (once) and the pool arithmetic. "" when the wave desk is not there.</summary>
+        /// <summary>Second line of the wave strip: group and price (once), or the held reason. "" when the wave desk is not there.</summary>
         public static string WaveLine(StrViewModel vm)
         {
             StrWaveView w = vm?.Wave;
@@ -71,14 +71,14 @@ namespace BoscaliSummer.Modules.Command.Domain
             return text;
         }
 
-        /// <summary>The check or the cross of the price against the pool; nothing while either is unknown.</summary>
+        /// <summary>The check or the cross of the price against the faction's funds; nothing while either is unknown.</summary>
         public static string WaveCheck(StrViewModel vm)
         {
             if (vm == null || vm.Wave == null || !vm.Wave.Present) return "";
             switch (vm.Wave.Affordable)
             {
                 case StrTri.Yes: return "AFFORDABLE";
-                case StrTri.No: return StrWords.No + " OVER THE POOL";
+                case StrTri.No: return StrWords.No + " SHORT OF FUNDS";
                 default: return "";
             }
         }

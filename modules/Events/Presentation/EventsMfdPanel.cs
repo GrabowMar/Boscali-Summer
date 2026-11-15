@@ -8,13 +8,14 @@ using BoscaliSummer.Modules.Events.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Ui;
 using UnityEngine;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — active dispatch, archive and field documentation. Kit v2 console: chrome
+    /// "EVN" — active dispatch, the game log, archive and field documentation. Kit v2 console: chrome
     /// (metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
     /// sections, rows and the module's own <see cref="EventHeroPart"/> / <see cref="EventCaseFilePart"/> parts.
     /// </summary>
@@ -22,7 +23,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
     {
         private const float RefreshInterval = 0.25f;
         private const int TabDispatch = 0;
-        private const int TabDesk = 1;
+        private const int TabLog = 1;
+        private const int TabDesk = 2;
 
         /// <summary>
         /// The scripted-beat rows the active card and the full-screen broadcast both reserve.
@@ -44,8 +46,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             new MfdPanelInstaller(MfdSlots.Events, "EVN", "BoscaliEvents.Screen", preferLeft: false) { Host = true };
         private MFDScreen screen => installer.Screen;
         private AvConsole console;
-        private AvMetric[] metrics;
-        private AvHelpTip costTip, resetTip, leftTip, logTip;
+        private AvSection liveSection;
 
         private EventHeroPart hero;
         private AvGauge directorPosture, directorBases, directorSupers;
@@ -91,8 +92,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             installer.Reset();
 
             console = null;
-            metrics = null;
-            costTip = resetTip = leftTip = logTip = null;
+            liveSection = null;
             hero = null;
             directorPosture = directorBases = directorSupers = null;
             onCallSection = null;
@@ -117,6 +117,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
             boundAimed = false;
             boundResolved = false;
             nextRefresh = 0f;
+            cabinetSection = decisionsSection = null;
+            cabinetCard = null;
+            boundCard = -1;
+            ResetLog();
         }
 
         private void OnDestroy() => ResetForScene();
@@ -153,22 +157,19 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             // The root is clamped before the console exists. Clamping console.Root afterwards baked
             // the canvas correction into the child as a negative offset and shifted the whole page left.
-            console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENT DIRECTORATE", 2, AvTokens.PanelWidth, height);
-            // Four compact tiles carry what the three header chips and two wide tiles used to say twice.
-            metrics = console.Metrics("COST", "RESET", "LEFT", "LOG");
-            costTip = HelpOn(metrics[0], "COST: the support price multiplier the running event sets on requisitions.");
-            resetTip = HelpOn(metrics[1], "RESET: how fast your support requests come back off cooldown.");
-            leftTip = HelpOn(metrics[2], "LEFT: time until the running event ends.");
-            logTip = HelpOn(metrics[3], "LOG: dispatches finished so far, out of the log capacity.");
-            console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.Bookmark, "DESK"));
+            console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENTS", 3, AvTokens.PanelWidth, height);
+            // The country strip on top; the dispatch's own COST · RESET · LEFT · FILED read on DISPATCH's first line.
+            CountryStrip.Mount(console);
+            console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.ListDetails, "LOG"), (AvIcon.Bookmark, "DESK"));
 
             historyCapacity = Mathf.Max(1, settings.HistoryLength.Value);
             BuildDispatchPage(console.Page(TabDispatch));
+            BuildLogPage(console.Page(TabLog));
             BuildDeskPage(console.Page(TabDesk));
             console.Orders(TabDispatch,
                 "One dispatch runs at a time. COST and RESET price it for your side; LEFT is its clock.",
                 "A superevent carries timed orders: NEXT is the order due, QUEUED orders follow it.",
-                "The log keeps this mission's finished dispatches, newest first.");
+                "FILED keeps this mission's finished dispatches, newest first. The whole game log is on LOG.");
             console.Orders(TabDesk,
                 "Pull a drawer to read its cards. The archive is a local copy and sends nothing.",
                 "The case file is the dispatch running now, or the last one closed.",
@@ -181,7 +182,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void BuildDispatchPage(AvFlow p)
         {
-            // The live dispatch. A quiet theater shows one standby row and leaves the rest to the console ground.
+            // The cabinet's answer card (FOR THE CABINET) and the latest decisions, above the live dispatch (EventsMfdPanel.Cabinet).
+            BuildCabinet(p);
+            // The live dispatch under one readout line (what the header tiles used to say). A quiet theater shows one standby row and
+            // leaves the rest to the console ground. FAC's ECONOMY and POLITICS link here for the order in force.
+            liveSection = p.Section(AvIcon.AlertTriangle, "LIVE DISPATCH", "");
+            HelpOn(liveSection, "COST: the support price multiplier the running event sets on requisitions. RESET: how fast your support requests come back off cooldown. LEFT: time until it ends. FILED: dispatches finished, out of the history capacity.");
             hero = p.Add(new EventHeroPart(p.Content));
             hero.BindCalm("STANDING BY FOR DIRECTOR REPORT");
 
@@ -196,6 +202,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
             directorPosture.Set(0f, "—", AvState.Inert);
             directorBases.Set(0f, "—", AvState.Inert);
             directorSupers.Set(0f, "—", AvState.Inert);
+
+            // The faction's lead contract (FAC POLITICS' old DIRECTIVE block).
+            HelpOn(p.Section(AvIcon.Flag, "DIRECTIVE", "THE FACTION'S LEAD CONTRACT"),
+                "DIRECTIVE: the contract your faction holds, else the first on offer. Completing it pays and lifts morale by 3.");
+            directiveRow = p.Add(new AvRow(p.Content, () => AvConsole.Open("MIS")));
+            directiveRow.Help = "The faction's lead contract. Opens MIS.";
 
             // While the theater is quiet the page also says what the director holds on call: the authored catalog,
             // counted by tier. The numbers are the catalog's own; the rings are each tier's share of it.
@@ -218,11 +230,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             // Finished events as bars (tall = superevent, short = minor), newest first; it grows into spare height.
             logBars = new float[Mathf.Max(1, historyCapacity)];
-            historyEq = p.Add(new AvEqualizer(p.Content, "EVENT LOG", 36f), 1f);
-            historyEq.Help = "EVENT LOG: finished events as bars, newest at the left. A tall bar is a superevent, a middle bar a medium, a short bar a minor. Hover a row below for its tier, target and age.";
+            historyEq = p.Add(new AvEqualizer(p.Content, "FILED", 36f), 1f);
+            historyEq.Help = "FILED: finished events as bars, newest at the left. A tall bar is a superevent, a middle bar a medium, a short bar a minor. Hover a row below for its tier, target and age.";
             historyEq.SetShown(false);
             timeline = p.Add(new EventTimelinePart(p.Content));
-            timeline.SetNote("NO DISPATCHES LOGGED");
+            timeline.SetNote("NO DISPATCHES FILED");
+            p.Links(("SUPPORT PRICES", "OPS", null), ("FUNDS", "FAC", "ECONOMY"));
         }
 
         private void BuildDeskPage(AvFlow p)
@@ -265,6 +278,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             }
             recentSection.SetShown(false);
             foreach (AvRow row in recentRows) row.SetShown(false);
+            p.Links(("WAR PLAN", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
         }
 
         /// <summary>The desk before the director has issued anything this mission.</summary>
@@ -306,53 +320,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             bool historyOff = settings.HistoryLength.Value <= 0;
             float secondsLeft = current != null ? current.EndsAtMissionTime - now : 0f;
-            bool ending = current != null && secondsLeft <= EndingSeconds;
-            bool critical = current != null && secondsLeft <= CriticalSeconds;
             AvState effectState = EffectState(summary, aimedAtLocal);
 
-            string sideNote = current == null ? "" : aimedAtLocal ? "YOUR SIDE" : "OTHER SIDE";
-            string costCaption = current == null ? "NO ACTIVE EVENT" : EffectText(current, summary, aimedAtLocal);
-            metrics[0].Set(
-                current != null ? MultiplierLabel(multiplier) : "—",
-                current == null ? "" : aimedAtLocal ? "YOU" : "THEM",
-                current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(multiplier - 1f)) : 0f,
-                effectState);
-            costTip.Text = "COST: the support price multiplier the running event sets on requisitions. " +
-                (current == null ? "No event is running, so prices are normal."
-                    : sideNote + ": " + costCaption + ". Dearer shows amber or red, cheaper green; it holds until the event ends.");
-
-            string resetCaption = current == null ? "NO ACTIVE EVENT" :
-                !aimedAtLocal ? "NO EFFECT ON YOU" :
-                cooldown > 1.001f ? "LONGER COOLDOWN" :
-                cooldown < 0.999f ? "SHORTER COOLDOWN" : "NORMAL RESET";
-            AvState resetState = !aimedAtLocal ? AvState.Inert :
-                cooldown > 1.001f ? AvState.Caution : cooldown < 0.999f ? AvState.Ready : AvState.Inert;
-            metrics[1].Set(
-                current != null ? MultiplierLabel(cooldown) : "—",
-                current == null || !aimedAtLocal ? "" : cooldown > 1.001f ? "SLOW" : cooldown < 0.999f ? "FAST" : "",
-                current != null && aimedAtLocal ? Mathf.Clamp01(Mathf.Abs(cooldown - 1f)) : 0f,
-                resetState);
-            resetTip.Text = "RESET: how fast your support requests come back off cooldown. x1.00 is normal, above 1 is slower, below 1 is faster. " +
-                (current == null ? "No event is running." : resetCaption + ".");
-
-            float span = current != null ? Mathf.Max(1f, current.EndsAtMissionTime - current.StartedAtMissionTime) : 1f;
-            float remaining = current != null ? Mathf.Clamp01(secondsLeft / span) : 0f;
-            // The bar is time, not severity: neutral until the event is ending or it is costing this side.
-            AvState leftState = current == null ? AvState.Inert
-                : critical ? AvState.Danger
-                : ending || effectState == AvState.Danger ? AvState.Caution
-                : effectState == AvState.Ready ? AvState.Ready : AvState.Info;
-            metrics[2].Set(current != null ? AvNum.Clock(secondsLeft) : "—", critical ? "CRIT" : ending ? "END" : "", remaining, leftState);
-            leftTip.Text = "LEFT: time until the running event ends; the bar is how much of its window remains. Amber under a minute, red under twenty seconds." +
-                (current == null ? " No event is running." : "");
-
-            metrics[3].Set(
-                historyOff ? "OFF" : AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0), "",
-                historyOff || historyCapacity <= 0 ? 0f : Mathf.Clamp01(history.Count / (float)historyCapacity),
-                !historyOff && history.Count > 0 ? AvState.Ready : AvState.Inert);
-            logTip.Text = historyOff
-                ? "LOG: the event log is switched off (Events.HistoryLength is 0)."
-                : "LOG: dispatches finished so far, out of the log capacity (Events.HistoryLength). The bars and rows below show them, newest first.";
+            // One readout line: COST and RESET are this side's prices (x1.00 is normal), LEFT the dispatch's clock, FILED the finished count.
+            string log = "FILED " + (historyOff ? "OFF" : AvNum.Fixed(history.Count, 0) + "/" + AvNum.Fixed(historyCapacity, 0));
+            liveSection.SetCaption(current == null ? "NO ACTIVE EVENT · " + log
+                : "COST " + MultiplierLabel(multiplier) + (aimedAtLocal ? " YOU" : " THEM") + " · RESET " + MultiplierLabel(cooldown) +
+                  " · LEFT " + AvNum.Clock(secondsLeft) + (secondsLeft <= CriticalSeconds ? " CRIT" : secondsLeft <= EndingSeconds ? " END" : "") + " · " + log);
 
             string id = current != null ? current.Id : "";
             float started = current != null ? current.StartedAtMissionTime : 0f;
@@ -378,7 +352,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             if (current != null)
             {
-                // One effect line replaces the three pills; the price and reset numbers live in the COST / RESET tiles.
+                // One effect line replaces the three pills; the price and reset numbers are on the LIVE DISPATCH line.
                 string tempo = aimedAtLocal && !string.IsNullOrEmpty(current.TempoSummary) ? current.TempoSummary : "";
                 hero.SetEffect(EffectText(current, summary, aimedAtLocal) + (tempo.Length > 0 ? " · " + tempo : "") +
                     " · " + (aimedAtLocal ? "YOUR SIDE" : "NOT YOUR SIDE"), effectState);
@@ -387,12 +361,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             onCallSection.SetShown(current == null);
             foreach (AvGauge gauge in onCall) gauge.SetShown(current == null);
+            RefreshDirective();
             RefreshTimeline(current, history, now, historyOff);
             RefreshDesk(current, history, now);
+            RefreshLog();
+            string cabinet = RefreshCabinet();
 
-            string ambient = current != null
-                ? "DISPATCH LIVE // " + current.Title.ToUpperInvariant()
-                : events.Available ? "THEATER QUIET // DIRECTOR SCANNING" : "NO MISSION ON THE NET";
+            string ambient = console.CurrentPage == TabLog
+                ? "THE LOG · " + AvNum.Fixed(logShown.Count, 0) + (logCategory > 0 ? " " + TacticalLogEntry.Categories[logCategory - 1] : "") + " LINES"
+                : cabinet.Length > 0 ? cabinet
+                : current != null
+                ? "DISPATCH LIVE · " + current.Title.ToUpperInvariant()
+                : events.Available ? "THEATER QUIET · DIRECTOR SCANNING" : "NO MISSION ON THE NET";
             string status = !string.IsNullOrEmpty(MapPicker.Prompt) ? MapPicker.Prompt : ambient;
             AvState footerState = !string.IsNullOrEmpty(MapPicker.Prompt) ? AvState.Caution : AvState.Inert;
             console.Footer.Set(status, footerState);
@@ -404,7 +384,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             // A scripted superevent needs the room for its beats, so the rows step back to three while it runs.
             int limit = current != null && current.IsSuper && current.Steps.Count > 0 ? 3 : VisibleLogRows;
             int rows = Mathf.Min(shown, limit);
-            timeline.SetNote(historyOff ? "HISTORY OFF" : "NO DISPATCHES LOGGED");
+            timeline.SetNote(historyOff ? "HISTORY OFF" : "NO DISPATCHES FILED");
             for (int i = 0; i < logBars.Length; i++) logBars[i] = 0f;
             for (int index = 0; index < shown; index++)
             {
@@ -454,8 +434,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
             }
             else
             {
-                string meta = current != null ? file.Tier + " / LIVE · " + file.Target
-                    : file.Tier + " / LAST FILED · " + file.Target;
+                string meta = current != null ? file.Tier + " · LIVE · " + file.Target
+                    : file.Tier + " · LAST FILED · " + file.Target;
                 string body = current != null
                     ? file.EffectSummary +
                         (string.IsNullOrEmpty(file.TempoSummary) ? "" : " · " + file.TempoSummary) +
@@ -520,7 +500,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         /// The hero's plain-language effect, visible without hovering, or a cancellation notice.
         /// </summary>
         private static string Consequence(ActiveEventView view, bool aimedAtLocal) =>
-            view != null && !view.TargetResolved ? "TARGET LOST // ORDERS CANCELLED" : ConsequenceHelp(view, aimedAtLocal);
+            view != null && !view.TargetResolved ? "TARGET LOST · ORDERS CANCELLED" : ConsequenceHelp(view, aimedAtLocal);
 
         /// <summary>Plain words for what the live effect means, for hover help.</summary>
         private static string ConsequenceHelp(ActiveEventView view, bool aimedAtLocal)

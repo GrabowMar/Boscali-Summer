@@ -59,6 +59,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void BuildWingsPage(AvFlow p)
         {
             // One strip of four: the hunt state first, then the hostile wing counts.
+            p.Section(AvIcon.Radar2, "ACE WATCH", "HUNT · HOSTILE WINGS");
             huntTile = new AvStatTile(p.Content, "HUNT");
             huntTile.Set("STANDBY", AvState.Info);
             wingsTotalTile = new AvStatTile(p.Content, "ACE WINGS");
@@ -96,6 +97,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             wingsThreat = p.Add(new AvEqualizer(p.Content, "ORDER OF BATTLE", 36f), 1f);
             wingsThreat.Help = "ORDER OF BATTLE: one bar per known hostile ace wing, taller is a higher tier, a stub is a wing that is gone. The cards above say who they are and what they hunt.";
             wingsThreat.SetShown(false);
+            p.Links(("WING", "WMC", null), ("FORCES", "FAC", "FORCES"));
         }
 
         // ---- ACES refresh -------------------------------------------------------------------
@@ -245,7 +247,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (parts != null)
                 for (int i = 0, limit = Math.Min(parts.Count, HullPartScan); i < limit; i++)
                 {
-                    float condition = PartCondition(parts[i]);
+                    float condition = PlaneDossier.PartCondition(parts[i]);
                     if (float.IsNaN(condition)) continue;
                     sum += condition;
                     n++;

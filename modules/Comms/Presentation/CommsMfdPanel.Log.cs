@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             for (int i = 0; i < playerIds.Length; i++) playerIds[i] = 0;
         }
 
-        private void BuildLogPage(AvFlow p)
+        private void BuildNetPage(AvFlow p)
         {
             // The mute list: stations two to a line.
             playersSection = p.Section(AvIcon.UsersGroup, "STATIONS HEARD", "");
@@ -45,9 +45,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 playerMutes[i].Help = "Mute: hide this player's marks and calls on your screen only. They are not told.";
             }
             for (int i = 0; i < PlayerRows; i += 2) p.Row(playerRows[i], playerRows[i + 1]);
+            p.Links(("PLOT", "MAP", "TOOLS"), ("EVENTS", "EVN", "DISPATCH"));
 
-            console.Orders(TabComms,
-                "Calls go to your team. Those that mean 'here' also ping your aircraft's position.");
+            console.Orders(TabNet,
+                "The chips up top: the link, and who you post to (click it: TEAM or ALL).",
+                "Mute hides a player's marks and calls on your screen only. They are not told.");
         }
 
         private void RefreshLog(float now)

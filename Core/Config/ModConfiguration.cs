@@ -6,6 +6,7 @@ using BoscaliSummer.Modules.DynamicOperations.Configuration;
 using BoscaliSummer.Modules.Events.Configuration;
 using BoscaliSummer.Modules.FireAndDestruction.Configuration;
 using BoscaliSummer.Modules.HighCommand.Configuration;
+using BoscaliSummer.Modules.Nation.Configuration;
 using BoscaliSummer.Modules.Hud.Configuration;
 using BoscaliSummer.Modules.Immersion.Configuration;
 using BoscaliSummer.Modules.Intel.Configuration;
@@ -44,6 +45,7 @@ namespace BoscaliSummer.Core.Config
         public SupportSettings Support { get; }
         public CommandSettings Command { get; }
         public HighCommandSettings HighCommand { get; }
+        public NationSettings Nation { get; }
         public IntelSettings Intel { get; }
         public TheaterOpsSettings TheaterOps { get; }
         public DynamicOperationsSettings DynamicOperations { get; }
@@ -90,6 +92,7 @@ namespace BoscaliSummer.Core.Config
                 Support = new SupportSettings(config);
                 Command = new CommandSettings(config);
                 HighCommand = new HighCommandSettings(config);
+                Nation = new NationSettings(config);
                 Intel = new IntelSettings(config);
                 TheaterOps = new TheaterOpsSettings(config);
                 DynamicOperations = new DynamicOperationsSettings(config);

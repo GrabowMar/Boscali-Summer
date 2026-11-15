@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public string Power;
         /// <summary>The pilot's perks of this front: free to arm now (an armed or pending one is counted apart).</summary>
         public int Available, ArmedPerks, PendingPerks, Unlocked, QueueCount, FundingPct;
-        public ushort Budget;
         public AvState Tone, AlertTone;
         public ProgrammePhase Phase;
         public float BuildProgress;
@@ -47,23 +46,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool Enabled, Armed, Pending, Inspected;
     }
 
-    /// <summary>One posted strike of the TASKED tab: a package card any pilot of the faction can claim.</summary>
-    internal struct TaskedRowView
-    {
-        public int PostId, Targets;
-        public string Code, Name, Meta, Grids, GridsFull, Price, Expiry, Origin, Stamp, Detail;
-        public AvState Tone;
-        public bool Armed, Launching, Inspected, Urgent;
-    }
-
-    /// <summary>The pinned order strip: the inspected (or armed) perk or package in the strip's own lines, and what its buttons may do.</summary>
+    /// <summary>The pinned order strip: the inspected (or armed) perk in the strip's own lines, and what its buttons may do.</summary>
     internal struct StripView
     {
         public bool Has;
         public string Code, Stamp, Name, Meta, Price, Brief, Gate, Primary;
         public AvState StampTone, GateTone;
         public bool PrimaryEnabled, PrimaryFire, DisarmEnabled;
-        /// <summary>The perk (a <see cref="SupportActionId"/>) or the post id the buttons act on.</summary>
+        /// <summary>The perk (a <see cref="SupportActionId"/>) the buttons act on.</summary>
         public int Id;
     }
 
@@ -80,26 +70,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public AvState WordsTone = AvState.Ready;
         public bool Armed, Pending;
         public string FrontWords = "";
-        public readonly List<TaskedRowView> Tasked = new List<TaskedRowView>(MaxTaskedRows);
-        public int TaskedTotal;
-        /// <summary>The post the pilot was inspecting is no longer on the board (the strip says so instead of silently showing another).</summary>
-        public bool PostGone;
-        public StripView PerkStrip, PostStrip;
+        public StripView PerkStrip;
         public bool CruiseFlying, Steering;
         public string CruiseRoute = "";
         public int CruiseLegs;
-        public const int MaxTaskedRows = SpaceWire.MaxPosts;
         public AvState FrontWordsTone = AvState.Inert;
     }
 
     /// <summary>The pure mapping from the mirror and the tiles onto <see cref="OpsPageView"/>.</summary>
     internal static class OpsPageViews
     {
-        /// <summary>Pass as the inspected post after the inspected one left the board: nothing is shown until the pilot picks another.</summary>
-        public const int PostGone = -1;
-
         private const string Dot = " · ";
-        private const int ShortGrids = 3;
 
         // ---- Fronts -----------------------------------------------------------------------------------------
 
@@ -129,7 +110,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     continue;
                 }
                 c.Superiority = row.Superiority;
-                c.FundingPct = row.PriorityPct; c.Budget = row.Budget;
+                c.FundingPct = row.PriorityPct;
                 c.QueueCount = row.Queue.Count;
                 foreach (CallRow r in CallSheet.Rows) if (r.Front == f && CallGate.Open(r, c.Grade)) c.Unlocked++;
                 c.Word = FrontSuperiority.Word(row.Superiority);
@@ -313,81 +294,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
             v.WordsTone = v.Armed ? AvState.Caution : pending ? AvState.Info : C2Cap.StartsNegative(words ?? "") ? AvState.Danger : AvState.Ready;
         }
 
-        // ---- Tasked -----------------------------------------------------------------------------------------
-
-        /// <summary>
-        /// The TASKED cards: live posts only (stale ones are gone), in mirror order, capped for the page, and the pinned package strip.
-        /// The strip shows the inspected post (0 = nothing inspected yet: the armed post, else the first; <see cref="PostGone"/> = it left the
-        /// board). The press itself is re-validated by <see cref="CallsController.PressTasked"/>.
-        /// </summary>
-        public static void Tasked(OpsPageView v, IReadOnlyList<FeedPost> posts, bool known, float now, int armedPostId, bool claimPending, int inspectedPost = 0)
-        {
-            v.Tasked.Clear();
-            v.TaskedTotal = 0;
-            v.PostGone = false;
-            v.PostStrip = default;
-            if (!known || posts == null) { v.PostStrip = Idle("WAITING FOR HOST", "THE SPACE FEED HAS NOT ANSWERED YET", "", AvState.Inert); return; }
-            int shown = -1, armedAt = -1;
-            for (int i = 0; i < posts.Count; i++)
-            {
-                FeedPost post = posts[i];
-                PostStatus status = SpaceFeedRules.PostStatusOf(post, now);
-                if (status == PostStatus.Stale) continue;
-                v.TaskedTotal++;
-                if (v.Tasked.Count >= OpsPageView.MaxTaskedRows) continue;
-                int targets = post.Points != null ? Math.Max(1, post.Points.Length) : 1;
-                bool armed = post.CallId != 0 && armedPostId == post.CallId;
-                bool launching = status == PostStatus.Launching;
-                PostGrids g = Grids(post);
-                float left = Math.Max(0f, post.Expires - now);
-                string origin = post.Own ? "YOU" : post.WatchOfficer ? "OVERLORD" : string.IsNullOrEmpty(post.Maker) ? "OPERATOR" : "OPERATOR " + post.Maker;
-                string price = post.Price > 0 ? Ap(post.Price) : "FREE";
-                var row = new TaskedRowView
-                {
-                    PostId = post.CallId, Targets = targets, Code = Code(post.Action), Name = TaskedKinds.Label(post.Action),
-                    Meta = TaskedKinds.Slab(post.Domain) + Dot + targets + " TGT", Grids = g.Short, GridsFull = g.Full, Price = price,
-                    Expiry = FrontRules.Clock(left) + " LEFT", Origin = origin, Urgent = left < 20f,
-                    // ARM is a local arm only; FIRE sends the host's claim-and-launch. Another pilot's launch is LAUNCHING, never ARMED.
-                    Stamp = launching ? "LAUNCHING" : armed ? (claimPending ? "CLAIM SENT" : "ARMED") : "OPEN",
-                    Detail = launching ? (string.IsNullOrEmpty(post.Claimant) ? "ANOTHER PILOT" : post.Claimant) + " LAUNCHING" + Dot + targets + " TGT"
-                        : "FROM " + origin + Dot + targets + " TGT" + Dot + price,
-                    Tone = armed ? AvState.Caution : launching ? AvState.Info : AvState.Ready,
-                    Armed = armed, Launching = launching
-                };
-                if (inspectedPost > 0 && row.PostId == inspectedPost) shown = v.Tasked.Count;
-                if (armed) armedAt = v.Tasked.Count;
-                v.Tasked.Add(row);
-            }
-            if (shown < 0 && inspectedPost == 0) shown = armedAt >= 0 ? armedAt : v.Tasked.Count > 0 ? 0 : -1; // nothing inspected yet
-            if (shown >= 0)
-            {
-                TaskedRowView r = v.Tasked[shown];
-                r.Inspected = true;
-                v.Tasked[shown] = r;
-                string gate = r.Launching ? r.Detail + Dot + r.Expiry
-                    : r.Armed ? (claimPending ? "CLAIM SENT" + Dot + "WAITING FOR THE HOST" : "ARMED" + Dot + "FIRE CLAIMS AND LAUNCHES IT" + Dot + r.Expiry)
-                    : "OPEN" + Dot + "FROM " + r.Origin + Dot + r.Expiry + Dot + "ARM, THEN FIRE LAUNCHES IT";
-                v.PostStrip = new StripView
-                {
-                    Has = true, Id = r.PostId, Code = r.Code, Stamp = r.Stamp, StampTone = r.Tone, Name = r.Name, Meta = r.Meta, Price = r.Price,
-                    Brief = "TARGETS " + r.Targets + Dot + r.GridsFull, Gate = gate, GateTone = r.Urgent && !r.Launching ? AvState.Caution : r.Tone,
-                    Primary = r.Launching ? "ARM" : claimPending ? "WAIT" : r.Armed ? "FIRE" : "ARM",
-                    PrimaryEnabled = !r.Launching && !claimPending, PrimaryFire = r.Armed && !r.Launching, DisarmEnabled = armedPostId != 0
-                };
-            }
-            else if (inspectedPost != 0)
-            {
-                v.PostGone = true;
-                v.PostStrip = Idle("POST EXPIRED OR TAKEN", "THE PACKAGE YOU WERE REVIEWING IS NO LONGER ON THE BOARD", "PICK ANOTHER PACKAGE BELOW", AvState.Caution);
-                v.PostStrip.DisarmEnabled = armedPostId != 0;
-            }
-            else
-            {
-                v.PostStrip = Idle("NO PACKAGES POSTED", "MARK CONTACTS IN ORBIT AND SEND THEM TO THE BOARD · THEY APPEAR HERE", "THE BOARD IS CLEAR", AvState.Inert);
-                v.PostStrip.DisarmEnabled = armedPostId != 0;
-            }
-        }
-
         /// <summary>A strip with nothing to act on: a name, a line and a reason, buttons off.</summary>
         public static StripView Idle(string name, string brief, string gate, AvState tone) => new StripView
         {
@@ -395,53 +301,6 @@ namespace BoscaliSummer.Modules.Support.Presentation
         };
 
         // ---- Words and caches (bounded; filled on first use so the 0.2 s tick does not rebuild them) ----------------
-
-        /// <summary>Post ids restart with every faction desk and every mission, so a cached entry is kept only with the points it was made from: a reused id never shows another post's grids.</summary>
-        private sealed class PostGrids
-        {
-            public string Short, Full;
-            public int Count;
-            public float FirstX, FirstZ, LastX, LastZ;
-
-            public bool Matches(FeedPoint[] pts)
-            {
-                int n = pts != null ? pts.Length : 0;
-                return Count == n && (n == 0 || (FirstX == pts[0].X && FirstZ == pts[0].Z && LastX == pts[n - 1].X && LastZ == pts[n - 1].Z));
-            }
-        }
-        private static readonly Dictionary<int, PostGrids> gridCache = new Dictionary<int, PostGrids>(16);
-        private static readonly StringBuilder gridText = new StringBuilder(64);
-
-        /// <summary>
-        /// The grid squares of a post's targets (its points are fixed at SEND, so one list per post id is enough). Cached only once the map's
-        /// grid labels exist: before that the kilometre fallback is shown but not kept.
-        /// </summary>
-        private static PostGrids Grids(in FeedPost post)
-        {
-            FeedPoint[] pts = post.Points;
-            if (post.CallId != 0 && gridCache.TryGetValue(post.CallId, out PostGrids hit) && hit.Matches(pts)) return hit;
-            var g = new PostGrids { Short = "—", Full = "—" };
-            if (pts != null && pts.Length > 0)
-            {
-                g.Count = pts.Length; g.FirstX = pts[0].X; g.FirstZ = pts[0].Z; g.LastX = pts[pts.Length - 1].X; g.LastZ = pts[pts.Length - 1].Z;
-                gridText.Length = 0;
-                int shortLen = 0;
-                for (int i = 0; i < pts.Length; i++)
-                {
-                    if (i > 0) gridText.Append(Dot);
-                    gridText.Append(OpsKit.Grid(pts[i].X, pts[i].Z));
-                    if (i == ShortGrids - 1) shortLen = gridText.Length;
-                }
-                g.Full = gridText.ToString();
-                g.Short = pts.Length <= ShortGrids ? g.Full : g.Full.Substring(0, shortLen) + " +" + (pts.Length - ShortGrids);
-            }
-            if (post.CallId != 0 && SceneSingleton<DynamicMap>.i?.gridLabels != null)
-            {
-                if (gridCache.Count >= 48) gridCache.Clear();
-                gridCache[post.CallId] = g;
-            }
-            return g;
-        }
 
         private static readonly string[] apCache = new string[128];
 

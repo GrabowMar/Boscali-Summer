@@ -387,7 +387,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             pendingAction = id;
             if (!request.Pending) { pendingAction = null; return; } // answered in-process: Answer already said the real words
             AimNow = AimSource.None;
-            Say("PENDING · " + Label(id) + (id == SupportActionId.Cruise ? " · STEER IT ON TASKED" : ""), AvUiCue.Press);
+            Say("PENDING · " + Label(id) + (id == SupportActionId.Cruise ? " · STEER IT ON PERKS" : ""), AvUiCue.Press);
         }
 
         private void Update()

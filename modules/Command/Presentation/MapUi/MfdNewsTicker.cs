@@ -52,10 +52,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static float alertUntil;
         private static float holdUntil;
         private static bool alertVisualsClear;
-        private static bool lastLogLive;
-
-        internal static bool IsVisible => root != null && root.gameObject.activeSelf;
-        internal static float BottomY => root == null ? 0f : root.anchoredPosition.y - root.sizeDelta.y;
+        private static string lastFiled;
 
         public static void Ensure(Canvas canvas, MfdLayout.Columns columns, CommandSettings config = null)
         {
@@ -69,7 +66,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (!subscribedToLog)
             {
-                MfdLogPanel.OnLineAdded += OnLogLineAdded;
+                TacticalLog.GameLine += OnLogLineAdded;
                 subscribedToLog = true;
             }
 
@@ -109,13 +106,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
 
-            bool logLive = MfdLogPanel.HasTraffic;
-            if (deskLabel != null && logLive != lastLogLive)
-            {
-                deskLabel.text = logLive ? "// LOG LIVE" : "// LOG STANDBY";
-                lastLogLive = logLive;
-            }
-
             float now = Time.unscaledTime;
 
             // Periodic theater status updates from CommandManager
@@ -146,7 +136,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (subscribedToLog)
             {
-                MfdLogPanel.OnLineAdded -= OnLogLineAdded;
+                TacticalLog.GameLine -= OnLogLineAdded;
                 subscribedToLog = false;
             }
 
@@ -170,13 +160,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             currentMarqueeString = "";
             alertVisualsClear = false;
             holdUntil = 0f;
-            lastLogLive = false;
         }
 
         public static void Reset()
         {
             Restore();
             feed.Clear();
+            lastFiled = null;
         }
 
         private static Rect ResolveArea(MfdLayout.Columns columns)
@@ -250,7 +240,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 new Rect(badgeWidth, -size.y + 2f, size.x - badgeWidth, 2f),
                 AvStyleHost.FuiColor("select", AvTheme.Accent).WithAlpha(0.30f));
 
-            // Align the wire's left bay with the Field Log directly beneath it.
+            // Align the wire's left bay with the panel column beneath it.
             MfdChromeLay.Rule(chrome, "BadgeDivider", new Rect(badgeWidth, 0f, 1f, size.y),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(0.60f));
 
@@ -267,12 +257,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdChromeLay.Place(badgeLabel.rectTransform, new Rect(18f, 0f, 112f, size.y));
             badgeLabel.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
 
-            lastLogLive = MfdLogPanel.HasTraffic;
-            deskLabel = AvText.Make(badgeRt, "Desk", AvTextRole.Micro,
-                lastLogLive ? "// LOG LIVE" : "// LOG STANDBY", TextAlignmentOptions.MidlineRight);
+            // The desk label is the way into the whole log: the wire only reads its headlines.
+            deskLabel = AvText.Make(badgeRt, "Desk", AvTextRole.Micro, "THE LOG · EVN", TextAlignmentOptions.MidlineRight);
             MfdChromeLay.Place(deskLabel.rectTransform, new Rect(badgeWidth - 145f, 0f, 112f, size.y));
             deskLabel.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            // A narrow badge (folded column) has no room for the label; when shown it opens EVN LOG.
             deskLabel.gameObject.SetActive(badgeWidth >= 260f);
+            deskLabel.raycastTarget = true;
+            AvHit.On(deskLabel).Click = _ => AvConsole.Open("EVN", "LOG");
+            MapUiPointer.Register(deskLabel.rectTransform);   // a destroyed label drops out of the map's hit test by itself
 
             // 3. Masked Viewport
             float viewportX = badgeWidth + 10f;
@@ -394,13 +387,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (cm == null || cm.TheaterState == null) return;
 
             var state = cm.TheaterState;
-            feed.UpdateTheaterStatus(
+            MfdNewsFeed.HeadlineItem breaking = feed.UpdateTheaterStatus(
                 Time.unscaledTime,
                 state.DefconLevel,
                 state.TerritoryControlRatio,
                 state.AirSuperiorityRatio,
                 state.ActiveClashesCount,
                 state.ContestedAirbaseCount);
+            // A breaking theater headline is filed in the game log once, until the wire says something else.
+            if (breaking == null || breaking.Text == lastFiled) return;
+            lastFiled = breaking.Text;
+            TacticalLog.Add(BoscaliSummer.Core.Contracts.TacticalLogEntry.News, breaking.Text);
         }
     }
 }

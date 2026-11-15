@@ -333,8 +333,6 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             breakIndex = 0;
             cursors.Clear();
             nextOpenerAt = 0f;
-            wire.Clear();
-            wireRevision++;
             bulletinCursor = 0;
             lastProgramName = null;
             lastChatter = string.Empty;
@@ -1286,30 +1284,12 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             if (string.IsNullOrEmpty(line)) return;
             if (line.Length > 64) line = line.Substring(0, 64);
             ticker = line;
-            // The wire keeps the last lines with the clock and the station that aired them.
-            wire.Insert(0, new WireLine(DateTime.Now.ToString("HH:mm"),
-                huntTrack != null || offStation ? "RX" : CurrentChannelCode, CurrentChannelColor, line));
-            if (wire.Count > WireCapacity) wire.RemoveAt(wire.Count - 1);
-            wireRevision++;
+            // The wire is the game log's RADIO lines (EVN LOG), tagged with the station that aired them.
+            if (ModuleServices.TryGet(out ITacticalLog log))
+                log.Radio((huntTrack != null || offStation ? "RX" : CurrentChannelCode) + " · " + line);
         }
 
         // ---------------------------------------------------------- broadcast desk face
-
-        internal readonly struct WireLine
-        {
-            public readonly string Clock, Tag, Text;
-            public readonly Color Color;
-            public WireLine(string clock, string tag, Color color, string text) { Clock = clock; Tag = tag; Color = color; Text = text; }
-        }
-
-        private const int WireCapacity = 12;
-        private readonly List<WireLine> wire = new List<WireLine>(WireCapacity + 1);
-        private int wireRevision;
-
-        public int WireCount => wire.Count;
-        public int WireRevision => wireRevision;
-        /// <summary>Newest first.</summary>
-        internal WireLine GetWire(int index) => wire[index];
 
         public float Duration => receiver.Duration;
         public Color CurrentChannelColor => GetChannelColor(selectedChannel);

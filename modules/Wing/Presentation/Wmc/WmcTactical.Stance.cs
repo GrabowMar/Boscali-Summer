@@ -15,11 +15,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildStance(AvFlow f)
         {
-            stanceSection = f.Section(AvIcon.Shield, "STANCE", "");
+            stanceSection = f.Section(AvIcon.Shield, "PROFILE", "");
             slots = f.Add(new WmcStanceSlots(f.Content, PickSlot, null));
             for (int i = 0; i < WmcStanceSlots.Count; i++)
             {
-                slots.SetHelp(i, "Wing key + " + (i + 1) + ": fly this stance with the scope.");
+                slots.SetHelp(i, "Wing key + " + (i + 1) + ": fly this profile with the scope.");
             }
         }
 
@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcMotion.Punch(slots.Rect);
             if (!WmcStanceActions.ApplySlot(last, i))
             {
-                WingToast.Show("Slot " + (i + 1) + " is empty: assign a stance on BEHAVIOUR › STANCES");
+                WingToast.Show("Slot " + (i + 1) + " is empty: on BEHAVIOUR · PROFILES, light a profile and give it WING KEY W+" + (i + 1));
                 return;
             }
             FlashScope();

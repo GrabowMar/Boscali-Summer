@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using BoscaliSummer.Modules.Comms.Configuration;
 using BoscaliSummer.Modules.Comms.Domain;
 using BoscaliSummer.Modules.Comms.Runtime;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
 using UnityEngine;
@@ -11,24 +12,25 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
-    /// <summary>COM: two pages for shared map annotations and team communications.
-    /// All actions pass through CommsManager and remain host-authoritative.</summary>
-    internal sealed partial class CommsMfdPanel : MonoBehaviour, ISceneService
+    /// <summary>COM: who is on the net and calling what (CALLS: brevity calls; NET: the stations heard). The shared plot it used to
+    /// carry is built on MAP TOOLS through <see cref="ICommsPlot"/>. All actions pass through CommsManager and remain host-authoritative.</summary>
+    internal sealed partial class CommsMfdPanel : MonoBehaviour, ISceneService, ICommsPlot
     {
         private const float Width = AvTokens.PanelWidth;
         private const float RefreshInterval = 0.2f;
         private const float NoticeSeconds = 6f;
+        private const float PlotWantedFor = 0.5f;
 
-        private const int TabMap = 0;
-        private const int TabComms = 1;
+        private const int TabCalls = 0;
+        private const int TabNet = 1;
 
         /// <summary>The console title; the harness builds its console with the same words.</summary>
-        internal const string Title = "MULTIPLAYER DATA LINK";
+        internal const string Title = "COMMS";
 
         private static readonly (AvIcon Icon, string Label)[] TabSpecs =
         {
-            (AvIcon.Map2, "MAP"),
-            (AvIcon.Message2, "COMMS"),
+            (AvIcon.Message2, "CALLS"),
+            (AvIcon.UsersGroup, "NET"),
         };
 
         private CommsSettings settings;
@@ -45,6 +47,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private float nextRefresh;
         private bool viewOpen;
+        private float plotWantedUntil;
 
         public void Configure(CommsSettings config, CommsManager manager, ManualLogSource log)
         {
@@ -63,7 +66,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             viewOpen = false;
             if (comms != null) comms.PanelOpen = false;
             nextRefresh = 0f;
-            ResetMap();
+            // The plot parts belong to the MAP console: they go with it, and its next build replaces them.
             ResetLog();
         }
 
@@ -81,7 +84,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
-            SetViewOpen(visible);
+            SetViewOpen(visible || Time.unscaledTime < plotWantedUntil);
             if (!visible || Time.unscaledTime < nextRefresh) return;
             nextRefresh = Time.unscaledTime + RefreshInterval;
             Refresh();
@@ -102,16 +105,34 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private RectTransform BuildScreen(RectTransform content, float height)
         {
             console = AvConsole.Build(content, "COM", Title, TabSpecs.Length, Width, height);
-            chips = console.Chips(3);
+            chips = console.Chips(2);
             BindAudienceChip();
             console.Tabs(TabSpecs);
             console.PageChanged += _ => nextRefresh = 0f;
 
-            BuildMapPage(console.Page(TabMap));
-            BuildCommsPage(console.Page(TabComms));
+            BuildCallsPage(console.Page(TabCalls));
+            BuildNetPage(console.Page(TabNet));
             console.Finish();
-            console.SetPage(TabMap);
+            console.SetPage(TabCalls);
             return null;
+        }
+
+        // ---- ICommsPlot: the plot on MAP TOOLS ---------------------------------------------------
+
+        bool ICommsPlot.On => settings != null && settings.Enabled.Value;
+
+        AvPart[] ICommsPlot.Build(AvFlow page) => BuildMapPage(page);
+
+        void ICommsPlot.Refresh()
+        {
+            plotWantedUntil = Time.unscaledTime + PlotWantedFor;
+            if (comms != null) RefreshMap();
+        }
+
+        bool ICommsPlot.ShowOnMap
+        {
+            get => settings != null && settings.ShowOnMap.Value;
+            set { if (settings != null) settings.ShowOnMap.Value = value; }
         }
 
         // ---- Refresh -----------------------------------------------------------------------
@@ -129,13 +150,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             chips[0].Set(connText, !online || comms.HostSilent ? AvState.Caution : AvState.Info);
             chips[1].Set(comms.Channel == CommsChannel.Team ? "NET TEAM · CHANGE" : "NET ALL · CHANGE",
                 comms.Channel == CommsChannel.Team ? AvState.Ready : AvState.Caution);
-            chips[2].Set("PLOT · " + ToolName(comms.Tool), comms.Tool == CommsTool.None ? AvState.Inert : AvState.Info);
-
-            switch (console.CurrentPage)
-            {
-                case TabMap: RefreshMap(); break;
-                case TabComms: RefreshLog(now); break;
-            }
+            if (console.CurrentPage == TabNet) RefreshLog(now);
 
             string alert = comms.HostSilent
                 ? "HOST NOT ANSWERING \u00b7 NEEDS BOSCALI SUMMER"

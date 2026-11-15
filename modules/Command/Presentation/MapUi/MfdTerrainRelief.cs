@@ -2301,6 +2301,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mapY = at.y;
             return true;
         }
+
+        public bool Focus(float worldX, float worldZ) => MapFocus.To(worldX, worldZ, true);
     }
 
     [HarmonyPatch(typeof(GridLabels), "LateUpdate")]

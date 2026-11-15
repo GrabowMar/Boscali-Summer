@@ -42,17 +42,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private AvField labelField;
         private AvControl clearAllButton;
 
-        private void ResetMap()
-        {
-            plotSection = null;
-            toolButtons = null;
-            pingButtons = null;
-            penRow = null;
-            labelField = null;
-            clearAllButton = null;
-        }
-
-        private void BuildMapPage(AvFlow p)
+        /// <summary>The PLOT section on MAP TOOLS (<see cref="BoscaliSummer.Core.Contracts.ICommsPlot"/>); returns every part it added.</summary>
+        private AvPart[] BuildMapPage(AvFlow p)
         {
             // Top to bottom: pick a tool and its ink, or a marker, then right-click the map. The map itself is the list of marks.
             plotSection = p.Section(AvIcon.Pencil, "PLOT", "MAP FREE");
@@ -88,9 +79,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 penRow.Swatches[i].Help = CommsCatalog.Pens[i].Name + " ink, for the pen and the shapes.";
             for (int i = 0; i < penRow.Widths.Length; i++) penRow.Widths[i].Help = "Stroke width for the pen and shapes. " + HoldHint();
 
-            p.Section(AvIcon.MapPin, "MARKERS", "RIGHT-CLICK THE MAP");
+            AvSection markers = p.Section(AvIcon.MapPin, "MARKERS", "RIGHT-CLICK THE MAP");
             var pingSpecs = new AvControl.Spec[CommsCatalog.PalettePings];
-            var pingHelps = new string[pingSpecs.Length];
             for (int i = 0; i < pingSpecs.Length; i++)
             {
                 int kind = i;
@@ -100,9 +90,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     comms.PingKind = kind;
                     comms.SetTool(CommsTool.Ping);
                 }, ToneStyle(ping.Tone), PingIcons[i]);
-                pingHelps[i] = ping.Code + " ping: " + ping.Phrase + ". Pick it, then right-click the map.";
             }
-            pingButtons = ButtonGrid(p, pingSpecs, pingSpecs.Length, pingHelps);
+            AvButtons pingRow = p.Buttons(pingSpecs);
+            pingButtons = pingRow.Controls;
+            for (int i = 0; i < pingButtons.Length; i++)
+                pingButtons[i].Help = CommsCatalog.Pings[i].Code + " ping: " + CommsCatalog.Pings[i].Phrase + ". Pick it, then right-click the map.";
 
             labelField = new AvField(p.Content, "TEXT: FARP HERE, CAP EAST…", CommsText.MaxLabel, _ => ArmLabel());
             Tip(labelField, "Words for the map, up to " + CommsText.MaxLabel + " characters. Press PLACE, then right-click where they go.");
@@ -113,17 +105,14 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             var clearRow = new AvButtons(p.Content,
                 new[]
                 {
-                    new AvControl.Spec("CLEAR MINE", () => comms.ClearMine(), AvButtonStyle.Danger, AvIcon.Eraser),
-                    new AvControl.Spec("CLEAR MAP", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR", () => comms.ClearMine(), AvButtonStyle.Danger, AvIcon.Eraser),
+                    new AvControl.Spec("CLEAR", () => comms.ClearAll(), AvButtonStyle.Danger, AvIcon.Eraser),
                 });
             clearAllButton = clearRow.Controls[1];
-            clearRow.Controls[0].Help = "Remove everything you have put on the map.";
-            clearAllButton.Help = "Host only: wipe every mark from the shared map.";
+            clearRow.Controls[0].Help = "Clear yours: remove everything you have put on the map.";
+            clearAllButton.Help = "Clear all (host only): wipe every mark from the shared map.";
             p.Add(clearRow);
-
-            console.Orders(TabMap,
-                "Arm a tool, then right-click or right-drag on the map. ESC puts it down.",
-                HoldHint());
+            return new AvPart[] { plotSection, deck, penRow, markers, pingRow, labelField, placeRow, clearRow };
         }
 
         private void ArmLabel()

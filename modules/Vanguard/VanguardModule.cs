@@ -91,9 +91,8 @@ namespace BoscaliSummer.Modules.Vanguard
             Networking.VanguardNet net = context.AddSceneService<Networking.VanguardNet>(60);
             Presentation.DroneLinkService drones = context.AddSceneService<Presentation.DroneLinkService>(60);
             drones.Configure(net);
-            context.AddService<IDroneCommand>(drones);
+            context.AddService<IDroneCommand>(drones);     // TGT DRONES on the MFD reads the link through it
             context.AddSceneService<Presentation.DroneFeedHud>(60).Configure(drones);       // the HUD feed card
-            context.AddSceneService<Presentation.DroneMfdPanel>(65).Configure(drones, context.Logger); // UAV on the MFD
             var scopeGauges = new VanguardScopeGauges(drones);
             scopeGauges.Register();      // the TAC BOARD's LANCE, AEGIS and REMORA gauges
             context.OnTeardown(scopeGauges.Unregister);

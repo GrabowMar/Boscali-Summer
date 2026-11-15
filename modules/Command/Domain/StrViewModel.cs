@@ -179,7 +179,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>-1 unknown (printed as a dash).</summary>
         public int Cost = -1, Pool = -1;
         public StrTri Affordable = StrTri.Unknown;
-        /// <summary>"EARNING 2/3", "READY", "HELD, POOL SHORT"; the group name; "POOL 7,400 to 5,550" or "POOL 7,400, NEEDS 1,850"; the last-wave line.</summary>
+        /// <summary>"EARNING 2/3", "READY", "HELD, FUNDS SHORT"; the group name; "COST 1,850" or the held reason; the last-wave line.</summary>
         public string StateText = "", GroupText = "", PoolText = "", LastText = "";
         public bool Held;
         /// <summary>Depot position for the wave route line; global metres.</summary>
@@ -288,11 +288,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>DEFCON level 1..5 (0 = not measured), its word and the rule that set it.</summary>
         public int AlertLevel;
         public string AlertWord = "NOT MEASURED", AlertRule = "";
-        /// <summary>The AI sortie board: code, count (-1 unknown), share 0..1 (NaN unknown); caption names whom it counts.</summary>
-        public string[] SortieCodes = { "CAP", "SEAD", "CAS", "STRIKE", "TRANSIT" };
-        public int[] SortieCounts = { -1, -1, -1, -1, -1 };
-        public float[] SortieShares = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
-        public string SortieBoardCaption = "";
         /// <summary>Footer strip: line 1 states status and age, line 2 is the flavour or the latest result.</summary>
         public string FooterStatus = "", FooterNote = "";
         /// <summary>Selected and hovered ids resolved against the rows; SelectionVanished asks the hub to clear its copy.</summary>

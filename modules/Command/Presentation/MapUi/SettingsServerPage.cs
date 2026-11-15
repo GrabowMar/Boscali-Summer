@@ -146,6 +146,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             switch ((view.Section ?? "").ToUpperInvariant())
             {
                 case "HIGH COMMAND":
+                case "NATION":
                 case "SUPPORT CALL-INS":
                 case "SQUAD AND ACES":
                 case "PROGRESSION":
@@ -160,7 +161,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly string[] SectionOrder =
         {
             "DYNAMIC OPERATIONS", "WORLD EVENTS", "TRENCHES", "URBAN COMBAT",
-            "HIGH COMMAND", "SUPPORT CALL-INS", "SQUAD AND ACES", "PROGRESSION", "COMMS",
+            "NATION", "HIGH COMMAND", "SUPPORT CALL-INS", "SQUAD AND ACES", "PROGRESSION", "COMMS",
             "FIRE AND DESTRUCTION", "WEATHER"
         };
 
@@ -172,7 +173,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case "WORLD EVENTS": return AvIcon.Flag;
                 case "TRENCHES": return AvIcon.Ruler2;
                 case "URBAN COMBAT": return AvIcon.Shield;
-                case "HIGH COMMAND": return AvIcon.Crown;
+                case "HIGH COMMAND":
+                case "NATION": return AvIcon.Crown;
                 case "SUPPORT CALL-INS": return AvIcon.Radio;
                 case "SQUAD AND ACES": return AvIcon.UsersGroup;
                 case "PROGRESSION": return AvIcon.Star;

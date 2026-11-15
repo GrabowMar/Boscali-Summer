@@ -47,6 +47,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "disarm":
                     MapPicker.Disarm(TestOwner);
                     break;
+                // MAP TOOLS (panels fold phase 2): the console on its TOOLS page, and its RANGE mark tool armed / put down.
+                case "tools":
+                    AvConsole.Open("MAP", "TOOLS");
+                    break;
+                case "mark":
+                    MfdMapInteractions.ArmMark(MfdMapInteractions.MarkTool.Range);
+                    break;
+                case "unmark":
+                    MapPicker.Disarm(MfdMapInteractions.MarkOwner);
+                    break;
                 case "card":
                     if (!OpenCard(map, Bool(args, "onTrack"))) return Failure("MapInputAutomation", "card", "no ground or track to open on");
                     break;
@@ -154,7 +164,24 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return MapContextCard.Visible;
         }
 
-        private static Dictionary<string, object> State(DynamicMap map) => new Dictionary<string, object>
+        private static Dictionary<string, object> State(DynamicMap map)
+        {
+            // The MAP console's open page as text (empty while it is not up): TOOLS shows MARK's LANDING ZONE and COM's MARKERS.
+            AvConsole mapConsole = AvConsole.Find("MAP");
+            var text = new System.Text.StringBuilder();
+            if (mapConsole != null && mapConsole.Root.gameObject.activeInHierarchy && mapConsole.CurrentPage >= 0)
+                foreach (TMPro.TMP_Text t in mapConsole.Page(mapConsole.CurrentPage).Content.GetComponentsInChildren<TMPro.TMP_Text>(false))
+                    text.Append(t.text).Append('|');
+            string page = text.ToString();
+            Dictionary<string, object> state = Read(map);
+            state["mapPage"] = mapConsole?.CurrentPageName ?? "";
+            state["plotShown"] = page.Contains("MARKERS") ? 1f : 0f;
+            state["markShown"] = page.Contains("LANDING ZONE") ? 1f : 0f;
+            state["markArmed"] = MfdMapInteractions.ArmedMark != MfdMapInteractions.MarkTool.None ? 1f : 0f;
+            return state;
+        }
+
+        private static Dictionary<string, object> Read(DynamicMap map) => new Dictionary<string, object>
         {
             ["open"] = DynamicMap.mapMaximized ? 1f : 0f,
             ["deck"] = MapSelectionDeck.Shown ? 1f : 0f,

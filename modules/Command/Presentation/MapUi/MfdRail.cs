@@ -48,6 +48,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return rail != null && rail.gameObject.activeInHierarchy;
         }
 
+        /// <summary>Opens the screen behind <paramref name="code"/> unless it is already up (a second press would close it); false when no such key.</summary>
+        public static bool Open(string code)
+        {
+            for (int i = 0; i < keys.Count; i++)
+            {
+                if (keys[i].Entry.Code != code) continue;
+                if (!keys[i].Latched) keys[i].Press();
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>False when even bare 44px keys would not fit; the caller then leaves the stock bezel alone.</summary>
         public static bool Fits(float railHeight, int keyCount) => MfdRailPlan.Resolve(railHeight, keyCount, 0).Fits;
 
@@ -157,12 +169,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < buttons.Count && i < screens.Count; i++)
             {
                 if (buttons[i] == null || screens[i] == null) continue;
-                into.Add(new Slot
-                {
-                    Button = buttons[i],
-                    Screen = screens[i],
-                    Entry = MfdRailCatalog.For(CodeOf(buttons[i], screens[i])),
-                });
+                MfdRailEntry entry = MfdRailCatalog.For(CodeOf(buttons[i], screens[i]));
+                if (MfdRailCatalog.OffRail(entry.Code)) continue;
+                into.Add(new Slot { Button = buttons[i], Screen = screens[i], Entry = entry });
             }
         }
 

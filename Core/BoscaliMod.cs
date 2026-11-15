@@ -164,6 +164,8 @@ namespace BoscaliSummer.Core
             if (settings.Command.Enabled.Value) modules.Add(new StrategicCommandModule());
             if (settings.DynamicOperations.Enabled.Value) modules.Add(new DynamicOperationsModule());
             if (settings.HighCommand.Enabled.Value) modules.Add(new HighCommandModule());
+            // Always installed so SET SERVER can switch it; it only runs in the sandbox missions it names.
+            modules.Add(new BoscaliSummer.Modules.Nation.NationModule());
             // Intel publishes IThreatPicture ahead of TheaterOps, whose director reads it
             // late; neither depends on the other.
             if (settings.Intel.Enabled.Value) modules.Add(new IntelModule());

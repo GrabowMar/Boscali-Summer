@@ -115,6 +115,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (!Authoritative || quote.Block != WaveBlock.None || quote.GroupIndex < 0 || groups == null || quote.GroupIndex >= groups.Count)
             { why = quote.Block != WaveBlock.None ? WaveText.Reason(quote.Block) : "NO GROUP"; return false; }
             Faction.ConvoyGroup group = groups[quote.GroupIndex];
+            if (!NationScale.CanConvoy(hq, group)) { why = "NOT PRODUCED"; return false; }
             float cost = group.GetCost();
             if (!float.IsFinite(cost) || cost < 0f) { why = "NO PRICE"; return false; }
             grant = Mathf.Max(0f, grant);

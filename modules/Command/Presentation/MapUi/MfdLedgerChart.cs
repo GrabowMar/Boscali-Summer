@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             float maximum = 0f;
             for (int i = 0; i < 4; i++) maximum = Mathf.Max(maximum, first[i], second[i]);
-            legend.text = "TOP: " + firstName + "   /   LOWER: " + secondName;
+            legend.text = "TOP: " + firstName + " · LOWER: " + secondName;
             scale.text = maximum > 0f ? "COMMON SCALE  0 — " + format(maximum) + " " + unit : "NO RECORDED DATA";
             for (int i = 0; i < 4; i++)
             {

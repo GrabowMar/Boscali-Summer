@@ -54,30 +54,11 @@ namespace BoscaliSummer.Modules.Wing.Domain
             }
             state = "live";
             string up = count > 0 ? " · " + (airborne > 0 ? N(airborne) : "NONE") + " AIRBORNE" : "";
-            // The header shares its row with the funds chip and the console serial: shed the inbound
-            // tail first, then the airborne count, rather than running under the chip.
+            // The footer status leads with this: shed the inbound tail first, then the airborne count, to keep it short.
             string down = inbound > 0 ? " · " + N(inbound) + " INBOUND" : "";
             if ((wing + up + down).Length > 24) down = "";
             if ((wing + up).Length > 24) up = "";
             return wing + up + down;
-        }
-
-        /// <summary>FUNDS (spec FUI §header, the 0.9 metric): the player's allocation, SANDBOX when nothing costs, a dash on a
-        /// client (the host pays).</summary>
-        public static string Funds(float funds, bool sandbox, bool client, out string state)
-        {
-            if (client || float.IsNaN(funds))
-            {
-                state = "inert";
-                return "FUNDS " + None;
-            }
-            if (sandbox)
-            {
-                state = "info";
-                return "SANDBOX";
-            }
-            state = funds <= 0f ? "warn" : "info";
-            return "FUNDS " + Credits.Number(funds);
         }
 
         public static string Fuel(in WingVitals v, out string state)

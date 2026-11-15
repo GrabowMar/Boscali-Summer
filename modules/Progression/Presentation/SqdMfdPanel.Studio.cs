@@ -9,9 +9,9 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
-    /// STUDIO tab: the squadron insignia generator (a proof sheet of fresh rolls over eight
-    /// hand-set layers), the kneeboard card picker, and a launcher for the Wing Command studio
-    /// (WMC WING > STUDIO), which owns custom-pilot editing.
+    /// STUDIO tab: the squadron (roster, personnel files and the pilot studio that owns custom-pilot editing; Wing builds it here
+    /// through <see cref="IWingSquad.BuildSquadron"/>, it was WMC's WING tab), then the squadron insignia generator (a proof sheet of
+    /// fresh rolls over eight hand-set layers), the kneeboard card picker and FLY AS.
     /// </summary>
     internal sealed partial class SqdMfdPanel
     {
@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private StudioTone studioMessageTone = StudioTone.Info;
         private float studioMessageUntil;
 
-        private SqdEmptyCard studioLauncher;
+        private IWingSquad wingSquad;
         private SqdQuote studioMessageText;
         private AvNote studioBlazon, studioContrast;
         private AvStepper[] studioLayers;
@@ -60,7 +60,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessage = string.Empty;
             studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;
-            studioLauncher = null;
+            wingSquad = null;
             studioMessageText = null;
             studioBlazon = studioContrast = null;
             studioLayers = null;
@@ -75,6 +75,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void BuildStudioPage(AvFlow p)
         {
+            // The squadron is Wing's; with Wing off it is one dim line.
+            if (ModuleServices.TryGet(out wingSquad))
+            {
+                p.Section(AvIcon.UsersGroup, "SQUADRON", "PILOTS · FILES · PILOT STUDIO");
+                wingSquad.BuildSquadron(TabStudio, p, console);
+            }
+            else p.Add(new AvNote(p.Content, AvTextRole.Micro)).Set("SQUADRON · THE WING MODULE IS OFF");
+
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
 
             p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", "PAINT SHOP · LOCAL ONLY");
@@ -143,13 +151,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 () => string.IsNullOrEmpty(settings.PilotProfile.Value) ? "SQUADRON RECORD" : settings.PilotProfile.Value.ToUpperInvariant(),
                 () => StepFlyAs(-1), () => StepFlyAs(1)));
             StepperHelp(studioFlyAs, "saved pilot to fly as (SQUADRON RECORD shows the host's generated pilot)");
-            studioLauncher = p.Add(new SqdEmptyCard(p.Content, AvIcon.Pencil, "PILOTS ARE EDITED IN WING COMMAND",
-                "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots.",
-                "OPEN WMC STUDIO", OpenWmcStudio, AvIcon.Pencil));
 
             // No grow: the note is the last line of the job sheet; below it the console ground shows.
             studioMessageText = p.Add(new SqdQuote(p.Content, "SHOP NOTE"));
             studioMessageText.Set(StudioQuietLine);
+            p.Links(("WING", "WMC", null), ("MY AIRCRAFT", "WMC", "LOADOUT"));
         }
 
         private static void StepperHelp(AvStepper stepper, string what)
@@ -173,10 +179,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 emblemFiles = EmblemRenderer.ScanFiles();
             }
 
-            studioLauncher.Set(WingLink.SquadAvailable ? "PILOTS ARE EDITED IN WING COMMAND" : "WING COMMAND NOT CONNECTED",
-                WingLink.SquadAvailable
-                    ? "The WMC WING tab has the pilot studio: write, clone, recruit and delete pilots."
-                    : WingLink.SquadUnavailableReason);
             studioEmblem.Set(emblemSprite);
             studioBlazon.Set(emblem.Blazon());
             studioContrast.Set(emblem.Legible ? "CONTRAST OK · READS AT DISTANCE" : "CONTRAST LOW · MARK MAY NOT READ",
@@ -201,20 +203,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         // ---- STUDIO actions --------------------------------------------------------------
 
-        private void OpenWmcStudio()
-        {
-            if (WingLink.OpenPilotStudio()) NextMessage("Opening the Wing Command pilot studio.", StudioTone.Ok);
-            else NextMessage("Wing Command could not open the pilot studio.", StudioTone.Warn);
-            nextRefresh = 0f;
-        }
-
         /// <summary>FLY AS: the squadron record, then each saved pilot in studio order.</summary>
         private void StepFlyAs(int direction)
         {
             string[] pilots = WingLink.SavedPilotCallsigns();
             if (pilots.Length == 0)
             {
-                NextMessage("No saved pilots yet: write one in the Wing Command studio.", StudioTone.Warn);
+                NextMessage("No saved pilots yet: open STUDIO in SQUADRON above and write one.", StudioTone.Warn);
                 return;
             }
             int at = Array.FindIndex(pilots, c => string.Equals(c, settings.PilotProfile.Value, StringComparison.OrdinalIgnoreCase)) + 1;
@@ -306,9 +301,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             // While the paint shop is on, its own words say whether the fin really carries the insignia.
             if (settings != null && settings.EmblemPaint.Value != EmblemPaint.Off && Visuals.TailPaint.Status.Length > 0)
                 return Visuals.TailPaint.Status + ". Only you see it.";
-            return WingLink.SquadAvailable
-                ? "PAINT SHOP · pilots are written in Wing Command."
-                : WingLink.SquadUnavailableReason;
+            return wingSquad?.SquadronLine ?? StudioQuietLine;
         }
 
         private static int NextSeed() =>

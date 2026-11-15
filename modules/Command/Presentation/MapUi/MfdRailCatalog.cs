@@ -32,8 +32,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public bool HasName => !string.IsNullOrEmpty(Name);
     }
 
-    /// <summary>What a screen is for; the rail gathers its keys under these, in this order.</summary>
-    internal enum MfdRailGroup { Situation, Tasking, Comms, System, Aux }
+    /// <summary>When a pilot asks a key's question; the rail gathers its keys under these, in this order.</summary>
+    internal enum MfdRailGroup { Sortie, War, Country, News, Map, System, Aux }
 
     /// <summary>
     /// How the rail spends its height: full dress (index header and group labels) while the
@@ -95,43 +95,49 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static MfdRailEntry For(string label)
         {
             string code = Sanitise(label, MaxCodeLength);
-            // FAC is the merged faction readout; the native HQ codes stay recognised for
-            // the moments the game shows them. Each screen wears a glyph of its own.
+            // The name is the console's own title word. FAC is the merged faction readout; the native HQ codes stay recognised
+            // for the moments the game shows them. Each screen wears a glyph of its own.
             switch (code)
             {
-                case "FAC": return new MfdRailEntry(code, "FACTIONS", AvIcon.Crest, MfdRailGroup.Situation, 0);
-                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.Crest, MfdRailGroup.Situation, 1);
-                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.Crest, MfdRailGroup.Situation, 2);
-                case "MAP": return new MfdRailEntry(code, "TACTICAL", AvIcon.Map2, MfdRailGroup.Situation, 3);
-                case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.Territory, MfdRailGroup.Situation, 4);
-                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Burst, MfdRailGroup.Situation, 5);
-                case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud, MfdRailGroup.Situation, 6);
-                case "MIS": return new MfdRailEntry(code, "MISSION", AvIcon.Clipboard, MfdRailGroup.Tasking, 0);
-                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Tasking, 1);
-                case "WMC": return new MfdRailEntry(code, "WING CMD", AvIcon.Formation, MfdRailGroup.Tasking, 2);
-                case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.CallDown, MfdRailGroup.Tasking, 3);
-                case "UAV": return new MfdRailEntry(code, "DRONE LINK", AvIcon.Drone, MfdRailGroup.Tasking, 4);
-                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.Comms, 0);
-                case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.Comms, 1);
-                case "HUD": return new MfdRailEntry(code, "SYMBOLOGY", AvIcon.FlightPath, MfdRailGroup.System, 0);
-                case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2, MfdRailGroup.System, 1);
-                case "PILOT": return new MfdRailEntry(code, "PERSONNEL", AvIcon.Pilot, MfdRailGroup.System, 2);
-                case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.Pilot, MfdRailGroup.System, 3);
-                case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 4);
-                // Last key of the rail, under any unknown code too, and pinned to its bottom edge (MfdRail.Lay).
+                case "WMC": return new MfdRailEntry(code, "WING", AvIcon.Formation, MfdRailGroup.Sortie, 0);
+                case "PILOT": return new MfdRailEntry(code, "PILOT", AvIcon.Pilot, MfdRailGroup.Sortie, 1);
+                case "SQD": return new MfdRailEntry(code, "PILOT", AvIcon.Pilot, MfdRailGroup.Sortie, 2);
+                case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.Territory, MfdRailGroup.War, 0);
+                case "MIS": return new MfdRailEntry(code, "MISSIONS", AvIcon.Clipboard, MfdRailGroup.War, 1);
+                case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.CallDown, MfdRailGroup.War, 2);
+                case "FAC": return new MfdRailEntry(code, "FACTION", AvIcon.Crest, MfdRailGroup.Country, 0);
+                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.Crest, MfdRailGroup.Country, 1);
+                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.Crest, MfdRailGroup.Country, 2);
+                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Burst, MfdRailGroup.News, 0);
+                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.News, 1);
+                case "MAP": return new MfdRailEntry(code, "MAP", AvIcon.Map2, MfdRailGroup.Map, 0);
+                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Map, 1);
+                case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 0);
+                case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud, MfdRailGroup.System, 1);
+                case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.System, 2);
+                case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2, MfdRailGroup.System, 3);
+                // Last key of the rail, under any unknown code too, and pinned to its bottom edge (MfdRail.Lay). Dev builds only.
                 case "MISC": return new MfdRailEntry(code, "EXTRAS", AvIcon.Stack2, MfdRailGroup.Aux, 99);
                 default: return new MfdRailEntry(code, null, NeutralGlyph, MfdRailGroup.Aux, 0);
             }
         }
+
+        /// <summary>
+        /// A screen that keeps its bezel slot but gets no key: HUD, whose priority lists live on TGT FILTER. Its screen stays,
+        /// because MfdBezel lays every mod screen out on it.
+        /// </summary>
+        public static bool OffRail(string code) => code == "HUD";
 
         /// <summary>The label a group of keys sits under.</summary>
         public static string GroupName(MfdRailGroup group)
         {
             switch (group)
             {
-                case MfdRailGroup.Situation: return "SITUATION";
-                case MfdRailGroup.Tasking: return "TASKING";
-                case MfdRailGroup.Comms: return "COMMS";
+                case MfdRailGroup.Sortie: return "BEFORE THE SORTIE";
+                case MfdRailGroup.War: return "THE WAR";
+                case MfdRailGroup.Country: return "THE COUNTRY";
+                case MfdRailGroup.News: return "THE NEWS";
+                case MfdRailGroup.Map: return "THE MAP";
                 case MfdRailGroup.System: return "SYSTEM";
                 default: return "AUX";
             }

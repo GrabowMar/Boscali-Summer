@@ -1,15 +1,32 @@
 using NOAvionics;
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Progression.Domain;
+using BoscaliSummer.Modules.Progression.Runtime;
 using NuclearOption.Networking;
 using TMPro;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
-    internal sealed partial class SqdMfdPanel
+    /// <summary>MY AIRCRAFT (was PILOT's PLANE tab; the 2026-11-14 panels fold moved it onto WMC LOADOUT): the aircraft you fly, live.
+    /// The section's caption is the crew chief's call. Wing builds it through <see cref="IMyAircraft"/>; the latest build owns it.</summary>
+    internal sealed class PlaneDossier : IMyAircraft
     {
+        private readonly ProgressionManager progression;
+
+        public PlaneDossier(ProgressionManager manager) { progression = manager; }
+
+        public void Build(int page, AvFlow flow)
+        {
+            ResetPlanePage();
+            planeSection = flow.Section(AvIcon.Plane, "MY AIRCRAFT", PlaneNoAircraft);
+            BuildPlanePage(flow);
+            flow.Ticker.Add(page, AvTickRate.Fast, RefreshPlanePage);
+        }
+
+        private AvSection planeSection;
         private const int PlaneFaultRows = 4;
         private const int PlaneStoreRows = 4;
         private const int SystemGear = 0, SystemAssist = 1, SystemCountermeasure = 2, SystemWarning = 3;
@@ -36,7 +53,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private int planeTuneMode = -1;
         private bool planeLive;
         private const string PlaneNoAircraft = "CREW CHIEF · NO AIRCRAFT ON THE LINE";
-        private string planeStatus = PlaneNoAircraft;
 
         private void ResetPlanePage()
         {
@@ -46,8 +62,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             planeSystems = null;
             planeStoresSection = planeFaultSection = null;
             planeStorePager = null;
-            planeDamage?.Clear();
-            planeDamage = null;
+            planeDamage = null; // its view died with the console it was built on
             planeTuneName = null;
             planeTuneSegmented = null;
             planeTuneState = null;
@@ -55,7 +70,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             planeTuneAircraft = null;
             planeTuneMode = -1;
             planeLive = false;
-            planeStatus = PlaneNoAircraft;
             planePreviousStores = planeNextStores = null;
             planeStorePage = 0;
             planeLiveParts.Clear();
@@ -81,14 +95,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private void BuildPlanePage(AvFlow p)
         {
-            // No grow: a lone card is the page's whole content; below it the console ground shows, and the orders run in the footer.
+            // Without an aircraft the section is this one card.
             planeEmpty = p.Add(new SqdEmptyCard(p.Content, AvIcon.Plane, "NO AIRCRAFT ASSIGNED",
                 "Take an aircraft and this card opens its status: damage, engine map, flight data and stores."));
             planeIdentity = p.Add(Live(new PlaneHero(p.Content)));
 
             planeDamage = Live(new PlaneDamagePart(p.Content));
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
-            AvCard engineCard = Live(new AvCard(p.Content, console.Ticker, half, "ENGINE MAP"));
+            AvCard engineCard = Live(new AvCard(p.Content, p.Ticker, half, "ENGINE MAP"));
             planeTuneName = engineCard.Flow.Add(new AvNote(engineCard.Flow.Content, AvTextRole.DataStrong) { MinHeight = 14f, StretchText = true });
             planeTuneName.Set("STOCK");
             planeTuneSegmented = engineCard.Flow.Add(new AvSegmented(engineCard.Flow.Content, "MAP",
@@ -126,13 +140,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             p.Row(planeStores[2], planeStores[3]);
             planeStorePager = p.Add(Live(new AvButtons(p.Content, new[]
             {
-                new AvControl.Spec("PREVIOUS", () => { planeStorePage = Math.Max(0, planeStorePage - 1); nextRefresh = 0f; },
+                new AvControl.Spec("PREVIOUS", () => planeStorePage = Math.Max(0, planeStorePage - 1),
                     AvButtonStyle.Quiet, AvIcon.ChevronLeft),
                 new AvControl.Spec("NEXT", () =>
                 {
                     int count = CurrentPlaneStoreCount();
                     if ((planeStorePage + 1) * PlaneStoreRows < count) planeStorePage++;
-                    nextRefresh = 0f;
                 }, AvButtonStyle.Quiet, AvIcon.ChevronRight, true)
             })));
             planePreviousStores = planeStorePager.Controls[0];
@@ -158,7 +171,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 aircraft = local.Aircraft;
             if (aircraft == null)
             {
-                planeStatus = PlaneNoAircraft;
+                planeSection.SetCaption(PlaneNoAircraft);
                 planeStorePage = 0;
                 planePreviousStores.Interactable = false;
                 planeNextStores.Interactable = false;
@@ -261,10 +274,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 damaged |= planeWorstParts[i] != null && PartCondition(planeWorstParts[i]) < .995f;
             }
             planeFaultSection.SetCaption(damaged ? "FOUR LOWEST PARTS" : "NONE FOUND");
-            planeStatus = inbound > 0 ? "CREW CHIEF · MISSILE WARNING, CHECK DEFENSIVE SYSTEMS"
+            planeSection.SetCaption(inbound > 0 ? "CREW CHIEF · MISSILE WARNING, CHECK DEFENSIVE SYSTEMS"
                 : fuel <= .15f ? "CREW CHIEF · LOW FUEL, CHECK DIVERT OPTIONS"
                 : damaged ? "CREW CHIEF · AIRFRAME DAMAGE, INSPECT BEFORE NEXT SORTIE"
-                : "CREW CHIEF · AIRCRAFT SERVICEABLE";
+                : "CREW CHIEF · AIRCRAFT SERVICEABLE");
         }
 
         private void PaintPlanePart(int row, UnitPart part)
@@ -283,7 +296,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 (detached ? "torn off the airframe." : AvNum.Percent(condition) + " condition. The four lowest parts are listed; the damage art above shows where.");
         }
 
-        private static float PartCondition(UnitPart part)
+        internal static float PartCondition(UnitPart part)
         {
             if (part == null) return float.NaN;
             if (part.IsDetached()) return 0f;
@@ -442,10 +455,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 if (view == null) return;
                 view.Refresh(aircraft);
                 state.text = view.Available ? "DAMAGE DIAGRAM · LIVE" : "DIAGRAM UNAVAILABLE";
-                if (view.Available != lastAvailable) { lastAvailable = view.Available; Changed(); }
+                if (view.Available != lastAvailable) { lastAvailable = view.Available; PlaceState(); }
             }
 
-            public void Clear() { view?.Clear(); state.text = "NO AIRCRAFT"; if (lastAvailable) { lastAvailable = false; Changed(); } }
+            public void Clear() { view?.Clear(); state.text = "NO AIRCRAFT"; if (lastAvailable) { lastAvailable = false; PlaceState(); } }
 
             public override float Measure(float width) => 170f;
 
@@ -454,8 +467,16 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 base.Place(s);
                 float hostH = s.H - 24f;
                 AvLay.Place(host, 4f, 4f, s.W - 8f, hostH);
-                AvLay.Place(state.rectTransform, 4f, lastAvailable ? s.H - 18f : (s.H - 16f) * 0.5f, s.W - 8f, 16f);
+                PlaceState();
                 if (view == null) view = new PlaneNativeDamageView(host, new Rect(0f, 0f, s.W - 8f, hostH));
+            }
+
+            // The height never changes, so the flow does not place the part again when the art comes or goes: the line moves itself
+            // (under the art, or centred on an empty card).
+            private void PlaceState()
+            {
+                var r = Rect.rect;
+                AvLay.Place(state.rectTransform, 4f, lastAvailable ? r.height - 18f : (r.height - 16f) * 0.5f, r.width - 8f, 16f);
             }
 
             public override void Restyle()

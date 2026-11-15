@@ -73,6 +73,14 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 Morale.TrySet(faction, Mathf.Clamp(value + delta, 0f, 100f));
         }
 
+        public bool TryGetMorale(int factionId, out float morale)
+        {
+            morale = 0f;
+            return GameAccess.IsServer() && Morale.TryGet(factionId, out morale);
+        }
+
+        public void AwardMorale(int factionId, float delta) => OnOperationMorale(factionId, delta);
+
         public bool TryGetContractMultiplier(int factionId, out float multiplier)
         {
             multiplier = 1f;

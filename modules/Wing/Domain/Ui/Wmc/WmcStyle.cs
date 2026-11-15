@@ -1,11 +1,9 @@
 namespace BoscaliSummer.Modules.Wing.Domain
 {
-    /// <summary>WMC states as stylesheet classes (spec WMC program §2): the rail carries the state, the level class the
-    /// fuel/ammo band, and each has a word so colour is never the only carrier.</summary>
+    /// <summary>WMC states as stylesheet classes (spec WMC program §2): the rail carries the state, and each has a word so colour
+    /// is never the only carrier.</summary>
     internal static class WmcStyle
     {
-        public const float Low = 0.35f, Critical = 0.15f;
-
         public static string Rail(string state)
         {
             switch (state)
@@ -23,8 +21,5 @@ namespace BoscaliSummer.Modules.Wing.Domain
                 default: return "info";
             }
         }
-
-        public static string Level(float fraction) =>
-            float.IsNaN(fraction) ? "" : fraction < Critical ? "bad" : fraction < Low ? "warn" : "ok";
     }
 }

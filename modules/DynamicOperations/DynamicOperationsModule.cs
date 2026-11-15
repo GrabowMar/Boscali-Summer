@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.DynamicOperations
             context.AddService<IOperationOutcomeSource>(manager);
             context.AddService<ISortieOutcomeSource>(manager);
             context.AddService<ISortieWingOrderSource>(manager);
+            context.AddService<IOperationJobs>(new OperationJobs(manager));
             context.AddSceneService<ContractHud>(52).Configure(manager);
             context.AddSceneService<ContractMapHud>(53).Configure(manager);
             context.AddSceneService<OperationZoneHud>(54).Configure(manager);

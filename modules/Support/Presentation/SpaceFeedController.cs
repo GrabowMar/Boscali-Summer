@@ -43,8 +43,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
         private bool visible, leaseOpen, dirty;
 
-        /// <summary>The OPS page's PERKS tab is on screen: hold the feed lease for its TASKED rows (posts arrive with the rows) without rebuilding the ORBIT view.</summary>
-        internal bool PanelWatch { get; set; }
+        /// <summary>Until this unscaled time MIS JOBS is reading the posts: hold the feed lease (posts arrive with it) without rebuilding the ORBIT view.</summary>
+        internal float WatchUntil { get; set; }
         private float nextRefresh, nextActivity, failedUntil;
         private int lastFaction;
 
@@ -112,7 +112,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             ClearView();
             leaseOpen = false;
             visible = false;
-            PanelWatch = false;
+            WatchUntil = 0f;
             baselined = false;
             SpaceCockpitThreatProbe.ResetForScene();
             DisposeSensors();
@@ -178,7 +178,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             AdvanceChain(now);
             WatchEvents(now);
 
-            bool wanted = visible || PanelWatch;
+            bool wanted = visible || Time.unscaledTime < WatchUntil;
             leaseOpen = manager.SpaceFeedWanted; // a link or faction reset clears the manager's lease; follow it so the feed re-opens
             if (wanted && !leaseOpen) { manager.SpaceOpenFeed(); leaseOpen = true; }
             else if (!wanted && leaseOpen)
@@ -188,7 +188,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 if (imager != null) imager.Visible = false;
                 if (sar != null) sar.Visible = false;
             }
-            if (!visible) return; // a PERKS-tab lease only wants the posts, not the ORBIT view
+            if (!visible) return; // a MIS JOBS lease only wants the posts, not the ORBIT view
 
             float wall = Time.unscaledTime;
             if (wall < failedUntil) return; // a refresh fault holds the feed off for a moment, however often the panel re-shows it
@@ -696,7 +696,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             view.SendCount = linked ? Math.Min(SpaceCommand.MaxIds, state.Marks.Count) : 0;
             view.CanSend = linked && state.Marks.Count > 0 && sendRequest == 0;
             view.SendHelp = state.Marks.Count == 0 ? "No live MARKs: CONFIRM a target first."
-                : "Post your live MARKs as one TASKED call to the board. The first pilot to claim it fires.";
+                : "Post your live MARKs as one strike package on MIS JOBS. The first pilot to claim it fires.";
         }
 
         private void FillWords(float now)

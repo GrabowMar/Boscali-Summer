@@ -6,7 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>A tug-of-war balance bar of the SITREP tab: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track.</summary>
+    /// <summary>A tug-of-war balance bar of the BOARD's FORCE BALANCE: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track.</summary>
     internal sealed class StrBalanceBar : StrPart
     {
         private const float BarH = 12f;
@@ -157,88 +157,5 @@ namespace BoscaliSummer.Modules.Command.Presentation
         }
 
         public override void Restyle() => Paint();
-    }
-
-    /// <summary>The AI sortie board (D2): CAP, SEAD, CAS, STRIKE and TRANSIT of the friendly AI, each with its share bar and count. An unknown count is a dash and no bar.</summary>
-    internal sealed class StrSortieBoard : StrPart
-    {
-        private const float RowH = 22f, CodeW = 62f, CountW = 44f;
-
-        private readonly TMP_Text[] codes = new TMP_Text[5], counts = new TMP_Text[5];
-        private readonly RectTransform[] barRects = new RectTransform[5];
-        private readonly AvVector[] bars = new AvVector[5];
-        private readonly float[] shares = { float.NaN, float.NaN, float.NaN, float.NaN, float.NaN };
-        private readonly bool[] known = new bool[5];
-        private float drawnW = -1f;
-
-        internal StrSortieBoard(RectTransform parent, StrControls controls, IStrHub hub) : base(parent, "SortieBoard", controls, hub)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                codes[i] = Text(Rect, "Code " + i, AvTextRole.DataStrong, TextAlignmentOptions.MidlineLeft);
-                counts[i] = Text(Rect, "val.count " + i, AvTextRole.DataStrong, TextAlignmentOptions.MidlineRight);
-                barRects[i] = AvLay.Child(Rect, "Bar " + i);
-                bars[i] = AvVector.Create(barRects[i], "BarInk", 12);
-            }
-            Restyle();
-        }
-
-        protected override void Apply(StrViewModel vm)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                AvText.Set(codes[i], vm.SortieCodes[i]);
-                AvText.Set(counts[i], vm.SortieCounts[i] < 0 ? StrWords.Dash : vm.SortieCounts[i].ToString());
-                if (!shares[i].Equals(vm.SortieShares[i]) || known[i] != vm.SortieCounts[i] >= 0) { shares[i] = vm.SortieShares[i]; known[i] = vm.SortieCounts[i] >= 0; drawnW = -1f; }
-            }
-            Paint();
-            Changed();
-        }
-
-        public override float Measure(float width) => 5f * RowH + 2f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            float bw = s.W - CodeW - CountW - 12f;
-            for (int i = 0; i < 5; i++)
-            {
-                float y = i * RowH;
-                AvLay.Place(codes[i].rectTransform, 0f, y, CodeW, RowH);
-                AvLay.Place(barRects[i], CodeW + 6f, y + 5f, bw, 12f);
-                AvLay.Place(counts[i].rectTransform, s.W - CountW, y, CountW, RowH);
-            }
-            if (!drawnW.Equals(s.W)) { drawnW = s.W; Draw(bw); }
-        }
-
-        private void Draw(float w)
-        {
-            for (int i = 0; i < 5; i++)
-            {
-                AvQuadBuffer b = bars[i].Buffer;
-                b.Clear();
-                Rgba track = AvInk.Hairline.ToRgba();
-                b.Add(0f, 0f, w, 0f, w, 12f, 0f, 12f, track, track, track, track);
-                if (!known[i] || float.IsNaN(shares[i])) StrStrokes.HatchRect(b, 0f, 0f, w, 12f, 8f, 1.5f, AvInk.Dim.ToRgba());
-                else if (shares[i] > 0f)
-                {
-                    Rgba c = AvInk.Key.ToRgba();
-                    float x = Mathf.Clamp01(shares[i]) * w;
-                    b.Add(0f, 0f, x, 0f, x, 12f, 0f, 12f, c, c, c, c);
-                }
-                bars[i].Commit();
-            }
-        }
-
-        private void Paint()
-        {
-            for (int i = 0; i < 5; i++) { codes[i].color = AvInk.Ink; counts[i].color = AvInk.Ink; }
-        }
-
-        public override void Restyle()
-        {
-            Paint();
-            drawnW = -1f;
-        }
     }
 }

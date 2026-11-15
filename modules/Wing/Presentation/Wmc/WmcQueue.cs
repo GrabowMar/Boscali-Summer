@@ -33,7 +33,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (plans.Running)
             {
-                WingToast.Show("The plan is running: edit it on BEHAVIOUR › SORTIE");
+                WingToast.Show("The plan is running: CLEAR on ORDERS · QUEUE stops it before you add steps");
                 return;
             }
             Waypoint at = Waypoint.At(point.x, point.z);

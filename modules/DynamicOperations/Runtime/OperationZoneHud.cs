@@ -132,7 +132,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (offer.Id > highest) highest = offer.Id;
             }
             announced = highest;
-            if (fresh > 0) hud.Notice("sorties", HudTone.Info, "SORTIES · " + place, fresh + " NEW · MIS > SECONDARY");
+            if (fresh > 0) hud.Notice("sorties", HudTone.Info, "SORTIES · " + place, fresh + " NEW · MIS > JOBS");
         }
 
         private void Write(int row, in ContractCard card, float distance, bool isInside, bool metric)

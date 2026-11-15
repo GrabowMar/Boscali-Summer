@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static RectTransform box;
         /// <summary>The dropped range mark: a map close keeps it, a scene reset forgets it.</summary>
         private static GlobalPosition? mark;
+        /// <summary>The last ground the pointer crossed on the map (MAP TOOLS' AT THE CURSOR reads it).</summary>
+        private static GlobalPosition? cursor;
         private static RectTransform markGlyph;
         private static RectTransform banner;
         private static TMP_Text bannerWhat;
@@ -148,6 +150,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DrawMark(map);
             DrawBanner(map);
             MapSelectionDeck.Tick(map);
+            if (!MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out GlobalPosition pointer)) cursor = pointer;
+            TickMarkTool(map);
             // An armed tool owns the right button: the card goes and no right press is latched for it.
             if (MapPicker.IsBusy)
             {
@@ -316,22 +320,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Unit goTo = contact != null ? contact.unit : null;
                 Add(goTo != null ? "GO TO UNIT" : "GO TO PLACE", AvIcon.Camera, () => GoTo(goTo, ground), true);
             }
-            bool marked = mark.HasValue;
-            Add(marked ? "MOVE MARK" : "RANGE MARK", AvIcon.Ruler2, () => SetMark(ground), true);
-            if (marked) Add("CLEAR MARK", AvIcon.Eraser, () => SetMark(null), true);
-            // The landing zone stands until moved or cleared: every HALO stick and glider this
-            // pilot releases aims at it (Urban Combat owns the zone and its host sync).
-            if (ModuleServices.TryGet(out ILandingZone _) && GameManager.GetLocalAircraft(out Aircraft _))
-            {
-                bool zoned = TryZone(out _);
-                Add(zoned ? "MOVE LZ" : "LANDING ZONE", AvIcon.Parachute, () => SetLandingZone(ground), true);
-                if (zoned) Add("CLEAR LZ", AvIcon.Eraser, () => SetLandingZone(null), true);
-            }
-            Add("COPY FIX", AvIcon.Copy, () =>
-            {
-                GUIUtility.systemCopyBuffer = "X " + AvNum.Fixed(ground.x, 0) + "  Z " + AvNum.Fixed(ground.z, 0);
-                Echo("GROUND FIX COPIED");
-            }, true);
+            // RANGE MARK, LANDING ZONE and COPY FIX are MAP TOOLS' MARK tools now: arm one there, then right-click.
 
             Color tone = MapContextRead.Fill(map, ground, mark, rows);
             string title, kind;
@@ -414,26 +403,82 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Bearing and range from the dropped range mark, or null while none is set.</summary>
         internal static string FromMark(GlobalPosition to) => mark.HasValue ? LegText(mark.Value, to) : null;
 
+        // ---- MARK tools (MAP TOOLS): armed from the MAP console, placed with a right click like every tool (rule B) ----
+
+        internal const string MarkOwner = "boscali.map.mark";
+        internal enum MarkTool { None, Range, Zone, Fix }
+        private static MarkTool markTool;
+        private static bool markPress;
+
+        /// <summary>The MARK tool holding the map's right button, None while another or none does.</summary>
+        internal static MarkTool ArmedMark => MapPicker.IsOwner(MarkOwner) ? markTool : MarkTool.None;
+
+        internal static GlobalPosition? Mark => mark;
+        internal static GlobalPosition? Cursor => cursor;
+
+        /// <summary>The landing zone takes this pilot's HALO sticks and gliders (Urban Combat owns it): offered while flying with the service up.</summary>
+        internal static bool ZoneOffered => ModuleServices.TryGet(out ILandingZone _) && GameManager.GetLocalAircraft(out Aircraft _);
+
+        internal static bool Zoned => TryZone(out _);
+
+        /// <summary>Arms a MARK tool, or puts it down when it is the armed one.</summary>
+        internal static void ArmMark(MarkTool tool)
+        {
+            if (ArmedMark == tool || tool == MarkTool.None) { MapPicker.Disarm(MarkOwner); return; }
+            string prompt = tool == MarkTool.Range ? "RANGE MARK · RIGHT-CLICK THE MAP"
+                : tool == MarkTool.Zone ? "LANDING ZONE · RIGHT-CLICK THE MAP" : "COPY FIX · RIGHT-CLICK THE MAP";
+            if (!MapPicker.TryArm(MarkOwner, MapPicker.GestureRight, prompt)) { Echo("THE MAP IS BUSY WITH ANOTHER PICK"); return; }
+            markTool = tool;
+            markPress = false;
+        }
+
+        /// <summary>MARK's CLEAR: the range mark and the landing zone go.</summary>
+        internal static void ClearMarks()
+        {
+            mark = null;
+            if (ModuleServices.TryGet(out ILandingZone zone)) zone.ClearLocal();
+            Echo("RANGE MARK AND LANDING ZONE CLEARED");
+        }
+
+        private static void TickMarkTool(DynamicMap map)
+        {
+            if (ArmedMark == MarkTool.None) { markPress = false; return; }
+            if (MapTool.CancelPressed()) { MapPicker.Disarm(MarkOwner); return; }
+            if (Input.GetMouseButtonDown(MapTool.Button))
+            {
+                rightStart = Input.mousePosition;
+                markPress = !MapTool.Typing() && !MapUiPointer.OverControls() && MapUiPointer.Contains(map.mapBackground.rectTransform, rightStart);
+            }
+            if (!markPress || !Input.GetMouseButtonUp(MapTool.Button)) return;
+            markPress = false;
+            if (!MapTool.IsClick(rightStart, Input.mousePosition) || !map.TryGetCursorCoordinates(out GlobalPosition ground)) return;
+            MarkTool tool = markTool;
+            MapPicker.Disarm(MarkOwner);
+            if (tool == MarkTool.Range) SetMark(ground);
+            else if (tool == MarkTool.Zone) SetLandingZone(ground);
+            else
+            {
+                GUIUtility.systemCopyBuffer = "X " + AvNum.Fixed(ground.x, 0) + "  Z " + AvNum.Fixed(ground.z, 0);
+                Echo("GROUND FIX COPIED");
+            }
+        }
+
         private static bool TryZone(out GlobalPosition point)
         {
             point = default;
             return ModuleServices.TryGet(out ILandingZone zone) && zone.TryGetLocal(out point);
         }
 
-        private static void SetLandingZone(GlobalPosition? point)
+        private static void SetLandingZone(GlobalPosition point)
         {
-            if (ModuleServices.TryGet(out ILandingZone zone))
-            {
-                if (point.HasValue) zone.SetLocal(point.Value);
-                else zone.ClearLocal();
-            }
-            Echo(point.HasValue ? "LANDING ZONE SET  /  PARATROOPERS AND GLIDERS AIM THERE" : "LANDING ZONE CLEARED");
+            if (ModuleServices.TryGet(out ILandingZone zone)) zone.SetLocal(point);
+            Echo("LANDING ZONE SET · PARATROOPERS AND GLIDERS AIM THERE");
         }
 
-        private static void SetMark(GlobalPosition? point)
+        private static void SetMark(GlobalPosition point)
         {
             mark = point;
-            Echo(point.HasValue ? "RANGE MARK SET  /  CURSOR LINE READS FROM IT" : "RANGE MARK CLEARED");
+            Echo("RANGE MARK SET · CURSOR LINE READS FROM IT");
         }
 
         private static void DrawMark(DynamicMap map)
@@ -881,6 +926,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bannerPrompt = null;
             MapSelectionDeck.Reset();
             mark = null;
+            cursor = null;
         }
 
         /// <summary>Map closed: gestures end, the card hides (kept for the next open), the pause key goes back.</summary>
@@ -888,6 +934,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             CancelBox();
             HideMenu();
+            MapPicker.Disarm(MarkOwner);   // a closed map disarms
             ReleasePause();
             MapSelectionDeck.Hide();
             if (banner != null) banner.gameObject.SetActive(false);

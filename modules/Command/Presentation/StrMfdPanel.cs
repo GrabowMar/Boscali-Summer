@@ -1,11 +1,14 @@
 using System;
 using System.Collections.Generic;
 using BepInEx.Logging;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Configuration;
 using BoscaliSummer.Modules.Command.Domain;
 using NOAvionics;
+using TMPro;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
@@ -18,7 +21,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
     internal sealed partial class StrMfdPanel : MonoBehaviour, ISceneService
     {
         private const float Width = AvTokens.PanelWidth;
-        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2, PageSupply = 3, PageCount = 4;
+        private const int PageBoard = 0, PageSitrep = 1, PageInfo = 2, PageCount = 3;
         private const int MaxLanes = StrViewModel.MaxFronts;
 
         // ---- Dependencies ----------------------------------------------------------------
@@ -33,7 +36,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             new MfdPanelInstaller(MfdSlots.Str, "STR", "BoscaliStrategic.Screen", preferLeft: true);
         private MFDScreen screen => installer.Screen;
         private AvConsole console;
-        private AvMetric[] metrics;
+        // NATION: the desk shows the nation layer while the service says it is active; the key moves when a shown value does (whole seconds) and forces one rebind.
+        private int nationKey;
 
         private readonly List<StrPart> parts = new List<StrPart>(32);
         private StrViewModel boundModel;
@@ -44,7 +48,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private AvSection otherSection, allSection;
         private readonly StrFrontLane[] lanes = new StrFrontLane[MaxLanes];
         // SITREP
-        private AvSection sortieSection;
         private readonly AvRow[] sensors = new AvRow[4];
 
         /// <summary>The scene's panel, for the automation hooks.</summary>
@@ -81,12 +84,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void ResetContent()
         {
             console = null;
-            metrics = null;
+            nationKey = 0;
+            StrNation.View = null;
             parts.Clear();
             Controls.Clear();
             boundModel = null;
             boundRevision = -1;
-            otherSection = allSection = sortieSection = null;
+            otherSection = allSection = null;
             for (int i = 0; i < lanes.Length; i++) lanes[i] = null;
             for (int i = 0; i < sensors.Length; i++) sensors[i] = null;
             nextLog = 0f;
@@ -116,6 +120,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (!installer.Tick()) return;
             // A closed screen costs nothing.
             if (!screen.isActive) return;
+            TickNation();
             TickBind();
         }
 
@@ -146,22 +151,18 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             ResetContent();
             console = AvConsole.Build(rootRect, "STR", "THEATER", PageCount, Width, height);
-            AvTabBar tabBar = console.Tabs(
+            TabHelp.Apply(console.Tabs(
                 (AvIcon.Stack2, "BOARD"),
                 (AvIcon.Radar2, "SITREP"),
-                (AvIcon.InfoCircle, "INFO"),
-                (AvIcon.Coins, "SUPPLY"));
-            TabHelp.Apply(tabBar,
-                "The live operation, the staff's proposals, the platforms and the posture.",
-                "Force balance, sensors, the alert level and the AI sortie board.",
-                "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.",
-                "Spend your own funds: buy a ground group for your side, or give to the faction pool.");
-            metrics = console.Metrics("SECTORS", "AIR", "GROUND", "POOL");
+                (AvIcon.InfoCircle, "INFO")),
+                "The live operation, the staff's proposals, the platforms, the war plan and the force balance.",
+                "Sensors and the alert level.",
+                "Your chain of command and the enemy posts you have confirmed, and status lamps for report ages and host switches.");
+            BoscaliSummer.Core.Ui.CountryStrip.Mount(console);
 
             BuildBoard(console.Page(PageBoard));
             BuildSitrep(console.Page(PageSitrep));
             BuildInfo(console.Page(PageInfo));
-            BuildSupply(console.Page(PageSupply));
             console.Finish();
             console.SetPage(PageBoard);
             return console.Root;
@@ -176,7 +177,10 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void BuildBoard(AvFlow p)
         {
+            Add(p, new StrNationTicker(p.Content, Controls, hub));
             Add(p, new StrBannerPart(p.Content, Controls, hub));
+            // WAR PLAN: with the nation layer on, the plan row (it keeps its lock) stands in for the posture rows.
+            Add(p, new StrPolicyRow(p.Content, Controls, hub, StrPolicyRow.Kind.Plan));
             Add(p, new StrPostureRow(p.Content, Controls, hub, false));
             Add(p, new StrHeroLane(p.Content, Controls, hub));
             for (int i = 0; i < StrViewModel.MaxProposals; i++) Add(p, new StrProposalTicket(p.Content, Controls, hub, i));
@@ -184,21 +188,22 @@ namespace BoscaliSummer.Modules.Command.Presentation
             allSection = p.Section(AvIcon.Map2, "PLATFORMS", StrPanelText.NotchCaption);
             for (int i = 0; i < MaxLanes; i++) lanes[i] = Add(p, new StrFrontLane(p.Content, Controls, hub, i));
             Add(p, new StrPostureRow(p.Content, Controls, hub, true));
-        }
-
-        private void BuildSitrep(AvFlow p)
-        {
             p.Section(AvIcon.Scale, "FORCE BALANCE", "OWN : HOSTILE, TRK = TRACKED ONLY");
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Sectors));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Air));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Ground));
             Add(p, new StrBalanceBar(p.Content, Controls, hub, vm => vm.Airbases));
+            BuildOrders(p);
+            p.Links(("FUNDS", "FAC", "ECONOMY"), ("JOBS", "MIS", "JOBS"));
+        }
+
+        private void BuildSitrep(AvFlow p)
+        {
             p.Section(AvIcon.Antenna, "SENSORS AND FRONT", "WHAT WE KNOW, NOT WHAT EXISTS");
             for (int i = 0; i < sensors.Length; i++) sensors[i] = p.Add(new AvRow(p.Content));
             p.Section(AvIcon.AlertTriangle, "ALERT LEVEL", "FROM THE HOST'S OWN COUNTS");
             Add(p, new StrAlertRow(p.Content, Controls, hub));
-            sortieSection = p.Section(AvIcon.Plane, "AI SORTIE BOARD", "");
-            Add(p, new StrSortieBoard(p.Content, Controls, hub));
+            p.Links(("FORCES", "FAC", "FORCES"), ("SUPPORT", "OPS", null));
         }
 
         private void BuildInfo(AvFlow p)
@@ -207,15 +212,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             Add(p, new StrChainPart(p.Content, Controls, hub));
             p.Section(AvIcon.Activity, "MISC", "HOVER A LAMP FOR WHAT IT READS");
             Add(p, new StrMiscStrip(p.Content, Controls, hub));
-        }
-
-        // The game's own contribute menu on the map: the same two commands, the same gates.
-        private void BuildSupply(AvFlow p)
-        {
-            p.Section(AvIcon.Coins, "FACTION POOL", "A SHARE OF YOUR FUNDS" + StrWords.Dot + "ONE DONATION A MINUTE");
-            Add(p, new StrDonateRow(p.Content, Controls, hub));
-            p.Section(AvIcon.Shield, "GROUND UNITS", "PAID FROM YOUR FUNDS" + StrWords.Dot + "A DEPOT DELIVERS");
-            for (int i = 0; i < StrViewModel.MaxConvoys; i++) Add(p, new StrConvoyRow(p.Content, Controls, hub, i));
+            p.Links(("POLITICS", "FAC", "POLITICS"), ("EVENTS", "EVN", "DISPATCH"));
         }
 
         // ---- Binding ---------------------------------------------------------------------
@@ -226,10 +223,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (console == null || hub == null) return;
             StrViewModel vm = hub.Current;
             Controls.Clear();
+            StrNation.Fill();
             RegisterTabs();
             for (int i = 0; i < parts.Count; i++) parts[i].Bind(vm);
             BindSections(vm);
-            BindTiles(vm);
+            BindOrders();
             BindSensors(vm);
             console.Footer.Set(vm.FooterStatus + "\n" + vm.FooterNote, vm.Stale ? AvState.Caution : AvState.Inert);
             boundModel = vm;
@@ -259,19 +257,16 @@ namespace BoscaliSummer.Modules.Command.Presentation
             string laneCaption = StrPanelText.LaneCaption(vm);
             otherSection.SetCaption(laneCaption);
             allSection.SetCaption(laneCaption);
-            sortieSection.SetCaption(vm.SortieBoardCaption);
         }
 
-        private void BindTiles(StrViewModel vm)
+        // ---- Nation ----------------------------------------------------------------------
+
+        private void TickNation()
         {
-            if (metrics == null || metrics.Length < 4) return;
-            for (int i = 0; i < 4; i++)
-            {
-                StrTile t = vm.Tiles[i];
-                if (t.Key == null) continue;
-                metrics[i].Set(t.Value, t.Caption, float.IsNaN(t.Bar) ? 0f : t.Bar, t.State);
-                StrTips.Metric(metrics[i], t.Help);
-            }
+            int key = unchecked(StrNation.Refresh() * 31 + OrdersKey(StrNation.View));   // ORDERS IN FORCE rebinds with the nation
+            if (key == nationKey) return;
+            nationKey = key;
+            boundRevision = -1;   // one rebind: the parts read the nation through StrNation
         }
 
         private void BindSensors(StrViewModel vm)

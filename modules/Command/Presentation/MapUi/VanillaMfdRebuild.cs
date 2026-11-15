@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// fixed, fully owned avionics surface. Native state and actions therefore remain the
     /// authority, while no native layout participates in the rendered panel.
     ///
-    /// HUD and mission surfaces attach when first shown, so their card trees cost nothing
+    /// Mission surfaces attach when first shown, so their card trees cost nothing
     /// while the player stays on other pages.
     /// </summary>
     internal static partial class VanillaMfdRebuild
@@ -108,11 +108,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return null;
         }
 
-        /// <summary>Dev tooling: clicks the MIS job board's slip at this index (the click path), false without one.</summary>
-        internal static bool PickContractForAutomation(int index)
+        /// <summary>Dev tooling: clicks the MIS JOBS card at this index (the click path), or its act button with <paramref name="act"/>; false when there is nothing to click.</summary>
+        internal static bool JobCardForAutomation(int index, bool act)
         {
             foreach (Binding binding in bindings.Values)
-                if (binding.Presenter is MissionPresenter mission) return mission.PickForAutomation(index);
+                if (binding.Presenter is MissionPresenter mission) return mission.PickForAutomation(index, act);
             return false;
         }
 #endif
@@ -153,9 +153,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MapOptions map = screen.GetComponent<MapOptions>();
             if (map != null) return new MapPresenter(screen, map);
 
-            HUDOptions hud = screen.GetComponent<HUDOptions>();
-            if (hud != null) return screen.isActive ? new HudPresenter(screen, hud) : null;
-
+            // HUD keeps its native view: it has no rail key (its priority lists are TGT FILTER sections) and MfdBezel measures it.
             TargetListSelector target = screen.GetComponent<TargetListSelector>();
             if (target != null) return new TargetPresenter(screen, target);
 
@@ -173,8 +171,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             rt.SetParent(parent, worldPositionStays: false);
             rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0f, 1f);
             rt.anchoredPosition = Vector2.zero;
-            float height = AvLay.ResolveHeight(
-                parent.parent as RectTransform, AvTokens.PanelHeight, AvTokens.PanelHeightMax);
+            float height = AvLay.BayHeight(parent);
             rt.sizeDelta = new Vector2(AvTokens.PanelWidth, height);
             rt.localScale = Vector3.one;
             rt.SetAsLastSibling();
@@ -433,10 +430,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             protected readonly MFDScreen Screen;
             public readonly VanillaMfdPanelId Id;
             protected AvConsole Console { get; private set; }
+            protected AvTabBar TabBar { get; private set; }
             internal AvConsole ConsoleForAutomation => Console;
-
-            /// <summary>The console's full header title (the id plate carries the short tag).</summary>
-            protected abstract string Title { get; }
 
             /// <summary>
             /// One (icon, label) per page, in <see cref="CreatePage"/> order. An empty or
@@ -452,17 +447,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 (AvIcon Icon, string Label)[] tabs = TabItems ?? Array.Empty<(AvIcon, string)>();
                 int pageCount = Mathf.Max(1, tabs.Length);
-                Console = AvConsole.Build(root, VanillaMfdPanelCatalog.Label(Id), Title, pageCount,
+                string key = VanillaMfdPanelCatalog.Label(Id);
+                Console = AvConsole.Build(root, key, MfdRailCatalog.For(key).Name ?? key, pageCount,
                     root.rect.width, root.rect.height);
                 if (tabs.Length > 1)
                 {
-                    AvTabBar tabBar = Console.Tabs(tabs);
+                    TabBar = Console.Tabs(tabs);
                     var hints = new string[tabs.Length];
                     string[] custom = TabTips;
                     for (int i = 0; i < hints.Length; i++)
                         hints[i] = custom != null && i < custom.Length && !string.IsNullOrEmpty(custom[i])
                             ? custom[i] : "Open the " + tabs[i].Label.ToLowerInvariant() + " page.";
-                    TabHelp.Apply(tabBar, hints);
+                    TabHelp.Apply(TabBar, hints);
                 }
                 Console.PageChanged += OnPageChanged;
                 BuildContent();

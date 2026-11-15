@@ -5,6 +5,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
@@ -13,7 +15,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// FIT flies it as CUSTOM), AIRFRAME ◂ ▸ over the airframes SUPPLY offers (starting on SUPPLY's pick), HARDPOINTS as a small station map beside
     /// the station table with the store picker kept open below, and a LIVERY row. The airframe's standard stores show until the first
     /// change, which saves them as its one custom loadout. Loadouts and liveries live in this machine's config and only the host's launch
-    /// the wing, so a client looks.</summary>
+    /// the wing, so a client looks. Last comes MY AIRCRAFT (was PILOT's PLANE tab), which Progression builds through <see cref="IMyAircraft"/>.</summary>
     internal sealed partial class WmcLoadout : IWmcPage
     {
         private AvFlow flow;
@@ -46,6 +48,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildHardpoints(flow);
             BuildLivery(flow);
             BuildFly(flow);
+            if (ModuleServices.TryGet(out IMyAircraft mine)) mine.Build(index, flow);
+            else flow.Add(new AvNote(flow.Content, AvTextRole.Micro)).Set("MY AIRCRAFT · THE PROGRESSION MODULE IS OFF");
+            flow.Links(("PILOT", "PILOT", null), ("SUPPLY", "WMC", "SUPPLY"));
         }
 
         /// <summary>LOADOUT came on screen: the airframes SUPPLY offers and the faction's liveries are read again.</summary>

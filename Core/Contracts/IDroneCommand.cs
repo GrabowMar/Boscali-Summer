@@ -55,11 +55,14 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>FLY MY HEADING: the linked drone takes the pilot's heading and height and holds them (HAND).</summary>
         void MatchNose();
 
-        /// <summary>BACK ON TASK: the linked drone drops its order and goes back to its own job.</summary>
+        /// <summary>RELEASE: the linked drone drops its order and goes back to its own job.</summary>
         void Release();
 
         void ToggleFeed();
 
         void OpenTerminal();
+
+        /// <summary>The linked drone's live picture (null with no signal). Asking keeps its camera running for half a second: TGT DRONES asks while it shows.</summary>
+        UnityEngine.Texture WantFeed();
     }
 }

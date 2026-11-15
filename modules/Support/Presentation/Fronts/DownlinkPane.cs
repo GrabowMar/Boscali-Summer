@@ -294,7 +294,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 lockWhat = Wrap(b, "LockWhat", cx + 10f, cy + 24f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
                 lockThreat = Wrap(b, "LockThreat", cx + 10f, cy + 52f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
                 lockStare = Wrap(b, "LockStare", cx + 10f, cy + 80f, tw, Row, 10.5f, TextAlignmentOptions.TopLeft);
-                send = Tool(b, "SEND TO TASKED", AvIcon.Target, cx + 8f, cy + 110f, cw - 16f, 40f, () => room.Do(() => room.Feed.SendToTasked()), "");
+                send = Tool(b, "SEND TO JOBS", AvIcon.Target, cx + 8f, cy + 110f, cw - 16f, 40f, () => room.Do(() => room.Feed.SendToTasked()), "");
                 send.SetStyle(AvButtonStyle.Danger);
                 sendNote = Wrap(b, "SendNote", cx + 10f, cy + 152f, tw, 26f, 10f, TextAlignmentOptions.Top);
                 float hw = (cw - 24f) * 0.5f;
@@ -949,7 +949,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                     FrontKit.Set(lockHead, "NO LOCK", steel);
                     what = f.NoContacts.Length > 0 ? f.NoContacts : !live ? "" : f.Brackets.Count > 0 ? "CLICK A BOX ON THE PICTURE TO LOCK IT" : "NO BOX IN VIEW · ONLY HOST-REVEALED CONTACTS GET ONE";
                     whatInk = steel;
-                    if (f.SendCount > 0) stare = f.SendCount + (f.SendCount == 1 ? " MARK HELD" : " MARKS HELD") + " · SEND TO TASKED POSTS " + (f.SendCount == 1 ? "IT" : "THEM");
+                    if (f.SendCount > 0) stare = f.SendCount + (f.SendCount == 1 ? " MARK HELD" : " MARKS HELD") + " · SEND TO JOBS POSTS " + (f.SendCount == 1 ? "IT" : "THEM");
                 }
                 FrontKit.Set(lockAge, age, steel);
                 FrontKit.Set(lockWhat, what, whatInk); // advice rows wrap to two lines, never cut
@@ -957,7 +957,7 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 FrontKit.Set(lockStare, stare, stareInk);
                 bool chain = b.Has && !b.Marked && !b.FixedPoint;
                 OpsKit.Enable(send, f.CanConfirm || f.CanSend);
-                Help(send, chain ? "One press: MARK the lock, then post it to TASKED as a strike any pilot can claim." : f.CanSend ? f.SendHelp : f.ConfirmHelp);
+                Help(send, chain ? "One press: MARK the lock, then post it to MIS JOBS as a strike package any pilot can claim." : f.CanSend ? f.SendHelp : f.ConfirmHelp);
                 string note = chain ? "ONE PRESS: MARK IT, THEN POST A STRIKE ANY PILOT CAN CLAIM"
                     : f.CanSend ? "POSTS " + f.SendCount + (f.SendCount == 1 ? " MARK" : " MARKS") + " AS ONE STRIKE ANY PILOT CAN CLAIM" : "LOCK A BOX FIRST";
                 FrontKit.Set(sendNote, note, f.CanConfirm || f.CanSend ? RoomInk.Engrave : steel);

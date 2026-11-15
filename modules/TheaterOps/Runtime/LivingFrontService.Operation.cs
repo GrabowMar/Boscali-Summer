@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (now < war.FirstDealAt) return;
             vetoWar = war; vetoNow = now;
             war.Vetoes.Prune(now);
-            LivingWarRules.Choose(war.Reads, war.Posture, new WarCapability(SteeringAvailable), isVetoed, ranked, out war.Tally);
+            LivingWarRules.Choose(war.Reads, war.Posture, new WarCapability(SteeringAvailable), isVetoed, ranked, out war.Tally, DefenceAgainst(war));
             // An own base under attack cannot wait for a slot: cards keep their places, so a full deck gives up its weakest card that is not a base defence.
             int urgent = LivingWarRules.UrgentDefence(ranked, war.Deck, war.Active?.Key);
             string dropped = urgent >= 0 && war.Deck.Count >= DeckRules.Slots ? DeckRules.DropWeakest(war.Deck) : null;
@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
             if (at < 0) return new IntentReply(TheaterCommandCode.StaleChoice);
             WarFrontRead read = war.Reads[at];
             vetoWar = war; vetoNow = now;
-            float score = LivingWarRules.Evaluate(read, war.Posture, new WarCapability(SteeringAvailable), isVetoed(read), out TheaterOpKind kind, out _);
+            float score = LivingWarRules.Evaluate(read, war.Posture, new WarCapability(SteeringAvailable), isVetoed(read), out TheaterOpKind kind, out _, DefenceAgainst(war));
             if (!(score > 0f) || kind != card.Kind) return new IntentReply(TheaterCommandCode.StaleChoice);
 
             if (live != null)
@@ -222,6 +222,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Runtime
         private IntentReply SetPosture(FactionWar war, byte posture, float now)
         {
             if (posture > (byte)TheaterWarPosture.Bold) return new IntentReply(TheaterCommandCode.Invalid);
+            if (OutsideBand(war, posture, out string why)) return new IntentReply(TheaterCommandCode.NotAllowed, why);
             war.Posture = (TheaterWarPosture)posture;
             war.Log.Add("POSTURE " + war.Posture.ToString().ToUpperInvariant());
             Collect(war, now);

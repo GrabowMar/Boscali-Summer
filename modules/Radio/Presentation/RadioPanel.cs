@@ -77,9 +77,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static AvKeyHeader presetHeader;
         private static readonly AvRow[] stationRows = new AvRow[PresetRows];
         private static int presetShown = PresetRows;
-        private static AvKeyHeader wireHeader;
-        private static RadioWirePart wirePart;
-        private static int wireShownRevision = -1;
+        private static AvButtons receiverLinks, deckLinks;
 
         // ----------------------------------------------------------------------- deck widgets
         private static AvRow nowRow;
@@ -156,9 +154,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             presetHeader = null;
             Array.Clear(stationRows, 0, stationRows.Length);
             presetShown = PresetRows;
-            wireHeader = null;
-            wirePart = null;
-            wireShownRevision = -1;
+            receiverLinks = deckLinks = null;
 
             nowRow = null;
             deckEq = null;
@@ -229,7 +225,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             dialStrip[6].Help = "Seek: jump to the next station up the band.";
             dialStrip[8].Help = "Stop: sign off and hand the soundtrack bus back to the game.";
 
-            // The scope keeps a fixed strip; the wire at the bottom of the page takes the leftover height.
+            // The scope keeps a fixed strip; the station list takes the leftover height.
             scopePart = p.Add(new BandScopePart(p.Content));
 
             levelsPart = p.Add(new RadioLevelsPart(p.Content,
@@ -259,10 +255,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 stationRows[i].BadgeSlot = true;
             }
 
-            wireHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.Radio, "WIRE"));
-            wirePart = p.Add(new RadioWirePart(p.Content), 1f);
-            wirePart.Help = "The wire: what the receiver picked up, newest on top - station talk and bulletins, intercepted " +
-                "enemy chatter, base alarms. The tag is the station that aired it; RX is the set itself.";
+            // The wire (bulletins, talk on air, intercepts) is the game log's RADIO lines on EVN LOG.
+            receiverLinks = p.Links(("THE WIRE", "EVN", "LOG"), ("CALLS", "COM", "CALLS"));
+            receiverLinks.Controls[0].Help = "Opens EVN on LOG: what the receiver picked up is filed there as RADIO, newest first, " +
+                "tagged with the station that aired it (RX is the set itself).";
 
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
@@ -335,7 +331,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             FitPresetRows();
 
             UpdateMeter(modeLine);
-            RefreshWire();
 
             levelsPart.Volume.Set(Mathf.Clamp01(manager.VolumeLevel), AvNum.Percent(manager.VolumeLevel), AvState.Info);
             levelsPart.Squelch.Set(Mathf.Clamp01(manager.Squelch), AvNum.Percent(manager.Squelch),
@@ -459,14 +454,14 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             // Measure the same inner width and six fixed lines used by AvFlow. Programme copy can
             // wrap when a tower goes off air, so this runs after the current tune data is applied.
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 8f * AvGridTokens.Gap +
+            float fixedHeight = 2f * AvGridTokens.Pad + 7f * AvGridTokens.Gap +
                 onAirPart.Measure(width) + readoutPart.Measure(width) + dialStrip.Measure(width) +
                 scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width) +
-                wireHeader.Measure(width) + wirePart.Measure(width);
+                receiverLinks.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
-            // One row per station on file (the rest of the height goes to the wire); nothing on file: one line says so.
+            // One row per station on file; nothing on file: one line says so.
             int most = manager.HasChannels ? Mathf.Clamp(manager.ChannelCount, MinPresetRows, PresetRows) : MinPresetRows;
             int shown = page.ViewportHeight <= 0f ? most :
                 Mathf.Clamp(Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinPresetRows, most);
@@ -518,25 +513,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
             RadioDial dial = manager.TunedDial;
             readoutPart.Set(dial.FrequencyText, dial.UnitText + " · " + modeLine, report, detail, level, manager.Squelch, color);
-        }
-
-        /// <summary>Rewrites the wire's lines when the manager logged something new.</summary>
-        private static void RefreshWire()
-        {
-            if (wirePart == null || manager.WireRevision == wireShownRevision) return;
-            wireShownRevision = manager.WireRevision;
-            for (int i = 0; i < RadioWirePart.MaxLines; i++)
-            {
-                if (i >= manager.WireCount)
-                {
-                    wirePart.SetLine(i, i == 0 ? "<color=#5f737c>Receiver on. Tune a station and the wire fills in.</color>" : null);
-                    continue;
-                }
-                RadioManager.WireLine line = manager.GetWire(i);
-                wirePart.SetLine(i, "<color=#5f737c>" + line.Clock + "</color>  <color=#" +
-                    ColorUtility.ToHtmlStringRGB(line.Color) + ">" + line.Tag + "</color>  " +
-                    line.Text.Replace("<", "‹"));
-            }
         }
 
         /// <summary>Enable a control and swap its hover help with it, so a greyed key always says why.</summary>
@@ -630,6 +606,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 int captured = i;
                 trackRows[i] = p.Add(new AvRow(p.Content, () => OnTrackRowClick(captured)));
             }
+            deckLinks = p.Links(("SETTINGS", "SET", null), ("EVENTS", "EVN", "DISPATCH"));
 
             p.Ticker.Add(TabDeck, AvTickRate.Fast, RefreshDeck);
 
@@ -774,9 +751,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             AvFlow page = console.Page(TabDeck);
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 5f * AvGridTokens.Gap +
+            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap +
                 deckEq.Measure(width) + nowRow.Measure(width) + deckBar.Measure(width) +
-                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width);
+                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width) + deckLinks.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in trackRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);

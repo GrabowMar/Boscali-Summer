@@ -80,10 +80,11 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         /// <summary>
         /// Score above 0 means the front is offered as <paramref name="kind"/>; otherwise <paramref name="reject"/> says why not. First match wins:
         /// a bad, gone or vetoed front; no presence; a held front with a hostile near is a DEFEND (a base is its own presence); a quiet held front;
-        /// then ASSAULT and RECON, which need steering and a carrier.
+        /// then ASSAULT and RECON, which need steering and a carrier. <paramref name="defence"/> is what the defender's politics adds to the
+        /// assault ratio (SHIELD: 1.5).
         /// </summary>
         internal static float Evaluate(in WarFrontRead front, TheaterWarPosture posture, in WarCapability cap, bool vetoed,
-            out TheaterOpKind kind, out WarReject reject)
+            out TheaterOpKind kind, out WarReject reject, float defence = 1f)
         {
             kind = TheaterOpKind.Assault;
             reject = WarReject.BadFix;
@@ -110,7 +111,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             }
             // Counts are observed local presence, not a combat-power prediction.
             int theirs = Math.Max(0, front.ReachHostile);
-            if (front.ReachFriendlyGround < theirs * PostureRule.Ratio(posture)) { reject = WarReject.PostureRatio; return float.NegativeInfinity; }
+            if (front.ReachFriendlyGround < theirs * PostureRule.Ratio(posture) * (defence > 1f ? defence : 1f)) { reject = WarReject.PostureRatio; return float.NegativeInfinity; }
             kind = TheaterOpKind.Assault;
             float appetite = posture == TheaterWarPosture.Bold ? 2f : posture == TheaterWarPosture.Cautious ? -2f : 0f;
             return 3f + appetite + Math.Min(8, ours) - Math.Min(8, theirs) * .8f + front.Pressure * 2f + (front.Objective ? 2f : 0f);
@@ -121,7 +122,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
         /// <paramref name="isVetoed"/> may be null.
         /// </summary>
         internal static void Choose(IReadOnlyList<WarFrontRead> fronts, TheaterWarPosture posture, in WarCapability cap,
-            Func<WarFrontRead, bool> isVetoed, List<WarOffer> ranked, out RejectTally tally)
+            Func<WarFrontRead, bool> isVetoed, List<WarOffer> ranked, out RejectTally tally, float defence = 1f)
         {
             tally = default;
             ranked.Clear();
@@ -130,7 +131,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Domain
             {
                 WarFrontRead front = fronts[i];
                 tally.Candidates++;
-                float score = Evaluate(front, posture, cap, isVetoed != null && isVetoed(front), out TheaterOpKind kind, out WarReject reject);
+                float score = Evaluate(front, posture, cap, isVetoed != null && isVetoed(front), out TheaterOpKind kind, out WarReject reject, defence);
                 switch (reject)
                 {
                     case WarReject.BadFix: tally.BadFix++; break;

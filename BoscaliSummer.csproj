@@ -266,6 +266,12 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup Label="Nation doctrine emblems (ChatGPT, 256 px; docs/superpowers/specs/2026-11-14-politics-design.md)">
+    <EmbeddedResource Include="modules\Nation\Assets\Doctrine\*.png">
+      <LogicalName>BoscaliSummer.NationArt.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
   <ItemGroup Label="Superevent posters">
     <EmbeddedResource Include="modules\Events\Assets\Posters\*.png">
       <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>

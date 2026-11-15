@@ -12,10 +12,11 @@ namespace BoscaliSummer.Vanguard
 {
     /// <summary>
     /// Drone link sim hook (tests/ingame/vg-dronelink.json): Step {action:"link", do:...}, driving the same DroneLinkService calls the C-menu,
-    /// the UAV MFD and the UAV terminal make, then reading back both ends:
+    /// TGT DRONES and the UAV terminal make, then reading back both ends:
     ///   do=status (default)  count, linked, local mode, host mode of the linked drone (SteerOrders), hands (host HAND orders of this launcher),
-    ///                        headingGap (linked drone vs the pilot, degrees), courseGap (vs its HAND course), feed, terminal, mfd
-    ///   do=link index | next | prev | send (where I look) | target | nose | steer x y | ground x y | auto | feed | look | zoom | terminal | close | mfd | unmap
+    ///                        headingGap (linked drone vs the pilot, degrees), courseGap (vs its HAND course), feed, terminal, mfd (TGT DRONES up)
+    ///   do=link index | next | prev | send (where I look) | target | nose | steer x y | ground x y | auto | feed | look | zoom | terminal | close
+    ///          | mfd (opens TGT on DRONES through the rail) | unmap
     ///   do=wpt  east, north (metres from the linked drone): WPT for it there
     /// </summary>
     public static partial class VanguardAutomation
@@ -43,7 +44,7 @@ namespace BoscaliSummer.Vanguard
                 case "mfd":
                     DynamicMap map = SceneSingleton<DynamicMap>.i;
                     if (map != null && !DynamicMap.mapMaximized) map.Maximize();
-                    DroneMfdPanel.Active?.OpenForAutomation();
+                    NOAvionics.AvConsole.Open("TGT", "DRONES");
                     break;
                 case "unmap":
                     if (DynamicMap.mapMaximized) SceneSingleton<DynamicMap>.i?.Minimize();
@@ -94,8 +95,14 @@ namespace BoscaliSummer.Vanguard
                 ["feed"] = link.Feed != null ? 1 : 0,
                 ["feedShown"] = link.FeedShown ? 1 : 0,
                 ["terminal"] = link.TerminalOpen ? 1 : 0,
-                ["mfd"] = DroneMfdPanel.Active != null && DroneMfdPanel.Active.Showing ? 1 : 0,
+                ["mfd"] = TgtDronesShowing() ? 1 : 0,
             };
+        }
+
+        private static bool TgtDronesShowing()
+        {
+            NOAvionics.AvConsole tgt = NOAvionics.AvConsole.Find("TGT");
+            return tgt != null && tgt.Root.gameObject.activeInHierarchy && tgt.CurrentPageName == "DRONES";
         }
     }
 }

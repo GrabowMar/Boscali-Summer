@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             StrSupplyView s = vm.Supply;
             if (!s.Known) return NoAccount();
             if (percent < 1 || percent > 100) return new StrAct(StrWhy.NoBoard, "NOT A SHARE");
-            if (!(s.Funds > 0f)) return new StrAct(StrWhy.NoFunds, "YOU HAVE NO FUNDS TO GIVE");
+            if (!(s.Funds > 0f)) return new StrAct(StrWhy.NoFunds, "YOU HAVE NO ALLOCATION TO GIVE");
             if (s.DonateCooldown < 0) return new StrAct(StrWhy.Pending, "ASKING THE HOST WHEN IT TAKES THE NEXT DONATION");
             if (s.DonateCooldown > 0) return new StrAct(StrWhy.Cooldown, "ONE DONATION A MINUTE" + StrWords.Dot + "NEXT IN " + s.DonateCooldown + " S");
             return Allowed;
@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         internal static StrSupplyRow SupplyRow(StrViewModel vm, int index) =>
             index >= 0 && index < vm.Supply.RowCount && index < vm.Supply.Rows.Length ? vm.Supply.Rows[index] : null;
 
-        private static StrAct NoAccount() => new StrAct(StrWhy.NoBoard, "JOIN A FACTION TO SPEND YOUR FUNDS");
+        private static StrAct NoAccount() => new StrAct(StrWhy.NoBoard, "JOIN A FACTION TO SPEND YOUR ALLOCATION");
 
         /// <summary>The proposal row with this id, or null: the one lookup the gate and the runner share.</summary>
         internal static StrProposalRow Proposal(StrViewModel vm, StrItemId id)
@@ -217,7 +217,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 {
                     float amount = vm.Supply.Funds * arg / 100f;
                     return verbs.Donate(amount)
-                        ? Noted(ref ui, StrWhy.None, "GAVE " + Math.Floor(amount).ToString("N0", CultureInfo.InvariantCulture) + " TO THE FACTION POOL", nowUnscaled, true)
+                        ? Noted(ref ui, StrWhy.None, "GAVE " + Math.Floor(amount).ToString("N0", CultureInfo.InvariantCulture) + " TO FUNDS", nowUnscaled, true)
                         : new StrAct(StrWhy.NoBoard, "THE DONATION WAS NOT SENT" + StrWords.Dot + "TRY AGAIN");
                 }
                 default:

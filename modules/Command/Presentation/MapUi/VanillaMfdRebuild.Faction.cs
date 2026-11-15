@@ -34,7 +34,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ClassLabels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
             private static readonly string[] LedgerLabels = { "RESERVES", "LOSSES", "VALUE", "MANPOWER" };
-            private static readonly string[] PageTitles = { "TREASURY RETURNS", "ORDER OF BATTLE", "LOSS RETURN", "THE MANDATE" };
             private static readonly string[] LedgerTitles = { "RESERVE RETURN", "LOSS RETURN", "VALUE RETURN", "MANPOWER RETURN" };
             private const int AttritionLimit = 32;
 
@@ -52,17 +51,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private readonly float[] chartSecondary = new float[4];
             private readonly float[] resourceBuffer = new float[MfdResourceHistory.Capacity];
 
-            private AvMetric[] resourceMetrics;
             private UnitRosterPart definitionGrid;
             private MfdPagingGrid infoGrid;
             private ChoiceRow definitionTabs;
             private ChoiceRow ledgerTabs;
             private AvSegmented infoTabs;
             private HistoryCard history;
-            private EventStrip eventStrip;
+            private AvButtons economyOrder, politicsOrder;
             private MandateStrip mandateStrip;
-            private BriefBlock dispatchBlock;
-            private BriefBlock directiveBlock;
             private FactionHeaderPart factionHeader;
             private AvGauge[] ledgerRows;
             private UnitRosterPart attritionRoster;
@@ -70,19 +66,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvNote directorySummary;
             private AvHazardBar moraleBar;
             private LedgerChartPart ledgerChart;
-            private AvNote economyHeadline;
-            private AvNote economyEffect;
-            private AvNote economyContract;
             private AvNote mandateHeadline;
             private AvNote mandateEffect;
-            private AvNote politicalEvent;
-            private AvNote politicalEffect;
-            private AvNote politicalBrief;
-            private AvNote politicalMission;
-            private AvNote politicalMissionDetail;
             private AvSection historySection;
             private AvList bandList;
-            private string factionTitle = "";
+            // NATION layer: shown instead of the morale mandate while the service reports Active (see RefreshNation).
+            private FacPolitics politics;
+            private FacStockPart stockPart;
+            private FacPlantsPart plantsPart;
+            private FacForcePart forcePart;
+            private AvNote moneyNote;
+            private readonly List<AvPart> nationPoliticsParts = new List<AvPart>(2);
+            private readonly List<AvPart> nationEconomyParts = new List<AvPart>(8);
+            private readonly List<AvPart> mandateParts = new List<AvPart>(3);
             private int selectedFaction;
             private int definitionGroup;
             private bool definitionsLoaded;
@@ -102,8 +98,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 this.otherSource = otherSource;
             }
 
-            protected override string Title => "FACTION  /  TREASURY RETURNS";
-
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
                 (AvIcon.Coins, "ECONOMY"),
@@ -114,26 +108,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string[] TabTips { get; } = new[]
             {
-                "Economy: the current event's price effect with its countdown, and four simultaneous compact histories of funds, warheads, manpower and morale.",
+                "Economy: the country's funds, production, plants and policies, your donations and convoy purchases, and the histories of funds, warheads, manpower and morale.",
                 "Forces: live unit counts by class, then every unit type of the chosen class with its live and lost counts, busiest first.",
                 "Ledger: reserves, losses, value or manpower per class, plus a named loss ledger of the unit types hit hardest.",
-                "Politics: the morale mandate, the current dispatch and directive, and a directory of airbases or players.",
+                "Politics: war support and why it moved, the doctrine and its ranks, the decisions and the cabinet minutes (the morale mandate while the nation layer is off), and a directory of airbases or players.",
             };
 
             protected override void BuildContent()
             {
-                // Stockpile telemetry is faction-wide, so it rides the console header on every page. The
-                // score / funds / warhead chips that used to sit above it repeated the same numbers and are gone.
-                resourceMetrics = Console.Metrics(ResourceLabels);
-                string[] metricTips =
-                {
-                    "Funds: the faction's spendable balance. It pays for support call-ins and reinforcements.",
-                    "Warheads: stockpiled strategic warheads. Losing airbases and depots drains them.",
-                    "Manpower: personnel embodied in the faction's living assets.",
-                    "Morale: the host's 0-100 mandate. Below 50 contracts pay less; above it they pay more."
-                };
-                for (int i = 0; i < resourceMetrics.Length; i++)
-                    AvHelpTip.Attach(resourceMetrics[i].Rect.gameObject, metricTips[i]);
+                // The country strip, as on STR, MIS, OPS and EVN. Warheads, manpower and morale of the selected side are
+                // on the TREASURY RETURNS chart (ECONOMY) and the mandate bar (POLITICS).
+                BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
                 BuildResourcesPage(CreatePage());
                 BuildForcesPage(CreatePage());
                 BuildLedgerPage(CreatePage());
@@ -142,7 +127,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Console.Orders(0,
                     "Each trace keeps its own scale. Compare the figures, not the slopes.",
                     "A break in a trace is a missed observation, never a zero.",
-                    "The order in force reprices support call-ins. Contract pay follows morale.",
+                    "The order in force reprices support call-ins; it is read on EVN DISPATCH. Contract pay follows morale.",
                     "OPPOSITION shows the other side's returns as last synced from the host.");
                 Console.Orders(1,
                     "Types run busiest first. Ties go to the heavier losses, then to name.",
@@ -155,26 +140,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     "Losses are the host's mission accounting, not an estimate.",
                     "The loss form lists the hardest-hit unit types, heaviest first.");
                 Console.Orders(3,
+                    "Sorties earn war support: +10 a base taken, +1 a kill, +3 a plant, depot or air defence. Losses drain it.",
+                    "Decisions cost war support; the first press wins. Nobody pressing? The staff spends above 60.",
+                    "The doctrine is chosen once, on the WAR CABINET card on EVN DISPATCH. Its ranks open by themselves.",
                     "The mandate is the host's 0-100 morale. It starts at 50.",
                     "Events and contract results move it. Below 50 new contracts pay less; above, more.",
                     "AIRBASES lists the faction's bases. PLAYERS lists crews by score.",
-                    "A dispatch is the event in force. A directive is the faction's lead contract.");
-                ShowTitle();
+                    "The event in force and the faction's lead contract are on EVN DISPATCH.");
             }
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
-                ShowTitle();
                 RequestRefresh();
-            }
-
-            // The header names the faction and the return on this page; a name too long to share the line goes.
-            private void ShowTitle()
-            {
-                string page = selectedPage == 2 ? LedgerTitles[(int)ledgerMode] : PageTitles[Mathf.Clamp(selectedPage, 0, 3)];
-                // ponytail: 48 characters is what the header holds above the 11 px floor; longer names drop out.
-                Console.SetTitle(string.IsNullOrEmpty(factionTitle) || factionTitle.Length + 5 + page.Length > 48
-                    ? page : factionTitle + "  /  " + page);
             }
 
             protected override void RefreshContent()
@@ -194,10 +171,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 if (hq == null)
                 {
-                    for (int i = 0; i < resourceMetrics.Length; i++)
-                        resourceMetrics[i].Set("—", "NO HQ", 0f, AvState.Inert);
-                    factionTitle = "";
-                    ShowTitle();
                     factionHeader.Set("NO RETURN FROM FACTION HQ",
                         "Standing by for the selected faction and its live mission data.");
                     factionHeader.SetLogo(null);
@@ -208,19 +181,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ledgerChart.Chart.Clear();
                     history.Clear("FACTION HQ UNAVAILABLE");
                     historySection.SetCaption("FORM 31-T / NO RETURN");
-                    economyHeadline.Set("NO RETURN FROM FACTION HQ");
-                    economyEffect.Set("SUPPORT COST / UNAVAILABLE");
-                    economyContract.Set("CONTRACT / UNAVAILABLE");
-                    eventStrip.Bar.Set(0f, "\u2014", AvState.Inert);
-                    eventStrip.Bar.SetShown(false);
-                    eventStrip.Changed();
                     mandateHeadline.Set("REPORT UNAVAILABLE");
                     mandateEffect.Set("CONTRACT EFFECT / UNAVAILABLE");
                     mandateStrip.SetSeal(null);
                     moraleBar.Set(0f, "\u2014", AvState.Inert);
-                    politicalEvent.Set("DISPATCH UNAVAILABLE");
-                    politicalEffect.Set("\u2014"); politicalBrief.Set("\u2014");
-                    politicalMission.Set("DIRECTIVE UNAVAILABLE"); politicalMissionDetail.Set("\u2014");
                     directorySummary.Set("REGISTER / UNAVAILABLE");
                     bandMorale = float.NaN;
                     bandList.SetCount(BandNames.Length);
@@ -230,8 +194,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
-                string upperName = (name ?? "FACTION").ToUpperInvariant();
-                if (upperName != factionTitle) { factionTitle = upperName; ShowTitle(); }
 
                 string extended = hq.faction == null ? null : hq.faction.factionExtendedName;
                 factionHeader.Set(name ?? "FACTION", (string.IsNullOrEmpty(extended)
@@ -241,6 +203,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 factionHeader.SetLogo(logo);
 
                 RefreshResources(hq);
+                RefreshNation(hq);
                 if (selectedPage == 1)
                 {
                     SetForceTotals(hq.missionStatsTracker);
@@ -260,10 +223,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (observedHq == null) return "STANDING BY FOR FACTION HQ";
                 switch (selectedPage)
                 {
-                    case 0: return "TREASURY • OBSERVED RETURNS";
-                    case 1: return "ORDER OF BATTLE • LIVE / LOST";
-                    case 2: return LedgerTitles[(int)ledgerMode] + " • FORM 12-B";
-                    default: return "THE MANDATE • MORALE 0-100";
+                    case 0: return "TREASURY · OBSERVED RETURNS";
+                    case 1: return "ORDER OF BATTLE · LIVE / LOST";
+                    case 2: return LedgerTitles[(int)ledgerMode] + " · FORM 12-B";
+                    default: return nationPoliticsParts.Count > 0 && nationPoliticsParts[0].Shown ? "POLITICS · WAR SUPPORT AND THE CABINET" : "THE MANDATE · MORALE 0-100";
                 }
             }
 
@@ -321,18 +284,58 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // ---------------------------------------------------------- ECONOMY page
 
+            // What STR SUPPLY held (panels fold phase 3): the STR hub's own parts, bound here from the hub's model with FAC's own control ids.
+            // The nation rows hide with the layer (one dim line instead); DONATE and BUY hide only while STR is off. The opposition shows none.
+            private readonly List<StrPart> supplyParts = new List<StrPart>(12), nationSupplyParts = new List<StrPart>(6);
+            private readonly StrControls supplyControls = new StrControls();
+            private IStrHub supplyHub;
+            private StrViewModel supplyBound;
+            private int supplyRevision = -1, supplyKey;
+            private bool supplyNation;
+            private AvSection donateSection, convoySection;
+            private AvNote nationOffNote, strOffNote;
+
+            private void AddSupply(AvFlow page, StrPart part, bool nation)
+            {
+                page.Add(part);
+                part.SetShown(false);
+                (nation ? nationSupplyParts : supplyParts).Add(part);
+            }
+
             private void BuildResourcesPage(AvFlow page)
             {
                 BuildFactionSelector(page);
-                eventStrip = page.Add(new EventStrip(page.Content));
-                economyHeadline = eventStrip.Headline;
-                economyEffect = eventStrip.Effect;
-                economyContract = eventStrip.Contract;
-                economyHeadline.Set("STANDING BY FOR DISPATCH");
-                economyEffect.Set("SUPPORT COST / BASELINE");
-                economyContract.Set("—");
-                eventStrip.Bar.Help = "Order in force: the share of the current local event still to run. The clock beside it is the " +
-                                      "time left; when it empties, prices return to baseline.";
+                economyOrder = OrderLink(page);
+                supplyHub = Runtime.StrViewHub.Active;
+
+                // NATION blocks sit above the treasury chart and stay out of the flow until the layer is Active.
+                nationEconomyParts.Add(page.Section(AvIcon.Coins, "FUNDS", "WHAT THE COUNTRY HAS TO SPEND"));
+                moneyNote = page.Add(new AvNote(page.Content, AvTextRole.DataSmall, true));
+                nationEconomyParts.Add(moneyNote);
+                nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PRODUCTION", "THE STAFF RUNS THE PLANTS · FAVOUR ONE ARM"));
+                AddSupply(page, new StrNationReply(page.Content, supplyControls, supplyHub), true);
+                for (int i = 0; i < StrNationView.MaxLines; i++) AddSupply(page, new StrLineRowPart(page.Content, supplyControls, supplyHub, i), true);
+                nationEconomyParts.Add(page.Section(AvIcon.Tank, "STOCK", "WHAT THE FACTION CAN FIELD NOW"));
+                stockPart = page.Add(new FacStockPart(page.Content));
+                nationEconomyParts.Add(stockPart);
+                nationEconomyParts.Add(page.Section(AvIcon.BuildingFactory, "PLANTS", "FACTORIES AND FREE SLOTS"));
+                plantsPart = page.Add(new FacPlantsPart(page.Content));
+                nationEconomyParts.Add(plantsPart);
+                AddSupply(page, new StrConstructionRow(page.Content, supplyControls, supplyHub), true);
+                AddSupply(page, new StrBuildRow(page.Content, supplyControls, supplyHub), true);
+                nationEconomyParts.Add(page.Section(AvIcon.Scale, "POLICIES", "HOW HARD THE COUNTRY WORKS"));
+                AddSupply(page, new StrPolicyRow(page.Content, supplyControls, supplyHub, StrPolicyRow.Kind.Economy), true);
+                nationEconomyParts.Add(page.Section(AvIcon.ListDetails, "IN FORCE", "POLICIES AND OUTPUT"));
+                forcePart = page.Add(new FacForcePart(page.Content));
+                nationEconomyParts.Add(forcePart);
+                foreach (AvPart p in nationEconomyParts) p.SetShown(false);
+                nationOffNote = page.Add(new AvNote(page.Content, "NATION OFF · PRODUCTION, PLANTS AND POLICIES SHOW WHILE IT RUNS"));
+
+                donateSection = page.Section(AvIcon.Coins, "HELP THE COUNTRY", "FROM YOUR ALLOCATION · ONE DONATION A MINUTE");
+                AddSupply(page, new StrDonateRow(page.Content, supplyControls, supplyHub), false);
+                convoySection = page.Section(AvIcon.Shield, "CONVOYS", "BOUGHT FROM YOUR ALLOCATION · A DEPOT DELIVERS");
+                for (int i = 0; i < StrViewModel.MaxConvoys; i++) AddSupply(page, new StrConvoyRow(page.Content, supplyControls, supplyHub, i), false);
+                strOffNote = page.Add(new AvNote(page.Content, "STRATEGIC COMMAND OFF · FACTORY, POLICY, DONATE AND BUY SHOW WHILE IT RUNS"));
 
                 historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "FORM 31-T / NO OBSERVATIONS");
                 history = page.Add(new HistoryCard(page.Content), 1f);
@@ -340,58 +343,43 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     AvNum.Seconds(MfdResourceHistory.Interval, 0) + "; up to " +
                     AvNum.Seconds(MfdResourceHistory.Capacity * MfdResourceHistory.Interval, 0) +
                     " retained. Missing observations break each resource trace; no backfill.";
+                page.Links(("FRONTS AND WAR PLAN", "STR", "BOARD"), ("WHAT ALLOCATION BUYS", "OPS", null));
             }
             private void RefreshResources(FactionHQ hq)
             {
-                float manpower = FactionResourceHistoryStore.Manpower(hq);
-                float morale = FactionResourceHistoryStore.Morale(hq);
-                float funds = hq.factionFunds;
-                int warheads = hq.GetWarheadStockpile();
-                bool manpowerKnown = float.IsFinite(manpower);
-                bool moraleKnown = float.IsFinite(morale);
-
-                resourceMetrics[0].Set(AvNum.Money(funds), funds < 0f ? "NEGATIVE BALANCE" : "AVAILABLE",
-                    0f, funds < 0f ? AvState.Caution : AvState.Ready);
-                resourceMetrics[1].Set(AvNum.Fixed(warheads, 0), "STOCKPILE", 0f, AvState.Ready);
-                resourceMetrics[2].Set(manpowerKnown ? AvNum.Thousands(manpower) : "—",
-                    manpowerKnown ? "IN ASSETS" : "UNAVAILABLE", 0f,
-                    manpowerKnown ? AvState.Ready : AvState.Inert);
-                // Only morale has a meaningful maximum; the other resources are absolute stocks.
-                resourceMetrics[3].Set(moraleKnown ? AvNum.Fixed(morale, 1) : "—",
-                    moraleKnown
-                        ? "CONTRACTS " + AvNum.Fixed(FactionMoraleState.ContractMultiplier(morale), 2) + "x"
-                        : "HOST DATA UNAVAILABLE",
-                    moraleKnown ? morale / 100f : 0f,
-                    !moraleKnown ? AvState.Inert : morale < 50f ? AvState.Caution : AvState.Ready);
-                AvHelpTip.Attach(resourceMetrics[3].Rect.gameObject,
-                    "Morale: the host's 0-100 mandate. Below 50 contracts pay less; above it they pay more." +
-                    (moraleKnown ? " Live contract multiplier " +
-                        AvNum.Fixed(FactionMoraleState.ContractMultiplier(morale), 2) + "x." : " Host morale is unavailable."));
-
-                ModuleServices.TryGet(out IActiveEventsView events);
-                ActiveEventView current = events?.Current;
-                bool applies = current != null && events.AffectsFaction(hq.faction?.factionName);
-                string price = current == null ? "NO EFFECT" :
-                    events.PriceSummaryForFaction(hq.faction?.factionName);
-                economyHeadline.Set(current == null ? "SUPPLY LINES HOLDING" : current.Title.ToUpperInvariant());
-                economyEffect.Set(current == null ? "SUPPORT COST / BASELINE " + AvNum.Fixed(1, 2) + "x" :
-                    !current.TargetResolved ? "TARGET LOST / EVENT EFFECT CANCELLED" :
-                    applies ? (IsLocalFaction(hq) ? "LOCAL EVENT / " : "BASE EVENT / ") + price :
-                    "OTHER SIDE / NO EVENT PRICE CHANGE HERE", PriceState(applies, price));
-                string eventClock;
-                float eventLeft = EventRemaining(current, out eventClock);
-                eventStrip.Bar.Set(eventLeft, eventClock,
-                    current == null ? AvState.Inert : applies ? AvState.Caution : AvState.Info);
-                eventStrip.Bar.SetShown(current != null);   // no order in force, no countdown frame
-                eventStrip.Tone(current == null ? AvState.Inert : applies ? AvState.Caution : AvState.Info);
-                SecondaryObjectiveView contract = FeaturedContract(hq);
-                economyContract.Set(contract == null
-                    ? IsLocalFaction(hq) ? ContractsDisabled() ? "CONTRACTS OFF" : "—" : "—"
-                    : "CONTRACT / " + MfdSecondaryObjectives.PayoutLabel(contract));
-                eventStrip.Changed();
-
+                SetOrderLink(economyOrder);
                 if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
                 RefreshResourceChart();
+                RefreshSupply(hq);
+            }
+
+            /// <summary>Binds the folded STR parts when the hub built something new, the nation moved or the layer turned; the same key STR uses.</summary>
+            private void RefreshSupply(FactionHQ hq)
+            {
+                Runtime.StrViewHub live = Runtime.StrViewHub.Active;
+                bool own = selectedFaction == 0;
+                bool str = own && live != null && ReferenceEquals(live, supplyHub) && live.Current.Built;
+                int key = StrNation.Refresh();
+                bool nation = str && IsLocalFaction(hq) && StrNation.Active;
+                nationOffNote.SetShown(own && !StrNation.Active);
+                strOffNote.SetShown(own && !str);
+                donateSection.SetShown(str);
+                if (!nation) foreach (StrPart p in nationSupplyParts) p.SetShown(false);
+                if (!str)
+                {
+                    foreach (StrPart p in supplyParts) p.SetShown(false);
+                    convoySection.SetShown(false);
+                    supplyBound = null;
+                    return;
+                }
+                StrViewModel vm = live.Current;
+                convoySection.SetShown(vm.Supply.RowCount > 0);
+                if (ReferenceEquals(vm, supplyBound) && live.Revision == supplyRevision && key == supplyKey && nation == supplyNation) return;
+                supplyBound = vm; supplyRevision = live.Revision; supplyKey = key; supplyNation = nation;
+                supplyControls.Clear();
+                StrNation.Fill();
+                foreach (StrPart p in supplyParts) { p.SetShown(true); p.Bind(vm); }
+                if (nation) foreach (StrPart p in nationSupplyParts) { p.SetShown(true); p.Bind(vm); }
             }
 
             /// <summary>Each resource gets its own scale and trailing finite run; gaps never bridge.</summary>
@@ -435,22 +423,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            /// <summary>Share of the event still to run (0..1) and its clock text, for the countdown bar.</summary>
-            private static float EventRemaining(ActiveEventView active, out string clock)
+            /// <summary>The one line FAC keeps for the order in force (ECONOMY and POLITICS): its headline, price effect, clock and the
+            /// faction's lead contract are read on EVN DISPATCH.</summary>
+            private static AvButtons OrderLink(AvFlow page)
             {
-                clock = "—";
-                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (active == null || mission == null) return 0f;
-                float total = active.EndsAtMissionTime - active.StartedAtMissionTime;
-                float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!float.IsFinite(left) || !float.IsFinite(total)) { clock = "LIVE"; return 1f; }
-                clock = AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
-                return total > 0.5f ? Mathf.Clamp01(left / total) : 1f;
+                AvButtons link = page.Links(("ORDER IN FORCE", "EVN", "DISPATCH"));
+                link.Controls[0].Help = "Opens EVN on DISPATCH: the order in force, what it does to support prices, its clock, " +
+                                        "and the faction's lead contract.";
+                return link;
             }
 
-            private static AvState PriceState(bool applies, string price) =>
-                !applies || price == "NO EFFECT" ? AvState.Inert :
-                price.StartsWith("+") ? AvState.Caution : AvState.Ready;
+            /// <summary>The line says in words whether an order is in force.</summary>
+            private static void SetOrderLink(AvButtons link) =>
+                link.Controls[0].Label = (ModuleServices.TryGet(out IActiveEventsView events) && events.Current != null
+                    ? "ORDER IN FORCE" : "NO ORDER IN FORCE") + " · EVN";
 
             // ----------------------------------------------------------- FORCES page
 
@@ -465,6 +451,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         "counts, busiest first.";
 
                 definitionGrid = page.Add(new UnitRosterPart(page.Content, false), 1f);
+                page.Links(("FORCE BALANCE", "STR", "BOARD"), ("WING", "WMC", null));
             }
             private void SetForceTotals(MissionStatsTracker tracker)
             {
@@ -533,7 +520,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (definition == null) return "UNIT";
                 string full = !string.IsNullOrEmpty(definition.unitName) ? definition.unitName : definition.code;
-                return (full ?? "UNIT").ToUpperInvariant() + " • " + DefinitionDetail(definition, hq);
+                return (full ?? "UNIT").ToUpperInvariant() + " · " + DefinitionDetail(definition, hq);
             }
 
             private static string DefinitionDetail(UnitDefinition definition, FactionHQ hq)
@@ -598,11 +585,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 ledgerChart = page.Add(new LedgerChartPart(page.Content, page.Inner));
 
                 attritionRoster = page.Add(new UnitRosterPart(page.Content, true), 1f);
+                page.Links(("FRONTS", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
             }
             private void SelectLedger(int selected)
             {
                 ledgerMode = (LedgerMode)Mathf.Clamp(selected, 0, 3);
-                ShowTitle();
                 RequestRefresh();
             }
 
@@ -731,7 +718,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildStatusPage(AvFlow page)
             {
                 BuildFactionSelector(page);
+                politics = new FacPolitics(page, nationPoliticsParts);
+                foreach (AvPart p in nationPoliticsParts) p.SetShown(false);
                 mandateStrip = page.Add(new MandateStrip(page.Content));
+                mandateParts.Add(mandateStrip);
                 moraleBar = mandateStrip.Bar;
                 mandateHeadline = mandateStrip.Headline;
                 mandateEffect = mandateStrip.Effect;
@@ -741,19 +731,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 moraleBar.Help = "Morale: the host's 0-100 mandate. It starts at 50; authored events and contract results move it, " +
                                  "and it scales contract money and XP.";
 
-                dispatchBlock = new BriefBlock(page.Content, "DISPATCH", AvTextRole.Head, AvTextRole.Prose, AvTextRole.ProseSmall);
-                directiveBlock = new BriefBlock(page.Content, "DIRECTIVE", AvTextRole.Head, AvTextRole.Prose);
-                politicalEvent = dispatchBlock.Lines[0];
-                politicalEffect = dispatchBlock.Lines[1];
-                politicalBrief = dispatchBlock.Lines[2];
-                politicalMission = directiveBlock.Lines[0];
-                politicalMissionDetail = directiveBlock.Lines[1];
-                politicalEvent.Set("NO ACTIVE EVENT");
-                politicalEffect.Set("THEATER CALM");
-                politicalBrief.Set("—");
-                politicalMission.Set("NO DIRECTIVE");
-                politicalMissionDetail.Set("—");
-                page.Row(dispatchBlock, directiveBlock);
+                politicsOrder = OrderLink(page);
 
                 infoTabs = page.Add(AvSegmented.Strip(page.Content, new[] { "AIRBASES", "PLAYERS" },
                     () => infoMode == InfoMode.Airbases ? 0 : 1, SelectInfo));
@@ -765,9 +743,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 // The bands are the mandate's own rule (names and thresholds from MandateName, prices from the
                 // contract multiplier), so the table reads the same on every faction.
-                page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE");
+                mandateParts.Add(page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE"));
                 bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
+                mandateParts.Add(bandList);
                 bandList.SetCount(BandNames.Length);
+                page.Links(("ORDERS IN FORCE", "STR", "BOARD"), ("CABINET", "EVN", "DISPATCH"));
             }
 
             private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };
@@ -804,7 +784,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bool known = float.IsFinite(morale);
                 bandMorale = known ? morale : float.NaN;
                 bandList.SetCount(BandNames.Length);   // rebinds the rows: the band holding the morale reads NOW
-                SecondaryObjectiveView contract = FeaturedContract(hq);
                 mandateHeadline.Set(known ? MandateName(morale) : "REPORT UNAVAILABLE",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
                 int percent = known ? Mathf.RoundToInt((FactionMoraleState.ContractMultiplier(morale) - 1f) * 100f) : 0;
@@ -812,32 +791,30 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     known ? AvNum.Fixed(morale, 1) + " / 100" : "—",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
                 mandateEffect.Set(known ? "CONTRACTS " + AvNum.Signed(percent, 0) + "% MONEY / XP" : "—");
-                ModuleServices.TryGet(out IActiveEventsView events);
-                ActiveEventView current = events?.Current;
-                bool applies = current != null && events.AffectsFaction(hq.faction?.factionName);
-                string price = current == null ? "NO EFFECT" :
-                    events.PriceSummaryForFaction(hq.faction?.factionName);
-                dispatchBlock.Tone(current == null ? AvState.Inert : applies ? AvState.Caution : AvState.Info);
-                directiveBlock.Tone(contract == null ? AvState.Inert : AvState.Info);
-                politicalEvent.Set(current == null ? "NO ACTIVE EVENT" : current.Title.ToUpperInvariant());
-                politicalEffect.Set(current == null ? "CALM" :
-                    !current.TargetResolved ? "TARGET LOST" :
-                    (applies ? IsLocalFaction(hq) ? "LOCAL EVENT" : "BASE EVENT" : "OTHER SIDE") + " • " + price +
-                    " • " + EventClock(current), PriceState(applies, price));
-                politicalBrief.Set(current == null ? "—" :
-                    !current.TargetResolved ? "—" :
-                    current.IsSuper ? current.Target + " • " + NextEventBeat(current) :
-                    current.Tier + " / " + current.Target);
-                politicalMission.Set(contract == null ?
-                    IsLocalFaction(hq) ? ContractsDisabled() ? "DIRECTIVES OFF" :
-                        "NO DIRECTIVE" : "CLASSIFIED" :
-                    (contract.IsActive ? "ACTIVE / " : "OFFERED / ") +
-                    MfdSecondaryObjectives.PlainObjective(contract.Title).ToUpperInvariant());
-                politicalMissionDetail.Set(contract == null ? "—" :
-                    MfdSecondaryObjectives.PayoutLabel(contract) + "  •  +3 MORALE");
-                dispatchBlock.Changed();
-                directiveBlock.Changed();
+                SetOrderLink(politicsOrder);
                 mandateStrip.Changed();
+            }
+
+            // The NATION layer takes the ECONOMY and POLITICS pages for the player's own faction while it runs; otherwise both read as before.
+            // Nation installs after Command, so the service is looked up on every refresh rather than cached at build.
+            private void RefreshNation(FactionHQ hq)
+            {
+                INationView nation = null;
+                bool on = selectedFaction == 0 && IsLocalFaction(hq) && ModuleServices.TryGet(out nation) && nation.Active && nation.Local != null;
+                foreach (AvPart p in nationEconomyParts) p.SetShown(on);
+                foreach (AvPart p in nationPoliticsParts) p.SetShown(on);
+                foreach (AvPart p in mandateParts) p.SetShown(!on);
+                if (!on) return;
+                NationView v = nation.Local;
+                if (selectedPage == 0)
+                {
+                    moneyNote.Set("FUNDS " + AvNum.Thousands(Mathf.Round(v.Funds)) + "   ·   NEW FACTORY " +
+                                  AvNum.Thousands(Mathf.Round(v.FactoryCost)) + "   ·   OUTPUT x" + AvNum.Fixed(v.Output, 2));
+                    stockPart.Set(v);
+                    plantsPart.Set(v);
+                    forcePart.Set(v);
+                }
+                else if (selectedPage == 3) politics.Set(nation);
             }
 
             private void RefreshInfo(FactionHQ hq)
@@ -906,65 +883,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private static string MandateName(float morale) => BandNames[BandOf(morale)];
 
-            private static string EventClock(ActiveEventView active)
-            {
-                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (active == null || mission == null) return "LIVE";
-                float left = active.EndsAtMissionTime - mission.MissionTime;
-                if (!float.IsFinite(left)) return "LIVE";
-                return AvNum.Clock(Mathf.Max(0, Mathf.CeilToInt(left))) + " LEFT";
-            }
-
-            private static string NextEventBeat(ActiveEventView active)
-            {
-                MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                if (mission == null || active?.Steps == null) return "OPEN EVN FOR FIELD ORDERS";
-                float elapsed = mission.MissionTime - active.StartedAtMissionTime;
-                for (int i = 0; i < active.Steps.Count; i++)
-                {
-                    ActiveEventStep step = active.Steps[i];
-                    if (step.AtSeconds <= elapsed) continue;
-                    int remaining = Mathf.CeilToInt(step.AtSeconds - elapsed);
-                    return "NEXT ORDER " + AvNum.Clock(remaining) + " / " + step.Label;
-                }
-                return "FIELD ORDERS ISSUED • OPEN EVN FOR DISPATCH";
-            }
-
-            private static bool ContractsDisabled() =>
-                ModuleServices.TryGet(out ISecondaryObjectivesView board) && board?.Status != null &&
-                board.Status.IndexOf("disabled", StringComparison.OrdinalIgnoreCase) >= 0;
-
             private static bool IsLocalFaction(FactionHQ hq) =>
                 hq != null && GameManager.GetLocalPlayer<Player>(out Player local) &&
                 local != null && local.HQ == hq;
 
-            private static SecondaryObjectiveView FeaturedContract(FactionHQ hq)
-            {
-                if (!IsLocalFaction(hq) || !ModuleServices.TryGet(out ISecondaryObjectivesView board) ||
-                    board?.Objectives == null) return null;
-                SecondaryObjectiveView offered = null;
-                IReadOnlyList<SecondaryObjectiveView> objectives = board.Objectives;
-                for (int i = 0; i < Mathf.Min(16, objectives.Count); i++)
-                {
-                    SecondaryObjectiveView entry = objectives[i];
-                    if (entry == null) continue;
-                    if (entry.IsActive) return entry;
-                    if (offered == null && entry.IsOffered) offered = entry;
-                }
-                return offered;
-            }
-
             // ------------------------------------------------------------ local parts
 
             /// <summary>
-            /// Bordered strip with Portal corner brackets. The tone recolours the frame (amber for a live event,
-            /// cyan hairline otherwise); derived strips lay their own children out from the slot.
+            /// Bordered strip with Portal corner brackets; derived strips lay their own children out from the slot.
             /// </summary>
             private abstract class FramedPart : AvPart
             {
                 protected const float Inset = 10f;
                 private readonly AvFrame frame;
-                private AvState tone = AvState.Inert;
 
                 protected FramedPart(RectTransform parent, string name)
                 {
@@ -974,28 +905,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     frame.Bracket = 8f;
                 }
 
-                public void Tone(AvState next)
-                {
-                    if (next == tone) return;
-                    tone = next;
-                    PaintFrame();
-                }
-
-                private void PaintFrame()
+                public override void Restyle()
                 {
                     AvStyle c = AvStyleHost.FuiStyle("card");
-                    Color line = AvStyleHost.Resolve(c.Border, AvTheme.Hairline);
-                    Color bracket = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
-                    if (tone == AvState.Caution)
-                        line = bracket = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
-                    else if (tone == AvState.Danger)
-                        line = bracket = AvStyleHost.FuiColor("danger", AvTheme.RailDanger);
-                    frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), line);
-                    frame.BracketColor = bracket;
+                    frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Surface), AvStyleHost.Resolve(c.Border, AvTheme.Hairline));
+                    frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
                     frame.SetVerticesDirty();
                 }
-
-                public override void Restyle() => PaintFrame();
             }
 
             /// <summary>
@@ -1115,7 +1031,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     RenderTotals();
                     previous.Interactable = page > 0;
                     next.Interactable = page + 1 < pages;
-                    pageText.text = "PAGE " + (page + 1) + "/" + pages + "  /  " + count + " TYPES";
+                    pageText.text = "PAGE " + (page + 1) + "/" + pages + " · " + count + " TYPES";
                 }
 
                 // Sums over every record of the form, not just the page on show; a type with no figure adds nothing.
@@ -1212,50 +1128,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         bars[i].Paint(AvTheme.Warning, AvTheme.Hairline.WithAlpha(.4f));
                     }
                     previous.Restyle(); next.Restyle();
-                }
-            }
-
-            /// <summary>The local event: title, price effect, countdown and featured contract.</summary>
-            private sealed class EventStrip : FramedPart
-            {
-                public readonly AvNote Headline, Effect, Contract;
-                public readonly AvHazardBar Bar;
-
-                public EventStrip(RectTransform parent) : base(parent, "EventStrip")
-                {
-                    Headline = new AvNote(Rect, AvTextRole.Head, true);
-                    Effect = new AvNote(Rect, AvTextRole.Prose);
-                    Bar = new AvHazardBar(Rect, "ORDER IN FORCE");
-                    Contract = new AvNote(Rect, AvTextRole.ProseSmall);
-                    Restyle();
-                }
-
-                public override float Measure(float width)
-                {
-                    float w = width - 2f * Inset;
-                    return 8f + Headline.Measure(w) + 2f + Effect.Measure(w) + 5f + (Bar.Shown ? Bar.Measure(w) + 5f : 0f) +
-                        Contract.Measure(w) + 8f;
-                }
-
-                public override void Place(AvSlot s)
-                {
-                    base.Place(s);
-                    float w = s.W - 2f * Inset, y = 8f, h = Headline.Measure(w);
-                    Headline.Place(new AvSlot(Inset, y, w, h)); y += h + 2f;
-                    h = Effect.Measure(w);
-                    Effect.Place(new AvSlot(Inset, y, w, h)); y += h + 5f;
-                    if (Bar.Shown)
-                    {
-                        h = Bar.Measure(w);
-                        Bar.Place(new AvSlot(Inset, y, w, h)); y += h + 5f;
-                    }
-                    Contract.Place(new AvSlot(Inset, y, w, Contract.Measure(w)));
-                }
-
-                public override void Restyle()
-                {
-                    base.Restyle();
-                    Headline?.Restyle(); Effect?.Restyle(); Bar?.Restyle(); Contract?.Restyle();
                 }
             }
 
@@ -1425,52 +1297,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     base.Restyle();
                     Headline?.Restyle(); Effect?.Restyle(); Bar?.Restyle();
-                }
-            }
-
-            /// <summary>A small bordered briefing: a "// KEY" micro label over a few text lines.</summary>
-            private sealed class BriefBlock : FramedPart
-            {
-                private readonly TMP_Text key;
-                public readonly AvNote[] Lines;
-
-                public BriefBlock(RectTransform parent, string keyText, params AvTextRole[] roles)
-                    : base(parent, "Brief " + keyText)
-                {
-                    key = AvText.Make(Rect, "Key", AvTextRole.Micro, "// " + keyText);
-                    AvText.Fit(key, false);
-                    Lines = new AvNote[roles.Length];
-                    for (int i = 0; i < roles.Length; i++) Lines[i] = new AvNote(Rect, roles[i], i == 0);
-                    Restyle();
-                }
-
-                public override float Measure(float width)
-                {
-                    float w = width - 2f * Inset, h = 8f + 15f + 3f;
-                    foreach (AvNote l in Lines) h += l.Measure(w) + 2f;
-                    return h + 6f;
-                }
-
-                public override void Place(AvSlot s)
-                {
-                    base.Place(s);
-                    float w = s.W - 2f * Inset, y = 8f;
-                    AvLay.Place(key.rectTransform, Inset, y, w, 15f);
-                    y += 18f;
-                    foreach (AvNote l in Lines)
-                    {
-                        float h = l.Measure(w);
-                        l.Place(new AvSlot(Inset, y, w, h));
-                        y += h + 2f;
-                    }
-                }
-
-                public override void Restyle()
-                {
-                    base.Restyle();
-                    if (Lines == null) return;
-                    key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
-                    foreach (AvNote l in Lines) l.Restyle();
                 }
             }
 

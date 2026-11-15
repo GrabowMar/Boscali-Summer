@@ -71,10 +71,11 @@ namespace BoscaliSummer.Modules.Support
             hudLine.Configure(manager, calls);
             SpaceFeedController feed = context.AddSceneService<SpaceFeedController>(57);
             feed.Configure(manager, calls, context.Settings.Support);
+            context.AddService<ISupportJobs>(new SupportJobs(manager, calls, feed));
             FrontController fronts = context.AddSceneService<FrontController>(62);
             fronts.Configure(manager, calls, feed);
             CallsPanel panel = context.AddSceneService<CallsPanel>(55);
-            panel.Configure(manager, calls, fronts, feed);
+            panel.Configure(manager, calls, fronts);
             var perkFan = new OpsPerkFan(manager, calls);
             context.AddService<IOpsPerks>(perkFan);
             var scopeFeed = new StrikeScopeFeed(manager, perkFan);

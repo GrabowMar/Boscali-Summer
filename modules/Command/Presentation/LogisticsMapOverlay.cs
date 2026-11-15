@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
             public Vector3 Position;
             public SiteKind Kind;
             public bool Friendly;
+            /// <summary>An own factory whose NATION plant is below 60 % health.</summary>
+            public bool Damaged;
         }
 
         private struct Truck
@@ -140,6 +142,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             siteCount = truckCount = routeCount = 0;
             FactionHQ hq = dynamicMap.HQ;
+            NationView nationView = ModuleServices.TryGet(out INationView nation) && nation.Active ? nation.Local : null;
             var icons = dynamicMap.mapIcons;
             if (icons != null)
                 for (int i = 0; i < icons.Count; i++)
@@ -154,7 +157,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
                         Airbase airbase = site.GetAirbase();
                         FactionHQ owner = airbase != null && airbase.CurrentHQ != null ? airbase.CurrentHQ : unit.NetworkHQ;
                         if (owner != null && siteCount < MaxSites && MapUiAccess.TryPosition(unit, hq, out Vector3 at, owner))
-                            sites[siteCount++] = new Site { Position = at, Kind = kind, Friendly = hq == null || owner == hq };
+                        {
+                            bool own = hq == null || owner == hq;
+                            sites[siteCount++] = new Site
+                                { Position = at, Kind = kind, Friendly = own, Damaged = own && kind == SiteKind.Factory && PlantHit(nationView, at) };
+                        }
                     }
                     else if (unit is GroundVehicle && unit.definition is VehicleDefinition vehicle &&
                         vehicle.vehicleType == VehicleType.TRUCK && truckCount < MaxTrucks &&
@@ -172,6 +179,19 @@ namespace BoscaliSummer.Modules.Command.Presentation
             if (graphic != null)
                 graphic.SetSource(this, dynamicMap, IndustryVisible, SupplyVisible,
                     settings != null ? settings.OverlayOpacity.Value : .35f);
+        }
+
+        /// <summary>True when the NATION plant within 60 m of this fix is below 60 % health (both GLOBAL metres; the view is the local faction's).</summary>
+        private static bool PlantHit(NationView view, Vector3 at)
+        {
+            if (view == null) return false;
+            for (int i = 0; i < view.Plants.Count; i++)
+            {
+                PlantView p = view.Plants[i];
+                float dx = p.X - at.x, dz = p.Z - at.z;
+                if (dx * dx + dz * dz <= 3600f) return p.Health01 < .6f;
+            }
+            return false;
         }
 
         internal static bool TryKind(BuildingType type, out SiteKind kind)
@@ -286,7 +306,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
                         Site s = owner.sites[i];
                         if (!Project(s.Position.x, s.Position.z, projection, active, out Vector2 at)) continue;
                         Color c = s.Friendly ? friendly : hostile;
-                        if (s.Kind == SiteKind.Factory) Square(vh, at, r, px, c);
+                        if (s.Kind == SiteKind.Factory) Square(vh, at, r, px, s.Damaged ? AvTheme.RailCaution.WithAlpha(ink) : c);
                         else if (s.Kind == SiteKind.Depot) Diamond(vh, at, r * 1.25f, px, c);
                         else Triangle(vh, at, r * 1.2f, px, c);
                     }

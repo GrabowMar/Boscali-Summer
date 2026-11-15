@@ -94,7 +94,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             title.color = interactable ? AvStyleHost.Resolve(c.Color, AvTheme.TextPrimary) : AvTheme.Disabled;
             stateWord.color = AvStyleHost.FuiInk("cell-state", AvTheme.Disabled, shown ? "on" : null);
             stripe.color = shown ? lit : Color.clear;
-            track.color = shown ? new Color(lit.r, lit.g, lit.b, .35f) : dark;
+            track.color = shown ? lit.WithAlpha(.35f) : dark;
             knob.color = shown ? lit : interactable ? AvStyleHost.FuiInk("cell-sub", AvTheme.Dim) : AvTheme.Disabled;
         }
     }

@@ -61,6 +61,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO SKILL CATALOG",
                     "This host has not configured an OPS skill catalog, so there is nothing to unlock."));
+                p.Links(("WING", "WMC", null), ("PERKS", "OPS", "PERKS"));
                 return;
             }
 
@@ -68,7 +69,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             for (int i = 0; i < perks.Length; i++)
                 LaneOf(lanes, perks[i].Branch).Nodes.Add(perks[i]);
 
-            // The budget rings that used to sit here repeated the header's SCORE and PICKS tiles; the board takes the height.
+            // The budget rings are on PILOT's PICK LEDGER; the idle detail card says the picks in hand. The board takes the height.
             skillBoard = p.Add(new SkillBoard(p.Content, console.Ticker, lanes, SelectSkill), 1f);
             skillRows.AddRange(skillBoard.Rows);
             skillBranches.AddRange(skillBoard.Branches);
@@ -85,6 +86,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             skillConfirmButton.Interactable = false;
             skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
             p.Add(detail);
+            p.Links(("WING", "WMC", null), ("PERKS", "OPS", "PERKS"));
         }
 
         private static SkillLane LaneOf(List<SkillLane> lanes, string name)

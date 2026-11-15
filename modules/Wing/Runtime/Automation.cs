@@ -136,8 +136,8 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             };
         }
 
-        /// <summary>Opens the WMC on <c>tab</c> (0 TACTICAL … 4 WING) and, on TACTICAL, BEHAVIOUR and WING, sub-page <c>sub</c>, for a
-        /// capture of each page; <c>close</c> minimizes the map again.</summary>
+        /// <summary>Opens the WMC on <c>tab</c> (0 ROSTER … 3 LOADOUT) and, on ROSTER, sub-page <c>sub</c>, for a capture of each
+        /// page; <c>close</c> minimizes the map again. The squadron (the old WING tab) is on PILOT STUDIO.</summary>
         public static Dictionary<string, object> Wmc(Dictionary<string, object> args)
         {
             Presentation.WmcPanel panel = Presentation.WmcPanel.Instance;
@@ -147,11 +147,10 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 SceneSingleton<DynamicMap>.i?.Minimize();
                 return Ok("closed", true);
             }
-            int tab = Number(args, "tab", WmcTabs.Tactical), sub = Number(args, "sub", 0);
+            int tab = Number(args, "tab", WmcTabs.Roster), sub = Number(args, "sub", 0);
             panel.Open();
             panel.Show(tab);
-            if (tab == WmcTabs.Tactical) panel.Tactical?.ShowSub(sub);
-            else if (tab == WmcTabs.Wing) panel.WingPage?.ShowSub(sub);
+            if (tab == WmcTabs.Roster) panel.Tactical?.ShowSub(sub);
             panel.Refresh();
             WingLog.Logger.LogInfo($"[Automation] Wmc: tab {tab} sub {sub} visible {panel.Visible}");
             return new Dictionary<string, object> { { "ok", true }, { "tab", tab }, { "sub", sub }, { "visible", panel.Visible } };
