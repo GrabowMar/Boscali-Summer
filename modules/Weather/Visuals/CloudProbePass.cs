@@ -32,7 +32,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>Feed-lens frames drawn since the pass was made (sims read it to prove a feed got its clouds).</summary>
         internal static int FeedFramesDrawn { get; private set; }
 
-        private static bool Wanted(Camera camera) => camera.cameraType == CameraType.Reflection || FeedCamera.IsLens(camera);
+        private static bool Wanted(Camera camera) => !WeatherCloudPass.IsWeatherExcluded(camera) &&
+            (camera.cameraType == CameraType.Reflection || FeedCamera.IsLens(camera));
 
         internal CloudProbePass()
         {

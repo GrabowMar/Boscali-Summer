@@ -4,6 +4,7 @@ using System.IO;
 using BepInEx;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Effects.Configuration;
 using BoscaliSummer.Modules.Effects.Domain;
@@ -14,7 +15,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Modules.Effects.Runtime
 {
     /// <summary>
-    /// The client's display grade, built only from what URP already ships: one global volume just
+    /// The client's display grade: one global volume just
     /// above the game's own (<c>LevelInfo.PostProcessing</c>, priority 0.5) and below its night
     /// vision (1), plus RCAS sharpening. The game keeps what it owns: <c>ExposureController</c>
     /// drives postExposure and <c>GLOC</c> drives ColorAdjustments.saturation on the game's
@@ -27,6 +28,9 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         private const float LumaR = 0.2126f, LumaG = 0.7152f, LumaB = 0.0722f;
 
         private readonly Sharpening sharpening = new Sharpening();
+        private readonly AgxTonemapping agx = new AgxTonemapping();
+        private readonly CinematicPost cinematic = new CinematicPost();
+        private readonly CameraPostQuality postQuality = new CameraPostQuality();
         private EffectsSettings settings;
         private ManualLogSource logger;
         private string lutFolder;
@@ -51,11 +55,20 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             catch (Exception error) { logger?.LogWarning("[Effects] LUT folder unavailable: " + error.Message); }
         }
 
-        public void ResetForScene() => Teardown();
+        public void ResetForScene()
+        {
+            postQuality.Restore();
+            cinematic.Release();
+            agx.Restore();
+            Teardown();
+        }
 
         public void ReleaseFx()
         {
+            postQuality.Dispose();
             sharpening.Restore();
+            cinematic.Release();
+            agx.Dispose();
             Teardown();
         }
 
@@ -64,24 +77,38 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             state["grade"] = holder != null;
             state["lut"] = lut != null ? lut.width + "x" + lut.height : "none";
             sharpening.Describe(state);
+            agx.Describe(state);
+            cinematic.Describe(state);
+            postQuality.Describe(state);
         }
 
         private void OnDestroy() => ReleaseFx();
 
         private void Update()
         {
+            // Display LUTs and channel mixing must not recolour a calibrated phosphor/thermal picture.
+            bool nightVision = GameAccess.TryGetNightVisionState(out _, out bool active) && active;
+            if (holder != null) holder.SetActive(!nightVision);
             if (settings == null || Time.unscaledTime < nextApply) return;
             nextApply = Time.unscaledTime + ApplySeconds;
 
             bool on = settings.Enabled.Value;
             sharpening.Apply(on && settings.SharpenEnabled.Value, settings.SharpenStrength.Value);
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            postQuality.Apply(level != null && cameras != null ? cameras.mainCamera : null,
+                settings.Dithering.Value, settings.EdgeSmoothing.Value, logger);
+            agx.Apply(settings.AgxEnabled.Value && level != null && level.PostProcessing != null,
+                settings.AgxLook.Value, cameras != null ? cameras.mainCamera : null, logger);
+            cinematic.Apply(settings.Cinematic, level, transform, cameras != null ? cameras.mainCamera : null,
+                settings.Cinematic.Enabled.Value ? agx.GetShader("Hidden/Boscali/CinematicStreak", logger) : null);
             if (!on || level == null || level.PostProcessing == null)
             {
                 Teardown();
                 return;
             }
             EnsureVolume(level);
+            holder.SetActive(!nightVision);
 
             adjustments.contrast.Override(Mathf.Clamp(settings.Contrast.Value, -100f, 100f));
             balance.temperature.Override(Mathf.Clamp(settings.Temperature.Value, -100f, 100f));

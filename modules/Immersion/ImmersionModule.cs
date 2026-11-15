@@ -96,8 +96,12 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting(Look, "DAMAGE SURFACES",
                 "Cockpit view: subtle damage shading on supported opaque cockpit materials. Weather owns glass moisture.",
                 s.SurfaceImmersionEnabled, ClientPreset.Light, master);
-            context.AddClientSetting(Look, "PILOT BODY",
-                "First-person flight suit, arms and legs using the native pilot model.", s.PilotBodyEnabled, ClientPreset.Light, master);
+            ClientSettingToggle body = context.AddClientSetting(Look, "PILOT BODY",
+                "Your first-person flight suit, arms, legs and strapped kneeboard. Only your own cockpit pilot changes.",
+                s.PilotBodyEnabled, ClientPreset.Light, master);
+            context.AddClientChoice(Look, "PILOT MODEL",
+                "Choose your cockpit pilot's suit appearance. Applies immediately; saved on this machine.",
+                s.PilotModel, new[] { "STANDARD", "RECON", "RESCUE", "NIGHT OPS" }, requires: body);
             context.AddClientSetting(Look, "PILOT REFLECTION",
                 "Faint pilot and helmet reflection on the windscreen; small pilot-only capture at most ten times per second.",
                 s.PilotReflectionEnabled, ClientPreset.Heavy, master);

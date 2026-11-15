@@ -8,13 +8,14 @@ using Random = UnityEngine.Random;
 namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
     /// <summary>
-    /// Hell's Army, the third boss (host only, single player like GHOST). A gate tears open on land ahead of the host's aircraft
-    /// (shockwave, a pillar of fire) with a ring of AA wardens held round it, then themed waves (<see cref="HellRules"/>: scouts,
+    /// Hell's Army, the third boss (host only, single player like GHOST). A ground rift tears open ahead of the host's aircraft
+    /// (dark throat and disturbed ash) with a ring of AA wardens held round it, then themed waves (<see cref="HellRules"/>: scouts,
     /// iron, skyfire, horde, bigger each lap) pour out of it one unit at a time: ground vehicles that drive on the nearest enemy
     /// airbase, and from the second wave hellish gunships and jets. The gate grows with every wave. Everything is on the HELL side,
     /// hostile to all; every listed side is fed its tracks (HELL is unlisted, so radars never see it) and HELL is fed what stands
-    /// near its units. Flying through the portal is <see cref="Enter"/>: the way into the hell pocket dimension and the objective
-    /// that shuts the gate.
+    /// near its units. Ground superiority captures and corrupts bases, strengthening reinforcements. Diving into the rift calls
+    /// <see cref="Enter"/>: the pocket dimension holds three damageable anchors. Broken anchors suppress the invasion across
+    /// retreats and re-entry; breaking all three shuts the gate and restores occupied territory.
     /// </summary>
     internal static class HellGate
     {
@@ -22,6 +23,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private const float OrdersSeconds = 15f, FeedSeconds = 1f, SightRange = 6000f, AirSight = 15000f, MarchRange = 30000f, BaseRange = 45000f;
 
         private static readonly List<Unit> Army = new List<Unit>(), Air = new List<Unit>(), Wardens = new List<Unit>();
+        private static readonly List<Unit> CleanupUnits = new List<Unit>();
         private static readonly Queue<UnitDefinition> Pending = new Queue<UnitDefinition>();
         private static readonly List<UnitDefinition> Pool = new List<UnitDefinition>();
         private static readonly Dictionary<string, VehicleDefinition> Known = new Dictionary<string, VehicleDefinition>(StringComparer.OrdinalIgnoreCase);
@@ -35,6 +37,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         internal static event Action Defeated;
 
         public static int Waves, Spawned, SpawnedAir, Entered, Falters;
+        internal static float OpenedAt { get; private set; }
         public static bool WasDefeated;
 
         /// <summary>The last wave's theme (sim readout).</summary>
@@ -50,6 +53,19 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         public static IReadOnlyList<Unit> Aircraft => Air;
 
         public static IReadOnlyList<Unit> Guards => Wardens;
+
+        // Keep object references after the HQ is forgotten: ownership checks alone cannot detect an orphan then.
+        public static int CleanupRequested => CleanupUnits.Count;
+        public static int CleanupRemaining
+        {
+            get
+            {
+                int count = 0;
+                foreach (Unit unit in CleanupUnits)
+                    if (unit != null && unit.gameObject.activeInHierarchy) count++;
+                return count;
+            }
+        }
 
         /// <summary>Why the gate cannot open now, or null.</summary>
         public static string CannotSpawn()
@@ -71,17 +87,20 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             GameManager.GetLocalAircraft(out global::Aircraft host);
             if (!Site(host, out Vector3 ground, out Vector3 toward)) return Name + ": NO LAND IN REACH";
             if (HellSide.Side.Ensure() == null) return Name + ": NO HELL SIDE";
-            portal = HellPortal.Spawn(ground + Vector3.up * (HellRules.PortalRadius + 15f), Quaternion.LookRotation(toward, Vector3.up),
+            HellDimension.Reset();
+            OpenedAt = Time.time;
+            portal = HellPortal.Spawn(ground + Vector3.up * 3f, Quaternion.LookRotation(toward, Vector3.up),
                 HellRules.PortalRadius);
             portal.Shockwave();
             Waves = Spawned = SpawnedAir = Entered = Falters = 0;
             WasDefeated = haveAlong = faltered = false;
+            CleanupUnits.Clear();
             Pending.Clear();
             nextWave = Time.time + HellRules.FirstWaveSeconds; // the gate opens first, the army a breath later
             nextStream = nextOrders = nextFeed = 0f;
             PostWardens(ground, toward);
             FallenAce.Announce("THE GATE IS OPEN");
-            FallenAce.Announce("FLY INTO IT");
+            FallenAce.Announce("DIVE INTO THE RIFT · BREAK ITS ANCHORS IN HELL");
             Plugin.Logger.LogInfo("[Spooktober] HELL'S ARMY gate opened " + (Vector3.Distance(ground, host.transform.position) / 1000f).ToString("0.0") +
                                   " km out, " + Wardens.Count + " wardens.");
             return Name + ": THE GATE IS OPEN";
@@ -96,42 +115,57 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         }
 
         /// <summary>
-        /// The player flew through the portal. ponytail: until the hell scene (the pocket dimension, user-supplied) is wired in, going
-        /// through is the objective itself and shuts the gate as the defeat; the scene will replace this body with the transfer there
-        /// and call <see cref="Close"/> with true once its objective falls.
+        /// The player dives into the rift. Entering is the start of the anchor battle, never a defeat by itself.
         /// </summary>
         public static void Enter()
         {
-            if (!Alive) return;
-            Entered++;
-            Plugin.Logger.LogInfo("[Spooktober] HELL'S ARMY: the player flew through the gate.");
-            FallenAce.Announce("YOU WENT THROUGH. IT FOLLOWS YOU BACK.");
-            Close(true);
+            if (!Alive || HellDimension.Inside) return;
+            if (HellDimension.Enter(portal))
+            {
+                Entered++;
+                haveAlong = false;
+                Plugin.Logger.LogInfo("[Spooktober] HELL'S ARMY: entered the Hell dimension.");
+            }
         }
 
         /// <summary>Host: the army burns away, the portal collapses and HELL is forgotten; a defeat credits the chain.</summary>
         internal static void Close(bool defeated)
         {
-            Mirage.ServerObjectManager objects = GameAccess.NetworkManagerOrNull?.ServerObjectManager;
+            HellDimension.Clear(true);
+            HellAtmosphere.Clear();
+            HellTerritory.Clear();
+            // Restore native base buildings first; never destroy a scene facility after a partial restoration failure.
+            // Native reinforcements are outside the wave lists, while recent wave spawns may not have registered yet.
+            var departing = new HashSet<Unit>();
+            if (UnitRegistry.allUnits != null)
+                foreach (Unit unit in UnitRegistry.allUnits)
+                    if (unit != null && !(unit is Building) && HellSide.Side.Owns(unit.NetworkHQ)) departing.Add(unit);
             foreach (List<Unit> list in new[] { Army, Air, Wardens })
-            {
                 foreach (Unit unit in list)
-                {
-                    if (unit == null || unit.Identity == null || unit.Identity.NetId == 0) continue;
-                    Burst(unit.transform.position);
-                    if (unit is global::Aircraft aircraft && aircraft.pilots != null)
-                        foreach (Pilot pilot in aircraft.pilots)
-                            if (pilot != null) pilot.SwitchState(null);
-                    try { objects?.Destroy(unit.Identity, !unit.Identity.IsSceneObject); }
-                    catch (Exception e) { Plugin.Logger.LogWarning("[Spooktober] HELL'S ARMY despawn " + unit.name + ": " + e.Message); }
-                }
-                list.Clear();
+                    if (unit != null && HellSide.Side.Owns(unit.NetworkHQ)) departing.Add(unit);
+            if (departing.Count > 0)
+            {
+                CleanupUnits.Clear();
+                CleanupUnits.AddRange(departing);
             }
+            Mirage.ServerObjectManager objects = GameAccess.NetworkManagerOrNull?.ServerObjectManager;
+            foreach (Unit unit in departing)
+            {
+                if (unit == null || unit.Identity == null || unit.Identity.NetId == 0) continue;
+                Burst(unit.transform.position);
+                if (unit is global::Aircraft aircraft && aircraft.pilots != null)
+                    foreach (Pilot pilot in aircraft.pilots)
+                        if (pilot != null)
+                            try { pilot.SwitchState(null); }
+                            catch (Exception e) { Plugin.Logger.LogWarning("[Spooktober] HELL'S ARMY stop pilot " + unit.name + ": " + e.Message); }
+                try { objects?.Destroy(unit.Identity, !unit.Identity.IsSceneObject); }
+                catch (Exception e) { Plugin.Logger.LogWarning("[Spooktober] HELL'S ARMY despawn " + unit.name + ": " + e.Message); }
+            }
+            foreach (List<Unit> list in new[] { Army, Air, Wardens }) list.Clear();
             Pending.Clear();
             HellArmy.Clear();
             if (portal != null && portal.Alive)
             {
-                Burst(portal.Root.transform.position);
                 portal.Close();
             }
             portal = null;
@@ -145,6 +179,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         /// <summary>Scene reset: the scene took the portal and the army with it.</summary>
         internal static void Forget()
         {
+            HellDimension.Clear(false);
+            HellAtmosphere.Clear();
+            HellTerritory.Clear(false);
             portal = null;
             Army.Clear();
             Air.Clear();
@@ -152,15 +189,21 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             Pending.Clear();
             Known.Clear();
             Flyers.Clear();
+            CleanupUnits.Clear();
         }
 
         /// <summary>Host, every frame while the gate is open: waves, the stream out of the gate, orders, tracks and the fly-through.</summary>
         internal static void Frame(float now)
         {
             if (!Alive) return;
-            Army.RemoveAll(u => u == null || u.disabled);
-            Air.RemoveAll(u => u == null || u.disabled);
-            Wardens.RemoveAll(u => u == null || u.disabled);
+            HellDimension.Frame(now);
+            if (!Alive) return;
+            HellTerritory.Frame(now);
+            HellArmy.Frame(now);
+            HellAtmosphere.Frame();
+            Army.RemoveAll(u => u == null || u.disabled || !HellSide.Side.Owns(u.NetworkHQ));
+            Air.RemoveAll(u => u == null || u.disabled || !HellSide.Side.Owns(u.NetworkHQ));
+            Wardens.RemoveAll(u => u == null || u.disabled || !HellSide.Side.Owns(u.NetworkHQ));
             if (Waves > 0 && Army.Count == 0 && Air.Count == 0 && Pending.Count == 0 && !faltered)
             {
                 // The player wiped out everything that came through: the gate falters and the next wave is late.
@@ -171,7 +214,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             }
             if (now >= nextWave)
             {
-                nextWave = now + HellRules.Delay(Waves);
+                nextWave = now + HellRules.InvasionDelay(Waves, HellTerritory.Count, HellDimension.Broken);
                 Wave();
             }
             if (Pending.Count > 0 && now >= nextStream)
@@ -189,14 +232,14 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 nextFeed = now + FeedSeconds;
                 Feed();
             }
-            FlyThrough();
+            if (!HellDimension.Inside) FlyThrough();
         }
 
         /// <summary>Queues the wave (ground first, aircraft last, so the jets break out over the column), announces it and grows the gate.</summary>
         private static void Wave()
         {
             HellTheme theme = HellRules.Theme(Waves);
-            int ground = HellRules.ToSpawn(Waves, Army.Count + Pending.Count);
+            int ground = HellRules.InvasionToSpawn(Waves, Army.Count + Pending.Count, HellTerritory.Count, HellDimension.Broken);
             int air = HellRules.AirToSpawn(Waves, Air.Count);
             List<UnitDefinition> pool = Roll(theme, false);
             for (int i = 0; i < ground && pool.Count > 0; i++) Pending.Enqueue(pool[Random.Range(0, pool.Count)]);
@@ -205,13 +248,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             if (ground + air == 0) return;
             FallenAce.Announce(HellRules.Banner(Waves));
             if (theme == HellTheme.Skyfire) FallenAce.Announce("THEY ARE AIMING AT THE SKY");
-            else if (theme == HellTheme.Horde) FallenAce.Announce("THE GATE IS SCREAMING");
+            else if (theme == HellTheme.Horde) FallenAce.Announce("THE RIFT WIDENS");
             else if (air > 0 && Waves == 1) FallenAce.Announce("SOMETHING IS FLYING OUT OF IT");
             LastTheme = theme;
             Waves++;
             faltered = false;
             portal.SetScale(HellRules.GateScale(Waves));
-            Burst(portal.Root.transform.position);
+            portal.Shockwave();
         }
 
         /// <summary>One unit through the gate: a vehicle rolls out in front of it, an aircraft flies out of the disc.</summary>
@@ -232,7 +275,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 {
                     float speed = CruiseSpeed(flyer);
                     bool rotor = speed < 60f;
-                    Vector3 at = gate.position + forward * (portal.Radius * portal.Scale + 30f) + Vector3.up * (rotor ? 0f : 120f);
+                    Vector3 at = gate.position + forward * (portal.Radius * portal.Scale + 30f) + Vector3.up * (rotor ? 80f : 180f);
                     unit = spawner.SpawnAircraft(null, flyer.unitPrefab, Loadout(flyer), 1f, default, at.ToGlobalPosition(), facing,
                         forward * speed, null, hell, name, 1f, 1f);
                     if (unit != null)
@@ -244,8 +287,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 }
                 else
                 {
-                    Vector3 foot = Ground(gate.position);
-                    Vector3 want = foot + right * Random.Range(-portal.Radius, portal.Radius) * 0.8f + forward * Random.Range(40f, 90f);
+                    Vector3 foot = gate.position - Vector3.up * 3f;
+                    Vector3 want = foot + right * Random.Range(-portal.Radius, portal.Radius) * 0.8f +
+                        forward * (portal.Radius * portal.Scale + Random.Range(40f, 90f));
                     Vector3 at = GroundPlacement.TryPlace(definition, want, facing, out Vector3 free) ? free : Ground(want);
                     unit = spawner.SpawnVehicle(definition.unitPrefab, at.ToGlobalPosition(), facing, Vector3.zero, hell, name, 1f, true, null);
                     if (unit != null)
@@ -341,6 +385,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 if (hq != null && hq != hell)
                     foreach (List<Unit> list in new[] { Army, Air, Wardens })
                         foreach (Unit unit in list) Track(hq, unit);
+            if (GhostSide.Side.HQ != null)
+                foreach (List<Unit> list in new[] { Army, Air, Wardens })
+                    foreach (Unit unit in list) Track(GhostSide.Side.HQ, unit);
             foreach (Unit other in UnitRegistry.allUnits)
             {
                 if (!Enemy(other)) continue;
@@ -363,17 +410,18 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             else track.UpdateInfo(unit.GlobalPosition());
         }
 
-        private static bool Enemy(Unit unit) => unit != null && !unit.disabled && unit.NetworkHQ != null && !HellSide.Side.Owns(unit.NetworkHQ);
+        private static bool Enemy(Unit unit) => unit != null && !unit.disabled && HellSide.IsHostile(unit.NetworkHQ);
 
-        /// <summary>The host's aircraft through the disc between two frames (<see cref="HellRules.Crossed"/>, at the gate's grown size).</summary>
+        /// <summary>The host descending through the horizontal rift's entry height between frames
+        /// (<see cref="HellRules.EnteredRift"/>, at the gate's grown size), before reaching the ground.</summary>
         private static void FlyThrough()
         {
             if (!GameManager.GetLocalAircraft(out global::Aircraft host) || host == null || host.disabled) { haveAlong = false; return; }
             Transform gate = portal.Root.transform;
             Vector3 rel = host.transform.position - gate.position;
-            float along = Vector3.Dot(rel, gate.forward);
-            float across = (rel - gate.forward * along).magnitude;
-            bool crossed = haveAlong && HellRules.Crossed(wasAlong, along, across, portal.Radius * portal.Scale);
+            float along = rel.y;
+            float across = new Vector2(rel.x, rel.z).magnitude;
+            bool crossed = haveAlong && HellRules.EnteredRift(wasAlong, along, across, portal.Radius * portal.Scale);
             wasAlong = along;
             haveAlong = true;
             if (crossed) Enter();
@@ -461,8 +509,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private static Vector3 Ground(Vector3 at)
         {
             var origin = new Vector3(at.x, Datum.LocalSeaY + 9000f, at.z);
-            return Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 18000f, PhysicsLayers.StaticsMask) && hit.point.y > Datum.LocalSeaY
-                ? hit.point : new Vector3(at.x, Datum.LocalSeaY, at.z);
+            for (int i = 0; i < 4 && Physics.Raycast(origin, Vector3.down, out RaycastHit hit, 18000f, PhysicsLayers.StaticsMask); i++)
+            {
+                if (!HellDimension.IsSurface(hit.collider))
+                    return hit.point.y > Datum.LocalSeaY ? hit.point : new Vector3(at.x, Datum.LocalSeaY, at.z);
+                origin = hit.point + Vector3.down;
+            }
+            return new Vector3(at.x, Datum.LocalSeaY, at.z);
         }
 
         private static Vector3 Flat(Vector3 v)
@@ -484,7 +537,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
     {
         public void ResetForScene() => HellGate.Forget();
 
-        private void OnDestroy() => HellGate.Forget();
+        private void OnDestroy() => HellGate.Close(false);
 
         private void Update()
         {

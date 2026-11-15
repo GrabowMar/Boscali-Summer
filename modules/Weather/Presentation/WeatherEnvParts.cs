@@ -310,7 +310,7 @@ namespace BoscaliSummer.Modules.Weather.Presentation
     /// </summary>
     internal sealed class EnvProfile : EnvPart
     {
-        private const float PlotX = 50f, LabelW = 122f, PlotTop = 14f, Height = 132f, BottomMargin = 14f;
+        private const float PlotX = 50f, LabelW = 122f, PlotTop = 14f, Height = 104f, BottomMargin = 14f;
         private const int MaxTicks = 7;
         private readonly TMP_Text[] ticks = new TMP_Text[MaxTicks];
         private readonly TMP_Text topLabel, baseLabel, camLabel, empty, status;

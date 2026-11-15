@@ -6,8 +6,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Spooktober.Patches
 {
-    /// <summary>Hell's Army draws black on the map (deep red when selected) whatever side the viewer is on. Hot path: every map
-    /// icon colour update; one count check while the army is empty.</summary>
+    /// <summary>Hell's units and captured structures use their own violet ink for every viewer.</summary>
     [HarmonyPatch(typeof(UnitMapIcon), "GetColor")]
     internal static class HellMapColourPatch
     {
@@ -19,6 +18,21 @@ namespace BoscaliSummer.Modules.Spooktober.Patches
                     __result = ___isSelected ? HellArmy.MapInkSelected : HellArmy.MapInk;
             }
             catch (Exception e) { PatchGuard.Report("Spooktober.HellMapColour", e); }
+        }
+    }
+
+    // AirbaseMapIcon has its own GetColor, which otherwise draws a hostile captured airfield as friendly.
+    [HarmonyPatch(typeof(AirbaseMapIcon), "GetColor")]
+    internal static class HellAirbaseMapColourPatch
+    {
+        private static void Postfix(AirbaseMapIcon __instance, ref Color __result, bool ___isSelected)
+        {
+            try
+            {
+                if (__instance.airbase != null && HellSide.Side.Owns(__instance.airbase.CurrentHQ))
+                    __result = ___isSelected ? HellArmy.MapInkSelected : HellArmy.MapInk;
+            }
+            catch (Exception e) { PatchGuard.Report("Spooktober.HellAirbaseMapColour", e); }
         }
     }
 }

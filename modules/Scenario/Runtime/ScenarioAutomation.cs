@@ -18,6 +18,24 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             return host.Report();
         }
 
+        /// <summary>Sim-only audio lifetime check: cancel a fresh embedded track through the real disable seam, then resume the host.</summary>
+        public static Dictionary<string, object> Audio(Dictionary<string, object> args)
+        {
+            ScenarioHost host = ScenarioHost.Instance;
+            if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO")) || host == null)
+                return new Dictionary<string, object> { ["ok"] = false, ["error"] = "requires a nomodkit scenario with the Scenario module installed" };
+            string action = args != null && args.TryGetValue("action", out object value) ? value as string : null;
+            if (action == "resume") { host.enabled = true; return host.Report(); }
+            if (action != "cancel" || !host.enabled)
+                return new Dictionary<string, object> { ["ok"] = false, ["error"] = "use cancel on an enabled host, or resume" };
+            host.Music("synthetic-warfront.mp3", 0.7f, false);
+            object pending = host.Report()["audio_requests"];
+            host.enabled = false; // OnDisable must cancel requests and release every mission clip.
+            Dictionary<string, object> report = host.Report();
+            report["requests_before_cancel"] = pending;
+            return report;
+        }
+
         /// <summary>
         /// The scripted world as the game sees it: each named unit (args <c>units</c>, comma-separated) as "x z" or "down" or "absent"; the local
         /// pilot's aircraft; and for every side, how many units of each other side its HQ is tracking (peace means zero).

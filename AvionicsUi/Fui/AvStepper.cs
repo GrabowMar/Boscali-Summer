@@ -27,15 +27,18 @@ namespace NOAvionics
 
         public void Refresh() { if (AvText.Set(value, read?.Invoke())) Changed(); }
 
-        private bool Stacked(float width) => label.text.Length > 0 && AvText.Width(label) + 166f > width;
+        private bool Stacked(float width) => label.text.Length > 0 && AvText.Width(label) + ValueMax + 76f > width;
 
-        private static float ValueWidth(float width) => Mathf.Min(90f, Mathf.Max(1f, width - 68f));
+        /// <summary>The widest the value may be before it wraps (90 by default; a stepper through long names sets more).</summary>
+        public float ValueMax = 90f;
+
+        private float ValueWidth(float width) => Mathf.Min(ValueMax, Mathf.Max(1f, width - 68f));
         private float ControlsHeight(float width) => Mathf.Max(AvGridTokens.Row, AvText.Height(value, ValueWidth(width)) + 8f);
 
         public override float Measure(float width)
         {
             if (Stacked(width)) return AvText.Height(label, width) + 4f + ControlsHeight(width);
-            return Mathf.Max(ControlsHeight(width), AvText.Height(label, Mathf.Max(1f, width - 166f)) + 8f);
+            return Mathf.Max(ControlsHeight(width), AvText.Height(label, Mathf.Max(1f, width - ValueMax - 76f)) + 8f);
         }
 
         public override void Place(AvSlot s)
@@ -44,8 +47,8 @@ namespace NOAvionics
             bool stacked = Stacked(s.W);
             float height = ControlsHeight(s.W), labelH = stacked ? AvText.Height(label, s.W) : s.H;
             float y = stacked ? labelH + 4f : (s.H - height) * 0.5f;
-            AvLay.Place(label.rectTransform, 0f, 0f, stacked ? s.W : Mathf.Max(0f, s.W - 166f), labelH);
-            float groupX = Mathf.Max(0f, s.W - 158f);
+            AvLay.Place(label.rectTransform, 0f, 0f, stacked ? s.W : Mathf.Max(0f, s.W - ValueMax - 76f), labelH);
+            float groupX = Mathf.Max(0f, s.W - ValueMax - 68f);
             AvLay.Place(minus.Rect, groupX, y + (height - AvGridTokens.Row) * 0.5f, 30f, AvGridTokens.Row);
             AvLay.Place(value.rectTransform, groupX + 34f, y, ValueWidth(s.W), height);
             AvLay.Place(plus.Rect, s.W - 30f, y + (height - AvGridTokens.Row) * 0.5f, 30f, AvGridTokens.Row);

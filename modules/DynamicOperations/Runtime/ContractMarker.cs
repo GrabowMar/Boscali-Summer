@@ -31,8 +31,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private const float DetailShare = (DetailSizeFactor + GapFactor * 0.5f) / HeightFactor;
         private const float Bracket = 11f;
         private const float Stroke = 1.25f;
-        private const float ShadeMargin = 60f;
-        private const float ShadeAlpha = 0.3f;
         private const float RingInk = 0.85f;
         private const float MinRingPixels = 16f;
         private const float MaxRingPixels = 2600f;
@@ -85,10 +83,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             label.anchoredPosition = new Vector2(LabelOffsetX, LabelOffsetY);
             labelScale = style.LabelScale > 0.01f ? style.LabelScale : 0.5f;
             label.localScale = new Vector3(labelScale, labelScale, 1f);
-            Image shade = HudSprites.Child(label, name + " Shade", HudSprites.Feather, sliced: true);
-            shade.rectTransform.offsetMin = new Vector2(-ShadeMargin, -ShadeMargin);
-            shade.rectTransform.offsetMax = new Vector2(ShadeMargin, ShadeMargin);
-            shade.color = HudSprites.ShadeTint.WithAlpha(ShadeAlpha);
             title = Text(label, name + " Title", style, textSize);
             detail = Text(label, name + " Detail", style, textSize * DetailSizeFactor);
             detail.rectTransform.anchorMin = detail.rectTransform.anchorMax = new Vector2(0f, 0f);

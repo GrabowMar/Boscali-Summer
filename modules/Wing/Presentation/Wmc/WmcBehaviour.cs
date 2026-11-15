@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// bottom in the order it is used. NOW FLYING says in words what the scope does right now. SCENARIOS are the presets (stances): one
     /// tap flies one for the scope; the one it flies is lit, and SAVE NEW / UPDATE keep the live tuning as a preset. TUNE changes the
     /// scope's AI at once, a setting at a time (the lit or nearest preset's own value is outlined). WING RULES are the whole wing's
-    /// after-action rules, set at once. OVERRIDES lists the aircraft flying settings of their own. Plans are queued and run on ORDERS.</summary>
+    /// after-action rules, set at once. OVERRIDES (only while an aircraft flies settings of its own) lists them. Plans are queued and run on ORDERS.</summary>
     internal sealed class WmcBehaviour : IWmcPage
     {
         private const int MaxOverrides = WcSnapshot.MaxMembers;
@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             nameGate = flow.Add(new WmcCollapsible(nameField));
             var keys = new[] { "W+1", "W+2", "W+3", "W+4", "W+5", "W+6" };
             keyRow = flow.Add(new WmcTuneRow(flow.Content, "WING KEY", keys, PickKey));
-            for (int i = 0; i < keys.Length; i++) keyRow.Options[i].Help = "Wing key + " + (i + 1) + " flies the lit profile (ORDERS' slot " + (i + 1) + ").";
+            for (int i = 0; i < keys.Length; i++) keyRow.Options[i].Help = "Wing key + " + (i + 1) + " flies the lit profile.";
 
             // ---- live tuning of the scope's AI
             tuneSection = flow.Section(AvIcon.AdjustmentsHorizontal, "TUNE", "");
@@ -116,9 +116,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     "Incoming missile: notch, beam or flare out of it.",
                     "Incoming radar missile while ours is in the air: hold heading (chaff) until it is 3 s out, then break.",
                 }, Kind.Missiles, DoctrineAxis.Guard);
-            Add("SPACING", new[] { "CLOSE", "STD", "OPEN" },
-                new[] { "Close: three quarters of the formation spacing.", "Standard formation spacing.", "Open: one and a half times the spacing." },
-                Kind.Axis, DoctrineAxis.Interval);
 
             // ---- the whole wing's rules
             flow.Section(AvIcon.Radio, "WING RULES", "WHOLE WING · AT ONCE");
@@ -144,7 +141,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             overrideSection = flow.Section(AvIcon.Target, "OVERRIDES", "");
             overrides = flow.Add(new OverrideView(flow.Content, ticker, MaxOverrides, BindOverride));
             overrides.Prime(MaxOverrides);
-            flow.Links(("SORTIES", "STR", "BOARD"), ("JOBS", "MIS", "JOBS"));
+            overrideSection.SetShown(false);
         }
 
         private void Add(string key, string[] labels, string[] tips, Kind kind, DoctrineAxis axis)
@@ -494,8 +491,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     ovSub[n] = mask == 0 ? "SAME AS ITS ELEMENT · KEEPS ITS OWN" : StanceWords.ChangedWords(mask, own);
                     ovMember[n++] = m.Aircraft.persistentID.Id;
                 }
-            overrides.SetCount(n, c.Client ? "The host sets each aircraft's own settings." : "Every aircraft flies its element's settings.");
-            overrideSection.SetCaption(n == 0 ? "" : AvNum.Fixed(n, 0) + " AIRCRAFT");
+            overrides.SetCount(n);
+            overrideSection.SetCaption(AvNum.Fixed(n, 0) + " AIRCRAFT");
+            overrideSection.SetShown(n > 0);
             flow.RequestRelayout();
         }
 
@@ -523,12 +521,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcUi.Order(last, () => WingOrders.Run(new WingOrder { Kind = OrderKind.ClearDoctrine, Scope = WingScope.OfMembers(member) }));
         }
 
-        /// <summary>The OVERRIDES lines (a pooled <see cref="AvList"/> that holds the most a wing can have), or the one line that says
-        /// there are none; only the one that shows takes room.</summary>
+        /// <summary>The OVERRIDES lines (a pooled <see cref="AvList"/> that holds the most a wing can have); with none, the part and
+        /// its header are hidden and take no room.</summary>
         private sealed class OverrideView : AvPart
         {
             private readonly AvList list;
-            private readonly WmcLines none;
             private int count;
 
             public readonly AvControl[] Clears;
@@ -537,8 +534,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 Rect = AvLay.Child(parent, "Overrides");
                 Clears = new AvControl[max];
-                none = new WmcLines(Rect, 1, AvTextRole.ProseSmall, "row-sub");
-                ticker?.Register(none);
                 list = new AvList(Rect, ticker, max, binder);
                 SetCount(0);
             }
@@ -549,26 +544,23 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 SetCount(0);
             }
 
-            public void SetCount(int n, string noneText = null)
+            public void SetCount(int n)
             {
                 count = n;
-                if (noneText != null) none.Set(0, noneText);
                 list.SetCount(n);
                 list.Rect.gameObject.SetActive(n > 0);
-                none.Rect.gameObject.SetActive(n == 0);
+                SetShown(n > 0);
             }
 
-            public override float Measure(float width) => count > 0 ? list.Measure(width) : none.Measure(width);
+            public override float Measure(float width) => count > 0 ? list.Measure(width) : 0f;
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
-                var inner = new AvSlot(0f, 0f, s.W, s.H);
-                if (count > 0) list.Place(inner);
-                else none.Place(inner);
+                if (count > 0) list.Place(new AvSlot(0f, 0f, s.W, s.H));
             }
 
-            public override void Restyle() => none.Restyle();
+            public override void Restyle() { }
         }
     }
 }

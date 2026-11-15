@@ -19,7 +19,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
         private static bool InSimRun => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
         private static float locatedX = float.NaN, locatedZ = float.NaN;
 
-        /// <summary>{action: read (default) | locate | kill, unit}: lines, placed, a count per category, newest, offset.</summary>
+        /// <summary>{action: read (default) | locate | kill, unit}: lines, placed, a count per category, newest, offset, and the map's
+        /// field log (shown, text).</summary>
         public static Dictionary<string, object> Step(Dictionary<string, object> args)
         {
             if (!InSimRun) return Failure("TacticalLogProbe", "Step", "requires a nomodkit scenario run");
@@ -36,6 +37,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 return new Dictionary<string, object> { { "ok", true }, { "wrecked", wrecked } };
             }
 
+            // A typed line (category, text), for looks: the feed patch that files real lines is proven by kill.
+            if (action == "add") TacticalLog.Add(Text(args, "category") ?? TacticalLogEntry.News, Text(args, "text") ?? "");
             if (!ModuleServices.TryGet(out ITacticalLog log)) return Failure("TacticalLogProbe", action, "no game log");
             var reply = new Dictionary<string, object> { { "ok", true }, { "lines", log.Entries.Count } };
             foreach (string category in TacticalLogEntry.Categories) reply[category] = 0;
@@ -52,6 +55,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             reply["newest"] = log.Entries.Count > 0 ? log.Entries[0].Category + " " + log.Entries[0].Text : "";
             reply["offset"] = float.IsNaN(locatedX) ? -1f : MapFocus.CentreOffset(locatedX, locatedZ);
             reply["evnHeight"] = NOAvionics.AvConsole.Find("EVN")?.Root.rect.height ?? -1f;   // the left bay, under the ticker
+            reply["fieldLog"] = MfdFieldLog.Shown;   // the map's bottom-right corner log and what it prints
+            reply["fieldLogText"] = MfdFieldLog.BodyText ?? "";
             if (action != "locate") return reply;
 
             if (first == null) return Failure("TacticalLogProbe", "locate", "no line with a place");

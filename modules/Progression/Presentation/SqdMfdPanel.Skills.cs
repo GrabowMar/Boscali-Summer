@@ -28,9 +28,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private readonly List<SkillRow> skillRows = new List<SkillRow>(PerkCatalog.All.Length);
         private readonly List<SkillBranchRow> skillBranches = new List<SkillBranchRow>(8);
         private byte? skillAwaitingConfirmation;
+        private int skillSig;
+        private bool skillSigSet;
 
         private void ResetSkillRows()
         {
+            skillSigSet = false;
             skillRows.Clear();
             skillBranches.Clear();
             skillBoard = null;
@@ -61,7 +64,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 p.Add(new SqdEmptyCard(p.Content, AvIcon.Lock, "NO SKILL CATALOG",
                     "This host has not configured an OPS skill catalog, so there is nothing to unlock."));
-                p.Links(("WING", "WMC", null), ("PERKS", "OPS", "PERKS"));
                 return;
             }
 
@@ -86,7 +88,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             skillConfirmButton.Interactable = false;
             skillConfirmButton.Help = "Commit the selected grade. One pick, no undo.";
             p.Add(detail);
-            p.Links(("WING", "WMC", null), ("PERKS", "OPS", "PERKS"));
         }
 
         private static SkillLane LaneOf(List<SkillLane> lanes, string name)
@@ -173,6 +174,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (requestPending) skillAwaitingConfirmation = null;
 
             PerkView[] perks = view.GetPerks();
+            // Repaint only when a grade, the selection or the picks in hand moved.
+            int sig = Mix(Mix(Mix(17, view.AvailablePoints), skillAwaitingConfirmation ?? -1), (requestPending ? 1 : 0) | (progression.BypassRequirements ? 2 : 0));
+            for (int i = 0; i < perks.Length; i++) sig = Mix(sig, (perks[i].Unlocked ? 1 : 0) | (perks[i].Affordable ? 2 : 0) | (perks[i].Block << 2));
+            if (skillSigSet && sig == skillSig) return;
+            skillSigSet = true;
+            skillSig = sig;
             for (int i = 0; i < skillRows.Count; i++) PaintSkill(skillRows[i], perks);
             for (int i = 0; i < skillBranches.Count; i++) PaintLane(skillBranches[i], perks);
 

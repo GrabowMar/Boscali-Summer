@@ -10,7 +10,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     // EVN DISPATCH's politics: FOR THE CABINET (the open card, its picture and its answers; any pilot answers, else the staff at 0:00) and
-    // LATEST DECISIONS (one line per side; the full record is on LOG). Fed by CabinetDispatch and INationView; hidden while Nation is off.
+    // LATEST DECISIONS (one line per side; the full record is in the map log). Fed by CabinetDispatch and INationView; hidden while Nation is off.
     internal sealed partial class EventsMfdPanel
     {
         private const int CabinetOptions = 3;
@@ -37,10 +37,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 cabinetOptions[i] = p.Add(new AvRow(p.Content));
                 cabinetButtons[i] = cabinetOptions[i].AddTrailing(new AvControl.Spec("CHOOSE", () => Cabinet?.Choose(option), AvButtonStyle.Primary));
             }
-            decisionsSection = p.Section(AvIcon.ListDetails, "LATEST DECISIONS", "ONE PER SIDE · ALL ON LOG");
+            decisionsSection = p.Section(AvIcon.ListDetails, "LATEST DECISIONS", "ONE PER SIDE");
             for (int i = 0; i < latest.Length; i++)
             {
-                latest[i] = p.Add(new AvRow(p.Content, () => AvConsole.Open("FAC", "POLITICS")));
+                latest[i] = p.Add(new AvRow(p.Content));
                 latest[i].BadgeSlot = true;
                 latest[i].Help = "The newest decision of this side, who took it and when. Decisions are taken on FAC POLITICS.";
             }

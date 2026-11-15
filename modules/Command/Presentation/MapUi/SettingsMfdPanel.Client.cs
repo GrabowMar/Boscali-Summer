@@ -9,13 +9,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// <summary>THIS PILOT pages: settings stored on this machine only.</summary>
     internal sealed partial class SettingsMfdPanel
     {
-        private static readonly string[] BackgroundNames = { "MATTE", "CUSTOM" };
-        private static readonly string[] BackgroundBriefs =
-        {
-            "MATTE: shaded instrument surface. Legacy decorative patterns are retired.",
-            "CUSTOM: your own PNG or JPEG from the wallpapers folder; pick it with IMAGE FILE.",
-        };
-
         private static readonly string[] FinishNames = { "CLEAR", "GLASS", "CRT", "CUSTOM" };
         private static readonly string[] FinishBriefs =
         {
@@ -83,19 +76,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => settings.AvionicsBlurBehind.Value, v => settings.AvionicsBlurBehind.Value = v);
             ToggleCell(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
                 () => settings.DisplayAutoLight.Value, v => { settings.DisplayEffects.Value = true; settings.DisplayAutoLight.Value = v; });
+            ToggleCell(flow, page, "STANDING ORDERS", "Each page's usage notes (SOP) turn over in the footer under the status line.",
+                () => settings.PanelOrders.Value, v => settings.PanelOrders.Value = v);
+            ToggleCell(flow, page, "HOVER HELP", "A control's help (TIP) in the footer while the pointer is over it.",
+                () => settings.PanelHoverHelp.Value, v => settings.PanelHoverHelp.Value = v);
             var tone = flow.Add(new SetRingRow(flow.Content));
             PercentRing(flow, tone, page, "UI VOLUME", settings.UiSoundVolume, 0f, 1f, .1f,
                 "Volume of interface clicks and hover sounds. 0% is silent.");
-
-            flow.Section(AvIcon.AdjustmentsHorizontal, "CONSOLE", "EVERY PANEL");
-            ToggleCell(flow, page, "GRID", "Faint grid crosses in the empty part of each page.",
-                () => settings.PanelGrid.Value, v => settings.PanelGrid.Value = v);
-            ToggleCell(flow, page, "STANDING ORDERS", "Each page's usage notes (SOP) turn over in the footer under the status line.",
-                () => settings.PanelOrders.Value, v => settings.PanelOrders.Value = v);
-            ToggleCell(flow, page, "FOOTER CLOCK", "Mission clock, local time and network column at the right of every footer.",
-                () => settings.PanelClock.Value, v => settings.PanelClock.Value = v);
-            ToggleCell(flow, page, "HOVER HELP", "A control's help (TIP) in the footer while the pointer is over it.",
-                () => settings.PanelHoverHelp.Value, v => settings.PanelHoverHelp.Value = v);
 
             BuildBoardRows(flow, page, CPanels);
         }
@@ -131,26 +118,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return -1;
         }
 
-        private void SetBackground(int mode)
-        {
-            settings.DeckGrid.Value = false;
-            settings.CheckerboardOverlay.Value = false;
-            settings.BackgroundImage.Value = mode == 1;
-            if (mode == 1) settings.BackgroundImagePreset.Value = 3;
-        }
-
-        private bool ImageEnabled() => settings.ExpandedMapUi.Value && settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-
-        private int BackgroundIndex() =>
-            Array.IndexOf(BackgroundNames, SettingsChoices.BackgroundName(
-                settings.BackgroundImage.Value, settings.BackgroundImagePreset.Value));
-
         private void BuildMapPage(AvFlow flow, int page)
         {
             Func<bool> expanded = () => settings.ExpandedMapUi.Value;
             Func<string> needExpanded = () => "Turn on expanded layout first.";
 
-            flow.Section(AvIcon.Map2, "MAP CONSOLE", "LAYOUT · TERRAIN · TICKER");
+            flow.Section(AvIcon.Map2, "MAP CONSOLE", null);
             ToggleCell(flow, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
                 () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
             ToggleCell(flow, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
@@ -197,101 +170,38 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "How fast a held-button drag turns and tilts the relief.", relief, needRelief);
             EntryRing(flow, mouse, page, "ZOOM STEP", settings.MapZoomStep, .25f, 3f, .25f, v => AvNum.Fixed(v, 2) + "x",
                 "How far one notch of the mouse wheel zooms the relief.", relief, needRelief);
-
-            // The backdrop controls that only matter for the chosen background appear with it, so a page that
-            // is mostly disabled reasons never builds up.
-            flow.Section(AvIcon.Stack2, "BACKDROP", "BEHIND THE CONSOLE");
-            var background = flow.Add(AvSegmented.Strip(flow.Content, BackgroundNames, BackgroundIndex, i =>
-            {
-                SetBackground(i);
-                Echo("BACKGROUND — " + BackgroundNames[i]);
-                Changed();
-            }));
-            var image = flow.Add(new SetRingRow(flow.Content));
-            PercentRing(flow, image, page, "IMAGE STRENGTH", settings.BackgroundImageOpacity, .05f, 1f, .05f,
-                "How visible the background image is.", ImageEnabled, () => "Choose an image background first.");
-            AvRow imageFile = Stepper(flow, page, "IMAGE FILE", MfdMapDeck.GetCurrentWallpaperFileName,
-                MfdMapDeck.CycleCustomWallpaper,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                () => MfdMapDeck.DiscoveredWallpaperCount > 1,
-                "Local PNG/JPEG files. Use RESCAN after adding or replacing files.", ImageEnabled,
-                () => "Choose CUSTOM as the background. Add files to BepInEx/config/BoscaliSummer/wallpapers.");
-            string[] fits = { "COVER", "FIT", "STRETCH" };
-            AvRow imageFit = Stepper(flow, page, "IMAGE FIT",
-                () => fits[Mathf.Clamp(settings.WallpaperFitMode.Value, 0, 2)],
-                d => settings.WallpaperFitMode.Value = (settings.WallpaperFitMode.Value + d + 3) % 3,
-                () => true, () => true, "COVER crops; FIT keeps the full image; STRETCH fills the screen.",
-                ImageEnabled, () => "Choose CUSTOM as the background first.");
-            AvNote wallNote = new AvNote(flow.Content) { MinHeight = 18f };
-            AvButtons scanRow = new AvButtons(flow.Content, new[]
-            {
-                new AvControl.Spec("RESCAN LOCAL FILES", () =>
-                {
-                    MfdMapDeck.RescanWallpapers();
-                    Echo("RESCAN — " + MfdMapDeck.WallpaperStatus);
-                    Changed();
-                }, AvButtonStyle.Primary, AvIcon.Refresh),
-            });
-            flow.Row(wallNote, scanRow);
-            AvControl scan = scanRow.Controls[0];
-
-            var layout = flow.Add(new SetLayoutPreview(flow.Content), 1f);
-
-            void RefreshBackdrop()
-            {
-                bool custom = settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-                bool isExpanded = settings.ExpandedMapUi.Value;
-                background.Refresh();
-                for (int i = 0; i < background.Options.Length; i++)
-                {
-                    background.Options[i].Interactable = isExpanded;
-                    background.Options[i].Help = isExpanded ? BackgroundBriefs[i] : needExpanded();
-                }
-                image.SetShown(custom);
-                imageFile.SetShown(custom);
-                imageFit.SetShown(custom);
-                wallNote.SetShown(custom);
-                scanRow.SetShown(custom);
-                if (custom) wallNote.Set(MfdMapDeck.WallpaperStatus);
-                bool ready = ImageEnabled();
-                scan.Interactable = ready;
-                scan.Help = ready
-                    ? "Scan up to 512 entries. PNG/JPEG: 16 MB and 4096 pixels per side."
-                    : "Turn on expanded layout and choose CUSTOM first.";
-                layout.Refresh(settings);
-            }
-            RefreshBackdrop();
-            flow.Ticker.Add(page, AvTickRate.Slow, RefreshBackdrop);
         }
 
-        /// <summary>HUD: the TAC BOARD and the visor first (what a pilot tunes most), then flight aids, comms notices, targeting and every key.</summary>
+        /// <summary>HUD: the TAC BOARD first (what a pilot tunes most), then the visor, flight aids, comms notices, targeting and every key.</summary>
         private void BuildHudPage(AvFlow flow, int page)
         {
             BuildTacBoardRows(flow, page);
-            BuildVisorRows(flow, page);
             BuildBoardRows(flow, page, CHud);
-            flow.Section(AvIcon.Target, "TARGETING", "TGT QUICK SLOTS");
+            flow.Section(AvIcon.Map2, "VISOR & TARGETING", null);
+            var level = flow.Add(new SetRingRow(flow.Content));
+            PercentRing(flow, level, page, "TERRAIN GHOST", settings.TerrainGhost, 0f, 1f, .05f,
+                "A faint wire relief of the ground around and below you, over the view. 0% turns it off.");
             ToggleCell(flow, page, "RADIAL PRESETS",
                 "Offer the TGT quick slots as a page in the native cockpit radial menu.",
                 () => settings.TargetPresetWheel.Value, v => settings.TargetPresetWheel.Value = v);
             BuildKeyRows(flow);
         }
 
-        /// <summary>COCKPIT and WORLD: nothing but the rows the owning features publish, and a reset for the page.</summary>
-        private void BuildBoardPage(AvFlow flow, int page, string what)
+        /// <summary>VISUALS: the cockpit feel and the world look, as the owning features publish them, then a reset and the compat-mod links when such a mod is installed.</summary>
+        private void BuildVisualsPage(AvFlow flow, int page)
         {
             bool any = false;
             if (clientSettings != null)
-                foreach (ClientSetting row in clientSettings.Rows) any |= ClientTabOf(row.Section) == page;
+                foreach (ClientSetting row in clientSettings.Rows) any |= ClientTabOf(row.Section) == CVisuals;
             if (!any)
             {
-                flow.Section(page == CCockpit ? AvIcon.WaveSine : AvIcon.CloudRain, what, "UNAVAILABLE");
+                flow.Section(AvIcon.Eye, "VISUALS", "UNAVAILABLE");
                 flow.Add(new AvNote(flow.Content) { MinHeight = 18f }).Set("NOTHING INSTALLED FOR THIS PAGE");
                 return;
             }
-            BuildBoardRows(flow, page, page);
-            flow.Section(AvIcon.Refresh, what + " DEFAULTS", "THIS PAGE ONLY");
-            BoardResetButton(flow, page, what);
+            BuildBoardRows(flow, page, CVisuals);
+            BoardResetButton(flow, CVisuals, "VISUALS");
+            BuildBoardRows(flow, page, CCompat);
         }
 
         /// <summary>Keys the installed features read live, rebound in place.</summary>

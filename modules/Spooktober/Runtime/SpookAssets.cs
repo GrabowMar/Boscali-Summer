@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
     {
         private const string Resource = "BoscaliSummer.Spooktober.spooktober.bundle";
         private static AssetBundle bundle;
-        private static Shader radGhost, hellfire, hellPortal;
+        private static Shader radGhost, hellfire, hellPortal, hellMatter, hellSky, ashSurface, hellInfection;
         private static bool attempted;
 
         public static Shader RadGhost { get { Load(); return radGhost; } }
@@ -18,11 +18,15 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         public static Shader Hellfire { get { Load(); return hellfire; } }
         /// <summary>The hell portal's vortex disc; null when missing (the portal is then its embers only).</summary>
         public static Shader HellPortal { get { Load(); return hellPortal; } }
+        internal static Shader HellMatter { get { Load(); return hellMatter; } }
+        internal static Shader HellSky { get { Load(); return hellSky; } }
+        internal static Shader AshSurface { get { Load(); return ashSurface; } }
+        internal static Shader HellInfection { get { Load(); return hellInfection; } }
 
         internal static void Release()
         {
             if (bundle != null) bundle.Unload(true);
-            bundle = null; radGhost = null; hellfire = null; hellPortal = null; attempted = false;
+            bundle = null; radGhost = null; hellfire = null; hellPortal = null; hellMatter = null; hellSky = null; ashSurface = null; hellInfection = null; attempted = false;
         }
 
         private static void Load()
@@ -40,6 +44,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                         if (shader.name == "Boscali/RadGhost") radGhost = shader;
                         else if (shader.name == "Boscali/Hellfire") hellfire = shader;
                         else if (shader.name == "Boscali/HellPortal") hellPortal = shader;
+                        else if (shader.name == "Boscali/HellMatter") hellMatter = shader;
+                        else if (shader.name == "Boscali/HellSky") hellSky = shader;
+                        else if (shader.name == "Boscali/SootedWasteland") ashSurface = shader;
+                        else if (shader.name == "Boscali/HellInfection") hellInfection = shader;
                     }
             }
             catch (Exception error) { Debug.LogError("[Spooktober] spooktober.bundle: " + error.Message); }

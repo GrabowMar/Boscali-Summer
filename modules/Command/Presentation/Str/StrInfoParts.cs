@@ -7,7 +7,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>
-    /// The INFO tab's chain of command: an OWN / ENEMY switch, the side's officers as a top-down org chart (theater on top, components under it, bases under their own component), and the dossier of the
+    /// The STATUS tab's chain of command: an OWN / ENEMY switch, the side's officers as a top-down org chart (theater on top, components under it, bases under their own component), and the dossier of the
     /// selected officer. Read only: the one action is LOCATE on an enemy officer whose post is on the strike list. The selection and the side are the
     /// panel's own state; every word comes from the model. When there is no staff board the part shows the one stated reason instead.
     /// </summary>

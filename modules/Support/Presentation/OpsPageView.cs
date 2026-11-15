@@ -24,12 +24,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public bool Known;
         public FrontStatus Status;
         public int Grade, Superiority;
-        /// <summary>Alert = the current blocker or recovery line (what is wrong NOW, "NO ACTIVE BLOCKER" otherwise); Event = the newest log row as history, EventAge its age.</summary>
-        public string Word, Directive, Building, BuildNote, Alert, Queue, Event, EventAge;
+        /// <summary>Alert = the current blocker (what is wrong NOW; empty when nothing is).</summary>
+        public string Word, Directive, Building, BuildNote, Alert;
         /// <summary>The front's perk power as the card shows it: <c>POWER ×1.25</c> (empty before the host has spoken).</summary>
         public string Power;
-        /// <summary>The pilot's perks of this front: free to arm now (an armed or pending one is counted apart).</summary>
-        public int Available, ArmedPerks, PendingPerks, Unlocked, QueueCount, FundingPct;
+        public int QueueCount;
         public AvState Tone, AlertTone;
         public ProgrammePhase Phase;
         public float BuildProgress;
@@ -64,7 +63,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
         public int Allocation, PerksReady, PerksTotal, FrontsAhead, Alerts;
         public readonly FrontCardView[] Cards = new FrontCardView[FrontRules.FrontCount];
         public readonly List<PerkRowView> Perks = new List<PerkRowView>(24);
-        /// <summary>Per front: <c>POWER ×1.25 · AHEAD</c>, the line the PERKS tab puts on each group header (empty before the host has spoken).</summary>
+        /// <summary>Per front: <c>POWER ×1.25 · AHEAD</c>, the caption of each PERKS group (empty before the host has spoken).</summary>
         public readonly string[] PowerLine = { "", "", "" };
         public string Words = "";
         public AvState WordsTone = AvState.Ready;
@@ -95,24 +94,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 FrontCardView c = default;
                 c.Front = f; c.Known = known;
                 c.Grade = grades != null && i < grades.Length ? Math.Max(1, grades[i]) : 1;
-                foreach (PerkRowView p in v.Perks)
-                {
-                    if (p.Front != f) continue;
-                    if (p.Armed) c.ArmedPerks++; else if (p.Pending) c.PendingPerks++; else if (p.Enabled) c.Available++;
-                }
                 FrontRow row = known && d != null ? d.Fronts[i] : null;
                 if (row == null)
                 {
                     c.Status = FrontStatus.Waiting; c.Word = "NO LINK"; c.Tone = AvState.Inert; c.Directive = "—"; c.Power = ""; v.PowerLine[i] = "";
-                    c.Building = "WAITING FOR THE HOST"; c.BuildNote = ""; c.Queue = ""; c.Event = ""; c.EventAge = "";
+                    c.Building = ""; c.BuildNote = "";
                     c.Alert = "WAITING FOR HOST" + Dot + "FRONT STATE NOT RECEIVED"; c.AlertTone = AvState.Inert;
                     v.Cards[i] = c;
                     continue;
                 }
                 c.Superiority = row.Superiority;
-                c.FundingPct = row.PriorityPct;
                 c.QueueCount = row.Queue.Count;
-                foreach (CallRow r in CallSheet.Rows) if (r.Front == f && CallGate.Open(r, c.Grade)) c.Unlocked++;
                 c.Word = FrontSuperiority.Word(row.Superiority);
                 c.Power = FrontSuperiority.PowerWord(row.Superiority);
                 v.PowerLine[i] = FrontSuperiority.PowerLine(row.Superiority);
@@ -135,13 +127,12 @@ namespace BoscaliSummer.Modules.Support.Presentation
                         bt = row.Superiority <= -60 ? AvState.Danger : AvState.Caution;
                     }
                 }
-                if (blocker == null) blocker = "NO ACTIVE BLOCKER";
-                else
+                if (blocker != null)
                 {
                     if (conditions > 1) blocker += Dot + "+" + (conditions - 1) + " MORE";
                     blocker = AvStates.Glyph(bt) + blocker;
                 }
-                c.Alert = blocker; c.AlertTone = bt;
+                c.Alert = blocker ?? ""; c.AlertTone = bt;
                 c.Status = !online ? FrontStatus.Offline : conditions > 0 ? FrontStatus.Degraded : FrontStatus.Operational;
                 alerts += conditions;
 
@@ -160,28 +151,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
                     c.BuildProgress = building ? 1f - left / build : q.Percent / 100f;
                     c.BuildNote = building ? FrontRules.Clock(left) + " LEFT" : q.Percent + " % FUNDED";
                 }
-                else { c.Building = "NOTHING QUEUED"; c.BuildNote = ""; }
-
-                // The newest log row, as history with its age (the log is oldest first).
-                if (row.Log.Count > 0)
-                {
-                    FrontLogRow l = row.Log[row.Log.Count - 1];
-                    string call = FrontWords.Callsign(f) + Dot;
-                    string text = FrontWords.Line(f, l, row.DirectiveBy);
-                    if (text.StartsWith(call, StringComparison.Ordinal)) text = text.Substring(call.Length); // the card already carries the codename
-                    c.Event = text.Length > 0 ? text : "NO NEWS";
-                    c.EventAge = FrontRules.Clock(Math.Max(0f, now - l.Time)) + " AGO";
-                }
-                else { c.Event = ""; c.EventAge = ""; }
-
-                // What waits behind the shown programme.
-                string behind = "";
-                for (int q = 0; q < row.Queue.Count; q++)
-                {
-                    if (q == pick) continue;
-                    behind += (behind.Length > 0 ? Dot : "") + FrontRules.Info(row.Queue[q].Id).Name;
-                }
-                c.Queue = behind;
+                else { c.Building = ""; c.BuildNote = ""; }
                 v.Cards[i] = c;
             }
             v.FrontsAhead = ahead;

@@ -49,6 +49,22 @@ namespace BoscaliSummer.Modules.Performance
                 "Unload unused assets and collect garbage on scene transitions " +
                 "(menu/mission loads), never during flight. Frees memory; loads take slightly longer. Client-local.",
                 context.Settings.Performance.CleanupOnSceneChange);
+            context.AddClientSetting("BASE GAME", "LIGHTER LOGS",
+                "Skip stack traces for ordinary Unity logs and warnings. Messages still appear; " +
+                "errors keep their diagnostics. Helps only when logs are frequent. Restores on disable.",
+                context.Settings.Performance.QuietUnityLogs);
+            ClientSettingToggle streaming = context.AddClientSetting("BASE GAME", "TEXTURE STREAMING",
+                "Stream textures that support it to reduce memory pressure. Can cause texture pop-in " +
+                "and extra CPU work. No benefit without streamable textures. Restores on disable.",
+                context.Settings.Performance.TextureStreaming);
+            context.AddClientLevel("BASE GAME", "TEXTURE BUDGET", "Texture memory budget while streaming. " +
+                "Other textures can exceed it; a small budget can blur textures.",
+                context.Settings.Performance.TextureStreamingBudgetMb, 128f, 8192f, 128f,
+                value => value.ToString("F0") + " MB", requires: streaming);
+            context.AddClientSetting("BASE GAME", "UPLOAD BUFFER",
+                "Reserve at least 64 MB for texture and mesh uploads (configurable in the config file). " +
+                "Uses more RAM to avoid buffer resize work during loads. Restores on disable.",
+                context.Settings.Performance.PreallocateUploadBuffer);
             context.AddSceneService<ClientSavings>(92)
                 .Configure(context.Settings.Performance);
             context.AddClientSetting("FAR UNITS", "SKIP IDLE SEARCH",
@@ -62,7 +78,8 @@ namespace BoscaliSummer.Modules.Performance
             context.AddClientSetting("FAR UNITS", "SLEEP FAR UNITS",
                 "Stop drawing aircraft, vehicles and ships more than 15 km away. What you fly, follow or " +
                 "have targeted always draws; a zoomed camera on an untargeted far unit shows nothing.",
-                context.Settings.Performance.SleepDistantUnits, ClientPreset.LastResort);            context.Logger.LogInfo("Performance=client-local Boscali cosmetic budget; game simulation unchanged");
+                context.Settings.Performance.SleepDistantUnits, ClientPreset.LastResort);
+            context.Logger.LogInfo("Performance=client-local Boscali cosmetic budget and opt-in engine tuning; game simulation unchanged");
         }
     }
 }

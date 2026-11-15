@@ -1,10 +1,5 @@
 using NOAvionics;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using BepInEx;
 using BoscaliSummer.Modules.Command.Configuration;
-using BoscaliSummer.Core.Util;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -36,42 +31,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const string TrayName = "NOAvionics.MapTray";
         private const float TrayBleed = 10f;
 
-        public struct WallpaperFileEntry
-        {
-            public string FileName;
-            public string FullPath;
-        }
-
         private static CommandSettings settings;
         private static GameObject backdrop;
         private static GameObject tray;
-        private static Vector2 backdropCanvasSize;
 
         private static Image backdropBaseImage;
-        private static Image backdropUserImage;
         private static Image backdropGradientImage;
         private static Image trayBaseImage;
         private static Image trayGradientImage;
 
-        private static Sprite customWallpaperSprite;
-        private static string customWallpaperPath;
-        private static string failedWallpaperPath;
-        public static string WallpaperStatus { get; private set; } = "Choose CUSTOM on MAP to use local PNG/JPEG files.";
         private static Image terrainImage;
         private static bool terrainWasEnabled;
         private static Color terrainColor;
         private static Image nativeBackground;
         private static Color nativeBackgroundColor;
 
-        private static readonly List<WallpaperFileEntry> discoveredWallpapers = new List<WallpaperFileEntry>();
-        private static bool scannedWallpapers;
-
         public static void Configure(CommandSettings config)
         {
             settings = config;
         }
 
-        /// <summary>Apply the matte instrument finish or a local custom wallpaper.</summary>
+        /// <summary>Apply the matte instrument finish.</summary>
         public static void ApplyAppearance(CommandSettings config = null)
         {
             if (config != null) settings = config;
@@ -88,62 +68,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (backdrop == null) return;
 
             float opacity = settings != null ? settings.DeckOpacity.Value : 0.95f;
-            bool showWallpaper = settings != null && settings.BackgroundImage.Value && settings.BackgroundImagePreset.Value == 3;
-            float wallpaperOpacity = settings != null ? settings.BackgroundImageOpacity.Value : 0.25f;
             float mapTrayOpacity = settings != null ? settings.MapTrayOpacity.Value : 0.15f;
-            int fitMode = settings != null ? settings.WallpaperFitMode.Value : 0;
 
             if (backdropBaseImage != null)
             {
                 backdropBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(opacity);
-            }
-
-            if (backdropUserImage != null)
-            {
-                if (showWallpaper)
-                {
-                    Sprite sprite = LoadCustomWallpaper(out bool isTiled);
-                    if (sprite != null)
-                    {
-                        backdropUserImage.gameObject.SetActive(true);
-                        backdropUserImage.sprite = sprite;
-                        RectTransform imgRt = backdropUserImage.rectTransform;
-                        if (isTiled)
-                        {
-                            AvLay.Fill(imgRt);
-                            backdropUserImage.type = Image.Type.Tiled;
-                            backdropUserImage.preserveAspect = false;
-                        }
-                        else
-                        {
-                            backdropUserImage.type = Image.Type.Simple;
-                            if (fitMode == 0) // Cover (Aspect Fill)
-                            {
-                                backdropUserImage.preserveAspect = false;
-                                ApplyAspectCover(imgRt, sprite, backdropCanvasSize);
-                            }
-                            else if (fitMode == 1) // Fit (Aspect Fit)
-                            {
-                                AvLay.Fill(imgRt);
-                                backdropUserImage.preserveAspect = true;
-                            }
-                            else // Stretch
-                            {
-                                AvLay.Fill(imgRt);
-                                backdropUserImage.preserveAspect = false;
-                            }
-                        }
-                        backdropUserImage.color = Color.white.WithAlpha(wallpaperOpacity);
-                    }
-                    else
-                    {
-                        backdropUserImage.gameObject.SetActive(false);
-                    }
-                }
-                else
-                {
-                    backdropUserImage.gameObject.SetActive(false);
-                }
             }
 
             if (backdropGradientImage != null)
@@ -200,38 +129,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        private static void ApplyAspectCover(RectTransform rt, Sprite sprite, Vector2 canvasSize)
-        {
-            if (rt == null || sprite == null || canvasSize.x <= 1f || canvasSize.y <= 1f) return;
-            float canvasAspect = canvasSize.x / canvasSize.y;
-            float spriteAspect = (float)sprite.rect.width / Mathf.Max(1f, sprite.rect.height);
-
-            rt.anchorMin = new Vector2(0.5f, 0.5f);
-            rt.anchorMax = new Vector2(0.5f, 0.5f);
-            rt.pivot = new Vector2(0.5f, 0.5f);
-            rt.anchoredPosition = Vector2.zero;
-
-            if (spriteAspect >= canvasAspect)
-            {
-                float h = canvasSize.y;
-                float w = h * spriteAspect;
-                rt.sizeDelta = new Vector2(w, h);
-            }
-            else
-            {
-                float w = canvasSize.x;
-                float h = w / spriteAspect;
-                rt.sizeDelta = new Vector2(w, h);
-            }
-        }
-
         /// <summary>Build or update the two canvas-level passive layers.</summary>
         public static void Ensure(Canvas canvas, MfdLayout.Columns columns)
         {
             if (canvas == null) return;
 
             // The nested map canvas can report a stale rect on the first open; the backdrop
-            // grid must span the real UI area, so resolve it the same way the layout does.
+            // must span the real UI area, so resolve it the same way the layout does.
             Vector2 canvasSize = MfdLayout.CanvasSize(canvas);
             if (canvasSize.x <= 1f || canvasSize.y <= 1f) return;
 
@@ -239,7 +143,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             RectTransform trayRect = EnsureCanvasRoot(ref tray, TrayName, canvas);
             if (backdropRect == null || trayRect == null) return;
 
-            ConfigureBackdrop(backdropRect, canvasSize);
+            ConfigureBackdrop(backdropRect);
             ConfigureTray(trayRect, columns);
 
             // The tray shares the map canvas, where sibling order is draw order. Its root is
@@ -256,11 +160,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DestroyOwned(ref backdrop);
             DestroyOwned(ref tray);
             backdropBaseImage = null;
-            backdropUserImage = null;
             backdropGradientImage = null;
             trayBaseImage = null;
             trayGradientImage = null;
-            backdropCanvasSize = Vector2.zero;
 
             if (terrainImage != null)
             {
@@ -276,11 +178,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Reset()
         {
             Restore();
-            UnloadCustomWallpaper();
-            failedWallpaperPath = null;
-            discoveredWallpapers.Clear();
-            scannedWallpapers = false;
-
         }
 
         /// <summary>
@@ -370,7 +267,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return root.GetComponent<RectTransform>();
         }
 
-        private static void ConfigureBackdrop(RectTransform root, Vector2 canvasSize)
+        private static void ConfigureBackdrop(RectTransform root)
         {
             AvLay.Fill(root);
 
@@ -383,17 +280,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             backdropBaseImage.enabled = true;
             AvSurfaceGradient.Apply(backdropBaseImage, Color.white, (Color.white * .72f).WithAlpha(1f));
 
-            if (MfdLayout.Same(backdropCanvasSize, canvasSize) && root.childCount > 0)
-            {
-                ApplyAppearance();
-                return;
-            }
-
-            ClearChildren(root);
-            backdropCanvasSize = canvasSize;
-
-            backdropUserImage = CreateUserImageLayer(root, "UserImageLayer");
-            backdropGradientImage = CreateGradient(root, "ScreenGradient", Color.white.WithAlpha(0.38f));
+            if (backdropGradientImage == null || backdropGradientImage.transform.parent != root)
+                backdropGradientImage = CreateGradient(root, "ScreenGradient", Color.white.WithAlpha(0.38f));
 
             ApplyAppearance();
         }
@@ -435,241 +323,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             image.color = color;
             image.raycastTarget = false;
             return image;
-        }
-
-        private static Image CreateUserImageLayer(RectTransform parent, string name)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image));
-            RectTransform rt = go.GetComponent<RectTransform>();
-            rt.SetParent(parent, worldPositionStays: false);
-            AvLay.Fill(rt);
-
-            Image image = go.GetComponent<Image>();
-            image.type = Image.Type.Simple;
-            image.preserveAspect = false;
-            image.raycastTarget = false;
-            go.SetActive(false);
-            return image;
-        }
-
-        public static int DiscoveredWallpaperCount
-        {
-            get
-            {
-                EnsureWallpapersScanned();
-                return discoveredWallpapers.Count;
-            }
-        }
-
-        public static string GetCurrentWallpaperFileName()
-        {
-            EnsureWallpapersScanned();
-            if (discoveredWallpapers.Count == 0) return "NONE FOUND";
-            string current = settings?.CustomWallpaperFile?.Value;
-            for (int i = 0; i < discoveredWallpapers.Count; i++)
-            {
-                if (string.Equals(discoveredWallpapers[i].FileName, current, StringComparison.OrdinalIgnoreCase))
-                    return discoveredWallpapers[i].FileName;
-            }
-            return discoveredWallpapers[0].FileName;
-        }
-
-        public static void CycleCustomWallpaper(int delta)
-        {
-            EnsureWallpapersScanned();
-            if (discoveredWallpapers.Count == 0 || settings == null) return;
-
-            string current = settings.CustomWallpaperFile.Value;
-            int index = 0;
-            for (int i = 0; i < discoveredWallpapers.Count; i++)
-            {
-                if (string.Equals(discoveredWallpapers[i].FileName, current, StringComparison.OrdinalIgnoreCase))
-                {
-                    index = i;
-                    break;
-                }
-            }
-
-            int newIndex = (index + delta + discoveredWallpapers.Count) % discoveredWallpapers.Count;
-            settings.CustomWallpaperFile.Value = discoveredWallpapers[newIndex].FileName;
-            UnloadCustomWallpaper();
-            ApplyAppearance();
-        }
-
-        public static void RescanWallpapers()
-        {
-            EnsureWallpapersScanned(forceRescan: true);
-            UnloadCustomWallpaper();
-            failedWallpaperPath = null;
-            ApplyAppearance();
-        }
-
-        public static void EnsureWallpapersScanned(bool forceRescan = false)
-        {
-            if (scannedWallpapers && !forceRescan) return;
-            scannedWallpapers = true;
-            discoveredWallpapers.Clear();
-
-            string primaryDir = Path.Combine(Paths.ConfigPath, "BoscaliSummer", "wallpapers");
-            try
-            {
-                if (!Directory.Exists(primaryDir))
-                {
-                    Directory.CreateDirectory(primaryDir);
-                    string readme = Path.Combine(primaryDir, "README.txt");
-                    if (!File.Exists(readme))
-                    {
-                        File.WriteAllText(readme,
-                            "Boscali Summer - Tactical Map Wallpapers\r\n" +
-                            "========================================\r\n\r\n" +
-                            "Place your custom .png, .jpg, or .jpeg images here.\r\n" +
-                            "Recommended resolution: 1920x1080 (or your display resolution).\r\n" +
-                            "Select them in-game via the MFD SET (Settings) panel.\r\n");
-                    }
-                }
-            }
-            catch { }
-
-            string[] candidateDirs = {
-                primaryDir,
-                Path.Combine(Paths.ConfigPath, "BoscaliSummer", "Backgrounds"),
-                Path.Combine(Paths.ConfigPath, "WingCommand", "Backgrounds"),
-                Path.Combine(Paths.ConfigPath, "BoscaliSummer"),
-                Path.Combine(Paths.PluginPath, "BoscaliSummer", "wallpapers"),
-                Path.Combine(Paths.PluginPath, "BoscaliSummer", "Backgrounds"),
-                Path.Combine(Paths.PluginPath, "BoscaliSummer")
-            };
-
-            var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            int visited = 0;
-            for (int d = 0; d < candidateDirs.Length && visited < 512; d++)
-            {
-                string dir = candidateDirs[d];
-                if (!Directory.Exists(dir)) continue;
-
-                try
-                {
-                    foreach (string path in Directory.EnumerateFiles(dir))
-                    {
-                        if (++visited > 512) break;
-                        string ext = Path.GetExtension(path)?.ToLowerInvariant();
-                        if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") continue;
-
-                        string name = Path.GetFileName(path);
-                        if (seenNames.Add(name))
-                        {
-                            discoveredWallpapers.Add(new WallpaperFileEntry
-                            {
-                                FileName = name,
-                                FullPath = path
-                            });
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            discoveredWallpapers.Sort((a, b) => string.Compare(a.FileName, b.FileName, StringComparison.OrdinalIgnoreCase));
-        }
-
-        private static void UnloadCustomWallpaper()
-        {
-            if (customWallpaperSprite != null)
-            {
-                if (customWallpaperSprite.texture != null)
-                    Object.Destroy(customWallpaperSprite.texture);
-                Object.Destroy(customWallpaperSprite);
-                customWallpaperSprite = null;
-                customWallpaperPath = null;
-            }
-        }
-
-        private static Sprite LoadCustomWallpaper(out bool isTiled)
-        {
-            isTiled = false;
-            EnsureWallpapersScanned();
-            if (discoveredWallpapers.Count == 0)
-            {
-                WallpaperStatus = "No images found. Add PNG/JPEG files to BepInEx/config/BoscaliSummer/wallpapers, then RESCAN.";
-                return null;
-            }
-
-            string targetName = settings?.CustomWallpaperFile?.Value;
-            WallpaperFileEntry selected = default;
-            bool found = false;
-
-            if (!string.IsNullOrEmpty(targetName))
-            {
-                for (int i = 0; i < discoveredWallpapers.Count; i++)
-                {
-                    if (string.Equals(discoveredWallpapers[i].FileName, targetName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        selected = discoveredWallpapers[i];
-                        found = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!found)
-            {
-                selected = discoveredWallpapers[0];
-                if (settings != null) settings.CustomWallpaperFile.Value = selected.FileName;
-            }
-
-            if (customWallpaperSprite != null && customWallpaperPath == selected.FullPath)
-                return customWallpaperSprite;
-
-            if (failedWallpaperPath == selected.FullPath) return null;
-            UnloadCustomWallpaper();
-            failedWallpaperPath = selected.FullPath;
-            WallpaperStatus = "Image unavailable or unsupported. Limit: 16 MB, 4096 pixels per side. Replace it and RESCAN.";
-            Texture2D tex = null;
-            try
-            {
-                byte[] data;
-                using (var stream = File.OpenRead(selected.FullPath))
-                    data = EmbeddedResources.ReadAll(stream, 16 * 1024 * 1024);
-                if (data == null || !SettingsChoices.SupportedImage(data)) return null;
-                tex = new Texture2D(2, 2, TextureFormat.RGBA32, mipChain: false)
-                {
-                    filterMode = FilterMode.Bilinear,
-                    wrapMode = TextureWrapMode.Clamp,
-                    hideFlags = HideFlags.HideAndDontSave
-                };
-                if (!ImageConversion.LoadImage(tex, data, markNonReadable: true))
-                {
-                    Object.Destroy(tex);
-                    return null;
-                }
-                customWallpaperSprite = Sprite.Create(
-                    tex,
-                    new Rect(0f, 0f, tex.width, tex.height),
-                    new Vector2(0.5f, 0.5f),
-                    100f,
-                    0u,
-                    SpriteMeshType.FullRect);
-                customWallpaperSprite.hideFlags = HideFlags.HideAndDontSave;
-                customWallpaperPath = selected.FullPath;
-                failedWallpaperPath = null;
-                WallpaperStatus = "Loaded " + selected.FileName + ". RESCAN reloads replaced files.";
-                return customWallpaperSprite;
-            }
-            catch
-            {
-                if (tex != null) Object.Destroy(tex);
-                UnloadCustomWallpaper();
-                return null;
-            }
-        }
-
-        private static void ClearChildren(RectTransform root)
-        {
-            for (int i = root.childCount - 1; i >= 0; i--)
-                Object.Destroy(root.GetChild(i).gameObject);
-            backdropUserImage = null;
-            backdropGradientImage = null;
         }
 
         private static void DestroyOwned(ref GameObject root)

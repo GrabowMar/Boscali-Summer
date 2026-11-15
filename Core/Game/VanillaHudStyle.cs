@@ -62,8 +62,48 @@ namespace BoscaliSummer.Core.Game
             WeaponStatus status = hud != null ? WeaponStatusField?.GetValue(hud) as WeaponStatus : null;
             TextMeshProUGUI label = status != null ? NameTextField?.GetValue(status) as TextMeshProUGUI : null;
             font = label != null ? label.font : null;
-            material = label != null ? label.fontSharedMaterial : null;
+            material = Glow(label != null ? label.fontSharedMaterial : null);
             return font != null;
+        }
+
+        private static readonly System.Collections.Generic.Dictionary<long, Material> glows = new System.Collections.Generic.Dictionary<long, Material>();
+        /// <summary>Each copy's native material, so a copy handed in again is re-tinted from its source.</summary>
+        private static readonly System.Collections.Generic.Dictionary<Material, Material> sourceOf = new System.Collections.Generic.Dictionary<Material, Material>();
+
+        /// <summary>The halo's alpha and spread, and the face's dilate (the native face is thin, -0.19, and frayed on bright cloud once there was no backdrop behind it).</summary>
+        internal const float HaloAlpha = 0.3f, HaloDilate = 0.05f, HaloSoftness = 0.3f, FaceDilate = -0.06f;
+
+        /// <summary>A word in the HUD ink (<see cref="Glow(Material, Color)"/> in <see cref="Colours"/>.AllClear): what a label gets that does not follow its own colour.</summary>
+        internal static Material Glow(Material native) => Glow(native, Colours.AllClear);
+
+        /// <summary>
+        /// The mod's HUD words as light on the visor (2026-11-15, user: no dark shadows, "brighter and very slight glow to imitate augmented reality"): a copy of the native label
+        /// material on TMP's alpha-blended SDF shader (the native one is additive, so ink vanished on bright cloud), a fuller face, and a soft halo of <paramref name="tint"/>
+        /// round each glyph (TMP's underlay, centred: its glow fades out on text this small). The halo stays inside the atlas padding, 1-2 px on screen, and fades with the
+        /// text. One copy per native material and tint (rgb in 16 steps, at most 64: past that the ink one), kept for the session; null in, null out; a copy in is re-tinted from its native.
+        /// </summary>
+        internal static Material Glow(Material native, Color tint)
+        {
+            if (native == null) return null;
+            if (sourceOf.TryGetValue(native, out Material source)) native = source;
+            Color32 c = tint;
+            long key = ((long)native.GetInstanceID() << 16) ^ ((c.r >> 4) << 8 | (c.g >> 4) << 4 | (c.b >> 4));
+            if (glows.TryGetValue(key, out Material m) && m != null) return m;
+            if (glows.Count >= 64 && tint != Colours.AllClear) return Glow(native);
+            m = new Material(native) { name = native.name + " (Boscali AR glow)", hideFlags = HideFlags.HideAndDontSave };
+            Shader sdf = Shader.Find("TextMeshPro/Distance Field");
+            if (sdf != null) m.shader = sdf;
+            m.SetFloat(ShaderUtilities.ID_FaceDilate, FaceDilate);
+            m.EnableKeyword(ShaderUtilities.Keyword_Underlay);
+            m.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(c.r / 255f, c.g / 255f, c.b / 255f, HaloAlpha));
+            m.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
+            m.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
+            m.SetFloat(ShaderUtilities.ID_UnderlayDilate, HaloDilate);
+            m.SetFloat(ShaderUtilities.ID_UnderlaySoftness, HaloSoftness);
+            ShaderUtilities.UpdateShaderRatios(m);
+            glows[key] = m;
+            sourceOf[m] = native;
+            return m;
         }
 
         /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
@@ -170,7 +210,7 @@ namespace BoscaliSummer.Core.Game
                 style = new CockpitStyle
                 {
                     Font = label.font,
-                    FontMaterial = label.fontSharedMaterial,
+                    FontMaterial = Glow(label.fontSharedMaterial),
                     LabelScale = Scale(label.rectTransform, 0.5f)
                 };
                 return style.Font != null;

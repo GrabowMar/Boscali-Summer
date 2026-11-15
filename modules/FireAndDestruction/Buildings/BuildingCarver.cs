@@ -16,7 +16,7 @@ namespace BoscaliSummer.Fire
     /// </summary>
     internal sealed class BuildingCarver : MonoBehaviour, ISceneService
     {
-        private const int MaxOwners = 12, MaxRuins = 6, MaxMoving = 64, MaxLobes = 48, GroundGrid = 6;
+        private const int MaxOwners = 12, MaxRuins = 6, MaxMoving = 36, MaxLobes = 48, GroundGrid = 6;
         // Beyond FarCull the native renderers stand in and far hits skip fragments; chunks and shadows drop sooner.
         // Hold is the groan before a collapse lets go; Sag is how far the sections settle in it.
         private const float FarCull = 1600f, ChunkCull = 600f, ShadowCull = 300f, Hold = 0.6f, Sag = 0.35f;
@@ -27,8 +27,10 @@ namespace BoscaliSummer.Fire
             internal GameObject Root;
             internal Renderer Drawn;
             internal Mesh Mesh;
+            internal Mesh PendingMesh;
+            internal MeshFilter Filter;
             internal Material[] Materials;
-            internal int Version, Applied;
+            internal int Version;
         }
 
         private sealed class Owner
@@ -68,7 +70,7 @@ namespace BoscaliSummer.Fire
             internal Vector3[] Hull; // Shared by spray chunks; scaled by HullScale.
             internal float HullScale = 1f;
             internal float Born, Spin, Radius, ExtentY, Delay, MaxTilt;
-            internal bool Section, Landed, Dusted, Released, Shared;
+            internal bool Section, Landed, Dusted, Released, Shared, Pending;
             internal Vector3 Last;
         }
 
@@ -80,7 +82,12 @@ namespace BoscaliSummer.Fire
             internal bool Pooled; // Apply reads the cutter synchronously, so it can go back after.
         }
 
-        private sealed class Batch { internal int Remaining; internal readonly List<Action> Ready = new List<Action>(); }
+        private sealed class Batch
+        {
+            internal int Remaining;
+            internal readonly List<Action> Ready = new List<Action>();
+            internal readonly List<Moving> Sections = new List<Moving>(6);
+        }
 
         public static BuildingCarver Instance { get; private set; }
         private readonly List<Owner> owners = new List<Owner>(MaxOwners);
@@ -101,10 +108,13 @@ namespace BoscaliSummer.Fire
         private Light[] flashes;
         private readonly float[] flashPeak = new float[3], flashAt = new float[3];
         private int flashHead;
+        private static readonly double MillisecondsPerTick = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
 
         internal double MaxCarveMs { get; private set; }
         internal double MaxApplyMs { get; private set; }
         internal double LastCarveMs { get; private set; }
+        internal double MaxApplyFrameMs { get; private set; }
+        internal int MaxAppliesPerFrame { get; private set; }
         internal int CarveCount { get; private set; }
 
         private void Awake() => Instance = this;
@@ -178,7 +188,7 @@ namespace BoscaliSummer.Fire
         }
 
         internal double CollapseMs { get; private set; }
-        /// <summary>Slowest collapse hand-over: stub upload plus every section mesh, all in one frame.</summary>
+        /// <summary>Slowest collapse reveal; all geometry has already uploaded in budgeted jobs.</summary>
         internal double MaxJoinMs { get; private set; }
 
         private bool CollapseOwner(Owner owner, GameObject nativeWreck, bool animate)
@@ -219,14 +229,30 @@ namespace BoscaliSummer.Fire
             {
                 Part p = part;
                 int version = ++p.Version;
-                Launch(p.Surface, Field(owner, p, CarveField.Kind.Keep, int.MaxValue, true, null, 0), false,
-                    cut => Join(batch, () => { if (version >= p.Applied) { p.Applied = version; cut.Apply(p.Mesh, Vector3.zero); } }, owner));
+                Launch(p.Surface, Field(owner, p, CarveField.Kind.Keep, int.MaxValue, true, null, 0), false, cut =>
+                {
+                    if (p.Root == null || !owners.Contains(owner)) { Join(batch, null, owner); return; }
+                    p.PendingMesh = new Mesh { name = "Collapsed " + p.Mesh.name };
+                    cut.Apply(p.PendingMesh, Vector3.zero);
+                    Join(batch, () =>
+                    {
+                        Mesh stub = p.PendingMesh; p.PendingMesh = null;
+                        if (version != p.Version || p.Root == null) { Destroy(stub); return; }
+                        Destroy(p.Mesh); p.Mesh = stub;
+                        p.Filter.sharedMesh = stub; p.Drawn.sharedMaterials = p.Materials;
+                    }, owner);
+                });
                 if (sites == null) continue;
                 for (int i = 0; i < sites.Length; i++)
                 {
                     int cell = i, seed = random.Next();
                     Launch(p.Surface, Field(owner, p, CarveField.Kind.Section, int.MaxValue, true, sites, cell), false,
-                        cut => Join(batch, () => SpawnSection(owner, p, cut, cell, seed), owner));
+                        cut =>
+                        {
+                            Moving section = SpawnSection(owner, p, cut, seed);
+                            if (section != null) { section.Pending = true; section.Drawn.enabled = false; batch.Sections.Add(section); }
+                            Join(batch, null, owner);
+                        });
                 }
             }
             BuildMound(owner);
@@ -270,7 +296,7 @@ namespace BoscaliSummer.Fire
                 }
             // The upper stub and heap stood on that roof; they go down with it, under the dust.
             if (!owners.Contains(upper)) yield break;
-            foreach (Part part in upper.Parts) { Destroy(part.Root); Destroy(part.Mesh); part.Applied = int.MaxValue; }
+            foreach (Part part in upper.Parts) { Destroy(part.Root); Destroy(part.Mesh); Destroy(part.PendingMesh); }
             upper.Parts.Clear();
             if (upper.Mound != null) Destroy(upper.Mound);
             if (upper.MoundMesh != null) Destroy(upper.MoundMesh);
@@ -346,8 +372,8 @@ namespace BoscaliSummer.Fire
                 int version = ++p.Version;
                 Launch(p.Surface, Field(owner, p, CarveField.Kind.Keep, int.MaxValue, owner.Dead, null, 0), true, cut =>
                 {
-                    if (version < p.Applied) return;
-                    p.Applied = version; cut.Apply(p.Mesh, Vector3.zero);
+                    if (version != p.Version || p.Root == null || !owners.Contains(owner)) return;
+                    Apply(p, cut);
                 });
                 for (int i = 0; seen && i < sites.Length; i++)
                 {
@@ -408,10 +434,15 @@ namespace BoscaliSummer.Fire
 
         private void Join(Batch batch, Action ready, Owner owner)
         {
-            batch.Ready.Add(ready);
+            if (ready != null) batch.Ready.Add(ready);
             if (--batch.Remaining > 0 || !owners.Contains(owner)) return;
             var clock = System.Diagnostics.Stopwatch.StartNew();
             foreach (Action action in batch.Ready) action();
+            // Keep the facade intact while meshes upload, then release every section together.
+            foreach (Moving section in batch.Sections)
+                if (moving.Contains(section) && section.Root != null)
+                { section.Pending = false; section.Born = Time.timeSinceLevelLoad; section.Drawn.enabled = true; }
+            batch.Ready.Clear(); batch.Sections.Clear();
             MaxJoinMs = Math.Max(MaxJoinMs, clock.Elapsed.TotalMilliseconds);
             if (owner.MoundBorn > -50f) owner.MoundBorn = Time.timeSinceLevelLoad + Hold; // Heap rises once the sections let go.
         }
@@ -423,6 +454,19 @@ namespace BoscaliSummer.Fire
         }
 
         private static bool Seen(Owner owner) => EyeDistanceSq(owner.Bounds) < FarCull * FarCull;
+
+        internal static bool InVisualRange(Vector3 worldPoint)
+        {
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+            return camera == null || (camera.transform.position - worldPoint).sqrMagnitude < FarCull * FarCull;
+        }
+
+        private static void Apply(Part part, SurfaceCutter cut)
+        {
+            cut.Apply(part.Mesh, Vector3.zero);
+            part.Filter.sharedMesh = part.Mesh;
+            part.Drawn.sharedMaterials = part.Materials;
+        }
 
         private static float ShakeReach(Owner owner) => 600f + 25f * (owner.Bounds.max.y - owner.Ground);
 
@@ -500,16 +544,14 @@ namespace BoscaliSummer.Fire
                 for (int i = 0; i < surface.Sub.Length; i++) part.Materials[i] = i < native.Length ? native[i] : edge;
                 part.Materials[surface.Sub.Length] = interior;
                 part.Materials[surface.Sub.Length + 1] = edge;
-                part.Root.AddComponent<MeshFilter>().sharedMesh = part.Mesh;
+                // The immutable native mesh stands in until the first cut is ready. No synchronous copy/upload on hit.
+                part.Filter = part.Root.AddComponent<MeshFilter>();
+                part.Filter.sharedMesh = shared;
                 var drawn = part.Root.AddComponent<MeshRenderer>();
-                drawn.sharedMaterials = part.Materials;
+                drawn.sharedMaterials = native;
                 drawn.shadowCastingMode = renderer.shadowCastingMode;
                 drawn.receiveShadows = renderer.receiveShadows;
                 part.Drawn = drawn;
-                SurfaceCutter intact = SurfaceCutter.Rent();
-                intact.Run(surface, null, false); // No carving yet: native triangles, synchronous.
-                intact.Apply(part.Mesh, Vector3.zero);
-                intact.Return();
                 owner.Parts.Add(part);
                 // LOD siblings share the base name; hide them with LOD0 so no intact copy shows through.
                 foreach (MeshFilter sibling in filters)
@@ -661,8 +703,10 @@ namespace BoscaliSummer.Fire
 
         private void Release(Owner owner)
         {
+            for (int i = moving.Count - 1; i >= 0; i--)
+                if (moving[i].Owner == owner && moving[i].Pending) Retire(moving[i]);
             for (int i = 0; i < owner.Hidden.Count; i++) if (owner.Hidden[i] != null) owner.Hidden[i].enabled = owner.HiddenState[i];
-            foreach (Part part in owner.Parts) { Destroy(part.Root); Destroy(part.Mesh); part.Applied = int.MaxValue; }
+            foreach (Part part in owner.Parts) { Destroy(part.Root); Destroy(part.Mesh); Destroy(part.PendingMesh); }
             if (owner.Mound != null) Destroy(owner.Mound);
             if (owner.MoundMesh != null) Destroy(owner.MoundMesh);
             owners.Remove(owner);
@@ -792,34 +836,43 @@ namespace BoscaliSummer.Fire
             piece.Spin = R(90f, 300f);
         }
 
-        private void SpawnSection(Owner owner, Part part, SurfaceCutter cut, int cell, int seed)
+        private Moving SpawnSection(Owner owner, Part part, SurfaceCutter cut, int seed)
         {
             Moving piece = Place(owner, part, cut);
-            if (piece == null) return;
+            if (piece == null) return null;
             var random = new System.Random(seed);
             piece.Section = true;
             Vector3 outward = piece.Start - owner.Bounds.center; outward.y = 0f;
             piece.Outward = outward.sqrMagnitude > 0.01f ? outward.normalized : Vector3.right;
             piece.Axis = Vector3.Cross(Vector3.up, piece.Outward);
-            piece.Delay = Hold + (float)random.NextDouble() * 0.45f + cell * 0.05f;
+            // Lower sections buckle first; the failure travels up the remaining structure.
+            float storey = Mathf.InverseLerp(owner.Ground, owner.Bounds.max.y, piece.Start.y);
+            piece.Delay = Hold + storey * 0.55f + (float)random.NextDouble() * 0.18f;
             piece.MaxTilt = 6f + (float)random.NextDouble() * 26f;
+            return piece;
         }
 
         private void Update()
         {
             float now = Time.timeSinceLevelLoad;
-            for (int i = jobs.Count - 1; i >= 0; i--)
+            long applyStart = System.Diagnostics.Stopwatch.GetTimestamp();
+            int applied = 0;
+            // One mesh can exceed the time target; never add a whole burst of uploads to that same frame.
+            for (int i = 0; i < jobs.Count && applied < 2 && (applied == 0 || (System.Diagnostics.Stopwatch.GetTimestamp() - applyStart) * MillisecondsPerTick < 2.0);)
             {
                 Job job = jobs[i];
-                if (!job.Task.IsCompleted) continue;
+                if (!job.Task.IsCompleted) { i++; continue; }
                 jobs.RemoveAt(i);
                 if (job.Task.IsFaulted) { Plugin.Logger.LogError("Building carve failed: " + job.Task.Exception?.GetBaseException()); continue; }
-                var clock = System.Diagnostics.Stopwatch.StartNew();
-                job.Apply(job.Task.Result);
-                if (job.Pooled) job.Task.Result.Return();
-                MaxApplyMs = Math.Max(MaxApplyMs, clock.Elapsed.TotalMilliseconds);
+                long jobStart = System.Diagnostics.Stopwatch.GetTimestamp();
+                try { job.Apply(job.Task.Result); }
+                finally { if (job.Pooled) job.Task.Result.Return(); }
+                applied++;
+                MaxApplyMs = Math.Max(MaxApplyMs, (System.Diagnostics.Stopwatch.GetTimestamp() - jobStart) * MillisecondsPerTick);
                 LastCarveMs = job.Ms; MaxCarveMs = Math.Max(MaxCarveMs, job.Ms); CarveCount++;
             }
+            if (applied > 0) MaxApplyFrameMs = Math.Max(MaxApplyFrameMs, (System.Diagnostics.Stopwatch.GetTimestamp() - applyStart) * MillisecondsPerTick);
+            MaxAppliesPerFrame = Math.Max(MaxAppliesPerFrame, applied);
             for (int i = moving.Count - 1; i >= 0; i--) if (i < moving.Count) Animate(moving[i], now);
             if (now >= nextCull) { nextCull = now + 0.5f; Cull(); }
             fires.Update(now);
@@ -846,7 +899,7 @@ namespace BoscaliSummer.Fire
         private void Animate(Moving piece, float now)
         {
             if (piece.Root == null) { moving.Remove(piece); return; }
-            if (piece.Landed) return;
+            if (piece.Landed || piece.Pending) return;
             Transform t = piece.Root.transform;
             float time = now - piece.Born;
             if (piece.Section)
@@ -1083,12 +1136,12 @@ namespace BoscaliSummer.Fire
             if (chunkMeshes != null) foreach (Mesh mesh in chunkMeshes) Destroy(mesh);
             if (flashes != null) foreach (Light light in flashes) if (light != null) Destroy(light.gameObject);
             chunkMeshes = null; flashes = null;
-            MaxCarveMs = MaxApplyMs = LastCarveMs = MaxJoinMs = 0; CarveCount = 0;
+            MaxCarveMs = MaxApplyMs = LastCarveMs = MaxJoinMs = MaxApplyFrameMs = 0; CarveCount = MaxAppliesPerFrame = 0;
         }
 
         // ---------- evidence ----------
 
-        internal void ResetMetrics() { MaxCarveMs = MaxApplyMs = 0; }
+        internal void ResetMetrics() { MaxCarveMs = MaxApplyMs = MaxJoinMs = MaxApplyFrameMs = 0; MaxAppliesPerFrame = 0; }
 
         private int StubTriangles()
         {
@@ -1168,6 +1221,7 @@ namespace BoscaliSummer.Fire
                 { "groundError", groundError }, { "collisionFree", collisionFree }, { "parentShift", follows },
                 { "pendingJobs", jobs.Count }, { "carves", CarveCount }, { "maxCarveMs", MaxCarveMs },
                 { "lastCarveMs", LastCarveMs }, { "maxApplyMs", MaxApplyMs },
+                { "maxApplyFrameMs", MaxApplyFrameMs }, { "maxAppliesPerFrame", MaxAppliesPerFrame },
                 { "libraryMs", NativeSurfaceLibrary.LoadMs }, { "libraryMeshes", NativeSurfaceLibrary.Count },
                 { "mound", owners.Exists(o => o.Mound != null) ? 1 : 0 }, { "groundChecked", checkedGround },
                 { "wreckShown", wreckRenderers }, { "moving", moving.Count },

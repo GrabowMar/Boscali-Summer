@@ -19,12 +19,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private AvConsole BuildConsole(RectTransform body, float height, bool server)
         {
-            string[] names = server ? ServerPageNames : ClientPageNames;
-            AvConsole c = AvConsole.Build(body, "SET", "SETTINGS", names.Length, AvTokens.PanelWidth, height);
+            // SERVER is one page, so it has no tab bar.
+            AvConsole c = AvConsole.Build(body, "SET", "SETTINGS", server ? 1 : 5, AvTokens.PanelWidth, height);
 
             // The kit has no slot for a control between the header and the tabs. A hidden metric reserves one
             // metric-height strip there and the mode switch (a module-local part) is drawn over exactly that strip.
-            // The old chip strip (SAVED / HOST) is gone: the switch's status line says the same thing.
             AvMetric[] band = c.Metrics("MODE");
             band[0].SetShown(false);
             var mode = new ModeSwitch(c.Root, SwitchMode);
@@ -32,48 +31,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvTokens.PanelWidth - 2f * AvGridTokens.Pad, AvGridTokens.Metric));
             c.Ticker.Register(mode);
 
-            if (server)
-            {
-                TabHelp.Apply(c.Tabs(
-                        (AvIcon.Flag, "WORLD"),
-                        (AvIcon.Shield, "FORCES"),
-                        (AvIcon.CloudRain, "EFFECTS"),
-                        (AvIcon.ListDetails, "TASKING")),
-                    "Contracts, world events, trenches and urban combat.",
-                    "High command, support call-ins, squad and aces, progression and comms.",
-                    "Fire, destruction and weather the host runs for everyone.",
-                    "Faction objective board. The host issues tasking.");
-                BuildServerGroupPage(c.Page(SWorld), SWorld, SWorld);
-                BuildServerGroupPage(c.Page(SForces), SForces, SForces);
-                BuildServerGroupPage(c.Page(SEffects), SEffects, SEffects);
-                BuildTaskingPage(c.Page(STasking), STasking);
-            }
+            if (server) BuildServerPage(c.Page(SRules), SRules);
             else
             {
                 AvTabBar tabs = c.Tabs(
                     (AvIcon.Typography, "PANELS"),
                     (AvIcon.Map2, "MAP"),
                     (AvIcon.Target, "HUD"),
-                    (AvIcon.WaveSine, "COCKPIT"),
-                    (AvIcon.CloudRain, "WORLD"),
-                    (AvIcon.Gauge, "PERF"),
-                    (AvIcon.Link, "COMPAT"));
+                    (AvIcon.Eye, "VISUALS"),
+                    (AvIcon.Gauge, "PERF"));
                 TabHelp.Apply(tabs,
                     "How every MFD panel looks: colour scheme, screen finish, panel motion and sound, and which screens the bezel offers.",
-                    "Map console layout, terrain, contacts, mouse handling, backdrop and the news ticker, with a layout schematic.",
-                    "Keys, the TAC BOARD, the visor maps, flight aids, comms notices and the radial target presets.",
-                    "What you feel in the cockpit: head motion, shakes, glare, visor, pilot body and cockpit sound.",
-                    "What the world looks like on this machine: sky, rain, sea, world effects, colour grade and mission pictures.",
-                    "One-click quality presets, client work budgets and a live frame-time trace. " +
-                    "Maintenance clears cache or restores factory settings; factory reset requires a game restart.",
-                    "Sharing the game with NoAtmoFX and Kelly's Client Effects: who draws the sky, the rain and the effects both have, and key clashes.");
+                    "Map console layout, terrain, contacts, mouse handling, backdrop and the news ticker.",
+                    "Keys, the TAC BOARD, the visor terrain ghost, flight aids, comms notices and the radial target presets.",
+                    "What you feel and see: head motion, shakes, glare, pilot body, cockpit sound, sky, rain, sea, world effects and colour grade. Compat mod links close the page.",
+                    "One-click quality presets, client work budgets and maintenance. Factory reset requires a game restart.");
                 BuildPanelsPage(c.Page(CPanels), CPanels);
                 BuildMapPage(c.Page(CMap), CMap);
                 BuildHudPage(c.Page(CHud), CHud);
-                BuildBoardPage(c.Page(CCockpit), CCockpit, "COCKPIT");
-                BuildBoardPage(c.Page(CWorld), CWorld, "WORLD");
+                BuildVisualsPage(c.Page(CVisuals), CVisuals);
                 BuildPerformancePage(c.Page(CPerf), CPerf);
-                BuildBoardPage(c.Page(CCompat), CCompat, "COMPAT");
             }
 
             ApplyOrders(c, server);
@@ -100,18 +77,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>
-        /// The two big segments under the header (what you are editing and who can change it) with a status line
-        /// under them: the scope on the left, the role on the right. Not a kit part (the kit has no console-level
-        /// mode control), built from kit v2 controls.
+        /// The two big segments under the header (what you are editing and who can change it). Not a kit part (the kit
+        /// has no console-level mode control), built from kit v2 controls. The footer says what each mode means.
         /// </summary>
         private sealed class ModeSwitch : AvPart
         {
-            private const float ButtonH = 30f, LineH = 15f;
+            private const float ButtonH = 44f;   // fills the strip the console reserves for it
             private readonly AvControl pilot, server;
-            private readonly TMP_Text scope, role;
             private readonly TMP_Text serverGlyph;
-            private bool lockedIcon, hostShown = true;
-            private string shown = "";
+            private bool lockedIcon;
 
             public ModeSwitch(RectTransform parent, Action<bool> pick)
             {
@@ -119,16 +93,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 AvLay.Nest(Rect, true);
                 pilot = AvControl.Make(Rect, new AvControl.Spec("THIS PILOT", () => pick(false), AvButtonStyle.Default, AvIcon.User));
                 server = AvControl.Make(Rect, new AvControl.Spec("SERVER", () => pick(true), AvButtonStyle.Default, AvIcon.Database));
-                pilot.Help = "Settings for your own machine: panels, map, HUD, cockpit, world look and performance. " +
+                pilot.Help = "Settings for your own machine: panels, map, HUD, visuals and performance. " +
                              "Saved automatically and never shared.";
                 server.Help = "Rules of this game. Host-authoritative: the host can change them, " +
                               "everyone else sees them locked.";
                 serverGlyph = server.transform.Find("Icon " + AvIcon.Database)?.GetComponent<TMP_Text>();
-                scope = AvText.Make(Rect, "Scope", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
-                AvText.Fit(scope, false);
-                role = AvText.Make(Rect, "Role", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
-                AvText.Fit(role, false);
-                Restyle();
             }
 
             public void Set(bool serverMode, bool host)
@@ -142,17 +111,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     lockedIcon = locked;
                     AvIcons.Set(serverGlyph, locked ? AvIcon.Lock : AvIcon.Database, AvGridTokens.IconInline);
                 }
-                string text = !serverMode
-                    ? "YOUR MACHINE ONLY · SAVED AUTOMATICALLY"
-                    : host
-                        ? "YOU ARE THE HOST · CHANGES APPLY TO EVERYONE"
-                        : AvStates.Glyph(AvState.Caution) + "LOCKED · THE HOST DECIDES, YOU CAN READ THEM";
-                string who = host ? "HOST" : "CLIENT";
-                if (text == shown && host == hostShown) return;
-                shown = text; hostShown = host;
-                scope.text = text;
-                role.text = who;
-                Restyle();
             }
 
             public override float Measure(float width) => AvGridTokens.Metric;
@@ -163,19 +121,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 float half = (s.W - 4f) * 0.5f;
                 AvLay.Place(pilot.Rect, 0f, 0f, half, ButtonH);
                 AvLay.Place(server.Rect, half + 4f, 0f, half, ButtonH);
-                float y = ButtonH + 2f;
-                AvLay.Place(scope.rectTransform, 2f, y, s.W * 0.78f, LineH);
-                AvLay.Place(role.rectTransform, s.W * 0.78f + 2f, y, s.W * 0.22f - 4f, LineH);
             }
 
             public override void Restyle()
             {
                 pilot.Restyle();
                 server.Restyle();
-                scope.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-                role.color = hostShown
-                    ? AvStyleHost.FuiColor("ready", AvTheme.RailReady)
-                    : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             }
         }
     }

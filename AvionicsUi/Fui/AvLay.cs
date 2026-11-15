@@ -48,8 +48,8 @@ namespace NOAvionics
         }
 
         /// <summary>
-        /// A console's height in the map's left bay, for a screen anywhere under the map canvas: the canvas less the news ticker strip
-        /// on top and the bottom margin (<see cref="AvTokens.BayReserve"/>), between <see cref="AvTokens.PanelHeight"/> and
+        /// A console's height in the map's left bay, for a screen anywhere under the map canvas: the canvas less its top and
+        /// bottom margins (<see cref="AvTokens.BayReserve"/>; the news ticker runs over the map only), between <see cref="AvTokens.PanelHeight"/> and
         /// <see cref="AvTokens.PanelHeightMax"/>. A screen-space canvas is measured from the screen: its rect can still hold the size it had
         /// the last time it was on.
         /// </summary>

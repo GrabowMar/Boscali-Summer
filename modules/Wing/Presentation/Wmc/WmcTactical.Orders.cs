@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>TACTICAL › ORDERS (spec 2026-10-04 §4.2; mockup board/orders.html #p1) on kit v2: the cue line while a map order is armed
     /// (HERE and CANCEL), the command card — 24 keys with the wing-key letter, a group rail, an input mark and an LED
-    /// for what each element flies — then the stance slots (<see cref="WmcTactical"/> .Stance), REACT and the queue lane. A point or area
+    /// for what each element flies — then REACT and the queue lane. A point or area
     /// order latches its key and arms the map; a shift-click (or the QUEUE toggle) adds it to the scope's element lane instead. The
     /// console body scrolls.</summary>
     internal sealed partial class WmcTactical
@@ -43,11 +43,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             cancel.Help = "Disarm the map order (Esc does too).";
             cueRow.Rect.gameObject.SetActive(false);
 
-            // The order keys come straight under the table and say who they go to; the stances follow (they are set less often, and
-            // above the keys they pushed every order off a short panel).
+            // The order keys come straight under the table and say who they go to; the profile slots live on BEHAVIOUR.
             ordersSection = f.Section(AvIcon.Flag, "ORDERS", "");
             BuildGrid(f);
-            BuildStance(f);
         }
 
         private void BuildGrid(AvFlow f)
@@ -197,14 +195,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void RefreshOrders(WmcContext c)
         {
-            string to = "TO " + c.ScopeLabel + " · WING KEY + LETTER";
+            string to = c.CanOrder && c.Count == 0 ? "NO AIRCRAFT IN THE WING" : "TO " + c.ScopeLabel + " · WING KEY + LETTER"; // one shared reason when no key can act
             if (to != ordersNoteShown)
             {
                 ordersNoteShown = to;
                 ordersSection.SetCaption(to);
             }
             RefreshCue(c);
-            RefreshStance(c);
             HelosInScope(c, out bool anyHelo, out bool allHelo);
             SetGrid(allHelo);
             bool scoped = c.Scope.Kind != ScopeKind.Wing;
@@ -238,7 +235,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             if (!cell.Built) return "SOON";
             if (!c.CanOrder) return "";
-            if (c.Count == 0 && cell.Order != GridOrder.Call) return "NO AC";
+            if (c.Count == 0 && cell.Order != GridOrder.Call) return ""; // the section caption says it once
             return cell.Order == GridOrder.Detach ? "SELECT" : "NO HELO";
         }
 

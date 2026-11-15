@@ -410,7 +410,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (ok)
             {
                 if (e.Id == ProgrammeId.LaunchSatellite) f.Book.NoteLog(Front.Space, FrontLogCode.Effect, (int)e.Id, (int)bird, now);
-                Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " complete.");
+                Plugin.Logger?.LogInfo("[Support.Fronts] " + owner.name + " " + FrontRules.Name(e.Front) + " " + FrontWords.Programme(e.Id) + " complete" +
+                    (e.HasPoint ? " (picked " + Mathf.RoundToInt(e.X) + ", " + Mathf.RoundToInt(e.Z) + ")." : "."));
                 return;
             }
             if (string.IsNullOrEmpty(why)) why = FrontWords.Refusal(failure, e.Front);
@@ -602,10 +603,15 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now)
         {
             if (id != ProgrammeId.LaunchSatellite) kind = 0; // a client's kind bits on any other row would ride the mirror and fail every reader's kind check
+            // A pick for a build the quartermaster already queued places that build (the automatic row was built first elsewhere, and its cap refused the pick).
+            if (human && hasPoint && Placement(f.Owner, f.Book.Side(front), id, true, x, z) == FrontOutcome.None && f.Book.AdoptPick(front, id, x, z, now))
+                return FrontOutcome.Queued;
             FrontOutcome r = f.Book.RefusalCode(front, id, kind, f.World);
             if (r == FrontOutcome.None) r = Placement(f.Owner, f.Book.Side(front), id, hasPoint, x, z);
             if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, f.World, now);
             if (!human && (r == FrontOutcome.NoSpot || r == FrontOutcome.NoSite || r == FrontOutcome.NotHeld)) f.BlockedUntil[(int)front, (int)id] = now + BlockedSeconds;
+            if (hasPoint && r != FrontOutcome.None)
+                Plugin.Logger?.LogInfo("[Support.Fronts] " + f.Owner.name + " " + FrontWords.Programme(id) + " at " + Mathf.RoundToInt(x) + ", " + Mathf.RoundToInt(z) + " refused: " + r + ".");
             return r == FrontOutcome.None ? FrontOutcome.Queued : r;
         }
 

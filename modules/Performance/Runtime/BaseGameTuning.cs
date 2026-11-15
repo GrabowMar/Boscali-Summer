@@ -11,7 +11,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 {
     /// <summary>
     /// Explicit opt-in Unity-level tunings: LOD floor, shadow cap, render scale cap, and a
-    /// scene-transition cleanup. Unlike the adaptive cosmetic budget, these touch the
+    /// scene-transition cleanup, log trace cost, mip streaming and upload buffer size.
+    /// Unlike the adaptive cosmetic budget, these touch the
     /// game's own render settings — but only while the toggle is on, only in the cheaper
     /// direction, and only client-locally. Each knob captures the game's value on first
     /// apply and restores it exactly on disable, scene reset keeps enabled knobs applied
@@ -34,6 +35,13 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private float scaleCap = ClientTuningMath.RenderScaleCap;
         private float lastCleanup = -CleanupSpacingSeconds;
         private const float CleanupSpacingSeconds = 30f;
+        private bool tracesApplied;
+        private StackTraceLogType logTraceOriginal, warningTraceOriginal;
+        private bool streamingApplied;
+        private bool streamingOriginal, streamingCamerasOriginal;
+        private float streamingBudgetOriginal, streamingBudgetApplied;
+        private bool uploadApplied;
+        private int uploadOriginal, uploadSizeApplied;
 
         public void Configure(PerformanceSettings config)
         {
@@ -57,7 +65,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private void Update() => ApplyWanted();
 
         private bool Usable =>
-            settings != null && !Application.isBatchMode && !GameManager.IsHeadless;
+            settings != null && isActiveAndEnabled && !Application.isBatchMode && !GameManager.IsHeadless;
 
         private void ApplyWanted()
         {
@@ -68,6 +76,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             HoldShadowCap();
             SyncScale(usable && settings.RenderScaleCap.Value);
             HoldScaleCap();
+            SyncLogTraces(usable && settings.QuietUnityLogs.Value);
+            SyncStreaming(usable && settings.TextureStreaming.Value);
+            SyncUploadBuffer(usable && settings.PreallocateUploadBuffer.Value);
             BaseGameTuningReport.LodFloorActive = lodApplied;
             BaseGameTuningReport.ShadowCapActive = shadowApplied;
         }
@@ -152,7 +163,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
 
         private void SyncScale(bool want)
         {
-            float cap = ClientTuningMath.ClampRenderScale(settings.RenderScale.Value);
+            float cap = want ? ClientTuningMath.ClampRenderScale(settings.RenderScale.Value) : scaleCap;
             // A new share from the config: hand the game value back, then cap again.
             if (want && scaleApplied && cap != scaleCap) SyncScale(false);
             if (want == scaleApplied) return;
@@ -218,11 +229,95 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             }
         }
 
+        // Independent implementations using Unity's public API. No REPOPerformanceKit code or binary.
+        private void SyncLogTraces(bool want)
+        {
+            if (want == tracesApplied) return;
+            if (want)
+            {
+                logTraceOriginal = Application.GetStackTraceLogType(LogType.Log);
+                warningTraceOriginal = Application.GetStackTraceLogType(LogType.Warning);
+                tracesApplied = true;
+                Application.SetStackTraceLogType(LogType.Log, StackTraceLogType.None);
+                Application.SetStackTraceLogType(LogType.Warning, StackTraceLogType.None);
+            }
+            else
+            {
+                tracesApplied = false;
+                if (Application.GetStackTraceLogType(LogType.Log) == StackTraceLogType.None)
+                    Application.SetStackTraceLogType(LogType.Log, logTraceOriginal);
+                if (Application.GetStackTraceLogType(LogType.Warning) == StackTraceLogType.None)
+                    Application.SetStackTraceLogType(LogType.Warning, warningTraceOriginal);
+            }
+        }
+
+        private void SyncStreaming(bool want)
+        {
+            want = want && SystemInfo.supportsMipStreaming;
+            float budget = want
+                ? FiniteRange(settings.TextureStreamingBudgetMb.Value, 128f, 8192f, 1024f)
+                : streamingBudgetApplied;
+            if (want && streamingApplied && budget != streamingBudgetApplied) SyncStreaming(false);
+            if (want == streamingApplied) return;
+            if (want)
+            {
+                streamingOriginal = QualitySettings.streamingMipmapsActive;
+                streamingBudgetOriginal = QualitySettings.streamingMipmapsMemoryBudget;
+                streamingCamerasOriginal = QualitySettings.streamingMipmapsAddAllCameras;
+                streamingBudgetApplied = budget;
+                streamingApplied = true;
+                QualitySettings.streamingMipmapsMemoryBudget = budget;
+                // Include cockpit and sensor feeds as well as the main view.
+                QualitySettings.streamingMipmapsAddAllCameras = true;
+                QualitySettings.streamingMipmapsActive = true;
+                Plugin.Logger?.LogInfo("Performance: texture streaming on; " + Texture.streamingTextureCount +
+                    " streamable textures currently loaded. Only textures built for streaming can benefit.");
+            }
+            else
+            {
+                streamingApplied = false;
+                if (QualitySettings.streamingMipmapsActive)
+                    QualitySettings.streamingMipmapsActive = streamingOriginal;
+                if (QualitySettings.streamingMipmapsMemoryBudget == streamingBudgetApplied)
+                    QualitySettings.streamingMipmapsMemoryBudget = streamingBudgetOriginal;
+                if (QualitySettings.streamingMipmapsAddAllCameras)
+                    QualitySettings.streamingMipmapsAddAllCameras = streamingCamerasOriginal;
+            }
+        }
+
+        private void SyncUploadBuffer(bool want)
+        {
+            int size = want
+                ? Mathf.RoundToInt(FiniteRange(settings.UploadBufferMb.Value, 16f, 256f, 64f))
+                : uploadSizeApplied;
+            if (want && uploadApplied && Math.Max(uploadOriginal, size) != uploadSizeApplied) SyncUploadBuffer(false);
+            if (want == uploadApplied) return;
+            if (want)
+            {
+                uploadOriginal = QualitySettings.asyncUploadBufferSize;
+                uploadSizeApplied = Math.Max(uploadOriginal, size);
+                uploadApplied = true;
+                QualitySettings.asyncUploadBufferSize = uploadSizeApplied;
+            }
+            else
+            {
+                uploadApplied = false;
+                if (QualitySettings.asyncUploadBufferSize == uploadSizeApplied)
+                    QualitySettings.asyncUploadBufferSize = uploadOriginal;
+            }
+        }
+
+        private static float FiniteRange(float value, float min, float max, float fallback) =>
+            float.IsNaN(value) || float.IsInfinity(value) ? fallback : Mathf.Clamp(value, min, max);
+
         private void RestoreAll()
         {
             SyncLod(false);
             SyncShadow(false);
             SyncScale(false);
+            SyncLogTraces(false);
+            SyncStreaming(false);
+            SyncUploadBuffer(false);
             BaseGameTuningReport.LodFloorActive =
                 BaseGameTuningReport.ShadowCapActive = false;
         }

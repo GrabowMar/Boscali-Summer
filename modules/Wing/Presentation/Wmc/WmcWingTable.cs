@@ -46,7 +46,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly int[] perElement = new int[MaxElements];
         private int count, shown = -1;
         private bool collapsed, collapsible, seatsOn, allLatched, summaryHover;
-        private float measuredWidth = 464f;
+        private float measuredWidth = AvTokens.PanelWidth - 16f;
         private string alertWord = "ALL CLEAR";
         private AvState alertState = AvState.Ready;
         private WmcContext last;

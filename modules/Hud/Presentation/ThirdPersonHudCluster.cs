@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             WeaponStatus weaponStatus = StatusPanel.WeaponStatusField?.GetValue(hud) as WeaponStatus;
             TextMeshProUGUI nameLabel = weaponStatus != null ? StatusPanel.NameTextField?.GetValue(weaponStatus) as TextMeshProUGUI : null;
             font = nameLabel != null ? nameLabel.font : null;
-            fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
+            fontMaterial = BoscaliSummer.Core.Game.VanillaHudStyle.Glow(nameLabel != null ? nameLabel.fontSharedMaterial : null);
 
             var rootObject = new GameObject("BoscaliWingviewCluster", typeof(RectTransform));
             root = (RectTransform)rootObject.transform;

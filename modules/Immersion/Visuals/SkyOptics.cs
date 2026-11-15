@@ -1,5 +1,6 @@
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -39,35 +40,42 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Light sun = RenderSettings.sun;
             if (!enabled || cam == null || sun == null || !haveSky) { Fade(0f, dt); return; }
             if (halo == null && !Build()) return;
-            Vector3 eye = cam.transform.position, toSun = -sun.transform.forward;
+            Vector3 eye = cam.cameraToWorldMatrix.MultiplyPoint3x4(Vector3.zero), toSun = -sun.transform.forward;
             float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
             bool day = elevation > 2f;
+            SunDiscMath.Transmission(elevation, cameraAltitude, out float sunR, out float sunG, out float sunB);
+            float sunlight = .2126f * sunR + .7152f * sunG + .0722f * sunB;
 
             // Halo and sundogs: thin cloud between you and a sun up in the sky (cirrostratus), not a solid deck.
-            float thin = day ? Bell(sky.Cover, .15f, .5f, .85f) : 0f;
-            Ease(halo, thin * .55f, dt);
+            // The weather view exposes the lowest cloud layer. Only infer ice optics when that layer is high
+            // and still above the eye; ordinary water-cloud cover alone must not create a 22 degree halo.
+            float ice = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(4500f, 7000f, sky.CloudBase));
+            float belowIce = Mathf.InverseLerp(sky.CloudBase, sky.CloudBase - 400f, cameraAltitude);
+            float thin = day ? Bell(sky.Cover, .15f, .45f, .8f) * ice * belowIce * sunlight : 0f;
+            Ease(halo, thin * .32f, dt);
             Place(halo, eye, toSun, 25f, 1f);
             float dogs = thin * Mathf.InverseLerp(30f, 8f, elevation);   // sundogs need a low sun
-            Ease(dogLeft, dogs * .8f, dt);
-            Ease(dogRight, dogs * .8f, dt);
+            Ease(dogLeft, dogs * .55f, dt);
+            Ease(dogRight, dogs * .55f, dt);
             Vector3 flat = new Vector3(toSun.x, 0f, toSun.z).normalized;
             float spread = 22f / Mathf.Max(.35f, Mathf.Cos(elevation * Mathf.Deg2Rad));
             Vector3 up = Vector3.up * toSun.y;
-            Place(dogLeft, eye, (Quaternion.AngleAxis(-spread, Vector3.up) * flat * Mathf.Sqrt(1f - toSun.y * toSun.y) + up).normalized, 6f, 1f);
-            Place(dogRight, eye, (Quaternion.AngleAxis(spread, Vector3.up) * flat * Mathf.Sqrt(1f - toSun.y * toSun.y) + up).normalized, 6f, -1f);
+            Place(dogLeft, eye, (Quaternion.AngleAxis(-spread, Vector3.up) * flat * Mathf.Sqrt(1f - toSun.y * toSun.y) + up).normalized, 6f, -1f);
+            Place(dogRight, eye, (Quaternion.AngleAxis(spread, Vector3.up) * flat * Mathf.Sqrt(1f - toSun.y * toSun.y) + up).normalized, 6f, 1f);
 
             // Rainbow: sun out where you are (below 42 degrees), rain falling on the far side.
-            float rainbow = day && elevation < 42f ? Mathf.Clamp01(rainAhead * 4f) * Mathf.InverseLerp(.9f, .55f, sky.Cover) : 0f;
-            Ease(bow, rainbow * .7f, dt);
+            float lowAir = Mathf.InverseLerp(12000f, 7000f, cameraAltitude);
+            float rainbow = day && elevation < 42f ? Mathf.Clamp01(rainAhead * 4f) * Mathf.InverseLerp(.9f, .55f, sky.Cover) * lowAir : 0f;
+            Ease(bow, rainbow * .5f * sunlight, dt);
             Place(bow, eye, -toSun, 55f, 1f);
 
             // Glory: above a cloud deck with the sun behind you; the ring sits round your shadow on the cloud.
             float above = cameraAltitude - sky.CloudTop;
             float glow = day && elevation < 60f && sky.Cover > .45f && above > 30f && above < 3000f ? Mathf.InverseLerp(3000f, 600f, above) : 0f;
-            Ease(glory, glow * .8f, dt);
+            Ease(glory, glow * .55f * sunlight, dt);
             Place(glory, eye, -toSun, 7f, 1f);
 
-            Meteor(eye, !day && elevation < -8f && sky.Cover < .45f, dt);
+            Meteor(eye, !day && elevation < -10f && sky.Cover < .35f && cameraAltitude < 18000f, dt);
         }
 
         private void Meteor(Vector3 eye, bool clearNight, float dt)

@@ -481,7 +481,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                     Put(ref r.CostText, priced ? N(Whole(c.Cost, true)) : StrWords.Dash);
                     Put(ref r.Cooldown, wait);
                     Put(ref r.Ready, ready);
-                    Put(ref r.StateText, !priced ? "NO PRICE" : f.DonationForbidden ? "FORBIDDEN" : wait < 0 ? "CHECKING" : wait > 0 ? "READY IN " + Clock(wait) :
+                    Put(ref r.StateText, !priced ? "NO PRICE" : f.DonationForbidden ? "" : wait < 0 ? "CHECKING" : wait > 0 ? "READY IN " + Clock(wait) :
                         c.Cost <= funds ? "READY" : "SHORT " + N(Whole(c.Cost - funds, true)));
                 }
                 Put(ref v.RowCount, count);

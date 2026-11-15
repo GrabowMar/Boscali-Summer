@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // SUPPLY step 1 AIRFRAME (every listed airframe as a tile, no paging) and step 3 FIT & FUEL (two labelled rows and EDIT LOADOUT ›).
+    // SUPPLY step 1 AIRFRAME (every listed airframe as a tile, no paging) and step 3 FIT & FUEL (two labelled rows and EDIT LOADOUT).
     internal sealed partial class WmcSupply
     {
         private WmcAirGrid tiles;
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         {
             "AUTO: the game arms it for the role it is called for.",
             "YOUR LOADOUT: the stores your own aircraft carries now, where this airframe can take them.",
-            "CUSTOM: this airframe's loadout built on LOADOUT.",
+            "CUSTOM: this airframe's loadout built with EDIT LOADOUT.",
         };
 
         private WmcHeadBar fitHead;
@@ -102,7 +102,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             var fuel = new string[SupplyWords.FuelSteps.Length];
             for (int i = 0; i < fuel.Length; i++) fuel[i] = SupplyWords.FuelSteps[i] + " %";
             fuelRow = f.Add(new WmcTuneRow(f.Content, "FUEL", fuel, SetFuel));
-            editButton = f.Buttons(new AvControl.Spec("EDIT LOADOUT ›", EditFit, AvButtonStyle.Default, AvIcon.Stack2)).Controls[0];
+            editButton = f.Buttons(new AvControl.Spec("EDIT LOADOUT", EditFit, AvButtonStyle.Default, AvIcon.Stack2)).Controls[0];
         }
 
         /// <summary>The selected airframe's fit (AUTO, YOUR LOADOUT, CUSTOM once LOADOUT has built one — shown greyed with how to get
@@ -133,10 +133,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvControl c = fitRow.Options[i];
                 bool on = why == null && (i < 2 || custom != null);
                 c.Interactable = on;
-                c.Help = why ?? (on ? FitTips[i] : "No custom loadout for this airframe yet: build one with EDIT LOADOUT ›.");
+                c.Help = why ?? (on ? FitTips[i] : "No custom loadout for this airframe yet: build one with EDIT LOADOUT.");
             }
             editButton.Interactable = why == null;
-            editButton.Help = why ?? "Open LOADOUT on this airframe.";
+            editButton.Help = why ?? "Show this airframe's hardpoints, stores and livery to edit.";
             fuelRow.Show(SupplyWords.FuelIndex(fuel), -1, false);
             foreach (AvControl c in fuelRow.Options)
             {
@@ -152,14 +152,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WmcPanel.Instance?.Refresh();
         }
 
-        /// <summary>EDIT LOADOUT ›: LOADOUT opens on the selected airframe.</summary>
+        /// <summary>EDIT LOADOUT: the selected airframe's hardpoints, stores and livery open (or fold away) under FIT &amp; FUEL.</summary>
         private void EditFit()
         {
             if (client || selected == null) return;
-            WmcPanel panel = WmcPanel.Instance;
-            if (panel == null) return;
-            panel.Show(WmcTabs.Loadout);
-            panel.Refresh();
+            editButton.Latched = !loadout.IsOpen;
+            loadout.SetOpen(editButton.Latched);
+            WmcPanel.Instance?.Refresh();
         }
 
         private void SetFuel(int step)

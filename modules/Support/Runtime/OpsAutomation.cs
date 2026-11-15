@@ -60,6 +60,11 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     request = m.FrontSetDirective((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (FrontDirective)Mathf.Clamp((int)Number(args, "directive", 1f), 0, 6));
                     break;
                 case "queue": // optional kind (satellite) and a picked point when both x and z are given, else automatic placement
+                    if (Has(args, "bearing") && Has(args, "metres") && NearHeldBase(Number(args, "bearing", 0f), Number(args, "metres", 1500f), out float px, out float pz))
+                    {   // dev: a pick at a bearing and range from the pilot's nearest held land airbase (the log names the point, to compare with the "built at" line)
+                        args["x"] = px; args["z"] = pz;
+                        Plugin.Logger?.LogInfo("[Support.Sim] picked " + Mathf.RoundToInt(px) + ", " + Mathf.RoundToInt(pz));
+                    }
                     request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
                         (byte)Mathf.Clamp((int)Number(args, "kind", 0f), 0, 3), Has(args, "x") && Has(args, "z"), Number(args, "x", 0f), Number(args, "z", 0f));
                     break;
@@ -69,7 +74,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     var donateId = (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1);
                     if (m.FrontMirror.Known)
                         foreach (FrontQueueRow q in m.FrontMirror.State.Fronts[(int)donateFront].Queue)
-                            if (q.Id == donateId) { request = m.FrontDonate(donateFront, q.Row, (int)Number(args, "amount", 25f)); break; }
+                            if (q.Id == donateId && (!Has(args, "picked") || q.HasPoint)) { request = m.FrontDonate(donateFront, q.Row, (int)Number(args, "amount", 25f)); break; }
                     break;
                 case "sync":
                     m.FrontFeed.Want(true); m.CyberFeed.Want(true); m.SofFeed.Want(true); m.OpsFeed.Want(true);
@@ -534,6 +539,29 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private static bool haveLine;
         private static readonly List<Unit> followed = new List<Unit>(24);
         private static readonly Dictionary<uint, Vector2> firstLive = new Dictionary<uint, Vector2>(), firstContact = new Dictionary<uint, Vector2>();
+
+        /// <summary>Dev: the point <paramref name="metres"/> out on <paramref name="bearing"/> (degrees, 0 = north) from the local pilot's nearest held land airbase, in global metres.</summary>
+        private static bool NearHeldBase(float bearing, float metres, out float x, out float z)
+        {
+            x = z = 0f;
+            FactionHQ hq = SceneSingleton<DynamicMap>.i != null ? SceneSingleton<DynamicMap>.i.HQ : null;
+            if (hq == null || FactionRegistry.airbaseLookup == null) return false;
+            Vector3 me = Camera.main != null ? Camera.main.transform.position : Vector3.zero;
+            Airbase best = null;
+            float bestD = float.MaxValue;
+            foreach (Airbase a in FactionRegistry.airbaseLookup.Values)
+            {
+                if (a == null || a.disabled || a.AttachedAirbase || a.CurrentHQ != hq || a.center == null) continue;
+                float d = (a.center.position - me).sqrMagnitude;
+                if (d < bestD) { bestD = d; best = a; }
+            }
+            if (best == null) return false;
+            GlobalPosition c = best.center.position.ToGlobalPosition();
+            float r = bearing * Mathf.Deg2Rad;
+            x = (float)c.x + Mathf.Sin(r) * metres; z = (float)c.z + Mathf.Cos(r) * metres;
+            Plugin.Logger?.LogInfo("[Support.Sim] base " + best.name + " at " + Mathf.RoundToInt((float)c.x) + ", " + Mathf.RoundToInt((float)c.z));
+            return true;
+        }
 
         private static MapFrame Theatre()
         {

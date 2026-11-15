@@ -58,10 +58,14 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         /// no renderer is left on a destroyed shader; a reload then loads the bundle afresh.</summary>
         private void OnDestroy()
         {
+            HellGate.Close(false);
             worn.Clear();
             RadGhostLook.RemoveAll();
             HellPortal.CloseAll();
             HellArmy.Clear();
+            HellMeshes.Release();
+            HellMaterials.Release();
+            HellGroundSurface.Release();
             SpookAssets.Release();
         }
     }

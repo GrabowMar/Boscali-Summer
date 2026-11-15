@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Hook for the unattended MIS check: <c>Open {page}</c> maximises the map, presses the MIS rail key (the click path) and
-    /// shows that page (0 JOBS, 1 OBJECTIVES, 2 BRIEF); <c>Pick {index}</c> clicks a job card, <c>Act {index}</c> its act button; <c>Read</c>
+    /// shows that page (0 JOBS, 1 BRIEF); <c>Pick {index}</c> clicks a job card, <c>Act {index}</c> its act button; <c>Read</c>
     /// reports the page and its text. Dev tooling.
     /// </summary>
     public static class MisAutomation

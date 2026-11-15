@@ -64,8 +64,8 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
             string hint = slot % 4 == 3
                 ? Whispers[(slot / 4) % Whispers.Length]
                 : SpookMenu.SpawnBlocked(GameAccess.IsServer())
-                    ? "Only the host can spawn. Your chain still counts."
-                    : "SPAWN drops a boss ahead of you. One at a time.";
+                    ? "Only the host can summon. Your defeats still count."
+                    : "Banishing ends an encounter without recording a defeat.";
             foreach (var message in messages)
                 message.Value.Set(message.Key == messagePage && now < lineUntil ? line : message.Key == menuPage ? hint : "", AvState.Info);
         }

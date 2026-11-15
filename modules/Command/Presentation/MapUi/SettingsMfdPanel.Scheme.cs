@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildSchemeSection(AvFlow flow, int page)
         {
-            flow.Section(AvIcon.AdjustmentsHorizontal, "COLOUR SCHEME", "EVERY PANEL · SAVED");
+            flow.Section(AvIcon.AdjustmentsHorizontal, "COLOUR SCHEME", null);
             SetSchemeBoard board = flow.Add(new SetSchemeBoard(flow.Content, () => (int)settings.AvionicsTheme.Value, i =>
             {
                 settings.AvionicsTheme.Value = (AvThemeId)i;
@@ -54,50 +54,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
 
-        /// <summary>Standing orders for every SET page; the console footer shows them one at a time.</summary>
+        /// <summary>One standing order per SET page; the console footer shows it under the status line.</summary>
         private static void ApplyOrders(AvConsole c, bool server)
         {
             if (server)
             {
-                string[] rules =
-                {
-                    "The host sets these rules for every pilot on the net.",
-                    "A client reads them locked; ask the host to change one.",
-                    "Each change is logged under SESSION CHANGES with its age.",
-                };
-                c.Orders(SWorld, rules);
-                c.Orders(SForces, rules);
-                c.Orders(SEffects, rules);
-                c.Orders(STasking,
-                    "The host issues faction tasking from this board.",
-                    "Pilots take and fly the tasks from the MIS console.");
+                c.Orders(SRules, "The host sets these rules for every pilot on the net.");
                 return;
             }
-            c.Orders(CPanels,
-                "Pick a scheme, then a finish: every console repaints at once.",
-                "CUSTOM opens the four finish dials; GLASS puts them back.",
-                "Caution stays amber and danger red in every scheme.");
-            c.Orders(CMap,
-                "EXPANDED LAYOUT off returns the game's own map screen.",
-                "Map layers (industry, supply, roads) live on the MAP bezel.",
-                "Custom backdrops come from the wallpapers folder; RESCAN after adding one.");
-            c.Orders(CHud,
-                "The TAC BOARD takes a change on its next tick, in flight.",
-                "Every key the mod reads is at the foot of this page.");
-            c.Orders(CCockpit,
-                "Every cue on this page is felt by this pilot only.",
-                "Turn a single cue down before you switch the whole set off.");
-            c.Orders(CWorld,
-                "World looks are drawn on this machine only; the host's weather is the same.",
-                "PERF presets also set the costly looks on this page.");
-            c.Orders(CCompat,
-                "Rows unlock when the other mod is installed.",
-                "Each effect has one owner: the other side's copy is switched off.",
-                "Changes write the other mod's own config file.");
-            c.Orders(CPerf,
-                "Watch FRAME TIME while you change a budget.",
-                "A preset is a starting point: tune single switches after it.",
-                "Changes apply in this mission; no restart.");
+            c.Orders(CPanels, "Pick a scheme, then a finish: every console repaints at once.");
+            c.Orders(CMap, "EXPANDED LAYOUT off returns the game's own map screen.");
+            c.Orders(CHud, "The TAC BOARD takes a change on its next tick, in flight.");
+            c.Orders(CVisuals, "Every cue on this page is felt by this pilot only.");
+            c.Orders(CPerf, "A preset is a starting point: tune single switches after it.");
         }
 
         private SetRingCell HueRing(AvFlow flow, SetRingRow row, int page, string title, ConfigEntry<float> entry,

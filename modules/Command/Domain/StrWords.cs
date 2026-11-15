@@ -171,21 +171,5 @@ namespace BoscaliSummer.Modules.Command.Domain
                 default: return "";
             }
         }
-
-        /// <summary>Label of the no-opening checklist row an engine reason belongs to. Six rows; a call-off and a cautious posture share the last.</summary>
-        public static string CheckLabel(TheaterEmptyReason reason)
-        {
-            switch (reason)
-            {
-                case TheaterEmptyReason.StaffFault: return "STAFF RUNNING";
-                case TheaterEmptyReason.NoTerritoryField: return "FRONT LINE DRAWN";
-                case TheaterEmptyReason.NoFronts: return "A FRONT TO WORK";
-                case TheaterEmptyReason.NoFriendlyGroundNearFront: return "GROUND FORCE WITHIN REACH OF A FRONT";
-                case TheaterEmptyReason.FrontsQuiet: return "HOSTILE CONTACT TO ANSWER";
-                case TheaterEmptyReason.PostureTooCautious:
-                case TheaterEmptyReason.CalledOff: return "POSTURE AND CALL-OFFS ALLOW AN OFFER";
-                default: return "";
-            }
-        }
     }
 }

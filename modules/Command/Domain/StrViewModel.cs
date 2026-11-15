@@ -164,13 +164,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public string OwnNote = "", EnemyNote = "";
     }
 
-    /// <summary>One MISC line: key, what it is, the value, and the state ink of the value.</summary>
-    internal struct StrMiscLine
-    {
-        public string Key, Text, Value;
-        public NOAvionics.AvState State;
-    }
-
     /// <summary>The reinforcement wave (R4): earned count, price, pool, whether the pool covers it, and why it is held.</summary>
     internal sealed class StrWaveView
     {
@@ -226,14 +219,7 @@ namespace BoscaliSummer.Modules.Command.Domain
         public float Own, Middle, Hostile;
     }
 
-    /// <summary>One checklist line of the no-opening banner.</summary>
-    internal struct StrCheck
-    {
-        public string Label, Do;
-        public StrTri Pass;
-    }
-
-    /// <summary>The banner above the board: why there is no board, or what the staff is doing, with a countdown and an optional checklist.</summary>
+    /// <summary>The banner above the board: why there is no board, or what the staff is doing, with a countdown.</summary>
     internal sealed class StrBanner
     {
         public bool Show;
@@ -242,14 +228,12 @@ namespace BoscaliSummer.Modules.Command.Domain
         /// <summary>Countdown in whole seconds (-1 none) and its label ("AUTO-PICK O1 IN", "NEXT REVIEW IN").</summary>
         public int CountSeconds = -1;
         public string CountLabel = "";
-        public StrCheck[] Checks = new StrCheck[StrViewModel.MaxChecks];
-        public int CheckCount;
     }
 
     /// <summary>Everything the panel and the overlay display, filled in place by StrViewBuilder.</summary>
     internal sealed class StrViewModel
     {
-        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxChecks = 6, MaxOfficers = 8, MiscCount = 7, MaxConvoys = 8;
+        public const int MaxProposals = 3, MaxFronts = 8, MaxSorties = 5, MaxPosts = 6, MaxMarks = 8, MaxOfficers = 8, MaxConvoys = 8;
 
         /// <summary>Bumps only when a displayed value changed.</summary>
         public int Revision;
@@ -279,7 +263,6 @@ namespace BoscaliSummer.Modules.Command.Domain
         public int SortieMore;
         public StrPostRow[] Posts = new StrPostRow[MaxPosts]; public int PostCount;
         public StrStaffView Staff = new StrStaffView();
-        public StrMiscLine[] Misc = new StrMiscLine[MiscCount];
         public StrWaveView Wave = new StrWaveView();
         public StrSupplyView Supply = new StrSupplyView();
         public StrTile[] Tiles = new StrTile[4];

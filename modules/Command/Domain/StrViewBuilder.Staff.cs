@@ -138,36 +138,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 for (int i = used; i < r.Traits.Length; i++) Put(ref r.Traits[i], "");
                 return used;
             }
-
-            // ---- the INFO tab: MISC ---------------------------------------------------------------------------------------------
-
-            private void Misc()
-            {
-                Line(0, "STAFF", "AGE OF THE STAFF REPORT THE BOARD READS", AgeWords(m.AgeSeconds));
-                Line(1, "CENSUS", "AGE OF THE COUNTS BEHIND THE TILES AND SITREP", f.Census.Known ? AgeWords(f.CensusAgeSeconds) : StrWords.Dash);
-                Line(2, "SORTIES", "THE SORTIE FEED BEHIND THE TICKETS", !f.SortiesAvailable ? "NO FEED" : f.SortiesFresh ? "LIVE" : "STALE");
-                Line(3, "BOARD", "AGE OF THE CHAIN OF COMMAND BOARD", f.PostsAvailable ? AgeWords(f.PostsAgeSeconds) : StrWords.Dash);
-                Line(4, "HOST", f.IsHost ? "YOU RUN THE STAFF AND OWN ITS SWITCHES" : "ANOTHER PILOT HOSTS: THE STAFF AND ITS SWITCHES ARE THEIRS", f.IsHost ? "YOU" : "REMOTE");
-
-                GroundReason reason = snap != null ? snap.GroundReason : GroundReason.Unknown;
-                string tactics = reason == GroundReason.Ready ? "ON" : reason == GroundReason.TacticsOff ? "OFF" : StrWords.Dash;
-                string tacticsText = "FRONTLINE TACTICS" + StrWords.Dot + "HOST SWITCH";
-                if (snap == null) tacticsText += StrWords.Dot + "NO STAFF REPORT YET";
-                else if (tactics == StrWords.Dash) tacticsText += StrWords.Dot + (reason == GroundReason.Unknown ? "NOT MEASURED HERE" : TheaterWords.Ground(reason));
-                Line(5, "TACTICS", tacticsText, tactics);
-                Line(6, "CONVOYS", "AI STAFF CONVOYS" + StrWords.Dot + "NOT REPORTED TO PILOTS, ONLY THE HOST SEES IT", StrWords.Dash);
-            }
-
-            private static string AgeWords(float seconds) => !float.IsFinite(seconds) || seconds < 0f ? StrWords.Dash : OldText(seconds);
-
-            private void Line(int i, string key, string text, string value)
-            {
-                NOAvionics.AvState state = value == StrWords.Dash || value == "NO FEED" ? NOAvionics.AvState.Inert : value == "STALE" || value == "OFF" ? NOAvionics.AvState.Caution : NOAvionics.AvState.Info;
-                ref StrMiscLine line = ref m.Misc[i];
-                if (line.Key == key && line.Text == text && line.Value == value && line.State == state) return;
-                line = new StrMiscLine { Key = key, Text = text, Value = value, State = state };
-                Changed = true;
-            }
         }
     }
 }

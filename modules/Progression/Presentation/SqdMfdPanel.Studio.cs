@@ -39,7 +39,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private float studioMessageUntil;
 
         private IWingSquad wingSquad;
-        private SqdQuote studioMessageText;
         private AvNote studioBlazon, studioContrast;
         private AvStepper[] studioLayers;
         private AvStepper studioArt, studioPaint, studioFlyAs;
@@ -51,6 +50,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private AvStepper studioKneeboard;
         private AvPortrait studioKneeboardArt;
         private IKneeboardGallery kneeboardGallery;
+        private EmblemDesign blazonFor;
+        private bool blazonSet;
+        private readonly EmblemDesign[] proofDrawn = new EmblemDesign[ProofCount];
+        private readonly bool[] proofDrawnSet = new bool[ProofCount];
 
         private void ResetStudioPage()
         {
@@ -61,7 +64,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessageTone = StudioTone.Info;
             studioMessageUntil = 0f;
             wingSquad = null;
-            studioMessageText = null;
             studioBlazon = studioContrast = null;
             studioLayers = null;
             studioArt = studioPaint = studioFlyAs = null;
@@ -69,6 +71,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioSquadronField = null;
             studioProofs = null;
             studioKneeboard = null; studioKneeboardArt = null; kneeboardGallery = null;
+            blazonSet = false;
+            Array.Clear(proofDrawnSet, 0, proofDrawnSet.Length);
         }
 
         // ---- STUDIO page -------------------------------------------------------------------
@@ -78,14 +82,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             // The squadron is Wing's; with Wing off it is one dim line.
             if (ModuleServices.TryGet(out wingSquad))
             {
-                p.Section(AvIcon.UsersGroup, "SQUADRON", "PILOTS · FILES · PILOT STUDIO");
+                p.Section(AvIcon.UsersGroup, "SQUADRON", null);
                 wingSquad.BuildSquadron(TabStudio, p, console);
             }
             else p.Add(new AvNote(p.Content, AvTextRole.Micro)).Set("SQUADRON · THE WING MODULE IS OFF");
 
             float half = AvFlowMath.ColumnWidth(p.Inner, 2, AvGridTokens.Gap);
 
-            p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", "PAINT SHOP · LOCAL ONLY");
+            p.Section(AvIcon.Shield, "SQUADRON INSIGNIA", null);
             studioEmblem = new AvPortrait(p.Content, "Emblem", "NO ART", StudioEmblemHeight);
             studioEmblem.Help = "Your squadron insignia, shown on the pilot card. Local cosmetic only; nothing is uploaded.";
             AvCard squadronCard = new AvCard(p.Content, console.Ticker, half);
@@ -94,7 +98,6 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioSquadronField.Text = squadronName;
             FieldHelp(studioSquadronField, "Local squadron name shown on the pilot status page.");
             studioBlazon = squadronCard.Flow.Add(new AvNote(squadronCard.Flow.Content, AvTextRole.ProseSmall));
-            studioBlazon.Set(emblem.Blazon());
             studioContrast = squadronCard.Flow.Add(new AvNote(squadronCard.Flow.Content, AvTextRole.Micro));
             AvButtons emblemButtons = squadronCard.Flow.Buttons(
                 new AvControl.Spec("ROLL", RollProofs, AvButtonStyle.Quiet, AvIcon.Refresh),
@@ -113,7 +116,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 proofDesigns[i] = EmblemDesign.Random(seed + i * 7919);
             }
 
-            p.Section(AvIcon.Stack2, "LAYERS", "SET BY HAND");
+            p.Section(AvIcon.Stack2, "LAYERS", null);
             studioLayers = new AvStepper[EmblemDesign.LayerCount];
             for (int i = 0; i < studioLayers.Length; i++)
             {
@@ -137,7 +140,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             if (ModuleServices.TryGet(out kneeboardGallery))
             {
-                p.Section(AvIcon.Pencil, "KNEEBOARD", "COCKPIT THIGH CARD");
+                p.Section(AvIcon.Pencil, "KNEEBOARD", null);
                 studioKneeboardArt = new AvPortrait(p.Content, "Kneeboard", "WRITTEN", StudioKneeboardHeight);
                 studioKneeboard = new AvStepper(p.Content, "CARD", () => kneeboardGallery.Name(kneeboardGallery.Selected),
                     () => kneeboardGallery.Selected--, () => kneeboardGallery.Selected++);
@@ -146,16 +149,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 p.Row(studioKneeboardArt, studioKneeboard);
             }
 
-            p.Section(AvIcon.UsersGroup, "YOUR PILOT", "WHO THIS DOSSIER SHOWS");
+            p.Section(AvIcon.UsersGroup, "YOUR PILOT", null);
             studioFlyAs = p.Add(new AvStepper(p.Content, "FLY AS",
                 () => string.IsNullOrEmpty(settings.PilotProfile.Value) ? "SQUADRON RECORD" : settings.PilotProfile.Value.ToUpperInvariant(),
                 () => StepFlyAs(-1), () => StepFlyAs(1)));
             StepperHelp(studioFlyAs, "saved pilot to fly as (SQUADRON RECORD shows the host's generated pilot)");
 
-            // No grow: the note is the last line of the job sheet; below it the console ground shows.
-            studioMessageText = p.Add(new SqdQuote(p.Content, "SHOP NOTE"));
-            studioMessageText.Set(StudioQuietLine);
-            p.Links(("WING", "WMC", null), ("MY AIRCRAFT", "WMC", "LOADOUT"));
         }
 
         private static void StepperHelp(AvStepper stepper, string what)
@@ -180,25 +179,28 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             }
 
             studioEmblem.Set(emblemSprite);
-            studioBlazon.Set(emblem.Blazon());
-            studioContrast.Set(emblem.Legible ? "CONTRAST OK · READS AT DISTANCE" : "CONTRAST LOW · MARK MAY NOT READ",
-                emblem.Legible ? AvState.Ready : AvState.Caution);
+            if (!blazonSet || emblem != blazonFor)
+            {
+                blazonSet = true;
+                blazonFor = emblem;
+                studioBlazon.Set(emblem.Blazon());
+                studioContrast.Set(emblem.Legible ? "CONTRAST OK · READS AT DISTANCE" : "CONTRAST LOW · MARK MAY NOT READ",
+                    emblem.Legible ? AvState.Ready : AvState.Caution);
+            }
             for (int i = 0; i < studioLayers.Length; i++) studioLayers[i].Refresh();
             studioArt.Refresh(); studioPaint.Refresh(); studioFlyAs.Refresh();
-            for (int i = 0; i < ProofCount; i++) studioProofs.Set(i, proofCanvases[i].Draw(proofDesigns[i]));
+            for (int i = 0; i < ProofCount; i++)
+            {
+                if (proofDrawnSet[i] && proofDrawn[i] == proofDesigns[i]) continue;
+                proofDrawnSet[i] = true;
+                proofDrawn[i] = proofDesigns[i];
+                studioProofs.Set(i, proofCanvases[i].Draw(proofDesigns[i]));
+            }
             if (studioKneeboard != null && kneeboardGallery != null)
             {
                 studioKneeboard.Refresh();
                 studioKneeboardArt.Set(kneeboardGallery.Preview(kneeboardGallery.Selected));
             }
-
-            bool quiet = string.IsNullOrEmpty(studioMessage);
-            studioMessageText.Set(quiet ? StudioQuietLine : studioMessage);
-            studioMessageText.Tone = quiet ? (Color?)null
-                : studioMessageTone == StudioTone.Ok ? AvTheme.RailReady
-                : studioMessageTone == StudioTone.Warn ? AvTheme.RailCaution
-                : studioMessageTone == StudioTone.Bad ? AvTheme.RailDanger
-                : (Color?)null;
         }
 
         // ---- STUDIO actions --------------------------------------------------------------
@@ -294,10 +296,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             studioMessageUntil = Time.unscaledTime + 8f;
         }
 
+        private bool StudioMessageLive => !string.IsNullOrEmpty(studioMessage) && Time.unscaledTime < studioMessageUntil;
+
         private string StudioStatusLine()
         {
-            if (!string.IsNullOrEmpty(studioMessage) && Time.unscaledTime < studioMessageUntil)
-                return studioMessage;
+            if (StudioMessageLive) return studioMessage;
             // While the paint shop is on, its own words say whether the fin really carries the insignia.
             if (settings != null && settings.EmblemPaint.Value != EmblemPaint.Off && Visuals.TailPaint.Status.Length > 0)
                 return Visuals.TailPaint.Status + ". Only you see it.";

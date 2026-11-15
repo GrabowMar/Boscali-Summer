@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             nativeSafety = safety;
             font = nameLabel != null ? nameLabel.font : null;
             if (font == null) font = AvType.Face(AvFace.Mono);
-            fontMaterial = nameLabel != null ? nameLabel.fontSharedMaterial : null;
+            fontMaterial = BoscaliSummer.Core.Game.VanillaHudStyle.Glow(nameLabel != null ? nameLabel.fontSharedMaterial : null);
             BoscaliSummer.Core.Ui.LeftHudStack.Font = font;
             BoscaliSummer.Core.Ui.LeftHudStack.FontMaterial = fontMaterial;
 

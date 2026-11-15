@@ -21,6 +21,34 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 - The plugin lands in `bin/Release/netstandard2.1/BoscaliSummer.dll`. Copy it to `BepInEx/plugins/BoscaliSummer/` in a test install of the game, not your everyday install.
 - NuGet restore is deliberately offline (`NuGet.Config` clears every source), because the project has no package dependencies. Please keep it that way.
 
+## Agent tools and nomodkit
+
+Install [nomodkit](https://github.com/GrabowMar/nomodkit) locally and put `nomod` on PATH. This repository's
+`.codex/config.toml` starts its MCP server with `nomod mcp`; `.agents/skills/nomodkit` documents the commands and
+`.agents/skills/boscali-nomod` covers this mod's test hooks and evidence requirements. No machine-specific paths
+are stored in that configuration. After changing MCP configuration, start a new Codex session to load it.
+
+Run commands from the checkout you edited, or pass `--mod-root "<checkout>"` when working in a worktree or using a
+server started in another directory. `test` reports `ModRoot`; `deploy` records `worktree`. Other commands do not
+all report a checkout field, so pass an explicit `--mod-root` when selection is uncertain. Useful starting points are:
+
+```text
+nomod code context "<task or game symbol>"
+nomod build
+nomod test
+nomod verify
+nomod sim ls <topic>
+nomod sim check <scenario>
+nomod sim run <scenario> --inst dev
+nomod sim peers --inst mp
+```
+
+`code context --check` validates recipe symbols against the current game; behavior requires running its checks.
+MCP results include structured data and bounded screenshots. Inspect captured images for visual changes and
+read each run's checks and game/mod fingerprint. A completed scenario without behavioral assertions proves only
+execution; a captured image still needs visual review. The peer smoke checks a real loopback join, authority,
+and vanilla replication. Network feature changes also need feature-specific observations on host and client.
+
 ## Pull requests
 
 - Fixes to existing behaviour are the most likely to be merged. New features are unlikely, and a review can take a long time.

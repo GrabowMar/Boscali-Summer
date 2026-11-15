@@ -6,7 +6,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     // STR BOARD's ORDERS IN FORCE: what the doctrine, the decisions, the cabinet and the war support thresholds are doing to the war right
-    // now, ours then theirs, then the next threshold. Read from the nation view (StrNation); hidden while the layer is off. Each row opens FAC POLITICS.
+    // now, ours then theirs, then the next threshold. Read from the nation view (StrNation); hidden while the layer is off. Plain rows, no links.
     internal sealed partial class StrMfdPanel
     {
         private readonly AvRow[] orders = new AvRow[PoliticsText.MaxOrders];
@@ -15,11 +15,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
 
         private void BuildOrders(AvFlow p)
         {
-            ordersSection = p.Section(AvIcon.Scale, "ORDERS IN FORCE", "DECIDED ON FAC · WHAT THE CABINET DOES NOW");
+            ordersSection = p.Section(AvIcon.Scale, "ORDERS IN FORCE");
             for (int i = 0; i < orders.Length; i++)
             {
-                orders[i] = p.Add(new AvRow(p.Content, () => AvConsole.Open("FAC", "POLITICS")));
-                orders[i].Help = "An order in force: a decision of ours or theirs with its clock, the cabinet's hold on the staff, or a war support threshold. Opens FAC POLITICS.";
+                orders[i] = p.Add(new AvRow(p.Content));
+                orders[i].Help = "An order in force: a decision of ours or theirs with its clock, the cabinet's hold on the staff, or a war support threshold.";
             }
         }
 

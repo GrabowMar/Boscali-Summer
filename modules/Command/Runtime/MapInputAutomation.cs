@@ -100,6 +100,34 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     map.HQ.AddExclusionZone(source, (source.transform.position + source.transform.forward * 8000f).ToGlobalPosition(),
                         Number(args, "radius", 3000f));
                     break;
+                // 2026-11-15 order path: two native right-click waypoints ahead of the player (as DynamicMap.MapControls makes them,
+                // marker at the mouse), then "waypointerr" reads how far each leg's head sits from its projected fix, in pixels.
+                case "waypoint":
+                    if (!GameManager.GetLocalAircraft(out Aircraft lead) || lead == null) return Failure("MapInputAutomation", "waypoint", "no aircraft");
+                    map.ClearWaypoints();
+                    GlobalPosition start = lead.GlobalPosition();
+                    foreach (Vector2 offset in new[] { new Vector2(0f, 6000f), new Vector2(5000f, 10000f) })
+                    {
+                        GlobalPosition fix = start;
+                        fix.x += offset.x;
+                        fix.z += offset.y;
+                        map.constructWaypoints.Add(fix);
+                        map.waypoints.Add(new MapWaypoint(Input.mousePosition, Vector3.zero,
+                            UnityEngine.Object.Instantiate(map.mapWaypoint, map.iconLayer.transform),
+                            UnityEngine.Object.Instantiate(map.mapWaypointVector, map.iconLayer.transform)));
+                    }
+                    break;
+                case "waypointerr":
+                    RectTransform image = MfdTerrainRelief.MapImageRect(map.mapImage);
+                    float worst = -1f;
+                    for (int i = 0; i < map.waypoints.Count && image != null; i++)
+                    {
+                        if (map.waypoints[i].vector == null ||
+                            !MfdTerrainRelief.TryProject(map.constructWaypoints[i].x, map.constructWaypoints[i].z, image.rect, out Vector2 p)) continue;
+                        Vector3 want = image.TransformPoint(new Vector3(p.x, p.y)), have = map.waypoints[i].vector.transform.position;
+                        worst = Mathf.Max(worst, new Vector2(want.x - have.x, want.y - have.y).magnitude / Mathf.Max(.0001f, image.lossyScale.x));
+                    }
+                    return new Dictionary<string, object> { ["waypoints"] = map.waypoints.Count, ["worstPx"] = worst, ["relief"] = MfdTerrainRelief.IsDrawing };
                 case "zones":
                     var zones = new System.Text.StringBuilder();
                     foreach (NuclearOption.ExclusionZone zone in map.HQ != null ? map.HQ.GetExclusionZones() : new List<NuclearOption.ExclusionZone>())

@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Spooktober
             typeof(FallenAcePartDamagePatch), typeof(FallenAcePilotGunPatch), typeof(FallenAcePilotDamagePatch), typeof(FallenAceEjectionPatch),
             typeof(FallenAcePhantomPatch), typeof(FallenAceTargetPatch),
             typeof(KaijuPrefabPatch), typeof(KaijuSelfDamagePatch), // the kaiju (when it is on)
-            typeof(HellMapColourPatch), // Hell's Army is black on the map (one count check while it is empty)
+            typeof(HellMapColourPatch), typeof(HellAirbaseMapColourPatch), // HELL units and captured airfields have their own violet ink
         };
 
         public ModuleMetadata Metadata { get; } = new ModuleMetadata("spooktober", "Spooktober");
@@ -38,6 +38,7 @@ namespace BoscaliSummer.Modules.Spooktober
             context.AddSceneService<HellGateDirector>(78);   // Hell's Army: waves, orders, tracks, fly-through (host)
             // Last: MISC builds its SPOOKTOBER tab against this. The kaiju card reads whether the kaiju service exists.
             context.AddService<IFallenAce>(new SpookAce());
+            context.AddService<IWeatherCameraExclusion>(new HellWeatherExclusion());
             context.AddService<ISetExtras>(new SpookSetExtras(() => ModuleServices.TryGet(out IKaijuBoss _)));
             context.Logger.LogInfo("[Spooktober] Ready.");
         }

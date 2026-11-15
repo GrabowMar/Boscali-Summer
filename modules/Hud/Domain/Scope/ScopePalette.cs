@@ -13,8 +13,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public static readonly Rgba PlateColor = new Rgba(0.043f, 0.110f, 0.157f), BgColor = new Rgba(0.020f, 0.051f, 0.078f);
 
-        /// <summary>LAYOUT.md 1: DIM is the ink at 0.70 over whatever is behind (there is no plate); DIM text never drops under 0.89 of it (0.623 of the ink).</summary>
-        public const float DimAlpha = 0.70f, DimTextFloor = 0.89f;
+        /// <summary>LAYOUT.md 1: DIM is the ink at 0.80 over whatever is behind (there is no plate; 0.70 until 2026-11-15, when the backdrop went and dim words faded on bright sky); DIM text never drops under 0.89 of it.</summary>
+        public const float DimAlpha = 0.80f, DimTextFloor = 0.89f;
 
         /// <summary>How far toward white BRIGHT is lifted from the ink (LAYOUT.md 1: INK 127, 223, 154 is BRIGHT 215, 255, 228, about 0.7 of the way): a lit word reads a clear step above data.</summary>
         public const float HiLift = 0.70f;

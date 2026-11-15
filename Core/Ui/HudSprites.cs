@@ -18,9 +18,9 @@ namespace BoscaliSummer.Core.Ui
 
         /// <summary>
         /// The one backdrop every mod HUD block stands on (2026-10-28: the board's clouds, the left column, the TAC MAP, the wing strip, the top-centre lane): a <see cref="Feather"/> patch of
-        /// <see cref="ShadeTint"/> at this alpha, the TAC BOARD's cloud core times the pilot's SHADE (0: no backdrops anywhere). Written by the Hud module every board tick; 0.27 is the default's.
+        /// <see cref="ShadeTint"/> at this alpha, the TAC BOARD's cloud core times the pilot's SHADE (0: no backdrops anywhere, the default since 2026-11-15: the HUD's words glow instead). Written by the Hud module every board tick.
         /// </summary>
-        public static float Backdrop = 0.27f;
+        public static float Backdrop;
 
         public static Color BackdropColor => new Color(ShadeTint.r, ShadeTint.g, ShadeTint.b, Backdrop);
 

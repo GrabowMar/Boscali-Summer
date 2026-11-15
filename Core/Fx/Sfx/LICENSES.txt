@@ -47,3 +47,10 @@ vo-*.wav               Voice warnings remade 2026-10-28 (flow 2p0c5LzKv16HTnnMBj
                        280 Hz-4.5 kHz with light drive like a cockpit warning unit.
 ui-click-0.wav  ui-click-1.wav  ui-confirm.wav  ui-caution.wav
 near-crack-0.wav  near-crack-1.wav  gear-lever.wav  canopy-close.wav
+
+ui-click-0.wav  ui-tab.wav  ui-engage.wav  ui-release.wav  ui-confirm.wav  ui-caution.wav  ui-open.wav
+                       CONSOLE CUES, 2026-11-15 (replaces the 2026-10-27 ui-* cuts). ElevenLabs flow 7cdkxbBIpwBnewTwkKxj, generated
+                       for this mod with eleven_text_to_sound_v2: a membrane key press, a selector detent, a
+                       rising and a falling switch blip, a two-note confirm, a low refusal pulse and a display wake swell.
+                       One take of four each, cut to 0.16-0.60 s, low-passed 3.6-6 kHz for a soft contact, faded and levelled
+                       to -3 dBFS peak (mono 16-bit 22050 Hz). One clip per AvUiCue (AvionicsUi/AvUiSound.cs).

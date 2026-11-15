@@ -139,5 +139,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// <summary>The ruffled, foaming patch on the water under any low aircraft, hovering or fast, 0..1.</summary>
         internal static float WashIntensity(float heightAboveSea, float radius)
             => 1f - Scalar.Clamp01(heightAboveSea / (1.6f * SprayCeiling(radius)));
+
+        /// <summary>A moving ship's surface wake; anchored hulls leave no foaming trail.</summary>
+        internal static float ShipWakeIntensity(float speed) => 0.8f * WeatherMath.Smoothstep(0.75f, 10f, speed);
+
+        /// <summary>Bounded stern trail in metres, longer for large or fast hulls.</summary>
+        internal static float ShipWakeLength(float speed, float radius)
+            => Math.Min(650f, Math.Max(40f, Math.Max(radius, 0f) * 3f + Math.Max(speed, 0f) * 7f));
     }
 }

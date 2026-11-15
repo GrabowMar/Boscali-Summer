@@ -14,27 +14,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The SET console (kit v2). A THIS PILOT / SERVER switch under the header picks one of two
-    /// consoles, each with at most four icon tabs: CLIENT pages hold only settings stored on this
-    /// machine; SERVER pages are host-authoritative and read-only (locked, with the reason on every
+    /// consoles: THIS PILOT has five icon tabs (PANELS, MAP, HUD, VISUALS, PERF) of settings stored on this
+    /// machine; SERVER is one page of host-authoritative rules, read-only (locked, with the reason on every
     /// row) for a remote client. Both consoles are built once and only one is shown, so scroll
     /// position and page survive a switch and the hidden one does not tick.
     /// </summary>
     internal sealed partial class SettingsMfdPanel : MonoBehaviour, ISceneService
     {
-        // Page indices are per console (each console has its own ticker and page set).
-        private const int CPanels = 0, CMap = 1, CHud = 2, CCockpit = 3, CWorld = 4, CPerf = 5, CCompat = 6;
-        private const int SWorld = 0, SForces = 1, SEffects = 2, STasking = 3;
-
-        private static readonly string[] ClientPageNames =
-        {
-            "PILOT · PANELS", "PILOT · MAP CONSOLE", "PILOT · HUD & KEYS", "PILOT · COCKPIT FEEL", "PILOT · WORLD LOOK", "PILOT · PERFORMANCE",
-            "PILOT · OTHER MODS"
-        };
-
-        private static readonly string[] ServerPageNames =
-        {
-            "SERVER · WORLD RULES", "SERVER · FORCES & ECONOMY", "SERVER · WORLD EFFECTS", "SERVER · FACTION TASKING"
-        };
+        // Page indices are per console (each console has its own ticker and page set). CCompat is not a page:
+        // it only tags the compat-mod sections, which close VISUALS when such a mod is installed.
+        private const int CPanels = 0, CMap = 1, CHud = 2, CVisuals = 3, CPerf = 4, CCompat = 5;
+        private const int SRules = 0;
 
         /// <summary>The last mode the pilot picked; kept for the session, across map opens and scene reloads.</summary>
         private static bool lastServerMode;
@@ -62,13 +52,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private bool overlayPending;
         private bool layoutPending;
         private bool tickerPending;
-
-        // The last few changes made on this screen this session, newest last. The SERVER tabs list them under
-        // their controls so a change is confirmed after the one-line footer echo has faded.
-        private const int ChangeLogSize = 8;
-        private readonly string[] changeText = new string[ChangeLogSize];
-        private readonly float[] changeTime = new float[ChangeLogSize];
-        private int changeCount;
 
         public void Configure(CommandSettings config, ManualLogSource log, ComMapOverlay mapOverlay = null,
             HostSettingsBoard hostSettingsBoard = null, ClientSettingsBoard clientSettingsBoard = null)
@@ -138,21 +121,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static bool HostAuthority() => GameAccess.IsServer();
 
-        private string AmbientStatus(bool server, int page)
+        private static string AmbientStatus(bool server)
         {
             if (server)
-            {
-                if (page == STasking)
-                    return HostAuthority()
-                        ? "Host tasking board. Refreshes while visible."
-                        : "Locked. The host issues faction tasking.";
                 return HostAuthority()
                     ? "Host controls are saved automatically."
                     : "Locked. These are the host's values for this server.";
-            }
-            if (page == CPerf) return "Saved automatically. Maintenance shows any restart needed.";
-            if (page == CPanels || page == CMap) return "Saved automatically. Hover a control for help.";
-            return "Changes apply now. No mission or game restart.";
+            return "Changes apply now and are saved automatically.";
         }
 
         private void Install(VirtualMFD mfd)
@@ -216,7 +191,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvUiSound.Volume = settings.UiSoundVolume.Value;
             mode.Set(serverMode, HostAuthority());
             string echo = Time.unscaledTime < actionEchoUntil ? actionEcho : null;
-            c.Footer.Set(echo ?? AmbientStatus(server, c.CurrentPage), echo != null ? AvState.Info : AvState.Inert);
+            c.Footer.Set(echo ?? AmbientStatus(server), echo != null ? AvState.Info : AvState.Inert);
         }
 
         /// <summary>Confirm the action on the footer for a moment. Text, not colour alone.</summary>
@@ -224,15 +199,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             actionEcho = text;
             actionEchoUntil = Time.unscaledTime + 1.6f;
-            if (changeCount == ChangeLogSize)
-            {
-                Array.Copy(changeText, 1, changeText, 0, ChangeLogSize - 1);
-                Array.Copy(changeTime, 1, changeTime, 0, ChangeLogSize - 1);
-                changeCount--;
-            }
-            changeText[changeCount] = text;
-            changeTime[changeCount] = Time.unscaledTime;
-            changeCount++;
         }
 
         private void ApplyDisplayEffects()
@@ -383,10 +349,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             nextTick = 0f;
             actionEcho = null;
             actionEchoUntil = 0f;
-            changeCount = 0;
-            tasking = null;
-            taskCards = null;
-            nextTaskingRefresh = 0f;
             clientCon = null;
             serverCon = null;
             AvUiSound.Reset();
@@ -411,11 +373,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             con = null;
             clientCon = null;
             serverCon = null;
-            taskRequest = null;
-            taskNote = null;
-            taskList = null;
-            tasking = null;
-            taskCards = null;
         }
 
         private void OnDestroy()

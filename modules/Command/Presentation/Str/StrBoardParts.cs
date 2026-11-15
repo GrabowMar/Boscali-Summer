@@ -128,23 +128,17 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>
-    /// The banner above the board: why there is no board or what the staff is doing, with a split-flap countdown and, for a board with no opening, the
-    /// checklist. Hidden while an operation runs on a current report.
+    /// The banner above the board: why there is no board (the one blocking reason) or what the staff is doing, with a split-flap countdown.
+    /// Hidden while an operation runs on a current report.
     /// </summary>
     internal sealed class StrBannerPart : StrLaidPart
     {
-        private const float Pad = 10f, TagW = 34f, MarkW = 26f;
-
-        private sealed class CheckRow
-        {
-            public TMP_Text Mark, Label, Do;
-        }
+        private const float Pad = 10f, TagW = 34f;
 
         private readonly AvFrame frame;
         private readonly StrSlab chip;
         private readonly TMP_Text head, countLabel, whyTag, whyText, doTag, doText;
         private readonly StrFlap flap;
-        private readonly CheckRow[] checks = new CheckRow[StrViewModel.MaxChecks];
         private StrInkRole ink = StrInkRole.Muted;
 
         internal StrBannerPart(RectTransform parent, StrControls controls, IStrHub hub) : base(parent, "Banner", controls, hub)
@@ -162,16 +156,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             doText = Text(Rect, "DoText", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
             whyTag.text = "WHY";
             doTag.text = "DO";
-            for (int i = 0; i < checks.Length; i++)
-            {
-                var row = new CheckRow
-                {
-                    Mark = Text(Rect, "CheckMark " + i, AvTextRole.DataStrong, TextAlignmentOptions.TopLeft),
-                    Label = Text(Rect, "CheckLabel " + i, AvTextRole.Label, TextAlignmentOptions.TopLeft, true),
-                    Do = Text(Rect, "CheckDo " + i, AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true),
-                };
-                checks[i] = row;
-            }
             Restyle();
         }
 
@@ -189,22 +173,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             flap.SetActive(count);
             AvText.Set(whyText, b.Why);
             AvText.Set(doText, b.Do);
-            for (int i = 0; i < checks.Length; i++)
-            {
-                bool on = i < b.CheckCount;
-                CheckRow r = checks[i];
-                r.Mark.gameObject.SetActive(on);
-                r.Label.gameObject.SetActive(on);
-                r.Do.gameObject.SetActive(on);
-                if (!on) continue;
-                StrCheck c = b.Checks[i];
-                AvText.Set(r.Mark, c.Pass == StrTri.Yes ? StrWords.Yes : c.Pass == StrTri.No ? StrWords.No : "·");
-                AvText.Set(r.Label, c.Label);
-                AvText.Set(r.Do, c.Do);
-                r.Mark.color = c.Pass == StrTri.Yes ? AvInk.State(AvState.Ready) : c.Pass == StrTri.No ? AvInk.State(AvState.Danger) : AvInk.Dim;
-                r.Label.color = c.Pass == StrTri.Unknown ? AvInk.Dim : AvInk.Ink;
-                r.Do.color = c.Pass == StrTri.No ? AvInk.Ink : AvInk.Dim;
-            }
             Paint();
             Changed();
         }
@@ -230,23 +198,6 @@ namespace BoscaliSummer.Modules.Command.Presentation
             y += top;
             y = Block(whyTag, whyText, b.Why, y, width, place);
             y = Block(doTag, doText, b.Do, y, width, place);
-            for (int i = 0; i < b.CheckCount && i < checks.Length; i++)
-            {
-                CheckRow r = checks[i];
-                float textW = width - 2f * Pad - MarkW;
-                float lh = Mathf.Max(16f, AvText.Height(r.Label, textW));
-                bool hasDo = r.Do.text.Length > 0;
-                float dh = hasDo ? AvText.Height(r.Do, textW) : 0f;
-                y += 7f;
-                if (place)
-                {
-                    AvLay.Place(r.Mark, Pad, y, MarkW, 18f);
-                    AvLay.Place(r.Label, Pad + MarkW, y, textW, lh);
-                    r.Do.gameObject.SetActive(hasDo);
-                    if (hasDo) AvLay.Place(r.Do, Pad + MarkW, y + lh + 1f, textW, dh);
-                }
-                y += lh + (hasDo ? 1f + dh : 0f);
-            }
             return y + Pad;
         }
 
@@ -285,8 +236,8 @@ namespace BoscaliSummer.Modules.Command.Presentation
     }
 
     /// <summary>
-    /// CAUTIOUS, STEADY, BOLD with the rule the staff really applies printed under them, and REPLAN, the quiet two-press call-off. One instance sits above the
-    /// tickets (no operation) and one below the lanes (an operation); the page plan shows exactly one, and only the shown one registers its ids.
+    /// CAUTIOUS, STEADY, BOLD with the rule the staff really applies printed under them, and REPLAN, the quiet two-press call-off. One row, between the
+    /// operation or tickets and the platforms; the page plan decides whether the mode has one.
     /// </summary>
     internal sealed class StrPostureRow : StrPart
     {
@@ -294,15 +245,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private static readonly string[] Words = { "CAUTIOUS", "STEADY", "BOLD" };
         private const float Pad = 2f, ButtonH = 26f, ButtonW = 74f;
 
-        private readonly bool bottom;
         private readonly TMP_Text label, caption;
         private readonly StrButton[] buttons = new StrButton[3];
         private readonly StrButton replan;
         private bool showReplan;
 
-        internal StrPostureRow(RectTransform parent, StrControls controls, IStrHub hub, bool atBottom) : base(parent, atBottom ? "Posture (below)" : "Posture (above)", controls, hub)
+        internal StrPostureRow(RectTransform parent, StrControls controls, IStrHub hub) : base(parent, "Posture", controls, hub)
         {
-            bottom = atBottom;
             label = Text(Rect, "Label", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             label.text = "POSTURE";
             caption = Text(Rect, "Caption", AvTextRole.ProseSmall, TextAlignmentOptions.TopLeft, true);
@@ -318,7 +267,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         protected override void Apply(StrViewModel vm)
         {
             StrPagePlan plan = StrPagePlan.For(vm.Mode);
-            bool on = (bottom ? plan.PostureBottom : plan.PostureTop) && !StrNation.Active;   // the nation desk shows the WAR PLAN row instead
+            bool on = plan.Posture && !StrNation.Active;   // the nation desk shows the WAR PLAN row instead
             SetShown(on);
             if (!on) return;
             for (int i = 0; i < 3; i++)
@@ -482,7 +431,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private readonly StrLaneBar lane;
         private readonly StrButton redirect;
         private StrFrontRow row;
-        private bool placeholder, hasButton;
+        private bool hasButton;
         private StrInkRole ink = StrInkRole.Muted;
 
         internal StrFrontLane(RectTransform parent, StrControls controls, IStrHub hub, int ordinal) : base(parent, "Lane " + (ordinal + 1), controls, hub)
@@ -492,7 +441,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvLay.Fill(frame.rectTransform);
             frame.raycastTarget = true;
             AvHit hit = AvHit.On(frame);
-            hit.Click = e => { StrFrontRow f = placeholder ? null : LaneAt(Vm); if (f != null && LocateGate(f.Id).Allowed) Locate(f.Id); };
+            hit.Click = e => { StrFrontRow f = LaneAt(Vm); if (f != null && LocateGate(f.Id).Allowed) Locate(f.Id); };
             tag = Text(Rect, "Tag", AvTextRole.DataStrong, TextAlignmentOptions.Center);
             name = Text(Rect, "Name", AvTextRole.Head, TextAlignmentOptions.MidlineLeft);
             status = Text(Rect, "Status", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
@@ -507,25 +456,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         protected override void Apply(StrViewModel vm)
         {
             StrPagePlan plan = StrPagePlan.For(vm.Mode);
-            placeholder = plan.Placeholders && index < 2;
-            row = placeholder || !plan.Lanes ? null : LaneAt(vm);
-            bool on = placeholder || row != null;
-            SetShown(on);
-            if (!on) return;
-            if (placeholder)
-            {
-                ink = StrInkRole.Muted;
-                AvText.Set(tag, "");
-                AvText.Set(name, StrPagePlan.PlaceholderText(vm.Mode));
-                AvText.Set(status, "");
-                AvText.Set(percent, StrWords.Dash);
-                AvText.Set(trend, "");
-                AvText.Set(offer, "");
-                lane.Set(float.NaN, float.NaN);
-                hasButton = false;
-                redirect.SetActive(false);
-            }
-            else
+            row = plan.Lanes ? LaneAt(vm) : null;   // a mode with no report shows no lane: the banner already says why
+            SetShown(row != null);
+            if (row == null) return;
             {
                 StrFrontRow r = row;
                 ink = r.Ink;
@@ -564,20 +497,13 @@ namespace BoscaliSummer.Modules.Command.Presentation
             return null;
         }
 
-        public override float Measure(float width) => !Shown ? 0f : placeholder ? 34f : 52f;
+        public override float Measure(float width) => Shown ? 52f : 0f;
 
         public override void Place(AvSlot s)
         {
             base.Place(s);
             if (!Shown) return;
             float h = s.H;
-            if (placeholder)
-            {
-                AvLay.Place(name, Pad + 6f, 0f, s.W - 2f * Pad - 60f, h);
-                AvLay.Place(percent, s.W - Pad - 52f, 0f, 52f, h);
-                lane.Place(s.W * 0.5f, h * 0.5f - 4f, 100f, 10f);
-                return;
-            }
             AvLay.Place(tag, Pad, (h - 24f) * 0.5f, TagW, 24f);
             float nx = Pad + TagW + 8f, right = s.W - Pad - ButtonW;
             float laneX = right - 8f - PercentW - 6f - LaneW;
@@ -597,9 +523,9 @@ namespace BoscaliSummer.Modules.Command.Presentation
         private void Paint()
         {
             Color c = StrInk.Of(ink);
-            frame.Paint(AvInk.Inert, placeholder ? AvInk.Hairline : c.WithAlpha(0.45f));
+            frame.Paint(AvInk.Inert, c.WithAlpha(0.45f));
             tag.color = AvInk.Ink;
-            name.color = placeholder ? AvInk.Dim : AvInk.Ink;
+            name.color = AvInk.Ink;
             status.color = ink == StrInkRole.Muted || ink == StrInkRole.Own ? AvInk.Dim : c;
             percent.color = AvInk.Ink;
             trend.color = AvInk.Dim;

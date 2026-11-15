@@ -35,9 +35,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
             switch (Text(args, "page"))
             {
                 case "board": return 0;
-                case "sitrep": return 1;
-                case "info": return 2;
-                default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 2);
+                case "status": case "sitrep": case "info": return 1;
+                default: return Mathf.Clamp((int)Number(args, "tab", 0f), 0, 1);
             }
         }
 

@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
         // Which camera the last frame drew on, as the sim hook reports it.
         private const string None = "none", MainCamera = "main", CockpitView = "cockpit";
         private static readonly GhostTint FallbackInk = new GhostTint(56, 222, 82);
-        private static readonly GhostTint FallbackCaution = new GhostTint(243, 217, 74);
 
         internal static TerrainGhostOverlay Live { get; private set; }
 
@@ -191,9 +190,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 placed = true;
             }
             ColorTheme theme = ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
+            GhostTint ink = theme != null ? Tint(theme.AllClear) : FallbackInk;
             glowing = TerrainGhostGrid.FillColours(cellX, cellZ, planeX, planeY, planeZ, strength,
-                theme != null ? Tint(theme.AllClear) : FallbackInk, theme != null ? Tint(theme.Warning) : FallbackCaution,
-                field.SeaLevel, vertices);
+                ink, ink, field.SeaLevel, vertices);
             mesh.SetVertexBufferData(vertices, 0, 0, vertices.Length, 0,
                 MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices | MeshUpdateFlags.DontNotifyMeshUsers);
             paintedStrength = strength;

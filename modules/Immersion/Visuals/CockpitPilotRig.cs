@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.Rendering;
 using BoscaliSummer.Modules.Immersion.Domain;
+using BoscaliSummer.Modules.Immersion.Configuration;
 
 namespace BoscaliSummer.Modules.Immersion.Visuals
 {
@@ -41,6 +42,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private bool bodyVisible, hooked, stickOnRight = true;
         internal SkinnedMeshRenderer Renderer { get; private set; }
         internal SkinnedMeshRenderer BodyRenderer => firstPerson != null ? firstPerson : Renderer;
+        internal PilotModelStyle Model { get; private set; }
         internal Transform Head { get; private set; }
         internal Transform Chest { get; private set; }
         internal int TransformCount => count;
@@ -166,6 +168,19 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 for (int element = 0; element < 16; element++)
                     if (Mathf.Abs(original[i][element] - derived[i][element]) > .00001f) return false;
             return true;
+        }
+
+        // Switching touches only the owned headless body. Native pilots and the reflection stay native.
+        internal void SetModel(PilotModelStyle style)
+        {
+            if ((uint)style >= 4) style = PilotModelStyle.Standard;
+            if (Model == style || firstPerson == null || bodyMaterial == null || nativeRenderer == null) return;
+            Mesh mesh = PilotShaderBundle.GetFirstPersonMesh(style);
+            if (!CompatibleMesh(nativeRenderer.sharedMesh, mesh, nativeRenderer.bones) ||
+                !PilotShaderBundle.GetBodyTextures(style, out Texture2D albedo, out Texture2D normal, out Texture2D mask)) return;
+            firstPerson.sharedMesh = mesh;
+            OwnMaterial(bodyMaterial, albedo, normal, mask);
+            Model = style;
         }
 
         private static void BorrowMaterial(Material native, Material owned)
@@ -614,6 +629,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             leftFoot = rightFoot = stick = throttle = null; Renderer = null;
             lean = pitchLean = headPitch = headYaw = pedals = 0f;
             bodyVisible = false; stickOnRight = true; properties.Clear();
+            Model = PilotModelStyle.Standard;
             rightArmLength = leftArmLength = stickRestFit = throttleRestFit = 0f;
         }
     }

@@ -146,8 +146,9 @@ namespace NOAvionics
         {
             bool stacked = Stacked(width);
             float main = MainHeight(TextWidth(width)), actions = ActionsHeight(ActionWidth(width), stacked);
-            float h = stacked ? main + ColumnGap + actions : Mathf.Max(main, actions);
-            return Mathf.Max(AvGridTokens.Row, h + 2f * PadY);
+            // Inline keys need only a hair of air above and below: a one-line row with keys is as tall as one without.
+            if (!stacked) return Mathf.Max(AvGridTokens.Row, Mathf.Max(main + 2f * PadY, actions + 4f));
+            return Mathf.Max(AvGridTokens.Row, main + ColumnGap + actions + 2f * PadY);
         }
 
         public override void Place(AvSlot s)
@@ -161,7 +162,10 @@ namespace NOAvionics
             float x0 = PadX + 4f + BadgeSpace;
             if (badge != null && badge.enabled) AvLay.Place(badge.rectTransform, PadX + 4f,
                 stacked ? PadY + (main - BadgeW) * 0.5f : (s.H - BadgeW) * 0.5f, BadgeW, BadgeW);
-            AvLay.Place(name.rectTransform, x0, PadY, w, nh);
+            // A one-line row with keys beside it sits on the keys' centre line; everything else reads from the top.
+            bool centred = !stacked && trailing.Count > 0 && sub.text.Length == 0;
+            float textY = centred ? Mathf.Max(2f, (s.H - nh) * 0.5f) : PadY;
+            AvLay.Place(name.rectTransform, x0, textY, w, nh);
             AvLay.Place(sub.rectTransform, x0, PadY + nh + 2f, w, AvText.Height(sub, w));
             float x = s.W - PadX;
             if (stacked)
@@ -177,7 +181,11 @@ namespace NOAvionics
                     x -= controlW; AvLay.Place(trailing[i].Rect, x, (s.H - actionH) * 0.5f, controlW, actionH); x -= 4f;
                 }
             }
-            if (value.text.Length > 0) AvLay.Place(value.rectTransform, x - ValueW, PadY, ValueW, AvText.Height(value, ValueW));
+            if (value.text.Length > 0)
+            {
+                float vh = AvText.Height(value, ValueW);
+                AvLay.Place(value.rectTransform, x - ValueW, centred ? Mathf.Max(2f, (s.H - vh) * 0.5f) : PadY, ValueW, vh);
+            }
         }
 
         public override void Restyle()

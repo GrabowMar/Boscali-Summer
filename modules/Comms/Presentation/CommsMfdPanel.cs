@@ -12,7 +12,7 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Comms.Presentation
 {
-    /// <summary>COM: who is on the net and calling what (CALLS: brevity calls; NET: the stations heard). The shared plot it used to
+    /// <summary>COM: who is on the net and calling what (one page: brevity calls, then the stations heard). The shared plot it used to
     /// carry is built on MAP TOOLS through <see cref="ICommsPlot"/>. All actions pass through CommsManager and remain host-authoritative.</summary>
     internal sealed partial class CommsMfdPanel : MonoBehaviour, ISceneService, ICommsPlot
     {
@@ -21,17 +21,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private const float NoticeSeconds = 6f;
         private const float PlotWantedFor = 0.5f;
 
-        private const int TabCalls = 0;
-        private const int TabNet = 1;
-
         /// <summary>The console title; the harness builds its console with the same words.</summary>
         internal const string Title = "COMMS";
-
-        private static readonly (AvIcon Icon, string Label)[] TabSpecs =
-        {
-            (AvIcon.Message2, "CALLS"),
-            (AvIcon.UsersGroup, "NET"),
-        };
 
         private CommsSettings settings;
         private CommsManager comms;
@@ -104,16 +95,15 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private RectTransform BuildScreen(RectTransform content, float height)
         {
-            console = AvConsole.Build(content, "COM", Title, TabSpecs.Length, Width, height);
+            console = AvConsole.Build(content, "COM", Title, 1, Width, height);
             chips = console.Chips(2);
             BindAudienceChip();
-            console.Tabs(TabSpecs);
-            console.PageChanged += _ => nextRefresh = 0f;
-
-            BuildCallsPage(console.Page(TabCalls));
-            BuildNetPage(console.Page(TabNet));
+            AvFlow page = console.Page(0);
+            BuildCallsPage(page);
+            BuildNetPage(page);
+            console.Orders(0, "Calls go to your team; 'here' calls also ping your aircraft. Mute hides a player on your screen only.");
             console.Finish();
-            console.SetPage(TabCalls);
+            console.SetPage(0);
             return null;
         }
 
@@ -150,7 +140,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             chips[0].Set(connText, !online || comms.HostSilent ? AvState.Caution : AvState.Info);
             chips[1].Set(comms.Channel == CommsChannel.Team ? "NET TEAM · CHANGE" : "NET ALL · CHANGE",
                 comms.Channel == CommsChannel.Team ? AvState.Ready : AvState.Caution);
-            if (console.CurrentPage == TabNet) RefreshLog(now);
+            RefreshLog();
 
             string alert = comms.HostSilent
                 ? "HOST NOT ANSWERING \u00b7 NEEDS BOSCALI SUMMER"
@@ -158,7 +148,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             string prompt = comms.Tool != CommsTool.None ? comms.Prompt(comms.Tool) : null;
             string ambient = state.Notice != null && !state.NoticeIsError && now - state.NoticeAt < NoticeSeconds
                 ? state.Notice
-                : Ambient(state);
+                : "";
             if (alert != null) console.Footer.Set(alert, AvState.Caution);
             else if (prompt != null) console.Footer.Set(prompt, AvState.Info);
             else console.Footer.Set(ambient, AvState.Inert);
@@ -171,13 +161,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             AvHit.On(hit).Click = _ => { comms.ToggleChannel(); nextRefresh = 0f; };
             AvHelpTip.Attach(hit.gameObject,
                 "Change audience on any COM page. TEAM reaches your side; ALL reaches both sides for one post, then returns to TEAM. The host can disable ALL.");
-        }
-
-        private string Ambient(CommsClientState state)
-        {
-            return "PLOT HOLDS " + AvNum.Fixed(state.Board.CountOf(CommsItemKind.Ping), 0) + " PINGS · " +
-                   AvNum.Fixed(state.Board.CountOf(CommsItemKind.Stroke), 0) + " DRAWN · " +
-                   AvNum.Fixed(state.Board.CountOf(CommsItemKind.Label), 0) + " LABELS";
         }
 
         private static string ToolName(CommsTool tool)

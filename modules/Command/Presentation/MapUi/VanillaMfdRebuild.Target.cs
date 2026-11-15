@@ -12,10 +12,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         // ------------------------------------------------------------ target panel
 
         /// <summary>
-        /// Four pages, one question each. TARGETS: what am I shooting (the held list on top, the known contacts
-        /// under it; a click moves a contact on or off the list). FILTER: what is allowed on the list (profiles,
-        /// then side / type / vehicle switches, then the result in one sentence) and what the HUD marks in full
-        /// (<see cref="HudPriority"/>). CAMERA MARK: call an operation onto a camera mark. DRONES: the VANGUARD drone
+        /// Three pages, one question each. TARGETS: what am I shooting (the held list on top, the known contacts
+        /// under it; a click moves a contact on or off the list), with the camera mark strip at the bottom. FILTER:
+        /// what is allowed on the list (profiles, then side / type / vehicle switches, then the result in one
+        /// sentence) and what the HUD marks in full (<see cref="HudPriority"/>). DRONES: the VANGUARD drone
         /// link through <see cref="IDroneCommand"/> (hidden while Vanguard is off). Lit always means "on the list".
         /// </summary>
         private sealed class TargetPresenter : Presenter
@@ -35,7 +35,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private MfdPagingGrid selectedGrid, candidateGrid;
             private AvControl dropAll, weaponReach;
             private AvControl[] storeGroup, recallGroup, rangeChoice;
-            private AvNote listNote;
             private float nextCandidateScan;
 
             // FILTER
@@ -48,7 +47,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private HudPriority hudPriority;
 
             // DRONES: Vanguard owns the drones; this page reads the roster and picks orders through IDroneCommand.
-            private const int DronesPage = 3;
+            private const int DronesPage = 2;
             private FeedPicture droneFeed;
             private AvSection droneFeedSection, droneRosterSection;
             private AvButtons droneOrders, droneTerminal;
@@ -56,10 +55,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvNote dronesOff;
             private IDroneCommand dronesSeen;
 
-            // CAMERA MARK: state lives in Support through a narrow contract.
+            // CAMERA MARK strip on TARGETS: state lives in Support through a narrow contract.
             private ICameraTargetService cameraService;
-            private readonly AvRow[] cameraRows = new AvRow[3];
+            private AvSection cameraSection;
             private AvControl cameraCapture, cameraCall, cameraClear;
+            private int cameraStamp = -1;
+            private string cameraArmed;
 
             private string activePreset = MfdTargetPresets.Names[0];
             private string selectedPreset = "";
@@ -80,7 +81,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private static readonly (AvIcon Icon, string Label)[] Pages =
             {
-                (AvIcon.Target, "TARGETS"), (AvIcon.Filter, "FILTER"), (AvIcon.Camera, "CAMERA MARK"), (AvIcon.Drone, "DRONES"),
+                (AvIcon.Target, "TARGETS"), (AvIcon.Filter, "FILTER"), (AvIcon.Drone, "DRONES"),
             };
 
             public TargetPresenter(MFDScreen screen, TargetListSelector selector)
@@ -103,9 +104,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             protected override string[] TabTips { get; } = new[]
             {
-                "Targets: the targets you hold and the contacts your side knows. Click a contact to add it, click a held target to drop it.",
+                "Targets: the targets you hold, the contacts your side knows, and the camera mark you can call an operation onto.",
                 "Filter: what is allowed onto the target list, and which contact types the HUD marks in full in each HUD mode.",
-                "Camera mark: record the surface point under the targeting camera and call an armed operation onto it.",
                 "Drones: your VANGUARD drones on the link, the linked one's live feed and its orders.",
             };
 
@@ -116,28 +116,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 foreach (AvMetric t in tiles) t.Set("—", "", 0f, AvState.Inert);
                 BuildTargetsPage(CreatePage());
                 BuildFilterPage(CreatePage());
-                BuildMarkPage(CreatePage());
                 BuildDronesPage(CreatePage());
 
                 // The footer shows these one at a time under the status line, most important first.
-                Console.Orders(0,
-                    "Click a known contact to add it to your targets; click a held target to drop it.",
-                    "Contacts are listed nearest first, from positions your side actually knows.",
-                    "STORE keeps the held targets in a group; the GROUP button brings them back.",
-                    "Only contacts the FILTER page allows are listed.");
-                Console.Orders(1,
-                    "A contact is listed only when its side and its type are both lit.",
-                    "Click a profile to apply it. FOLLOW HUD lets the HUD mode set the filter.",
-                    "Pick a key under the profiles to switch to the applied profile while flying.",
-                    "The HUD sections edit the HUD mode your weapon picks; each mode keeps its own set.");
-                Console.Orders(2,
-                    "MARK records the surface point under the targeting camera cross-hair.",
-                    "A mark lapses 120 seconds after it is taken. MARK again to refresh it.",
-                    "Arm an operation on OPS PERKS (the link below), then CALL AT MARK to deliver it.");
-                Console.Orders(DronesPage,
-                    "Click a drone to link it; every drone keeps flying its last order.",
-                    "In flight: C › WEAPONS › DRONES gives the same orders.",
-                    "RELEASE hands the linked drone back to its own job.");
+                Console.Orders(0, "Click a known contact to add it to your targets; click a held target to drop it.");
+                Console.Orders(1, "A contact is listed only when its side and its type are both lit.");
+                Console.Orders(DronesPage, "Click a drone to link it; every drone keeps flying its last order.");
             }
 
             protected override void OnPageChanged(int index)
@@ -158,7 +142,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     SetFilterInput(false);
                     sentenceStamp = int.MinValue;
                     filterNote.Set("Waiting for the target filters.");
-                    listNote.Set("Waiting for the target filters.");
                     return;
                 }
 
@@ -175,11 +158,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 RefreshHeld();
                 RefreshContacts();
-                RefreshFilter();
+                if (Console.CurrentPage == 1)
+                {
+                    RefreshFilter();
+                    filterNote.Set(FilterSentence());
+                }
 
-                string words = FilterSentence();
-                filterNote.Set(words);
-                listNote.Set(words + "  Change it on the FILTER page.");
                 tiles[0].Set(selectedUnits.Count.ToString(), "", 0f, selectedUnits.Count > 0 ? AvState.Ready : AvState.Inert);
                 tiles[1].Set(candidates.Count.ToString(), "", 0f, AvState.Info);
                 tiles[2].Set(activePreset, "", 0f, AvState.Ready);
@@ -190,7 +174,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (!string.IsNullOrEmpty(echo) && Time.unscaledTime < echoUntil) return echo;
                 int page = Console.CurrentPage;
                 if (page == 0) return "CLICK A CONTACT TO ADD · A HELD TARGET TO DROP";
-                if (page == 2) return "MARK · CALL AT MARK";
                 if (page == DronesPage) return DroneStatus();
                 return "LIT = LISTED · RIGHT CLICK KEEPS ONLY THAT ONE";
             }
@@ -252,8 +235,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 candidateGrid = AddGrid(page, new MfdPagingGrid(page.Content, 1, ContactsVisible, rowHeight: 40f, words: false));
                 candidateGrid.SetEmptyMessage("NO CONTACTS");
-                listNote = page.Add(new AvNote(page.Content, "Waiting for the target filters."));
-                page.Links(("MAP", "MAP", null), ("JOBS", "MIS", "JOBS"));
+
+                // The camera mark: one state line in the caption, then its three buttons.
+                cameraSection = page.Section(AvIcon.Camera, "CAMERA MARK", "WAITING FOR THE CAMERA SERVICE");
+                AvControl[] actions = page.Buttons(
+                    new AvControl.Spec("MARK", () => { Camera?.Capture(); RequestRefresh(); }, AvButtonStyle.Default, AvIcon.Camera),
+                    new AvControl.Spec("CALL AT MARK", () => { Camera?.CallAtMark(); RequestRefresh(); }, AvButtonStyle.Primary, AvIcon.CurrentLocation),
+                    new AvControl.Spec("CLEAR", () => { Camera?.Clear(); RequestRefresh(); }, AvButtonStyle.Default, AvIcon.Eraser)).Controls;
+                cameraCapture = actions[0];
+                cameraCall = actions[1];
+                cameraClear = actions[2];
             }
 
             private void SetRange(int step)
@@ -487,7 +478,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildFilterPage(AvFlow page)
             {
                 presetSection = page.Section(AvIcon.Bookmark, "PROFILES", SavedNote());
-                presetGrid = AddGrid(page, new MfdPagingGrid(page.Content, 2, 4, rowHeight: 40f, words: false));
+                presetGrid = AddGrid(page, new MfdPagingGrid(page.Content, 3, 3, rowHeight: 40f, words: false));
 
                 AvControl[] actions = page.Buttons(
                     new AvControl.Spec("SAVE AS", BeginSaveAs, AvButtonStyle.Default, AvIcon.Plus),
@@ -550,7 +541,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 filterNote = page.Add(new AvNote(page.Content, "Waiting for the target filters."));
                 hudPriority = new HudPriority(page, RequestRefresh);
-                page.Links(("HUD LOOK", "SET", null), ("MAP LAYERS", "MAP", "LAYERS"));
             }
 
             private void RefreshFilter()
@@ -562,7 +552,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     i => i == 0 ? "FOLLOW HUD" : LibraryLabel(i - 1),
                     i => i == 0 ? hud : !hud && catalog[i - 1] != null && catalog[i - 1].Name == activePreset,
                     i => { if (i == 0) ToggleFollowHud(); else ApplyCatalog(i - 1); },
-                    subs: i => i == 0 ? "THE HUD MODE SETS THE FILTER" : LibrarySub(i - 1),
+                    subs: i => i == 0 ? "" : LibrarySub(i - 1),
                     details: i =>
                     {
                         if (i == 0) return "Follow HUD: the target list lists whatever the HUD mode shows. Click again to set the filter yourself.";
@@ -585,8 +575,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         : "Apply a profile first, then pick its quick key.";
                 }
 
-                SetGrid(factionGrid, selector.toggleFactionItems, ToggleFaction);
-                SetGrid(unitGrid, selector.toggleUnitTypesItems, ToggleUnitType);
+                // SIDE and TYPE carry the game's placeholder sprite (a bare dash): they draw the chrome glyph instead.
+                SetGrid(factionGrid, selector.toggleFactionItems, ToggleFaction, nativeIcons: false);
+                SetGrid(unitGrid, selector.toggleUnitTypesItems, ToggleUnitType, nativeIcons: false);
                 SetGrid(vehicleGrid, selector.toggleVehicleTypesItems, ToggleVehicleType);
                 bool ground = GroundOpen();
                 vehicleSection.SetShown(ground);
@@ -677,7 +668,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // ------------------------------------------------------------ profiles
 
             private string SavedNote() =>
-                TargetPresetRuntime.Library.Count + " / " + TargetPresetLibrary.MaxCustomPresets + " SAVED · CLICK TO APPLY";
+                TargetPresetRuntime.Library.Count + " / " + TargetPresetLibrary.MaxCustomPresets + " SAVED";
 
             private static string KeyLabel(KeyCode key) => key == KeyCode.None ? "NO KEY" : key.ToString().ToUpperInvariant();
 
@@ -774,8 +765,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 TargetPresetSnapshot preset = catalog[index];
                 if (preset == null) return "";
-                string kind = TargetPresetRuntime.IsBuiltIn(index) ? "BUILT-IN" : "SAVED";
-                return preset.Name == selectedPreset && preset.Name != activePreset ? kind + " · CHANGED SINCE" : kind;
+                if (preset.Name == selectedPreset && preset.Name != activePreset) return "CHANGED";
+                return TargetPresetRuntime.IsBuiltIn(index) ? "" : "SAVED";
             }
 
             private void ApplyCatalog(int index)
@@ -1007,7 +998,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 droneRoster = page.Add(new AvList(page.Content, Console.Ticker, 5, BindDrone) { RowClicked = i => Order(d => d.Link(i)) });
                 droneTerminal = page.Buttons(new AvControl.Spec("UAV TERMINAL", () => Order(d => d.OpenTerminal()), AvButtonStyle.Primary, AvIcon.Terminal));
                 droneTerminal.Controls[0].Help = "Open the UAV terminal: every drone on the link, the big feed, the tactical plot and waypoints.";
-                page.Links(("HELD TARGETS", "TGT", "TARGETS"), ("CAMERA MARK", "TGT", "CAMERA MARK"));
             }
 
             private void Order(Action<IDroneCommand> order)
@@ -1094,40 +1084,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // ---------------------------------------------------------- camera mark
 
-            private static readonly string[] MarkSteps = { "1 · CAMERA VIEW", "2 · POINT MARKED", "3 · OPERATION ARMED" };
-
-            private void BuildMarkPage(AvFlow page)
-            {
-                // The chain from camera to delivery, one step per row, in the order the pilot works through it.
-                page.Section(AvIcon.Camera, "CALL AT A CAMERA MARK", "THREE STEPS");
-                for (int i = 0; i < cameraRows.Length; i++)
-                {
-                    cameraRows[i] = page.Add(new AvRow(page.Content));
-                    cameraRows[i].Set(MarkSteps[i], "Waiting for the camera service.", "—", AvState.Inert);
-                }
-                AvControl[] actions = page.Buttons(
-                    new AvControl.Spec("MARK", () => { Camera?.Capture(); RequestRefresh(); }, AvButtonStyle.Default, AvIcon.Camera),
-                    new AvControl.Spec("CALL AT MARK", () => { Camera?.CallAtMark(); RequestRefresh(); }, AvButtonStyle.Primary, AvIcon.CurrentLocation),
-                    new AvControl.Spec("CLEAR", () => { Camera?.Clear(); RequestRefresh(); }, AvButtonStyle.Default, AvIcon.Eraser)).Controls;
-                cameraCapture = actions[0];
-                cameraCall = actions[1];
-                cameraClear = actions[2];
-                page.Links(("ARM AN OPERATION", "OPS", "PERKS"), ("MAP", "MAP", null));
-            }
-
             private void RefreshMark()
             {
                 if (cameraCapture == null) return;
                 ICameraTargetService service = Camera;
                 if (service == null || !service.Available)
                 {
+                    if (cameraStamp == -2) return;
+                    cameraStamp = -2;
                     const string offline =
                         "Camera marking is unavailable: the support module or its observation source is not installed.";
                     cameraCapture.Interactable = cameraCall.Interactable = cameraClear.Interactable = false;
                     cameraCapture.Help = cameraCall.Help = cameraClear.Help = offline;
-                    cameraRows[0].Set(MarkSteps[0], offline, "OFFLINE", AvState.Inert);
-                    cameraRows[1].Set(MarkSteps[1], "Needs the camera marking service.", "—", AvState.Inert);
-                    cameraRows[2].Set(MarkSteps[2], "Needs the camera marking service.", "—", AvState.Inert);
+                    cameraSection.SetCaption("OFFLINE");
                     tiles[3].Set("—", "OFF", 0f, AvState.Inert);
                     return;
                 }
@@ -1135,26 +1104,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bool view = service.CanCapture, marked = service.HasMark;
                 string armedName = service.ArmedActionName;
                 bool armed = !string.IsNullOrEmpty(armedName);
-                cameraRows[0].Set(MarkSteps[0],
-                    view ? "The targeting camera is live. MARK records the point under its cross-hair."
-                         : "No live camera view on your aircraft. MARK needs one.",
-                    view ? "LIVE" : "NO VIEW", view ? AvState.Ready : AvState.Inert);
-                if (marked)
-                {
-                    float age = Mathf.Max(0f, service.AgeSeconds);
-                    cameraRows[1].Set(MarkSteps[1], MarkWords(service.Mark),
-                        AvNum.Fixed(Mathf.Max(0f, 120f - age), 0) + " S LEFT", age > 90f ? AvState.Caution : AvState.Ready);
-                }
-                else cameraRows[1].Set(MarkSteps[1], "No point recorded yet.", "NONE", AvState.Inert);
-                tiles[3].Set(marked ? AvNum.Fixed(Mathf.Max(0f, 120f - service.AgeSeconds), 0) : "NONE", marked ? "S LEFT" : "",
+                int left = marked ? Mathf.RoundToInt(Mathf.Max(0f, 120f - Mathf.Max(0f, service.AgeSeconds))) : 0;
+                int stamp = (view ? 1 : 0) | (marked ? 2 : 0) | (armed ? 4 : 0) | (service.CanCallAtMark ? 8 : 0) | (left << 4);
+                if (stamp == cameraStamp && armedName == cameraArmed) return;
+                cameraStamp = stamp;
+                cameraArmed = armedName;
+
+                tiles[3].Set(marked ? AvNum.Fixed(left, 0) : "NONE", marked ? "S LEFT" : "",
                     marked ? Mathf.Clamp01(1f - service.AgeSeconds / 120f) : 0f, marked ? AvState.Ready : AvState.Inert);
-                cameraRows[2].Set(MarkSteps[2], armed ? armedName : "None armed. Arm one on OPS PERKS (link below).",
-                    armed ? "ARMED" : "NONE", armed ? AvState.Ready : AvState.Inert);
+                cameraSection.SetCaption((view ? "CAMERA LIVE" : "NO CAMERA VIEW") + " · " +
+                    (marked ? "MARKED, " + left + " S LEFT" : "NO MARK") + " · " + (armed ? armedName : "NO OPERATION ARMED"));
 
                 cameraCapture.Interactable = view;
                 cameraCall.Interactable = service.CanCallAtMark;
                 cameraClear.Interactable = marked;
-                cameraCapture.Help = view ? "Record the surface point under the targeting camera."
+                cameraCapture.Help = view ? "Record the surface point under the targeting camera. A mark lapses after 120 seconds."
                     : "Needs a live targeting camera view on your aircraft.";
                 cameraCall.Help = !marked ? "Take a mark first."
                     : !armed ? "Arm an operation on OPS PERKS first."
@@ -1162,30 +1126,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 cameraClear.Help = marked ? "Clear the mark." : "No mark to clear.";
             }
 
-            /// <summary>The mark in one line: source, range and bearing from the player (when flying), elevation and grid.</summary>
-            private static string MarkWords(ObservationPoint point)
-            {
-                string words = (point.Source ?? "SENSOR").ToUpperInvariant() + " · " + AvNum.Fixed(Mathf.Max(0f, point.Range / 1000f), 1) + " KM";
-                CombatHUD hud = SceneSingleton<CombatHUD>.i;
-                if (hud != null && hud.aircraft != null && !hud.aircraft.disabled)
-                {
-                    GlobalPosition own = hud.aircraft.GlobalPosition();
-                    float turn = Mathf.Atan2(point.X - own.x, point.Z - own.z) * Mathf.Rad2Deg;
-                    if (float.IsFinite(turn))
-                        words += " · BRG " + (((Mathf.RoundToInt(turn) % 360) + 360) % 360).ToString("000");
-                }
-                return words + " · ELEV " + AvNum.Fixed(point.Y, 0) + " M · X " + AvNum.Fixed(point.X, 0) + " Z " + AvNum.Fixed(point.Z, 0);
-            }
-
             // ------------------------------------------------------------ plumbing
 
             private void SetGrid(MfdPagingGrid grid, List<TargetListSelector_ToggleButton> entries,
-                                 Action<int> onClick)
+                                 Action<int> onClick, bool nativeIcons = true)
             {
                 grid.SetData(entries == null ? 0 : entries.Count,
                     i => NativeTargetLabel(entries[i]),
                     i => entries[i] != null && entries[i].status,
-                    onClick, icons: i => entries[i] == null || entries[i].image == null ? null : entries[i].image.sprite,
+                    onClick, icons: !nativeIcons ? (Func<int, Sprite>)null : i => entries[i] == null || entries[i].image == null ? null : entries[i].image.sprite,
                     details: i => (FilterNote(NativeTargetLabel(entries[i])) ?? NativeTargetLabel(entries[i])) +
                                   ". Click to list or unlist it; right click lists only this one.");
             }

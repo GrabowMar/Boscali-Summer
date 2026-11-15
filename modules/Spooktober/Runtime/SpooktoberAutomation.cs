@@ -16,6 +16,7 @@ namespace BoscaliSummer.Spooktober
     /// nomodkit single-player test hook (tests/ingame/spooktober.json); inert outside a sim run. Actions: status,
     /// reset (fresh progress), spawn / defeat (boss = Kaiju|FallenAce|HellsArmy), dismiss,
     /// hell_status / hell_enter (Hell's Army's gate; tests/ingame/spooktober-hell.json),
+    /// hell_infection_status (bounded breach growth; tests/ingame/spooktober-hell-infection.json),
     /// ace_status, ace_hurt (how = wound|eject|hull) and fake_join (on = true|false; tests/ingame/spooktober-ace.json), relaunch (a new mission:
     /// progress re-read), rad (the look's readout), look (the free camera on the ace or the player) and
     /// tune ("_Knob": value on every material wearing the look).
@@ -82,13 +83,42 @@ namespace BoscaliSummer.Spooktober
                     return HellMap(action, "enlisted " + recruits.Count + " units");
                 case "hell_map":
                     return HellMap(action, null);
+                case "hell_map_open":
+                    SceneSingleton<DynamicMap>.i?.Maximize();
+                    return HellMap(action, "map opened");
+                case "hell_map_close":
+                    SceneSingleton<DynamicMap>.i?.Minimize();
+                    return HellMap(action, "map closed");
                 case "hell_status":
                     return HellStatus(action, null);
+                case "hell_infection_status":
+                    return InfectionStatus(action);
                 case "hell_enter":
                     // As if the host flew through the portal (HellRules.Crossed is pinned by the unit tests).
                     if (!HellGate.Alive) return Failure("SpooktoberAutomation", action, "no gate open");
                     HellGate.Enter();
                     return HellStatus(action, "entered");
+                case "hell_approach":
+                case "hell_dive":
+                    if (HellGate.Portal == null || !GameManager.GetLocalAircraft(out Aircraft diver))
+                        return Failure("SpooktoberAutomation", action, "no gate or pilot");
+                    FallenAce.Relocate(diver, HellGate.Portal.Root.transform.position + Vector3.up * (action == "hell_approach" ? 100f : 30f),
+                        Quaternion.Inverse(diver.transform.rotation));
+                    return HellStatus(action, "over the rift");
+                case "hell_retreat":
+                    HellDimension.Leave(true);
+                    return HellStatus(action, "retreated");
+                case "hell_hurt_anchor":
+                    foreach (Unit anchor in HellDimension.Anchors)
+                    {
+                        if (anchor == null || anchor.disabled) continue;
+                        foreach (UnitPart part in anchor.GetComponentsInChildren<UnitPart>())
+                            if (part != null) part.TakeDamage(0f, 0f, 0f, 0f, 1000000f, PersistentID.None);
+                        return HellStatus(action, "anchor hit through native damage");
+                    }
+                    return Failure("SpooktoberAutomation", action, "no live anchor");
+                case "hell_assault_base":
+                    return HellStatus(action, AssaultBase());
                 case "portal":
                     // A portal "distance" m ahead of the player at its altitude + "height", facing it; "close": true shuts them all.
                     if (Bool(args, "close")) { HellPortal.CloseAll(); message = "closed"; break; }
@@ -117,6 +147,97 @@ namespace BoscaliSummer.Spooktober
         }
 
         // ---- FALLEN ACE (Task 9) -----------------------------------------------------------------------------------------------
+        private static Airbase assaultedBase;
+        private static FactionHQ assaultedOwner;
+        private static int infectionPortal, matureMeshId, matureMeshBuilds;
+        private static float matureRadius, matureCoverage;
+        private static bool infectionMature;
+
+        private static Dictionary<string, object> InfectionStatus(string action)
+        {
+            Dictionary<string, object> result = HellStatus(action, null);
+            HellPortal portal = HellGate.Portal;
+            int portalId = portal != null && portal.Root != null ? portal.Root.GetInstanceID() : 0;
+            if (portalId != infectionPortal || portalId == 0)
+            {
+                infectionPortal = portalId;
+                infectionMature = false;
+            }
+            int meshId = HellTerritory.BreachMeshId, builds = HellTerritory.BreachMeshBuilds;
+            float radius = HellTerritory.BreachRadius, coverage = (float)result["breach_coverage"];
+            bool mature = portalId != 0 && meshId != 0 && HellTerritory.BreachAge >= 40f;
+            if (mature && !infectionMature)
+            {
+                matureMeshId = meshId;
+                matureMeshBuilds = builds;
+                matureRadius = radius;
+                matureCoverage = coverage;
+                infectionMature = true;
+            }
+            result["infection_mature_stable"] = mature && infectionMature && meshId == matureMeshId &&
+                builds == matureMeshBuilds && radius == matureRadius && coverage == matureCoverage;
+            result["infection_mesh_build_delta"] = infectionMature ? builds - matureMeshBuilds : 0;
+            result["infection_radius_delta"] = infectionMature ? radius - matureRadius : 0f;
+            result["infection_coverage_delta"] = infectionMature ? coverage - matureCoverage : 0f;
+            return result;
+        }
+
+        private static string AssaultBase()
+        {
+            Airbase target = null;
+            int weakest = int.MaxValue;
+            foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+            {
+                if (airbase == null || airbase.center == null || airbase.AttachedAirbase || HellSide.Side.Owns(airbase.CurrentHQ)) continue;
+                int defenders = 0;
+                foreach (Unit unit in UnitRegistry.allUnits)
+                    if (unit is GroundVehicle && !unit.disabled && unit.NetworkHQ != null && !HellSide.Side.Owns(unit.NetworkHQ) &&
+                        Vector3.Distance(unit.transform.position, airbase.center.position) < Mathf.Clamp(airbase.GetRadius(), 650f, 1600f)) defenders++;
+                if (defenders >= weakest) continue;
+                weakest = defenders;
+                target = airbase;
+            }
+            if (target == null) return "no base";
+            assaultedBase = target;
+            assaultedOwner = target.CurrentHQ;
+            int moved = 0, slot = 0;
+            foreach (Unit unit in HellGate.Guards)
+            {
+                if (!(unit is GroundVehicle vehicle) || unit.disabled) continue;
+                Vector3 free = default;
+                bool placed = false;
+                for (int attempt = 0; attempt < 8 && !placed; attempt++)
+                {
+                    Vector3 want = target.center.position + Quaternion.Euler(0f, slot * 97f + attempt * 45f, 0f) *
+                        Vector3.forward * (220f + attempt * 25f);
+                    placed = GroundPlacement.TryPlace(unit.definition, want, Quaternion.identity, out free);
+                    if (!placed)
+                    {
+                        Vector3 from = want + Vector3.up * 1000f;
+                        for (int n = 0; n < 8 && Physics.Raycast(from, Vector3.down, out RaycastHit hit, 2000f, PhysicsLayers.StaticsMask); n++)
+                        {
+                            if (hit.collider.sharedMaterial == GameAssets.i.terrainMaterial && hit.normal.y > .8f && hit.point.y > Datum.LocalSeaY)
+                            {
+                                free = hit.point + Vector3.up * ((unit.definition != null ? unit.definition.spawnOffset.y : 1f) + .3f);
+                                placed = true;
+                                break;
+                            }
+                            from = hit.point + Vector3.down * .05f;
+                        }
+                    }
+                }
+                slot++;
+                if (!placed) continue;
+                vehicle.StopImmediately();
+                unit.transform.position = free;
+                if (unit.rb != null) { unit.rb.position = free; unit.rb.velocity = Vector3.zero; }
+                vehicle.SetHoldPosition(true);
+                moved++;
+                Physics.SyncTransforms();
+            }
+            Physics.SyncTransforms();
+            return "assaulting " + target.name + " with " + moved + " wardens against " + weakest;
+        }
         private static readonly AccessTools.FieldRef<Unit, Dictionary<PersistentID, float>> DamageCredit =
             AccessTools.FieldRefAccess<Unit, Dictionary<PersistentID, float>>("damageCredit");
         /// <summary>Hurts the ace through the game's own methods. wound: a lethal Pilot.TakeDamage (impact damage, which armour does
@@ -259,6 +380,8 @@ namespace BoscaliSummer.Spooktober
             string target = Text(args, "at");
             Transform unit = target == "player" ? (GameManager.GetLocalAircraft(out Aircraft own) ? own.transform : null)
                 : target == "portal" ? HellPortal.First?.Root.transform
+                : target == "anchor" ? FirstAnchor()
+                : target == "territory" ? FirstTerritory()
                 : target == "hell" ? FirstHell()
                 : FallenAce.Current != null ? FallenAce.Current.transform : null;
             CameraStateManager camera = SceneSingleton<CameraStateManager>.i;
@@ -279,7 +402,7 @@ namespace BoscaliSummer.Spooktober
         /// portals and the HELLGATE signs showing.</summary>
         private static Dictionary<string, object> HellMap(string action, string message)
         {
-            int icons = 0, black = 0;
+            int icons = 0, violet = 0;
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             if (map != null && map.mapIcons != null)
                 foreach (MapIcon icon in map.mapIcons)
@@ -287,7 +410,7 @@ namespace BoscaliSummer.Spooktober
                     {
                         icons++;
                         Color c = unitIcon.iconImage.color;
-                        if (c.r < 0.1f && c.g < 0.1f && c.b < 0.1f) black++;
+                        if (c.b > .8f && c.r > .65f && c.g < .95f) violet++;
                     }
             int signs = 0;
             foreach (RectTransform r in UnityEngine.Object.FindObjectsOfType<RectTransform>())
@@ -295,7 +418,8 @@ namespace BoscaliSummer.Spooktober
             Dictionary<string, object> result = Status(action, message);
             result["members"] = HellArmy.Count;
             result["icons"] = icons;
-            result["black_icons"] = black;
+            result["violet_icons"] = violet;
+            result["territory_zones"] = HellTerritory.Zones.Count;
             result["portals"] = HellPortal.Count;
             result["signs"] = signs;
             result["map_open"] = DynamicMap.mapMaximized;
@@ -336,34 +460,89 @@ namespace BoscaliSummer.Spooktober
             result["gate_scale"] = portal != null ? portal.Scale : 0f;
             result["spawned"] = HellGate.Spawned;
             result["army"] = HellGate.Units.Count;
+            result["cleanup_requested"] = HellGate.CleanupRequested;
+            result["cleanup_remaining"] = HellGate.CleanupRemaining;
             result["on_hell"] = onHell;
             result["tracked_by_host"] = trackedByHost;
             result["moving"] = moving;
             result["hell_tracks"] = hellTracks;
             result["hell_hq"] = HellSide.Side.Made;
+            result["hell_rearm_controller"] = hell != null && hell.RearmMissionController != null;
+            HellTerritory.DepotReadout(out int hellDepotsOwned, out int hellDepotsStale);
+            result["hell_depots_owned"] = hellDepotsOwned;
+            result["hell_depots_stale"] = hellDepotsStale;
             result["members"] = HellArmy.Count;
             result["range"] = range;
             result["entered"] = HellGate.Entered;
             result["defeated"] = HellGate.WasDefeated;
+            result["inside_hell"] = HellDimension.Inside;
+            result["dimension_built"] = HellDimension.Built;
+            result["realm_suspended"] = HellDimension.Suspended;
+            result["realm_weather_excluded"] = ModuleServices.TryGet(out IWeatherCameraExclusion weatherExclusion) &&
+                weatherExclusion.Contains(SceneSingleton<CameraStateManager>.i?.mainCamera);
+            result["realm_colliders_active_outside"] = HellDimension.ActiveCollidersOutside;
+            result["realm_cloud_renderers_hidden"] = HellDimension.HiddenCloudRenderers;
+            result["anchors_remaining"] = HellDimension.Remaining;
+            result["anchors_broken"] = HellDimension.Broken;
+            result["held_bases"] = HellTerritory.Count;
+            result["captured_bases"] = HellTerritory.Captured;
+            result["corrupted_structures"] = HellTerritory.Textured;
+            result["alien_hulls"] = HellArmy.ShellCount;
+            result["native_renderers_hidden"] = HellArmy.HiddenRenderers;
+            result["growth_fields"] = HellGrowth.Count;
+            result["grown_forms"] = HellGrowth.Forms;
+            result["infection_fields"] = HellTerritory.InfectionFields;
+            result["infection_growing"] = HellTerritory.InfectionGrowing;
+            result["infection_mesh_builds"] = HellTerritory.InfectionMeshBuilds;
+            result["breach_age"] = HellTerritory.BreachAge;
+            result["breach_growing"] = HellTerritory.BreachGrowing;
+            result["breach_coverage"] = HellTerritory.BreachCoverage;
+            result["breach_radius"] = HellTerritory.BreachRadius;
+            result["breach_mesh_builds"] = HellTerritory.BreachMeshBuilds;
+            result["breach_mesh_id"] = HellTerritory.BreachMeshId;
+            result["ground_surface"] = HellTerritory.InfectionFields > 0
+                ? HellGroundSurface.InfectionMaterial()?.shader?.name ?? "" : HellGroundSurface.SourceName;
+            int hostile = 0, friendly = 0;
+            if (hell != null)
+                foreach (FactionHQ faction in FactionRegistry.GetAllHQs())
+                    if (faction != null && faction != hell)
+                    {
+                        if (HellSide.IsHostile(faction)) hostile++;
+                        else friendly++;
+                    }
+            result["hostile_factions"] = hostile;
+            result["friendly_factions"] = friendly;
+            result["assault_owner_restored"] = assaultedBase != null && assaultedBase.CurrentHQ == assaultedOwner;
             Plugin.Logger.LogInfo("[Spooktober] hell gate " + Describe(result));
             if (ids.Count > 0) result["ids"] = ids;
             return result;
         }
 
-        /// <summary>A live ground unit wearing Boscali/Hellfire, else any live unit wearing it.</summary>
+        /// <summary>A live Hell ground unit, else any live member (works with both authored hulls and the shader fallback).</summary>
         private static Transform FirstHell()
         {
             Transform any = null;
             foreach (Unit unit in UnitRegistry.allUnits)
             {
-                if (unit == null || unit.disabled) continue;
-                Renderer r = unit.GetComponentInChildren<Renderer>();
-                Material m = r != null ? r.sharedMaterial : null;
-                if (m == null || m.shader == null || m.shader.name != "Boscali/Hellfire") continue;
+                if (unit == null || unit.disabled || !HellArmy.IsHell(unit)) continue;
                 if (unit is GroundVehicle) return unit.transform;
                 if (any == null) any = unit.transform;
             }
             return any;
+        }
+
+        private static Transform FirstAnchor()
+        {
+            foreach (Unit unit in HellDimension.Anchors)
+                if (unit != null && !unit.disabled) return unit.transform;
+            return null;
+        }
+
+        private static Transform FirstTerritory()
+        {
+            foreach (HellTerritory.Zone zone in HellTerritory.Zones)
+                if (zone.Controlled && zone.Base != null) return zone.Base.center;
+            return null;
         }
 
         private static string UnitTag(Unit unit) =>

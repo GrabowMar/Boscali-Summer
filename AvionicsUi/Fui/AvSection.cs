@@ -10,6 +10,7 @@ namespace NOAvionics
         private const float Line = 22f;
         private readonly TMP_Text icon, title, caption;
         private readonly Image rule, cap;
+        private readonly AvQuadGraphic wash;
         private bool twoLines;
         private bool placed;
         private AvSlot lastSlot;
@@ -18,6 +19,11 @@ namespace NOAvionics
         public AvSection(RectTransform parent, AvIcon glyph, string titleText, string captionText = null)
         {
             Rect = AvLay.Child(parent, "Section " + titleText);
+            // A soft wash of the key colour behind the title, strongest at the left edge: the eye finds each section's start at a glance.
+            var washGo = new GameObject("Wash", typeof(RectTransform), typeof(CanvasRenderer));
+            washGo.transform.SetParent(Rect, false);
+            wash = washGo.AddComponent<AvQuadGraphic>();
+            wash.raycastTarget = false;
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
             title.font = AvType.Face(AvFace.Cond);
@@ -43,7 +49,7 @@ namespace NOAvionics
             captionW = AvText.Width(caption);
             title.enableWordWrapping = titleW > inner || title.text.IndexOf('\n') >= 0;
             titleH = title.enableWordWrapping ? Mathf.Max(Line, AvText.Height(title, inner) + 4f) : Line;
-            twoLines = caption.text.Length > 0 && (titleH > Line || caption.text.IndexOf('\n') >= 0 || 22f + titleW + 12f + captionW > width);
+            twoLines = caption.text.Length > 0 && (titleH > Line || caption.text.IndexOf('\n') >= 0 || 22f + titleW + 16f + captionW > width);
             caption.enableWordWrapping = twoLines;
             captionH = twoLines ? Mathf.Max(Line, AvText.Height(caption, inner) + 4f) : Line;
             return titleH + (twoLines ? captionH : 0f) + 1f;
@@ -54,15 +60,17 @@ namespace NOAvionics
             base.Place(slot);
             lastSlot = slot; placed = true;
             AvLay.Place(icon.rectTransform, 0f, 3f, 16f, 16f);
-            float titleW = slot.W - 22f - (!twoLines && caption.text.Length > 0 ? captionW + 12f : 0f);
+            float titleW = slot.W - 22f - (!twoLines && caption.text.Length > 0 ? captionW + 16f : 0f);
             AvLay.Place(title.rectTransform, 22f, 0f, Mathf.Max(0f, titleW), titleH);
             title.alignment = titleH > Line ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineLeft;
             caption.enableWordWrapping = twoLines;
-            AvLay.Place(caption.rectTransform, twoLines ? 22f : slot.W - captionW, twoLines ? titleH : 0f,
+            AvLay.Place(caption.rectTransform, twoLines ? 22f : slot.W - captionW - 4f, twoLines ? titleH : 0f,
                 twoLines ? Mathf.Max(0f, slot.W - 22f) : captionW, twoLines ? captionH : Line);
             caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
-            AvLay.Place(cap.rectTransform, 0f, slot.H - 1.5f, 22f, 1.5f);
+            AvLay.Place(cap.rectTransform, 0f, slot.H - 2f, 30f, 2f);
+            AvLay.Place(wash.rectTransform, 0f, 0f, slot.W, slot.H - 1f);
+            PaintWash();
         }
 
         public override void Restyle()
@@ -72,6 +80,15 @@ namespace NOAvionics
             caption.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
             rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
             cap.color = title.color;
+            if (placed) PaintWash();
+        }
+
+        private void PaintWash()
+        {
+            Color key = title.color;
+            wash.Begin();
+            wash.Add(0f, 0f, lastSlot.W * 0.7f, Mathf.Max(0f, lastSlot.H - 1f), key.WithAlpha(AvBundle.OverlayAlpha(0.22f)), key.WithAlpha(0f), true);
+            wash.End();
         }
     }
 }

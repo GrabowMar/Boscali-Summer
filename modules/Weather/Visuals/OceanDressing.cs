@@ -80,6 +80,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly Vector2[] direction = new Vector2[Waves];
         private readonly Vector4[] waves = new Vector4[Waves], wavePhase = new Vector4[Waves];
         private readonly Vector4[] calm = new Vector4[CalmSlots], calmGlobal = new Vector4[CalmSlots];
+        private readonly Ship[] calmShips = new Ship[CalmSlots];
         private readonly float[] calmDistance = new float[CalmSlots];
         private readonly Vector4[] wash = new Vector4[4], washDir = new Vector4[4];
         private readonly double[] offsetU = new double[6], offsetV = new double[6];
@@ -88,8 +89,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private double anchorX, anchorZ;
         private bool anchored, headed;
         private float seaWind = -1f, baseDeg, swellDeg, nextShips, nextLight, renderTime, probeMips;
-        private int calmCount;
+        private int calmCount, shipWakeCount;
         internal float WaveHeight { get; private set; }
+        internal bool EnhancedInteractions { get; set; } = true;
+        private bool Interactions => EnhancedInteractions && settings != null && settings.OceanInteractionsEnabled.Value &&
+            water != null && water.shader == SurfaceShaderBundle.Ocean;
 
         public string EffectId => "ocean";
 
@@ -106,6 +110,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             seaWind = -1f;
             headed = anchored = false;
             calmCount = 0;
+            Array.Clear(calmShips, 0, calmShips.Length);
             nextShips = nextLight = 0f;
         }
 
@@ -126,6 +131,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             state["sprayParticles"] = spray.Particles;
             state["wakeParticles"] = spray.WakeParticles;
             state["sprayWashes"] = spray.WashCount;
+            state["shipWakes"] = shipWakeCount;
         }
 
         private void LateUpdate()
@@ -192,6 +198,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         private void Release()
         {
+            calmCount = 0;
+            shipWakeCount = 0;
+            Array.Clear(calmShips, 0, calmShips.Length);
             if (!attached) return;
             if (water != null && vanillaShader != null)
             {
@@ -259,10 +268,21 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
             DriftTextures(dt);
             if (Time.unscaledTime >= nextShips) { nextShips = Time.unscaledTime + 0.5f; FindShips(camera); }
+            bool interactions = Interactions;
             for (int i = 0; i < CalmSlots; i++)
-                calm[i] = i < calmCount
-                    ? new Vector4((float)(calmGlobal[i].x - anchorX), (float)(calmGlobal[i].y - anchorZ), calmGlobal[i].z, calmGlobal[i].w)
-                    : Vector4.zero;
+            {
+                if (!interactions)
+                {
+                    calm[i] = i < calmCount
+                        ? new Vector4((float)(calmGlobal[i].x - anchorX), (float)(calmGlobal[i].y - anchorZ), calmGlobal[i].z, calmGlobal[i].w)
+                        : Vector4.zero;
+                    continue;
+                }
+                Ship ship = i < calmCount ? calmShips[i] : null;
+                if (ship == null) { calm[i] = Vector4.zero; continue; }
+                GlobalPosition g = ship.transform.position.ToGlobalPosition();
+                calm[i] = new Vector4((float)(g.x - anchorX), (float)(g.z - anchorZ), ship.maxRadius * 0.9f, ship.maxRadius * 1.9f);
+            }
             for (int i = 0; i < 4; i++)
             {
                 if (i < spray.WashCount)
@@ -273,6 +293,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 }
                 else { wash[i] = Vector4.zero; washDir[i] = new Vector4(0f, 1f, 1f, 0f); }
             }
+            shipWakeCount = 0;
+            if (interactions) AddShipWakes(spray.WashCount);
 
             if (Time.unscaledTime >= nextLight) { nextLight = Time.unscaledTime + 0.5f; ReadLighting(level); }
             Upload(level, crest);
@@ -333,6 +355,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private void FindShips(Camera camera)
         {
             calmCount = 0;
+            Array.Clear(calmShips, 0, calmShips.Length);
             List<Unit> units = UnitRegistry.allUnits;
             if (units == null) return;
             Vector3 eye = camera.transform.position;
@@ -352,7 +375,32 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 }
                 GlobalPosition g = at.ToGlobalPosition();
                 calmGlobal[slot] = new Vector4(g.x, g.z, ship.maxRadius * 0.9f, ship.maxRadius * 1.9f);
+                calmShips[slot] = ship;
                 calmDistance[slot] = d2;
+            }
+        }
+
+        // Share the existing four interaction slots with aircraft: no extra shader loop, particles or texture reads.
+        private void AddShipWakes(int firstSlot)
+        {
+            for (int i = 0; i < calmCount && firstSlot < wash.Length; i++)
+            {
+                Ship ship = calmShips[i];
+                if (ship == null || ship.rb == null || ship.disabled) continue;
+                Vector3 velocity = ship.rb.velocity;
+                Vector2 heading = new Vector2(velocity.x, velocity.z);
+                float speed = heading.magnitude;
+                float strength = SeaState.ShipWakeIntensity(speed);
+                if (strength <= 0f) continue;
+                heading /= speed;
+                float radius = Mathf.Max(ship.maxRadius, 4f);
+                GlobalPosition g = ship.transform.position.ToGlobalPosition();
+                // Begin at the stern rather than drawing a white wedge through the hull.
+                wash[firstSlot] = new Vector4((float)(g.x - anchorX) - heading.x * radius * 0.9f,
+                    (float)(g.z - anchorZ) - heading.y * radius * 0.9f, Mathf.Clamp(radius * 0.14f, 3f, 22f), strength);
+                washDir[firstSlot] = new Vector4(heading.x, heading.y, SeaState.ShipWakeLength(speed, radius), 1f);
+                firstSlot++;
+                shipWakeCount++;
             }
         }
 
@@ -379,7 +427,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             water.SetVectorArray(WashId, wash);
             water.SetVectorArray(WashDirId, washDir);
             water.SetVector(AnchorId, new Vector4((float)anchorX, (float)anchorZ, 0f, 0f));
-            water.SetVector(DispId, new Vector4(DisplaceStart, DisplaceEnd, renderTime, 0f));
+            water.SetVector(DispId, new Vector4(DisplaceStart, DisplaceEnd, renderTime, Interactions ? 1f : 0f));
             water.SetVector(WindId, new Vector4(windDir.x, windDir.y, SeaState.Ripples(seaWind), GustContrast));
             // Breaking cores are a fifth of the whitecap coverage (Monahan's stage A); the rest is the foam lace they leave.
             water.SetVector(SeaId, new Vector4(SeaState.Roughness(seaWind), SeaState.WhitecapSigma(coverage * 0.2f), SeaState.WhitecapSigma(coverage), coverage));

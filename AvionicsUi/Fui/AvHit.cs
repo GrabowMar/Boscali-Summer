@@ -12,6 +12,10 @@ namespace NOAvionics
         public Action<bool> Hover;
         public Action<bool> Press;
         public bool Interactable = true;
+        /// <summary>The cue a click plays once its handler has run (the handler may set it for that click, or play a cue of its own).</summary>
+        public AvUiCue Cue = AvUiCue.Press;
+        /// <summary>A click while not interactable answers with the soft refusal (disabled buttons).</summary>
+        public bool Refuses;
         private bool hovered, pressed;
 
         public static AvHit On(Graphic g)
@@ -39,11 +43,11 @@ namespace NOAvionics
 
         public void OnPointerClick(PointerEventData e)
         {
-            if (!Interactable) return;
             if (!e.eligibleForClick) synthFrame = Time.frameCount;
             else if (Mathf.Abs(synthFrame - downFrame) <= 1) return;
-            AvUiSound.Play(AvUiCue.Press);
+            if (!Interactable) { if (Refuses) AvUiSound.Play(AvUiCue.Caution); return; }
             Click?.Invoke(e);
+            AvUiSound.Play(Cue);
             AvInput.Deselect(gameObject);
         }
     }

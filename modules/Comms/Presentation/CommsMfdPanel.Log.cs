@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             playerRows = null;
             playerMutes = null;
             seenStations.Clear();
+            rosterKey = -1;
             for (int i = 0; i < playerIds.Length; i++) playerIds[i] = 0;
         }
 
@@ -31,7 +32,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             // The mute list: stations two to a line.
             playersSection = p.Section(AvIcon.UsersGroup, "STATIONS HEARD", "");
             rosterEmpty = p.Add(new NetRow(p.Content, AvTextRole.Head, 0f, 0f, 0f));
-            rosterEmpty.Set("", "", "NO STATIONS HEARD YET · THEY LIST HERE ONCE THEY POST", "", AvState.Inert);
+            rosterEmpty.Set("", "", "NO STATIONS HEARD YET", "", AvState.Inert);
             playerRows = new NetRow[PlayerRows];
             playerMutes = new AvControl[PlayerRows];
             for (int i = 0; i < PlayerRows; i++)
@@ -45,17 +46,18 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 playerMutes[i].Help = "Mute: hide this player's marks and calls on your screen only. They are not told.";
             }
             for (int i = 0; i < PlayerRows; i += 2) p.Row(playerRows[i], playerRows[i + 1]);
-            p.Links(("PLOT", "MAP", "TOOLS"), ("EVENTS", "EVN", "DISPATCH"));
 
-            console.Orders(TabNet,
-                "The chips up top: the link, and who you post to (click it: TEAM or ALL).",
-                "Mute hides a player's marks and calls on your screen only. They are not told.");
         }
 
-        private void RefreshLog(float now)
+        private int rosterKey = -1;
+
+        private void RefreshLog()
         {
             if (playerRows == null) return;
             CommsClientState state = comms.State;
+            int key = state.Revision * 31 + state.Seen.Count * 7 + state.MutedCount + (int)comms.LocalId * 13;
+            if (key == rosterKey) return;
+            rosterKey = key;
 
             // ---- stations: alphabetical, so a row never jumps out from under the pointer.
             seenStations.Clear();

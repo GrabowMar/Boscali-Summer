@@ -153,6 +153,9 @@ namespace NOAvionics
 
         private readonly Dictionary<string, AvStyle> cache =
             new Dictionary<string, AvStyle>(StringComparer.Ordinal);
+        // One class cache per state, so a stateful lookup (every hover, press and row rebind) builds no "classes|state" key.
+        private readonly Dictionary<string, Dictionary<string, AvStyle>> stateCache =
+            new Dictionary<string, Dictionary<string, AvStyle>>(StringComparer.Ordinal);
 
         private readonly Dictionary<string, AvPaint> paints =
             new Dictionary<string, AvPaint>(StringComparer.OrdinalIgnoreCase);
@@ -519,8 +522,10 @@ namespace NOAvionics
         {
             if (string.IsNullOrEmpty(classes)) return default(AvStyle);
 
-            string key = state == null ? classes : classes + "|" + state;
-            if (cache.TryGetValue(key, out AvStyle hit)) return hit;
+            Dictionary<string, AvStyle> byClass = cache;
+            if (state != null && !stateCache.TryGetValue(state, out byClass))
+                stateCache[state] = byClass = new Dictionary<string, AvStyle>(StringComparer.Ordinal);
+            if (byClass.TryGetValue(classes, out AvStyle hit)) return hit;
 
             string[] have = classes.Split(new[] { ' ', '\t', '.' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -542,7 +547,7 @@ namespace NOAvionics
                 }
             }
 
-            cache[key] = style;
+            byClass[classes] = style;
             return style;
         }
 

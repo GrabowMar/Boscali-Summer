@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.QoL.Configuration
             MarkCameraKey = config.Bind("QoL", "MarkCameraKey", KeyCode.F8,
                 "Capture a camera observation; ignores text entry and pause. None disables the shortcut. Also available on TGT CAMERA.");
             NightVisionLook = config.Bind("QoL", "NightVisionLook", NvgLook.Fused,
-                "How night vision looks. Vanilla: the game's own green picture. WhitePhosphor: a white tube whose gain follows what you look at and dips for bright sources. Fused: the same, with an orange glow on hot units.");
+                "How night vision looks. Vanilla: the game's own green picture. WhitePhosphor: clean mint-white phosphor, fine signal grain and protected highlights; gain adapts to the view. Fused: the same with amber thermal contours on hot units.");
 
         }
     }

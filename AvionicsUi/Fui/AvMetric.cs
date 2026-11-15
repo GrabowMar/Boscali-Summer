@@ -21,6 +21,7 @@ namespace NOAvionics
             value = AvText.Make(Rect, "Value", AvTextRole.Display);
             unit = AvText.Make(Rect, "Unit", AvTextRole.Micro, "", TextAlignmentOptions.MidlineRight);
             symbol = AvIcons.Make(Rect, Symbol(keyText), 22f, Color.white);
+            hasSymbol = Symbol(keyText) != AvIcon.Activity;   // a tile whose key names no subject carries no ornament
             frame.Bracket = 3f;
             AvText.Fit(key, false); AvText.Fit(value, false); AvText.Fit(unit, false);
             var go = new GameObject("Gauge", typeof(RectTransform), typeof(CanvasRenderer));
@@ -33,6 +34,7 @@ namespace NOAvionics
         public override float Measure(float width) => AvGridTokens.Metric;
 
         private AvSlot lastSlot;
+        private readonly bool hasSymbol;
         private bool placed, tipOwned;
 
         public override void Place(AvSlot s)
@@ -66,7 +68,7 @@ namespace NOAvionics
             }
             AvLay.Place((RectTransform)gauge.transform, 6f, s.H - 4f, s.W - 12f, 3f);
             // Decorative symbol uses only spare space; it never displaces a number or unit.
-            symbol.gameObject.SetActive(!line.UnitByValue && vw + 28f < avail);
+            symbol.gameObject.SetActive(hasSymbol && !line.UnitByValue && vw + 28f < avail);
             AvLay.Place(symbol.rectTransform, s.W - 29f, 19f, 22f, 22f);
             SyncHelp(line.UnitShown);
         }

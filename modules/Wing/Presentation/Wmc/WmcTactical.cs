@@ -2,8 +2,8 @@ using NOAvionics;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>ROSTER (was TACTICAL; spec 2026-10-04 §4.2, mockups board/orders.html, formation.html, route.html), the page the player spends most of the
-    /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (the stance
-    /// slots, the command card with REACT, the queue), FORMATION (the Station Board) and ROUTE · AP (the Flight Plan). The wing table is
+    /// WMC on, as a kit v2 flow: the sub-tabs, the dense wing table that is also the scope (who orders go to), then ORDERS (the command card, REACT and the queue),
+    /// FORMATION (the Station Board) and ROUTE · AP (the Flight Plan). The wing table is
     /// full on ORDERS and one summary line on the others (a tap expands it). The console body scrolls, so nothing pages or clips.</summary>
     internal sealed partial class WmcTactical : IWmcPage
     {
@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly AvIcon[] SubIcons = { AvIcon.Flag, AvIcon.LayersSubtract, AvIcon.MapPin };
         private static readonly string[] SubHelp =
         {
-            "Profiles and every order.",
+            "Every order, REACT and the queue.",
             "The Station Board: the shape each element flies and how well it holds it, spacing and stack.",
             "The Flight Plan: the scope's route as legs, and your own autopilot with NAV.",
         };
@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
             : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
             : last != null && last.Client ? "Orders are host only for now."
-            : "Click the table to choose who orders go to; a profile sets how the scope fights.";
+            : "Click the table to choose who orders go to.";
 
         public string Alert => alertText;
 
@@ -57,7 +57,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildOrders(subPages.Flow(SubOrders));
             form.Build(subPages.Flow(SubFormation), ticker, pageIndex);
             route.Build(subPages.Flow(SubRoute), ticker, pageIndex);
-            flow.Links(("IDENTITY AND STUDIO", "PILOT", "STUDIO"), ("JOBS FOR THE WING", "MIS", "JOBS"));
             ShowSub(SubOrders);
         }
 

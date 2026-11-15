@@ -58,8 +58,18 @@ modules/Events/Assets/Source/
 decompiled_src/
 /custom gui.png
 
-# Agent and tooling state
-.agents/
+# Agent and tooling state; publish only the two maintained nomod skills and MCP configuration.
+.agents/*
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/nomodkit/
+!.agents/skills/boscali-nomod/
+.agents/skills/nomodkit/*
+.agents/skills/boscali-nomod/*
+!.agents/skills/nomodkit/SKILL.md
+!.agents/skills/boscali-nomod/SKILL.md
+.codex/*
+!.codex/config.toml
 .superpowers/
 .claude/
 .opencode/

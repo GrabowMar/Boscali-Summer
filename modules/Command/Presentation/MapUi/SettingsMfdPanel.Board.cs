@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// <summary>
     /// The rows other features publish to SET (<see cref="ClientSettingsBoard"/>): each row's section picks its tab
     /// and its place there, so Command never reaches into a sibling's settings. A section the table does not list
-    /// lands at the foot of PERF, where every row used to go.
+    /// lands at the foot of PERF, where every row used to go. The CCompat sections close VISUALS, and only when their other mod is installed.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
     {
@@ -18,16 +18,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ("FLIGHT AIDS", CHud, AvIcon.Plane),
             ("COMMS", CHud, AvIcon.Antenna),
             ("CONTROLLER", CHud, AvIcon.AdjustmentsHorizontal),
-            ("IMMERSION", CCockpit, AvIcon.WaveSine),
-            ("COCKPIT MOTION", CCockpit, AvIcon.Activity),
-            ("COCKPIT VISUALS", CCockpit, AvIcon.Eye),
-            ("COCKPIT AUDIO", CCockpit, AvIcon.Volume),
-            ("SKY", CWorld, AvIcon.Cloud),
-            ("RAIN", CWorld, AvIcon.CloudRain),
-            ("SEA", CWorld, AvIcon.Wind),
-            ("WORLD FX", CWorld, AvIcon.Flame),
-            ("COLOUR GRADE", CWorld, AvIcon.Filter),
-            ("MISSIONS", CWorld, AvIcon.Flag),
+            ("IMMERSION", CVisuals, AvIcon.WaveSine),
+            ("COCKPIT MOTION", CVisuals, AvIcon.Activity),
+            ("COCKPIT VISUALS", CVisuals, AvIcon.Eye),
+            ("COCKPIT AUDIO", CVisuals, AvIcon.Volume),
+            ("SKY", CVisuals, AvIcon.Cloud),
+            ("RAIN", CVisuals, AvIcon.CloudRain),
+            ("GROUND", CVisuals, AvIcon.Map2),
+            ("SEA", CVisuals, AvIcon.Wind),
+            ("WORLD FX", CVisuals, AvIcon.Flame),
+            ("COLOUR GRADE", CVisuals, AvIcon.Filter),
+            ("MISSIONS", CVisuals, AvIcon.Flag),
+            ("EXPANSION 2082", CCompat, AvIcon.Bolt),
             ("WEATHER QUALITY", CPerf, AvIcon.Cloud),
             ("CLOUD DETAIL", CPerf, AvIcon.Cloud),
             ("FRAME BUDGET", CPerf, AvIcon.Gauge),
@@ -65,10 +67,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             foreach (string section in sections)
             {
                 bool any = false;
-                foreach (ClientSetting row in rows) any |= row.Section == section;
-                if (!any) continue;   // the feature that owns it is not installed
+                foreach (ClientSetting row in rows) any |= row.Section == section && (tab != CCompat || row.Gate != null && row.Gate() == null);
+                if (!any) continue;   // the feature that owns it is not installed (a compat section: its mod is not detected)
                 int index = ClientSectionIndex(section);
-                flow.Section(index < 0 ? AvIcon.Settings : ClientSections[index].Icon, section, "APPLIES NOW");
+                flow.Section(index < 0 ? AvIcon.Settings : ClientSections[index].Icon, section, null);
 
                 foreach (ClientSetting row in rows)
                     if (row.Section == section && row is ClientSettingToggle t)

@@ -148,7 +148,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < keys.Count; i++) Kill(keys[i].Rect.gameObject);
             keys.Clear();
             for (int i = 0; i < slots.Count; i++)
-                keys.Add(new MfdRailKey(rail, slots[i].Entry, i + 1, slots[i].Button, slots[i].Screen));
+                keys.Add(new MfdRailKey(rail, slots[i].Entry, slots[i].Button, slots[i].Screen));
 
             Lay();
             Refresh();
@@ -203,24 +203,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             MfdRailPlan plan = MfdRailPlan.Resolve(height, keys.Count, groups);
             float y = MfdRailPlan.Pad;
-            chrome.LayHeader(plan.Header, width, keys.Count);
-            if (plan.Header) y += MfdRailPlan.HeaderHeight + MfdRailPlan.Gap;
 
-            // MISC stands on the rail's bottom edge, its group label over it; the spare height (and the scheme line) opens above it.
+            // MISC stands on the rail's bottom edge, its group label over it; the spare height opens above it.
             int count = keys.Count;
             bool pinned = count > 1 && keys[count - 1].Entry.Code == "MISC";
             float pinTop = height - MfdRailPlan.Pad - plan.KeyHeight;
             if (pinned && plan.Groups && keys[count - 1].Entry.Group != keys[count - 2].Entry.Group) pinTop -= MfdRailPlan.GroupHeight;
-            float used = 0f;
 
             int labels = 0;
             for (int i = 0; i < count; i++)
             {
-                if (pinned && i == count - 1)
-                {
-                    used = y;
-                    y = Mathf.Max(y, pinTop);
-                }
+                if (pinned && i == count - 1) y = Mathf.Max(y, pinTop);
                 if (plan.Groups && (i == 0 || keys[i].Entry.Group != keys[i - 1].Entry.Group))
                 {
                     chrome.LayGroup(labels++, MfdRailCatalog.GroupName(keys[i].Entry.Group), y, width);
@@ -230,8 +223,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 y += plan.KeyHeight + MfdRailPlan.Gap;
             }
             chrome.HideGroupsFrom(labels);
-            if (pinned) chrome.LayFooter(used, width, pinTop + MfdRailPlan.Pad);
-            else chrome.LayFooter(y, width, height);
             laidSize = rail.sizeDelta;
         }
 
@@ -277,16 +268,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static Color Role(string role, Color fallback) => AvStyleHost.FuiColor(role, fallback);
 
-        /// <summary>The plate, the index header, the group labels and the scheme line; repaints the keys with itself.</summary>
+        /// <summary>The plate and the group labels; repaints the keys with itself.</summary>
         private sealed class Chrome : AvPart
         {
             private readonly AvFrame plate;
-            private readonly AvFrame header;
-            private readonly AvFrame slab;
-            private readonly TMP_Text slabText;
-            private readonly TMP_Text title;
-            private readonly TMP_Text count;
-            private readonly TMP_Text footer;
             private readonly List<TMP_Text> groupTexts = new List<TMP_Text>();
             private readonly List<Image> groupRules = new List<Image>();
 
@@ -298,29 +283,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 plate.Stroke = 1f;
                 plate.Bracket = 8f;
 
-                header = AvFrame.Add(root, "Header", AvChamfer.Diagonal(4f));
-                header.Stroke = 1f;
-                slab = AvFrame.Add(header.rectTransform, "Slab", default(AvChamfer));
-                slab.Stroke = 0f;
-                slabText = AvText.Make(header.rectTransform, "Id", AvTextRole.Head, "MFD", TextAlignmentOptions.Center);
-                title = AvText.Make(header.rectTransform, "Title", AvTextRole.Head, "INDEX");
-                count = AvText.Make(header.rectTransform, "Count", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-                footer = AvText.Make(root, "Scheme", AvTextRole.Micro, "", TextAlignmentOptions.Center);
                 Restyle();
-            }
-
-            public void LayHeader(bool show, float width, int keyCount)
-            {
-                header.gameObject.SetActive(show);
-                if (!show) return;
-
-                float w = width - MfdRailPlan.Pad * 2f, h = MfdRailPlan.HeaderHeight;
-                MfdChromeLay.Place(header.rectTransform, new Rect(MfdRailPlan.Pad, -MfdRailPlan.Pad, w, h));
-                MfdChromeLay.Place(slab.rectTransform, new Rect(4f, -5f, 36f, h - 10f));
-                MfdChromeLay.Place(slabText.rectTransform, new Rect(4f, -5f, 36f, h - 10f));
-                MfdChromeLay.Place(title.rectTransform, new Rect(48f, 0f, w - 80f, h));
-                MfdChromeLay.Place(count.rectTransform, new Rect(w - 34f, 0f, 26f, h));
-                AvText.Set(count, MfdChromeLay.TwoDigits(keyCount));
             }
 
             public void LayGroup(int slot, string name, float y, float width)
@@ -352,26 +315,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            /// <summary>Spare height under the last key names the scheme in force, rather than sitting empty.</summary>
-            public void LayFooter(float used, float width, float height)
-            {
-                bool show = height - used - MfdRailPlan.Pad >= 18f;
-                footer.gameObject.SetActive(show);
-                if (show) MfdChromeLay.Place(footer.rectTransform, new Rect(0f, -(height - MfdRailPlan.Pad - 18f), width, 18f));
-            }
-
             public override void Restyle()
             {
                 plate.Paint(AvStyleHost.FuiFill("console", AvTheme.Ground), AvStyleHost.FuiBorder("console", AvTheme.Frame));
                 plate.BracketColor = Role("select", AvTheme.Accent).WithAlpha(0.8f);
                 plate.SetVerticesDirty();
-                header.Paint(AvStyleHost.FuiFill("header", AvTheme.Surface), AvStyleHost.FuiBorder("header", AvTheme.Hairline));
-                slab.Paint(AvStyleHost.FuiFill("slab", AvTheme.Accent), Color.clear);
-                slabText.color = AvStyleHost.FuiInk("slab", Color.black);
-                title.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
-                count.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
-                footer.color = Role("ink-muted", AvTheme.Disabled);
-                AvText.Set(footer, "SCHEME  " + AvStyleHost.Theme.ToString().ToUpperInvariant());
                 for (int i = 0; i < groupTexts.Count; i++)
                 {
                     groupTexts[i].color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
@@ -383,9 +331,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     }
 
     /// <summary>
-    /// One key of the MFD index: glyph, the game's short code, the word the code stands for,
-    /// and its place in the index. The open screen's key carries the accent on its edge
-    /// rail, corner brackets, glyph and lamp, and reads ON where its number was.
+    /// One key of the MFD index: glyph, the game's short code and the word the code stands for.
+    /// The open screen's key shows its fill, the accent bar on its edge and ON in its corner.
     /// </summary>
     internal sealed class MfdRailKey
     {
@@ -402,24 +349,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly AvFx fx;
         private readonly Image selection;
         private readonly Image divider;
-        private readonly Image lamp;
         private readonly TMP_Text icon;
         private readonly TMP_Text code;
         private readonly TMP_Text name;
-        private readonly TMP_Text index;
-        private readonly string ordinal;
+        private readonly TMP_Text on;
         private bool hover;
         private bool pressed;
 
         public RectTransform Rect { get; }
         public bool Latched { get; private set; }
 
-        public MfdRailKey(RectTransform parent, MfdRailEntry entry, int position, Button source, MFDScreen screen)
+        public MfdRailKey(RectTransform parent, MfdRailEntry entry, Button source, MFDScreen screen)
         {
             Entry = entry;
             Source = source;
             Screen = screen;
-            ordinal = MfdChromeLay.TwoDigits(position);
 
             Rect = AvLay.Child(parent, "Key " + entry.Code);
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(5f));
@@ -428,13 +372,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame.Bracket = 5f;
             selection = AvLay.Solid(Rect, "Selection", Color.clear);
             divider = AvLay.Solid(Rect, "Divider", Color.clear);
-            lamp = AvLay.Solid(Rect, "Lamp", Color.clear);
             icon = AvIcons.Make(Rect, entry.Glyph, IconSize, Color.white);
             code = AvText.Make(Rect, "Code", AvTextRole.Title, entry.Code);
             name = AvText.Make(Rect, "Name", AvTextRole.Micro, entry.Name);
-            index = AvText.Make(Rect, "Index", AvTextRole.DataSmall, ordinal, TextAlignmentOptions.MidlineRight);
+            on = AvText.Make(Rect, "On", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
 
             AvHit hit = AvHit.On(frame);
+            hit.Cue = AvUiCue.Open;
             hit.Hover = on => { hover = on; Restyle(); };
             hit.Press = on => { pressed = on; Restyle(); };
             hit.Click = e => { if (e.button == PointerEventData.InputButton.Left) Press(); };
@@ -465,8 +409,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdChromeLay.Place(selection.rectTransform, new Rect(4f, -7f, 2f, Mathf.Max(0f, h - 14f)));
             MfdChromeLay.Place(icon.rectTransform, new Rect((IconBay - IconSize) * 0.5f + 2f, -(h - IconSize) * 0.5f, IconSize, IconSize));
             MfdChromeLay.Place(divider.rectTransform, new Rect(IconBay, -8f, 1f, h - 16f));
-            MfdChromeLay.Place(index.rectTransform, new Rect(w - 36f, -4f, 30f, 14f));
-            MfdChromeLay.Place(lamp.rectTransform, new Rect(w - 12f, -(h - 12f), 6f, 6f));
+            MfdChromeLay.Place(on.rectTransform, new Rect(w - 36f, -4f, 30f, 14f));
 
             AvText.Size(code, Mathf.Clamp(h * 0.31f, 14f, 19f));
             float textWidth = w - TextLeft - 6f;
@@ -492,16 +435,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Color accent = AvStyleHost.Resolve(AvStyleHost.FuiStyle(Class, "latched").Rail, MfdRail.Role("caution", AvTheme.Warning));
 
             frame.Paint(AvStyleHost.Resolve(style.Background, MfdRail.Role("surface-inert", AvTheme.Surface)), edge);
-            frame.BracketColor = Latched ? accent : edge;
+            frame.BracketColor = edge;
             frame.SetVerticesDirty();
             selection.color = Latched ? accent : hover ? accent.WithAlpha(accent.a * 0.45f) : Color.clear;
             divider.color = hairline;
-            lamp.color = Latched ? accent : MfdRail.Role("inert", AvTheme.Disabled);
-            icon.color = Latched ? accent : quiet;
+            icon.color = quiet;
             code.color = ink;
-            name.color = Latched ? ink : quiet;
-            index.color = Latched ? accent : MfdRail.Role("ink-muted", AvTheme.Disabled);
-            AvText.Set(index, Latched ? "ON" : ordinal);
+            name.color = quiet;
+            on.color = accent;
+            AvText.Set(on, Latched ? "ON" : "");
         }
     }
 }

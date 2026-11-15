@@ -238,10 +238,13 @@ namespace BoscaliSummer.Core.Fx
         {
             if (noise != null) return noise;
             const int size = 128;
-            noise = new Texture2D(size, size, TextureFormat.R8, false, true) { name = "BoscaliSummer.Grain", wrapMode = TextureWrapMode.Repeat };
-            var bytes = new byte[size * size];
+            // URP samples custom film grain from alpha; an R8 texture supplies constant alpha 1.
+            noise = new Texture2D(size, size, TextureFormat.RGBA32, false, true) { name = "BoscaliSummer.Grain", wrapMode = TextureWrapMode.Repeat };
+            var bytes = new byte[size * size * 4];
             var rng = new System.Random(1);
             rng.NextBytes(bytes);
+            for (int i = 0; i < bytes.Length; i += 4)
+                bytes[i + 1] = bytes[i + 2] = bytes[i + 3] = bytes[i];
             noise.LoadRawTextureData(bytes);
             noise.Apply(false, true);
             return noise;

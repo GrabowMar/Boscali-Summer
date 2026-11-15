@@ -10,10 +10,11 @@ namespace BoscaliSummer.Fire
     /// <summary>Bounded local impact residue and concrete bursts. Never edits native meshes or damage.</summary>
     internal sealed class BuildingHitLedger : MonoBehaviour, ISceneService
     {
-        private struct Mark { internal GameObject Object; internal int Owner; }
+        private struct Mark { internal GameObject Object; internal DecalProjector Projector; internal int Owner; }
         public static BuildingHitLedger Instance { get; private set; }
         internal GlobalPosition LastImpact { get; private set; }
         internal Vector3 LastImpactNormal { get; private set; }
+        internal int PendingGunHits => gunHits.Count;
         internal int ImpactMarks { get { int count = 0; foreach (Mark mark in marks)
             if (mark.Object != null && mark.Object.activeSelf) count++; return count; } }
         private const int MaxTracked = 128, MaxMarks = 48, MaxGroundScars = 32, GunQueueCap = 32, SeedSalt = 0xb171e5;
@@ -32,12 +33,16 @@ namespace BoscaliSummer.Fire
         private void OnDestroy() { Clear(); if (Instance == this) Instance = null; }
         public void ResetForScene() { Clear(); if (isActiveAndEnabled) Start(); }
         internal void EmitDebrisDust(GlobalPosition position) => dust.EmitImpact(position, Vector3.up, 3f);
+        internal void AuditDust(IDictionary<string, object> state) => dust.Audit(state, "impactDust");
 
         internal void SubmitShockwave(MapBuilding building, Vector3 origin, float power)
         {
             if (GameManager.IsHeadless || !Fire.ImpactScorchEnabled.Value || power < HitEscalation.MinBlastPower) return;
             RuinAftermathManager.Instance?.Poke(origin, power);
             if (building == null) return;
+            // Frag traces may notify the same building many times for one detonation.
+            // Reject the duplicates before collecting its colliders and tracing them again.
+            if (!CanCount(building.GetInstanceID(), Time.timeSinceLevelLoad)) return;
             colliders.Clear(); building.GetComponentsInChildren(false, colliders);
             bool found = false; float nearest = float.MaxValue; RaycastHit surface = default;
             foreach (Collider collider in colliders)
@@ -45,10 +50,12 @@ namespace BoscaliSummer.Fire
                 if (collider == null || collider.isTrigger) continue;
                 // Native collider rays give a real point and normal. Aim at the nearest point of the
                 // collider's box, not its centre, so a blast high on a tower marks the tower up there.
-                Vector3 direction = collider.ClosestPointOnBounds(origin) - origin;
-                if (direction.sqrMagnitude < 0.25f) direction = collider.bounds.center - origin;
+                Bounds bounds = collider.bounds;
+                Vector3 direction = bounds.ClosestPoint(origin) - origin;
+                if (direction.sqrMagnitude < 0.25f) direction = bounds.center - origin;
                 if (direction.sqrMagnitude < 0.001f) continue;
-                if (collider.Raycast(new Ray(origin, direction.normalized), out RaycastHit hit, direction.magnitude + collider.bounds.size.magnitude)
+                float distance = direction.magnitude;
+                if (collider.Raycast(new Ray(origin, direction / distance), out RaycastHit hit, distance + bounds.size.magnitude)
                     && hit.distance < nearest) { surface = hit; nearest = hit.distance; found = true; }
             }
             colliders.Clear();
@@ -57,13 +64,17 @@ namespace BoscaliSummer.Fire
 
         internal void SubmitGunHit(GlobalPosition position)
         {
-            if (!GameManager.IsHeadless && Fire.ImpactScorchEnabled.Value && gunHits.Count < GunQueueCap) gunHits.Enqueue(position);
+            if (!GameManager.IsHeadless && Fire.ImpactScorchEnabled.Value && gunHits.Count < GunQueueCap &&
+                BuildingCarver.InVisualRange(position.ToLocalPosition())) gunHits.Enqueue(position);
         }
         private void Update()
         {
             for (int budget = 0; budget < 2 && gunHits.Count > 0; budget++)
             {
                 Vector3 point = gunHits.Dequeue().ToLocalPosition();
+                // Cannon hits only make chips: unlike explosive breaches they have no
+                // persistent geometry to preserve when the camera is far away.
+                if (!Fire.ImpactScorchEnabled.Value || !BuildingCarver.InVisualRange(point)) continue;
                 RuinAftermathManager.Instance?.Poke(point, 0f);
                 int count = Physics.OverlapSphereNonAlloc(point, 4f, overlaps, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
                 for (int i = 0; i < count; i++)
@@ -71,6 +82,7 @@ namespace BoscaliSummer.Fire
                     Collider collider = overlaps[i];
                     MapBuilding building = collider != null ? collider.GetComponentInParent<MapBuilding>() : null;
                     if (building == null) continue;
+                    if (!CanCount(building.GetInstanceID(), Time.timeSinceLevelLoad)) break;
                     Vector3 direction = (collider.bounds.center - point).normalized;
                     if (collider.Raycast(new Ray(point - direction * 0.5f, direction), out RaycastHit hit, 5f))
                         Impact(building, hit.point, hit.normal, HitEscalation.GunBreachSize);
@@ -82,8 +94,9 @@ namespace BoscaliSummer.Fire
         private void Impact(MapBuilding building, Vector3 point, Vector3 normal, float size)
         {
             int owner = building.GetInstanceID(); float now = Time.timeSinceLevelLoad;
-            if (hits.TryGetValue(owner, out float previous) && !HitEscalation.ShouldCount(previous, now)) return;
-            if (!hits.ContainsKey(owner) && hits.Count >= MaxTracked)
+            bool tracked = hits.TryGetValue(owner, out float previous);
+            if (tracked && !HitEscalation.ShouldCount(previous, now)) return;
+            if (!tracked && hits.Count >= MaxTracked)
             {
                 int oldest = 0; float age = float.MaxValue;
                 foreach (var entry in hits) if (entry.Value < age) { age = entry.Value; oldest = entry.Key; }
@@ -91,25 +104,30 @@ namespace BoscaliSummer.Fire
             }
             hits[owner] = now; LastImpact = point.ToGlobalPosition(); LastImpactNormal = normal;
             BuildingCarver.Instance?.Hit(building, point, normal, size);
+            if (!BuildingCarver.InVisualRange(point)) return;
             dust.EmitImpact(LastImpact, normal, size);
             Material material = ScorchDecalMaterialResolver.Resolve();
             if (material == null || GameAssets.i == null || GameAssets.i.scorchMarkDecal == null) return;
-            Mark mark;
-            int slot;
-            if (marks.Count < MaxMarks)
+            Mark mark = default;
+            int slot = -1;
+            for (int i = 0; i < marks.Count; i++)
+                if (marks[i].Object != null && !marks[i].Object.activeSelf) { slot = i; mark = marks[i]; break; }
+            if (slot < 0 && marks.Count < MaxMarks)
             {
                 mark = new Mark { Object = Object.Instantiate(GameAssets.i.scorchMarkDecal, Datum.origin, false) };
+                mark.Projector = mark.Object.GetComponent<DecalProjector>();
                 slot = marks.Count; marks.Add(mark);
             }
-            else { slot = markHead; markHead = (markHead + 1) % MaxMarks; mark = marks[slot]; }
+            else if (slot < 0) { slot = markHead; markHead = (markHead + 1) % MaxMarks; mark = marks[slot]; }
             mark.Owner = owner; marks[slot] = mark;
             if (mark.Object == null) return;
             mark.Object.name = "BoscaliSummer.ImpactResidue"; mark.Object.SetActive(true);
             // Thin projection prevents a front-wall impact staining floors or the opposite wall.
-            ConfigureProjector(mark.Object, point, normal, Mathf.Clamp(size * 0.65f, 0.35f, 7f), 0.6f, material);
-            DecalProjector projector = mark.Object.GetComponent<DecalProjector>();
-            if (projector != null) projector.fadeFactor = 0.48f;
+            ConfigureProjector(mark.Object, mark.Projector, point, normal, Mathf.Clamp(size * 0.65f, 0.35f, 7f), 0.6f, material);
+            if (mark.Projector != null) mark.Projector.fadeFactor = 0.48f;
         }
+        private bool CanCount(int owner, float now) =>
+            !hits.TryGetValue(owner, out float previous) || HitEscalation.ShouldCount(previous, now);
         internal void Forget(int owner)
         {
             hits.Remove(owner);
@@ -122,9 +140,9 @@ namespace BoscaliSummer.Fire
             GameObject mark = AcquireRingMark(scarMarks, ref scarHead, MaxGroundScars);
             if (mark == null) return;
             float size = HitEscalation.GroundScarDiameter(footprintX, footprintZ);
-            ConfigureProjector(mark, localPosition, Vector3.up, size,
-                Mathf.Clamp(size * 0.12f, 2f, 6f), ScorchDecalMaterialResolver.Resolve());
             DecalProjector residue = mark.GetComponent<DecalProjector>();
+            ConfigureProjector(mark, residue, localPosition, Vector3.up, size,
+                Mathf.Clamp(size * 0.12f, 2f, 6f), ScorchDecalMaterialResolver.Resolve());
             if (residue != null) residue.fadeFactor = 0.28f;
 
         }
@@ -155,9 +173,8 @@ namespace BoscaliSummer.Fire
         }
 
         private static void ConfigureProjector(
-            GameObject mark, Vector3 point, Vector3 normal, float size, float depth, Material material)
+            GameObject mark, DecalProjector projector, Vector3 point, Vector3 normal, float size, float depth, Material material)
         {
-            DecalProjector projector = mark.GetComponent<DecalProjector>();
             if (projector == null) return;
             uint seed = Deterministic.Hash(
                 Mathf.RoundToInt(point.x), Mathf.RoundToInt(point.y), Mathf.RoundToInt(point.z),

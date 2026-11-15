@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
     /// rings with the receiver switches beside them, and the presets: a header that carries the paging
     /// and rescan keys, and named station rows with frequency and reception reports.</para>
     ///
-    /// <para>MUSIC: the equalizer (the growing part), the track on the deck, a position bar, ONE transport
+    /// <para>MUSIC: the track on the deck, a position bar, ONE transport
     /// row (transport, shuffle, repeat, stop all), a folder header with folder and library keys, a track
     /// header with paging keys and a track list sized to the page.</para>
     /// </summary>
@@ -33,7 +33,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private const int MinPresetRows = 1;
         private const int TrackRows = 15;
         private const int MinTrackRows = 1;
-        private const int EqBars = 24;
 
         private const float ListRowHeight = 33f;
 
@@ -77,25 +76,23 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private static AvKeyHeader presetHeader;
         private static readonly AvRow[] stationRows = new AvRow[PresetRows];
         private static int presetShown = PresetRows;
-        private static AvButtons receiverLinks, deckLinks;
 
         // ----------------------------------------------------------------------- deck widgets
         private static AvRow nowRow;
-        private static AvEqualizer deckEq;
         private static AvHazardBar deckBar;
-        private static readonly float[] eqLevels = new float[EqBars];
         private static RadioStripPart deckStrip;
         private static AvKeyHeader folderHeader;
         private static AvKeyHeader trackHeader;
         private static readonly AvRow[] trackRows = new AvRow[TrackRows];
         private static AvAlert emptyAlert;
         private static bool deckHadFolders = true;
-        private static bool deckEqGrows = true;
         private static int trackShown = TrackRows;
 
         // Per-row hover-help and badge caches, so a row only touches its widgets when its content changes.
         private static readonly string[] stationTipName = new string[PresetRows];
         private static readonly bool[] stationHasBadge = new bool[PresetRows];
+        private static readonly long[] stationKey = new long[PresetRows];
+        private static readonly long[] trackKey = new long[TrackRows];
         private static readonly string[] trackTipName = new string[TrackRows];
         private static int iconRevision = -1;
 
@@ -154,23 +151,21 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             presetHeader = null;
             Array.Clear(stationRows, 0, stationRows.Length);
             presetShown = PresetRows;
-            receiverLinks = deckLinks = null;
 
             nowRow = null;
-            deckEq = null;
             deckBar = null;
-            Array.Clear(eqLevels, 0, eqLevels.Length);
             deckStrip = null;
             folderHeader = null;
             trackHeader = null;
             Array.Clear(trackRows, 0, trackRows.Length);
             emptyAlert = null;
             deckHadFolders = true;
-            deckEqGrows = true;
             trackShown = TrackRows;
 
             Array.Clear(stationTipName, 0, stationTipName.Length);
             Array.Clear(stationHasBadge, 0, stationHasBadge.Length);
+            Array.Clear(stationKey, 0, stationKey.Length);
+            Array.Clear(trackKey, 0, trackKey.Length);
             Array.Clear(trackTipName, 0, trackTipName.Length);
             iconRevision = -1;
 
@@ -255,19 +250,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 stationRows[i].BadgeSlot = true;
             }
 
-            // The wire (bulletins, talk on air, intercepts) is the game log's RADIO lines on EVN LOG.
-            receiverLinks = p.Links(("THE WIRE", "EVN", "LOG"), ("CALLS", "COM", "CALLS"));
-            receiverLinks.Controls[0].Help = "Opens EVN on LOG: what the receiver picked up is filed there as RADIO, newest first, " +
-                "tagged with the station that aired it (RX is the set itself).";
-
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
             p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
 
-            console.Orders(TabReceiver,
-                "Pick a station below, or click the band scope to tune; hover the scope to preview.",
-                "Between songs each station airs its own talk: idents, hosts, adverts and news.",
-                "Base Broadcast is your own side's network: forces radio, army network or contractor net.",
-                "Raise squelch and only a stronger station opens the audio.");
+            console.Orders(TabReceiver, "Pick a station below, or click the band scope to tune; hover the scope to preview.");
         }
 
         private static void RefreshReceiver()
@@ -391,8 +377,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 row.SetShown(index < manager.ChannelCount || (!hasChannels && i == 0));
                 if (index >= manager.ChannelCount)
                 {
+                    stationKey[i] = 0;
                     row.Set(hasChannels ? string.Empty
-                        : "FREQUENCY LIST EMPTY · ADD MUSIC FOLDERS, THEN PRESS RESCAN", string.Empty, string.Empty, AvState.Inert);
+                        : "ADD MUSIC FOLDERS, THEN PRESS RESCAN", string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
                     badgesChanged |= ApplyStationBadge(row, i, null);
@@ -400,51 +387,38 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                     continue;
                 }
 
+                // What the row shows, as one number: nothing is built or written unless it moved.
+                int code, tracks = 0;
+                if (manager.GetChannelOffAir(index)) code = 1;
+                else if (!manager.GetChannelHasTransmitter(index)) { code = 2; tracks = manager.GetChannelTrackCount(index); }
+                else
+                {
+                    float strength = Mathf.Clamp01(manager.GetChannelStrength(index));
+                    code = strength >= 0.7f ? 3 : strength >= 0.35f ? 4 : 5;
+                }
+                bool armed = index == manager.SelectedChannel && !offStation;
+                long key = (((long)(index + 1) * 8 + code) * 100000 + tracks) * 4 + (armed ? 1 : 0) + (manager.StationRevision & 0xFFFF) * 1000000000000L;
+                if (stationKey[i] == key) continue;
+                stationKey[i] = key;
+
                 row.Interactable = true;
-                RadioDial rowDial = manager.GetChannelDial(index);
                 string channelName = manager.GetChannelName(index);
-                string rowName = channelName;
-                string rowSub = manager.GetChannelSubtitle(index) + " · " + rowDial.FullText;
                 if (stationTipName[i] != channelName)
                 {
                     stationTipName[i] = channelName;
                     row.Help = "Tune " + channelName + ". Its programme plays here; tracks are picked on the music tab.";
                 }
                 badgesChanged |= ApplyStationBadge(row, i, RadioStationIconCache.Get(manager.GetChannelIconPath(index)));
-                string status;
-                AvState state;
-                if (manager.GetChannelOffAir(index)) { status = "OFF AIR"; state = AvState.Danger; }
-                else if (!manager.GetChannelHasTransmitter(index))
-                {
-                    status = AvNum.Fixed(manager.GetChannelTrackCount(index), 0) + " TRK";
-                    state = AvState.Info;
-                }
-                else
-                {
-                    float strength = Mathf.Clamp01(manager.GetChannelStrength(index));
-                    status = strength >= 0.7f ? "STRONG" : strength >= 0.35f ? "FAIR" : "WEAK";
-                    state = strength >= 0.7f ? AvState.Ready : strength >= 0.35f ? AvState.Caution : AvState.Danger;
-                }
-
-                row.Set(rowName, rowSub, status, state);
-                row.Armed = index == manager.SelectedChannel && !offStation;
+                string status = code == 1 ? "OFF AIR" : code == 2 ? AvNum.Fixed(tracks, 0) + " TRK" : code == 3 ? "STRONG" : code == 4 ? "FAIR" : "WEAK";
+                AvState state = code == 1 ? AvState.Danger : code == 2 ? AvState.Info : code == 3 ? AvState.Ready : code == 4 ? AvState.Caution : AvState.Danger;
+                row.Set(channelName, manager.GetChannelSubtitle(index) + " · " + manager.GetChannelDial(index).FullText, status, state);
+                row.Armed = armed;
             }
             // A badge changes the row's text width and slot, so the page has to lay the rows out again.
             if (badgesChanged) console.Page(TabReceiver).RequestRelayout();
 
-            string alert = !hasChannels
-                ? "NO STATIONS · ADD FOLDERS, RESCAN"
-                : manager.IsOffAir
-                    ? "TOWER LOST · " + manager.CurrentChannelName + " OFF AIR"
-                    : manager.IsOffStation
-                        ? "DEAD AIR · TUNE OR CLICK THE SCOPE"
-                        : null;
-            if (alert != null)
-                console.Footer.Set(alert, hasChannels && !manager.IsOffAir ? AvState.Caution : AvState.Danger);
-            else
-            {
-                console.Footer.Set(manager.Status + " · RECEIVE ONLY", AvState.Inert);
-            }
+            // The head slab already says DEAD AIR / OFF AIR / NO LIBRARY; the footer only carries the manager's last action.
+            console.Footer.Set(manager.Status, AvState.Inert);
         }
 
         /// <summary>The list shows as many preset rows as the page can hold; a short console pages instead of scrolling.</summary>
@@ -454,10 +428,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             // Measure the same inner width and six fixed lines used by AvFlow. Programme copy can
             // wrap when a tower goes off air, so this runs after the current tune data is applied.
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 7f * AvGridTokens.Gap +
+            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap +
                 onAirPart.Measure(width) + readoutPart.Measure(width) + dialStrip.Measure(width) +
-                scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width) +
-                receiverLinks.Measure(width);
+                scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in stationRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
@@ -562,10 +535,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         private static void BuildDeck(AvFlow p)
         {
-            // The decorative meter yields space to a track on the compact console and grows
-            // into the height that the track list does not need on larger displays.
-            deckEq = p.Add(new AvEqualizer(p.Content, "NOW PLAYING", 8f), 1f);
-            deckEq.Help = "Level meter. It is decorative, not an audio analysis: the bars move while the deck is playing and settle when it is paused or stopped.";
             nowRow = p.Add(new AvRow(p.Content));
             nowRow.Help = "The track on the deck and its place in the folder. Click a track in the list below to play it.";
             deckBar = p.Add(new AvHazardBar(p.Content, "POSITION"));
@@ -606,15 +575,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 int captured = i;
                 trackRows[i] = p.Add(new AvRow(p.Content, () => OnTrackRowClick(captured)));
             }
-            deckLinks = p.Links(("SETTINGS", "SET", null), ("EVENTS", "EVN", "DISPATCH"));
 
             p.Ticker.Add(TabDeck, AvTickRate.Fast, RefreshDeck);
 
-            console.Orders(TabDeck,
-                "Click a track to play it; the deck then steps through its folder in order.",
-                "Shuffle also reorders the radio programme. Repeat loops the track on the deck.",
-                "Stop all signs off the deck and the receiver and hands the soundtrack bus back.",
-                "Add OGG or WAV files to the music folder, then rescan to list them.");
+            console.Orders(TabDeck, "Click a track to play it; the deck then steps through its folder in order.");
         }
 
         private static void RefreshDeck()
@@ -627,8 +591,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             int trackCount = manager.DeckTrackCount;
             int track = trackCount == 0 ? 0 : manager.DeckTrackIndex + 1;
             bool playing = manager.DeckEngaged;
+            bool loaded = hasFolders && trackCount > 0;
 
-            string trackTitle = !hasFolders ? "NO MUSIC ON FILE" : trackCount == 0 ? "DECK EMPTY" : manager.DeckCurrentTitle;
+            string trackTitle = loaded ? manager.DeckCurrentTitle : string.Empty;
             string position = hasFolders && trackCount > 0
                 ? "TRACK " + AvNum.Fixed(track, 0) + " / " + AvNum.Fixed(trackCount, 0)
                 : string.Empty;
@@ -639,26 +604,10 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             float progress = playing ? Mathf.Clamp01(manager.DeckProgress) : 0f;
             deckBar.Set(progress, timeText, playing ? AvState.Ready : AvState.Inert);
 
-            // Decorative level bars: not audio analysis, just motion while the deck is live.
-            bool live = playing && !manager.DeckPaused;
-            float clock = Time.unscaledTime;
-            for (int i = 0; i < EqBars; i++)
-            {
-                float target = live ? 0.15f + 0.85f * Mathf.PerlinNoise(clock * 3.1f + i * 0.61f, 0.23f * i) : 0.04f;
-                eqLevels[i] = Mathf.Lerp(eqLevels[i], target, live ? 0.6f : 0.2f);
-            }
-            deckEq.Set(eqLevels, live ? "ON" : manager.DeckPaused ? "PAUSED" : "IDLE", live ? AvState.Ready : AvState.Inert);
-            // The meter and the position bar need something loaded; an idle meter stays a thin strip (the room goes to the list
-            // or stays console ground) and only a playing one takes the leftover height.
-            bool loaded = hasFolders && trackCount > 0;
-            deckEq.SetShown(loaded);
+            // Nothing loaded: the one card below says so, and the track line, bar and transport stay out of the way.
+            nowRow.SetShown(loaded);
             deckBar.SetShown(loaded);
-            if (deckEqGrows != live)
-            {
-                deckEqGrows = live;
-                deckEq.Grow = live ? 1f : 0f;
-                console.Page(TabDeck).RequestRelayout();
-            }
+            deckStrip.SetShown(hasFolders);
 
             bool playEnabled = hasFolders && trackCount > 0;
             deckStrip[0].Interactable = playEnabled;
@@ -680,7 +629,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 ? "Repeat is on: the current track loops. Click to advance to the next track instead."
                 : "Repeat is off. Click to loop the current track instead of advancing.");
 
-            folderHeader.SetTitle(hasFolders ? manager.DeckFolderName(folder) : "NO MUSIC FOLDERS");
+            folderHeader.SetTitle(hasFolders ? manager.DeckFolderName(folder) : "MUSIC");
             folderHeader.SetCaption(FolderRangeText());
             Gate(folderHeader[0], hasFolders && folder > 0, FolderPreviousTip, hasFolders ? FirstFolderTip : PlayNoTracksTip);
             Gate(folderHeader[1], hasFolders && folder + 1 < folders, FolderNextTip, hasFolders ? LastFolderTip : PlayNoTracksTip);
@@ -703,6 +652,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 row.SetShown(hasFolders && i < trackShown && index < trackCount);
                 if (index >= trackCount)
                 {
+                    trackKey[i] = 0;
                     row.Set(string.Empty, string.Empty, string.Empty, AvState.Inert);
                     row.Armed = false;
                     row.Interactable = false;
@@ -710,8 +660,13 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                     continue;
                 }
 
-                row.Interactable = true;
                 bool active = index == current && playing;
+                int percent = active ? Mathf.RoundToInt(Mathf.Clamp01(manager.DeckProgress) * 100f) : -1;
+                long key = ((long)(index + 1) * 200 + percent + 1) * 2 + (active ? 1 : 0);
+                if (trackKey[i] == key) continue;
+                trackKey[i] = key;
+
+                row.Interactable = true;
                 string title = manager.DeckTrackTitle(index);
                 if (trackTipName[i] != title)
                 {
@@ -738,12 +693,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 emptyAlert.Show(AvIcon.Music, "FOLDER EMPTY",
                     "Choose another folder with the arrow keys, or add OGG/WAV files and press RESCAN.", AvState.Info);
             else emptyAlert.Hide();
-
-            console.Footer.Set(
-                hasFolders
-                    ? manager.DeckStatus + " · LOCAL ONLY"
-                    : "NO FOLDERS · OPEN FOLDER, ADD OGG/WAV, RESCAN",
-                hasFolders ? AvState.Inert : AvState.Caution);
+            console.Footer.Set(hasFolders ? manager.DeckStatus : string.Empty, AvState.Inert);
         }
 
         /// <summary>The track list shows as many rows as the page can hold, so a short console pages instead of scrolling.</summary>
@@ -751,9 +701,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             AvFlow page = console.Page(TabDeck);
             float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap +
-                deckEq.Measure(width) + nowRow.Measure(width) + deckBar.Measure(width) +
-                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width) + deckLinks.Measure(width);
+            float fixedHeight = 2f * AvGridTokens.Pad + 4f * AvGridTokens.Gap +
+                nowRow.Measure(width) + deckBar.Measure(width) +
+                deckStrip.Measure(width) + folderHeader.Measure(width) + trackHeader.Measure(width);
             float rowHeight = ListRowHeight;
             foreach (AvRow row in trackRows)
                 if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);

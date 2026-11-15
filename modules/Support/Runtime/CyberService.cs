@@ -236,8 +236,17 @@ namespace BoscaliSummer.Modules.Support.Runtime
             var order = new List<int>();
             if (hasPoint)
             {
-                Collect(owner, heldAirbases[FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: false)], diagonal, sites, cands);
+                // The clicked ground first, then the ring spots round the picked airbase nearest the click (the ring used to be walked from due north).
+                Airbase parent = heldAirbases[FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: false)];
+                // The click, then rings of 400/800/1500 m round it within the pick reach of the airbase (as a picked truck or camp does), then the airbase ring.
+                GlobalPosition c = parent.center.position.ToGlobalPosition();
+                var pickSpots = new List<(float X, float Z)>(37);
+                FrontPlacement.TruckSpots(new[] { ((float)c.x, (float)c.z) }, x, z, FrontRules.PadPickMetres, pickSpots);
+                foreach ((float X, float Z) p in pickSpots)
+                    if (SupportTargeting.TryMapPoint(new GlobalPosition(p.X, 0f, p.Z), out Vector3 ground)) sites.Add(new Site(parent, ground.ToGlobalPosition()));
+                Collect(owner, parent, diagonal, sites, cands);
                 for (int i = 0; i < sites.Count; i++) order.Add(i);
+                order.Sort((a, b) => Sq(sites[a].Anchor, x, z).CompareTo(Sq(sites[b].Anchor, x, z)));
             }
             else
             {
@@ -248,7 +257,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 if (!spawner.TryCreateCenter(owner, index, sites[id].Anchor, sites[id].Parent, out Unit made)) continue;
                 if (!Place(f, AnchorKind.DataCenter, index, made, sites[id].Parent)) break;
-                Plugin.Logger?.LogInfo("[Support.Cyber] " + owner.name + " DATA CENTER " + (index + 1) + " built by " + sites[id].Parent.name + ".");
+                Plugin.Logger?.LogInfo("[Support.Cyber] " + owner.name + " DATA CENTER " + (index + 1) + " built by " + sites[id].Parent.name + " at " +
+                    Mathf.RoundToInt((float)made.GlobalPosition().x) + ", " + Mathf.RoundToInt((float)made.GlobalPosition().z) + ".");
                 return true;
             }
             why = FrontOutcome.NoSpot;
@@ -414,6 +424,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 if (s.Kind == AnchorKind.DataCenter && f.Anchors.Health(s.Kind, s.Index) != AnchorHealth.Down && f.Anchors.TryPosition(s.Kind, s.Index, out float cx, out float cz))
                     centers.Add((cx, cz));
         }
+
+        private static double Sq(GlobalPosition p, float x, float z) => (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z);
 
         private sealed class Site
         {

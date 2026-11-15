@@ -14,9 +14,13 @@ namespace BoscaliSummer.Fire
         {
             internal GameObject Root;
             internal ParticleSystem Dust, Grit;
+            internal ParticleSystemRenderer GritRenderer;
             internal AudioSource Sound;
             internal GlobalPosition Position;
-            internal float Expires;
+            internal Vector2 Footprint;
+            internal uint Seed;
+            internal int LoftCount;
+            internal float Expires, LoftAt;
         }
         private readonly List<Burst> bursts = new List<Burst>(6);
         private readonly int impactCapacity;
@@ -37,9 +41,10 @@ namespace BoscaliSummer.Fire
 
         private void Emit(GlobalPosition position, Vector3 normal, Vector2 footprint, bool collapse)
         {
-            if (GameManager.IsHeadless || !EnsureAssets()) return;
-            if (collapse) ParticleFx.Spawn("fx-collapse-dust", position.ToLocalPosition(), Quaternion.identity, Mathf.Clamp(footprint.magnitude / 40f, 0.5f, 3f));
-            if (!depthLease) depthLease = DestructionAssets.AcquireDepth();
+            if (GameManager.IsHeadless) return;
+            Vector3 origin = position.ToLocalPosition();
+            float distanceSq = DistanceSq(origin);
+            if (distanceSq > 1600f * 1600f || !EnsureAssets()) return;
             Burst burst = null;
             foreach (Burst candidate in bursts) if (!candidate.Root.activeSelf) { burst = candidate; break; }
             if (burst == null)
@@ -49,18 +54,27 @@ namespace BoscaliSummer.Fire
                 if (bursts.Count >= maximum) return;
                 burst = Create(); bursts.Add(burst);
             }
+            // Acquire only for a real slot. The pooled effect owns the whole burst, including the delayed loft.
+            if (!depthLease) depthLease = DestructionAssets.AcquireDepth();
             burst.Position = position; burst.Expires = Time.timeSinceLevelLoad + (collapse ? 7f : 3.2f);
-            burst.Root.transform.position = position.ToLocalPosition(); burst.Root.SetActive(true);
+            burst.Root.transform.position = origin; burst.Root.SetActive(true);
             burst.Dust.Clear(); burst.Grit.Clear();
+            bool near = distanceSq < 400f * 400f, middle = distanceSq < 900f * 900f;
+            ParticleSystem.CollisionModule collision = burst.Grit.collision;
+            collision.enabled = distanceSq < 250f * 250f;
+            burst.GritRenderer.shadowCastingMode = distanceSq < 300f * 300f ? ShadowCastingMode.On : ShadowCastingMode.Off;
+            ParticleSystem.NoiseModule noise = burst.Dust.noise; noise.enabled = middle;
             burst.Dust.Play(); burst.Grit.Play();
             if (collapse) Rumble(burst);
             normal = normal.sqrMagnitude < 0.001f ? Vector3.up : normal.normalized;
             Vector3 tangent = Vector3.Cross(normal, Mathf.Abs(normal.y) > 0.85f ? Vector3.forward : Vector3.up).normalized;
             Vector3 other = Vector3.Cross(normal, tangent).normalized;
             uint seed = Deterministic.Hash(Mathf.RoundToInt(position.x), Mathf.RoundToInt(position.z), 211);
-            Vector3 origin = position.ToLocalPosition();
             bool small = !collapse && footprint.x <= 1.01f;
-            int dustCount = collapse ? 42 : small ? 8 : 18;
+            int dustCount = collapse ? (near ? 28 : middle ? 20 : 12) : (small ? 8 : near ? 18 : 12);
+            burst.Seed = seed; burst.Footprint = footprint;
+            burst.LoftCount = collapse ? dustCount / 2 : 0;
+            burst.LoftAt = Time.timeSinceLevelLoad + 0.35f;
             float extent = Mathf.Max(footprint.x, footprint.y);
             for (int i = 0; i < dustCount; i++)
             {
@@ -68,16 +82,16 @@ namespace BoscaliSummer.Fire
                 Vector3 radial = tangent * Mathf.Cos(angle) + other * Mathf.Sin(angle);
                 float ring = Mathf.Sqrt(FractureGeometry.Rand(seed, i + 11));
                 Vector3 offset = collapse ? new Vector3(Mathf.Cos(angle) * footprint.x * ring,
-                    i % 4 == 0 ? extent * (0.12f + FractureGeometry.Rand(seed, i + 21) * 0.38f) : 0.15f,
+                    0.15f,
                     Mathf.Sin(angle) * footprint.y * ring) : radial * ring * extent;
                 Vector3 velocity = collapse
-                    ? new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (4f + ring * 7f) + Vector3.up * (0.8f + FractureGeometry.Rand(seed, i + 31) * 3f)
+                    ? new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (4f + ring * 7f) + Vector3.up * (0.6f + FractureGeometry.Rand(seed, i + 31) * 1.2f)
                     : normal * (4f + ring * 6f) + radial * 3f + Vector3.up * 0.6f;
-                float size = collapse ? Mathf.Clamp(extent * 0.38f, 3.5f, 10f) : 1.2f + extent * 0.55f;
+                float size = collapse ? Mathf.Clamp(extent * 0.32f, 3f, 7.5f) : 1.2f + extent * 0.55f;
                 EmitDust(burst, origin + offset + normal * 0.3f, velocity, size * (0.7f + ring * 0.55f),
                     collapse ? 4.2f + ring * 2.2f : small ? 0.6f + ring * 0.5f : 1.4f + ring * 1.3f, seed, i);
             }
-            int gritCount = collapse ? 24 : small ? 4 : 8;
+            int gritCount = !middle ? 0 : collapse ? (near ? 24 : 12) : (small ? 4 : 8);
             for (int i = 0; i < gritCount; i++)
             {
                 float angle = i * 2.399963f;
@@ -117,6 +131,8 @@ namespace BoscaliSummer.Fire
 
         internal void EmitLanding(GlobalPosition position, float size)
         {
+            Vector3 origin = position.ToLocalPosition() + Vector3.up * 0.2f;
+            if (GameManager.IsHeadless || DistanceSq(origin) > 1600f * 1600f) return;
             Burst nearest = null; float best = 10000f;
             foreach (Burst burst in bursts)
             {
@@ -125,13 +141,20 @@ namespace BoscaliSummer.Fire
                 if (distance < best) { best = distance; nearest = burst; }
             }
             if (nearest == null) return;
-            Vector3 origin = position.ToLocalPosition() + Vector3.up * 0.2f;
+            float life = Mathf.Clamp(2.5f + size * 0.25f, 2.5f, 5f);
+            nearest.Expires = Mathf.Max(nearest.Expires, Time.timeSinceLevelLoad + life);
             for (int i = 0; i < 5; i++)
             {
                 float angle = i * 1.2566f;
                 EmitDust(nearest, origin, new Vector3(Mathf.Cos(angle) * 4f, 0.6f, Mathf.Sin(angle) * 4f),
-                    Mathf.Clamp(size, 2f, 9f), 2.5f + size * 0.25f, 271u, i);
+                    Mathf.Clamp(size, 2f, 9f), life, 271u, i);
             }
+        }
+
+        private static float DistanceSq(Vector3 point)
+        {
+            Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera ?? Camera.main;
+            return camera != null ? (camera.transform.position - point).sqrMagnitude : 0f;
         }
 
         private static void EmitDust(Burst burst, Vector3 point, Vector3 velocity, float size, float life, uint seed, int index)
@@ -140,7 +163,7 @@ namespace BoscaliSummer.Fire
             {
                 position = Datum.origin.InverseTransformPoint(point), velocity = velocity,
                 startSize = size, startLifetime = life,
-                startColor = new Color(0.58f, 0.54f, 0.47f, 0.42f + FractureGeometry.Rand(seed, index + 121) * 0.16f),
+                startColor = new Color(0.63f, 0.61f, 0.57f, 0.36f + FractureGeometry.Rand(seed, index + 121) * 0.14f),
                 rotation = FractureGeometry.Rand(seed, index + 131) * 360f
             }, 1);
         }
@@ -157,9 +180,48 @@ namespace BoscaliSummer.Fire
                     burst.Grit.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
                     burst.Root.SetActive(false);
                 }
-                else active = true;
+                else
+                {
+                    active = true;
+                    if (burst.LoftCount == 0 || now < burst.LoftAt) continue;
+                    // The low front expands first; a slower, rising body follows instead of one spherical puff.
+                    Vector3 origin = burst.Position.ToLocalPosition();
+                    float extent = Mathf.Max(burst.Footprint.x, burst.Footprint.y);
+                    for (int i = 0; i < burst.LoftCount; i++)
+                    {
+                        float angle = i * 2.399963f;
+                        float ring = Mathf.Sqrt(FractureGeometry.Rand(burst.Seed, i + 151));
+                        Vector3 radial = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                        Vector3 offset = new Vector3(radial.x * burst.Footprint.x, 0f, radial.z * burst.Footprint.y) * ring * 0.65f;
+                        EmitDust(burst, origin + offset + Vector3.up * 0.7f,
+                            radial * (1f + ring * 2f) + Vector3.up * (2.2f + ring * 2f),
+                            Mathf.Clamp(extent * 0.3f, 3f, 7f), 4.8f + ring * 1.4f, burst.Seed, i + 42);
+                    }
+                    burst.LoftCount = 0;
+                }
             }
             if (!active && depthLease) { DestructionAssets.ReleaseDepth(); depthLease = false; }
+        }
+
+        internal void Audit(IDictionary<string, object> state, string prefix)
+        {
+            int active = 0, dust = 0, grit = 0, pending = 0, maxDust = 0, maxGrit = 0;
+            foreach (Burst burst in bursts)
+            {
+                if (!burst.Root.activeSelf) continue;
+                active++; pending += burst.LoftCount;
+                int dustCount = burst.Dust.particleCount, gritCount = burst.Grit.particleCount;
+                dust += dustCount; grit += gritCount;
+                maxDust = Mathf.Max(maxDust, dustCount); maxGrit = Mathf.Max(maxGrit, gritCount);
+            }
+            state[prefix + "Slots"] = bursts.Count;
+            state[prefix + "Active"] = active;
+            state[prefix + "Dust"] = dust;
+            state[prefix + "Grit"] = grit;
+            state[prefix + "PendingLoft"] = pending;
+            state[prefix + "MaxDust"] = maxDust;
+            state[prefix + "MaxGrit"] = maxGrit;
+            state[prefix + "DepthLease"] = depthLease ? 1 : 0;
         }
 
         private Burst Create()
@@ -178,6 +240,8 @@ namespace BoscaliSummer.Fire
             color.color = gradient;
             ParticleSystem.NoiseModule noise = dust.noise; noise.enabled = true; noise.quality = ParticleSystemNoiseQuality.Low;
             noise.strength = 0.65f; noise.frequency = 0.17f;
+            ParticleSystem.LimitVelocityOverLifetimeModule drag = dust.limitVelocityOverLifetime;
+            drag.enabled = true; drag.limit = 2.2f; drag.dampen = 0.25f;
             ParticleSystem grit = System(root.transform, "BallisticConcreteGrit", 32, true);
             var gritRenderer = grit.GetComponent<ParticleSystemRenderer>();
             gritRenderer.renderMode = ParticleSystemRenderMode.Mesh; gritRenderer.mesh = gritMesh; gritRenderer.sharedMaterial = concreteMaterial;
@@ -188,7 +252,7 @@ namespace BoscaliSummer.Fire
             collision.type = ParticleSystemCollisionType.World; collision.quality = ParticleSystemCollisionQuality.Low;
             collision.collidesWith = PhysicsLayers.StaticsMask; collision.bounce = 0.25f; collision.dampen = 0.45f;
             root.SetActive(false);
-            return new Burst { Root = root, Dust = dust, Grit = grit };
+            return new Burst { Root = root, Dust = dust, Grit = grit, GritRenderer = gritRenderer };
         }
 
         private static ParticleSystem System(Transform parent, string name, int maximum, bool mesh)

@@ -136,8 +136,10 @@ namespace BoscaliSummer.Modules.Command.Patches
             if (map == null || !DynamicMap.mapMaximized) return;
 
             GetViewportHalfExtents(out float halfW, out float halfH);
-            Vector2 tooltipPos = CalculateTooltipPosition(halfW * 2f, halfH * 2f);
-            Vector2 aircraftPos = CalculateAircraftCoordPosition(halfW * 2f, halfH * 2f);
+            // The field log owns the bottom-right corner (2026-11-15): the readouts stand on top of it.
+            Vector2 lift = new Vector2(0f, MfdFieldLog.Reserve);
+            Vector2 tooltipPos = CalculateTooltipPosition(halfW * 2f, halfH * 2f) + lift;
+            Vector2 aircraftPos = CalculateAircraftCoordPosition(halfW * 2f, halfH * 2f) + lift;
 
             var tooltip = GridToolTipField?.GetValue(gridLabels) as Text;
             if (tooltip != null)

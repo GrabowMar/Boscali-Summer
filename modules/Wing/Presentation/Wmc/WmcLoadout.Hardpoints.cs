@@ -5,7 +5,7 @@ using UnityEngine;
 using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    // LOADOUT's HARDPOINTS: a station map beside the station table (each side of a pair has its own row, only ✕ empties
+    // SUPPLY LOADOUT editor HARDPOINTS: a station map beside the station table (each side of a pair has its own row, only ✕ empties
     // one, a blocked station names what blocks it), and the store picker kept open below for the selected station.
     internal sealed partial class WmcLoadout
     {
@@ -22,10 +22,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildHardpoints(AvFlow f)
         {
-            hpHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Stack2, "HARDPOINTS"));
-            hpEmpty = f.Add(new WmcLines(f.Content, 1));
-            hpBoard = f.Add(new WmcStationBoard(f.Content, SelectStation, ClearStation, TurnStations, ToggleLink));
-            picker = f.Add(new WmcStorePicker(f.Content, PickStore, TurnStores));
+            hpHead = Fold(f, new WmcHeadBar(f.Content, AvIcon.Stack2, "HARDPOINTS"));
+            hpEmpty = Fold(f, new WmcLines(f.Content, 1));
+            hpBoard = Fold(f, new WmcStationBoard(f.Content, SelectStation, ClearStation, TurnStations, ToggleLink));
+            picker = Fold(f, new WmcStorePicker(f.Content, PickStore, TurnStores));
         }
 
         /// <summary>The stations in words, the map and the picker for the selected station; the head counts stations once, as the metric does.</summary>

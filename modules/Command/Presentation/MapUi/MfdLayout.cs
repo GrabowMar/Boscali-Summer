@@ -83,9 +83,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Rect rail = ToUnityRect(regions.Rail);
             rail.height = Mathf.Max(rail.height, rail.y - (-canvasSize.y * 0.5f + Margin));
 
+            // The news ticker runs over the map and rail only, so the panel column starts at the top margin (2026-11-15).
+            Rect panel = ToUnityRect(regions.Panel);
+            panel.height += canvasSize.y * 0.5f - Margin - panel.y;
+            panel.y = canvasSize.y * 0.5f - Margin;
+
             return new Columns
             {
-                Panel = ToUnityRect(regions.Panel),
+                Panel = panel,
                 Map = ToUnityRect(regions.Map),
                 Rail = rail,
                 Canvas = canvasSize,

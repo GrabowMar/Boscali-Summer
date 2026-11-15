@@ -17,6 +17,7 @@ namespace BoscaliSummer.Fire
         private static string targetName, rubbleName, meshName;
         private static double hitCostMs, destroyCostMs, stressCostMs;
         private static int hits;
+        private static int hitLobesAdded, hitMarksAdded, fragmentBaseline, gunQueued;
         private static float lastOriginHeight;
 
         public static Dictionary<string, object> Step(Dictionary<string, object> args)
@@ -28,6 +29,7 @@ namespace BoscaliSummer.Fire
             if (action == "select")
             {
                 target = null; hits = 0;
+                hitLobesAdded = hitMarksAdded = fragmentBaseline = gunQueued = 0;
                 meshName = Text(args, "mesh") ?? "commercial_2a";
                 int skip = (int)Number(args, "skip", 0f);
                 foreach (MapBuilding building in UnityEngine.Object.FindObjectsOfType<MapBuilding>())
@@ -82,11 +84,26 @@ namespace BoscaliSummer.Fire
                 foreach (Collider collider in target.GetComponentsInChildren<Collider>())
                     if (!collider.isTrigger && collider.Raycast(new Ray(aim + face * (reach + 80f), -face), out RaycastHit surface, reach + 80f) && surface.distance < nearest)
                     { nearest = surface.distance; origin = surface.point + surface.normal * 1.5f; }
+                Dictionary<string, object> before = BuildingCarver.Instance.Audit();
+                int marks = BuildingHitLedger.Instance.ImpactMarks;
+                fragmentBaseline = Convert.ToInt32(before["fragments"]);
                 var clock = System.Diagnostics.Stopwatch.StartNew();
-                target.TakeShockwave(origin, 1f, Number(args, "power", 4f));
+                int repeat = Mathf.Clamp((int)Number(args, "repeat", 1f), 1, 8);
+                for (int i = 0; i < repeat; i++) target.TakeShockwave(origin, 1f, Number(args, "power", 4f));
                 hitCostMs = clock.Elapsed.TotalMilliseconds;
+                hitLobesAdded = Convert.ToInt32(BuildingCarver.Instance.Audit()["lobes"]) - Convert.ToInt32(before["lobes"]);
+                hitMarksAdded = BuildingHitLedger.Instance.ImpactMarks - marks;
                 hits++;
                 lastOriginHeight = origin.y - anchor.ToLocalPosition().y;
+            }
+            else if (action == "gun")
+            {
+                if (target == null || BuildingHitLedger.Instance == null)
+                    return Failure("DestructionAutomation", "gun", "native building or hit ledger disappeared");
+                int queued = BuildingHitLedger.Instance.PendingGunHits;
+                int repeat = Mathf.Clamp((int)Number(args, "repeat", 1f), 1, 32);
+                for (int i = 0; i < repeat; i++) BuildingHitLedger.Instance.SubmitGunHit(BuildingHitLedger.Instance.LastImpact);
+                gunQueued = BuildingHitLedger.Instance.PendingGunHits - queued;
             }
             else if (action == "destroy")
             {
@@ -106,7 +123,8 @@ namespace BoscaliSummer.Fire
                 float reach = Mathf.Abs(face.x) > 0.5f ? size.x * 0.5f : size.z * 0.5f;
                 RuinAftermathManager.Instance?.Poke(anchor.ToLocalPosition() + Vector3.up * 2.5f + face * (reach - 0.5f), 4f);
             }
-            else if (action == "frame") Frame(Number(args, "distance", 1f), Number(args, "angle", 0f), Number(args, "low", 0f) > 0f);
+            else if (action == "frame") Frame(Number(args, "distance", 1f), Number(args, "angle", 0f), Number(args, "low", 0f) > 0f,
+                Number(args, "metres", 0f));
             else if (action == "breachview")
             {
                 Vector3 center = BuildingHitLedger.Instance.LastImpact.ToLocalPosition();
@@ -141,11 +159,12 @@ namespace BoscaliSummer.Fire
             return reply;
         }
 
-        private static void Frame(float multiplier, float angle, bool low = false)
+        private static void Frame(float multiplier, float angle, bool low = false, float metres = 0f)
         {
             // A ruin sits at street level: frame the footprint, not the vanished tower.
             Vector3 center = anchor.ToLocalPosition() + Vector3.up * (low ? 3f : size.y * 0.4f);
             float distance = (low ? Mathf.Max(size.x, size.z, 20f) : Mathf.Max(size.x, size.y, size.z, 20f)) * 1.5f * Mathf.Clamp(multiplier, 0.4f, 40f);
+            if (metres > 0f) distance = Mathf.Clamp(metres, 20f, 10000f);
             Vector3 direction = Quaternion.AngleAxis(angle, Vector3.up) * face;
             Aim(center + direction * distance + Vector3.up * distance * 0.6f, center);
         }
@@ -190,6 +209,15 @@ namespace BoscaliSummer.Fire
             reply["pressureParticles"] = pressure;
             reply["collapseRumbles"] = CollapseBurstPool.Rumbles;
             reply["impactMarks"] = BuildingHitLedger.Instance != null ? BuildingHitLedger.Instance.ImpactMarks : 0;
+            reply["gunPending"] = BuildingHitLedger.Instance != null ? BuildingHitLedger.Instance.PendingGunHits : 0;
+            reply["gunQueued"] = gunQueued;
+            reply["hitLobesAdded"] = hitLobesAdded;
+            reply["hitMarksAdded"] = hitMarksAdded;
+            reply["fragmentsSinceHit"] = Convert.ToInt32(reply["fragments"]) - fragmentBaseline;
+            reply["impactInRange"] = BuildingHitLedger.Instance != null &&
+                BuildingCarver.InVisualRange(BuildingHitLedger.Instance.LastImpact.ToLocalPosition()) ? 1 : 0;
+            BuildingHitLedger.Instance?.AuditDust(reply);
+            RuinAftermathManager.Instance?.AuditDust(reply);
             reply["hitCostMs"] = hitCostMs;
             reply["originHeight"] = lastOriginHeight;
             reply["impactHeight"] = BuildingHitLedger.Instance != null ? BuildingHitLedger.Instance.LastImpact.ToLocalPosition().y - anchor.ToLocalPosition().y : 0f;

@@ -11,19 +11,24 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>LOADOUT (2026-11-05 remake: an AIRFRAME grid of every airframe on top, FLY IT ON SUPPLY at the foot; was spec 2026-10-04 "One Sheet"): a build card that says it is the airframe's saved custom loadout (SUPPLY's
-    /// FIT flies it as CUSTOM), AIRFRAME ◂ ▸ over the airframes SUPPLY offers (starting on SUPPLY's pick), HARDPOINTS as a small station map beside
-    /// the station table with the store picker kept open below, and a LIVERY row. The airframe's standard stores show until the first
-    /// change, which saves them as its one custom loadout. Loadouts and liveries live in this machine's config and only the host's launch
-    /// the wing, so a client looks. Last comes MY AIRCRAFT (was PILOT's PLANE tab), which Progression builds through <see cref="IMyAircraft"/>.</summary>
-    internal sealed partial class WmcLoadout : IWmcPage
+    /// <summary>SUPPLY's loadout editor (was the LOADOUT tab; folded into SUPPLY 2026-11-15 so the airframe grid is built once): for the
+    /// airframe SUPPLY has picked, a build card that says it is the airframe's saved custom loadout (SUPPLY's FIT flies it as CUSTOM),
+    /// HARDPOINTS as a small station map beside the station table with the store picker kept open below, and a LIVERY row. The parts
+    /// are folded away until SUPPLY's EDIT LOADOUT is on. The airframe's standard stores show until the first change, which saves them
+    /// as its one custom loadout. Loadouts and liveries live in this machine's config and only the host's launch the wing, so a client
+    /// looks. <see cref="BuildMine"/> adds MY AIRCRAFT (was PILOT's PLANE tab), which Progression builds through <see cref="IMyAircraft"/>.</summary>
+    internal sealed partial class WmcLoadout
     {
         private AvFlow flow;
         private bool relayout;
         private bool client;
+        private bool open;
 
-        // What is being edited: SUPPLY's selected airframe when the tab opens, then whatever the arrows browse to (browsing never
-        // changes what SUPPLY or the CALL hotkey launches), and its custom loadout (null until the first change).
+        /// <summary>The editor is on show (SUPPLY's EDIT LOADOUT is latched).</summary>
+        public bool IsOpen => open;
+        private readonly List<WmcCollapsible> folds = new List<WmcCollapsible>(8);
+
+        // What is edited: SUPPLY's selected airframe, and its custom loadout (null until the first change).
         private AircraftDefinition airframe;
         private StationLayout layout;
         private LoadoutTemplateRecord current;
@@ -34,36 +39,47 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private StoreFacts[] setFacts = new StoreFacts[0];
 
         private int pageKey = int.MinValue;
-        private string hint, alert;
+        private string alert;
 
-        public string Hint => hint;
+        /// <summary>The footer's alert while the editor is open: what the launch will empty.</summary>
+        public string Alert => open ? alert : null;
 
-        public string Alert => alert;
+        /// <summary>Adds a part to the flow inside a fold: hidden (no room) until the editor is open.</summary>
+        private T Fold<T>(AvFlow f, T part) where T : AvPart
+        {
+            var fold = f.Add(new WmcCollapsible(part));
+            fold.Set(false);
+            folds.Add(fold);
+            return part;
+        }
 
-        public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
+        public void BuildEditor(AvFlow pageFlow)
         {
             flow = pageFlow;
-            BuildAirframeRow(flow);
             BuildCard(flow);
             BuildHardpoints(flow);
             BuildLivery(flow);
-            BuildFly(flow);
-            if (ModuleServices.TryGet(out IMyAircraft mine)) mine.Build(index, flow);
-            else flow.Add(new AvNote(flow.Content, AvTextRole.Micro)).Set("MY AIRCRAFT · THE PROGRESSION MODULE IS OFF");
-            flow.Links(("PILOT", "PILOT", null), ("SUPPLY", "WMC", "SUPPLY"));
         }
 
-        /// <summary>LOADOUT came on screen: the airframes SUPPLY offers and the faction's liveries are read again.</summary>
-        public void Shown(WmcContext c)
+        /// <summary>MY AIRCRAFT, built by Progression into SUPPLY's flow; it refreshes on the flow's ticker while SUPPLY shows.</summary>
+        public static void BuildMine(AvFlow f, int pageIndex)
         {
-            client = c.Client;
-            ReadFaction();
-            Aircraft caller = WingRequisition.CallerOf(c.Wing, client);
-            WingRequisition.RefreshLists(caller, force: true);
-            WingRequisition.SelectDefault(caller);
-            airframe = WingRequisition.Selected;
-            liveryFor = null;
-            pageKey = int.MinValue;
+            if (ModuleServices.TryGet(out IMyAircraft mine)) mine.Build(pageIndex, f);
+        }
+
+        /// <summary>Opens or folds the editor; true when that changed it (the caller relayouts and refreshes).</summary>
+        public bool SetOpen(bool on)
+        {
+            if (on == open) return false;
+            open = on;
+            foreach (WmcCollapsible fold in folds) fold.Set(on);
+            if (on)
+            {
+                liveryFor = null;
+                pageKey = int.MinValue;
+            }
+            flow.RequestRelayout();
+            return true;
         }
 
         /// <summary>The player's faction and rank: the liveries and the mission rules the table reads.</summary>
@@ -136,14 +152,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private bool resolvedTactical, resolvedStrategic;
         private AircraftDefinition resolvedAirframe;
 
-        public void Refresh(WmcContext c)
+
+        /// <summary>One refresh while the editor is open, for SUPPLY's selected airframe (lists and the pick are SUPPLY's).</summary>
+        public void Refresh(WmcContext c, AircraftDefinition selected)
         {
+            if (!open) return;
             client = c.Client;
-            Aircraft caller = WingRequisition.CallerOf(c.Wing, client);
-            WingRequisition.RefreshLists(caller);
-            WingRequisition.SelectDefault(caller);
-            // SUPPLY's pick can appear after the tab opened (before the first spawn there is none): take it up while none is held.
-            if (airframe == null) airframe = WingRequisition.Selected;
+            airframe = selected;
             // Escalation and rank move mid-mission: the rules are read every refresh (a struct, nothing allocated).
             ReadFaction();
             Resolve();
@@ -153,19 +168,15 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 key = (current != null ? current.Id.GetHashCode() : 1) + WingLoadoutTemplates.Revision * 31 + (airframe != null ? airframe.GetHashCode() : 0)
                     + selStation * 7 + pickerPage * 131 + hpBoard.Page * 197 + (client ? 3 : 0) + splitVersion * 211
-                    + WingRequisition.Catalogue.Count * 1009 + WingRequisition.Catalogue.IndexOf(airframe) * 29
-                    + (WingRequisition.Selected != null ? WingRequisition.Selected.GetHashCode() * 37 : 0) + (fit != null ? fit.GetHashCode() : 0)
+                    + (fit != null ? fit.GetHashCode() : 0)
                     + mission.Rank * 13 + (mission.TacticalOpen ? 19 : 0) + (mission.StrategicOpen ? 23 : 0);
             }
             if (key != pageKey)
             {
                 pageKey = key;
                 RefreshCard(fit);
-                RefreshAirframeRow();
                 RefreshHardpoints();
                 RefreshLivery();
-                RefreshFly();
-                hint = LoadoutWords.Hint(client, airframe != null, current != null);
                 alert = current != null ? LoadoutWords.EmptyHereAlert(summary.Refused + summary.Blocked) : null;
                 relayout = true;
             }
@@ -180,7 +191,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private WmcBuildCard card;
 
-        private void BuildCard(AvFlow f) => card = f.Add(new WmcBuildCard(f.Content));
+        private void BuildCard(AvFlow f) => card = Fold(f, new WmcBuildCard(f.Content));
 
         private void RefreshCard(string fit)
         {
@@ -194,89 +205,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 summary.Stations > 0 ? (float)summary.Fitted / summary.Stations : 0f);
         }
 
-        // ---------------------------------------------------------------- the AIRFRAME grid
-
-        private WmcHeadBar airHead;
-        private WmcAirGrid airGrid;
-        /// <summary>The airframe each tile shows, bound at refresh: a click acts on what was shown.</summary>
-        private readonly AircraftDefinition[] tileDef = new AircraftDefinition[WmcAirGrid.Capacity];
-
-        private void BuildAirframeRow(AvFlow f)
-        {
-            airHead = f.Add(new WmcHeadBar(f.Content, AvIcon.Plane, "AIRFRAME"));
-            airGrid = f.Add(new WmcAirGrid(f.Content, PickAirframe));
-        }
-
-        /// <summary>Every airframe SUPPLY offers as a tile: CUSTOM when it has a loadout built here, ON SUPPLY on SUPPLY's pick; the one
-        /// being edited is lit. Picking one here never changes what SUPPLY launches (FLY IT ON SUPPLY does).</summary>
-        private void RefreshAirframeRow()
-        {
-            List<AircraftDefinition> cat = WingRequisition.Catalogue;
-            airHead.SetCaption(cat.Count > 0 ? cat.Count + " LISTED · TAP TO EDIT" : "NONE LISTED");
-            airGrid.ShowEmpty(cat.Count > 0 ? null : "No airframes listed yet: they list once you are flying.");
-            AircraftDefinition onSupply = WingRequisition.Selected;
-            for (int s = 0; s < WmcAirGrid.Capacity; s++)
-            {
-                if (s >= cat.Count)
-                {
-                    tileDef[s] = null;
-                    airGrid.Hide(s);
-                    continue;
-                }
-                AircraftDefinition d = cat[s];
-                tileDef[s] = d;
-                bool custom = WingLoadoutTemplates.CustomFor(d) != null, sel = ReferenceEquals(d, airframe), supply = ReferenceEquals(d, onSupply);
-                int key;
-                unchecked
-                {
-                    key = d.GetHashCode() * 31 + (custom ? 3 : 0) + (sel ? 5 : 0) + (supply ? 7 : 0) + (client ? 11 : 0);
-                }
-                if (!airGrid.NeedsBind(s, key)) continue;
-                string code = SupplyWords.Code(d.code, d.unitName);
-                airGrid.Bind(s, IconFactory.Aircraft(d), code, SupplyWords.Name(d.unitName, d.code), supply ? "SUPPLY" : "",
-                    custom ? "CUSTOM" : "STANDARD", custom ? "ok" : "", sel ? "live" : custom ? "ready" : "inert", sel, true,
-                    d.unitName + (custom ? " · its custom loadout is built" : " · flies its standard stores") + (supply ? " · SUPPLY's next requisition" : "")
-                    + ". Tap to edit it.");
-            }
-        }
-
-        private void PickAirframe(int slot)
-        {
-            AircraftDefinition d = slot >= 0 && slot < tileDef.Length ? tileDef[slot] : null;
-            if (d == null || ReferenceEquals(d, airframe)) return;
-            airframe = d;
-            WmcPanel.Instance?.Refresh();
-        }
-
-        // ---------------------------------------------------------------- FLY IT ON SUPPLY
-
-        private AvControl flyButton;
-
-        private void BuildFly(AvFlow f)
-        {
-            flyButton = f.Buttons(new AvControl.Spec("FLY IT ON SUPPLY ›", FlyOnSupply, AvButtonStyle.Primary, AvIcon.PlayerPlay)).Controls[0];
-        }
-
-        private void RefreshFly()
-        {
-            bool on = !client && airframe != null;
-            flyButton.Interactable = on;
-            flyButton.Help = client ? LoadoutWords.ClientWhy : airframe == null ? "Pick an airframe first."
-                : "SUPPLY's next requisition: this airframe" + (current != null ? " with this custom loadout." : " with its standard stores (AUTO).");
-        }
-
-        /// <summary>SUPPLY takes this airframe (and this custom loadout, once one is built) and comes on screen.</summary>
-        private void FlyOnSupply()
-        {
-            if (client || airframe == null) return;
-            WingRequisition.Selected = airframe;
-            if (current != null) WingRequisition.SetFit(airframe, current.Id);
-            WmcPanel panel = WmcPanel.Instance;
-            if (panel == null) return;
-            panel.Show(WmcTabs.Supply);
-            panel.Refresh();
-        }
-
         // ---------------------------------------------------------------- the LIVERY row
 
         private WmcPickRow liveryRow;
@@ -287,7 +215,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildLivery(AvFlow f)
         {
-            liveryRow = f.Add(new WmcPickRow(f.Content, "LIVERY", false, StepLivery));
+            liveryRow = Fold(f, new WmcPickRow(f.Content, "LIVERY", false, StepLivery));
         }
 
         private void RefreshLivery()

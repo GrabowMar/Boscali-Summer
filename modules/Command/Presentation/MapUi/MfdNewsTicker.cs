@@ -36,7 +36,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static TMP_Text labelA;
         private static TMP_Text labelB;
         private static TMP_Text badgeLabel;
-        private static TMP_Text deskLabel;
         private static TMP_Text badgeIcon;
         private static Image alertRail;
         private static Vector2 builtSize;
@@ -78,8 +77,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             PlaceRoot(area);
 
-            // A folded panel column resolves at zero: the badge keeps its own minimum, and drops the desk words that no longer fit.
-            float badgeWidth = Mathf.Max(MinimumBadgeWidth, Mathf.Min(columns.Panel.width, Mathf.Max(MinimumBadgeWidth, area.width - 180f)));
+            // The wire runs over the map and the rail only (2026-11-15: the strip above the panel column was cut); its badge is the short one.
+            float badgeWidth = MinimumBadgeWidth;
             if (!MfdLayout.Near(builtSize, area.size) || Mathf.Abs(builtBadgeWidth - badgeWidth) >= 0.5f || labelA == null)
             {
                 Rebuild(area.size, badgeWidth);
@@ -149,7 +148,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             labelA = null;
             labelB = null;
             badgeLabel = null;
-            deskLabel = null;
             badgeIcon = null;
             alertRail = null;
             builtSize = Vector2.zero;
@@ -173,11 +171,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             float top = columns.Canvas.y * 0.5f - MfdLayout.Margin;
             float height = DefaultHeight;
-            return new Rect(
-                -columns.Canvas.x * 0.5f + MfdLayout.Margin,
-                top,
-                columns.Canvas.x - MfdLayout.Margin * 2f,
-                height);
+            float left = columns.Map.x, right = columns.Canvas.x * 0.5f - MfdLayout.Margin;
+            return new Rect(left, top, right - left, height);
         }
 
         private static void EnsureRoot(Canvas canvas)
@@ -257,15 +252,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdChromeLay.Place(badgeLabel.rectTransform, new Rect(18f, 0f, 112f, size.y));
             badgeLabel.color = AvStyleHost.FuiColor("ink", AvTheme.TextPrimary);
 
-            // The desk label is the way into the whole log: the wire only reads its headlines.
-            deskLabel = AvText.Make(badgeRt, "Desk", AvTextRole.Micro, "THE LOG · EVN", TextAlignmentOptions.MidlineRight);
-            MfdChromeLay.Place(deskLabel.rectTransform, new Rect(badgeWidth - 145f, 0f, 112f, size.y));
-            deskLabel.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
-            // A narrow badge (folded column) has no room for the label; when shown it opens EVN LOG.
-            deskLabel.gameObject.SetActive(badgeWidth >= 260f);
-            deskLabel.raycastTarget = true;
-            AvHit.On(deskLabel).Click = _ => AvConsole.Open("EVN", "LOG");
-            MapUiPointer.Register(deskLabel.rectTransform);   // a destroyed label drops out of the map's hit test by itself
 
             // 3. Masked Viewport
             float viewportX = badgeWidth + 10f;

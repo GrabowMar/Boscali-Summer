@@ -12,9 +12,8 @@ namespace BoscaliSummer.Modules.Weather.Presentation
 {
     /// <summary>
     /// Read-only battlefield environment briefing on the maximised map. Kit v2 (AvConsole):
-    /// header metrics carry the live top-line numbers, WEATHER holds the current-conditions
-    /// card, rings, growing vertical profile, 60-minute outlook and cover trend, SKY &amp; AIR holds the
-    /// solar/lunar ephemeris, wind, local-air rings and the daylight and air-density charts.
+    /// one page: the current-conditions card, rings, cloud profile and 60-minute outlook, then the
+    /// solar/lunar ephemeris and wind.
     /// </summary>
     internal sealed class WeatherMfdPanel : MonoBehaviour, ISceneService
     {
@@ -30,16 +29,18 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         private WeatherEnvView view;
 
         private float nextRefresh;
-        private readonly float[] densityCurve = new float[13];
         private readonly EnvData data = new EnvData();
         private readonly EnvData noMission = new EnvData
         {
             HasMission = false,
-            Title = "METOC / NO MISSION",
             Footer = "NO MISSION",
             FooterState = AvState.Inert,
         };
         private EnvForecastRow[] forecastRows;
+        private int sunEventMinutes = int.MinValue;
+        private string sunEventName;
+        private string footerStory, footerText;
+        private bool footerHeld, footerManual;
 
 
         public void Configure(WeatherSettings config, WeatherManager manager, ManualLogSource log)
@@ -78,7 +79,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
         {
             view = new WeatherEnvView(rootRect, MfdSlots.Weather, Width, height);
             console = view.Console;
-            console.PageChanged += _ => nextRefresh = 0f;
             view.Finish();
             console.Ticker.Add(-1, AvTickRate.Fast, TickRefresh);
             return null;
@@ -138,9 +138,16 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             bool held = !hasBrief || brief.Held;
             string nextText = held ? "HELD" : brief.NextKm >= 0f ? AvNum.Fixed(brief.NextKm, 0) + " KM" : "CLEAR";
             float nextFrac = held || brief.NextKm < 0f ? 0f : Mathf.Clamp01(1f - brief.NextKm / 150f);
-            string footer = weather.IsManualOverride ? "HELD // CTRL+O // " + regime.Name : held ? "HELD // TAPE" : "TAPE // " + brief.Story.ToUpperInvariant();
+            string story = hasBrief ? brief.Story : null;
+            bool manual = weather.IsManualOverride;
+            string footerKey = manual ? regime.Name : story;
+            if (footerText == null || footerHeld != held || footerManual != manual || footerStory != footerKey)
+            {
+                footerHeld = held; footerManual = manual; footerStory = footerKey;
+                footerText = manual ? "HELD // CTRL+O // " + regime.Name : held ? "HELD // TAPE" : "TAPE // " + story.ToUpperInvariant();
+            }
+            string footer = footerText;
 
-            data.Title = "METOC / BATTLEFIELD";
             data.Next = nextText;
             data.NextFrac = nextFrac;
             data.Footer = footer;
@@ -166,8 +173,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             data.WindTo = towards;
             data.HasCamera = camera != null;
             data.CameraAlt = cameraAltitude;
-            data.AirDensity = camera != null ? LevelInfo.GetAirDensity(cameraAltitude) : 0f;
-            data.SoundSpeed = camera != null ? LevelInfo.GetSpeedOfSound(cameraAltitude) : 0f;
             data.HasViewAir = hasViewAir;
             data.ViewCloud = hasViewAir ? viewAir.CloudDensity01 : 0f;
             data.ViewRain = hasViewAir ? viewAir.Precipitation01 : 0f;
@@ -180,16 +185,19 @@ namespace BoscaliSummer.Modules.Weather.Presentation
             data.Sunset = solar.SunsetHour;
             data.PolarDay = solar.PolarDay;
             data.PolarNight = solar.PolarNight;
-            data.SunEvent = solar.NextEventName + " in " + AvNum.Fixed(solar.TimeToNextEventMinutes, 0) + " min.";
+            int eventMinutes = Mathf.RoundToInt(solar.TimeToNextEventMinutes);
+            if (eventMinutes != sunEventMinutes || solar.NextEventName != sunEventName)
+            {
+                sunEventMinutes = eventMinutes;
+                sunEventName = solar.NextEventName;
+                data.SunEvent = solar.NextEventName + " in " + AvNum.Fixed(solar.TimeToNextEventMinutes, 0) + " min.";
+            }
             data.MoonPhase = lunar.PhaseName;
             data.MoonLit = lunar.IlluminationFraction;
             data.MoonGlow = lunar.MoonlightIntensity;
             data.MoonWaxing = lunar.PhaseName.StartsWith("Waxing", StringComparison.Ordinal) ||
                              lunar.PhaseName.StartsWith("First", StringComparison.Ordinal);
             data.Moonless = lunar.IsMoonless;
-
-            for (int i = 0; i < densityCurve.Length; i++) densityCurve[i] = LevelInfo.GetAirDensity(i * 1000f);
-            data.DensityByAlt = densityCurve;
 
             ForecastStep[] steps = weather.GetForecastTimeline();
             data.Forecast = null;
@@ -207,8 +215,6 @@ namespace BoscaliSummer.Modules.Weather.Presentation
                     row.OffsetMinutes = i < offsets.Length ? offsets[i] : 0;
                     row.Regime = steps[i].Regime.Type;
                     row.Code = steps[i].Regime.Code;
-                    row.Cover = steps[i].Conditions;
-                    row.Deck = steps[i].CloudDeckMetres;
                     row.Rain = steps[i].RainProbability;
                 }
                 data.Forecast = forecastRows;

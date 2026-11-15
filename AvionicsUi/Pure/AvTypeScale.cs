@@ -19,6 +19,7 @@ namespace NOAvionics
 
     public static class AvTypeScale
     {
+        /// <summary>Nothing on a console is set smaller. Caps track 3 up to 13 px and 2 above; mixed case and mono track 0.</summary>
         public const float Floor = 11f;
 
         public static AvTypeSpec Of(AvTextRole role)
@@ -28,11 +29,11 @@ namespace NOAvionics
                 case AvTextRole.Display: return new AvTypeSpec(AvFace.MonoStrong, 24f, false, 0f);
                 case AvTextRole.Title: return new AvTypeSpec(AvFace.CondStrong, 18f, true, 2f);
                 case AvTextRole.Headline: return new AvTypeSpec(AvFace.CondStrong, 24f, true, 2f);
-                case AvTextRole.Head: return new AvTypeSpec(AvFace.CondStrong, 13f, true, 5f);
+                case AvTextRole.Head: return new AvTypeSpec(AvFace.CondStrong, 13f, true, 3f);
                 case AvTextRole.Label: return new AvTypeSpec(AvFace.Cond, 12f, true, 3f);
-                case AvTextRole.Micro: return new AvTypeSpec(AvFace.Cond, 11f, true, 4f);
+                case AvTextRole.Micro: return new AvTypeSpec(AvFace.Cond, 12f, true, 3f);
                 case AvTextRole.Prose: return new AvTypeSpec(AvFace.Cond, 13f, false, 0f);
-                case AvTextRole.ProseSmall: return new AvTypeSpec(AvFace.Cond, 12f, false, 0f);
+                case AvTextRole.ProseSmall: return new AvTypeSpec(AvFace.Cond, 13f, false, 0f);
                 case AvTextRole.DataSmall: return new AvTypeSpec(AvFace.Mono, 12f, false, 0f);
                 case AvTextRole.DataStrong: return new AvTypeSpec(AvFace.MonoStrong, 13f, false, 0f);
                 default: return new AvTypeSpec(AvFace.Mono, 13f, false, 0f);

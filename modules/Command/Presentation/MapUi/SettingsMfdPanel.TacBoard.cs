@@ -7,8 +7,8 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The TAC BOARD's options on the COCKPIT tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
-    /// imports it). Four groups: the board itself, its manual pages, its major parts and the extras. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
+    /// The TAC BOARD's options on the HUD tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
+    /// imports it). Three groups: the board itself, its major parts and the extras. Its manual page slots are the C-menu's (PAGES rows in MenuCatalog), not this console's. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
     /// in flight and there is no preview here. Every control but RESET and the kill feed and map restyle (which stay when the board is off) waits on the board's own switch, as the immersion page waits on its master.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
@@ -27,20 +27,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             "LEAN: no gauge row, dark lamps or captions.",
             "MIN: only lock, spike and missile lamps; your selected pages stay visible.",
         };
-        private static readonly string[] BoardPageCountNames = { "1", "2", "3", "4" };
-        private static readonly string[] BoardPageCountBriefs =
-        {
-            "Show one full page.",
-            "Show two pages: side by side in WIDE, one above the other in STACK.",
-            "Show three pages: two above, one under them.",
-            "Show four pages, two by two.",
-        };
-        /// <summary>In <see cref="BoardPage"/> order; SYSTEMS keeps its place but is never offered (<see cref="StepPage"/>): the board always shows it.</summary>
-        private static readonly string[] BoardPageNames =
-        {
-            "RADAR WARNING", "SHOT", "MISSILE CAM", "APPROACH", "WING", "STRIKE", "DOCK", "OBJECTIVE", "SYSTEMS", "CARGO",
-        };
-
         private void BuildTacBoardRows(AvFlow flow, int page)
         {
             ITacBoardSettings board = ModuleServices.TryGet(out ITacBoardSettings svc) ? svc : null;
@@ -54,7 +40,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Func<bool> on = () => board.Enabled;
             Func<string> off = () => "Turn on TAC BOARD first.";
 
-            flow.Section(AvIcon.Target, "TAC BOARD", "BOARD · LAYOUT · LOOK");
+            flow.Section(AvIcon.Target, "TAC BOARD", null);
             ToggleCell(flow, page, "TAC BOARD",
                 "Off hides the board and gives back the game's own weapon, countermeasure and power panels.",
                 () => board.Enabled, v => board.Enabled = v);
@@ -69,20 +55,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             BoardRing(flow, look, page, "BACKGROUNDS", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
                 "The one soft backdrop behind every block of the HUD: the board, the left column, the map, the wing strip and the centre alerts. 0% draws none.", () => true, off);
 
-            flow.Section(AvIcon.Radar2, "TAC BOARD PAGES", "MANUAL · UP TO 2 x 2");
-            Func<bool> pagesOn = () => board.Enabled && board.ScopeMode != BoardScopeMode.Off;
-            Func<string> pagesOff = () => board.Enabled ? "Turn on TACTICAL PAGES first." : off();
-            BoardStrip(flow, page, "FULL PAGES", BoardPageCountNames, BoardPageCountBriefs,
-                () => board.PageCount - 1, i => board.PageCount = i + 1, pagesOn, pagesOff);
-            BoardPageChoice(flow, page, "PAGE 1", () => board.Page1, v => SelectBoardPage(board, 0, v), pagesOn, pagesOff);
-            BoardPageChoice(flow, page, "PAGE 2", () => board.Page2, v => SelectBoardPage(board, 1, v),
-                () => pagesOn() && board.PageCount >= 2, () => pagesOn() ? "Choose 2 or more full pages first." : pagesOff());
-            BoardPageChoice(flow, page, "PAGE 3", () => board.Page3, v => SelectBoardPage(board, 2, v),
-                () => pagesOn() && board.PageCount >= 3, () => pagesOn() ? "Choose 3 or 4 full pages first." : pagesOff());
-            BoardPageChoice(flow, page, "PAGE 4", () => board.Page4, v => SelectBoardPage(board, 3, v),
-                () => pagesOn() && board.PageCount >= 4, () => pagesOn() ? "Choose 4 full pages first." : pagesOff());
-
-            flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", "MAJOR DISPLAY ELEMENTS");
+            flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", null);
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
             ToggleCell(flow, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
@@ -99,7 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
 
-            flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", "SWAY · RESET");
+            flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", null);
             ToggleCell(flow, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",
                 () => board.Sway, v => board.Sway = v, on, off);
             AvControl reset = flow.Buttons(new AvControl.Spec("RESET TO DEFAULTS", () =>
@@ -112,30 +85,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
         }
 
-        private void BoardPageChoice(AvFlow flow, int page, string title, Func<BoardPage> get, Action<BoardPage> set,
-            Func<bool> enabled, Func<string> reason) =>
-            Stepper(flow, page, title, () => BoardPageNames[Mathf.Clamp((int)get(), 0, BoardPageNames.Length - 1)],
-                d => set(StepPage(get(), d)),
-                () => true, () => true, "Choose this page manually; the selection stays until you change it.", enabled, reason, true);
-
-        /// <summary>The page <paramref name="d"/> steps on from <paramref name="from"/>, wrapping, past SYSTEMS (not a slot choice).</summary>
-        private static BoardPage StepPage(BoardPage from, int d)
-        {
-            int n = BoardPageNames.Length, i = Mathf.Clamp((int)from, 0, n - 1);
-            do i = (i + d + n) % n; while (i == (int)BoardPage.Systems);
-            return (BoardPage)i;
-        }
-
-        private static void SelectBoardPage(ITacBoardSettings board, int slot, BoardPage choice)
-        {
-            var pages = new[] { board.Page1, board.Page2, board.Page3, board.Page4 };
-            for (int i = 0; i < pages.Length; i++)
-                if (i != slot && pages[i] == choice) pages[i] = pages[slot];
-            pages[slot] = choice;
-            board.Page1 = pages[0]; board.Page2 = pages[1]; board.Page3 = pages[2]; board.Page4 = pages[3];
-        }
-
-        /// <summary>A labelled choice strip (LAYOUT, DECLUTTER, PAGES): one segment per name, the latched one read from <paramref name="get"/>.</summary>
+        /// <summary>A labelled choice strip (LAYOUT, DECLUTTER): one segment per name, the latched one read from <paramref name="get"/>.</summary>
         private AvSegmented BoardStrip(AvFlow flow, int page, string label, string[] names, string[] briefs, Func<int> get, Action<int> set,
             Func<bool> enabled, Func<string> reason)
         {

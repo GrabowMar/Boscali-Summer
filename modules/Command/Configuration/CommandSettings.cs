@@ -21,14 +21,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public ConfigEntry<float> GridRefreshInterval { get; }
 
         public ConfigEntry<float> DeckOpacity { get; }
-        public ConfigEntry<bool> DeckGrid { get; }
-        public ConfigEntry<bool> CheckerboardOverlay { get; }
-
-        public ConfigEntry<bool> BackgroundImage { get; }
-        public ConfigEntry<int> BackgroundImagePreset { get; }
-        public ConfigEntry<string> CustomWallpaperFile { get; }
-        public ConfigEntry<int> WallpaperFitMode { get; }
-        public ConfigEntry<float> BackgroundImageOpacity { get; }
 
         public ConfigEntry<bool> MapTerrainImage { get; }
         public ConfigEntry<bool> MapIndustry { get; }
@@ -87,7 +79,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
             DisplayLife = config.Bind("Command", "DisplayLife", 0.5f,
                 new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0f,
-                new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's colours. Ground that can hit you glows amber. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
+                new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's green. Ground that can hit you glows brighter in the same green. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             MapHoldKey = config.Bind("Command", "MapHoldKey", KeyCode.V,
                 "Hold to open the game's full map while flying; let go to close it. None disables the key.");
             // 0.2.4 turned the terrain ghost off by default; a cfg saved by 0.2.3 still holds the old on values.
@@ -173,33 +165,6 @@ namespace BoscaliSummer.Modules.Command.Configuration
                     "Opacity of the console backdrop (0.1 = see-through, 1.0 = solid). Map darkening is separate.",
                     new AcceptableValueRange<float>(0.10f, 1.0f)));
 
-            DeckGrid = config.Bind("Command", "DeckGrid", false,
-                "Retired backdrop grid flag, retained for config compatibility. Renders as matte.");
-
-            CheckerboardOverlay = config.Bind("Command", "CheckerboardOverlay", false,
-                "Retired checkerboard flag, retained for config compatibility. Renders as matte.");
-
-            BackgroundImage = config.Bind("Command", "BackgroundImage", false,
-                "Display a local custom wallpaper when BackgroundImagePreset is 3.");
-
-            BackgroundImagePreset = config.Bind("Command", "BackgroundImagePreset", 0,
-                new ConfigDescription(
-                    "Wallpaper source (3: Custom file; retired presets 0-2 render the matte instrument surface).",
-                    new AcceptableValueRange<int>(0, 3)));
-
-            CustomWallpaperFile = config.Bind("Command", "CustomWallpaperFile", "images.jpg",
-                "Filename of custom background wallpaper loaded from wallpapers directory.");
-
-            WallpaperFitMode = config.Bind("Command", "WallpaperFitMode", 0,
-                new ConfigDescription(
-                    "Aspect ratio fit mode for custom wallpaper (0: Cover/AspectFill, 1: Fit/Letterbox, 2: Stretch).",
-                    new AcceptableValueRange<int>(0, 2)));
-
-            BackgroundImageOpacity = config.Bind("Command", "BackgroundImageOpacity", 0.25f,
-                new ConfigDescription(
-                    "Alpha opacity of the backdrop background image or wallpaper.",
-                    new AcceptableValueRange<float>(0.05f, 1.0f)));
-
             MapTerrainImage = config.Bind("Command", "MapTerrainImage", true,
                 "Display satellite terrain map image under tactical overlays.");
 
@@ -256,7 +221,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             MapTrayOpacity = config.Bind("Command", "MapTrayOpacity", 0.15f,
                 new ConfigDescription(
-                    "Map darkening beneath terrain and symbols, independent of background choice (0.0 = clear, 1.0 = dark solid).",
+                    "Map darkening beneath terrain and symbols (0.0 = clear, 1.0 = dark solid).",
                     new AcceptableValueRange<float>(0.0f, 1.0f)));
 
             TargetPresetWheel = config.Bind("Command", "TargetPresetWheel", true,

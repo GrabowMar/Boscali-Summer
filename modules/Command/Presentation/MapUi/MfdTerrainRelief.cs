@@ -38,7 +38,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float SeaLevel = -200f;
         private const float CutOutRimRise = 5f;
         private const float ModelWidth = 900f;
-        private const float VerticalScale = 3.6f;
+        private const float VerticalScale = 2.6f;
         private const float MaximumAirLift = 120f;
         // A still view only redraws to pick up a re-baked tint or threat field.
         private const float RenderInterval = 1f;
@@ -194,8 +194,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Material controlMaterial;
         private static Material seaControlMaterial;
         private static Material gridMaterial;
-        private static readonly Color32 MinorGrid = new Color32(54, 128, 140, 41);
-        private static readonly Color32 MajorGrid = new Color32(77, 158, 173, 77);
+        private static readonly Color32 MinorGrid = new Color32(64, 136, 146, 50);
+        private static readonly Color32 MajorGrid = new Color32(96, 166, 178, 100);
         private static Material waterMaterial;
         private static Texture2D styleTexture;
         private static Camera camera;
@@ -497,6 +497,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lastImageTransform = imageTransform;
             lastViewportTransform = viewportTransform;
             ProjectCameraIndicator();
+            ProjectWaypoints(map);
             RefreshSelectedMarkers();
             DeclutterIcons();
             UpdateAircraftTrails();
@@ -555,6 +556,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly List<Renderer> sceneRenderers = new List<Renderer>(64), drawOrder = new List<Renderer>(64);
         private static readonly List<float> drawDepth = new List<float>(64);
         private static readonly List<int> drawQueue = new List<int>(64);
+        private static readonly Plane[] drawPlanes = new Plane[6];
+        private static readonly Dictionary<Material, int> drawPasses = new Dictionary<Material, int>(8);
         private static CommandBuffer drawCommands;
         private static bool directBroken;
 
@@ -580,17 +583,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             drawOrder.Clear();
             drawDepth.Clear();
             drawQueue.Clear();
+            GeometryUtility.CalculateFrustumPlanes(camera, drawPlanes);
             Vector3 eye = camera.transform.position, ahead = camera.transform.forward;
             for (int i = 0; i < sceneRenderers.Count; i++)
             {
                 Renderer renderer = sceneRenderers[i];
                 if (!renderer.enabled || renderer.gameObject.layer != TerrainLayer) continue;
+                Bounds bounds = renderer.bounds;
+                if (!GeometryUtility.TestPlanesAABB(drawPlanes, bounds)) continue;
                 Material material = renderer.sharedMaterial;
                 if (material == null) continue;
-                // Stable insertion by queue, then far to near among the transparent ones (≤ 64 renderers). The queues ride in their own
-                // list: reading them back off the materials was two native calls a step, ~1,200 a draw (2026-10-29 review).
+                // Cull before submitting the heightfield: a zoomed view sees only a few of its tiles. Within each queue, opaque
+                // tiles go near to far for early depth rejection; transparent layers keep their back-to-front order.
                 int queue = material.renderQueue;
-                float depth = queue > 2500 ? Vector3.Dot(renderer.bounds.center - eye, ahead) : 0f;
+                float depth = Vector3.Dot(bounds.center - eye, ahead) * (queue > 2500 ? 1f : -1f);
                 int at = drawOrder.Count;
                 while (at > 0 && (drawQueue[at - 1] > queue || (drawQueue[at - 1] == queue && drawDepth[at - 1] < depth))) at--;
                 drawOrder.Insert(at, renderer);
@@ -610,8 +616,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < drawOrder.Count; i++)
             {
                 Material material = drawOrder[i].sharedMaterial;
-                int pass = material.FindPass("ForwardLit");
-                commands.DrawRenderer(drawOrder[i], material, 0, pass >= 0 ? pass : 0);
+                if (!drawPasses.TryGetValue(material, out int pass))
+                {
+                    pass = Mathf.Max(0, material.FindPass("ForwardLit"));
+                    drawPasses.Add(material, pass);
+                }
+                commands.DrawRenderer(drawOrder[i], material, 0, pass);
             }
             for (int i = 0; i < FogKeywords.Length; i++)
                 if (fogWasOn[i]) commands.EnableShaderKeyword(FogKeywords[i]);
@@ -850,7 +860,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MeshCollider collider = tile.GetComponent<MeshCollider>();
             collider.sharedMesh = mesh;
             colliders.Add(collider);
-            controlRenderers.Add(AddFieldTile(mesh, "Control", controlMaterial, 0.12f));
+            // The shared mesh passes LEqual at the ground's exact depth. Lifting it exposes coloured silhouettes along ridges.
+            controlRenderers.Add(AddFieldTile(mesh, "Control", controlMaterial, 0f));
         }
 
         /// <summary>The scene root (parked), materials, grid, sea and camera; the tiles follow.</summary>
@@ -872,8 +883,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             groundMaterial = new Material(ground != null ? ground : opaque != null ? opaque : shader) {
                 mainTexture = styleTexture != null ? styleTexture : sprite.texture,
                 color = mapAssetName == NavalMap
-                    ? new Color(1.75f, 1.82f, 1.82f, 1f)
-                    : new Color(1.25f, 1.28f, 1.27f, 1f) };
+                    ? new Color(1.93f, 2.00f, 2.00f, 1f)
+                    : new Color(1.52f, 1.50f, 1.43f, 1f) };
             if (ground != null)
             {
                 groundMaterial.SetFloat("_MetersPerUnit", 81920f / (VerticalScale * ModelWidth));
@@ -1008,7 +1019,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float start = Vector3.Dot(focus - eye.position, eye.forward);
             float pitch = Mathf.Clamp(rig.Pitch, 5f, 89f);
             float reach = camera.orthographicSize / Mathf.Tan(pitch * Mathf.Deg2Rad);
-            float amount = .42f * Mathf.Clamp01((70f - pitch) / 45f);
+            float amount = .26f * Mathf.Clamp01((70f - pitch) / 45f);
             groundMaterial.SetVector("_HazeRange", new Vector4(start, start + Mathf.Max(1f, reach * 1.15f), amount, 0f));
         }
 
@@ -1035,16 +1046,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     bundled ? typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(
                         mapAssetName == NavalMap ? NavalStyleResource : StyleResource) : null)
                 {
-                    byte[] bytes = EmbeddedResources.ReadAll(stream, 8 * 1024 * 1024);
+                    byte[] bytes = EmbeddedResources.ReadAll(stream, 32 * 1024 * 1024);
                     if (bytes == null) return;
-                    var loaded = new Texture2D(2, 2, TextureFormat.RGB24, false);
+                    var loaded = new Texture2D(2, 2, TextureFormat.RGB24, true);
                     if (!loaded.LoadImage(bytes, false) || loaded.width > 4096 || loaded.height > 4096)
                     { Object.Destroy(loaded); return; }
                     // Forests, farmland, rock and deserts from the game's own splatmaps, then the CPU copy goes.
                     ReliefLandCover.Paint(loaded, mapAssetName, dryLand, Samples);
+                    loaded.Apply(true, false);
+                    // Compress once after painting/mip generation: 4K detail stays near the old uncompressed 2K memory budget.
+                    if (SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) loaded.Compress(false);
                     loaded.Apply(false, true);
                     loaded.name = "NOAvionics.IntelligenceTerrainStyle";
-                    loaded.filterMode = FilterMode.Bilinear;
+                    loaded.filterMode = FilterMode.Trilinear;
+                    loaded.anisoLevel = 4;
+                    loaded.wrapMode = TextureWrapMode.Clamp;
                     styleTexture = loaded;
                 }
             }
@@ -1070,12 +1086,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             const int side = TileCells + 1;
             float cellX = ModelSpanX / (Samples - 1);
             float cellZ = ModelSpanZ / (Samples - 1);
+            float sampleXMetres = source.MapSize.x / (Samples - 1);
+            float sampleZMetres = source.MapSize.y / (Samples - 1);
             Vector4 atlas = styleTexture != null ? new Vector4(0f, 0f, 1f, 1f) :
                 DataUtility.GetOuterUV(sprite);
             var vertices = new Vector3[side * side];
             var uv = new Vector2[vertices.Length];
-            // Distance to the shoreline in heightfield samples, for the ground shader's shallows (not the vertex alpha: the control
-            // tint reuses this mesh with a shader that multiplies it).
+            // Coast distance (x) and baked crest weight (y). Keep them out of vertex RGB, which the control wash also uses.
             var coastUv = new Vector2[vertices.Length];
             var colors = new Color32[vertices.Length];
             var triangles = new int[TileCells * TileCells * 6];
@@ -1090,9 +1107,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     ModelHeight(gx, gz), -ModelSpanZ * .5f + gz * cellZ);
                 uv[at] = new Vector2(Mathf.Lerp(atlas.x, atlas.z, gx / (float)(Samples - 1)),
                     Mathf.Lerp(atlas.y, atlas.w, gz / (float)(Samples - 1)));
-                float riseX = ModelHeight(gx + 1, gz) - ModelHeight(gx - 1, gz);
+                float west = ModelHeight(gx - 1, gz), east = ModelHeight(gx + 1, gz);
+                float south = ModelHeight(gx, gz - 1), north = ModelHeight(gx, gz + 1);
+                float riseX = east - west;
                 float dx = riseX / (2f * cellX);
-                float riseZ = ModelHeight(gx, gz + 1) - ModelHeight(gx, gz - 1);
+                float riseZ = north - south;
                 float dz = riseZ / (2f * cellZ);
                 Vector3 normal = new Vector3(-dx, 1f, -dz).normalized;
                 int sample = gz * Samples + gx;
@@ -1102,7 +1121,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 byte shade = ReliefLight.Shade(Vector3.Dot(normal, light), slopeDrop,
                     Mathf.Max(heights[sample], 0f), peakMeters, coast, dryLand[sample]);
                 colors[at] = new Color32(shade, shade, shade, 255);
-                coastUv[at] = new Vector2(coast, 0f);
+                // Reuse the normal samples; the shared encoding offset cancels in the curvature calculation.
+                float ridge = gx > 0 && gz > 0 && gx < Samples - 1 && gz < Samples - 1
+                    ? ReliefLight.Ridge(vertices[at].y * metersPerModel, west * metersPerModel, east * metersPerModel,
+                        south * metersPerModel, north * metersPerModel, sampleXMetres, sampleZMetres, coast, dryLand[sample]) : 0f;
+                coastUv[at] = new Vector2(coast, ridge);
                 if (x == TileCells || z == TileCells) continue;
                 int t = (z * TileCells + x) * 6;
                 triangles[t] = at;
@@ -1118,7 +1141,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             result.uv2 = coastUv;
             result.colors32 = colors;
             result.triangles = triangles;
-            result.RecalculateNormals();
             result.RecalculateBounds();
             return result;
         }
@@ -1133,7 +1155,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             mesh.uv = new[] { new Vector2(0f, 0f), new Vector2(0f, 1f),
                 new Vector2(1f, 0f), new Vector2(1f, 1f) };
             mesh.triangles = new[] { 0, 1, 2, 2, 1, 3 };
-            mesh.RecalculateNormals();
             mesh.RecalculateBounds();
             return mesh;
         }
@@ -1186,7 +1207,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static Vector3 GridPoint(int x, int z) => new Vector3(
             (x / (float)(Samples - 1) - .5f) * ModelSpanX,
-            Mathf.Max(land[z * Samples + x] ? ModelHeight(x, z) + .35f : 0f,
+            Mathf.Max(land[z * Samples + x] ? ModelHeight(x, z) + .08f : 0f,
                 SeaSurfaceHeight + .035f),
             (z / (float)(Samples - 1) - .5f) * ModelSpanZ);
 
@@ -1646,6 +1667,59 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             marker.localPosition = new Vector3(local.x, local.y, fix.z);
         }
 
+        private static MapWaypoint anchoredWaypoint;
+        private static GlobalPosition waypointAnchor;
+
+        /// <summary>The game's right-click orders (DynamicMap.MapControls) drop their marker at the mouse into the icon layer once and
+        /// never move it: on the relief the yellow path stayed put while the view panned, zoomed or turned (2026-11-15 report).
+        /// Every relief tick re-places each leg from its world fix; the first leg starts where the ordered unit stood.</summary>
+        private static void ProjectWaypoints(DynamicMap map)
+        {
+            List<MapWaypoint> list = map.waypoints;
+            List<GlobalPosition> fixes = map.constructWaypoints;
+            if (list == null || fixes == null || list.Count == 0 || list.Count != fixes.Count) return;
+            if (list[0] != anchoredWaypoint)
+            {
+                // Vanilla anchors the first leg on the selected icon at the click; this runs the same frame, after MapControls.
+                anchoredWaypoint = list[0];
+                waypointAnchor = map.selectedIcons.Count > 0 && map.selectedIcons[0] is UnitMapIcon u && u.unit != null
+                    ? u.unit.GlobalPosition() : fixes[0];
+            }
+            RectTransform image = MapImageRect(map.mapImage);
+            if (image == null || list[0].vector == null) return;
+            Rect rect = image.rect;
+            Transform layer = list[0].vector.transform.parent;
+            if (!WaypointLocal(image, rect, layer, waypointAnchor, out Vector2 previous)) return;
+            float inverse = 1f / Mathf.Max(.01f, map.mapImage.transform.localScale.x);
+            for (int i = 0; i < list.Count; i++)
+            {
+                MapWaypoint w = list[i];
+                if (w.vector == null || !WaypointLocal(image, rect, layer, fixes[i], out Vector2 at)) continue;
+                Transform vector = w.vector.transform;
+                vector.localPosition = new Vector3(at.x, at.y, vector.localPosition.z);
+                vector.localEulerAngles = new Vector3(0f, 0f, -Mathf.Atan2(at.x - previous.x, at.y - previous.y) * Mathf.Rad2Deg + 180f);
+                vector.localScale = new Vector3(4f * inverse, (at - previous).magnitude, 4f * inverse);
+                float z = vector.localPosition.z;
+                if (w.marker != null)
+                {
+                    z = w.marker.transform.localPosition.z;
+                    w.marker.transform.localPosition = new Vector3(at.x, at.y, z);
+                }
+                // The native zoom refresh (MapWaypoint.UpdateMarker) re-measures the leg from this.
+                w.previousWaypoint = new Vector3(previous.x, previous.y, z);
+                previous = at;
+            }
+        }
+
+        private static bool WaypointLocal(RectTransform image, Rect rect, Transform layer, GlobalPosition fix, out Vector2 local)
+        {
+            local = default;
+            if (!TryProject(fix.x, fix.z, rect, out Vector2 point)) return false;
+            Vector3 at = layer.InverseTransformPoint(image.TransformPoint(new Vector3(point.x, point.y)));
+            local = new Vector2(at.x, at.y);
+            return true;
+        }
+
         private static void ReprojectCachedMarkers()
         {
             staleMarkers.Clear();
@@ -1864,6 +1938,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 RefreshClusterBadges();
         }
 
+        /// <summary>
+        /// An OPS-built anchor (launch pad, data center, EW truck, camp, launcher; Support names them "BoscaliSummer:Support:&lt;Kind&gt;:", guards
+        /// "...Guard:"). It sits beside an airbase and its own guards, so a stack swallowed it and the player never saw the build land.
+        /// </summary>
+        private static bool OpsAnchor(Unit unit)
+        {
+            string name = unit != null ? unit.NetworkUniqueName : null;
+            return name != null && name.StartsWith("BoscaliSummer:Support:", StringComparison.Ordinal) &&
+                name.IndexOf("Guard:", StringComparison.Ordinal) < 0;
+        }
+
         private static void ClearClusters()
         {
             foreach (Image image in hiddenIcons) if (image != null) image.enabled = true;
@@ -1911,7 +1996,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 MapIcon entry = owner.mapIcons[i];
                 if (entry == null || !(entry is UnitMapIcon icon) || !icon.gameObject.activeInHierarchy ||
-                    selectedForClusters.Contains(icon) ||
+                    selectedForClusters.Contains(icon) || OpsAnchor(icon.unit) ||
                     !iconFixes.TryGetValue(icon, out IconFix fix) || fix.Airborne) continue;
                 Image image = icon.iconImage;
                 if (image == null || !image.raycastTarget ||
@@ -2255,6 +2340,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             drawOrder.Clear();
             drawQueue.Clear();
             drawDepth.Clear();
+            drawPasses.Clear();
             sceneRenderers.Clear();
             drawCommands?.Clear();   // no commands left pointing at destroyed renderers and the freed texture
         }

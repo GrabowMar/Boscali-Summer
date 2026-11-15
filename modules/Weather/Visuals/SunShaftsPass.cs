@@ -17,9 +17,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     {
         // Statics, not constants: the look is tuned live through the bridge.
         /// <summary>How far the light is smeared (share of the way to the sun) and how much of it is added.</summary>
-        internal static float Reach = 0.9f, Strength = 0.3f;
+        internal static float Reach = 0.78f, Strength = 0.22f;
         /// <summary>Radius of the glow around the sun, in screen heights.</summary>
-        internal static float GlowRadius = 0.45f;
+        internal static float GlowRadius = 0.32f;
 
         private static readonly int A = Shader.PropertyToID("_BoscaliShaftsA"), B = Shader.PropertyToID("_BoscaliShaftsB");
         private static readonly int SunId = Shader.PropertyToID("_ShaftSun"), ParamsId = Shader.PropertyToID("_ShaftParams");
@@ -58,8 +58,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             toSun = -level.sun.transform.forward;
             // The same air as the disc: white overhead, orange and dim at the horizon, gone once it has set.
             float elevation = Mathf.Asin(Mathf.Clamp(toSun.y, -1f, 1f)) * Mathf.Rad2Deg;
-            SunDiscMath.Transmission(elevation, view.transform.GlobalPosition().y, out float r, out float g, out float b);
-            tint = new Color(r, g, b) * SunDiscMath.AboveHorizon(elevation);
+            float altitude = view.transform.GlobalPosition().y;
+            SunDiscMath.Transmission(elevation, altitude, out float r, out float g, out float b);
+            tint = new Color(r, g, b) * (SunDiscMath.AboveHorizon(elevation) * SunDiscMath.AirDensity(altitude));
             if (!hooked)
             {
                 RenderPipelineManager.beginCameraRendering += OnBeginCamera;
@@ -77,7 +78,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
-            if (material == null || renderingData.cameraData.camera != camera) return;
+            if (!active || material == null || renderingData.cameraData.camera != camera || tint.maxColorComponent < 0.001f) return;
             Vector4 clip = renderingData.cameraData.GetProjectionMatrix() * camera.worldToCameraMatrix *
                 new Vector4(toSun.x, toSun.y, toSun.z, 0f);
             if (clip.w <= 1e-4f) return; // the sun is behind the camera

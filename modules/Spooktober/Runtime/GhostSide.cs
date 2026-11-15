@@ -47,18 +47,21 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         }
     }
 
-    /// <summary>HELL, Hell's Army's side: black, hostile to everyone, single player only like GHOST.</summary>
+    /// <summary>HELL, Hell's Army's side: violet, hostile to every other HQ, single player only like GHOST.</summary>
     internal static class HellSide
     {
         internal const string Key = "HELL";
 
-        internal static readonly SpookSide Side = new SpookSide(Key, new Color(0.08f, 0.02f, 0.02f, 1f));
+        internal static readonly SpookSide Side = new SpookSide(Key, HellArmy.MapInk);
+
+        // Vanilla targeting uses HQ inequality, including neutral factions and HQs created later in the mission.
+        internal static bool IsHostile(FactionHQ candidate) => Side.Made && candidate != null && !Side.Owns(candidate);
     }
 
     /// <summary>
     /// A Spooktober side made mid-mission. The game treats every other HQ as an enemy, so its units fight BDF and PALA alike.
-    /// The host makes the HQ on first ask: a Mirage scene object with a fresh sceneId, a stats tracker (Gun.SpawnBullet costs every
-    /// round against it) and the mission entry its server setup reads. It is kept out of <c>FactionRegistry.HQLookup</c>, so the
+    /// The host makes the HQ on first ask: a Mirage scene object with a fresh sceneId, native rearm controller, a stats tracker
+    /// (Gun.SpawnBullet costs every round against it) and the mission entry its server setup reads. It is kept out of <c>FactionRegistry.HQLookup</c>, so the
     /// join screen and the leaderboard never list it. Radars only scan the HQs in HQLookup, so the other sides see it by eye (or by
     /// a director's track feed) only. Host and single player only: a client has no scene object for its sceneId.
     /// </summary>
@@ -130,6 +133,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 made.faction = faction;
                 made.missionStatsTracker = stats;
                 stats.hq = made;
+                // Native HQ prefabs serialize this companion; AddComponent<FactionHQ> does not create it.
+                // Rearmer initialize/repair/disable/faction changes and Unit.RequestRearm all require it.
+                // Add before Spawn so Mirage includes its SyncLists and starts its native mission scheduler.
+                made.RearmMissionController = go.AddComponent<RearmMissionController>();
                 // Sync settings stay Mirage's default (public NetworkBehaviour.SyncSettings); PmcSide's reflection on
                 // "_syncSettings"/"syncSettings" finds no such field in this Mirage build and sets nothing.
                 if (!FactionRegistry.factions.Contains(faction)) FactionRegistry.factions.Add(faction);

@@ -10,7 +10,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// ADOPT strips only when they have something to say, then
     /// ① AIRFRAME (a grid of every listed airframe) · ② PILOT &amp; CREW · ③ FIT &amp; FUEL (labelled rows) · ④ LAUNCH BASE (2026-11-05 remake). REQUISITION sends the
     /// card as a Call order (airframe, field, pilot, fit, fuel); the executor quotes again on the same rules and answers in the same
-    /// words, and a bare call (the hotkey, TACTICAL CALL) flies the same draft. The airframe picked here is LOADOUT's too. A client looks;
+    /// words, and a bare call (the hotkey, TACTICAL CALL) flies the same draft. EDIT LOADOUT (under FIT & FUEL) opens the picked airframe's hardpoints, stores and livery, and MY AIRCRAFT closes the sheet. A client looks;
     /// the host requisitions: everything stays visible, disabled with the one reason.</summary>
     internal sealed partial class WmcSupply : IWmcPage
     {
@@ -18,6 +18,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private static readonly string ClientWhy = ShopRules.WingReason(WingBlock.Client, default);
 
         private AvFlow flow;
+        private readonly WmcLoadout loadout = new WmcLoadout();
         private bool relayout;
 
         // This refresh's snapshot: Shown takes a forced one, Refresh reuses it.
@@ -37,7 +38,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public string Hint => hint;
 
-        public string Alert => null;
+        public string Alert => loadout.Alert;
 
         public void Build(AvFlow pageFlow, AvTicker pageTicker, int index)
         {
@@ -48,8 +49,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             BuildAirframe(flow);
             BuildPilot(flow);
             BuildFit(flow);
+            loadout.BuildEditor(flow);
             BuildBase(flow);
-            flow.Links(("FUNDS AND PRODUCTION", "FAC", "ECONOMY"), ("LOADOUT", "WMC", "LOADOUT"));
+            WmcLoadout.BuildMine(flow, index);
         }
 
         /// <summary>A step header's caption: the state word, with the glyph a caution or danger carries.</summary>
@@ -88,6 +90,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             RefreshAirframe();
             RefreshPilot();
             RefreshFit();
+            loadout.Refresh(c, selected);
             RefreshBase();
             RefreshPin();
             if (relayout)

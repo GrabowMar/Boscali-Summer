@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Fx;
 using UnityEngine.Rendering;
 using BoscaliSummer.Modules.Weather.Domain;
 
@@ -24,6 +25,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly MaterialPropertyBlock properties = new MaterialPropertyBlock();
         private Transform map;
         private Material material;
+        private Material detailMaterial;
+        private Texture detailBoundTexture;
+        private bool wetActive;
         private int inspected;
         private float wetness;
         private Vector3 sunDirection = Vector3.up;
@@ -40,7 +44,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int FogDensityId = Shader.PropertyToID("_FogDensity");
         private static readonly int RippleTimeId = Shader.PropertyToID("_RippleTime");
         private static readonly int WetFadeId = Shader.PropertyToID("_WetFade");
+        private static readonly int DetailTextureId = Shader.PropertyToID("_TerrainDetail");
+        private static readonly int DetailFadeId = Shader.PropertyToID("_DetailFade");
+        private static readonly int DetailOriginId = Shader.PropertyToID("_DetailOrigin");
+        private static readonly int DetailStrengthId = Shader.PropertyToID("_DetailStrength");
         internal int SurfaceCount => surfaces.Count;
+        internal int DetailDrawCount { get; private set; }
+        internal uint DetailTriangleCount { get; private set; }
 
         public string EffectId => "terrain-rain";
 
@@ -53,6 +63,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             state["fx.terrain-rain.surfaces"] = surfaces.Count;
             state["fx.terrain-rain.wetness"] = wetness;
+            state["fx.terrain-detail.draws"] = DetailDrawCount;
+            state["fx.terrain-detail.triangles"] = DetailTriangleCount;
         }
         internal float Wetness => wetness;
 
@@ -70,8 +82,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         }
 
         internal void Update(Transform mapRoot, Camera camera, float rain, float deltaTime,
-            WeatherField field = null, float missionTime = 0f, float? forcedRain = null)
+            WeatherField field = null, float missionTime = 0f, float? forcedRain = null,
+            bool wetEnabled = true, bool detailEnabled = false, Shader detailShader = null, Texture detailTexture = null)
         {
+            DetailDrawCount = 0;
+            DetailTriangleCount = 0;
+            if (Application.isBatchMode && !Application.isEditor) { Reset(); return; }
             if (map != mapRoot)
             {
                 Reset();
@@ -79,18 +95,38 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 if (map != null) pending.Add(map);
             }
             if (map == null || camera == null) return;
+            if (!wetEnabled && wetActive)
+            {
+                // Turning wet ground off must not leave stale moisture when it is enabled again.
+                for (int i = 0; i < surfaces.Count; i++)
+                {
+                    var s = surfaces[i]; s.Initialized = false; s.Wet = 0f; surfaces[i] = s;
+                }
+                if (material != null) Object.Destroy(material);
+                material = null;
+            }
+            wetActive = wetEnabled;
             // Ground follows mission precipitation, not whether the aircraft is sheltered/above clouds.
-            wetness = Mathf.MoveTowards(wetness, Mathf.Clamp01(rain),
-                Mathf.Max(0f, deltaTime) * (rain > wetness ? 1f / 35f : 1f / 180f));
+            wetness = wetEnabled ? Mathf.MoveTowards(wetness, Mathf.Clamp01(rain),
+                Mathf.Max(0f, deltaTime) * (rain > wetness ? 1f / 35f : 1f / 180f)) : 0f;
+            detailEnabled &= detailShader != null && detailShader.isSupported && detailTexture != null;
+            if (!detailEnabled) ReleaseDetail();
+            float detailQuality = detailEnabled ? FxBus.Scales.RenderTargets : 0f;
+            float detailStrength = detailEnabled ? 1f - Mathf.SmoothStep(0f, 1f,
+                Mathf.InverseLerp(700f, 1200f, camera.transform.position.y - Datum.LocalSeaY)) : 0f;
+            float detailRange = detailEnabled && detailStrength > 0.001f ? 1000f * detailQuality : 0f;
+            if (!wetEnabled && detailRange <= 0f) return;
             Discover();
             if (surfaces.Count == 0) return;
-            if (material == null)
+            if (wetEnabled && material == null)
             {
                 Shader shader = CanopyShaderBundle.GetTerrainShader();
-                if (shader == null) return;
-                material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                if (shader != null) material = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
             }
-            float drawRange = AtmosphericSurfaceMath.GroundDrawRange(camera.transform.position.y - Datum.LocalSeaY);
+            float drawRange = wetEnabled && material != null
+                ? AtmosphericSurfaceMath.GroundDrawRange(camera.transform.position.y - Datum.LocalSeaY) : 0f;
+            float selectRange = Mathf.Max(drawRange, detailRange);
+            if (selectRange <= 0f) return;
             // Which eight chunks are nearest and in view is a walk over every surface (bounds, visibility, frustum): redo it 30 times a second, draw them every frame.
             bool select = Time.unscaledTime >= nextSelect;
             if (select)
@@ -107,7 +143,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     (camera.cullingMask & (1 << s.Renderer.gameObject.layer)) == 0) continue;
                 Bounds bounds = s.Renderer.bounds;
                 float distance = bounds.SqrDistance(camera.transform.position);
-                if (distance >= drawRange * drawRange || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
+                if (distance >= selectRange * selectRange || !GeometryUtility.TestPlanesAABB(planes, bounds)) continue;
                 for (int j = 0; j < 8; j++)
                 {
                     if (distance >= distances[j]) continue;
@@ -122,13 +158,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             properties.SetFloat(FogDensityId, fogDensity);
             properties.SetFloat(RippleTimeId, rippleTime);
             properties.SetVector(WetFadeId, new Vector4(drawRange * 0.65f, drawRange, 0f, 0f));
+            if (detailRange > 0f) DrawDetail(camera, detailShader, detailTexture, detailRange, detailStrength, detailQuality);
+            if (!wetEnabled || material == null) return;
             uint indexBudget = 300000; // At most 100,000 extra triangles on dense maps.
             int sampleBudget = 2;
             if (field != null) wetness = 0f;
             for (int i = 0; i < 8 && nearest[i] >= 0; i++)
             {
                 var s = surfaces[nearest[i]];
-                if (s.Renderer == null || s.Mesh == null) continue;   // destroyed since the last selection
+                if (s.Renderer == null || s.Mesh == null || distances[i] >= drawRange * drawRange) continue;
                 if (field != null && field.IsBuilt)
                 {
                     if ((!s.Initialized || missionTime >= s.NextSample || missionTime < s.LastTime) && sampleBudget-- > 0)
@@ -173,6 +211,51 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             }
         }
 
+        private void DrawDetail(Camera camera, Shader shader, Texture texture, float range, float strength, float quality)
+        {
+            if (detailMaterial == null || detailMaterial.shader != shader || detailBoundTexture != texture)
+            {
+                ReleaseDetail();
+                detailMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave };
+                detailMaterial.SetTexture(DetailTextureId, texture);
+                detailBoundTexture = texture;
+            }
+            properties.SetFloat(DetailStrengthId, strength);
+            properties.SetVector(DetailFadeId, new Vector4(range * 0.55f, range, 0.25f, 1.5f));
+            // At full quality at most four existing submeshes / 30,000 triangles receive detail.
+            // Lower/adaptive tiers reduce both distance and geometry; no native object is changed.
+            uint budget = (uint)(90000f * quality);
+            int limit = Mathf.Max(1, Mathf.FloorToInt(4f * quality));
+            for (int i = 0; i < 8 && nearest[i] >= 0 && DetailDrawCount < limit; i++)
+            {
+                var s = surfaces[nearest[i]];
+                if (s.Renderer == null || s.Mesh == null || !s.Renderer.enabled || !s.Renderer.gameObject.activeInHierarchy ||
+                    (camera.cullingMask & (1 << s.Renderer.gameObject.layer)) == 0 ||
+                    s.Indices > budget || distances[i] >= range * range) continue;
+                Transform transform = s.Renderer.transform;
+                GlobalPosition origin = transform.GlobalPosition();
+                Vector3 position = transform.position;
+                Matrix4x4 matrix = s.Renderer.localToWorldMatrix;
+                // Renderer matrices can differ from Transform matrices under static batching.
+                float x = origin.x + matrix.m03 - position.x, z = origin.z + matrix.m23 - position.z;
+                properties.SetVector(DetailOriginId, new Vector4(
+                    Mathf.Repeat(x, 64f) / 64f, Mathf.Repeat(z, 64f) / 64f, 0f, 0f));
+                Graphics.DrawMesh(s.Mesh, matrix, detailMaterial,
+                    s.Renderer.gameObject.layer, camera, s.Slot, properties,
+                    ShadowCastingMode.Off, false, null, LightProbeUsage.Off);
+                budget -= s.Indices;
+                DetailDrawCount++;
+                DetailTriangleCount += s.Indices / 3;
+            }
+        }
+
+        private void ReleaseDetail()
+        {
+            if (detailMaterial != null) Object.Destroy(detailMaterial);
+            detailMaterial = null;
+            detailBoundTexture = null;
+        }
+
         private void Discover()
         {
             for (int budget = 0; budget < 128 && pending.Count > 0 && inspected < 8192; budget++)
@@ -210,7 +293,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal void Reset()
         {
             if (material != null) Object.Destroy(material);
+            ReleaseDetail();
             material = null; map = null; wetness = 0f; inspected = 0;
+            wetActive = false;
+            DetailDrawCount = 0;
+            DetailTriangleCount = 0;
             pending.Clear(); surfaces.Clear(); slots.Clear();
             nextSelect = 0f;
         }

@@ -6,25 +6,27 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Command.Presentation
 {
-    /// <summary>A tug-of-war balance bar of the BOARD's FORCE BALANCE: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track.</summary>
+    /// <summary>A tug-of-war balance bar of the BOARD's FORCE BALANCE: own, middle (contested or neutral) and hostile parts of one track, the words under it. An unknown is the hatched track. The caption (LEAD, LAG, EVEN) shows only where it says something the label and the counts do not.</summary>
     internal sealed class StrBalanceBar : StrPart
     {
-        private const float BarH = 12f;
+        private const float BarH = 8f, Pitch = 8f, SegW = 6f;
 
         private readonly Func<StrViewModel, StrBalance> pick;
+        private readonly bool showCaption;
         private readonly TMP_Text key, caption, text;
         private readonly RectTransform barRect;
         private readonly AvVector bar;
         private float own = float.NaN, middle = float.NaN, hostile = float.NaN, drawnW = -1f;
 
-        internal StrBalanceBar(RectTransform parent, StrControls controls, IStrHub hub, Func<StrViewModel, StrBalance> select) : base(parent, "Balance", controls, hub)
+        internal StrBalanceBar(RectTransform parent, StrControls controls, IStrHub hub, Func<StrViewModel, StrBalance> select, bool captioned) : base(parent, "Balance", controls, hub)
         {
             pick = select;
+            showCaption = captioned;
             key = Text(Rect, "Key", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft);
             caption = Text(Rect, "Caption", AvTextRole.Micro, TextAlignmentOptions.MidlineRight);
             text = Text(Rect, "val.balance", AvTextRole.DataSmall, TextAlignmentOptions.TopLeft, true);
             barRect = AvLay.Child(Rect, "Track");
-            bar = AvVector.Create(barRect, "TrackInk", 40);
+            bar = AvVector.Create(barRect, "TrackInk", 160);
             Restyle();
         }
 
@@ -32,7 +34,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
         {
             StrBalance b = pick(vm);
             AvText.Set(key, b.Key);
-            AvText.Set(caption, b.Caption);
+            AvText.Set(caption, showCaption ? b.Caption : "");
             AvText.Set(text, b.Text);
             if (!own.Equals(b.Own) || !middle.Equals(b.Middle) || !hostile.Equals(b.Hostile)) { own = b.Own; middle = b.Middle; hostile = b.Hostile; drawnW = -1f; }
             Paint();
@@ -56,7 +58,7 @@ namespace BoscaliSummer.Modules.Command.Presentation
             AvQuadBuffer b = bar.Buffer;
             b.Clear();
             Rgba track = AvInk.Hairline.ToRgba();
-            b.Add(0f, 0f, w, 0f, w, BarH, 0f, BarH, track, track, track, track);
+            Seg(b, 0f, w, track);
             bool known = !float.IsNaN(own) || !float.IsNaN(hostile);
             if (!known) StrStrokes.HatchRect(b, 0f, 0f, w, BarH, 8f, 1.5f, AvInk.Dim.ToRgba());
             else
@@ -64,11 +66,19 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 float o = float.IsNaN(own) ? 0f : Mathf.Clamp01(own), m = float.IsNaN(middle) ? 0f : Mathf.Clamp01(middle), h = float.IsNaN(hostile) ? 0f : Mathf.Clamp01(hostile);
                 float x1 = o * w, x2 = Mathf.Min(w, x1 + m * w), x3 = Mathf.Min(w, x2 + h * w);
                 Rgba oc = AvInk.Friendly.WithAlpha(0.9f).ToRgba(), mc = AvInk.Ink.WithAlpha(0.45f).ToRgba(), hc = AvInk.Hostile.WithAlpha(0.9f).ToRgba();
-                if (x1 > 0f) b.Add(0f, 0f, x1, 0f, x1, BarH, 0f, BarH, oc, oc, oc, oc);
-                if (x2 > x1) b.Add(x1, 0f, x2, 0f, x2, BarH, x1, BarH, mc, mc, mc, mc);
-                if (x3 > x2) b.Add(x2, 0f, x3, 0f, x3, BarH, x2, BarH, hc, hc, hc, hc);
+                Seg(b, 0f, x1, oc); Seg(b, x1, x2, mc); Seg(b, x2, x3, hc);
             }
             bar.Commit();
+        }
+
+        // A meter of short lit segments, like the kit's gauges: each span lights the segments (or the part of one) it covers.
+        private static void Seg(AvQuadBuffer b, float from, float to, Rgba c)
+        {
+            for (float x = Mathf.Floor(from / Pitch) * Pitch; x < to; x += Pitch)
+            {
+                float a = Mathf.Max(x, from), z = Mathf.Min(x + SegW, to);
+                if (z > a) b.Add(a, 0f, z, 0f, z, BarH, a, BarH, c, c, c, c);
+            }
         }
 
         private void Paint()

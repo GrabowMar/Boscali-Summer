@@ -26,10 +26,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                     " Always goes to your team.";
             }
             ButtonGrid(p, callSpecs, 3, callHelps);
-            p.Links(("EVENTS", "EVN", "DISPATCH"), ("RADIO", "RAD", null));
-            console.Orders(TabCalls,
-                "Calls go to your team. Those that mean 'here' also ping your aircraft's position.",
-                "The shared plot (pings, drawings, text) is on MAP TOOLS.");
         }
     }
 }

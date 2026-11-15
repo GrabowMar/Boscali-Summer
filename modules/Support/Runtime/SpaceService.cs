@@ -210,8 +210,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 Component site = heldSites[FrontPlacement.NearestHeld(heldBases, x, z, FrontRules.PadPickMetres, allowCarrier: true)];
                 if (site is Ship carrier) made = carrier;
-                else if (site is Airbase airbase && TryAround(owner, airbase.center.position, airbase, diagonal, out Candidate spot, requireRear: false))
-                    spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out made);
+                else if (site is Airbase airbase) made = PadNear(owner, slot, airbase, x, z, diagonal);
             }
             else
             {
@@ -227,6 +226,31 @@ namespace BoscaliSummer.Modules.Support.Runtime
                 : " built at " + Mathf.RoundToInt(faction.SiteX[slot]) + ", " + Mathf.RoundToInt(faction.SiteZ[slot])) + ".");
             return true;
         }
+
+        /// <summary>
+        /// A picked pad: on the clicked ground when it is legal, else the legal ring spot round the picked airbase nearest the click (the ring used to be walked from
+        /// due north, so the pad landed wherever the first legal spot was). Null when nothing takes.
+        /// </summary>
+        // ponytail: up to 36 ring plans + 37 spawn tries, once per finished programme; step it across frames if a hitch shows.
+        private Unit PadNear(FactionHQ owner, int slot, Airbase airbase, float x, float z, float diagonal)
+        {
+            // The click, then rings of 400/800/1500 m round it that stay within the pick reach of the airbase (as a picked truck or camp does).
+            GlobalPosition c = airbase.center.position.ToGlobalPosition();
+            FrontPlacement.TruckSpots(new[] { ((float)c.x, (float)c.z) }, x, z, FrontRules.PadPickMetres, pickSpots);
+            foreach ((float X, float Z) p in pickSpots)
+                if (SupportTargeting.TryMapPoint(new GlobalPosition(p.X, 0f, p.Z), out Vector3 ground) &&
+                    spawner.TryCreate(owner, slot, ground.ToGlobalPosition(), airbase, out Unit near)) return near;
+            var spots = new List<Candidate>(36);
+            CollectAround(owner, airbase.center.position, airbase, diagonal, spots, 36, requireRear: false);
+            spots.Sort((a, b) => Sq(a.Anchor, x, z).CompareTo(Sq(b.Anchor, x, z)));
+            foreach (Candidate spot in spots)
+                if (spawner.TryCreate(owner, slot, spot.Anchor, spot.Parent, out Unit made)) return made;
+            return null;
+        }
+
+        private readonly List<(float X, float Z)> pickSpots = new List<(float X, float Z)>(37);
+
+        private static double Sq(GlobalPosition p, float x, float z) => (p.x - x) * (p.x - x) + (p.z - z) * (p.z - z);
 
         /// <summary>The slot a new pad takes: the first never built, else the first destroyed; -1 when both stand.</summary>
         private static int FreeSlot(FactionSpace faction)

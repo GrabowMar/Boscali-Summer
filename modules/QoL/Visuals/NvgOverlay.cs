@@ -12,11 +12,12 @@ namespace BoscaliSummer.Modules.QoL.Visuals
     internal sealed class NvgOverlay
     {
         private const float OpenSeconds = 0.45f, BlinkClose = 0.1f, BlinkOpen = 0.25f, WarmSeconds = 1f;
-        private const int Specks = 12;
+        private const int Specks = 6;
         private static readonly Color SpeckColour = new Color(0.9f, 0.96f, 1f);
 
         private Canvas canvas;
         private RectTransform top, bottom;
+        private Sprite lidSprite, dotSprite;
         private readonly Image[] specks = new Image[Specks];
         private bool wasOn;
         private float phaseStart = -10f, warmUntil;
@@ -43,13 +44,16 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             canvas.enabled = true;
             float half = ((RectTransform)canvas.transform).rect.height * 0.5f;
             // Each lid is a little taller than half the screen so its soft edge still covers when shut.
+            top.sizeDelta = bottom.sizeDelta = new Vector2(0f, half * 1.25f);
             float travel = half * 1.25f * (1f - closed);
             top.anchoredPosition = new Vector2(0f, travel);
             bottom.anchoredPosition = new Vector2(0f, -travel);
             top.gameObject.SetActive(closed > 0f);
             bottom.gameObject.SetActive(closed > 0f);
 
-            float chance = !specksOn ? 0f : now < warmUntil ? 0.45f : 0.12f;
+            bool warming = now < warmUntil;
+            // Sparse single-frame flashes, with a frame-rate independent arrival rate across the tube.
+            float chance = !specksOn ? 0f : (warming ? 16f : 2f) * Mathf.Min(Time.unscaledDeltaTime, 0.1f) / Specks;
             for (int i = 0; i < Specks; i++)
             {
                 Image speck = specks[i];
@@ -58,7 +62,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
                 if (!lit) continue;
                 speck.rectTransform.anchorMin = speck.rectTransform.anchorMax = new Vector2(Random.value, Random.value);
                 Color c = SpeckColour;
-                c.a = Random.Range(0.35f, 1f);
+                c.a = warming ? Random.Range(0.2f, 0.5f) : Random.Range(0.12f, 0.32f);
                 speck.color = c;
             }
         }
@@ -80,6 +84,10 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         {
             if (canvas != null) Object.Destroy(canvas.gameObject);
             canvas = null;
+            if (lidSprite != null) { Object.Destroy(lidSprite.texture); Object.Destroy(lidSprite); }
+            if (dotSprite != null) { Object.Destroy(dotSprite.texture); Object.Destroy(dotSprite); }
+            lidSprite = dotSprite = null;
+            top = bottom = null;
             wasOn = blinking = false;
             phaseStart = -10f;
         }
@@ -92,18 +100,19 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = short.MaxValue - 1;
-            Sprite lid = LidSprite(), dot = DotSprite();
-            top = Lid("TopLid", new Vector2(0.5f, 1f), lid, false);
-            bottom = Lid("BottomLid", new Vector2(0.5f, 0f), lid, true);
+            lidSprite = LidSprite();
+            dotSprite = DotSprite();
+            top = Lid("TopLid", new Vector2(0.5f, 1f), lidSprite, false);
+            bottom = Lid("BottomLid", new Vector2(0.5f, 0f), lidSprite, true);
             for (int i = 0; i < Specks; i++)
             {
                 var go = new GameObject("Speck", typeof(RectTransform), typeof(Image));
                 go.transform.SetParent(root.transform, false);
                 Image image = go.GetComponent<Image>();
-                image.sprite = dot;
+                image.sprite = dotSprite;
                 image.raycastTarget = false;
                 image.enabled = false;
-                image.rectTransform.sizeDelta = new Vector2(4f, 4f);
+                image.rectTransform.sizeDelta = new Vector2(2f, 2f);
                 specks[i] = image;
             }
         }

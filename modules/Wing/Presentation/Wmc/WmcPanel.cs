@@ -13,8 +13,8 @@ using CoreGameAccess = BoscaliSummer.Core.Game.GameAccess;
 using MfdPanelInstaller = BoscaliSummer.Core.Game.MfdPanelInstaller;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — ROSTER · BEHAVIOUR ‖ SUPPLY · LOADOUT (the 2026-11-14
-    /// panels fold moved the WING tab to PILOT STUDIO and PILOT's PLANE into LOADOUT) on a kit v2
+    /// <summary>Spec bezel v2 §3: the WMC bezel panel on the maximized map — ROSTER · BEHAVIOUR ‖ SUPPLY (LOADOUT folded into SUPPLY 2026-11-15; the 2026-11-14
+    /// panels fold moved the WING tab to PILOT STUDIO) on a kit v2
     /// <see cref="AvConsole"/> (display glass included), claimed through <see cref="BezelRegistry.Wmc"/>, refreshed at
     /// 5 Hz. The header names the open tab (the live wing count leads the footer status; funds live on FAC), and three vitals
     /// chips (FUEL MIN · AMMO MIN · THREAT) on every tab; there are no metric tiles. Every tab is an <see cref="IWmcPage"/> that builds into its console page's
@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private WmcTactical tactical;
         private WmcBehaviour behaviour;
         private WmcSupply supply;
-        private WmcLoadout loadout;
         private int shownPage = -1;
         private readonly HashSet<int> pageFaults = new HashSet<int>();
         private MFDScreen screen;
@@ -156,7 +155,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             tactical = null;
             behaviour = null;
             supply = null;
-            loadout = null;
             shownPage = -1;
             shownGuide = null;
             pageFaults.Clear();
@@ -232,7 +230,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private static readonly AvIcon[] TabIcons =
-            { AvIcon.Target, AvIcon.AdjustmentsHorizontal, AvIcon.Coins, AvIcon.Stack2 };
+            { AvIcon.Target, AvIcon.AdjustmentsHorizontal, AvIcon.Coins };
 
         private MFDScreen Build(MFDScreen template, Button bezel, out float height)
         {
@@ -263,8 +261,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             tactical = new WmcTactical();
             behaviour = new WmcBehaviour();
             supply = new WmcSupply();
-            loadout = new WmcLoadout();
-            pages = new IWmcPage[] { tactical, behaviour, supply, loadout };
+            pages = new IWmcPage[] { tactical, behaviour, supply };
             hosts = new RectTransform[pages.Length];
             for (int i = 0; i < pages.Length; i++)
             {
@@ -292,13 +289,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int fitStep = -1;
         private float fitAt;
 
-        /// <summary>[FIT] left of the console name and page count (the header's right 154 px; spec bezel v2 §3): each press one step of
+        /// <summary>[FIT] at the header's right end: each press one step of
         /// FIT › ALL › FOLLOW; the label names the next step, and reads FIT again once the map follows you. Hidden when the game's map
         /// view could not be reached.</summary>
         private void BuildFitButton()
         {
             fitButton = AvControl.Make(shell.Root, new AvControl.Spec("FIT", PressFit, AvButtonStyle.Quiet));
-            AvLay.Place(fitButton.Rect, AvTokens.PanelWidth - 154f - 4f - 56f, 3f, 56f, AvGridTokens.Header - 6f);
+            AvLay.Place(fitButton.Rect, AvTokens.PanelWidth - AvGridTokens.Pad - 56f, 3f, 56f, AvGridTokens.Header - 6f);
             fitButton.gameObject.SetActive(WmcMap.Usable);
             SetFit(0);
         }
@@ -415,7 +412,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 case WmcTactical t: return t.Sub == WmcTactical.SubFormation ? GuideWords.Formation : t.Sub == WmcTactical.SubRoute ? GuideWords.Route : GuideWords.Orders;
                 case WmcBehaviour _: return GuideWords.Behaviour;
                 case WmcSupply _: return GuideWords.Supply;
-                case WmcLoadout _: return GuideWords.Loadout;
                 default: return null;
             }
         }

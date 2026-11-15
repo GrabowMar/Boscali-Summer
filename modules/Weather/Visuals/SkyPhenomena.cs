@@ -34,13 +34,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <param name="sunUp">The sun direction's height, -1..1 (below the horizon is negative).</param>
         /// <param name="clearSky">0..1, how open the sky is around the camera.</param>
         /// <param name="auroraNight">0..1, this mission's aurora strength (0: none tonight).</param>
-        internal void Tick(Camera camera, float sunUp, float clearSky, float auroraNight, uint missionSeed, float realTime)
+        internal void Tick(Camera camera, float sunUp, float clearSky, float auroraNight, uint missionSeed, float realTime, float moonlight = 0f)
         {
             if (Application.isBatchMode || camera == null) { Reset(); return; }
             seed = missionSeed;
-            // 0 by day, 1 once the sun is ~8 degrees down (civil dusk keeps the sky too bright for either).
-            night = WeatherMath.Smoothstep(-0.02f, -0.14f, sunUp);
-            float target = night * Mathf.Clamp01(auroraNight) * WeatherMath.Smoothstep(0.25f, 0.75f, clearSky);
+            // Twilight washes out faint upper-atmosphere light. A full moon also lowers the contrast of an auroral curtain.
+            night = WeatherMath.Smoothstep(-0.05f, -0.21f, sunUp);
+            float moonContrast = Mathf.Lerp(1f, 0.45f, Mathf.Clamp01(moonlight / 0.5f));
+            float target = night * moonContrast * Mathf.Clamp01(auroraNight) * WeatherMath.Smoothstep(0.25f, 0.75f, clearSky);
             AuroraLevel = Mathf.MoveTowards(AuroraLevel, target, Time.deltaTime * 0.05f);
             bool spritesLive = sprites != null && sprites.particleCount > 0;
             if (AuroraLevel <= 0.001f && !spritesLive && (aurora == null || aurora.particleCount == 0))
@@ -51,10 +52,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (!Ensure()) return;
             if (!root.activeSelf) root.SetActive(true);
             root.transform.SetPositionAndRotation(camera.transform.position, Quaternion.identity);
-            // A slow shimmer of the whole display (two incommensurate waves) on top of each curtain's own fade.
-            float shimmer = 0.82f + 0.18f * Mathf.Sin(realTime * 0.7f) * Mathf.Sin(realTime * 1.9f + 1.3f);
+            // Slow breathing rather than a synchronized flicker of every ray; each curtain also has its own lifetime fade.
+            float shimmer = 0.92f + 0.08f * Mathf.Sin(realTime * 0.13f) * Mathf.Sin(realTime * 0.31f + 1.3f);
             // 0.9 (first live run at 2.2 drew fat glowing columns and a bloom glow under them; real aurora is thin and translucent).
             auroraMaterial.SetFloat(IntensityId, 0.9f * AuroraLevel * shimmer);
+            spriteMaterial.SetFloat(IntensityId, 2.5f * night);
             EmitAurora(Mathf.RoundToInt(AuroraMax * AuroraLevel));
         }
 
@@ -114,12 +116,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 float u = WeatherMath.HashRange(seed, 41, n, 0, -1f, 1f);
                 float az = (foldAz + u * 26f + 7f * Mathf.Sin(u * 5.1f + fold)) * Mathf.Deg2Rad;
                 float baseEl = 7f + 5f * WeatherMath.Hash01(seed, 42, fold) + 2.5f * Mathf.Sin(u * 3.7f + fold * 1.7f);
-                float tallDeg = 14f + 12f * WeatherMath.Hash01(seed, 43, n);
+                float tallDeg = 9f + 13f * WeatherMath.Hash01(seed, 43, n);
                 float midEl = (baseEl + tallDeg * 0.5f) * Mathf.Deg2Rad;
                 // North is +Z (sunset is due west, noon due south).
                 Vector3 dir = new Vector3(Mathf.Sin(az) * Mathf.Cos(midEl), Mathf.Sin(midEl), Mathf.Cos(az) * Mathf.Cos(midEl));
                 float height = 2f * Shell * Mathf.Tan(tallDeg * 0.5f * Mathf.Deg2Rad);
-                float width = Shell * WeatherMath.HashRange(seed, 44, n, 0, 0.018f, 0.04f);
+                float width = Shell * WeatherMath.HashRange(seed, 44, n, 0, 0.012f, 0.028f);
                 float green = WeatherMath.HashRange(seed, 45, n, 0, 0.75f, 1f);
                 var p = new ParticleSystem.EmitParams
                 {
@@ -127,7 +129,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     startSize3D = new Vector3(width, height, 1f),
                     startLifetime = WeatherMath.HashRange(seed, 46, n, 0, 14f, 26f),
                     // A slow sideways drift along the arc.
-                    velocity = new Vector3(Mathf.Cos(az), 0f, -Mathf.Sin(az)) * WeatherMath.HashRange(seed, 47, n, 0, -45f, 45f),
+                    velocity = new Vector3(Mathf.Cos(az), 0f, -Mathf.Sin(az)) * WeatherMath.HashRange(seed, 47, n, 0, -18f, 18f),
                     startColor = new Color(0.55f + 0.45f * (1f - green), green, 0.7f + 0.3f * green, 1f),
                     applyShapeToPosition = false,
                 };
@@ -264,6 +266,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal void Reset()
         {
             AuroraLevel = 0f;
+            night = 0f;
             if (root != null) Object.Destroy(root);
             if (auroraMaterial != null) Object.Destroy(auroraMaterial);
             if (spriteMaterial != null) Object.Destroy(spriteMaterial);

@@ -28,18 +28,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         private sealed class FactionPresenter : Presenter
         {
-            private enum LedgerMode { Reserves, Losses, Value, Manpower }
+            private enum ForcesView { Live, Reserves, Losses, Value, Manpower }
             private enum InfoMode { Airbases, Players }
 
             private static readonly string[] ResourceLabels = { "FUNDS", "WARHEADS", "MANPOWER", "MORALE" };
             private static readonly string[] ClassLabels = { "BUILDINGS", "VEHICLES", "SHIPS", "AIRCRAFT" };
-            private static readonly string[] LedgerLabels = { "RESERVES", "LOSSES", "VALUE", "MANPOWER" };
-            private static readonly string[] LedgerTitles = { "RESERVE RETURN", "LOSS RETURN", "VALUE RETURN", "MANPOWER RETURN" };
-            private const int AttritionLimit = 32;
+            private static readonly string[] ViewLabels = { "LIVE", "RESERVES", "LOSSES", "VALUE", "MANPOWER" };
+            private static readonly string[] ViewTitles = { "ORDER OF BATTLE · LIVE / LOST", "RESERVES BY CLASS", "LOSSES BY CLASS", "VALUE BY CLASS", "MANPOWER BY CLASS" };
 
             private readonly InfoPanel_Faction source;
             private readonly InfoPanel_Faction otherSource;
             private readonly List<UnitDefinition> definitions = new List<UnitDefinition>();
+            private readonly List<UnitDefinition> shownDefinitions = new List<UnitDefinition>(48);
+            private readonly float[] ledgerFraction = new float[4], lastFraction = new float[4], lastPrimary = new float[4], lastSecondary = new float[4];
+            private readonly int[] shownLive = { -2, -2, -2, -2 };
             private readonly List<string> infoRows = new List<string>();
             private readonly List<string> infoSubs = new List<string>();
             private readonly List<Sprite> infoIcons = new List<Sprite>();
@@ -53,23 +55,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private UnitRosterPart definitionGrid;
             private MfdPagingGrid infoGrid;
-            private ChoiceRow definitionTabs;
-            private ChoiceRow ledgerTabs;
+            private AvControl[] definitionTabs;
+            private AvButtons classBar;
+            private ChoiceRow viewTabs;
             private AvSegmented infoTabs;
             private HistoryCard history;
-            private AvButtons economyOrder, politicsOrder;
             private MandateStrip mandateStrip;
             private FactionHeaderPart factionHeader;
             private AvGauge[] ledgerRows;
-            private UnitRosterPart attritionRoster;
-            private readonly List<UnitDefinition> lossDefinitions = new List<UnitDefinition>(AttritionLimit);
             private AvNote directorySummary;
             private AvHazardBar moraleBar;
             private LedgerChartPart ledgerChart;
             private AvNote mandateHeadline;
             private AvNote mandateEffect;
             private AvSection historySection;
-            private AvList bandList;
             // NATION layer: shown instead of the morale mandate while the service reports Active (see RefreshNation).
             private FacPolitics politics;
             private FacStockPart stockPart;
@@ -82,7 +81,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private int selectedFaction;
             private int definitionGroup;
             private bool definitionsLoaded;
-            private LedgerMode ledgerMode;
+            private ForcesView view;
+            private bool definitionsDirty = true, ledgerDirty = true, ledgerShowsData, emptyApplied, nationApplied;
+            private bool nationOn, nationOnShown;
+            private int definitionSignature;
+            private float infoNext;
+            private MissionStatsTracker sortStats;
+            private Comparison<UnitDefinition> definitionOrder;
             private InfoMode infoMode;
             private int selectedPage;
             private int renderedResourceCount = -1;
@@ -102,17 +107,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 (AvIcon.Coins, "ECONOMY"),
                 (AvIcon.Shield, "FORCES"),
-                (AvIcon.ChartLine, "LEDGER"),
                 (AvIcon.Flag, "POLITICS"),
             };
 
             protected override string[] TabTips { get; } = new[]
             {
                 "Economy: the country's funds, production, plants and policies, your donations and convoy purchases, and the histories of funds, warheads, manpower and morale.",
-                "Forces: live unit counts by class, then every unit type of the chosen class with its live and lost counts, busiest first.",
-                "Ledger: reserves, losses, value or manpower per class, plus a named loss ledger of the unit types hit hardest.",
+                "Forces: unit types in service by class, live and lost, busiest first. Switch the view to reserves, losses, value or manpower per class.",
                 "Politics: war support and why it moved, the doctrine and its ranks, the decisions and the cabinet minutes (the morale mandate while the nation layer is off), and a directory of airbases or players.",
             };
+
+            private const int PageEconomy = 0, PageForces = 1, PagePolitics = 2;
 
             protected override void BuildContent()
             {
@@ -121,36 +126,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
                 BuildResourcesPage(CreatePage());
                 BuildForcesPage(CreatePage());
-                BuildLedgerPage(CreatePage());
                 BuildStatusPage(CreatePage());
                 SelectDefinitions(0);
-                Console.Orders(0,
-                    "Each trace keeps its own scale. Compare the figures, not the slopes.",
-                    "A break in a trace is a missed observation, never a zero.",
-                    "The order in force reprices support call-ins; it is read on EVN DISPATCH. Contract pay follows morale.",
-                    "OPPOSITION shows the other side's returns as last synced from the host.");
-                Console.Orders(1,
-                    "Types run busiest first. Ties go to the heavier losses, then to name.",
-                    "The strip under a type is its lost share of everything it fielded.",
-                    "RSV is mobile reserve supply. A dash means the figure does not apply.",
-                    "Pick a class to open its manifest. PREV and NEXT turn the form.");
-                Console.Orders(2,
-                    "RESERVES, LOSSES, VALUE and MANPOWER are four views of the same four classes.",
-                    "Both bars share one scale. The thin lower bar is the second series in the legend.",
-                    "Losses are the host's mission accounting, not an estimate.",
-                    "The loss form lists the hardest-hit unit types, heaviest first.");
-                Console.Orders(3,
-                    "Sorties earn war support: +10 a base taken, +1 a kill, +3 a plant, depot or air defence. Losses drain it.",
-                    "Decisions cost war support; the first press wins. Nobody pressing? The staff spends above 60.",
-                    "The doctrine is chosen once, on the WAR CABINET card on EVN DISPATCH. Its ranks open by themselves.",
-                    "The mandate is the host's 0-100 morale. It starts at 50.",
-                    "Events and contract results move it. Below 50 new contracts pay less; above, more.",
-                    "AIRBASES lists the faction's bases. PLAYERS lists crews by score.",
-                    "The event in force and the faction's lead contract are on EVN DISPATCH.");
+                Console.Orders(PageEconomy, "Each trace keeps its own scale; a break is a missed observation, never a zero. OPPOSITION shows the last host sync.");
+                Console.Orders(PageForces, "Types run busiest first and idle ones are left out. RSV is mobile reserve supply; a dash means not applicable.");
+                Console.Orders(PagePolitics, "Decisions cost war support; the first press wins. The mandate is the host's 0-100 morale, and below 50 contracts pay less.");
             }
+
             protected override void OnPageChanged(int index)
             {
                 selectedPage = index;
+                infoNext = 0f;
                 RequestRefresh();
             }
 
@@ -165,56 +151,64 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     resourceHistory = FactionResourceHistoryStore.For(hq);
                     renderedResourceCount = -1;
                     renderedResourceTime = float.NaN;
+                    definitionsDirty = ledgerDirty = true;
+                    infoNext = 0f;
                     definitionGrid.ResetPage();
                     infoGrid.ResetPage();
-                    attritionRoster.ResetPage();
                 }
                 if (hq == null)
                 {
-                    factionHeader.Set("NO RETURN FROM FACTION HQ",
-                        "Standing by for the selected faction and its live mission data.");
-                    factionHeader.SetLogo(null);
-                    definitionGrid.Set(Array.Empty<UnitDefinition>(), null, "FORM 7 / UNITS ON STRENGTH", "STATISTICS UNAVAILABLE");
-                    attritionRoster.Set(Array.Empty<UnitDefinition>(), null, "FORM 12-B / LOSSES BY TYPE", "STATISTICS UNAVAILABLE");
-                    SetForceTotals(null);
-                    foreach (AvGauge row in ledgerRows) row.Set(0f, "\u2014", AvState.Inert);
-                    ledgerChart.Chart.Clear();
-                    history.Clear("FACTION HQ UNAVAILABLE");
-                    historySection.SetCaption("FORM 31-T / NO RETURN");
-                    mandateHeadline.Set("REPORT UNAVAILABLE");
-                    mandateEffect.Set("CONTRACT EFFECT / UNAVAILABLE");
-                    mandateStrip.SetSeal(null);
-                    moraleBar.Set(0f, "\u2014", AvState.Inert);
-                    directorySummary.Set("REGISTER / UNAVAILABLE");
-                    bandMorale = float.NaN;
-                    bandList.SetCount(BandNames.Length);
-                    infoGrid.SetData(0, _ => "", _ => false, null);
-                    RefreshSegments();
+                    if (!emptyApplied) ApplyNoHq();
                     return;
                 }
+                emptyApplied = false;
 
                 string name = hq.faction == null ? "FACTION" : hq.faction.factionName;
-
                 string extended = hq.faction == null ? null : hq.faction.factionExtendedName;
                 factionHeader.Set(name ?? "FACTION", (string.IsNullOrEmpty(extended)
                     ? "FACTION STAFF RETURN" : extended.ToUpperInvariant()) +
                     "  ·  SCORE " + AvNum.Fixed(hq.factionScore, 1));
-                Sprite logo = hq.faction == null ? null : hq.faction.factionColorLogo;
-                factionHeader.SetLogo(logo);
+                factionHeader.SetLogo(hq.faction == null ? null : hq.faction.factionColorLogo);
 
-                RefreshResources(hq);
                 RefreshNation(hq);
-                if (selectedPage == 1)
+                if (selectedPage == PageEconomy) RefreshResources(hq);
+                else if (selectedPage == PageForces)
                 {
-                    SetForceTotals(hq.missionStatsTracker);
-                    RefreshDefinitionGrid(hq);
+                    if (view == ForcesView.Live)
+                    {
+                        SetForceTotals(hq.missionStatsTracker);
+                        RefreshDefinitionGrid(hq);
+                    }
+                    else RefreshLedger(hq);
                 }
-                else if (selectedPage == 2) RefreshLedger(hq);
-                else if (selectedPage == 3)
+                else
                 {
                     RefreshPolitics(hq);
-                    RefreshInfo(hq);
+                    if (Time.unscaledTime >= infoNext) { infoNext = Time.unscaledTime + 1f; RefreshInfo(hq); }
                 }
+                RefreshSegments();
+            }
+
+            /// <summary>No faction HQ yet: every page shows its empty state once, not on every tick.</summary>
+            private void ApplyNoHq()
+            {
+                emptyApplied = true;
+                factionHeader.Set("NO RETURN FROM FACTION HQ", "Standing by for the selected faction and its live mission data.");
+                factionHeader.SetLogo(null);
+                shownDefinitions.Clear();
+                definitionGrid.Set(shownDefinitions, null, ClassLabels[definitionGroup], "STATISTICS UNAVAILABLE");
+                SetForceTotals(null);
+                foreach (AvGauge row in ledgerRows) row.Set(0f, "—", AvState.Inert);
+                ledgerChart.Chart.Clear();
+                ledgerShowsData = false;
+                history.Clear("FACTION HQ UNAVAILABLE");
+                historySection.SetCaption("NO RETURN");
+                mandateHeadline.Set("REPORT UNAVAILABLE");
+                mandateEffect.Set("CONTRACT EFFECT / UNAVAILABLE");
+                mandateStrip.SetSeal(null);
+                moraleBar.Set(0f, "—", AvState.Inert);
+                directorySummary.Set("UNAVAILABLE");
+                infoGrid.SetData(0, _ => "", _ => false, null);
                 RefreshSegments();
             }
 
@@ -223,10 +217,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 if (observedHq == null) return "STANDING BY FOR FACTION HQ";
                 switch (selectedPage)
                 {
-                    case 0: return "TREASURY · OBSERVED RETURNS";
-                    case 1: return "ORDER OF BATTLE · LIVE / LOST";
-                    case 2: return LedgerTitles[(int)ledgerMode] + " · FORM 12-B";
-                    default: return nationPoliticsParts.Count > 0 && nationPoliticsParts[0].Shown ? "POLITICS · WAR SUPPORT AND THE CABINET" : "THE MANDATE · MORALE 0-100";
+                    case PageEconomy: return "TREASURY · OBSERVED RETURNS";
+                    case PageForces: return ViewTitles[(int)view];
+                    default: return nationOn ? "POLITICS · WAR SUPPORT AND THE CABINET" : "THE MANDATE · MORALE 0-100";
                 }
             }
 
@@ -277,8 +270,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             private void RefreshSegments()
             {
-                definitionTabs.Refresh();
-                ledgerTabs.Refresh();
+                for (int i = 0; i < definitionTabs.Length; i++) definitionTabs[i].Latched = i == definitionGroup;
+                viewTabs.Refresh();
                 infoTabs.Refresh();
             }
 
@@ -293,7 +286,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private int supplyRevision = -1, supplyKey;
             private bool supplyNation;
             private AvSection donateSection, convoySection;
-            private AvNote nationOffNote, strOffNote;
+            private AvNote offNote;
 
             private void AddSupply(AvFlow page, StrPart part, bool nation)
             {
@@ -305,7 +298,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void BuildResourcesPage(AvFlow page)
             {
                 BuildFactionSelector(page);
-                economyOrder = OrderLink(page);
                 supplyHub = Runtime.StrViewHub.Active;
 
                 // NATION blocks sit above the treasury chart and stay out of the flow until the layer is Active.
@@ -329,25 +321,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 forcePart = page.Add(new FacForcePart(page.Content));
                 nationEconomyParts.Add(forcePart);
                 foreach (AvPart p in nationEconomyParts) p.SetShown(false);
-                nationOffNote = page.Add(new AvNote(page.Content, "NATION OFF · PRODUCTION, PLANTS AND POLICIES SHOW WHILE IT RUNS"));
+                offNote = page.Add(new AvNote(page.Content, ""));
 
                 donateSection = page.Section(AvIcon.Coins, "HELP THE COUNTRY", "FROM YOUR ALLOCATION · ONE DONATION A MINUTE");
                 AddSupply(page, new StrDonateRow(page.Content, supplyControls, supplyHub), false);
                 convoySection = page.Section(AvIcon.Shield, "CONVOYS", "BOUGHT FROM YOUR ALLOCATION · A DEPOT DELIVERS");
                 for (int i = 0; i < StrViewModel.MaxConvoys; i++) AddSupply(page, new StrConvoyRow(page.Content, supplyControls, supplyHub, i), false);
-                strOffNote = page.Add(new AvNote(page.Content, "STRATEGIC COMMAND OFF · FACTORY, POLICY, DONATE AND BUY SHOW WHILE IT RUNS"));
 
-                historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "FORM 31-T / NO OBSERVATIONS");
+                historySection = page.Section(AvIcon.ChartLine, "TREASURY RETURNS", "NO OBSERVATIONS");
                 history = page.Add(new HistoryCard(page.Content), 1f);
                 history.Help = "Independent resource scales. One observation every " +
                     AvNum.Seconds(MfdResourceHistory.Interval, 0) + "; up to " +
                     AvNum.Seconds(MfdResourceHistory.Capacity * MfdResourceHistory.Interval, 0) +
                     " retained. Missing observations break each resource trace; no backfill.";
-                page.Links(("FRONTS AND WAR PLAN", "STR", "BOARD"), ("WHAT ALLOCATION BUYS", "OPS", null));
             }
             private void RefreshResources(FactionHQ hq)
             {
-                SetOrderLink(economyOrder);
                 if (resourceHistory == null) resourceHistory = FactionResourceHistoryStore.For(hq);
                 RefreshResourceChart();
                 RefreshSupply(hq);
@@ -361,8 +350,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 bool str = own && live != null && ReferenceEquals(live, supplyHub) && live.Current.Built;
                 int key = StrNation.Refresh();
                 bool nation = str && IsLocalFaction(hq) && StrNation.Active;
-                nationOffNote.SetShown(own && !StrNation.Active);
-                strOffNote.SetShown(own && !str);
+                // One line for whichever layer is off (the opposition shows none).
+                bool off = own && (!str || !StrNation.Active);
+                offNote.SetShown(off);
+                if (off) offNote.Set(!str ? "STRATEGIC COMMAND OFF" : "NATION OFF");
                 donateSection.SetShown(str);
                 if (!nation) foreach (StrPart p in nationSupplyParts) p.SetShown(false);
                 if (!str)
@@ -391,8 +382,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 renderedResourceCount = count;
                 renderedResourceTime = latest;
                 float onFile = count > 0 ? latest - resourceHistory.Time(0) : 0f;
-                historySection.SetCaption("FORM 31-T / " + (count == 0 || !float.IsFinite(onFile)
-                    ? "NO OBSERVATIONS" : AvNum.Clock(Mathf.Max(0f, onFile)) + " ON FILE"));
+                historySection.SetCaption(count == 0 || !float.IsFinite(onFile)
+                    ? "NO OBSERVATIONS" : AvNum.Clock(Mathf.Max(0f, onFile)) + " ON FILE");
 
                 for (int series = 0; series < ResourceLabels.Length; series++)
                 {
@@ -423,21 +414,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
             }
 
-            /// <summary>The one line FAC keeps for the order in force (ECONOMY and POLITICS): its headline, price effect, clock and the
-            /// faction's lead contract are read on EVN DISPATCH.</summary>
-            private static AvButtons OrderLink(AvFlow page)
-            {
-                AvButtons link = page.Links(("ORDER IN FORCE", "EVN", "DISPATCH"));
-                link.Controls[0].Help = "Opens EVN on DISPATCH: the order in force, what it does to support prices, its clock, " +
-                                        "and the faction's lead contract.";
-                return link;
-            }
-
-            /// <summary>The line says in words whether an order is in force.</summary>
-            private static void SetOrderLink(AvButtons link) =>
-                link.Controls[0].Label = (ModuleServices.TryGet(out IActiveEventsView events) && events.Current != null
-                    ? "ORDER IN FORCE" : "NO ORDER IN FORCE") + " · EVN";
-
             // ----------------------------------------------------------- FORCES page
 
             private void BuildForcesPage(AvFlow page)
@@ -445,64 +421,116 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 BuildFactionSelector(page);
                 factionHeader = page.Add(new FactionHeaderPart(page.Content));
 
-                definitionTabs = new ChoiceRow(page, ClassLabels, () => definitionGroup, SelectDefinitions);
-                for (int i = 0; i < ClassLabels.Length; i++)
-                    definitionTabs[i].Help = "List every " + ClassLabels[i].ToLowerInvariant().TrimEnd('s') + " type with its live and lost " +
-                        "counts, busiest first.";
+                viewTabs = new ChoiceRow(page, ViewLabels, () => (int)view, SelectView);
+                string[] viewTips =
+                {
+                    "Live: every unit type of the chosen class with its live and lost counts.",
+                    "Reserves: what is still alive against what is stockpiled and can be brought in, per class.",
+                    "Losses: units destroyed so far, per class.",
+                    "Value: the credit worth of what is alive, with the worth already lost beneath it.",
+                    "Manpower: personnel alive, with those already lost beneath.",
+                };
+                for (int i = 0; i < viewTips.Length; i++) viewTabs[i].Help = viewTips[i];
 
-                definitionGrid = page.Add(new UnitRosterPart(page.Content, false), 1f);
-                page.Links(("FORCE BALANCE", "STR", "BOARD"), ("WING", "WMC", null));
+                var classSpecs = new AvControl.Spec[ClassLabels.Length];
+                for (int i = 0; i < classSpecs.Length; i++)
+                {
+                    int index = i;
+                    classSpecs[i] = new AvControl.Spec(ClassLabels[i], () => SelectDefinitions(index), AvButtonStyle.Tab);
+                }
+                classBar = page.Buttons(classSpecs);
+                definitionTabs = classBar.Controls;
+                for (int i = 0; i < ClassLabels.Length; i++)
+                    definitionTabs[i].Help = "List every " + ClassLabels[i].ToLowerInvariant().TrimEnd('s') + " type with its live and lost counts, busiest first.";
+
+                definitionGrid = page.Add(new UnitRosterPart(page.Content));
+
+                ledgerRows = new AvGauge[ClassLabels.Length];
+                for (int i = 0; i < ledgerRows.Length; i++)
+                {
+                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i]);
+                    ledgerRows[i].Help = ClassLabels[i] + " in the chosen view, as a share of everything that class ever fielded. " +
+                                         "The bars below give the exact figures.";
+                }
+                page.Row(ledgerRows[0], ledgerRows[1], ledgerRows[2], ledgerRows[3]);
+                ledgerChart = page.Add(new LedgerChartPart(page.Content, page.Inner));
+                ApplyView();
             }
+
+            private void SelectView(int selected)
+            {
+                view = (ForcesView)Mathf.Clamp(selected, 0, 4);
+                ledgerDirty = true;
+                ApplyView();
+                RequestRefresh();
+            }
+
+            /// <summary>LIVE shows the class tabs and roster; every other view shows the four class gauges and the bar chart.</summary>
+            private void ApplyView()
+            {
+                bool live = view == ForcesView.Live;
+                classBar.SetShown(live);
+                definitionGrid.SetShown(live);
+                foreach (AvGauge g in ledgerRows) g.SetShown(!live);
+                ledgerChart.SetShown(!live);
+            }
+
             private void SetForceTotals(MissionStatsTracker tracker)
             {
                 if (definitionTabs == null) return;
-                if (tracker == null)
-                {
-                    for (int i = 0; i < ClassLabels.Length; i++) definitionTabs[i].Label = ClassLabels[i] + "\n\u2014 LIVE";
-                    return;
-                }
-                MissionStatsTracker.TypeStat stats = tracker.units;
-                chartPrimary[0] = stats.buildings.current; chartPrimary[1] = stats.vehicles.current;
-                chartPrimary[2] = stats.ships.current; chartPrimary[3] = stats.aircraft.current;
+                MissionStatsTracker.TypeStat stats = tracker == null ? default : tracker.units;
                 for (int i = 0; i < ClassLabels.Length; i++)
-                    definitionTabs[i].Label = ClassLabels[i] + "\n" + AvNum.Fixed(chartPrimary[i], 0) + " LIVE";
+                {
+                    int n = tracker == null ? -1 :
+                        Mathf.RoundToInt(i == 0 ? stats.buildings.current : i == 1 ? stats.vehicles.current : i == 2 ? stats.ships.current : stats.aircraft.current);
+                    if (n == shownLive[i]) continue;
+                    shownLive[i] = n;
+                    definitionTabs[i].Label = ClassLabels[i] + "\n" + (n < 0 ? "—" : AvNum.Fixed(n, 0)) + " LIVE";
+                }
             }
 
+            /// <summary>Types with something live or lost, busiest first; rebuilt only when a count moved.</summary>
             private void RefreshDefinitionGrid(FactionHQ hq)
             {
                 if (!definitionsLoaded) PopulateDefinitions();
-
-                // Sort active units to the front so players don't have to page past dozens of 0/0 items
-                if (hq != null && hq.missionStatsTracker != null)
-                {
-                    definitions.Sort((a, b) =>
+                MissionStatsTracker stats = hq?.missionStatsTracker;
+                int signature = definitions.Count;
+                if (stats != null)
+                    unchecked
                     {
-                        int aCurr = hq.missionStatsTracker.GetCurrentUnits(a);
-                        int bCurr = hq.missionStatsTracker.GetCurrentUnits(b);
-                        if (aCurr != bCurr) return bCurr.CompareTo(aCurr);
-
-                        int aLost = hq.missionStatsTracker.GetLostUnits(a);
-                        int bLost = hq.missionStatsTracker.GetLostUnits(b);
-                        if (aLost != bLost) return bLost.CompareTo(aLost);
-
-                        string aName = a != null ? a.unitName ?? a.code : "";
-                        string bName = b != null ? b.unitName ?? b.code : "";
-                        return string.Compare(aName, bName, StringComparison.OrdinalIgnoreCase);
-                    });
-                }
-
-                int activeTypes = 0, live = 0;
-                if (hq?.missionStatsTracker != null)
-                    foreach (UnitDefinition definition in definitions)
-                    {
-                        if (definition == null) continue;
-                        int current = hq.missionStatsTracker.GetCurrentUnits(definition);
-                        live += current;
-                        if (current > 0) activeTypes++;
+                        for (int i = 0; i < definitions.Count; i++)
+                            if (definitions[i] != null) signature = signature * 31 + stats.GetCurrentUnits(definitions[i]) * 7 + stats.GetLostUnits(definitions[i]);
                     }
-                definitionGrid.Set(definitions, hq, "FORM 7 / " + ClassLabels[definitionGroup] + " ON STRENGTH",
-                    hq?.missionStatsTracker == null ? "STATISTICS UNAVAILABLE" :
-                    activeTypes + " ACTIVE TYPES / " + live + " LIVE");
+                if (!definitionsDirty && signature == definitionSignature) return;
+                definitionsDirty = false;
+                definitionSignature = signature;
+
+                shownDefinitions.Clear();
+                int live = 0;
+                if (stats != null)
+                {
+                    for (int i = 0; i < definitions.Count; i++)
+                    {
+                        UnitDefinition d = definitions[i];
+                        if (d == null) continue;
+                        int current = stats.GetCurrentUnits(d);
+                        live += current;
+                        if (current > 0 || stats.GetLostUnits(d) > 0) shownDefinitions.Add(d);
+                    }
+                    sortStats = stats;
+                    shownDefinitions.Sort(definitionOrder ??= CompareDefinitions);
+                }
+                definitionGrid.Set(shownDefinitions, hq, ClassLabels[definitionGroup] + " · LIVE / LOST",
+                    stats == null ? "STATISTICS UNAVAILABLE" : shownDefinitions.Count + " TYPES / " + live + " LIVE");
+            }
+
+            private int CompareDefinitions(UnitDefinition a, UnitDefinition b)
+            {
+                int byLive = sortStats.GetCurrentUnits(b).CompareTo(sortStats.GetCurrentUnits(a));
+                if (byLive != 0) return byLive;
+                int byLost = sortStats.GetLostUnits(b).CompareTo(sortStats.GetLostUnits(a));
+                if (byLost != 0) return byLost;
+                return string.Compare(a.unitName ?? a.code, b.unitName ?? b.code, StringComparison.OrdinalIgnoreCase);
             }
 
             /// <summary>
@@ -535,6 +563,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void SelectDefinitions(int selected)
             {
                 definitionGroup = Mathf.Clamp(selected, 0, 3);
+                definitionsDirty = true;
                 PopulateDefinitions();
                 definitionGrid?.ResetPage();
                 RequestRefresh();
@@ -558,50 +587,20 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 group == 0 ? encyclopedia.buildings : group == 1 ? encyclopedia.vehicles : group == 2 ? encyclopedia.ships :
                 (IReadOnlyList<UnitDefinition>)encyclopedia.aircraft;
 
-            // ----------------------------------------------------------- LEDGER page
+            // ------------------------------------------------- FORCES page: the other views
 
-            private void BuildLedgerPage(AvFlow page)
-            {
-                BuildFactionSelector(page);
-                ledgerTabs = new ChoiceRow(page, LedgerLabels, () => (int)ledgerMode, SelectLedger);
-                string[] ledgerTips =
-                {
-                    "Reserves: what is still alive against what is stockpiled and can be brought in.",
-                    "Losses: units destroyed so far, per class.",
-                    "Value: the credit worth of what is alive, with the worth already lost beneath it.",
-                    "Manpower: personnel alive, with those already lost beneath."
-                };
-                for (int i = 0; i < ledgerTips.Length; i++) ledgerTabs[i].Help = ledgerTips[i];
-
-                ledgerRows = new AvGauge[ClassLabels.Length];
-                for (int i = 0; i < ledgerRows.Length; i++)
-                {
-                    ledgerRows[i] = new AvGauge(page.Content, ClassLabels[i]);
-                    ledgerRows[i].Help = ClassLabels[i] + " in the chosen ledger view, as a share of everything that class ever fielded. " +
-                                         "The bars below give the exact figures.";
-                }
-                page.Row(ledgerRows[0], ledgerRows[1], ledgerRows[2], ledgerRows[3]);
-
-                ledgerChart = page.Add(new LedgerChartPart(page.Content, page.Inner));
-
-                attritionRoster = page.Add(new UnitRosterPart(page.Content, true), 1f);
-                page.Links(("FRONTS", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
-            }
-            private void SelectLedger(int selected)
-            {
-                ledgerMode = (LedgerMode)Mathf.Clamp(selected, 0, 3);
-                RequestRefresh();
-            }
-
+            /// <summary>Gauges and chart for the chosen view; written only when a figure moved.</summary>
             private void RefreshLedger(FactionHQ hq)
             {
                 if (ledgerRows == null) return;
-                RefreshAttrition(hq);
                 if (hq.missionStatsTracker == null)
                 {
-                    for (int i = 0; i < ledgerRows.Length; i++)
-                        ledgerRows[i].Set(0f, "—", AvState.Inert);
-                    ledgerChart.Chart.Clear();
+                    if (ledgerShowsData || ledgerDirty)
+                    {
+                        for (int i = 0; i < ledgerRows.Length; i++) ledgerRows[i].Set(0f, "—", AvState.Inert);
+                        ledgerChart.Chart.Clear();
+                    }
+                    ledgerShowsData = ledgerDirty = false;
                     return;
                 }
                 MissionStatsTracker.TypeStat category = LedgerCategory(hq.missionStatsTracker);
@@ -609,72 +608,38 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 {
                     category.buildings, category.vehicles, category.ships, category.aircraft,
                 };
-                string unit = ledgerMode == LedgerMode.Value ? "CR" :
-                              ledgerMode == LedgerMode.Manpower ? "PAX" : "UNIT";
-                string caption = ledgerMode.ToString().ToUpperInvariant();
+                bool reserves = view == ForcesView.Reserves, losses = view == ForcesView.Losses;
+                bool same = ledgerShowsData && !ledgerDirty;
                 for (int i = 0; i < ledgerRows.Length; i++)
                 {
                     MissionStatsTracker.Stat stat = values[i];
-                    float value = ledgerMode == LedgerMode.Reserves ? ReserveCount(hq, i) :
-                                  LedgerValue(stat);
-                    float denominator = ledgerMode == LedgerMode.Reserves
-                        ? Mathf.Max(1f, value + stat.current)
-                        : Mathf.Max(1f, stat.total);
-                    float fraction = ledgerMode == LedgerMode.Losses ? stat.lost / denominator :
-                                     value / denominator;
+                    float value = reserves ? ReserveCount(hq, i) : LedgerValue(stat);
+                    float denominator = reserves ? Mathf.Max(1f, value + stat.current) : Mathf.Max(1f, stat.total);
                     chartPrimary[i] = value;
-                    chartSecondary[i] = ledgerMode == LedgerMode.Reserves || ledgerMode == LedgerMode.Losses
-                        ? stat.current : stat.lost;
-                    ledgerRows[i].Set(Mathf.Clamp01(fraction), FormatLedger(value),
-                        ledgerMode == LedgerMode.Losses ? AvState.Caution : AvState.Ready);
+                    chartSecondary[i] = reserves || losses ? stat.current : stat.lost;
+                    ledgerFraction[i] = Mathf.Clamp01(losses ? stat.lost / denominator : value / denominator);
+                    if (chartPrimary[i] != lastPrimary[i] || chartSecondary[i] != lastSecondary[i] || ledgerFraction[i] != lastFraction[i]) same = false;
                 }
-                ledgerChart.Chart.Set(chartPrimary, chartSecondary, caption,
-                    ledgerMode == LedgerMode.Reserves || ledgerMode == LedgerMode.Losses ? "CURRENT" : "LOST",
-                    unit, FormatLedger);
-            }
-
-            // Keep the highest losses bounded; each definition is scanned once per refresh.
-            private void RefreshAttrition(FactionHQ hq)
-            {
-                lossDefinitions.Clear();
-                MissionStatsTracker tracker = hq?.missionStatsTracker;
-                Encyclopedia encyclopedia = Encyclopedia.i;
-                int lostTotal = 0;
-                if (tracker != null && encyclopedia != null)
-                    for (int group = 0; group < ClassLabels.Length; group++)
-                        lostTotal += ScanAttrition(tracker, ClassGroup(encyclopedia, group));
-                attritionRoster.Set(lossDefinitions, hq, "FORM 12-B / LOSSES BY TYPE",
-                    tracker == null || encyclopedia == null ? "STATISTICS UNAVAILABLE" :
-                    lostTotal + " LOST / TOP " + lossDefinitions.Count + " TYPES");
-            }
-
-            private int ScanAttrition(MissionStatsTracker tracker, IReadOnlyList<UnitDefinition> list)
-            {
-                if (list == null) return 0;
-                int lostSum = 0;
-                foreach (UnitDefinition definition in list)
+                if (same) return;
+                ledgerShowsData = true;
+                ledgerDirty = false;
+                for (int i = 0; i < ledgerRows.Length; i++)
                 {
-                    if (definition == null) continue;
-                    int lost = tracker.GetLostUnits(definition);
-                    lostSum += lost;
-                    if (lost <= 0) continue;
-                    int at = 0;
-                    while (at < lossDefinitions.Count && tracker.GetLostUnits(lossDefinitions[at]) >= lost) at++;
-                    if (at >= AttritionLimit) continue;
-                    lossDefinitions.Insert(at, definition);
-                    if (lossDefinitions.Count > AttritionLimit) lossDefinitions.RemoveAt(AttritionLimit);
+                    lastPrimary[i] = chartPrimary[i]; lastSecondary[i] = chartSecondary[i]; lastFraction[i] = ledgerFraction[i];
+                    ledgerRows[i].Set(ledgerFraction[i], FormatLedger(chartPrimary[i]), losses ? AvState.Caution : AvState.Ready);
                 }
-                return lostSum;
+                ledgerChart.Chart.Set(chartPrimary, chartSecondary, ViewLabels[(int)view],
+                    reserves || losses ? "CURRENT" : "LOST", view == ForcesView.Value ? "CR" : view == ForcesView.Manpower ? "PAX" : "UNIT", FormatLedger);
             }
 
             private MissionStatsTracker.TypeStat LedgerCategory(MissionStatsTracker tracker)
             {
-                switch (ledgerMode)
+                switch (view)
                 {
-                    case LedgerMode.Losses:
-                    case LedgerMode.Reserves:
+                    case ForcesView.Losses:
+                    case ForcesView.Reserves:
                         return tracker.units;
-                    case LedgerMode.Value:
+                    case ForcesView.Value:
                         return tracker.value;
                     default:
                         return tracker.manpower;
@@ -682,11 +647,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             private float LedgerValue(MissionStatsTracker.Stat stat) =>
-                ledgerMode == LedgerMode.Losses ? stat.lost : stat.current;
+                view == ForcesView.Losses ? stat.lost : stat.current;
 
             private string FormatLedger(float value)
             {
-                return ledgerMode == LedgerMode.Value ? AvNum.Money(value) : AvNum.Fixed(value, 0);
+                return view == ForcesView.Value ? AvNum.Money(value) : AvNum.Fixed(value, 0);
             }
 
             private static int ReserveCount(FactionHQ hq, int group)
@@ -731,8 +696,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 moraleBar.Help = "Morale: the host's 0-100 mandate. It starts at 50; authored events and contract results move it, " +
                                  "and it scales contract money and XP.";
 
-                politicsOrder = OrderLink(page);
-
                 infoTabs = page.Add(AvSegmented.Strip(page.Content, new[] { "AIRBASES", "PLAYERS" },
                     () => infoMode == InfoMode.Airbases ? 0 : 1, SelectInfo));
                 infoTabs.Options[0].Help = "List the faction's airbases with their operational state and aircraft count.";
@@ -741,37 +704,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 infoGrid = new MfdPagingGrid(page.Content, 1, 12, readOnly: true, rowHeight: 40f);
                 AddGrid(page, infoGrid);
 
-                // The bands are the mandate's own rule (names and thresholds from MandateName, prices from the
-                // contract multiplier), so the table reads the same on every faction.
-                mandateParts.Add(page.Section(AvIcon.Scale, "MANDATE BANDS", "CONTRACT PRICING BY MORALE"));
-                bandList = page.Add(new AvList(page.Content, page.Ticker, BandNames.Length, BindBandRow));
-                mandateParts.Add(bandList);
-                bandList.SetCount(BandNames.Length);
-                page.Links(("ORDERS IN FORCE", "STR", "BOARD"), ("CABINET", "EVN", "DISPATCH"));
             }
 
             private static readonly string[] BandNames = { "MOBILIZED HOME FRONT", "STEADFAST MANDATE", "WAR WEARY", "CABINET IN CRISIS" };
-            private static readonly float[] BandFloor = { 80f, 50f, 25f, 0f };
-            private float bandMorale = float.NaN;
 
             private static int BandOf(float morale) => morale >= 80f ? 0 : morale >= 50f ? 1 : morale >= 25f ? 2 : 3;
 
-            private void BindBandRow(int index, AvRow row)
-            {
-                float lo = BandFloor[index], hi = index == 0 ? 100f : BandFloor[index - 1];
-                string lowPrice = "x" + AvNum.Fixed(FactionMoraleState.ContractMultiplier(lo), 2);
-                string highPrice = "x" + AvNum.Fixed(FactionMoraleState.ContractMultiplier(hi), 2);
-                bool current = float.IsFinite(bandMorale) && BandOf(bandMorale) == index;
-                row.Set(BandNames[index], "MORALE " + AvNum.Fixed(lo, 0) + "-" + AvNum.Fixed(hi, 0) + "   ·   PAY " + lowPrice + " TO " + highPrice,
-                    current ? "NOW" : "", current ? (index < 2 ? AvState.Ready : AvState.Caution) : AvState.Inert);
-                row.Help = BandNames[index] + ": morale " + AvNum.Fixed(lo, 0) + " to " + AvNum.Fixed(hi, 0) +
-                           ". New contracts are priced at " + lowPrice + " to " + highPrice + " of base, locked when offered.";
-            }
             private void SelectInfo(int selected)
             {
                 // Keep this local. InfoPanel_Faction.SetDisplayAirbases currently selects
                 // Players in stock code, exactly the bug this owned view avoids inheriting.
                 infoMode = selected == 0 ? InfoMode.Airbases : InfoMode.Players;
+                infoNext = 0f;
                 infoGrid.ResetPage();
                 RequestRefresh();
             }
@@ -782,8 +726,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 Sprite seal = hq.faction == null ? null : hq.faction.factionColorLogo;
                 mandateStrip.SetSeal(seal);
                 bool known = float.IsFinite(morale);
-                bandMorale = known ? morale : float.NaN;
-                bandList.SetCount(BandNames.Length);   // rebinds the rows: the band holding the morale reads NOW
                 mandateHeadline.Set(known ? MandateName(morale) : "REPORT UNAVAILABLE",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
                 int percent = known ? Mathf.RoundToInt((FactionMoraleState.ContractMultiplier(morale) - 1f) * 100f) : 0;
@@ -791,7 +733,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     known ? AvNum.Fixed(morale, 1) + " / 100" : "—",
                     !known ? AvState.Inert : morale >= 50f ? AvState.Ready : AvState.Caution);
                 mandateEffect.Set(known ? "CONTRACTS " + AvNum.Signed(percent, 0) + "% MONEY / XP" : "—");
-                SetOrderLink(politicsOrder);
                 mandateStrip.Changed();
             }
 
@@ -801,12 +742,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 INationView nation = null;
                 bool on = selectedFaction == 0 && IsLocalFaction(hq) && ModuleServices.TryGet(out nation) && nation.Active && nation.Local != null;
-                foreach (AvPart p in nationEconomyParts) p.SetShown(on);
-                foreach (AvPart p in nationPoliticsParts) p.SetShown(on);
-                foreach (AvPart p in mandateParts) p.SetShown(!on);
+                nationOn = on;
+                if (!nationApplied || on != nationOnShown)
+                {
+                    nationApplied = true; nationOnShown = on;
+                    foreach (AvPart p in nationEconomyParts) p.SetShown(on);
+                    foreach (AvPart p in nationPoliticsParts) p.SetShown(on);
+                    foreach (AvPart p in mandateParts) p.SetShown(!on);
+                }
                 if (!on) return;
                 NationView v = nation.Local;
-                if (selectedPage == 0)
+                if (selectedPage == PageEconomy)
                 {
                     moneyNote.Set("FUNDS " + AvNum.Thousands(Mathf.Round(v.Funds)) + "   ·   NEW FACTORY " +
                                   AvNum.Thousands(Mathf.Round(v.FactoryCost)) + "   ·   OUTPUT x" + AvNum.Fixed(v.Output, 2));
@@ -814,7 +760,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     plantsPart.Set(v);
                     forcePart.Set(v);
                 }
-                else if (selectedPage == 3) politics.Set(nation);
+                else if (selectedPage == PagePolitics) politics.Set(nation);
             }
 
             private void RefreshInfo(FactionHQ hq)
@@ -863,8 +809,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                 }
 
-                directorySummary.Set((infoMode == InfoMode.Airbases ? "BASE REGISTER / " : "PERSONNEL ROLL / ") +
-                    infoRows.Count + (infoMode == InfoMode.Airbases ? " ON FILE / OPERATIONS BELOW" : " CONNECTED / SCORE ORDER"));
+                directorySummary.Set(infoRows.Count + (infoMode == InfoMode.Airbases ? " AIRBASES" : " PLAYERS · SCORE ORDER"));
                 directorySummary.Changed();
                 if (infoRows.Count == 0)
                 {
@@ -915,14 +860,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             /// <summary>
-            /// Bounded, paged unit ledger; spare height reveals more named records, never anonymous tiles. Lines
-            /// the records do not fill stay on the form as empty ruled rows, and a total line closes the table.
+            /// Bounded, paged unit table; spare height reveals more named records, never anonymous tiles. Lines
+            /// the records do not fill stay as empty ruled rows, and a total line closes the table.
             /// </summary>
             private sealed class UnitRosterPart : FramedPart
             {
                 private const int Capacity = 20;
                 private const float RowHeight = 28f, HeaderHeight = 58f, TotalHeight = 26f, FooterHeight = 28f;
-                private readonly bool losses;
                 private readonly TMP_Text title, summary, columns, pageText, empty, totalName, totalLive, totalLost, totalExtra;
                 private readonly Image totalRule;
                 private readonly TMP_Text[] names = new TMP_Text[Capacity], live = new TMP_Text[Capacity],
@@ -937,9 +881,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 private Func<int, int> liveAt, lostAt, reserveAt;
                 private int page, visible = 4;
 
-                public UnitRosterPart(RectTransform parent, bool losses) : base(parent, "UnitRoster")
+                public UnitRosterPart(RectTransform parent) : base(parent, "UnitRoster")
                 {
-                    this.losses = losses;
                     title = AvText.Make(Rect, "Title", AvTextRole.Label);
                     summary = AvText.Make(Rect, "Summary", AvTextRole.Micro);
                     // Numeric headings get their own aligned cells below; this line labels the name column only.
@@ -959,7 +902,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     }
                     empty = AvText.Make(Rect, "Empty", AvTextRole.ProseSmall);
                     totalRule = AvLay.Solid(Rect, "TotalRule", AvTheme.Hairline);
-                    totalName = AvText.Make(Rect, "TotalName", AvTextRole.Label, losses ? "LISTED TYPES" : "CLASS TOTAL");
+                    totalName = AvText.Make(Rect, "TotalName", AvTextRole.Label, "CLASS TOTAL");
                     totalLive = AvText.Make(Rect, "TotalLive", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
                     totalLost = AvText.Make(Rect, "TotalLost", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
                     totalExtra = AvText.Make(Rect, "TotalExtra", AvTextRole.DataStrong, "", TextAlignmentOptions.MidlineRight);
@@ -987,24 +930,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Func<int, Sprite> icon, Func<int, int> current, Func<int, int> lostCount,
                     Func<int, int> reserves, string heading, string detail)
                 {
+                    bool resized = this.count != count;
                     this.count = count; nameAt = name; helpAt = help; iconAt = icon;
                     liveAt = current; lostAt = lostCount; reserveAt = reserves;
                     title.text = heading; summary.text = detail;
                     Render();
+                    if (resized) Changed();
                 }
 
                 private void Render()
                 {
                     int pages = Mathf.Max(1, (count + visible - 1) / visible);
                     page = Mathf.Clamp(page, 0, pages - 1);
-                    empty.text = summary.text.Contains("UNAVAILABLE") ? "AWAITING MISSION STATISTICS" :
-                        losses ? "NO RECORDED UNIT LOSSES" : "NO UNIT TYPES REGISTERED";
+                    empty.text = summary.text.Contains("UNAVAILABLE") ? "AWAITING MISSION STATISTICS" : "NONE FIELDED OR LOST";
                     empty.gameObject.SetActive(count == 0);
                     for (int row = 0; row < Capacity; row++)
                     {
                         int at = page * visible + row;
                         bool shown = row < visible && at < count;
-                        rows[row].gameObject.SetActive(row < visible);
+                        rows[row].gameObject.SetActive(shown);
                         if (!shown)
                         {
                             // An unfilled line of the form: the rule only, nothing that could pass for a record.
@@ -1019,9 +963,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         names[row].text = nameAt(at);
                         live[row].text = known ? AvNum.Fixed(current, 0) : "\u2014";
                         lost[row].text = known ? AvNum.Fixed(dead, 0) : "\u2014";
-                        extra[row].text = !known ? "\u2014" : losses
-                            ? AvNum.Fixed(current + dead > 0 ? 100f * dead / (current + dead) : 0f, 0) + "%"
-                            : reserve >= 0 ? AvNum.Fixed(reserve, 0) : "\u2014";
+                        extra[row].text = known && reserve >= 0 ? AvNum.Fixed(reserve, 0) : "\u2014";
                         icons[row].sprite = iconAt(at);
                         icons[row].enabled = icons[row].sprite != null;
                         bars[row].SetProgress(Mathf.Max(0, dead), Mathf.Max(1, current + dead));
@@ -1048,16 +990,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     bool any = known > 0;
                     totalLive.text = any ? AvNum.Fixed(sumLive, 0) : "\u2014";
                     totalLost.text = any ? AvNum.Fixed(sumLost, 0) : "\u2014";
-                    totalExtra.text = !any ? "\u2014" : losses
-                        ? AvNum.Fixed(sumLive + sumLost > 0 ? 100f * sumLost / (sumLive + sumLost) : 0f, 0) + "%"
-                        : reserveKnown > 0 ? AvNum.Fixed(sumReserve, 0) : "\u2014";
+                    totalExtra.text = any && reserveKnown > 0 ? AvNum.Fixed(sumReserve, 0) : "\u2014";
                     bool shownTotals = count > 0;
                     totalRule.gameObject.SetActive(shownTotals); totalName.gameObject.SetActive(shownTotals);
                     totalLive.gameObject.SetActive(shownTotals); totalLost.gameObject.SetActive(shownTotals);
                     totalExtra.gameObject.SetActive(shownTotals);
                 }
 
-                public override float Measure(float width) => HeaderHeight + 4f * RowHeight + TotalHeight + FooterHeight;
+                // As tall as its records (four lines at least): no page of empty rules under a short list.
+                public override float Measure(float width) => HeaderHeight + Mathf.Clamp(count, 4, Capacity) * RowHeight + TotalHeight + FooterHeight;
 
                 public override void Place(AvSlot slot)
                 {
@@ -1103,7 +1044,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     {
                         liveHeading = AvText.Make(Rect, "LiveHeading", AvTextRole.Micro, "LIVE", TextAlignmentOptions.MidlineRight);
                         lostHeading = AvText.Make(Rect, "LostHeading", AvTextRole.Micro, "LOST", TextAlignmentOptions.MidlineRight);
-                        extraHeading = AvText.Make(Rect, "ExtraHeading", AvTextRole.Micro, losses ? "LOSS %" : "RSV", TextAlignmentOptions.MidlineRight);
+                        extraHeading = AvText.Make(Rect, "ExtraHeading", AvTextRole.Micro, "RSV", TextAlignmentOptions.MidlineRight);
                         liveHeading.color = extraHeading.color = AvTheme.Dim; lostHeading.color = AvTheme.Warning;
                     }
                     AvLay.Place(liveHeading.rectTransform, Inset + w * .57f, 41f, w * .12f, 14f);

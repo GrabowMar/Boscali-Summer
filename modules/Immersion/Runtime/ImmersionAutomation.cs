@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Modules.Immersion.Configuration;
 using UnityEngine;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
@@ -67,6 +68,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             ImmersionManager manager = ImmersionManager.Live;
             if (manager == null || manager.Settings == null) return Failure("ImmersionAutomation", "Configure", "no immersion manager in this scene");
+            object model = Arg(args, "pilotModel");
+            if (model != null)
+            {
+                if (!(model is string name) || !System.Enum.TryParse(name, true, out PilotModelStyle style) ||
+                    !System.Enum.IsDefined(typeof(PilotModelStyle), style))
+                    return Failure("ImmersionAutomation", "Configure", "pilotModel must be Standard, Recon, Rescue or NightOps");
+                manager.Settings.PilotModel.Value = style;
+            }
             if (Arg(args, "body") is bool body) manager.Settings.PilotBodyEnabled.Value = body;
             if (Arg(args, "reflection") is bool reflection) manager.Settings.PilotReflectionEnabled.Value = reflection;
             if (Arg(args, "visor") is bool visor) manager.Settings.HelmetVisorEnabled.Value = visor;

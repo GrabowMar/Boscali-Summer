@@ -137,7 +137,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             IMapProjection projection = ModuleServices.TryGet(out IMapProjection p) && p.IsActive ? p : null;
             Relief = projection != null;
-            if (planChanged) chrome.BindLegend(Plan, map.mapBackground.rectTransform.rect.width);
+            // The legend owns the bottom-left corner and wraps short of the field log in the bottom-right one.
+            if (planChanged) chrome.BindLegend(Plan, map.mapBackground.rectTransform.rect.width - MfdFieldLog.WidthTaken);
 
             if (planChanged) tagsStale = true;
             bool poseChanged = (projection != null ? reliefGate : gate).ShouldRebuild(Pose(map, projection), now);
@@ -204,7 +205,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             pulse = AvVector.Create(root, "Pulse", PulseCapacity);
             Pivot(pulse.rectTransform, image.pivot);
             tagLayer = Stretched("Tags", root, image.pivot);
-            chrome = new StrMapChrome(viewport, this, Controls);
+            chrome = new StrMapChrome(MapSelectionDeck.ChromeLayer(viewport), this, Controls);
             card = new StrMapCard(viewport, this, Controls, CardPlan);
             MapUiPointer.Register(chrome.Plate);
             MapUiPointer.Register(chrome.Legend);

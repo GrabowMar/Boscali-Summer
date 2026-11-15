@@ -44,20 +44,26 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static void LoadOrbitClouds()
         {
             orbitClouds = new Texture2D(2, 2, TextureFormat.RGB24, true, true) { name = "BoscaliOrbitClouds", hideFlags = HideFlags.DontSave };
+            bool loaded = false;
             try
             {
                 byte[] bytes = EmbeddedResources.ReadAll(typeof(HighAltitudeSky).Assembly, OrbitCloudResource, 8 * 1024 * 1024);
-                if (bytes == null || !ImageConversion.LoadImage(orbitClouds, bytes, true))
-                {
+                loaded = bytes != null && ImageConversion.LoadImage(orbitClouds, bytes, true);
+                if (!loaded)
                     Debug.LogWarning("[BoscaliSummer] Orbit cloud texture missing; no clouds from orbit.");
-                    orbitClouds.Reinitialize(1, 1);
-                    orbitClouds.SetPixel(0, 0, Color.black);
-                    orbitClouds.Apply(false, true);
-                }
             }
             catch (System.Exception e)
             {
                 Debug.LogWarning("[BoscaliSummer] Orbit cloud texture load failed: " + e.Message);
+            }
+            if (!loaded)
+            {
+                // A decoder exception must use the same black fallback as a missing resource, never uninitialized texels.
+                Object.Destroy(orbitClouds);
+                orbitClouds = new Texture2D(1, 1, TextureFormat.RGB24, false, true)
+                    { name = "BoscaliOrbitClouds.Empty", hideFlags = HideFlags.DontSave };
+                orbitClouds.SetPixel(0, 0, Color.black);
+                orbitClouds.Apply(false, true);
             }
             orbitClouds.wrapMode = TextureWrapMode.Repeat;
             orbitClouds.filterMode = FilterMode.Trilinear;

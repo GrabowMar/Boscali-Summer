@@ -5,20 +5,11 @@ using BoscaliSummer.Modules.Wing.Configuration;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>Applying a stance (spec 2026-10-04 §4.1): the existing SetDoctrine order for the scope; the wing-wide follow-ons
-    /// (fall back, winchester, bingo) only when the scope is the whole wing, because they are wing-wide config. Shared by ORDERS'
-    /// stance slots, BEHAVIOUR › STANCES and the wing-key chord, so the three cannot drift apart.</summary>
+    /// (fall back, winchester, bingo) only when the scope is the whole wing, because they are wing-wide config. Shared by
+    /// BEHAVIOUR › PROFILES and the wing-key chord, so the two cannot drift apart.</summary>
     internal static class WmcStanceActions
     {
         public static StanceBook Book => WmcStanceFiles.Book;
-
-        /// <summary>Applies slot <paramref name="slot"/> (0-5) to the WMC's scope; false when the slot is empty.</summary>
-        public static bool ApplySlot(WmcContext c, int slot)
-        {
-            Stance s = Book.Slot(slot);
-            if (s == null) return false;
-            Apply(c, s);
-            return true;
-        }
 
         public static void Apply(WmcContext c, Stance s)
         {

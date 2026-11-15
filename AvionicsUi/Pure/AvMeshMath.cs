@@ -21,17 +21,19 @@ namespace NOAvionics
     {
         private const float Tan225 = 0.41421356f;
 
-        public static AvV2[] ChamferPolygon(float x0, float y0, float x1, float y1, AvChamfer c)
+        public static AvV2[] ChamferPolygon(float x0, float y0, float x1, float y1, AvChamfer c) =>
+            ChamferPolygon(x0, y0, x1, y1, c, new AvV2[8]);
+
+        /// <summary>Fills <paramref name="into"/> (8 points) and returns it: a mesh that rebuilds on every hover allocates nothing.</summary>
+        public static AvV2[] ChamferPolygon(float x0, float y0, float x1, float y1, AvChamfer c, AvV2[] into)
         {
             float w = x1 - x0, h = y1 - y0, lim = Math.Max(0f, Math.Min(w, h) * 0.5f);
             float tl = Math.Clamp(c.TL, 0f, lim), tr = Math.Clamp(c.TR, 0f, lim), br = Math.Clamp(c.BR, 0f, lim), bl = Math.Clamp(c.BL, 0f, lim);
-            return new[]
-            {
-                new AvV2(x0, y1 - tl), new AvV2(x0 + tl, y1),   // top-left
-                new AvV2(x1 - tr, y1), new AvV2(x1, y1 - tr),   // top-right
-                new AvV2(x1, y0 + br), new AvV2(x1 - br, y0),   // bottom-right
-                new AvV2(x0 + bl, y0), new AvV2(x0, y0 + bl),   // bottom-left
-            };
+            into[0] = new AvV2(x0, y1 - tl); into[1] = new AvV2(x0 + tl, y1);   // top-left
+            into[2] = new AvV2(x1 - tr, y1); into[3] = new AvV2(x1, y1 - tr);   // top-right
+            into[4] = new AvV2(x1, y0 + br); into[5] = new AvV2(x1 - br, y0);   // bottom-right
+            into[6] = new AvV2(x0 + bl, y0); into[7] = new AvV2(x0, y0 + bl);   // bottom-left
+            return into;
         }
 
         public static AvChamfer Inset(AvChamfer c, float stroke)

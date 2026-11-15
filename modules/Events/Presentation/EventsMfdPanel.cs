@@ -15,7 +15,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// "EVN" — active dispatch, the game log, archive and field documentation. Kit v2 console: chrome
+    /// "EVN" — active dispatch, archive and field documentation. Kit v2 console: chrome
     /// (metrics/tabs/footer) from <see cref="AvConsole"/>, page content from <see cref="AvFlow"/>
     /// sections, rows and the module's own <see cref="EventHeroPart"/> / <see cref="EventCaseFilePart"/> parts.
     /// </summary>
@@ -23,8 +23,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
     {
         private const float RefreshInterval = 0.25f;
         private const int TabDispatch = 0;
-        private const int TabLog = 1;
-        private const int TabDesk = 2;
+        private const int TabDesk = 1;
 
         /// <summary>
         /// The scripted-beat rows the active card and the full-screen broadcast both reserve.
@@ -50,23 +49,16 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private EventHeroPart hero;
         private AvGauge directorPosture, directorBases, directorSupers;
-        private AvSection onCallSection;
-        private AvGauge[] onCall;
-        private AvEqualizer historyEq;
-        private float[] logBars;
+        private AvRow onCallRow;
         private EventTimelinePart timeline;
         private int historyCapacity;
 
-        private const int RecentRecords = 3;
         private const int VisibleLogRows = 5;
         private AvSection archiveSection;
         private ArchiveTilePart[] tiles;
         private EventCaseFilePart deskCase;
         private AvButtons deskCaseAction;
         private int deskCaseCatalog = -1;
-        private AvSection recentSection;
-        private AvRow[] recentRows;
-        private readonly int[] recentCatalog = new int[RecentRecords];
         private EventDeskArchive archive;
 
         private string boundId;
@@ -77,6 +69,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private bool boundResolved;
         private float nextRefresh;
         private bool boundPictures;
+        private bool countsBound;
 
         public void Configure(EventsSettings config, EventsManager manager, ManualLogSource log)
         {
@@ -95,10 +88,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             liveSection = null;
             hero = null;
             directorPosture = directorBases = directorSupers = null;
-            onCallSection = null;
-            onCall = null;
-            historyEq = null;
-            logBars = null;
+            onCallRow = null;
             timeline = null;
             historyCapacity = 0;
             archiveSection = null;
@@ -106,8 +96,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             deskCase = null;
             deskCaseAction = null;
             deskCaseCatalog = -1;
-            recentSection = null;
-            recentRows = null;
+            countsBound = false;
             archive?.Close();
             archive = null;
             boundId = null;
@@ -120,7 +109,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             cabinetSection = decisionsSection = null;
             cabinetCard = null;
             boundCard = -1;
-            ResetLog();
         }
 
         private void OnDestroy() => ResetForScene();
@@ -137,6 +125,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             }
             if (!installer.Tick()) return;
 
+            if (Time.unscaledTime < nextRefresh) return;
+            nextRefresh = Time.unscaledTime + RefreshInterval;
+
             bool visible = screen.isActive &&
                 SceneSingleton<DynamicMap>.i?.maximizedMapCanvas?.isActiveAndEnabled == true;
             if (archive != null && (!archive.IsOpen || !visible || console.CurrentPage != TabDesk))
@@ -144,36 +135,23 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 archive.Close();
                 archive = null;
             }
-            if (!visible) return;
-
-            if (Time.unscaledTime >= nextRefresh)
-            {
-                nextRefresh = Time.unscaledTime + RefreshInterval;
-                Refresh();
-            }
+            if (visible) Refresh();
         }
 
         private RectTransform BuildScreen(RectTransform rootRect, float height)
         {
             // The root is clamped before the console exists. Clamping console.Root afterwards baked
             // the canvas correction into the child as a negative offset and shifted the whole page left.
-            console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENTS", 3, AvTokens.PanelWidth, height);
+            console = AvConsole.Build(rootRect, MfdSlots.Events, "EVENTS", 2, AvTokens.PanelWidth, height);
             // The country strip on top; the dispatch's own COST · RESET · LEFT · FILED read on DISPATCH's first line.
             CountryStrip.Mount(console);
-            console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.ListDetails, "LOG"), (AvIcon.Bookmark, "DESK"));
+            console.Tabs((AvIcon.AlertTriangle, "DISPATCH"), (AvIcon.Bookmark, "DESK"));
 
             historyCapacity = Mathf.Max(1, settings.HistoryLength.Value);
             BuildDispatchPage(console.Page(TabDispatch));
-            BuildLogPage(console.Page(TabLog));
             BuildDeskPage(console.Page(TabDesk));
-            console.Orders(TabDispatch,
-                "One dispatch runs at a time. COST and RESET price it for your side; LEFT is its clock.",
-                "A superevent carries timed orders: NEXT is the order due, QUEUED orders follow it.",
-                "FILED keeps this mission's finished dispatches, newest first. The whole game log is on LOG.");
-            console.Orders(TabDesk,
-                "Pull a drawer to read its cards. The archive is a local copy and sends nothing.",
-                "The case file is the dispatch running now, or the last one closed.",
-                "RECENT opens the dossier of a finished dispatch.");
+            console.Orders(TabDispatch, "One dispatch runs at a time. COST and RESET price it for your side; LEFT is its clock.");
+            console.Orders(TabDesk, "Pull a drawer to read its cards. The archive is a local copy and sends nothing.");
             console.Finish();
             return console.Root;
         }
@@ -185,7 +163,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             // The cabinet's answer card (FOR THE CABINET) and the latest decisions, above the live dispatch (EventsMfdPanel.Cabinet).
             BuildCabinet(p);
             // The live dispatch under one readout line (what the header tiles used to say). A quiet theater shows one standby row and
-            // leaves the rest to the console ground. FAC's ECONOMY and POLITICS link here for the order in force.
+            // leaves the rest to the console ground.
             liveSection = p.Section(AvIcon.AlertTriangle, "LIVE DISPATCH", "");
             HelpOn(liveSection, "COST: the support price multiplier the running event sets on requisitions. RESET: how fast your support requests come back off cooldown. LEFT: time until it ends. FILED: dispatches finished, out of the history capacity.");
             hero = p.Add(new EventHeroPart(p.Content));
@@ -203,39 +181,23 @@ namespace BoscaliSummer.Modules.Events.Presentation
             directorBases.Set(0f, "—", AvState.Inert);
             directorSupers.Set(0f, "—", AvState.Inert);
 
-            // The faction's lead contract (FAC POLITICS' old DIRECTIVE block).
-            HelpOn(p.Section(AvIcon.Flag, "DIRECTIVE", "THE FACTION'S LEAD CONTRACT"),
-                "DIRECTIVE: the contract your faction holds, else the first on offer. Completing it pays and lifts morale by 3.");
-            directiveRow = p.Add(new AvRow(p.Content, () => AvConsole.Open("MIS")));
-            directiveRow.Help = "The faction's lead contract. Opens MIS.";
-
-            // While the theater is quiet the page also says what the director holds on call: the authored catalog,
-            // counted by tier. The numbers are the catalog's own; the rings are each tier's share of it.
+            // While the theater is quiet one line says what the director holds on call: the authored catalog, counted by tier.
+            onCallRow = p.Add(new AvRow(p.Content));
+            onCallRow.Help = "ON CALL: the dispatches in the director's authored catalog by tier. Their dossiers are in the EVENTS drawer on DESK.";
             EventDefinition[] catalog = EventCatalog.All;
-            onCallSection = p.Section(AvIcon.Database, "ON CALL", AvNum.Fixed(catalog.Length, 0) + " DOSSIERS");
-            onCall = new AvGauge[3];
-            EventTier[] tiers = { EventTier.Minor, EventTier.Medium, EventTier.Super };
-            string[] tierNames = { "MINOR", "MEDIUM", "SUPER" };
-            AvState[] tierStates = { AvState.Info, AvState.Caution, AvState.Danger };
-            for (int i = 0; i < onCall.Length; i++)
+            int minor = 0, medium = 0, super = 0;
+            foreach (EventDefinition definition in catalog)
             {
-                int held = 0;
-                foreach (EventDefinition definition in catalog) if (definition.Tier == tiers[i]) held++;
-                onCall[i] = new AvGauge(p.Content, tierNames[i]);
-                onCall[i].Set(catalog.Length > 0 ? held / (float)catalog.Length : 0f, AvNum.Fixed(held, 0), tierStates[i]);
-                onCall[i].Help = "ON CALL: the " + tierNames[i].ToLowerInvariant() + " dispatches in the director's authored catalog, " +
-                    AvNum.Fixed(held, 0) + " of " + AvNum.Fixed(catalog.Length, 0) + ". Their dossiers are in the EVENTS drawer on the DESK page.";
+                if (definition.Tier == EventTier.Minor) minor++;
+                else if (definition.Tier == EventTier.Medium) medium++;
+                else if (definition.Tier == EventTier.Super) super++;
             }
-            p.Row(onCall[0], onCall[1], onCall[2]);
+            onCallRow.Set("ON CALL · " + AvNum.Fixed(catalog.Length, 0) + " DOSSIERS",
+                AvNum.Fixed(minor, 0) + " MINOR · " + AvNum.Fixed(medium, 0) + " MEDIUM · " + AvNum.Fixed(super, 0) + " SUPER", "", AvState.Inert);
+            onCallRow.SetShown(false);
 
-            // Finished events as bars (tall = superevent, short = minor), newest first; it grows into spare height.
-            logBars = new float[Mathf.Max(1, historyCapacity)];
-            historyEq = p.Add(new AvEqualizer(p.Content, "FILED", 36f), 1f);
-            historyEq.Help = "FILED: finished events as bars, newest at the left. A tall bar is a superevent, a middle bar a medium, a short bar a minor. Hover a row below for its tier, target and age.";
-            historyEq.SetShown(false);
             timeline = p.Add(new EventTimelinePart(p.Content));
             timeline.SetNote("NO DISPATCHES FILED");
-            p.Links(("SUPPORT PRICES", "OPS", null), ("FUNDS", "FAC", "ECONOMY"));
         }
 
         private void BuildDeskPage(AvFlow p)
@@ -255,7 +217,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             // The case file takes the page's spare height only while it has a poster to show.
             deskCase = p.Add(new EventCaseFilePart(p.Content));
-            deskCase.Help = "CASE FILE: the running dispatch, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are listed under RECENT.";
+            deskCase.Help = "CASE FILE: the running dispatch, or the last one filed: poster, tier, target, price effect and time left. Older dossiers are in the EVENTS drawer.";
             BindNoCase();
             deskCaseAction = p.Buttons(new AvControl.Spec("OPEN CASE DOSSIER", () =>
             {
@@ -264,21 +226,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
             deskCaseAction.MinHeight = 44f;
             deskCaseAction.Controls[0].Help ="Read this event's catalog dossier, including its authored effects and timed orders.";
             deskCaseAction.SetShown(false);
-
-            recentSection = p.Section(AvIcon.ListDetails, "RECENT", "OPEN");
-            recentRows = new AvRow[RecentRecords];
-            for (int i = 0; i < recentRows.Length; i++)
-            {
-                int slot = i;
-                recentRows[i] = p.Add(new AvRow(p.Content, () =>
-                {
-                    if (recentCatalog[slot] >= 0) OpenArchive(ArchiveShelf.Events, recentCatalog[slot]);
-                }));
-                recentRows[i].Help = "Open this dossier in the field archive.";
-            }
-            recentSection.SetShown(false);
-            foreach (AvRow row in recentRows) row.SetShown(false);
-            p.Links(("WAR PLAN", "STR", "BOARD"), ("BRIEF", "MIS", "BRIEF"));
         }
 
         /// <summary>The desk before the director has issued anything this mission.</summary>
@@ -316,7 +263,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             string summary = current != null ? EventSelector.EffectSummary(multiplier) : null;
             bool aimedAtLocal = current != null && (events.LocalTargeted || current.Target == "ALL THEATER");
 
-            RefreshDirector();
+            if (console.CurrentPage == TabDispatch) RefreshDirector();
 
             bool historyOff = settings.HistoryLength.Value <= 0;
             float secondsLeft = current != null ? current.EndsAtMissionTime - now : 0f;
@@ -359,17 +306,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 hero.SetScript(current, current.StartedAtMissionTime, now);
             }
 
-            onCallSection.SetShown(current == null);
-            foreach (AvGauge gauge in onCall) gauge.SetShown(current == null);
-            RefreshDirective();
-            RefreshTimeline(current, history, now, historyOff);
-            RefreshDesk(current, history, now);
-            RefreshLog();
+            onCallRow.SetShown(current == null);
+            // Only the open page is refreshed (the desk counts walk the whole encyclopedia); a tab switch catches up within one interval.
+            if (console.CurrentPage == TabDispatch) RefreshTimeline(current, history, now, historyOff);
+            if (console.CurrentPage == TabDesk) RefreshDesk(current, history, now);
             string cabinet = RefreshCabinet();
 
-            string ambient = console.CurrentPage == TabLog
-                ? "THE LOG · " + AvNum.Fixed(logShown.Count, 0) + (logCategory > 0 ? " " + TacticalLogEntry.Categories[logCategory - 1] : "") + " LINES"
-                : cabinet.Length > 0 ? cabinet
+            string ambient = cabinet.Length > 0 ? cabinet
                 : current != null
                 ? "DISPATCH LIVE · " + current.Title.ToUpperInvariant()
                 : events.Available ? "THEATER QUIET · DIRECTOR SCANNING" : "NO MISSION ON THE NET";
@@ -385,13 +328,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             int limit = current != null && current.IsSuper && current.Steps.Count > 0 ? 3 : VisibleLogRows;
             int rows = Mathf.Min(shown, limit);
             timeline.SetNote(historyOff ? "HISTORY OFF" : "NO DISPATCHES FILED");
-            for (int i = 0; i < logBars.Length; i++) logBars[i] = 0f;
-            for (int index = 0; index < shown; index++)
+            for (int index = 0; index < rows; index++)
             {
                 ActiveEventView view = history[history.Count - 1 - index];
-                if (index < logBars.Length)
-                    logBars[index] = view.Tier == "SUPEREVENT" ? 1f : view.Tier == "MEDIUM" ? 0.6f : 0.3f;
-                if (index >= rows) continue;
                 string effect = IsNeutral(view.EffectSummary) && !string.IsNullOrEmpty(view.TempoSummary)
                     ? view.TempoSummary : view.EffectSummary;
                 timeline.Set(index, view.Title.ToUpperInvariant(),
@@ -401,10 +340,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     IsNeutral(effect) ? AvState.Inert : effect[0] == '+' ? AvState.Danger : AvState.Ready);
             }
             timeline.SetCount(historyOff ? 0 : rows);
-            // While a scripted superevent runs the bars step aside as well (the rows already list the log).
-            bool bars = !historyOff && shown > 0 && limit == VisibleLogRows;
-            historyEq.SetShown(bars);
-            if (bars) historyEq.Set(logBars, "NEWEST FIRST", AvState.Info);
         }
 
         private void RefreshDesk(ActiveEventView current, IReadOnlyList<ActiveEventView> history, float now)
@@ -413,14 +348,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
             ActiveEventView file = current ?? (history.Count > 0 ? history[history.Count - 1] : null);
             deskCaseCatalog = file != null ? CatalogIndexOf(file.Id) : -1;
             deskCaseAction?.SetShown(deskCaseCatalog >= 0);
-            int held = 0;
-            for (int i = 0; i < tiles.Length; i++)
+            if (!countsBound)
             {
-                int records = ArchiveShelf.CountOf(i);
-                held += records;
-                tiles[i].SetCount(records);
+                countsBound = true;
+                int held = 0;
+                for (int i = 0; i < tiles.Length; i++)
+                {
+                    int records = ArchiveShelf.CountOf(i);
+                    held += records;
+                    tiles[i].SetCount(records);
+                }
+                archiveSection.SetCaption(AvNum.Thousands(held) + " RECORDS HELD");
             }
-            archiveSection.SetCaption(AvNum.Thousands(held) + " RECORDS HELD");
             // A filed case shows its 16:9 poster; an empty file stays one row over the console ground.
             bool wide = file != null;
             if (deskCase.Wide != wide)
@@ -443,22 +382,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     : "CLOSED";
                 deskCase.Bind(file.Title.ToUpperInvariant(), meta, body, CategoryIcon(file.Category),
                     EventArtCache.Get(file.IconKey, file.IsSuper ? "tier_super" : "tier_medium"), TierState(file.Tier));
-            }
-
-            // Records: the most recent finished events, each opening its dossier.
-            int shown = Mathf.Min(history.Count, RecentRecords);
-            recentSection.SetShown(shown > 0);
-            for (int i = 0; i < recentRows.Length; i++)
-            {
-                bool on = i < shown;
-                recentRows[i].SetShown(on);
-                recentCatalog[i] = -1;
-                if (!on) continue;
-                ActiveEventView view = history[history.Count - 1 - i];
-                recentCatalog[i] = CatalogIndexOf(view.Id);
-                recentRows[i].Set(view.Title.ToUpperInvariant(),
-                    TierShort(view.Tier) + " · " + Duration(now - view.EndsAtMissionTime) + " AGO",
-                    ShortEffect(view), TierState(view.Tier));
             }
         }
 
@@ -522,19 +445,6 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     (string.IsNullOrEmpty(view.TempoSummary) ? "" : " " + view.TempoSummary + ".")
                 : "Requisitions cost less until it ends." +
                     (string.IsNullOrEmpty(view.TempoSummary) ? "" : " " + view.TempoSummary + ".");
-        }
-
-        /// <summary>The effect as a value-column word: "+50% COST", "RESET +20%" or nothing.</summary>
-        private static string ShortEffect(ActiveEventView view)
-        {
-            if (!IsNeutral(view.EffectSummary))
-            {
-                int space = view.EffectSummary.IndexOf(' ');
-                return (space > 0 ? view.EffectSummary.Substring(0, space) : view.EffectSummary) + " COST";
-            }
-            if (string.IsNullOrEmpty(view.TempoSummary)) return "";
-            int at = view.TempoSummary.LastIndexOf(' ');
-            return "RESET " + (at >= 0 ? view.TempoSummary.Substring(at + 1) : view.TempoSummary);
         }
 
         private static float MissionTime() =>

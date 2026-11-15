@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             }
 
             Vector3 toSun = -sun.transform.forward;
-            Vector3 eye = camera.transform.position;
+            Vector3 eye = camera.cameraToWorldMatrix.MultiplyPoint3x4(Vector3.zero);
             viewFade = ViewFade(camera, toSun);
             if (viewFade <= 0f)
             {

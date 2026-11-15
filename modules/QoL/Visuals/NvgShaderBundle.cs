@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.QoL.Visuals
 {
-    /// <summary>The two night-vision shaders, from the embedded nightvision.bundle (tools/Compile-NightVisionAssets.ps1). Null when it is missing or unsupported.</summary>
+    /// <summary>The two night-vision shaders, from the embedded nightvision.bundle (tools/Compile-NightVisionAssets.ps1). Versioned source lives in Assets/Source. Null when missing or unsupported.</summary>
     internal static class NvgShaderBundle
     {
         private static AssetBundle bundle;

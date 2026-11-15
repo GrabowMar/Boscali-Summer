@@ -14,12 +14,12 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
     /// <summary>
-    /// "PILOT" (registry id SQD) — pilot status, the shared OPS skill board (SPACE, CYBER, SOF),
-    /// enemy ace roster, and STUDIO: the squadron (roster and pilot studio, built by Wing through <see cref="IWingSquad"/>) above the
+    /// "PILOT" (registry id SQD) — pilot status with the enemy ace watch, the shared OPS skill board (SPACE, CYBER, SOF),
+    /// and STUDIO: the squadron (roster and pilot studio, built by Wing through <see cref="IWingSquad"/>) above the
     /// emblem paint shop. Reads encounter snapshots only; Wing owns aircraft orders, custom-pilot files and pilot
     /// generation. Emblems and the local pilot profile are client-local cosmetics.
     /// Built entirely from kit v2 (spec 2026-09-28-fui-panel-polish-design.md): one
-    /// <see cref="AvConsole"/> with four icon tabs over a paged <see cref="AvFlow"/> body.
+    /// <see cref="AvConsole"/> with three icon tabs over a paged <see cref="AvFlow"/> body.
     /// </summary>
     internal sealed partial class SqdMfdPanel : MonoBehaviour, ISceneService
     {
@@ -28,8 +28,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private const int TabPilot = 0;
         private const int TabSkills = 1;
-        private const int TabWings = 2;
-        private const int TabStudio = 3;
+        private const int TabStudio = 2;
         private const int WingRowsPerPage = 2;
 
         private ProgressionManager progression;
@@ -133,19 +132,17 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
         private RectTransform BuildScreen(RectTransform content, float height)
         {
-            console = AvConsole.Build(content, "PILOT", "PILOT", 4, Width, height);
+            console = AvConsole.Build(content, "PILOT", "PILOT", 3, Width, height);
             console.PageChanged += OnTabChanged;
             // No header tiles: SCORE, RANK and PICKS are on the PILOT page (ID card, PICK LEDGER) and SKILLS says the picks in hand.
             AvTabBar tabBar = console.Tabs(
                 (AvIcon.User, "PILOT"),
                 (AvIcon.Star, "SKILLS"),
-                (AvIcon.Skull, "ACES"),
                 (AvIcon.Pencil, "STUDIO"));
             AttachTabHelp(tabBar);
 
             BuildPilotPage(console.Page(TabPilot));
             BuildSkillsPage(console.Page(TabSkills));
-            BuildWingsPage(console.Page(TabWings));
             studioPageFlow = console.Page(TabStudio);
             SetStandingOrders();
             console.Finish();
@@ -155,26 +152,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// <summary>Each page's standing orders, shown one at a time in the console footer: usage doctrine, most important first.</summary>
         private void SetStandingOrders()
         {
-            console.Orders(TabPilot,
-                "Read the flight log before you taxi: fuel state, aircraft condition and life mode.",
-                "Free picks are spent on the SKILLS tab. A committed pick cannot be withdrawn.",
-                "Grade 1 of every OPS lane is free; picks buy grades 2 to 6.",
-                "Callsign, portrait and service background come from the saved pilot you fly as (STUDIO).");
-            console.Orders(TabSkills,
-                "Tap an open grade to read what it buys, then commit it. One pick, no undo.",
-                "A grade needs the grade before it. Grade 1 of every lane is free.",
-                "SPEND PICKS ON SPACE, CYBER OR SOF · GRADE 1 IS FREE",
-                "Picks come from mission score: fly, capture or rescue to earn the next one.");
-            console.Orders(TabWings,
-                "Tier sets an ace wing's threat; its skill badges say what it can do to you.",
-                "An ace wing that hunts you is flagged on every tab; the footer carries the alert.",
-                "An ace kill earns one skill point; a returning ace has met you before.",
-                "Wing management stays in Wing Command; this board only reports.");
-            console.Orders(TabStudio,
-                "ROSTER: a row opens that pilot's personnel file; RECRUIT adds a pilot, STUDIO › changes their look and identity.",
-                "STUDIO writes saved pilots and PNG portraits; SAVE keeps them for every mission, FLY AS makes one yours.",
-                "Roll fresh proofs, then tap one to adopt it; the insignia you had takes its place.",
-                "Tail-fin paint shows on your own aircraft only: OFF, COLOUR or LOW-VIS.");
+            console.Orders(TabPilot, "Free picks are spent on SKILLS. Tier sets an ace wing's threat; its badges say what it can do to you.");
+            console.Orders(TabSkills, "Tap an open grade to read what it buys, then commit it. One pick, no undo.");
+            console.Orders(TabStudio, "Roll fresh proofs and tap one to adopt it; FLY AS picks which saved pilot the dossier shows.");
         }
 
         /// <summary>Every tab carries the hover sentence the pre-kit-v2 console gave it.</summary>
@@ -182,9 +162,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         {
             string[] hints =
             {
-                "PILOT: your dossier. ID card, this sortie, the pick rings and every OPS lane at a glance.",
+                "PILOT: your dossier. ID card, this sortie, the pick ledger and the known hostile ace wings with their threat, skills and who they are hunting.",
                 "SKILLS: the OPS skill tree, three lanes of six grades. Tap an open grade, read what it buys, then unlock it. One pick, no undo.",
-                "ACES: your flight and the known hostile ace wings, with threat, skills and who they are hunting. Wing management stays in Wing Command.",
                 "STUDIO: the squadron's pilots and their files, the pilot studio, the squadron emblem and name. Saved pilots and art stay on this machine.",
             };
             AvControl[] tabs = bar.Rect.GetComponentsInChildren<AvControl>(true);
@@ -194,6 +173,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void OnTabChanged(int page)
         {
             CancelSkillConfirmation();
+            skillSigSet = aceSigSet = false;
             nextRefresh = 0f;
             if (page == TabStudio)
             {
@@ -228,25 +208,33 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 case TabPilot: RefreshPilotPage(bypass, score, bonus); break;
                 case TabSkills: RefreshSkillsPage(); break;
-                case TabWings: RefreshWingsPage(); break;
                 case TabStudio: RefreshStudioPage(); break;
             }
 
             UpdateFooter();
         }
 
+        private string huntBase, huntLine;
+
         private void UpdateFooter()
         {
             if (console == null) return;
-            string baseLine = console.CurrentPage == TabWings
-                ? (squad != null ? squad.Status : "No ace reports reach this console.")
-                : console.CurrentPage == TabStudio ? StudioStatusLine()
+            string baseLine = console.CurrentPage == TabStudio ? StudioStatusLine()
                 : progression.BypassRequirements ? "DEBUG BYPASS — EVERY GRADE OPEN"
                 : progression.LastResult;
             // A running ace hunt is the one alert every tab must carry; it used to live in a header chip.
-            bool hunted = squad != null && squad.HuntActive && console.CurrentPage != TabWings;
-            if (hunted) baseLine = "ACE HUNT ACTIVE · " + (string.IsNullOrEmpty(baseLine) ? "an ace is after you." : baseLine);
-            console.Footer.Set(baseLine, hunted ? AvState.Danger : progression.BypassRequirements ? AvState.Caution : AvState.Inert);
+            bool hunted = squad != null && squad.HuntActive;
+            if (hunted && (!ReferenceEquals(baseLine, huntBase) || huntLine == null))
+            {
+                huntBase = baseLine;
+                huntLine = "ACE HUNT ACTIVE · " + (string.IsNullOrEmpty(baseLine) ? "an ace is after you." : baseLine);
+            }
+            AvState state = hunted ? AvState.Danger : progression.BypassRequirements ? AvState.Caution : AvState.Inert;
+            if (!hunted && console.CurrentPage == TabStudio && StudioMessageLive)
+                state = studioMessageTone == StudioTone.Ok ? AvState.Ready
+                    : studioMessageTone == StudioTone.Warn ? AvState.Caution
+                    : studioMessageTone == StudioTone.Bad ? AvState.Danger : state;
+            console.Footer.Set(hunted ? huntLine : baseLine, state);
         }
 
         // ---- Local cosmetics -------------------------------------------------------------

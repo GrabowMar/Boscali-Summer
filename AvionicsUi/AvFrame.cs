@@ -42,13 +42,16 @@ namespace NOAvionics
             Paint(AvStyleHost.Resolve(c.Background, fill), AvStyleHost.Resolve(c.Border, stroke));
         }
 
+        // Every button, row, card and chip is an AvFrame and its mesh rebuilds on each hover, press and restyle: shared scratch, no garbage.
+        private static readonly AvV2[] outerScratch = new AvV2[8], innerScratch = new AvV2[8];
+
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();
             Rect r = GetPixelAdjustedRect();
-            AvV2[] outer = AvMeshMath.ChamferPolygon(r.xMin, r.yMin, r.xMax, r.yMax, Chamfer);
+            AvV2[] outer = AvMeshMath.ChamferPolygon(r.xMin, r.yMin, r.xMax, r.yMax, Chamfer, outerScratch);
             float s = Mathf.Max(0f, Stroke);
-            AvV2[] inner = AvMeshMath.ChamferPolygon(r.xMin + s, r.yMin + s, r.xMax - s, r.yMax - s, AvMeshMath.Inset(Chamfer, s));
+            AvV2[] inner = AvMeshMath.ChamferPolygon(r.xMin + s, r.yMin + s, r.xMax - s, r.yMax - s, AvMeshMath.Inset(Chamfer, s), innerScratch);
 
             if (Fill && FillColor.a > 0f)
             {

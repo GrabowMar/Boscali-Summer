@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private Camera camera;
         private Cockpit controls;
         private UniversalAdditionalCameraData cameraData;
-        private bool controlsBound, stickExpected, throttleExpected;
+        private bool controlsBound, stickExpected, throttleExpected, kneeboardOnRight;
         private int bindFrame;
         private float retryAt, controlsRetryAt;
         private int warnedAircraft;
@@ -52,6 +52,9 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public string EffectId => "cockpit-pilot";
 
         internal void Configure(ImmersionSettings value, ManualLogSource log) { settings = value; logger = log; Live = this; }
+
+        internal static bool IsLocalAircraft(Aircraft followed) => followed != null &&
+            GameManager.GetLocalAircraft(out Aircraft local) && local == followed;
 
         private void LateUpdate()
         {
@@ -62,7 +65,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             if (Application.isBatchMode || settings == null || !settings.Enabled.Value ||
                 (!settings.PilotBodyEnabled.Value && !settings.PilotReflectionEnabled.Value) || cameras == null ||
                 CameraStateManager.cameraMode != CameraMode.cockpit || cameras.currentState != cameras.cockpitState ||
-                followed == null || followed.disabled || followed.cockpit == null || followedPilot == null ||
+                !IsLocalAircraft(followed) || followed.disabled || followed.cockpit == null || followedPilot == null ||
                 followedPilot.dead || followedPilot.ejected || renderCamera == null || !renderCamera.enabled || cameras.mainCamera == null)
             { if (aircraft != null) ResetForScene(); return; }
             if (followed != aircraft || followedPilot != pilot || renderCamera != camera)
@@ -71,13 +74,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             }
             if (!rig.Valid)
             {
-                reflection.Release(); rig.Release();
+                kneeboard.Detach(); reflection.Release(); rig.Release();
                 if (Time.unscaledTime < retryAt) return;
                 retryAt = Time.unscaledTime + 2f;
                 if (!Bind()) return;
             }
             using (FxBus.Time(EffectId))
             {
+                rig.SetModel(settings.PilotModel.Value);
                 rig.CopySeatedPose();
                 if ((!controlsBound || controls == null || (stickExpected && !rig.StickBound) || (throttleExpected && !rig.ThrottleBound)) &&
                     Time.frameCount > bindFrame + 1 && Time.unscaledTime >= controlsRetryAt)
@@ -94,7 +98,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
                 rig.SetBodyVisible(settings.PilotBodyEnabled.Value);
                 // Handedness is known once controls bind (or after a short grace for control-less layouts).
                 // Re-seat the card if control handedness resolved after it was placed; no card while the body is hidden.
-                if (kneeboard.Bound && kneeboard.RightThigh == rig.StickOnRight) kneeboard.Detach();
+                if (kneeboard.Bound && kneeboard.RightThigh != kneeboardOnRight) kneeboard.Detach();
                 if (!kneeboard.Bound && settings.PilotBodyEnabled.Value && (controlsBound || Time.frameCount > bindFrame + 30) &&
                     kneeboard.TryBeginBind()) BindKneeboard();
                 kneeboard.SetVisible(settings.PilotBodyEnabled.Value);
@@ -125,6 +129,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             var animator = PilotAnimator.GetValue(pilot) as Animator;
             if (!rig.Bind(source, animator, PilotShaderBundle.GetBody(), camera)) { WarnUnavailable(); return false; }
             rig.SetFrame(aircraft.cockpit.transform);
+            kneeboardOnRight = RightKneeboard(aircraft.name, rig.StickOnRight);
             camera.TryGetComponent(out cameraData);
             ModuleServices.TryGet(out ICanopyGlassView canopy);
             reflection.SetGlassView(canopy);
@@ -137,10 +142,18 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         private void BindKneeboard()
         {
-            bool rightThigh = !rig.StickOnRight; // the free hand's side, away from the stick
+            bool rightThigh = kneeboardOnRight;
             kneeboard.Bind(rig.Bone(rightThigh ? "thigh_R" : "thigh_L"), rig.Bone(rightThigh ? "shin_R" : "shin_L"),
                 aircraft.cockpit.transform.up, rightThigh, aircraft, PilotShaderBundle.GetBody());
             rig.SetCompanion(kneeboard.Renderer);
+        }
+
+        internal static bool RightKneeboard(string nativeAirframe, bool stickOnRight)
+        {
+            // These two native captain seats have an adjacent left stick whose full throw
+            // clips a left board. The right thigh clears both sticks and the throttle.
+            // Other layouts retain the free hand's side. Resolve at bind, never scan per frame.
+            return nativeAirframe == "EW1" || nativeAirframe == "Darkreach" || !stickOnRight;
         }
 
         private void WarnUnavailable()
@@ -166,6 +179,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             stickExpected = sticks != null && sticks.Length > 0;
             throttleExpected = throttles != null && throttles.Length > 0;
             rig.SetControlHandedness(!ThrottleOnRight(throttles));
+            kneeboardOnRight = RightKneeboard(aircraft.name, rig.StickOnRight);
             bool stickRight = rig.StickOnRight;
             Vector3 stickGrip = Vector3.zero, throttleGrip = Vector3.zero;
             Quaternion stickRotation = Quaternion.identity, throttleRotation = Quaternion.identity;
@@ -264,6 +278,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             kneeboard.Detach(); reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
             controlsBound = stickExpected = throttleExpected = false;
+            kneeboardOnRight = false;
             retryAt = controlsRetryAt = 0; warnedAircraft = 0; reportedControls = -1;
         }
         public void ReleaseFx() { ResetForScene(); kneeboard.Release(); PilotShaderBundle.Release(); }
@@ -272,7 +287,9 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         public void DescribeFx(IDictionary<string, object> state)
         {
             state["pilotBodyBound"] = rig.Valid;
+            state["pilotAircraft"] = aircraft != null && aircraft.definition != null ? aircraft.definition.unitName : "none";
             state["pilotBodyDedicatedMesh"] = rig.Valid && rig.BodyRenderer != rig.Renderer;
+            state["pilotModel"] = rig.Model.ToString();
             state["pilotBodyVertices"] = rig.BodyRenderer != null && rig.BodyRenderer.sharedMesh != null
                 ? rig.BodyRenderer.sharedMesh.vertexCount : 0;
             state["pilotTransforms"] = rig.TransformCount;

@@ -26,6 +26,9 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         public const float MaxGateScale = 2.2f;
         public const int Wardens = 4;
         public const float WardenRing = 170f;
+        public const int Anchors = 3;
+        public const float EntryHeight = 45f;
+        public const float DimensionRadius = 7000f;
 
         private static readonly int[] BaseSize = { 6, 8, 6, 12 };
         private static readonly int[] BaseAir = { 0, 1, 2, 3 };
@@ -71,6 +74,33 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         /// <summary>Seconds from wave <paramref name="index"/> to the next one: the beat, plus a breather after a HORDE.</summary>
         public static float Delay(int index) => WaveSeconds + (Theme(index) == HellTheme.Horde ? BreatherSeconds : 0f);
 
+        /// <summary>Captured bases sustain reinforcements; breaking an anchor permanently slows the invasion.</summary>
+        public static float InvasionDelay(int index, int heldBases, int brokenAnchors) =>
+            Math.Max(18f, Delay(index) - Math.Min(heldBases, 4) * 4f + Math.Max(0, brokenAnchors) * 10f);
+
+        public static int InvasionToSpawn(int index, int alive, int heldBases, int brokenAnchors) =>
+            Math.Max(0, Math.Min(MaxAlive - alive, Math.Min(MaxWave, Size(index) + Math.Min(4, Math.Max(0, heldBases)) * 2) - Math.Max(0, brokenAnchors) * 2));
+
+        /// <summary>Descend into the ground rift before hitting its floor. Horizontal overflights and teleport jumps do not count.</summary>
+        public static bool EnteredRift(float previousHeight, float height, float across, float radius) =>
+            previousHeight > EntryHeight && height <= EntryHeight && height >= -10f &&
+            previousHeight - height < 500f && across < radius * 0.9f;
+
+        public static bool DimensionWon(int brokenAnchors) => brokenAnchors >= Anchors;
+
+        /// <summary>Volcanic atmosphere fades across the boundary and above the terrain, never staining distant overflights.</summary>
+        public static float CorruptionWeight(float distance, float height, float radius)
+        {
+            if (!float.IsFinite(distance) || !float.IsFinite(height) || !float.IsFinite(radius) || radius <= 0f) return 0f;
+            return (1f - Smooth((Math.Max(0f, distance) / radius - .55f) / .85f)) * (1f - Smooth((Math.Abs(height) - 250f) / 1350f));
+        }
+
+        private static float Smooth(float value)
+        {
+            value = Math.Max(0f, Math.Min(1f, value));
+            return value * value * (3f - 2f * value);
+        }
+
         /// <summary>The gate's size after <paramref name="waves"/> waves came through: 12 % bigger each, up to <see cref="MaxGateScale"/>.</summary>
         public static float GateScale(int waves) => Math.Min(MaxGateScale, 1f + 0.12f * Math.Max(waves, 0));
 
@@ -82,7 +112,7 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         public static string Banner(int index) => "WAVE " + (index + 1) + " · " + Theme(index).ToString().ToUpperInvariant();
 
         /// <summary>
-        /// Did the aircraft fly through the disc between two samples? <paramref name="wasAlong"/> and <paramref name="along"/> are its
+        /// Legacy vertical-disc crossing helper; ground rifts use <see cref="EnteredRift"/>. <paramref name="wasAlong"/> and <paramref name="along"/> are the
         /// signed distances along the disc's normal before and now, <paramref name="across"/> its distance from the axis now. It must
         /// change side within the radius; a jump of 500 m or more in one sample is a teleport (floating origin, respawn), not a pass.
         /// </summary>

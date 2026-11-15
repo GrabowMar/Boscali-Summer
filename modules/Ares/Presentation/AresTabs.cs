@@ -10,7 +10,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Ares.Presentation
 {
     /// <summary>
-    /// ARES's three MISC tabs, kit parts only. Every button calls the matching <see cref="AresHost"/> method; the host's answer shows in
+    /// ARES's three MISC tabs (CHEATS also carries the DEV switches), kit parts only. Every button calls the matching <see cref="AresHost"/> method; the host's answer shows in
     /// the ARES line at the end of each page, and the map pick in progress latches its button.
     /// </summary>
     internal sealed class AresTabs : IMiscTabs
@@ -23,17 +23,22 @@ namespace BoscaliSummer.Modules.Ares.Presentation
         private static readonly string[] Helps =
         {
             "Spawn aircraft, ground units, ships, buildings or whole kits on map clicks, for any side.",
-            "Strikes anywhere, the weather console, the clock, free OPS casts, fire and levelling.",
-            "God mode, infinite fuel and ammo, boost, low gravity, reveal all, time stop and more. This session only."
+            "Strikes anywhere, the clock, free OPS casts, fire and levelling.",
+            "God mode, infinite fuel and ammo, boost, low gravity, reveal all, time stop, and the developer switches."
         };
 
         private readonly AresHost host;
         private readonly ModConfiguration settings;
 
+        // The host's one result line is shown on the page that last changed it, so no page wears another page's answer.
+        private string resultSeen;
+        private int resultPage;
+
         public AresTabs(AresHost host, ModConfiguration settings)
         {
             this.host = host;
             this.settings = settings;
+            resultSeen = host.Result;
         }
 
         public int Count => Labels.Length;
@@ -46,12 +51,20 @@ namespace BoscaliSummer.Modules.Ares.Presentation
         {
             switch (tab)
             {
-                case Spawn: BuildSpawn(page, flow, console); break;
+                case Spawn: resultPage = page; BuildSpawn(page, flow, console); break;
                 case Powers: BuildPowers(page, flow, console); break;
                 case Cheats: BuildCheats(page, flow, console); break;
             }
             AvNote line = flow.Add(new AvNote(flow.Content, AvTextRole.ProseSmall) { MinHeight = 14f });
-            flow.Ticker.Add(page, AvTickRate.Slow, () => line.Set(host.Result, AvState.Info));
+            flow.Ticker.Add(page, AvTickRate.Slow, () =>
+            {
+                if (host.Result != resultSeen)
+                {
+                    resultSeen = host.Result;
+                    resultPage = page;
+                }
+                line.Set(resultPage == page ? resultSeen : "", AvState.Info);
+            });
         }
 
         private static AvControl.Spec Button(string label, Action press, AvIcon icon, AvButtonStyle style = AvButtonStyle.Default) =>
@@ -116,7 +129,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             actions.Controls[2].Help = "Removes everything ARES spawned this mission.";
             AvNote tally = flow.Add(new AvNote(flow.Content, AvTextRole.Micro) { MinHeight = 12f });
 
-            int shownKind = -1;
+            int shownKind = -1, shownSpawned = -1, shownSide = -1, shownItem = -1;
             void Refresh()
             {
                 side.Refresh();
@@ -131,14 +144,17 @@ namespace BoscaliSummer.Modules.Ares.Presentation
                 altitude.Refresh();
                 actions.Controls[0].Latched = host.Placing;
                 actions.Controls[0].Label = host.Placing ? "STOP" : "PLACE";
-                tally.Set(host.Spawned + " ARES UNIT(S) OUT · " + AresHost.SideName(host.Side) + " · " + host.ItemName(host.Item), AvState.Inert);
+                if (shownSpawned != host.Spawned || shownSide != host.Side || shownItem != host.Item)
+                {
+                    shownSpawned = host.Spawned;
+                    shownSide = host.Side;
+                    shownItem = host.Item;
+                    tally.Set(host.Spawned + " ARES UNIT(S) OUT · " + AresHost.SideName(host.Side) + " · " + host.ItemName(host.Item), AvState.Inert);
+                }
             }
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
-            console.Orders(page,
-                "Pick a side and a unit, then PLACE and right-click the map.",
-                "Right-press, drag and release to face what you place.",
-                "UNDO takes back the last placement; CLEAR ALL takes back every one.");
+            console.Orders(page, "Right-press, drag and release to face what you place.");
         }
 
         // ------------------------------------------------------------------ POWERS
@@ -147,6 +163,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
         {
             AvSection strikeHead = flow.Section(AvIcon.Bolt, "STRIKE", "FOR THE SPAWN SIDE");
             var munition = new AvStepper(flow.Content, "MUNITION", () => host.MunitionName, () => host.Munition--, () => host.Munition++);
+            munition.ValueMax = 220f;   // munition names run long: one line, not three
             flow.Add(munition);
             AvSegmented pattern = flow.Add(AvSegmented.Strip(flow.Content, AresHost.Patterns, () => host.Pattern, v => host.Pattern = v));
             AvButtons strike = flow.Buttons(Button("STRIKE", Pick("STRIKE", host.ArmStrike), AvIcon.Target));
@@ -157,12 +174,8 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             {
                 bool armed = host.Armed && host.PickLabel == "STRIKE";
                 strikeHead.SetCaption(armed ? "ARMED · ESC CANCELS" : "FOR THE SPAWN SIDE");
-                brief.Set((armed ? "TARGETING · " : "") + host.MunitionName + " · " + PatternBrief[host.Pattern], armed ? AvState.Caution : AvState.Inert);
+                brief.Set(PatternBrief[host.Pattern], armed ? AvState.Caution : AvState.Inert);
             });
-
-            flow.Section(AvIcon.CloudRain, "WEATHER", "CTRL+O");
-            AvButtons weather = flow.Buttons(Button("OPEN WEATHER CONSOLE", () => host.OpenWeatherConsole(), AvIcon.CloudRain));
-            weather.Controls[0].Help = "The Met Office: hold states, set-pieces, scenarios, back to live.";
 
             flow.Section(AvIcon.Clock, "TIME", "HOST");
             var hour = new AvStepper(flow.Content, "HOUR", () => AresMath.Hour(host.Hour), () => host.SetHour(host.Hour - 1f), () => host.SetHour(host.Hour + 1f));
@@ -193,10 +206,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             }
             Refresh();
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
-            console.Orders(page,
-                "Strikes fly for the side picked on SPAWN.",
-                "An armed button glows amber until the map click lands.",
-                "Weather lives in the Ctrl+O console; the clock moves the sun now.");
+            console.Orders(page, "An armed button glows amber until the map click lands.");
         }
 
         private static readonly string[] PatternBrief = { "ONE ROUND FROM 1.5 KM", "8 ROUNDS OVER 250 M", "ONE ROUND FROM 12 KM OUT" };
@@ -234,10 +244,17 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             quick.Controls[0].Help = "Repairs, rearms and refuels your aircraft now.";
 
             BuildHuntingWing(page, flow);
-            console.Orders(page,
-                "Testing aids, never in a public build.",
-                "On a server only the host's BYPASS and COOLDOWN count.",
-                "Cheat switches last until the game closes.");
+
+            flow.Section(AvIcon.Terminal, "DEV", "THIS MACHINE");
+            AvCellGrid dev = flow.Grid(2);
+            ConfigToggle(flow, dev, page, "VERBOSE LOG", settings.Diagnostics.VerboseLogging);
+            ConfigToggle(flow, dev, page, "WING LOG", settings.Wing.VerboseLogging);
+            ConfigToggle(flow, dev, page, "FOOTPRINT", settings.Diagnostics.FootprintProfiler);
+            ConfigToggle(flow, dev, page, "DEV TOOLS", settings.Wing.DevTools);
+            ConfigEntry<bool> devTools = settings.Wing.DevTools;
+            ConfigToggle(flow, dev, page, "WING OVERLAY", settings.Wing.Overlay, () => devTools.Value);
+
+            console.Orders(page, "Cheats last until the game closes; on a server only the host's BYPASS and COOLDOWN count.");
         }
 
         private void BuildHuntingWing(int page, AvFlow flow)
@@ -250,7 +267,7 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             AvControl plus = tierRow.AddTrailing(new AvControl.Spec("", () => tier.Value = Mathf.Min(5, tier.Value + 1), AvButtonStyle.Quiet, AvIcon.Plus));
             tierRow.Help = tier.Description.Description;
             flow.Add(tierRow);
-            var result = new AvNote(flow.Content, "Host only. Fly an aircraft in a running mission.");
+            var result = new AvNote(flow.Content, "");
             AvButtons actions = flow.Buttons(
                 new AvControl.Spec("SPAWN", () => result.Set(squad.SpawnDebugWing?.Invoke(tier.Value) ?? "", AvState.Info), AvButtonStyle.Primary, AvIcon.Skull),
                 new AvControl.Spec("CLEAR MINE", () => result.Set(squad.ClearDebugWings?.Invoke() ?? "", AvState.Info), AvButtonStyle.Quiet, AvIcon.Trash));
@@ -269,15 +286,29 @@ namespace BoscaliSummer.Modules.Ares.Presentation
             flow.Ticker.Add(page, AvTickRate.Slow, Refresh);
         }
 
-        private static void Toggle(AvFlow flow, AvCellGrid grid, int page, string title, string help, Func<bool> get, Action<bool> set)
+        private static AvCell Toggle(AvFlow flow, AvCellGrid grid, int page, string title, string help, Func<bool> get, Action<bool> set)
         {
             AvCell cell = grid.Toggle(title, "", get, set);
             cell.Help = help;
             flow.Ticker.Add(page, AvTickRate.Slow, cell.Refresh);
+            return cell;
         }
 
-        /// <summary>A [Debug] config switch; its own description is the hover help.</summary>
-        private static void ConfigToggle(AvFlow flow, AvCellGrid grid, int page, string title, ConfigEntry<bool> entry) =>
-            Toggle(flow, grid, page, title, entry.Description.Description, () => entry.Value, v => entry.Value = v);
+        /// <summary>A config switch; its own description is the hover help. With <paramref name="enabled"/> the cell is dead until it holds.</summary>
+        private static void ConfigToggle(AvFlow flow, AvCellGrid grid, int page, string title, ConfigEntry<bool> entry, Func<bool> enabled = null)
+        {
+            string help = entry.Description.Description;
+            AvCell cell = Toggle(flow, grid, page, title, help, () => entry.Value, v => { if (enabled == null || enabled()) entry.Value = v; });
+            if (enabled == null) return;
+            void Gate()
+            {
+                bool avail = enabled();
+                if (cell.Interactable == avail) return;
+                cell.Interactable = avail;
+                cell.Help = avail ? help : "Turn on DEV TOOLS first.";
+            }
+            Gate();
+            flow.Ticker.Add(page, AvTickRate.Slow, Gate);
+        }
     }
 }

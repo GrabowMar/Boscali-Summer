@@ -1,4 +1,6 @@
 using System;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -25,6 +27,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         internal int Height => targets.Height;
         internal int Width => targets.Width;
         internal long TargetBytes => targets.TargetBytes;
+        internal static bool IsWeatherExcluded(Camera view) =>
+            ModuleServices.TryGet(out IWeatherCameraExclusion exclusion) && exclusion.Contains(view);
 
         internal WeatherCloudPass()
         {
@@ -63,8 +67,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // A resolved cover belongs only to the camera/frame that executes Record below.
             Shader.SetGlobalFloat(CloudLowRes.CoverFrameId, 0f);
             if (rendering == null) return;
-            if (volume != null) volume.forceRenderingOff = rendering != camera;
+            bool excluded = IsWeatherExcluded(rendering);
+            if (volume != null) volume.forceRenderingOff = rendering != camera || excluded;
             if (rendering != camera) return;
+            if (excluded) { ExecutedFrame = -1; targets.InvalidateHistory(); return; }
             if (!reduced) { beforeRender?.Invoke(rendering, rendering.worldToCameraMatrix, rendering.projectionMatrix); return; }
             // The camera rides the interpolated aircraft hierarchy: it moves after LateUpdate,
             // and culling bakes the composite cube's matrix. Re-follow here, pre-cull, or the
@@ -79,6 +85,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
             if (march == null || composite == null || renderingData.cameraData.camera != camera) return;
+            if (IsWeatherExcluded(camera))
+            {
+                if (volume != null) volume.forceRenderingOff = true;
+                ExecutedFrame = -1;
+                targets.InvalidateHistory();
+                return;
+            }
             RenderTextureDescriptor screen = renderingData.cameraData.cameraTargetDescriptor;
             if (!targets.Ensure(screen.width, screen.height)) { ExecutedFrame = -1; return; }
             // A frame without the pass leaves stale history behind.

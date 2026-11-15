@@ -106,7 +106,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// </summary>
     internal sealed class SetRingCell : AvPart
     {
-        private const float Pad = 10f, H = 30f, BtnW = 22f, BtnH = 20f, Ladder = 2f;
+        private const float Pad = 10f, H = 30f, BtnW = 26f, BtnH = 24f, Ladder = 2f;   // keys are 24 px at least: a pointer target, not a speck
         private readonly AvFrame frame;
         private readonly TMP_Text title, value;
         private readonly AvGaugeGraphic dial;

@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
 {
     /// <summary>
     /// The night-vision pass on the world camera, after transparents and before the cockpit and the game's
-    /// post-processing: the frame becomes phosphor, the hot units are redrawn as a glow, and ten times a second
+    /// post-processing: the frame becomes phosphor, depth-tested hot silhouettes become contours, and ten times a second
     /// a 16 x 16 average of the frame is read back for the tube's gain meter.
     /// </summary>
     internal sealed class NvgPass : ScriptableRenderPass, IDisposable
@@ -25,13 +25,16 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         private static readonly int FrameId = Shader.PropertyToID("_BoscaliNvgFrame");
         private static readonly int TintId = Shader.PropertyToID("_NvgTint");
         private static readonly int NoiseId = Shader.PropertyToID("_NvgNoise");
+        private static readonly int ResponseId = Shader.PropertyToID("_NvgResponse");
         private static readonly int HeatId = Shader.PropertyToID("_NvgHeat");
         private static readonly int HeatColorId = Shader.PropertyToID("_NvgHeatColor");
+        private static readonly int HeatMaskId = Shader.PropertyToID("_BoscaliNvgHeatMask");
 
         private Material phosphor, heat;
         private Camera camera;
         private RenderTexture meter;
         private bool hooked, pending;
+        private int meterGeneration;
         private float nextMeter;
 
         internal readonly List<HotRenderer> Hot = new List<HotRenderer>(256);
@@ -39,6 +42,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         internal Color Tint, HeatColor;
         /// <summary>x: grain on the signal, y: noise floor.</summary>
         internal Vector2 Noise;
+        internal float Exposure = 1f;
 
         /// <summary>The last meter reading, in the frame's own linear units before exposure.</summary>
         internal float Mean { get; private set; }
@@ -86,32 +90,55 @@ namespace BoscaliSummer.Modules.QoL.Visuals
                 cmd.GetTemporaryRT(FrameId, frame, FilterMode.Bilinear);
                 cmd.Blit(renderer.cameraColorTargetHandle, FrameId);
                 cmd.SetGlobalColor(TintId, Tint);
+                cmd.SetGlobalVector(ResponseId, new Vector4(Exposure, 0f, 0f, 0f));
                 cmd.SetGlobalVector(NoiseId, new Vector4(Noise.x, Noise.y, (Time.frameCount & 63) * 7.31f,
                     Mathf.Max(0f, Mathf.Round(Mathf.Log(frame.width / (float)MeterSize, 2f)))));
                 if (meterNow)
                 {
                     cmd.GenerateMips(FrameId);
                     cmd.Blit(FrameId, meter, phosphor, 1);
-                    cmd.RequestAsyncReadback(meter, OnMeter);
+                    int generation = meterGeneration;
+                    cmd.RequestAsyncReadback(meter, request => OnMeter(request, generation));
                     pending = true;
                     nextMeter = Time.unscaledTime + MeterInterval;
                 }
-                cmd.Blit(FrameId, renderer.cameraColorTargetHandle, phosphor, 0);
-                // URP tracks its own attachments; give the camera its targets back before drawing into them.
-                cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
                 int draws = 0;
-                if (DrawHeat && heat != null)
+                bool drawHeat = DrawHeat && heat != null;
+                RenderTextureDescriptor mask = renderingData.cameraData.cameraTargetDescriptor;
+                if (drawHeat)
                 {
-                    cmd.SetGlobalColor(HeatColorId, HeatColor);
+                    mask.depthBufferBits = 0;
+                    if (renderer.cameraDepthTargetHandle.rt != null)
+                        mask.msaaSamples = renderer.cameraDepthTargetHandle.rt.antiAliasing;
+                    mask.colorFormat = SystemInfo.SupportsRenderTextureFormat(RenderTextureFormat.R8)
+                        ? RenderTextureFormat.R8 : RenderTextureFormat.ARGB32;
+                    mask.sRGB = false;
+                    mask.useMipMap = mask.autoGenerateMips = false;
+                    mask.bindMS = false;
+                    if (SystemInfo.GetRenderTextureSupportedMSAASampleCount(mask) != mask.msaaSamples)
+                        mask.colorFormat = RenderTextureFormat.ARGB32;
+                    drawHeat = SystemInfo.GetRenderTextureSupportedMSAASampleCount(mask) == mask.msaaSamples;
+                }
+                if (drawHeat)
+                {
+                    cmd.GetTemporaryRT(HeatMaskId, mask, FilterMode.Bilinear);
+                    cmd.SetRenderTarget(new RenderTargetIdentifier(HeatMaskId), renderer.cameraDepthTargetHandle);
+                    cmd.ClearRenderTarget(false, true, Color.clear);
                     for (int i = 0; i < Hot.Count && draws < MaxDraws; i++)
                     {
                         HotRenderer hot = Hot[i];
                         if (hot.Renderer == null || !hot.Renderer.enabled || !hot.Renderer.isVisible) continue;
                         cmd.SetGlobalFloat(HeatId, hot.Heat);
-                        for (int s = 0; s < hot.Submeshes; s++, draws++) cmd.DrawRenderer(hot.Renderer, heat, s, 0);
+                        for (int s = 0; s < hot.Submeshes && draws < MaxDraws; s++, draws++) cmd.DrawRenderer(hot.Renderer, heat, s, 0);
                     }
                 }
+                else cmd.SetGlobalTexture(HeatMaskId, Texture2D.blackTexture);
+                cmd.SetGlobalColor(HeatColorId, drawHeat ? HeatColor : Color.clear);
+                cmd.Blit(FrameId, renderer.cameraColorTargetHandle, phosphor, 0);
+                // URP tracks its own attachments; give the camera its targets back after the blit.
+                cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
                 Draws = draws;
+                if (drawHeat) cmd.ReleaseTemporaryRT(HeatMaskId);
                 cmd.ReleaseTemporaryRT(FrameId);
                 context.ExecuteCommandBuffer(cmd);
                 ExecutedFrame = Time.frameCount;
@@ -119,8 +146,9 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             finally { CommandBufferPool.Release(cmd); }
         }
 
-        private void OnMeter(AsyncGPUReadbackRequest request)
+        private void OnMeter(AsyncGPUReadbackRequest request, int generation)
         {
+            if (generation != meterGeneration) return;
             pending = false;
             if (request.hasError) return;
             NativeArray<float> data = request.GetData<float>();
@@ -153,6 +181,10 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         {
             Active = false;
             Metered = false;
+            pending = false;
+            meterGeneration++;
+            nextMeter = 0f;
+            Draws = 0;
             Hot.Clear();
         }
 

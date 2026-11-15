@@ -194,6 +194,26 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             return FrontOutcome.None;
         }
 
+        /// <summary>
+        /// A human's picked spot for a build the quartermaster already queued without one (same programme, pool-owned, no point): that row takes the spot, keeping its
+        /// funding and build progress, so the pick is what gets built. Without this the automatic row was built first at its automatic spot and the pick queued behind it
+        /// (or was refused by the cap the automatic row filled). False when no such row waits.
+        /// </summary>
+        public bool AdoptPick(Front f, ProgrammeId id, float x, float z, float now)
+        {
+            if (!float.IsFinite(x) || !float.IsFinite(z)) return false;
+            FrontSide s = sides[(int)f];
+            foreach (FrontProgrammeEntry e in s.Queue)
+            {
+                if (e.Id != id || e.HasPoint || e.Owner != 0) continue;
+                e.HasPoint = true; e.X = x; e.Z = z;
+                LastHumanQueue[(int)f] = now;
+                AddLog(s, FrontLogCode.Queued, (int)id, 0, now);
+                return true;
+            }
+            return false;
+        }
+
         /// <summary>Human factions: the quartermaster steps in only after a quiet spell with an empty queue. AI factions: whenever the queue is empty.</summary>
         public bool QuartermasterDue(Front f, float now, bool humanFaction) =>
             sides[(int)f].Queue.Count == 0 && (!humanFaction || now - LastHumanQueue[(int)f] >= FrontRules.QuartermasterIdleSeconds);

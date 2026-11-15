@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
+using System.Threading;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Contracts;
@@ -14,6 +15,7 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Scenario.Configuration;
 using BoscaliSummer.Modules.Scenario.Presentation;
+using Cysharp.Threading.Tasks;
 using HarmonyLib;
 using NOAvionics;
 using NuclearOption.SavedMission;
@@ -58,6 +60,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private readonly HashSet<string> effectFiles = new HashSet<string>(StringComparer.Ordinal);
         // Counts missions: a recording that finishes loading after its mission ended is thrown away.
         private int voiceRound;
+        private CancellationTokenSource voiceLifetime, musicLoad;
         private float musicVolume, musicFadeFrom = -1f, musicEndsAt;
         private int musicAsked;
         private int shotsShown, skippedShots;
@@ -65,22 +68,31 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
 #if !PUBLIC_RELEASE
         private int linesSaid, cutsPlayed, shotsPlayed, heard;
+        private int audioRequests;
         private string lastLine = "";
 
         internal static ScenarioHost Instance { get; private set; }
 
         /// <summary>For unattended in-game tests: what the runner has done so far.</summary>
-        internal Dictionary<string, object> Report() => new Dictionary<string, object>
+        internal Dictionary<string, object> Report()
         {
-            ["ok"] = true, ["script"] = script?.Id ?? "", ["started"] = started ? 1 : 0, ["joined"] = joined ? 1 : 0,
-            ["side"] = runner == null ? "" : runner.Side.ToString(), ["airborne"] = airborne ? 1 : 0, ["cut_playing"] = cutPlaying ? 1 : 0,
-            ["cuts_played"] = cutsPlayed, ["shots_played"] = shotsPlayed, ["lines_said"] = linesSaid, ["last_line"] = lastLine,
-            ["objective_events"] = heard, ["flags"] = runner == null ? "" : string.Join(",", runner.Flags),
-            ["finished"] = runner != null && runner.Finished ? 1 : 0, ["idle"] = runner != null && runner.Idle ? 1 : 0,
-            ["music_playing"] = music != null && music.isPlaying ? 1 : 0, ["game_music_muted"] = gameMusicMuted ? 1 : 0,
-            ["flight_controls_enabled"] = GameManager.flightControlsEnabled ? 1 : 0,
-            ["join_menu_open"] = NuclearOption.UI.LeaderboardMenu.IsOpen() ? 1 : 0
-        };
+            int ready = 0;
+            foreach (AudioClip clip in voiceClips.Values) if (clip != null) ready++;
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["script"] = script?.Id ?? "", ["started"] = started ? 1 : 0, ["joined"] = joined ? 1 : 0,
+                ["side"] = runner == null ? "" : runner.Side.ToString(), ["airborne"] = airborne ? 1 : 0, ["cut_playing"] = cutPlaying ? 1 : 0,
+                ["cuts_played"] = cutsPlayed, ["shots_played"] = shotsPlayed, ["lines_said"] = linesSaid, ["last_line"] = lastLine,
+                ["objective_events"] = heard, ["flags"] = runner == null ? "" : string.Join(",", runner.Flags),
+                ["finished"] = runner != null && runner.Finished ? 1 : 0, ["idle"] = runner != null && runner.Idle ? 1 : 0,
+                ["music_playing"] = music != null && music.isPlaying ? 1 : 0, ["game_music_muted"] = gameMusicMuted ? 1 : 0,
+                ["flight_controls_enabled"] = GameManager.flightControlsEnabled ? 1 : 0,
+                ["join_menu_open"] = NuclearOption.UI.LeaderboardMenu.IsOpen() ? 1 : 0,
+                ["host_enabled"] = enabled ? 1 : 0, ["audio_requests"] = audioRequests,
+                ["voice_clips"] = voiceClips.Count, ["voice_clips_ready"] = ready,
+                ["unitask_player_loop"] = PlayerLoopHelper.IsInjectedUniTaskPlayerLoop() ? 1 : 0
+            };
+        }
 #endif
 
         private Func<Mission, ScenarioDef> scriptOf;
@@ -197,6 +209,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (script == null) { early.Clear(); return; }
             ScenarioDef running = script;
             runner = new ScenarioRunner(running, this, flag => library.Progress.Has(running.Saga, flag)) { World = this };
+            voiceLifetime = new CancellationTokenSource();
             foreach (KeyValuePair<TriggerKind, string> heard in early) runner.Raise(heard.Key, heard.Value);
             // A session that never loaded through the mission-preparation seam still needs the events.
             Listen();
@@ -227,7 +240,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                         }
                 }
             // Every recording decodes now, so the first line of a cutscene and a line in a firefight are both ready when they are needed.
-            if (recordings.Count > 0) StartCoroutine(LoadVoices(recordings, voiceRound));
+            if (recordings.Count > 0) LoadVoices(recordings, voiceRound, voiceLifetime.Token).Forget();
             log?.LogInfo("[Scenario] '" + running.Id + "' is running: " + running.Beats.Count + " beat(s).");
             if (running.Contract != ScenarioSide.Any)
                 log?.LogInfo("[Scenario] contract " + running.Contract + ": not yet acted on; the script's peace lines decide who fights whom.");
@@ -235,6 +248,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
         private void Unbind()
         {
+            voiceRound++;
+            CancelAudio(ref voiceLifetime);
             if (cutPlaying) camera?.Stop();
             cutPlaying = false;
             ShowGameUi();
@@ -256,23 +271,36 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             pictures.Clear();
             StopMusic();
             ReleaseGameMusic();
-            if (voice != null) voice.Stop();
-            if (radio != null) radio.Stop();
+            if (voice != null) { voice.Stop(); voice.clip = null; }
+            if (radio != null) { radio.Stop(); radio.clip = null; }
+            effectRound++;
+            if (effects != null) effects.Stop();
             foreach (AudioClip clip in voiceClips.Values)
                 if (clip != null) Destroy(clip);
             voiceClips.Clear();
-            voiceRound++;
+            effectFiles.Clear();
         }
 
         public void Music(string file, float volume, bool loop)
         {
+            CancelAudio(ref musicLoad);
+            int asked = ++musicAsked;
             if (file == null)
             {
                 if (music != null && music.isPlaying && musicFadeFrom < 0f) musicFadeFrom = Time.unscaledTime;
-                else musicAsked++;   // a track still loading must not start after it was told to stop
                 return;
             }
-            StartCoroutine(PlayMusic(file, volume, ++musicAsked, loop));
+            musicLoad = new CancellationTokenSource();
+            PlayMusic(file, volume, asked, loop, musicLoad.Token).Forget();
+        }
+
+        private static void CancelAudio(ref CancellationTokenSource source)
+        {
+            CancellationTokenSource pending = source;
+            source = null;
+            if (pending == null) return;
+            pending.Cancel();
+            pending.Dispose();
         }
 
         private bool gameMusicMuted;
@@ -317,11 +345,12 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
         private void StopMusic()
         {
+            CancelAudio(ref musicLoad);
             // With gamemusic off the game's tracks stay quiet after the script's has run out; the mission's end lets them go.
             if (script == null || script.GameMusic) MuteGameMusic(false);
             musicAsked++;
             musicFadeFrom = -1f;
-            if (music != null) music.Stop();
+            if (music != null) { music.Stop(); music.clip = null; }
             if (musicClip != null) Destroy(musicClip);
             musicClip = null;
         }
@@ -373,33 +402,86 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         }
 
         /// <summary>One recording after another, a frame apart: decoding and the gain pass are main-thread work, and they land in the opening cutscene.</summary>
-        private IEnumerator LoadVoices(List<string> files, int round)
+        private async UniTask LoadVoices(List<string> files, int round, CancellationToken token)
         {
-            foreach (string file in files)
+            try
             {
-                if (round != voiceRound) yield break;
-                yield return LoadVoice(file, round);
-                yield return null;
+                foreach (string file in files)
+                {
+                    if (round != voiceRound || token.IsCancellationRequested) return;
+                    await LoadVoice(file, round, token);
+                    await UniTask.NextFrame(token);
+                }
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         }
 
-        private IEnumerator LoadVoice(string file, int round)
+        private async UniTask LoadVoice(string file, int round, CancellationToken token)
         {
+            AudioClip clip = null;
+            try
+            {
+                clip = await LoadAudio(file, "voice", token);
+                if (clip == null) return;
+                // The mission ended while the file was loading (another may have started and asked for the same file).
+                if (token.IsCancellationRequested || this == null || runner == null || round != voiceRound || !voiceClips.ContainsKey(file)) return;
+                Level(clip, effectFiles.Contains(file) ? EffectLevel : VoiceLevel);
+                voiceClips[file] = clip;
+                clip = null; // the mission now owns the clip
+            }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception error) { log?.LogWarning("[Scenario] voice '" + file + "' could not be loaded: " + error.Message); }
+            finally { if (clip != null) Destroy(clip); }
+        }
+
+        private async UniTask<AudioClip> LoadAudio(string file, string kind, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
             string path = null;
             try { path = MusicFile(file); }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            if (path == null) { log?.LogWarning("[Scenario] voice '" + file + "' could not be read."); yield break; }
+            if (path == null) { log?.LogWarning("[Scenario] " + kind + " '" + file + "' could not be read."); return null; }
             AudioType type = file.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ? AudioType.OGGVORBIS : AudioType.MPEG;
             using (UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type))
             {
-                yield return request.SendWebRequest();
-                AudioClip clip = request.result == UnityWebRequest.Result.Success ? DownloadHandlerAudioClip.GetContent(request) : null;
-                if (clip == null) { log?.LogWarning("[Scenario] voice '" + file + "' could not be decoded."); yield break; }
-                // The mission ended while the file was loading (another may have started and asked for the same file).
-                if (runner == null || round != voiceRound || !voiceClips.ContainsKey(file)) { Destroy(clip); yield break; }
-                Level(clip, effectFiles.Contains(file) ? EffectLevel : VoiceLevel);
-                voiceClips[file] = clip;
+#if !PUBLIC_RELEASE
+                audioRequests++;
+#endif
+                try
+                {
+                    // UniTask aborts the request on cancellation; disposal also releases its download handler.
+                    await request.SendWebRequest().WithCancellation(token);
+                    AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
+                    if (clip == null || clip.samples <= 0)
+                    {
+                        if (clip != null) Destroy(clip);
+                        log?.LogWarning("[Scenario] " + kind + " '" + file + "' could not be decoded.");
+                        return null;
+                    }
+                    return clip;
+                }
+                catch (Exception) when (token.IsCancellationRequested)
+                {
+                    // Completion can win the abort: a successfully decoded clip still needs an owner to destroy it.
+                    if (request.result == UnityWebRequest.Result.Success)
+                    {
+                        AudioClip discarded = DownloadHandlerAudioClip.GetContent(request);
+                        if (discarded != null) Destroy(discarded);
+                    }
+                    throw new OperationCanceledException(token);
+                }
+                catch (UnityWebRequestException) when (!token.IsCancellationRequested)
+                {
+                    log?.LogWarning("[Scenario] " + kind + " '" + file + "' could not be decoded.");
+                    return null;
+                }
+                finally
+                {
+#if !PUBLIC_RELEASE
+                    audioRequests--;
+#endif
+                }
             }
         }
 
@@ -430,21 +512,16 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             clip.SetData(samples, 0);
         }
 
-        private IEnumerator PlayMusic(string file, float volume, int asked, bool loop)
+        private async UniTask PlayMusic(string file, float volume, int asked, bool loop, CancellationToken token)
         {
-            string path = null;
-            try { path = MusicFile(file); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-            if (path == null) { log?.LogWarning("[Scenario] music '" + file + "' could not be read."); yield break; }
-            AudioType type = file.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ? AudioType.OGGVORBIS : AudioType.MPEG;
-            using (UnityWebRequest request = UnityWebRequestMultimedia.GetAudioClip(new Uri(path).AbsoluteUri, type))
+            AudioClip clip = null;
+            try
             {
-                yield return request.SendWebRequest();
-                AudioClip clip = request.result == UnityWebRequest.Result.Success ? DownloadHandlerAudioClip.GetContent(request) : null;
-                if (clip == null) { log?.LogWarning("[Scenario] music '" + file + "' could not be decoded."); yield break; }
+                clip = await LoadAudio(file, "music", token);
+                if (clip == null) return;
                 // Told to stop, or the mission ended, while the file was loading.
-                if (asked != musicAsked || runner == null) { Destroy(clip); yield break; }
+                if (token.IsCancellationRequested || this == null || asked != musicAsked || runner == null) return;
+                Level(clip, MusicLevel);
                 if (music == null)
                 {
                     music = gameObject.AddComponent<AudioSource>();
@@ -454,7 +531,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                     music.ignoreListenerPause = true;
                 }
                 if (musicClip != null) Destroy(musicClip);
-                Level(clip, MusicLevel);
                 musicClip = clip;
                 musicVolume = volume;
                 musicFadeFrom = -1f;
@@ -464,7 +540,11 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 music.Play();
                 musicEndsAt = loop ? float.MaxValue : Time.unscaledTime + clip.length;
                 log?.LogInfo("[Scenario] music '" + file + "' playing, " + clip.length.ToString("0") + " s.");
+                clip = null; // the music source now owns the clip
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            catch (Exception error) { log?.LogWarning("[Scenario] music '" + file + "' could not be loaded: " + error.Message); }
+            finally { if (clip != null) Destroy(clip); }
         }
 
         /// <summary>The local pilot's state, turned into the triggers a script can wait for.</summary>
@@ -667,7 +747,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 if (cut.Voice != null && !voiceClips.ContainsKey(cut.Voice))
                 {
                     voiceClips[cut.Voice] = null;
-                    StartCoroutine(LoadVoice(cut.Voice, voiceRound));
+                    LoadVoice(cut.Voice, voiceRound, voiceLifetime.Token).Forget();
                 }
             }
             // The stage may finish inside Play (every shot blocked): the flags are set first so that end is seen.

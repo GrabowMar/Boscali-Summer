@@ -44,17 +44,35 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static bool Shown => root != null && root.gameObject.activeInHierarchy;
         internal static string CountText => count != null ? count.text : null;
 
+        private const string ChromeName = "NOAvionics.MapChrome";
+
+        /// <summary>
+        /// The one layer the map's standing chrome lives in (2026-11-15): the STR plate and legend, the field log and this console. It fills
+        /// the viewport, draws nothing itself and stays above the map's own layers (contact counts, overlays filed later), so no piece needs its
+        /// own lift and they never shuffle each other; a card that opens lifts itself above it.
+        /// </summary>
+        internal static RectTransform ChromeLayer(RectTransform viewport)
+        {
+            if (viewport.Find(ChromeName) is RectTransform found) return found;
+            RectTransform layer = AvLay.Child(viewport, ChromeName);
+            AvLay.Fill(layer);
+            return layer;
+        }
+
         internal static void Tick(DynamicMap map)
         {
             RectTransform viewport = map.mapBackground.rectTransform;
-            if (root == null || root.parent != viewport) Build(viewport);
+            if (root == null || root.parent == null || root.parent.parent != viewport) Build(ChromeLayer(viewport));
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
             bool view = MfdTerrainRelief.IsDrawing;
             if (view != viewShown) { viewShown = view; Apply(); }
             if (Time.unscaledTime < nextRead) return;
             nextRead = Time.unscaledTime + .1f;
-            // Above the map layers, beside the banner (no per-frame reorder: that rebuilds the canvas).
-            if (root.GetSiblingIndex() < viewport.childCount - 2) root.SetAsLastSibling();
+            // The chrome layer above the map layers, one card or banner allowed over it (no per-frame reorder: that rebuilds the canvas).
+            Transform layer = root.parent;
+            if (layer.GetSiblingIndex() < viewport.childCount - 2) layer.SetAsLastSibling();
+            // The console stays the layer's top piece (the STR plate and legend may be built after it).
+            if (root.GetSiblingIndex() != layer.childCount - 1) root.SetAsLastSibling();
             Counts(map);
             if (folded) return;
             Choices();
@@ -119,12 +137,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return "";
         }
 
-        private static void Build(RectTransform viewport)
+        private static void Build(RectTransform layer)
         {
             Reset();
             var go = new GameObject("NOAvionics.MapSelectionDeck", typeof(RectTransform));
             root = go.GetComponent<RectTransform>();
-            root.SetParent(viewport, false);
+            root.SetParent(layer, false);
             root.anchorMin = root.anchorMax = root.pivot = new Vector2(1f, 1f);
             root.anchoredPosition = new Vector2(-12f, -8f);
             back = MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, Width, HeadH),

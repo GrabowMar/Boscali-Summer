@@ -29,7 +29,6 @@ namespace BoscaliSummer.Garrisons
             AvStrokes.Line(pointer.Buffer, 16f, 6f, 24f, 0f, 1.8f, new Rgba(1f, 1f, 1f, 1f));
             AvStrokes.Line(pointer.Buffer, 24f, 0f, 16f, -6f, 1.8f, new Rgba(1f, 1f, 1f, 1f));
             pointer.Commit();
-            if (hud) ImageShade(Root);
             label = AvText.Make(Root, "Landing zone label", AvTextRole.DataSmall, "LZ", TextAlignmentOptions.Center);
             label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(.5f, .5f);
             label.rectTransform.pivot = new Vector2(.5f, 1f);
@@ -45,16 +44,6 @@ namespace BoscaliSummer.Garrisons
                 if (style.FontMaterial != null) label.fontSharedMaterial = style.FontMaterial;
             }
             SetVisible(false);
-        }
-
-        private static void ImageShade(RectTransform parent)
-        {
-            var shade = HudSprites.Child(parent, "Landing zone label shade", HudSprites.Feather, sliced: true);
-            shade.rectTransform.SetAsFirstSibling();
-            shade.rectTransform.anchorMin = shade.rectTransform.anchorMax = shade.rectTransform.pivot = new Vector2(.5f, .5f);
-            shade.rectTransform.sizeDelta = new Vector2(276f, 58f);
-            shade.rectTransform.anchoredPosition = new Vector2(0f, -32f);
-            shade.color = HudSprites.ShadeTint.WithAlpha(.3f);
         }
 
         internal void Show(Vector2 at, string caption, Color ink, bool pinned = false, float bearing = 0f)

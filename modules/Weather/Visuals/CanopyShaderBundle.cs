@@ -50,6 +50,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             warmed += WarmOne(updateShader) ? 1 : 0;
             warmed += WarmOne(flightCloudShader) ? 1 : 0;
             warmed += WarmOne(flightCloudCompositeShader) ? 1 : 0;
+            warmed += WarmOne(SurfaceShaderBundle.Terrain) ? 1 : 0;
+            warmed += WarmOne(SurfaceShaderBundle.Ocean) ? 1 : 0;
             watch.Stop();
             return warmed > 0 ? watch.ElapsedMilliseconds : -1;
         }
@@ -127,6 +129,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>The wind- and storm-driven sea (OceanDressing).</summary>
         internal static Shader GetOceanShader()
         {
+            Shader enhanced = SurfaceShaderBundle.Ocean;
+            if (enhanced != null) return enhanced;
             GetShader();
             return oceanShader;
         }

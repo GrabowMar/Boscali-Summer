@@ -2,6 +2,14 @@ using BepInEx.Configuration;
 
 namespace BoscaliSummer.Modules.Immersion.Configuration
 {
+    internal enum PilotModelStyle
+    {
+        Standard,
+        Recon,
+        Rescue,
+        NightOps
+    }
+
     /// <summary>
     /// Client-side cockpit feel and immersion configuration.
     /// Values can be adjusted mid-flight via configuration manager or MFD settings.
@@ -27,6 +35,7 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<float> HelmetCurvature { get; }
         public ConfigEntry<float> HelmetReflection { get; }
         public ConfigEntry<bool> PilotBodyEnabled { get; }
+        public ConfigEntry<PilotModelStyle> PilotModel { get; }
         public ConfigEntry<bool> PilotControlMotionEnabled { get; }
         public ConfigEntry<bool> PilotReflectionEnabled { get; }
         public ConfigEntry<int> KneeboardCard { get; }
@@ -101,7 +110,9 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 new ConfigDescription("Cockpit view: visor and canopy reflections - Fresnel rim on the visor, pilot reflection and sun glint on the windscreen. 0 turns reflections off.",
                     new AcceptableValueRange<float>(0f, 1f)));
             PilotBodyEnabled = config.Bind(section, "PilotBodyEnabled", true,
-                "Show the native pilot's flight suit, arms and legs in first person. Local presentation only.");
+                "Show your cockpit pilot's flight suit, arms, legs and strapped kneeboard in first person. Local presentation only.");
+            PilotModel = config.Bind(section, "PilotModel", PilotModelStyle.Standard,
+                "Your cockpit pilot's suit appearance: Standard, Recon, Rescue or NightOps. Changes apply immediately in first person and stay on this machine.");
             PilotControlMotionEnabled = config.Bind(section, "PilotControlMotionEnabled", true,
                 "Enable rudder foot movement, restrained breathing and G-load bracing. Hand attachment stays active; Comfort Motion reduces body motion.");
             PilotReflectionEnabled = config.Bind(section, "PilotReflectionEnabled", true,

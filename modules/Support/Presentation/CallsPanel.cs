@@ -25,8 +25,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
 
     /// <summary>
     /// The OPS bezel page, in the shared console frame every other MFD panel wears (<see cref="AvConsole"/>): header, the country strip, two icon
-    /// tabs and the footer that carries the page's words and the hover help. FRONTS shows the three fronts as cards (status stamp, blocker,
-    /// readiness, superiority, your support, programme phase) with an OPEN button each (the windows are <see cref="FrontController"/>'s);
+    /// tabs and the footer that carries the page's live state and the hover help. FRONTS shows the three fronts as cards (status stamp,
+    /// superiority, directive, queue, then the blocker or the programme in hand) with an OPEN button each (the windows are <see cref="FrontController"/>'s);
     /// PERKS lists the pilot's perks by front as call cards (clicking one ARMS it: arming spends nothing). A strip pinned under the tabs (outside
     /// the scroller) shows the armed or inspected perk and carries ARM / FIRE / DISARM, so those never scroll away; the cruise block (ADD LEG,
     /// CANCEL PICK, CLEAR ROUTE) heads the PERKS page while a salvo flies. The posted strike packages are jobs on MIS JOBS (<see cref="SupportJobs"/>).
@@ -56,7 +56,19 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private OrderStrip strip;
         private CruisePart cruisePart;
         private AvSection[] groups;
-        private readonly int[] readyByFront = new int[FrontRules.FrontCount];
+        private static readonly string[] AheadWords = CountWords("", "/" + FrontRules.FrontCount + " FRONTS AHEAD", FrontRules.FrontCount);
+        private static readonly string[] AlertWords = CountWords("", " ALERTS", 12);
+        private static readonly string[] ReadyWords = CountWords("", " PERKS READY", 32);
+
+        private static string[] CountWords(string prefix, string suffix, int max)
+        {
+            var words = new string[max + 1];
+            for (int i = 0; i < words.Length; i++) words[i] = prefix + i + suffix;
+            words[1] = words[1].Replace("ALERTS", "ALERT").Replace("PERKS", "PERK");
+            return words;
+        }
+
+        private static string Count(string[] words, int n) => words[Math.Max(0, Math.Min(n, words.Length - 1))];
         private OpsTab tab = OpsTab.Fronts;
 
         // Local inspection state: which perk the strip shows. Inspecting never arms or spends.
@@ -176,15 +188,11 @@ namespace BoscaliSummer.Modules.Support.Presentation
             CountryStrip.Mount(console);
             console.PageChanged += OnPage;
 
-            // FRONTS: the player's allocation (their own share; the strip above is the faction's), then three cards. A short panel drops
-            // the cards' secondary lines (programme, queue, directive, latest event) before anything else.
-            float body = height - (AvGridTokens.Header + 4f + AvGridTokens.Metric + 6f + AvGridTokens.Tab + 4f + AvGridTokens.Footer);
-            CardTier tier = body >= 540f ? CardTier.Full : body >= 360f ? CardTier.Mid : CardTier.Core;
+            // FRONTS: the player's allocation (their own share; the strip above is the faction's), then three cards.
             AvFlow p0 = console.Page(0);
             allocationRow = p0.Add(new AvRow(p0.Content));
-            allocationRow.Help = "ALLOCATION: your own share, spent on perks, programmes and posted strikes. AHEAD counts the fronts where your side holds superiority; ALERTS the blockers on the cards below.";
-            for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront, tier));
-            p0.Links(("WAR PLAN", "STR", "BOARD"), ("FUNDS", "FAC", "ECONOMY"));
+            allocationRow.Help = "ALLOCATION: your own share, spent on perks, programmes and posted strikes. AHEAD counts the fronts where your side holds superiority.";
+            for (int i = 0; i < cards.Length; i++) cards[i] = p0.Add(new FrontCardPart(p0.Content, (Front)i, OpenFront));
 
             // PERKS: the flying cruise's block (only while one flies), then the perks grouped by front as call cards. The pinned strip sits over the top of the page.
             float stripSpace = OrderStrip.Height - AvGridTokens.Gap;
@@ -200,17 +208,9 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 foreach (CallRow r in CallSheet.Rows)
                     if (r.Front == front) perkRows[r.Id] = p1.Add(new PerkRowPart(p1.Content, InspectPerk, r.Id));
             }
-            p1.Links(("TARGETS", "TGT", "TARGETS"), ("JOBS", "MIS", "JOBS"));
 
-            console.Orders(0,
-                "OPEN a front for its map, programmes and perks.",
-                "A stamp says OPERATIONAL, DEGRADED, OFFLINE or WAITING; the line under it names what is wrong now.",
-                "Superiority belongs to the faction and is shared by every pilot on your side; your skill grades are your own.");
-            console.Orders(1,
-                "Click a perk to arm it. Nothing is spent until FIRE.",
-                "Aim with your pod or a team laser, or right-click the map (that fires at once). Otherwise press FIRE.",
-                "DISARM spends nothing. Keys: bind CallSlot 1-4 in the mod settings (Support Keys).",
-                "A flying cruise: ADD LEG, then right-click the map, one leg per press. CANCEL PICK keeps the route; CLEAR ROUTE drops it.");
+            console.Orders(0, "OPEN a front for its map, programmes and perks.");
+            console.Orders(1, "Click a perk to arm it, aim (pod, laser or map), then FIRE. Nothing is spent until FIRE.");
             console.Finish();
 
             // The strip is a direct child of the console, after every page canvas, so it draws and takes clicks over scrolled content. It is
@@ -334,8 +334,7 @@ namespace BoscaliSummer.Modules.Support.Presentation
             // Only the open page is painted; OnPage forces a refresh the moment another one is picked, so it repaints then.
             if (tab == OpsTab.Fronts)
             {
-                allocationRow?.Set("ALLOCATION", v.FrontsAhead + "/" + FrontRules.FrontCount + " FRONTS AHEAD · " + (v.Alerts == 0 ? "NO ALERTS" : v.Alerts + (v.Alerts == 1 ? " ALERT" : " ALERTS")),
-                    v.Allocation + " AP", v.Alerts > 0 ? AvState.Danger : v.Allocation > 0 ? AvState.Ready : AvState.Caution);
+                allocationRow?.Set("ALLOCATION", Count(AheadWords, v.FrontsAhead), OpsPageViews.Ap(v.Allocation), v.Alerts > 0 ? AvState.Danger : v.Allocation > 0 ? AvState.Ready : AvState.Caution);
                 for (int i = 0; i < cards.Length; i++) cards[i]?.Paint(v.Cards[i]);
             }
 
@@ -344,20 +343,17 @@ namespace BoscaliSummer.Modules.Support.Presentation
                 bool cruiseOn = v.CruiseFlying || v.Steering; // the block exists only while there is a salvo to steer
                 cruisePart.SetShown(cruiseOn);
                 if (cruiseOn) cruisePart.Paint(v);
-                Array.Clear(readyByFront, 0, readyByFront.Length);
                 foreach (PerkRowView p in v.Perks)
-                {
                     if (perkRows.TryGetValue(p.Id, out PerkRowPart row)) row.Paint(p);
-                    if (p.Enabled && !p.Armed && !p.Pending) readyByFront[(int)p.Front]++;
-                }
-                for (int f = 0; f < groups.Length; f++) groups[f].SetCaption((v.PowerLine[f].Length > 0 ? v.PowerLine[f] + " · " : "") + readyByFront[f] + " READY");
+                for (int f = 0; f < groups.Length; f++) groups[f].SetCaption(v.PowerLine[f]);
                 strip?.Paint(v.PerkStrip.Has ? v.PerkStrip : OpsPageViews.Idle("WAITING FOR HOST", "NO PERKS READ YET", "", AvState.Inert));
             }
 
             string words; AvState tone;
-            if (tab == OpsTab.Perks) { words = v.Words.Length > 0 ? v.Words : "CLICK A PERK TO ARM IT, AIM, THEN FIRE"; tone = v.WordsTone; }
+            if (tab == OpsTab.Perks) { words = v.Words.Length > 0 ? v.Words : Count(ReadyWords, v.PerksReady); tone = v.Words.Length > 0 ? v.WordsTone : v.PerksReady > 0 ? AvState.Ready : AvState.Inert; }
             else if (v.FrontWords.Length > 0) { words = v.FrontWords; tone = v.FrontWordsTone; }
-            else { words = "OPEN A FRONT FOR ITS MAP, PROGRAMMES AND PERKS"; tone = AvState.Ready; }
+            else if (v.Alerts > 0) { words = Count(AlertWords, v.Alerts); tone = AvState.Danger; }
+            else { words = "NO ALERTS"; tone = AvState.Ready; }
             console.Footer.Set(words, tone);
         }
 

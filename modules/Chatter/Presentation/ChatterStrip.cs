@@ -348,7 +348,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             switch (net)
             {
                 case ChatterNet.Enemy: return "FFB4AC";
-                default: return ColorUtility.ToHtmlStringRGB(Color.Lerp(VanillaHudStyle.Colours.AllClear, Color.white, 0.82f));
+                default: return ColorUtility.ToHtmlStringRGB(Color.Lerp(VanillaHudStyle.Colours.AllClear, Color.white, 0.3f));      // HUD ink, a touch lighter: near-white words vanished on bright cloud once the backdrop went (2026-11-15)
             }
         }
     }

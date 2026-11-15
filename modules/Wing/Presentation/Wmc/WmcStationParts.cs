@@ -81,7 +81,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly AvVector vector;
         private readonly TMP_Text caption, scaleWord, leaderWord, empty;
         private readonly TMP_Text[] slotWords = new TMP_Text[StationData.Max], liveWords = new TMP_Text[StationData.Max];
-        private float width = 464f;
+        private float width = AvTokens.PanelWidth - 16f;
         private StationData data;
 
         public WmcPlanCard(RectTransform parent)

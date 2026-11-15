@@ -15,15 +15,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>
         /// The MIS bezel, home of every paid task. JOBS lists the pilot's own job (on the HUD, or an armed package) and then the open jobs of every
         /// <see cref="IJobSource"/> (contracts and staff sorties from DynamicOperations, strike packages from Support), nearest first, each with
-        /// LOCATE and its source's own act; a contract or sortie opens in place into its order, plot and ABORT. OBJECTIVES is a checklist with
-        /// state glyphs and distances; BRIEF is the hero card (name, clock, lead objective, briefing) over SCORE, OBJECTIVES and the escalation
-        /// ladder. Reads happen in <see cref="Gather"/> into one reusable <see cref="BoardModel"/>; <see cref="Render"/> only writes it to built parts.
+        /// LOCATE and its source's own act; a contract or sortie opens in place into its order, plot and ABORT. BRIEF is the hero card (name,
+        /// clock, lead objective, briefing) over SCORE, the escalation ladder and the task checklist. Reads happen in <see cref="Gather"/> into one reusable <see cref="BoardModel"/>; <see cref="Render"/> only writes it to built parts.
         /// </summary>
         private sealed class MissionPresenter : Presenter
         {
             private const int ObjectivePageSize = 10;
             private const int MaxObjectiveLines = 24;
-            private const int PageJobs = 0, MaxHudCards = 2, MaxOpenCards = 12;
+            private const int PageJobs = 0, PageBrief = 1, MaxHudCards = 2, MaxOpenCards = 12;
 
             private struct ObjectiveLine
             {
@@ -35,7 +34,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public MissionPhase Phase;
             }
 
-            /// <summary>Everything the three pages show, read once per refresh.</summary>
+            /// <summary>Everything the two pages show, read once per refresh.</summary>
             private sealed class BoardModel
             {
                 public string MissionName = "NO MISSION LOADED", Brief = "STANDING BY FOR MISSION CONTROLLER", Mode = "", Clock = "—";
@@ -58,7 +57,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private int objectiveSummarySignature;
             private bool hasObjectiveSummary;
 
-            private AvFlow jobsFlow, objectivesFlow, briefFlow;
+            private AvFlow jobsFlow, briefFlow;
             private int selectedPage;
 
             // JOBS page.
@@ -75,57 +74,39 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private bool hasSelf;
             private Comparison<JobRow> jobOrder;
 
-            // OBJECTIVES page.
+            // BRIEF page.
+            private MissionHeroPart hero;
+            private AvGauge scoreTile;
+            private AvSection ladderSection;
+            private EscalationLadderPart ladder;
             private ObjectiveTallyPart tally;
             private AvSection checklistSection;
             private AvPagedStack<ChecklistRow> checklist;
             private AvRow objectivesEmpty;
-            private AvSection typeSection;
-            private TaskTypeTally typeTally;
-
-            // BRIEF page.
-            private MissionHeroPart hero;
-            private AvGauge[] briefTiles;
-            private AvSection ladderSection;
-            private EscalationLadderPart ladder;
 
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
                 (AvIcon.Star, "JOBS"),
-                (AvIcon.ListDetails, "OBJECTIVES"),
                 (AvIcon.Flag, "BRIEF"),
             };
 
             protected override string[] TabTips { get; } = new[]
             {
                 "Jobs: the one on your HUD, then every open job (contracts, staff sorties, strike packages), nearest first. LOCATE moves the map.",
-                "Objectives: the checklist with progress and distance to each objective, and a map of how far each one has come.",
-                "Brief: the briefing, the lead objective, the score and the escalation ladder.",
+                "Brief: the briefing, the lead objective, the score, the escalation ladder and the task checklist with progress and distance.",
             };
 
             protected override void BuildContent()
             {
                 BoscaliSummer.Core.Ui.CountryStrip.Mount(Console);
                 jobsFlow = CreatePage();
-                objectivesFlow = CreatePage();
                 briefFlow = CreatePage();
                 BuildJobsPage(jobsFlow);
-                BuildObjectivesPage(objectivesFlow);
                 BuildBriefPage(briefFlow);
-                Console.Orders(0,
-                    "LOCATE moves the map to the job. The act on the right is the source's own: ACCEPT, SELECT, FIRE.",
-                    "RELEASE hands your own job back: off your HUD, or a strike package disarmed.",
-                    "Click a contract or sortie to open its order, plot and ABORT. ABORT asks for confirmation.");
-                Console.Orders(1,
-                    "Open tasks lead the list. Completed tasks are filed beneath them.",
-                    "The figure on the right is the distance to the task's nearest fix. No fix reads percent complete.",
-                    "Percent complete is the host's own figure. The strip under each task mirrors it.",
-                    "BY TASK TYPE counts done against issued for each kind of task.");
-                Console.Orders(2,
-                    "The lead task is the nearest open objective with a known fix.",
-                    "The ring under SCORE fills toward the next escalation gate.");
+                Console.Orders(0, "LOCATE moves the map to the job; click a contract to open its order and ABORT.");
+                Console.Orders(1, "Open tasks lead the list; the figure on the right is the distance to the task's nearest fix.");
             }
 
             protected override void RefreshContent()
@@ -160,7 +141,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 taskPlot = new MissionTaskPlot(page.Content); taskPlot.Rect.gameObject.SetActive(false);
                 taskActions = new MissionTaskActions(page.Content, RequestRefresh); Console.Ticker.Register(taskActions);
                 taskActions.Rect.gameObject.SetActive(false);
-                page.Links(("WAR PLAN", "STR", "BOARD"), ("ALLOCATION", "OPS", "PERKS"));
             }
 
             private void Pick(JobCard card)
@@ -266,20 +246,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return float.IsFinite(d) ? d : float.MaxValue;
             }
 
-            // -------------------------------------------------------- OBJECTIVES page
-
-            private void BuildObjectivesPage(AvFlow page)
-            {
-                tally = page.Add(new ObjectiveTallyPart(page.Content));
-                checklistSection = page.Section(AvIcon.ListDetails, "TASK LIST");
-                checklist = page.Add(new AvPagedStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
-                    (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
-                objectivesEmpty = page.Add(new AvRow(page.Content));
-                objectivesEmpty.SetShown(false);
-                typeSection = page.Section(AvIcon.Stack2, "BY TASK TYPE", "DONE / ISSUED");
-                typeTally = page.Add(new TaskTypeTally(page.Content));
-                page.Links(("FRONTS", "STR", "BOARD"), ("TARGETS", "TGT", "TARGETS"));
-            }
+            // ------------------------------------------------------------- BRIEF page
 
             private void RenderObjectives()
             {
@@ -288,8 +255,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 checklistSection.SetShown(any);
                 checklist.SetShown(any);
                 objectivesEmpty.SetShown(!any);
-                typeSection.SetShown(any);
-                typeTally.SetShown(any);
                 if (!any)
                 {
                     objectivesEmpty.Set(model.HasHq ? "NO TASKS ISSUED" : "TASK FEED OFFLINE",
@@ -297,8 +262,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     checklist.SetCount(0);
                     return;
                 }
-                typeTally.Tally(model.Objectives, o => o.Kind, o => o.Phase == MissionPhase.Done);
-
                 int total = model.ObjectivesDone + model.ObjectivesActive;
                 float nearest = -1f;
                 for (int i = 0; i < model.Objectives.Count; i++)
@@ -310,7 +273,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 tally.Set(model.ObjectivesDone, total, nearest >= 0f ? MfdMissionBoard.Distance(nearest) : null,
                     model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
                 checklistSection.SetCaption(model.ObjectiveSummary);
-                typeSection.SetCaption(model.ObjectivesDone + " DONE / " + total + " ISSUED");
                 checklist.SetCount(model.Objectives.Count);
             }
 
@@ -335,24 +297,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 row.Help = line.Title + "  —  " + detail;
             }
 
-            // ------------------------------------------------------------- BRIEF page
-
             private void BuildBriefPage(AvFlow page)
             {
                 hero = page.Add(new MissionHeroPart(page.Content));
 
-                briefTiles = new[]
-                {
-                    new AvGauge(page.Content, "SCORE"),
-                    new AvGauge(page.Content, "OBJECTIVES"),
-                };
-                briefTiles[0].Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
-                briefTiles[1].Help = "Objectives: completed against issued. The OBJECTIVES page lists them with distances.";
-                page.Row(briefTiles);
+                scoreTile = new AvGauge(page.Content, "SCORE");
+                scoreTile.Help = "Score: the faction's mission score. The ring shows progress toward the next escalation gate.";
+                page.Row(scoreTile);
 
                 ladderSection = page.Section(MfdChromeIcon.For("CHART"), "ESCALATION");
                 ladder = page.Add(new EscalationLadderPart(page.Content));
-                page.Links(("WAR PLAN", "STR", "BOARD"), ("FUNDS", "FAC", "ECONOMY"));
+
+                tally = page.Add(new ObjectiveTallyPart(page.Content));
+                checklistSection = page.Section(AvIcon.ListDetails, "TASK LIST");
+                checklist = page.Add(new AvPagedStack<ChecklistRow>(page.Content, page.Ticker, ObjectivePageSize, 2f,
+                    (parent, slot) => new ChecklistRow(parent), BindObjectiveRow));
+                objectivesEmpty = page.Add(new AvRow(page.Content));
+                objectivesEmpty.SetShown(false);
             }
 
             private void RenderBrief()
@@ -376,16 +337,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     holding = stage == 2 ? AvState.Danger : stage == 1 ? AvState.Caution : AvState.Ready;
                     progress = MfdMissionOverview.NextGateProgress(model.Current, model.Tactical, model.Strategic);
                 }
-                if (!model.HasHq) briefTiles[0].Set(0f, "—", AvState.Inert);
-                else briefTiles[0].Set(progress, AvNum.Fixed(model.Score, 1), model.HasEscalation ? holding : AvState.Ready);
-
-                int total = model.ObjectivesDone + model.ObjectivesActive;
-                if (total == 0) briefTiles[1].Set(0f, "—", AvState.Inert);
-                else briefTiles[1].Set(model.ObjectivesDone / (float)total,
-                    AvNum.Fixed(model.ObjectivesDone, 0) + "/" + AvNum.Fixed(total, 0),
-                    model.ObjectivesDone == total ? AvState.Ready : AvState.Info);
+                if (!model.HasHq) scoreTile.Set(0f, "—", AvState.Inert);
+                else scoreTile.Set(progress, AvNum.Fixed(model.Score, 1), model.HasEscalation ? holding : AvState.Ready);
 
                 RenderLadder();
+                RenderObjectives();
             }
 
             private int LeadObjective()
@@ -433,8 +389,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private void Render()
             {
                 if (selectedPage == PageJobs) RenderJobs();
-                RenderObjectives();
-                RenderBrief();
+                else RenderBrief();
             }
 
             // ---------------------------------------------------------------- gather
@@ -473,7 +428,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     model.Strategic = manager.strategicThreshold;
                 }
 
-                GatherObjectives(mission, hq);
+                if (selectedPage == PageBrief) GatherObjectives(mission, hq);
                 // Only while JOBS is up: reading the strike packages holds the SPACE feed open.
                 if (selectedPage == PageJobs) GatherJobs();
             }

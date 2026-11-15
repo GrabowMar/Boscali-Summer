@@ -85,6 +85,46 @@ namespace NOAvionics
         /// </summary>
         public static float OverlayAlpha(float a) => QualitySettings.activeColorSpace == ColorSpace.Linear ? Mathf.Pow(Mathf.Clamp01(a), 2.2f) : a;
 
+        private static readonly System.Collections.Generic.Dictionary<string, Texture2D> consoleArt =
+            new System.Collections.Generic.Dictionary<string, Texture2D>(16);
+
+        /// <summary>
+        /// A console's decorative geometry: the embedded greyscale PNG "NOAvionics.art.&lt;id&gt;.png" (white lines on black), returned
+        /// white with the drawing in alpha so the caller tints it per scheme. Decoded once per id on first use and kept; null when the
+        /// host embeds none for that id.
+        /// </summary>
+        public static Texture2D ConsoleArt(string id)
+        {
+            if (string.IsNullOrEmpty(id)) return null;
+            // A cached null means "none embedded"; a destroyed texture (Unity null, not a C# null) is decoded again.
+            if (consoleArt.TryGetValue(id, out Texture2D hit) && (ReferenceEquals(hit, null) || hit != null)) return hit;
+            Texture2D t = null;
+            try
+            {
+                byte[] png = ReadResource("NOAvionics.art." + id.ToLowerInvariant() + ".png", 2 << 20);
+                if (png != null)
+                {
+                    t = new Texture2D(2, 2, TextureFormat.RGBA32, false) { name = "NOA art " + id, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.HideAndDontSave };
+                    if (ImageConversion.LoadImage(t, png, false))
+                    {
+                        // Same linear-space correction as the ground: the drawing reads as authored once the caller converts its tint too.
+                        bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
+                        var lut = new byte[256];
+                        for (int i = 0; i < 256; i++) lut[i] = linear ? (byte)Mathf.RoundToInt(Mathf.Pow(i / 255f, 2.2f) * 255f) : (byte)i;
+                        Color32[] px = t.GetPixels32();
+                        for (int i = 0; i < px.Length; i++) px[i] = new Color32(255, 255, 255, lut[px[i].r]);
+                        t.SetPixels32(px);
+                        if ((t.width & 3) == 0 && (t.height & 3) == 0) t.Compress(false);
+                        t.Apply(false, true);   // upload, then drop the CPU copy
+                    }
+                    else { UnityEngine.Object.Destroy(t); t = null; }
+                }
+            }
+            catch (Exception) { t = null; }
+            consoleArt[id] = t;
+            return t;
+        }
+
         public static void Load(Action<string> log = null)
         {
             if (attempted) return;

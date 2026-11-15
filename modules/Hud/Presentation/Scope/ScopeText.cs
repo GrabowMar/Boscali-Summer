@@ -81,7 +81,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (s.Spacing != spacing) { s.Text.characterSpacing = spacing; s.Spacing = spacing; }
             TextAlignmentOptions alignment = align == ScopeAlign.Left ? TextAlignmentOptions.MidlineLeft : align == ScopeAlign.Right ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Midline;
             if (s.Alignment != alignment) { s.Text.alignment = alignment; s.Alignment = alignment; }
-            if (s.Color != color) { s.Text.color = color; s.Color = color; }
+            if (s.Color != color)
+            {
+                s.Text.color = color;
+                s.Color = color;
+                Material glow = BoscaliSummer.Core.Game.VanillaHudStyle.Glow(material, color);      // the halo is the word's own colour (one cached material per tone)
+                if (glow != null && s.Text.fontSharedMaterial != glow) s.Text.fontSharedMaterial = glow;
+            }
 
             // A decimal point is narrowed with <space> tags (the glyph keeps the geometry of every other character, so it sits on the baseline like them); a word with a "<" in it is never marked up.
             bool rich = PageInk.Decimals(text) > 0 && text.IndexOf('<') < 0;

@@ -17,12 +17,18 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private SqdQuote pilotBackground;
         private SqdStatGrid sortieGrid;
         private int sortieAirframe, sortieCondition, sortieLife, sortieMission;
-        private const int AceBonusCeiling = 20; // matches the host's ace bonus point ceiling
         private const string NoBackground = "No service background on file. One can be written in the Wing Command pilot studio.";
-        private AvGauge ringScore, ringBonus, ringPicks, ringFree;
-        private SkillLaneStrip committedLanes;
-        private string[] committedLaneNames;
-        private readonly bool[][] committedHeld = new bool[8][];
+        private AvStatTile tileNext, tileAce, tilePicks;
+
+        // Last values painted, so a 5 Hz tick with nothing new builds no strings and touches no text.
+        private int idSig;
+        private bool idSigSet, ledgerSigSet;
+        private int ledgerSig;
+        private string lastBackground;
+        private int lastGen = int.MinValue, lastClock = -1, lastDeaths = int.MinValue, lastSortie = int.MinValue, lastMissionScore = int.MinValue;
+        private string lastAirframe, airframeText, fuelText;
+        private int lastFuel = -1;
+        private string genText, clockText, deathsText, sortieText, missionScoreText;
 
         private void ResetPilotPage()
         {
@@ -30,10 +36,25 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             tileSortie = tileTime = tileFuel = tileDeaths = null;
             pilotBackground = null;
             sortieGrid = null;
-            ringScore = ringBonus = ringPicks = ringFree = null;
-            committedLanes = null;
-            committedLaneNames = null;
+            tileNext = tileAce = tilePicks = null;
+            idSigSet = ledgerSigSet = false;
+            lastBackground = null;
+            lastAirframe = airframeText = fuelText = null;
+            lastFuel = -1;
+            genText = clockText = deathsText = sortieText = missionScoreText = null;
+            lastGen = lastDeaths = lastSortie = lastMissionScore = int.MinValue;
+            lastClock = -1;
         }
+
+        /// <summary>The cached text of an int: rebuilt only when the number changes.</summary>
+        private static string Num(int value, ref int last, ref string text)
+        {
+            if (text == null || value != last) { last = value; text = AvNum.Thousands(value); }
+            return text;
+        }
+
+        private static int Mix(int h, int v) => unchecked(h * 31 + v);
+        private static int Mix(int h, string s) => unchecked(h * 31 + (s == null ? 0 : s.GetHashCode()));
 
         private void BuildPilotPage(AvFlow p)
         {
@@ -42,7 +63,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             pilotBackground = p.Add(new SqdQuote(p.Content, "SERVICE BACKGROUND"));
             pilotBackground.Set(NoBackground);
 
-            p.Section(AvIcon.ListDetails, "FLIGHT LOG", "FORM 12-B · THIS SORTIE");
+            p.Section(AvIcon.ListDetails, "FLIGHT LOG", "THIS SORTIE");
             tileSortie = new AvStatTile(p.Content, "SORTIE");
             tileTime = new AvStatTile(p.Content, "MISSION");
             tileFuel = new AvStatTile(p.Content, "FUEL");
@@ -56,27 +77,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             sortieMission = sortieGrid.Add("MISSION SCORE");
             sortieGrid.Help = "This sortie: the airframe you fly, its condition, whether you respawn or have one life, and the mission score the pick ladder is built from.";
 
-            ringScore = new AvGauge(p.Content, "NEXT");
-            ringBonus = new AvGauge(p.Content, "ACE");
-            ringPicks = new AvGauge(p.Content, "EARNED");
-            ringFree = new AvGauge(p.Content, "FREE");
-            ringScore.Help = "NEXT: mission score still needed to earn the next skill pick. The ladder fills as you approach it.";
-            ringBonus.Help = "ACE: bonus score from ace kills and streaks, added to your career score (ceiling " + AceBonusCeiling + ").";
-            ringPicks.Help = "EARNED: skill picks earned so far out of the maximum.";
-            ringFree.Help = "FREE: earned picks not yet spent. Spend them on the SKILLS tab; a pick cannot be undone.";
+            // One ladder, one row: score to the next pick, the ace bonus, and the picks in hand. They are spent on SKILLS.
             p.Section(AvIcon.Star, "PICK LEDGER", "MISSION SCORE TO PICKS");
-            p.Row(ringScore, ringBonus, ringPicks, ringFree);
+            tileNext = new AvStatTile(p.Content, "NEXT PICK");
+            tileAce = new AvStatTile(p.Content, "ACE BONUS");
+            tilePicks = new AvStatTile(p.Content, "FREE / EARNED");
+            p.Row(tileNext, tileAce, tilePicks);
 
-            // The lanes come from the catalogue, in table order: one row per OPS lane, one pip per grade.
-            var names = new System.Collections.Generic.List<string>(4);
-            for (int i = 0; i < PerkCatalog.All.Length; i++)
-                if (!names.Contains(PerkCatalog.All[i].Lane)) names.Add(PerkCatalog.All[i].Lane);
-            committedLaneNames = names.ToArray();
-            for (int i = 0; i < committedHeld.Length; i++) committedHeld[i] = new bool[PerkCatalog.MaximumDepth];
-            p.Section(AvIcon.Stack2, "OPS SKILLS", "FORM 3-C · GRADES HELD");
-            committedLanes = p.Add(new SkillLaneStrip(p.Content, committedLaneNames, PerkCatalog.MaximumDepth) { Grow = 1f });
-            committedLanes.Help = "HELD: every OPS lane and its six grades. A lit pip is a grade you hold; grade 1 of every lane is free.";
-            p.Links(("WING", "WMC", null), ("BRIEF", "MIS", "BRIEF"));
+            BuildAceWatch(p);
         }
 
         // ---- PILOT refresh ---------------------------------------------------------------
@@ -97,33 +105,59 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (GameManager.GetLocalPlayer<Player>(out localPlayer) && localPlayer != null)
                 playerAircraft = localPlayer.Aircraft;
 
-            pilotBackground.Set(string.IsNullOrEmpty(background) ? NoBackground : background);
-            string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
+            if (!string.Equals(lastBackground, background, StringComparison.Ordinal))
+            {
+                lastBackground = background;
+                pilotBackground.Set(string.IsNullOrEmpty(background) ? NoBackground : background);
+            }
+
+            Sprite portraitSprite = PlayerPortrait(name, callsign);
+            int rank = Progress.Rank;
             bool kia = pilot.Status != null && pilot.Status.IndexOf("KIA", StringComparison.OrdinalIgnoreCase) >= 0;
-            pilotIdentity.Set(
-                profile ? "PERSONNEL JACKET · LOCAL PROFILE" : "PERSONNEL JACKET · FORM 1-A",
-                string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
-                string.IsNullOrEmpty(name) ? "—" : name,
-                AvNum.Thousands(Progress.Rank), pilotTitle,
-                "GEN " + AvNum.Thousands(pilot.Generation),
-                string.IsNullOrEmpty(pilot.Status) ? "NO STATUS ON FILE" : pilot.Status,
-                kia ? AvState.Danger : playerAircraft != null ? AvState.Ready : AvState.Info,
-                PlayerPortrait(name, callsign), emblemSprite,
-                string.IsNullOrEmpty(squadronName) ? "NO SQUADRON NAME" : squadronName,
-                bypass ? AvState.Caution : kia ? AvState.Danger : AvState.Ready,
-                bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
+            int sig = 17;
+            sig = Mix(sig, callsign); sig = Mix(sig, name); sig = Mix(sig, pilot.Status); sig = Mix(sig, squadronName);
+            sig = Mix(sig, rank); sig = Mix(sig, pilotScore); sig = Mix(sig, pilot.Generation);
+            sig = Mix(sig, (profile ? 1 : 0) | (bypass ? 2 : 0) | (kia ? 4 : 0) | (playerAircraft != null ? 8 : 0));
+            sig = Mix(sig, portraitSprite == null ? 0 : portraitSprite.GetInstanceID());
+            sig = Mix(sig, emblemSprite == null ? 0 : emblemSprite.GetInstanceID());
+            if (!idSigSet || sig != idSig)
+            {
+                idSigSet = true;
+                idSig = sig;
+                string pilotTitle = PilotTitleCatalog.TitleFor(pilotScore, Progress.ScorePerPoint, Progress.MaximumPoints);
+                if (genText == null || pilot.Generation != lastGen) { lastGen = pilot.Generation; genText = "GEN " + AvNum.Thousands(lastGen); }
+                pilotIdentity.Set(
+                    profile ? "PERSONNEL JACKET · LOCAL PROFILE" : "PERSONNEL JACKET",
+                    string.IsNullOrEmpty(callsign) ? "RECORD PENDING" : callsign,
+                    string.IsNullOrEmpty(name) ? "—" : name,
+                    AvNum.Thousands(rank), pilotTitle,
+                    genText,
+                    string.IsNullOrEmpty(pilot.Status) ? "NO STATUS ON FILE" : pilot.Status,
+                    kia ? AvState.Danger : playerAircraft != null ? AvState.Ready : AvState.Info,
+                    portraitSprite, emblemSprite,
+                    string.IsNullOrEmpty(squadronName) ? "NO SQUADRON NAME" : squadronName,
+                    bypass ? AvState.Caution : kia ? AvState.Danger : AvState.Ready,
+                    bypass ? "DEBUG" : kia ? "KIA" : "ACTIVE");
+            }
 
             if (playerAircraft != null)
             {
                 string airframe = playerAircraft.definition != null
                     ? playerAircraft.definition.unitName : playerAircraft.unitName;
-                sortieGrid.Set(sortieAirframe, string.IsNullOrEmpty(airframe) ? "AIRCRAFT" : airframe.ToUpperInvariant());
+                if (!ReferenceEquals(airframe, lastAirframe) || airframeText == null)
+                {
+                    lastAirframe = airframe;
+                    airframeText = string.IsNullOrEmpty(airframe) ? "AIRCRAFT" : airframe.ToUpperInvariant();
+                }
+                sortieGrid.Set(sortieAirframe, airframeText);
                 bool disabled = playerAircraft.disabled;
                 sortieGrid.Set(sortieCondition, disabled ? "DISABLED" : playerAircraft.IsLanded() ? "LANDED" : "AIRBORNE",
                     disabled ? AvState.Danger : AvState.Ready);
                 float fuel = BoscaliSummer.Core.Game.AircraftReadout.Fuel(playerAircraft);
-                tileFuel.Set(AvNum.Percent(fuel), fuel <= .15f ? AvState.Caution : AvState.Inert);
-                tileSortie.Set(AvNum.Thousands(playerAircraft.sortieScore));
+                int fuelPct = Mathf.RoundToInt(fuel * 100f);
+                if (fuelPct != lastFuel || fuelText == null) { lastFuel = fuelPct; fuelText = AvNum.Percent(fuel); }
+                tileFuel.Set(fuelText, fuel <= .15f ? AvState.Caution : AvState.Inert);
+                tileSortie.Set(Num((int)playerAircraft.sortieScore, ref lastSortie, ref sortieText));
             }
             else
             {
@@ -133,52 +167,33 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 tileSortie.Set(null);
             }
 
-            int minutes = Mathf.FloorToInt(Time.timeSinceLevelLoad / 60f);
-            int seconds = Mathf.FloorToInt(Time.timeSinceLevelLoad % 60f);
-            tileTime.Set(AvNum.Clock(minutes * 60 + seconds));
-            tileDeaths.Set(AvNum.Thousands(pilot.Deaths), pilot.Deaths > 0 ? AvState.Caution : AvState.Inert);
+            int clock = Mathf.FloorToInt(Time.timeSinceLevelLoad);
+            if (clock != lastClock || clockText == null) { lastClock = clock; clockText = AvNum.Clock(clock); }
+            tileTime.Set(clockText);
+            tileDeaths.Set(Num(pilot.Deaths, ref lastDeaths, ref deathsText), pilot.Deaths > 0 ? AvState.Caution : AvState.Inert);
 
             sortieGrid.Set(sortieLife, pilot.Respawns ? "RESPAWNING" : "ONE LIFE",
                 pilot.Respawns ? AvState.Info : AvState.Caution);
-            sortieGrid.Set(sortieMission, AvNum.Thousands(view.Score));
+            sortieGrid.Set(sortieMission, Num(view.Score, ref lastMissionScore, ref missionScoreText));
 
             // The host's ramp (grade n costs n × the interval), never a score modulo; -1 once the ladder is spent.
             int toNext = PerkPoints.RemainingToNext(pilotScore, view.ScorePerPoint);
-            float price = Math.Max(1f, view.ScorePerPoint) *
-                (PerkPoints.Earned(pilotScore, view.ScorePerPoint, PerkCatalog.MaximumDepth) + 1);
             int earned = view.EarnedPoints;
             int available = view.AvailablePoints;
-            int ceiling = Math.Max(1, view.MaximumPoints);
             bool complete = earned >= view.MaximumPoints || toNext < 0;
 
-            ringScore.Set(bypass || complete ? 1f : 1f - toNext / price,
-                bypass ? "DBG" : complete ? "MAX" : AvNum.Thousands(toNext), bypass ? AvState.Caution : AvState.Info);
-            ringBonus.Set(Mathf.Clamp01(bonus / (float)AceBonusCeiling), "+" + AvNum.Thousands(bonus),
-                bonus > 0 ? AvState.Ready : AvState.Inert);
-            ringPicks.Set(bypass ? 1f : Mathf.Clamp01(earned / (float)ceiling), bypass ? "ALL" : earned + "/" + ceiling,
-                AvState.Info);
-            ringFree.Set(bypass ? 1f : Mathf.Clamp01(available / (float)ceiling), bypass ? "ALL" : AvNum.Thousands(available),
-                bypass || available > 0 ? AvState.Ready : AvState.Inert);
-
-            RefreshCommittedSkills(view.GetPerks());
-        }
-
-        private void RefreshCommittedSkills(PerkView[] perks)
-        {
-            if (committedLanes == null || committedLaneNames == null) return;
-            for (int l = 0; l < committedLaneNames.Length && l < committedHeld.Length; l++)
+            int ledger = Mix(Mix(Mix(Mix(Mix(17, toNext), bonus), available), earned), (bypass ? 1 : 0) | (complete ? 2 : 0));
+            if (ledger != ledgerSig || !ledgerSigSet)
             {
-                Array.Clear(committedHeld[l], 0, committedHeld[l].Length);
-                for (int i = 0; i < PerkCatalog.All.Length; i++)
-                {
-                    PerkDefinition definition = PerkCatalog.All[i];
-                    if (!string.Equals(definition.Lane, committedLaneNames[l], StringComparison.Ordinal)) continue;
-                    if (!TryFind(perks, definition.Id, out PerkView view)) continue;
-                    int grade = definition.Grade - 1;
-                    if (grade >= 0 && grade < committedHeld[l].Length) committedHeld[l][grade] = view.Unlocked;
-                }
-                committedLanes.SetLane(l, committedHeld[l]);
+                ledgerSig = ledger;
+                ledgerSigSet = true;
+                tileNext.Set(bypass ? "DEBUG" : complete ? "MAX" : AvNum.Thousands(toNext), bypass ? AvState.Caution : AvState.Info);
+                tileAce.Set("+" + AvNum.Thousands(bonus), bonus > 0 ? AvState.Ready : AvState.Inert);
+                tilePicks.Set(bypass ? "ALL" : AvNum.Thousands(available) + " / " + AvNum.Thousands(earned),
+                    bypass || available > 0 ? AvState.Ready : AvState.Inert);
             }
+
+            RefreshAceWatch();
         }
 
         /// <summary>
@@ -260,13 +275,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 string generation, string statusLine, AvState statusState, Sprite photo, Sprite emblemSprite,
                 string squadron, AvState state, string stateWord)
             {
-                profileTag.text = profileTagText ?? "";
-                callsignText.text = callsign ?? "";
-                nameLine.text = name ?? "";
-                rankNumber.text = rank ?? "";
-                rankTitle.text = title ?? "";
-                generationText.text = generation ?? "";
-                statusText.text = statusLine ?? "";
+                AvText.Set(profileTag, profileTagText);
+                AvText.Set(callsignText, callsign);
+                AvText.Set(nameLine, name);
+                AvText.Set(rankNumber, rank);
+                AvText.Set(rankTitle, title);
+                AvText.Set(generationText, generation);
+                AvText.Set(statusText, statusLine);
                 if (statusState != status || statusGlyph == AvIcon.None)
                 {
                     status = statusState;
@@ -283,7 +298,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 portrait.Set(photo != null ? photo : equipmentArt);
                 portrait.Help = photo != null ? "Pilot portrait from the local profile." : "Generic flight equipment illustration. The callsign and service record beside it identify your pilot.";
                 emblem.Set(emblemSprite);
-                squadronText.text = squadron ?? "";
+                AvText.Set(squadronText, squadron ?? "");
                 stateChip.Set(stateWord, state);
             }
 

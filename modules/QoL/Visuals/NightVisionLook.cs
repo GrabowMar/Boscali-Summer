@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
     /// The mod's night-vision look, on top of the game's own goggles (the N key and vanilla's volume swap stay as
     /// they are). While the goggles are on it drives the overrides of vanilla's night-vision volume and runs
     /// <see cref="NvgPass"/>: a white-phosphor picture with a metered, gating tube gain, and in the Fused look an
-    /// orange glow on everything the game counts as hot. Local presentation only.
+    /// amber contour on everything the game counts as hot. Local presentation only.
     /// Fails closed: no shaders means a white tint on vanilla's own gain; the Vanilla setting touches nothing.
     /// </summary>
     internal sealed class NightVisionLook : MonoBehaviour, ISceneService
@@ -23,13 +23,13 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         internal static float TargetLuminance = 0.12f;
         /// <summary>Stops of gain AUTO and HIGH may add over vanilla's maximum.</summary>
         internal static float MaxBoost = 1.5f;
-        internal static float HeatBrightness = 1.5f, SignalGrain = 0.35f, NoiseFloor = 0.004f, Saturation = -25f;
+        internal static float HeatBrightness = 1.15f, SignalGrain = 0.16f, NoiseFloor = 0.002f, Saturation = 0f;
 
         private const float ScanInterval = 0.25f, HeatRange = 12000f;
         private const int MaxHotUnits = 40, MaxCachedUnits = 200;
         /// <summary>Radius over distance below which a mesh is skipped: about three pixels at 1080p.</summary>
         private const float MinAngularSize = 0.0025f;
-        private static readonly Color Phosphor = new Color(0.80f, 0.90f, 1f), HeatColor = new Color(1f, 0.36f, 0.04f);
+        private static readonly Color Phosphor = new Color(0.68f, 0.88f, 0.84f), HeatColor = new Color(1f, 0.40f, 0.055f);
 
         private readonly Dictionary<Unit, NvgPass.HotRenderer[]> renderers = new Dictionary<Unit, NvgPass.HotRenderer[]>();
         private readonly List<(float Distance, Unit Unit, float Heat)> candidates = new List<(float, Unit, float)>(64);
@@ -45,7 +45,7 @@ namespace BoscaliSummer.Modules.QoL.Visuals
         private FilmGrain grain;
         private Vignette vignette;
         private Color savedFilter;
-        private float savedSaturation, savedExposure, savedThreshold, savedGrain, savedVignette, nextScan;
+        private float savedSaturation, savedExposure, savedThreshold, savedBloom, savedScatter, savedGrain, savedVignette, nextScan;
         private int appliedFrame, lastStep;
         private float settleUntil;
 
@@ -115,13 +115,24 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             Camera world = cameras != null ? cameras.mainCamera : null;
             // Shaders present and the pass really running (a grace period covers the first frames after switch-on).
             bool live = world != null && EnsurePass(world) &&
-                (Time.frameCount - appliedFrame < 30 || pass.ExecutedFrame >= Time.frameCount - 30);
+                (Time.frameCount - appliedFrame < 30 || pass.Metered && pass.ExecutedFrame >= Time.frameCount - 30);
             if (pass != null) pass.Active = world != null && phosphorMaterial != null;
+            bool wasOwningGain = NightVisionLink.OwnsGain;
             NightVisionLink.OwnsGain = live;
             if (!live)
             {
                 // Vanilla keeps its own gain; only the colour changes.
+                pass?.Rest();
                 NightVisionLink.Gating = false;
+                if (wasOwningGain)
+                {
+                    color.postExposure.value = savedExposure;
+                    bloom.threshold.value = savedThreshold;
+                }
+                bloom.intensity.value = savedBloom;
+                bloom.scatter.value = savedScatter;
+                if (grain != null) grain.intensity.value = savedGrain;
+                if (vignette != null) vignette.intensity.value = savedVignette;
                 color.colorFilter.value = Phosphor;
                 color.saturation.value = -90f;
                 return;
@@ -142,15 +153,19 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             color.postExposure.value = gain.Ev;
             color.colorFilter.value = Color.white;
             color.saturation.value = Saturation;
-            bloom.threshold.value = Mathf.Lerp(1.5f, 0.35f, level);
-            if (grain != null) grain.intensity.value = Mathf.Lerp(0.2f, 0.6f, level);
-            if (vignette != null) vignette.intensity.value = 0.42f;
+            bloom.threshold.value = Mathf.Lerp(1.15f, 0.85f, level);
+            bloom.intensity.value = 0.25f;
+            bloom.scatter.value = 0.55f;
+            // The signal pass already supplies fine grain; a second film layer hides terrain detail.
+            if (grain != null) grain.intensity.value = 0f;
+            if (vignette != null) vignette.intensity.value = 0.24f;
 
             pass.Tint = Phosphor;
-            pass.Noise = new Vector2(SignalGrain, NoiseFloor);
+            pass.Noise = new Vector2(Mathf.Lerp(SignalGrain * 0.4f, SignalGrain, level), NoiseFloor);
+            pass.Exposure = Mathf.Pow(2f, gain.Ev);
             pass.DrawHeat = look == NvgLook.Fused && heatMaterial != null;
             // Divided by the gain, so a hot unit looks as bright on a moonless night as at dusk.
-            pass.HeatColor = HeatColor * (HeatBrightness / Mathf.Pow(2f, gain.Ev));
+            pass.HeatColor = HeatColor * (HeatBrightness / pass.Exposure);
             if (!pass.DrawHeat) pass.Hot.Clear();
             else if (Time.unscaledTime >= nextScan)
             {
@@ -185,6 +200,8 @@ namespace BoscaliSummer.Modules.QoL.Visuals
             savedSaturation = color.saturation.value;
             savedExposure = color.postExposure.value;
             savedThreshold = bloom.threshold.value;
+            savedBloom = bloom.intensity.value;
+            savedScatter = bloom.scatter.value;
             if (grain != null) savedGrain = grain.intensity.value;
             if (vignette != null) savedVignette = vignette.intensity.value;
             appliedFrame = Time.frameCount;
@@ -203,7 +220,12 @@ namespace BoscaliSummer.Modules.QoL.Visuals
                 color.saturation.value = savedSaturation;
                 color.postExposure.value = savedExposure;
             }
-            if (bloom != null) bloom.threshold.value = savedThreshold;
+            if (bloom != null)
+            {
+                bloom.threshold.value = savedThreshold;
+                bloom.intensity.value = savedBloom;
+                bloom.scatter.value = savedScatter;
+            }
             if (grain != null) grain.intensity.value = savedGrain;
             if (vignette != null) vignette.intensity.value = savedVignette;
             volume = null;

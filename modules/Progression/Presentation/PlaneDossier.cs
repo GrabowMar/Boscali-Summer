@@ -10,7 +10,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Progression.Presentation
 {
-    /// <summary>MY AIRCRAFT (was PILOT's PLANE tab; the 2026-11-14 panels fold moved it onto WMC LOADOUT): the aircraft you fly, live.
+    /// <summary>MY AIRCRAFT (was PILOT's PLANE tab; the 2026-11-14 panels fold moved it onto WMC SUPPLY): the aircraft you fly, live.
     /// The section's caption is the crew chief's call. Wing builds it through <see cref="IMyAircraft"/>; the latest build owns it.</summary>
     internal sealed class PlaneDossier : IMyAircraft
     {

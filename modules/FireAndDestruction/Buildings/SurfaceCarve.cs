@@ -165,7 +165,7 @@ namespace BoscaliSummer.Fire
     /// </summary>
     internal sealed class SurfaceCutter
     {
-        private struct V { internal Vector3 P, N; internal Vector2 U; }
+        private struct V { internal Vector3 P, N; internal Vector2 U; internal float F; }
         private const float Slope = 5f, Thickness = 0.45f, Storey = 3.3f, SlabDepth = 0.32f;
 
         internal readonly List<Vector3> Positions = new List<Vector3>(4096);
@@ -177,6 +177,8 @@ namespace BoscaliSummer.Fire
         private bool any;
         private CarveField field;
         private NativeSurface source;
+        private readonly Vector3[] slabInner = new Vector3[29], slabOuter = new Vector3[29];
+        private readonly bool[] slabValid = new bool[29];
 
         // ponytail: six spare cutters (a few MB of grown lists) instead of ~1 MB of garbage per hit.
         private static readonly Stack<SurfaceCutter> Spare = new Stack<SurfaceCutter>(6);
@@ -219,9 +221,8 @@ namespace BoscaliSummer.Fire
         private void SlabRing(Slab slab)
         {
             const int segments = 28;
-            var inner = new Vector3[segments + 1];
-            var outer = new Vector3[segments + 1];
-            var valid = new bool[segments + 1];
+            Vector3[] inner = slabInner, outer = slabOuter;
+            bool[] valid = slabValid;
             // The native collider can sit off the real facade; if the slab centre fell outside the
             // shell, walk it in along the inward direction before measuring anything.
             if (float.IsInfinity(MeshHit(slab.C, -slab.Inward)))
@@ -258,7 +259,7 @@ namespace BoscaliSummer.Fire
             }
         }
 
-        private static V Vertex(NativeSurface s, int i) => new V { P = s.P[i], N = s.N[i], U = s.U[i] };
+        private static V Vertex(NativeSurface s, int i) => new V { P = s.P[i], N = s.N[i], U = s.U[i], F = float.NaN };
 
         /// <summary>Nearest two-sided hit of a ray with the native shell; +inf when it misses.</summary>
         private float MeshHit(Vector3 origin, Vector3 direction)
@@ -298,6 +299,9 @@ namespace BoscaliSummer.Fire
                     Emit(slot, a, b, c, interior); return true;
                 }
                 int positions = Positions.Count, own = Triangles[slot].Count, inner = Triangles[InteriorSlot].Count;
+                // Each midpoint belongs to several children. Evaluate its noisy field once,
+                // then carry the value with the vertex instead of repeating it at every leaf.
+                Value(ref a); Value(ref b); Value(ref c);
                 V ab = Mid(a, b), bc = Mid(b, c), ca = Mid(c, a);
                 bool whole = Carve(slot, a, ab, ca, depth + 1, interior);
                 whole &= Carve(slot, ab, b, bc, depth + 1, interior);
@@ -312,7 +316,7 @@ namespace BoscaliSummer.Fire
                 Emit(slot, a, b, c, interior);
                 return true;
             }
-            float fa = field.Eval(a.P), fb = field.Eval(b.P), fc = field.Eval(c.P);
+            float fa = Value(ref a), fb = Value(ref b), fc = Value(ref c);
             bool ka = fa < 0f, kb = fb < 0f, kc = fc < 0f;
             int kept = (ka ? 1 : 0) + (kb ? 1 : 0) + (kc ? 1 : 0);
             if (kept == 3) { Emit(slot, a, b, c, interior); return true; }
@@ -330,9 +334,20 @@ namespace BoscaliSummer.Fire
         private static void Rotate(ref V a, ref V b, ref V c, ref float fa, ref float fb, ref float fc)
         { V v = a; a = b; b = c; c = v; float f = fa; fa = fb; fb = fc; fc = f; }
 
-        private static V Mid(V a, V b) => Lerp(a, b, 0.5f);
+        private float Value(ref V v)
+        {
+            if (float.IsNaN(v.F)) v.F = field.Eval(v.P);
+            return v.F;
+        }
+
+        private V Mid(V a, V b)
+        {
+            V v = Lerp(a, b, 0.5f);
+            Value(ref v);
+            return v;
+        }
         private static V Lerp(V a, V b, float t) => new V
-        { P = Vector3.LerpUnclamped(a.P, b.P, t), N = Vector3.LerpUnclamped(a.N, b.N, t).normalized, U = Vector2.LerpUnclamped(a.U, b.U, t) };
+        { P = Vector3.LerpUnclamped(a.P, b.P, t), N = Vector3.LerpUnclamped(a.N, b.N, t).normalized, U = Vector2.LerpUnclamped(a.U, b.U, t), F = float.NaN };
 
         private void Emit(int slot, V a, V b, V c, bool interior)
         {
@@ -386,7 +401,11 @@ namespace BoscaliSummer.Fire
             mesh.SetVertices(Positions); mesh.SetNormals(Normals); mesh.SetUVs(0, Uvs);
             mesh.subMeshCount = Triangles.Length;
             for (int s = 0; s < Triangles.Length; s++) mesh.SetTriangles(Triangles[s], s, false);
-            mesh.RecalculateBounds();
+            // The worker already enclosed every emitted vertex, including inset interiors.
+            // Reuse that envelope instead of scanning the uploaded vertex buffer on the main thread.
+            Bounds bounds = Bounds;
+            bounds.center -= origin;
+            mesh.bounds = bounds;
         }
     }
 }

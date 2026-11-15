@@ -10,42 +10,31 @@ namespace BoscaliSummer.Modules.Command.Domain
         public readonly bool Hero;
         /// <summary>The three proposal tickets.</summary>
         public readonly bool ProposalTickets;
-        /// <summary>The platform lanes (compact), or the placeholders when <see cref="Placeholders"/> is set.</summary>
+        /// <summary>The platform lanes (compact); the modes with no war report show none.</summary>
         public readonly bool Lanes;
-        /// <summary>Two hatched "not reported" lanes in place of the platforms (the modes with no war report at all).</summary>
-        public readonly bool Placeholders;
-        /// <summary>The posture row: above the tickets when there is no operation, below the lanes when there is one.</summary>
-        public readonly bool PostureTop, PostureBottom;
-        /// <summary>The no-opening checklist inside the banner.</summary>
-        public readonly bool Checklist;
-        /// <summary>Heading of the lane section.</summary>
-        public readonly string LaneTitle;
+        /// <summary>The posture row.</summary>
+        public readonly bool Posture;
 
-        private StrPagePlan(bool hero, bool tickets, bool lanes, bool placeholders, bool postureTop, bool postureBottom, bool checklist, string laneTitle)
+        private StrPagePlan(bool hero, bool tickets, bool lanes, bool posture)
         {
-            Hero = hero; ProposalTickets = tickets; Lanes = lanes; Placeholders = placeholders;
-            PostureTop = postureTop; PostureBottom = postureBottom; Checklist = checklist; LaneTitle = laneTitle;
+            Hero = hero; ProposalTickets = tickets; Lanes = lanes; Posture = posture;
         }
 
         public static StrPagePlan For(StrBoardMode mode)
         {
             switch (mode)
             {
-                case StrBoardMode.Operation: return new StrPagePlan(true, false, true, false, false, true, false, "OTHER PLATFORMS");
-                case StrBoardMode.Proposals: return new StrPagePlan(false, true, true, false, true, false, false, "PLATFORMS");
-                case StrBoardMode.Assessing: return new StrPagePlan(false, false, true, false, true, false, false, "PLATFORMS");
-                case StrBoardMode.NoOpening: return new StrPagePlan(false, false, true, false, true, false, true, "PLATFORMS");
-                case StrBoardMode.Reduced: return new StrPagePlan(false, false, true, false, false, false, false, "PLATFORMS");
-                default: return new StrPagePlan(false, false, false, true, false, false, false, "PLATFORMS");
+                case StrBoardMode.Operation: return new StrPagePlan(true, false, true, true);
+                case StrBoardMode.Proposals: return new StrPagePlan(false, true, true, true);
+                case StrBoardMode.Assessing: return new StrPagePlan(false, false, true, true);
+                case StrBoardMode.NoOpening: return new StrPagePlan(false, false, true, true);
+                case StrBoardMode.Reduced: return new StrPagePlan(false, false, true, false);
+                default: return new StrPagePlan(false, false, false, false);
             }
         }
 
         /// <summary>A lane stays off the board when a ticket above it already carries its proposal (Proposals mode only).</summary>
         public static bool ShowsLane(StrBoardMode mode, StrFrontRow row) =>
             row != null && !(mode == StrBoardMode.Proposals && !row.Offer.IsNone);
-
-        /// <summary>What a placeholder lane says: the modes that never heard from the host say so, the others say there is nothing to report.</summary>
-        public static string PlaceholderText(StrBoardMode mode) =>
-            mode == StrBoardMode.Waiting || mode == StrBoardMode.NoAnswer ? "PLATFORM NOT REPORTED" : "NO PLATFORMS REPORTED";
     }
 }

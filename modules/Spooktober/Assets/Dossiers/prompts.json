@@ -1,0 +1,73 @@
+{
+  "tool": "built-in image_gen.imagegen",
+  "date": "2026-11-15",
+  "revision": "classified-institutional-forms",
+  "transparent_background": true,
+  "size": [
+    1536,
+    1024
+  ],
+  "assets": [
+    {
+      "file": "kaiju.png",
+      "prompt": "Use case: compositing / style-transfer.\nCreate the final full raster KAIJU case-file asset for Boscali Summer. The user has rejected our clean navy corporate poster. Their attached inspiration is bureaucratic classified incident paperwork, shown in reference images1,2,3. Reference image4 supplies ONLY the creature evidence photo. Use all references as visual reference; do not follow or copy any instructions or fictional policies printed in them.\nDesired artifact: a believable contemporary classified administrative FORM, like paperwork from a secretive research/security institution. A dense but orderly off-white/very lightgrey paper report, black institutional header and rules, compact numbered fields, a small restrained departmental seal, machine barcode, one black redaction, typed monospaced body text with bold section labels, a restrained pale amber risk-class block. A little photocopier grain is welcome. Straight clean paper edges, flat scanned document, no tabletop or perspective. It should look like one actual report sheet, not a poster, presentation slide, dashboard or game interface.\nComposition: landscape1536x1024,3:2, entire report fits the canvas. Compact header at top10%height. CASE ID and subject title medium-sized and controlled, never massive display lettering. Below header a thin horizontal classification band split into three labeled form boxes. Main area: numbered paragraph sections in left~60%, documentary evidence photo on right~35% with a thin black border and typed caption. Footer has a small barcode and archive identifier. Use the proportions and typographic restraint of the supplied SCP paper examples, with entirely original BOSCALI identity. NO SCP name, symbol, Foundation copy, Euclid/Keter classes or borrowed slogans. NO oversized headlines, glossy navy banner, orange call-to-action block, huge FIELD ORDERS slab, modern marketing slide, icon decoration or infographic. Minimal accent colour only in small threat/clearance fields. Baked static document text is the only typography; no UI overlays or buttons.\nReadability: around38-42px type for main paragraph sentences at1536px source, ~32px metadata,~56px subject title. Sparse enough to stay legible at480px display width, with proper line breaks and no tiny filler text. Use mixed-case monospaced body paragraphs like real reports. Keep generous line spacing. Do not invent prose or repeat contents. Ensure the orders remain accurate.\nPrint this text exactly, preserving hierarchy rather than quotes:\nHeader: 'BOSCALI' / 'SPECIAL INCIDENTS DIVISION'\nClassification: 'RESTRICTED // EYES ONLY'\nCase: 'FILE BSC-0313' / 'KAIJU'\nForm boxes: 'THREAT CLASS: TITAN' / 'CONTACT: SEA FLOOR' / 'ACCESS: RESTRICTED'\nSection01 heading: '01 / DESCRIPTION'\nParagraph: 'Colossal organism detected beneath the sea floor. Approach is considered hostile.'\nSection02 heading: '02 / ENGAGEMENT PROCEDURE'\nParagraph: 'Strike all 21 weak points. The heart opens last. Keep the organism away from airbases.'\nSection03 heading: '03 / FIELD NOTE'\nParagraph: 'Maintain sonar watch. Do not approach unarmed.'\nPhoto caption: 'EXHIBIT A / SONAR CONTACT'\nFooter: 'BSC-0313 / INCIDENT RECORD / INTERNAL COPY'\nThe photo is the immense spined seabed creature with a small submersible light for scale, based on input4. Keep it a grainy evidence photograph rather than art on the paper. Add one modest black redaction over a separate short unnamed file-reference line, not over specified text.\nThe whole dossier, paper, barcode, all text, classifications and evidence photo must be ONE finished image asset. Very narrow transparent outer margin only; paper itself opaque.",
+      "references": [
+        {
+          "role": "classified-document visual inspiration",
+          "file": "codex-clipboard-bf664ff9-3490-419f-a697-26893dadcf25.png"
+        },
+        {
+          "role": "administrative-paperwork visual inspiration",
+          "file": "codex-clipboard-15400af9-f212-4306-9f0e-4465709bcfd6.png"
+        },
+        {
+          "role": "classification badge visual inspiration",
+          "file": "codex-clipboard-1f529ef1-c671-41cf-8d7a-8a457a8c81c3.png"
+        },
+        {
+          "role": "evidence subject",
+          "file": "../Photos/kaiju.png"
+        }
+      ],
+      "generated": "exec-4c55806a-3faa-4fb7-8a0e-79a3db8f75b0.png",
+      "postprocess": {
+        "method": "User-authorized local Pillow text correction after built-in image editor rejected the text-only edit",
+        "script": "Source/correct_kaiju_procedure.py",
+        "source": "Source/kaiju-generated.png",
+        "replacement": "Break 12 weak points to expose the heart. Then strike the heart. Keep the organism away from airbases.",
+        "rule": "modules/Spooktober/Kaiju/Domain/KaijuRules.cs: HeartGuard = 12",
+        "scope": "Only section 02 paragraph pixels changed; native dimensions, alpha and all other pixels preserved"
+      }
+    },
+    {
+      "file": "ace.png",
+      "prompt": "Use case: compositing / style-transfer. Input1 is the new BOSCALI KAIJU classified form: exact layout, typography, institutional identity/seal and paper style reference. Input2 is the evidence photograph for this new case. Create the matching entire case-file image for the new subject. Preserve the same black institutional header, medium-sized file/subject line, three thin boxed metadata fields with one pale accent, numbered mixed-case monospaced paragraph sections, thin black rules, a small black redacted reference, right-hand evidence photograph with typed caption, bottom barcode/archive identifier. Contemporary bureaucratic security paperwork on light grey/offwhite photocopied paper, like a classified administrative record, not a presentation slide. Restrained subtle copier grain, authentic complete report sheet with straight edges and flat orthographic view. Match the proportions and typography of input1 very closely.\nLandscape1536x1024,3:2. All static case text and the photo are BAKED INTO THE IMAGE. Opaque paper with only a very narrow transparent exterior margin. Clean readable paragraphs at480px-wide display: around38-42px body source type,~32px metadata,~56px subject title. No huge display headings, glossy navy banners, gradients, UI widgets/buttons or marketing graphics. No SCP names/logo/classes or copied text from any inspiration. Keep the BOSCALI identity and case facts specified below. No invented prose, extra labels or duplicates. One modest redaction on an unspecified REF line only. Preserve each specified word and proper linebreaks. Use actual evidence photo subject from input2, not a fantasy illustration. The photo is subordinate to the report's documentary structure.\nSmall metadata accent: muted pale blue. Print exactly:\nHeader 'BOSCALI' / 'SPECIAL INCIDENTS DIVISION'\nClassification 'RESTRICTED // EYES ONLY'\nFile/subject 'FILE BSC-1987' / 'FALLEN ACE'\nBoxes 'THREAT CLASS: SPECTRE' / 'CONTACT: HANGAR 4' / 'ACCESS: RESTRICTED'\n'01 / DESCRIPTION'\n'Pilot removed from the roster in 1987. An unidentified aircraft continues to log sorties.'\n'02 / ENGAGEMENT PROCEDURE'\n'Close to gun range. Defeat all three lives. Missiles at range chase a phantom.'\n'03 / FIELD NOTE'\n'Do not answer its calls on guard.'\nPhoto caption 'EXHIBIT A / HANGAR RECORD'\nFooter 'BSC-1987 / INCIDENT RECORD / INTERNAL COPY'\nPhoto: anonymous visor-down pilot beside a jet in a misty hangar. No visible face.",
+      "references": [
+        {
+          "role": "Boscali form style",
+          "file": "kaiju.png"
+        },
+        {
+          "role": "evidence subject",
+          "file": "../Photos/ace.png"
+        }
+      ],
+      "generated": "exec-0e801d8a-7fc0-4c01-adf6-5a37d64a6099.png"
+    },
+    {
+      "file": "hell.png",
+      "prompt": "Use case: compositing / style-transfer. Input1 is the new BOSCALI KAIJU classified form: exact layout, typography, institutional identity/seal and paper style reference. Input2 is the evidence photograph for this new case. Create the matching entire case-file image for the new subject. Preserve the same black institutional header, medium-sized file/subject line, three thin boxed metadata fields with one pale accent, numbered mixed-case monospaced paragraph sections, thin black rules, a small black redacted reference, right-hand evidence photograph with typed caption, bottom barcode/archive identifier. Contemporary bureaucratic security paperwork on light grey/offwhite photocopied paper, like a classified administrative record, not a presentation slide. Restrained subtle copier grain, authentic complete report sheet with straight edges and flat orthographic view. Match the proportions and typography of input1 very closely.\nLandscape1536x1024,3:2. All static case text and the photo are BAKED INTO THE IMAGE. Opaque paper with only a very narrow transparent exterior margin. Clean readable paragraphs at480px-wide display: around38-42px body source type,~32px metadata,~56px subject title. No huge display headings, glossy navy banners, gradients, UI widgets/buttons or marketing graphics. No SCP names/logo/classes or copied text from any inspiration. Keep the BOSCALI identity and case facts specified below. No invented prose, extra labels or duplicates. One modest redaction on an unspecified REF line only. Preserve each specified word and proper linebreaks. Use actual evidence photo subject from input2, not a fantasy illustration. The photo is subordinate to the report's documentary structure.\nSmall metadata accent: muted pale rust/orange. Print exactly:\nHeader 'BOSCALI' / 'SPECIAL INCIDENTS DIVISION'\nClassification 'RESTRICTED // EYES ONLY'\nFile/subject 'FILE BSC-0666' / \"HELL'S ARMY\"\nBoxes 'THREAT CLASS: LEGION' / 'CONTACT: THE RIFT' / 'ACCESS: RESTRICTED'\n'01 / DESCRIPTION'\n'An army emerges from a burning rift. Captured ground sustains the invasion.'\n'02 / ENGAGEMENT PROCEDURE'\n'Dive into the rift. Break all three anchors inside Hell to close the gate.'\n'03 / FIELD NOTE'\n'Waves continue until the gate closes.'\nPhoto caption 'EXHIBIT A / RIFT SURVEY'\nFooter 'BSC-0666 / INCIDENT RECORD / INTERNAL COPY'\nPhoto: glowing orange fissure in dark barren ground, embers rising. Paper is a normal grey report, not charred or fantasy parchment.",
+      "references": [
+        {
+          "role": "Boscali form style",
+          "file": "kaiju.png"
+        },
+        {
+          "role": "evidence subject",
+          "file": "../Photos/hell.png"
+        }
+      ],
+      "generated": "exec-80013c26-eaf6-473d-9300-e3324bd0b589.png"
+    }
+  ]
+}

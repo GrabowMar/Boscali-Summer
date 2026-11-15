@@ -1,0 +1,6 @@
+Original generated artwork, OpenAI image generation through the Codex CLI (ChatGPT), 2026-11-15, for the MISC > SPOOKTOBER
+incident files (SpookMenuPage.EvidenceCard). One evidence print per file, cropped and reduced to 318x336, 128 colours:
+kaiju.png  a grainy deep-sea sonar and floodlight photograph of a colossal spined creature on the sea floor, a submersible's light for scale
+ace.png    a faded 1980s squadron photograph of a lone pilot, visor down, in front of a jet in a misty hangar (no face, no real person)
+hell.png   a night reconnaissance photograph of a glowing fissure in barren ground with embers rising
+Prompts asked for no frame, caption, letters or numbers. Not photographs of real places, people or equipment.

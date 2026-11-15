@@ -33,12 +33,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     }
 
     /// <summary>When a pilot asks a key's question; the rail gathers its keys under these, in this order.</summary>
-    internal enum MfdRailGroup { Sortie, War, Country, News, Map, System, Aux }
+    internal enum MfdRailGroup { Sortie, War, Map, System, Aux }
 
     /// <summary>
-    /// How the rail spends its height: full dress (index header and group labels) while the
-    /// keys stay comfortable, then the header alone, then bare keys down to the 44px pointer
-    /// floor. Below that it does not fit and the stock bezel is left alone.
+    /// How the rail spends its height: keys under their short group captions while the keys stay comfortable,
+    /// then bare keys down to the 44px pointer floor. Below that it does not fit and the stock bezel is left alone.
     /// </summary>
     internal readonly struct MfdRailPlan
     {
@@ -46,33 +45,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public const float KeyMin = 44f;
         public const float Gap = 2f;
         public const float Pad = 4f;
-        public const float HeaderHeight = 28f;
         public const float GroupHeight = 16f;
 
         public readonly bool Fits;
-        public readonly bool Header;
         public readonly bool Groups;
         public readonly float KeyHeight;
 
-        private MfdRailPlan(bool fits, bool header, bool groups, float keyHeight)
+        private MfdRailPlan(bool fits, bool groups, float keyHeight)
         {
             Fits = fits;
-            Header = header;
             Groups = groups;
             KeyHeight = (float)System.Math.Floor(System.Math.Min(KeyMax, keyHeight));
         }
 
         public static MfdRailPlan Resolve(float height, int keys, int groups)
         {
-            if (keys <= 0) return new MfdRailPlan(true, true, false, KeyMax);
+            if (keys <= 0) return new MfdRailPlan(true, false, KeyMax);
 
             float body = height - Pad * 2f - (keys - 1) * Gap;
-            float dressed = (body - HeaderHeight - Gap - groups * GroupHeight) / keys;
+            float dressed = (body - groups * GroupHeight) / keys;
             // Group labels outrank tall keys (user ruling 2026-10-25): they stay down to 46px keys.
-            if (dressed >= 46f) return new MfdRailPlan(true, true, true, dressed);
-            float headed = (body - HeaderHeight - Gap) / keys;
-            if (headed >= 48f) return new MfdRailPlan(true, true, false, headed);
-            return new MfdRailPlan(body / keys >= KeyMin, false, false, body / keys);
+            if (dressed >= 46f) return new MfdRailPlan(true, true, dressed);
+            return new MfdRailPlan(body / keys >= KeyMin, false, body / keys);
         }
     }
 
@@ -105,19 +99,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 case "STR": return new MfdRailEntry(code, "THEATER", AvIcon.Territory, MfdRailGroup.War, 0);
                 case "MIS": return new MfdRailEntry(code, "MISSIONS", AvIcon.Clipboard, MfdRailGroup.War, 1);
                 case "OPS": return new MfdRailEntry(code, "SUPPORT", AvIcon.CallDown, MfdRailGroup.War, 2);
-                case "FAC": return new MfdRailEntry(code, "FACTION", AvIcon.Crest, MfdRailGroup.Country, 0);
-                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.Crest, MfdRailGroup.Country, 1);
-                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.Crest, MfdRailGroup.Country, 2);
-                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Burst, MfdRailGroup.News, 0);
-                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.News, 1);
-                case "MAP": return new MfdRailEntry(code, "MAP", AvIcon.Map2, MfdRailGroup.Map, 0);
-                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Map, 1);
+                case "FAC": return new MfdRailEntry(code, "FACTION", AvIcon.Crest, MfdRailGroup.War, 3);
+                case "BDF": return new MfdRailEntry(code, "BOSCALI HQ", AvIcon.Crest, MfdRailGroup.War, 4);
+                case "PALA": return new MfdRailEntry(code, "PALA HQ", AvIcon.Crest, MfdRailGroup.War, 5);
+                case "EVN": return new MfdRailEntry(code, "EVENTS", AvIcon.Burst, MfdRailGroup.War, 6);
+                case "COM": return new MfdRailEntry(code, "COMMS", AvIcon.Headset, MfdRailGroup.Map, 0);
+                case "MAP": return new MfdRailEntry(code, "MAP", AvIcon.Map2, MfdRailGroup.Map, 1);
+                case "TGT": return new MfdRailEntry(code, "TARGETS", AvIcon.Designator, MfdRailGroup.Map, 2);
                 case "SET": return new MfdRailEntry(code, "SETTINGS", AvIcon.AdjustmentsHorizontal, MfdRailGroup.System, 0);
                 case "ENV": return new MfdRailEntry(code, "WEATHER", AvIcon.Cloud, MfdRailGroup.System, 1);
                 case "RAD": return new MfdRailEntry(code, "RADIO", AvIcon.Radio, MfdRailGroup.System, 2);
                 case "MFD": return new MfdRailEntry(code, "DISPLAY", AvIcon.Focus2, MfdRailGroup.System, 3);
-                // Last key of the rail, under any unknown code too, and pinned to its bottom edge (MfdRail.Lay). Dev builds only.
-                case "MISC": return new MfdRailEntry(code, "EXTRAS", AvIcon.Stack2, MfdRailGroup.Aux, 99);
+                // Last key of the rail, under any unknown code too, and pinned to its bottom edge (MfdRail.Lay). Ships for everyone.
+                case "MISC": return new MfdRailEntry(code, "EXTRAS", AvIcon.Stack2, MfdRailGroup.System, 999);
                 default: return new MfdRailEntry(code, null, NeutralGlyph, MfdRailGroup.Aux, 0);
             }
         }
@@ -133,13 +127,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             switch (group)
             {
-                case MfdRailGroup.Sortie: return "BEFORE THE SORTIE";
-                case MfdRailGroup.War: return "THE WAR";
-                case MfdRailGroup.Country: return "THE COUNTRY";
-                case MfdRailGroup.News: return "THE NEWS";
-                case MfdRailGroup.Map: return "THE MAP";
-                case MfdRailGroup.System: return "SYSTEM";
-                default: return "AUX";
+                case MfdRailGroup.Sortie: return "SORTIE";
+                case MfdRailGroup.War: return "WAR";
+                case MfdRailGroup.Map: return "MAP";
+                default: return "SYSTEM";
             }
         }
 

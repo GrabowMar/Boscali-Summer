@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using BepInEx.Logging;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.Audio;
 using UnityEngine.Networking;
@@ -44,6 +45,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private float crossfadeSeconds = 1.5f;
         private float currentGain = 1f, incomingGain = 1f; // loudness levelling per clip (Loudness.Gain)
 
+#if !PUBLIC_RELEASE
+        internal int ActiveLoads { get; private set; }
+#endif
+
         public RadioProgram(MonoBehaviour runner, GameObject host, string name, ManualLogSource logger)
         {
             this.runner = runner ?? throw new ArgumentNullException(nameof(runner));
@@ -81,7 +86,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
 
         /// <summary>True once the clip ran out on its own; the caller advances the log.</summary>
         public bool Finished =>
-            State == Transport.Playing && currentClip != null && pendingCoroutine == null &&
+            State == Transport.Playing && currentClip != null && pendingRequest == null && pendingCoroutine == null &&
             currentSource != null && !currentSource.isPlaying;
 
         public void SetVolume(float value)
@@ -156,8 +161,11 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 var handler = pendingRequest.downloadHandler as DownloadHandlerAudioClip;
                 if (handler != null) handler.streamAudio = false;
                 int generation = loadGeneration;
-                pendingCoroutine = runner.StartCoroutine(
-                    LoadTrack(title, startTime, paused, generation, pendingRequest));
+                UnityWebRequestAsyncOperation operation = pendingRequest.SendWebRequest();
+#if !PUBLIC_RELEASE
+                ActiveLoads++;
+#endif
+                LoadTrackAsync(title, startTime, paused, generation, pendingRequest, operation).Forget();
                 return true;
             }
             catch (Exception e)
@@ -209,36 +217,58 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             incomingSource = null;
         }
 
-        private IEnumerator LoadTrack(
-            string title, float startTime, bool paused, int generation, UnityWebRequest request)
+        private async UniTaskVoid LoadTrackAsync(
+            string title, float startTime, bool paused, int generation, UnityWebRequest request, UnityWebRequestAsyncOperation operation)
         {
-            yield return request.SendWebRequest();
-
-            if (generation != loadGeneration || request != pendingRequest) yield break;
-            pendingRequest = null;
-            pendingCoroutine = null;
-
-            if (request.result != UnityWebRequest.Result.Success)
+            try
             {
-                string error = request.error;
-                request.Dispose();
+                // Native completion timing: no additional PlayerLoop hooks or frame polling.
+                try { await operation; }
+                catch (UnityWebRequestException) { } // failure/Abort is handled below; superseded loads stay silent
+                if (generation != loadGeneration || request != pendingRequest)
+                {
+                    // Completion can win the abort race; that decoded clip has no owner.
+                    if (request.result == UnityWebRequest.Result.Success)
+                        DestroyClip(DownloadHandlerAudioClip.GetContent(request), true);
+                    return;
+                }
+                pendingRequest = null;
+
+                if (request.result != UnityWebRequest.Result.Success)
+                {
+                    State = currentClip != null ? Transport.Playing : Transport.Stopped;
+                    LastError = "Skipped unreadable track";
+                    logger?.LogWarning(name + " could not decode a local track: " + request.error);
+                    return;
+                }
+
+                AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
+                if (clip == null || clip.samples <= 0)
+                {
+                    DestroyClip(clip, true);
+                    State = currentClip != null ? Transport.Playing : Transport.Stopped;
+                    LastError = "Skipped empty track";
+                    return;
+                }
+
+                clip.name = title;
+                StartIncomingClip(clip, true, startTime, paused);
+            }
+            catch (Exception e)
+            {
+                if (generation != loadGeneration) return;
                 State = currentClip != null ? Transport.Playing : Transport.Stopped;
                 LastError = "Skipped unreadable track";
-                logger?.LogWarning(name + " could not decode a local track: " + error);
-                yield break;
+                logger?.LogWarning(name + " track load failed: " + e.Message);
             }
-
-            AudioClip clip = DownloadHandlerAudioClip.GetContent(request);
-            request.Dispose();
-            if (clip == null)
+            finally
             {
-                State = currentClip != null ? Transport.Playing : Transport.Stopped;
-                LastError = "Skipped empty track";
-                yield break;
+                if (request == pendingRequest) pendingRequest = null;
+                request.Dispose();
+#if !PUBLIC_RELEASE
+                ActiveLoads--;
+#endif
             }
-
-            clip.name = title;
-            StartIncomingClip(clip, true, startTime, paused);
         }
 
         private void StartIncomingClip(AudioClip clip, bool owned, float startTime, bool paused)
@@ -297,9 +327,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             loadGeneration++;
             if (pendingRequest != null)
             {
-                pendingRequest.Abort();
-                pendingRequest.Dispose();
+                UnityWebRequest request = pendingRequest;
                 pendingRequest = null;
+                // The async load owns disposal, including after an abort completes.
+                request.Abort();
             }
             if (pendingCoroutine != null)
             {

@@ -26,6 +26,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> SkyPhenomenaEnabled { get; }
         public ConfigEntry<bool> DarkNightsEnabled { get; }
         public ConfigEntry<bool> OceanWavesEnabled { get; }
+        public ConfigEntry<bool> OceanInteractionsEnabled { get; }
         public ConfigEntry<bool> SeaSprayEnabled { get; }
         public ConfigEntry<bool> CloudHalfResolution { get; }
         public ConfigEntry<bool> CloudTemporalUpdate { get; }
@@ -36,6 +37,7 @@ namespace BoscaliSummer.Modules.Weather.Configuration
         public ConfigEntry<bool> CanopyRainEnabled { get; }
         public ConfigEntry<bool> CanopyShaderEnabled { get; }
         public ConfigEntry<bool> TerrainRainEnabled { get; }
+        public ConfigEntry<bool> TerrainDetailEnabled { get; }
         public ConfigEntry<bool> RainAtmosphereEnabled { get; }
         public ConfigEntry<bool> LightningEnabled { get; }
         public ConfigEntry<bool> ReducedFlashes { get; }
@@ -99,8 +101,8 @@ namespace BoscaliSummer.Modules.Weather.Configuration
                 "Client-local rain rush and canopy patter through the game's effects mixer. Applies now.");
 
             CinematicCloudsEnabled = config.Bind(section, "CinematicCloudsEnabled", true,
-                "Render fly-through volumetric clouds for the current weather state. " +
-                "Falls back to native clouds when the shader is unavailable; applies now.");
+                "Render fly-through volumetric clouds and the atmospheric sky with sunset scattering and a natural night sky. " +
+                "Falls back to the native sky when the shaders are unavailable; applies now.");
 
             SunShaftsEnabled = config.Bind(section, "SunShaftsEnabled", true,
                 "Beams of light around the sun, cut by clouds, terrain and aircraft. " +
@@ -121,6 +123,10 @@ namespace BoscaliSummer.Modules.Weather.Configuration
 
             SeaSprayEnabled = config.Bind(section, "SeaSprayEnabled", true,
                 "Spray thrown up behind aircraft flying low and fast over water. Client-local; applies now.");
+
+            OceanInteractionsEnabled = config.Bind(section, "OceanInteractionsEnabled", false,
+                "Surface wakes behind moving ships and smoother aircraft downwash on the custom ocean. " +
+                "Reuses four interaction slots; client-local and cosmetic. Requires OceanWavesEnabled; applies now.");
 
             CloudHalfResolution = config.Bind(section, "CloudHalfResolution", true,
                 "March the volumetric clouds at half resolution and upsample them along scene depth " +
@@ -164,6 +170,10 @@ namespace BoscaliSummer.Modules.Weather.Configuration
             TerrainRainEnabled = config.Bind(section, "TerrainRainEnabled", true,
                 "Wet darkening, puddles and sun glints on nearby native terrain, with gradual drying. " +
                 "At most eight visible terrain submeshes receive an extra texture-free pass.");
+
+            TerrainDetailEnabled = config.Bind(section, "TerrainDetailEnabled", false,
+                "Subtle soil and rock relief on nearby terrain. At most four visible submeshes and 30,000 triangles " +
+                "receive one extra detail pass, fading out within 1 km. Client-local; applies now.");
 
             LightningEnabled = config.Bind(section, "LightningEnabled", true,
                 "Spatial storm lightning and delayed thunder. Client-local presentation; no aircraft physics changes.");

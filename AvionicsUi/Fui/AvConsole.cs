@@ -11,7 +11,7 @@ namespace NOAvionics
     /// </summary>
     public static class AvConsoleLook
     {
-        public static bool Grid = true, Orders = true, Clock = true, HoverHelp = true;
+        public static bool Grid = true, Orders = true, Clock = true, HoverHelp = true, Art = true;
         public static int Revision { get; private set; }
         public static void Changed() => Revision++;
     }
@@ -26,8 +26,8 @@ namespace NOAvionics
     {
         private readonly float width, height;
         private readonly AvFrame frame;
-        private readonly Image headerBack, idPlate;
-        private readonly TMP_Text idText, titleText, pageIndex;
+        private readonly Image headerBack, idPlate, idRail;
+        private readonly TMP_Text idText, titleText;
         private readonly RectTransform live, bodyRect, viewport;
         private readonly AvScrollView scrollView;
         private readonly RectTransform[] pageRects;
@@ -44,6 +44,8 @@ namespace NOAvionics
         private AvTabBar tabs;
         private readonly RawImage groundArt;
         private readonly AvGroundGraphic graticule;
+        private readonly RawImage consoleArt;
+        private float bodyHeight, artShown = -1f;
         private readonly string[][] orders;
         private readonly TMP_Text bootText;
         private readonly string id;
@@ -97,14 +99,12 @@ namespace NOAvionics
             idPlate = AvLay.Solid(Root, "IdPlate", Color.clear);
             AvSurfaceGradient.Apply(headerBack, Color.white, new Color(.65f, .71f, .74f, 1f));
             AvSurfaceGradient.Apply(idPlate, Color.white, new Color(.65f, .71f, .74f, 1f));
+            idRail = AvLay.Solid(Root, "IdRail", Color.clear);   // the key colour under the plate: every console is signed the same way
             idText = AvText.Make(Root, "Id", AvTextRole.Head, id, TextAlignmentOptions.Center);
             titleText = AvText.Make(Root, "Title", AvTextRole.Head, title);
             titleText.fontSize = 15f;
-            titleText.characterSpacing = 5f;
+            titleText.characterSpacing = 3f;
             AvText.Fit(titleText, false);
-            // Right end: the console's name (the rail key's words) and the page count, "MISSIONS  01/03".
-            pageIndex = AvText.Make(Root, "PageIndex", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-            AvText.Fit(pageIndex, false);
 
             live = AvLay.Child(Root, "Live");
             AvLay.Nest(live, false);
@@ -115,6 +115,17 @@ namespace NOAvionics
             AvLay.Fill((RectTransform)gridGo.transform);
             graticule = gridGo.AddComponent<AvGroundGraphic>();
             graticule.raycastTarget = false;
+            // The console's abstract background, over the graticule and under the pages (see SeatArt).
+            Texture2D picture = AvBundle.ConsoleArt(this.id);
+            if (picture != null)
+            {
+                var artGo = new GameObject("Art", typeof(RectTransform), typeof(CanvasRenderer));
+                artGo.transform.SetParent(bodyRect, false);
+                consoleArt = artGo.AddComponent<RawImage>();
+                consoleArt.texture = picture;
+                consoleArt.raycastTarget = false;
+                consoleArt.enabled = false;
+            }
             scrollView = new AvScrollView(bodyRect, false);
             viewport = scrollView.Viewport;
 
@@ -158,23 +169,20 @@ namespace NOAvionics
             float width = AvTokens.PanelWidth, float height = AvTokens.PanelHeight) =>
             new AvConsole(host, id, title, pages, width, height);
 
-        /// <summary>Overrides the page title (the left of the header); null or empty goes back to the open tab's label.</summary>
+        /// <summary>Overrides the header title; null or empty goes back to the console's name.</summary>
         public void SetTitle(string t) { pageTitle = t; ShowTitle(); }
 
-        // Left: the page (the open tab's label unless overridden). Right: the console's name, which is the rail key's own words
-        // when the host mod supplies them, and the page count.
+        // The header says which console this is, once: the id plate and the rail key's own words (the host mod supplies them). The lit
+        // tab names the page, so the header neither repeats it nor counts pages. A console whose name is its id shows the plate alone.
         private void ShowTitle()
         {
-            string t = !string.IsNullOrEmpty(pageTitle) ? pageTitle
-                : pageNames != null && CurrentPage >= 0 ? pageNames[CurrentPage] : name;
+            string t = !string.IsNullOrEmpty(pageTitle) ? pageTitle : KeyName?.Invoke(id) ?? name;
+            if (string.Equals(t, id, StringComparison.OrdinalIgnoreCase)) t = "";
             if (titleText.text != t) titleText.text = t;
-            string n = (KeyName?.Invoke(id) ?? name) + "  " +
-                       (Math.Max(0, CurrentPage) + 1).ToString("00", System.Globalization.CultureInfo.InvariantCulture) + "/" +
-                       PageCount.ToString("00", System.Globalization.CultureInfo.InvariantCulture);
-            if (pageIndex.text != n) pageIndex.text = n;
+            if (decor.PlateRule != t.Length > 0) { decor.PlateRule = t.Length > 0; decor.SetVerticesDirty(); }
         }
 
-        // ---- rail wiring: every console can be opened on a page from any other (link chips) ------------------------------------
+        // ---- rail wiring: a console can be opened on a page by key (menus, automation) ------------------------------------
 
         /// <summary>The words on a rail key for a console id ("MIS" -> "MISSIONS"); null keeps the console's own name.</summary>
         public static Func<string, string> KeyName;
@@ -184,8 +192,6 @@ namespace NOAvionics
 
         private static readonly System.Collections.Generic.Dictionary<string, AvConsole> byId =
             new System.Collections.Generic.Dictionary<string, AvConsole>(16);
-        /// <summary>Every "KEY|PAGE" a link chip targets (filled by <see cref="AvFlow.Links"/>), for the dev link audit.</summary>
-        public static readonly System.Collections.Generic.HashSet<string> LinkTargets = new System.Collections.Generic.HashSet<string>();
 
         private static readonly System.Collections.Generic.Dictionary<string, string> pendingPage =
             new System.Collections.Generic.Dictionary<string, string>(4);
@@ -279,7 +285,7 @@ namespace NOAvionics
             bool changed = CurrentPage != index;
             CurrentPage = index;
             ShowTitle();
-            if (changed) { StartScan(); Footer.SetOrders(orders[index]); PageChanged?.Invoke(index); }
+            if (changed) { Footer.SetOrders(orders[index]); PageChanged?.Invoke(index); }
             // Flush deferred layout after page callbacks, including a same-page reopen.
             flows[CurrentPage].Relayout();
             scrollView.Scroll.StopMovement();
@@ -291,7 +297,30 @@ namespace NOAvionics
         private void SeatGround()
         {
             if (lookRevision != AvConsoleLook.Revision) { lookRevision = AvConsoleLook.Revision; Restyle(); Footer.Relook(); }
-            if (CurrentPage >= 0) graticule.Top = flows[CurrentPage].ContentHeight;
+            if (CurrentPage < 0) return;
+            graticule.Top = flows[CurrentPage].ContentHeight;
+            SeatArt();
+        }
+
+        // The console's decorative geometry lives in the room a short page leaves under its last part: it fades in as that room grows and
+        // is gone under a full page. One float compare per slow tick; the colour is written only when the amount moves.
+        private void SeatArt()
+        {
+            if (consoleArt == null) return;
+            float room = bodyHeight - flows[CurrentPage].ContentHeight;
+            // The drawing's top fifth is faded out in the picture itself, so it may start that far under the last part and no further.
+            float ah = consoleArt.rectTransform.sizeDelta.y;
+            float show = AvConsoleLook.Art ? Mathf.Clamp01((room - ah * 0.8f) / (ah * 0.25f)) : 0f;
+            if (Mathf.Abs(show - artShown) < 0.01f) return;
+            artShown = show;
+            consoleArt.enabled = show > 0f;
+            if (show > 0f) PaintArt();
+        }
+
+        private void PaintArt()
+        {
+            Color ink = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+            consoleArt.color = ink.WithAlpha(AvBundle.OverlayAlpha(0.28f * Mathf.Max(0f, artShown)));
         }
 
         public void Finish()
@@ -308,10 +337,9 @@ namespace NOAvionics
             AvLay.Place(headerBack.rectTransform, 0f, 0f, width, AvGridTokens.Header);
             AvLay.Place(idPlate.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
             AvLay.Place(idText.rectTransform, 0f, 0f, 56f, AvGridTokens.Header);
-            float right = width >= 360f ? 150f : 60f;
-            AvLay.Place(titleText.rectTransform, 66f, 0f, Mathf.Max(0f, width - 66f - right - 6f), AvGridTokens.Header);
+            AvLay.Place(idRail.rectTransform, 0f, AvGridTokens.Header - 2f, 56f, 2f);
+            AvLay.Place(titleText.rectTransform, 66f, 0f, Mathf.Max(0f, width - 66f - AvGridTokens.Pad), AvGridTokens.Header);
             decor.RulerTop = AvGridTokens.Header; decor.SetVerticesDirty();
-            AvLay.Place(pageIndex.rectTransform, width - right - 4f, 0f, right, AvGridTokens.Header);
             y += AvGridTokens.Header + 4f;
 
             AvLay.Place(live, 0f, 0f, width, height);
@@ -333,6 +361,13 @@ namespace NOAvionics
             Footer.Place(new AvSlot(0f, height - footerH, width, footerH));
             float bodyH = Mathf.Max(0f, height - footerH - y);
             AvLay.Place(bodyRect, 0f, y, width, bodyH);
+            bodyHeight = bodyH;
+            if (consoleArt != null)
+            {
+                float aw = width - 2f * pad, ah = aw * consoleArt.texture.height / Mathf.Max(1f, consoleArt.texture.width);
+                AvLay.Place(consoleArt.rectTransform, pad, bodyH - ah - 2f, aw, ah);
+                artShown = -1f;
+            }
             scrollView.Place(width, bodyH);
             foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
             AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
@@ -444,7 +479,7 @@ namespace NOAvionics
             idPlate.color = AvStyleHost.Resolve(p.Background, AvTheme.SurfaceRaised);
             idText.color = AvStyleHost.Resolve(p.Color, AvTheme.TextPrimary);
             titleText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
-            pageIndex.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
+            idRail.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
             decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
             bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
             if (groundArt != null)
@@ -455,6 +490,7 @@ namespace NOAvionics
             graticule.enabled = AvConsoleLook.Grid;
             Color grid = AvStyleHost.FuiFill("console-ground", AvTheme.Hairline.WithAlpha(0.3f));
             graticule.color = grid.WithAlpha(AvBundle.OverlayAlpha(grid.a));
+            if (consoleArt != null && artShown > 0f) PaintArt();
             scrollView.Restyle();
         }
     }

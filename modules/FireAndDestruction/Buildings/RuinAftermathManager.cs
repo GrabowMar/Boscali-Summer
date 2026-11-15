@@ -47,6 +47,7 @@ namespace BoscaliSummer.Fire
         public void ResetForScene() { Clear(); if (isActiveAndEnabled) Start(); }
         internal void LandingDust(GlobalPosition position) => collapsePool.EmitLanding(position, 3f);
         internal void SectionDust(GlobalPosition position, float size) => collapsePool.EmitLanding(position, size);
+        internal void AuditDust(IDictionary<string, object> state) => collapsePool.Audit(state, "collapseDust");
 
         internal void RegisterRuin(
             GlobalPosition position, Vector2 halfExtents, float ageSeconds = 0f,

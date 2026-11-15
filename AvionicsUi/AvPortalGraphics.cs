@@ -94,10 +94,12 @@ namespace NOAvionics
 
 namespace NOAvionics
 {
-    /// <summary>Static console decoration: a ruler under the header and registration crosses at two corners. No motion.</summary>
+    /// <summary>Static console rules: one under the header, one beside the id plate, one over the footer. No motion.</summary>
     public sealed class AvDecorGraphic : MaskableGraphic
     {
         public float RulerTop = 32f;
+        /// <summary>The rule beside the id plate; off when the header has no title to part from the plate.</summary>
+        public bool PlateRule = true;
 
         protected override void OnPopulateMesh(VertexHelper vh)
         {
@@ -106,25 +108,9 @@ namespace NOAvionics
             Color c = color;
             float y = r.yMax - RulerTop;
             AvMesh.Quad(vh, r.xMin + 8f, y, r.xMax - 8f, y + 0.65f, c);
-            AvMesh.Quad(vh, r.xMin + 59f, r.yMax - RulerTop + 7f, r.xMin + 59.65f, r.yMax - 7f, c);
+            if (PlateRule) AvMesh.Quad(vh, r.xMin + 59f, r.yMax - RulerTop + 7f, r.xMin + 59.65f, r.yMax - 7f, c);
             float footer = r.yMin + NOAvionics.AvGridTokens.Footer;
             AvMesh.Quad(vh, r.xMin + 8f, footer, r.xMax - 8f, footer + 0.65f, c);
-            // Edge calibrations stay in the reserved margins; they do not imply live measurements.
-            for (float tick = footer + 24f; tick < y - 12f; tick += 48f)
-            {
-                AvMesh.Quad(vh, r.xMin + 1f, tick, r.xMin + 4f, tick + 0.65f, c);
-                AvMesh.Quad(vh, r.xMax - 4f, tick, r.xMax - 1f, tick + 0.65f, c);
-            }
-            Cross(vh, r.xMin + 5f, footer, c);
-            Cross(vh, r.xMax - 5f, footer, c);
-            Cross(vh, r.xMin + 5f, r.yMin + 5f, c);
-            Cross(vh, r.xMax - 5f, r.yMin + 5f, c);
-        }
-
-        private static void Cross(VertexHelper vh, float cx, float cy, Color c)
-        {
-            AvMesh.Quad(vh, cx - 4f, cy - 0.5f, cx + 4f, cy + 0.5f, c);
-            AvMesh.Quad(vh, cx - 0.5f, cy - 4f, cx + 0.5f, cy + 4f, c);
         }
     }
 

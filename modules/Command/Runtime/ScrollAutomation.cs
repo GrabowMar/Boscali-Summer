@@ -42,6 +42,20 @@ namespace BoscaliSummer.Modules.Command.Runtime
             return Failure("ScrollAutomation", "Open", "no screen in the list has an overflowing page");
         }
 
+        /// <summary>Clicks the first shown kit button whose label is <c>label</c> (any case), as a press would: for captures of states no page index reaches.</summary>
+        public static Dictionary<string, object> Press(Dictionary<string, object> args)
+        {
+            string label = Text(args, "label") ?? "";
+            foreach (AvControl c in Object.FindObjectsOfType<AvControl>())
+            {
+                if (!c.isActiveAndEnabled || !string.Equals(c.Label, label, System.StringComparison.OrdinalIgnoreCase)) continue;
+                var clicked = (System.Delegate)typeof(AvControl).GetField("Clicked", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(c);
+                clicked?.DynamicInvoke();
+                return new Dictionary<string, object> { ["ok"] = true, ["label"] = c.Label };
+            }
+            return Failure("ScrollAutomation", "Press", "no shown button labelled " + label);
+        }
+
         public static Dictionary<string, object> Wheel(Dictionary<string, object> args)
         {
             AvSmoothScroll best = null; float travel = 0f;

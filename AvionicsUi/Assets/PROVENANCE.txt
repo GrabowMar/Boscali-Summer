@@ -23,3 +23,17 @@ that is switched on and showing pure black: an extremely fine, perfectly uniform
 cool light falloff from the top ... Greyscale only". Split into the micro-texture (minus a 1.5 px blur) and the broad light (80 px
 blur), the blotchy mid scale dropped, recombined, stored white with it in alpha at full size, tinted ~8% per scheme
 (embedded PNG, decoded once).
+
+Original generated artwork, OpenAI built-in imagegen through Codex, 2026-11-15 (rich abstract revision):
+Art/<console id>.png (wmc pilot str mis ops fac evn com map tgt set env rad misc): layered abstract field compositions,
+replacing both the earlier literal equipment illustrations and the rejected sparse geometric motifs.
+Raw 1536x1024 originals and exact per-image prompts: Source/ConsoleArt/<id>.png and <id>.prompt.txt.
+Art direction: an engraved tactical atlas mixed with scientific field visualization; several scales of flowing forms,
+contour ribbons, hatching, broken construction geometry, fine secondary meshes and varied line weights on black.
+Formation wakes (wmc), swept paired laminations (pilot), interlocking strategic fields (str), threading route ribbons (mis),
+orbital/coverage projections (ops), territorial resource-flow cells (fac), branching information channels (evn), phase
+interference fields (com), imaginary contour valleys (map), offset sensing sectors (tgt), woven adjustment structures (set),
+atmospheric streamlines (env), modulation envelopes (rad), tessellated planes (misc). No literal equipment, text or live data.
+Runtime packing: py -3 tools/Build-ConsoleArt.py (Pillow). Resize to 640x428 greyscale, remove near-black export noise,
+keep the upper fifth empty and soften the boundaries. Stored as luminance; AvBundle.ConsoleArt turns it into alpha and
+AvConsole tints it per scheme at 0.28 opacity. Passive background in unused page space; no external source artwork or fonts.

@@ -2,24 +2,33 @@ using UnityEngine;
 
 namespace NOAvionics
 {
-    public enum AvUiCue { Hover, Navigate, Press, Engage, Release, Confirm, Caution }
+    /// <summary>
+    /// What a control says when used. Navigate = a tab or selector step; Press = a plain key; Engage / Release = a switch latching on / off;
+    /// Confirm / Caution = an accepted / refused action; Open = a console key bringing its screen up. Hover is silent.
+    /// </summary>
+    public enum AvUiCue { Hover, Navigate, Press, Engage, Release, Confirm, Caution, Open }
 
     /// <summary>
-    /// Quiet, scene-owned, two-dimensional feedback for cockpit controls: recorded panel keys and blips by name from
-    /// <see cref="Recorded"/> (the host's clip library), with synthesized tones as the fallback when a clip is missing.
+    /// Quiet, scene-owned, two-dimensional feedback for cockpit controls: one recorded clip per cue, by name from
+    /// <see cref="Recorded"/> (the host's clip library), with a synthesized tone as the fallback when a clip is missing.
     /// </summary>
     public static class AvUiSound
     {
         private const int SampleRate = 44100;
-        private static readonly AudioClip[] clips = new AudioClip[7];
-        // Hover, Navigate, Press, Engage, Release, Confirm, Caution
-        private static readonly string[] recorded = { null, "ui-click-1", "ui-click-0", "ui-click-0", "ui-click-1", "ui-confirm", "ui-caution" };
-        private static readonly float[] gains = { 0f, .35f, .35f, .4f, .3f, .14f, .16f };
-        private static readonly float[] pitches = { 1f, 1.08f, 1f, .9f, .94f, 1f, 1f };
+        private const int Cues = 8;
+        /// <summary>A cue does not repeat inside this, and a generic click cue yields to any cue played inside it (a handler's own Confirm wins).</summary>
+        private const float Gate = .06f;
+        private static readonly AudioClip[] clips = new AudioClip[Cues];
+        // Hover, Navigate, Press, Engage, Release, Confirm, Caution, Open. Each cue has its own clip at its own pitch: nothing retunes the
+        // shared source, so a ringing chime is never bent by the next click.
+        private static readonly string[] recorded = { null, "ui-tab", "ui-click-0", "ui-engage", "ui-release", "ui-confirm", "ui-caution", "ui-open" };
+        // The clips share one peak level; tonal cues carry more energy than clicks, so they sit lower.
+        private static readonly float[] gains = { 0f, .30f, .34f, .18f, .16f, .14f, .16f, .15f };
+        private static readonly float[] last = new float[Cues];
         private static AudioSource source;
-        private static float lastAction = -1f;
+        private static float lastAny = -1f;
 
-        /// <summary>The host's recorded clips by name (ui-click-0/1, ui-confirm, ui-caution); null keeps the synthesized tones.</summary>
+        /// <summary>The host's recorded clips by name (ui-click-0, ui-tab, ui-engage, ...); null keeps the synthesized tones.</summary>
         public static System.Func<string, AudioClip> Recorded { get; set; }
 
         /// <summary>Independent UI level; zero mutes every cue.</summary>
@@ -29,11 +38,13 @@ namespace NOAvionics
         {
             if (Volume <= 0f || cue == AvUiCue.Hover) return;
             if (!Ensure()) return;
+            int i = (int)cue;
             float now = Time.unscaledTime;
-            if (now - lastAction < .025f) return;
-            lastAction = now;
-            source.pitch = pitches[(int)cue];
-            source.PlayOneShot(clips[(int)cue], gains[(int)cue] * Mathf.Clamp01(Volume));
+            if (now - last[i] < Gate) return;
+            bool generic = cue == AvUiCue.Press || cue == AvUiCue.Navigate || cue == AvUiCue.Engage || cue == AvUiCue.Release;
+            if (generic && now - lastAny < Gate) return;
+            last[i] = lastAny = now;
+            source.PlayOneShot(clips[i], gains[i] * Mathf.Clamp01(Volume));
         }
 
         public static void Reset()
@@ -44,13 +55,14 @@ namespace NOAvionics
             {
                 if (clips[i] != null && clips[i].name.StartsWith("NOAvionics.")) Object.Destroy(clips[i]); // the recorded ones are shared
                 clips[i] = null;
+                last[i] = -1f;
             }
-            lastAction = -1f;
+            lastAny = -1f;
         }
 
         private static bool Ensure()
         {
-            if (source != null && clips[0] != null) return true;
+            if (source != null && clips[(int)AvUiCue.Press] != null) return true;
             Reset();
             var host = new GameObject("NOAvionics.UiSound", typeof(AudioSource));
             source = host.GetComponent<AudioSource>();
@@ -58,8 +70,8 @@ namespace NOAvionics
             source.loop = false;
             source.spatialBlend = 0f;
             source.volume = 1f;
-            for (int i = 0; i < clips.Length; i++) clips[i] = (recorded[i] != null ? Recorded?.Invoke(recorded[i]) : null) ?? Build((AvUiCue)i);
-            return clips[0] != null;
+            for (int i = 1; i < clips.Length; i++) clips[i] = Recorded?.Invoke(recorded[i]) ?? Build((AvUiCue)i);
+            return clips[(int)AvUiCue.Press] != null;
         }
 
         private static AudioClip Build(AvUiCue cue)
@@ -69,12 +81,12 @@ namespace NOAvionics
             float seconds, frequency, glide, decay, texture;
             switch (cue)
             {
-                case AvUiCue.Hover:    seconds = .035f; frequency = 300f; glide = 0f; decay = 55f; texture = .02f; break;
                 case AvUiCue.Navigate: seconds = .060f; frequency = 350f; glide = -25f; decay = 48f; texture = .035f; break;
-                case AvUiCue.Engage:   seconds = .080f; frequency = 390f; glide = -30f; decay = 38f; texture = .035f; break;
-                case AvUiCue.Release:  seconds = .065f; frequency = 285f; glide = -20f; decay = 44f; texture = .03f; break;
+                case AvUiCue.Engage:   seconds = .080f; frequency = 390f; glide = 60f; decay = 38f; texture = .035f; break;
+                case AvUiCue.Release:  seconds = .065f; frequency = 285f; glide = -40f; decay = 44f; texture = .03f; break;
                 case AvUiCue.Confirm:  seconds = .085f; frequency = 420f; glide = -20f; decay = 36f; texture = .03f; break;
                 case AvUiCue.Caution:  seconds = .090f; frequency = 250f; glide = -15f; decay = 34f; texture = .04f; break;
+                case AvUiCue.Open:     seconds = .110f; frequency = 300f; glide = 80f; decay = 26f; texture = .05f; break;
                 default:               seconds = .060f; frequency = 320f; glide = -25f; decay = 46f; texture = .04f; break;
             }
 

@@ -1,0 +1,98 @@
+Graphical improvement candidates — 2026-11-15
+============================================
+Target: Nuclear Option 0.34.3, Unity 2022.3, URP 14.0.12; a BepInEx mod
+of an already-built game. Package Manager installation alone cannot add
+renderer features or recover shader variants stripped from that game.
+
+Implemented in this change
+--------------------------
+meenphie's AgX LUTs: BASE, PUNCHY, HUE; independent live toggle, default on.
+Compose the native linear HDR grading LUT before output, after native grading.
+The actual game world and cockpit cameras do not enable post-processing;
+postProcessingRenderer is their final post-processing overlay. Follow that
+owner so the combined frame is graded once. Exposure and G-LOC stay native.
+Night vision, sensor cameras, LDR targets and HDR display output bypass AgX.
+https://github.com/meenphie/AgX-Tonemapping-Unity
+Exact source revision and missing licence: Assets/PROVENANCE.txt.
+
+Optional BF4-inspired cinematic preset, default off: cool shadows, restrained
+warm highlights, deeper shadow contrast, exposure-relative bloom, horizontal
+HDR light streaks, subtle vignette and custom grain. Strength and LIGHT GLOW
+are adjustable in SET > WORLD > COLOUR GRADE. No motion blur or depth of field.
+The streak pass runs on the world base camera before the final overlay's post.
+The native URP volume runs below night vision, and it never owns exposure or
+the saturation parameter used by G-LOC. Built-in RCAS sharpening and display
+.cube loading were already present and are reused.
+
+Further controls
+----------------
+1. Built-in URP dithering: SKY DITHER, default on. `CameraPostQuality` sets the
+   base camera's dithering property; the final overlay inherits it. Setting
+   the final overlay component alone would do nothing. The service validates
+   native uber/final shaders and every blue-noise texture before applying,
+   restoring the native field when the override is off or resources vanish.
+   Runs after final sharpening and cannot repair banding already quantized
+   into an earlier intermediate texture.
+   https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/api/UnityEngine.Rendering.Universal.UniversalAdditionalCameraData.html
+
+2. Built-in SMAA: EDGE SMOOTHING > SMAA, opt-in; GAME restores native AA.
+   Sets base camera AA and High quality, inherited by the final overlay.
+   Validates its supported three-pass shader and both area/search textures.
+   Adds three full-resolution passes before bloom and tonemapping; compatible
+   with the existing later FSR/RCAS pass. Native values restore on disable,
+   scene/camera swap and release. TAA is a poorer drop-in fit:
+   URP 14 TAA does not support camera stacking, MSAA or dynamic resolution.
+   https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/anti-aliasing.html
+
+   Validation on 2026-11-15: Release build passed with zero warnings/errors;
+   25 focused Unity assertions passed for resources, native camera-stack
+   inheritance, sensor isolation and restoration. A rendered 1080p flight
+   passed 12 live checks across native, dither, SMAA, sharpen and SMAA+sharpen
+   states, with no reported graphics errors. Saved captures and frame windows:
+   C:/Users/marci/.nomodkit/runs/20261115-220311-77ca-sim-post-quality
+   This sequential smoke check is not a controlled performance benchmark.
+
+Other candidates (researched; not installed)
+------------------------------------------
+3. Built-in SSAO. Medium effort: runtime renderer feature/resources, downsample
+   and depth reconstruction first. Could add contact depth around aircraft,
+   cockpit recesses and compounds, but verify custom material normals and
+   camera-stack interaction. Downsampling reduces AO pixel count fourfold.
+   Shipped URP DLL contains the internal feature/settings; reflection can
+   create it. A pilot could use InterleavedGradient, Depth, AfterOpaque,
+   Low samples and Medium blur. AfterOpaque avoids surface shader variants,
+   but multiplies all opaque light, including direct/emissive light. Validate
+   the retained shader variants, cockpit depth clearing, no duplicate native
+   AO, silhouettes and cost before enabling. A mod-owned wrapper on the live
+   renderer feature list avoids rebuilding/disposal of the whole renderer.
+   If vendoring a stripped shader, pin URP14.0.12 and preserve its Unity
+   Companion License; those shader sources are not MIT.
+   https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/post-processing-ssao.html
+
+4. CristianQiu/Unity-URP-Volumetric-Light. MIT, Unity 2022.3+, DX11, forward and
+   deferred. Most promising external renderer feature for visible light beams.
+   Medium/high effort: bundle its shaders and connect it to existing Weather
+   fog/clouds rather than introduce a second atmosphere. Transparent-object
+   blending is limited; multiple local lights add GPU cost.
+   https://github.com/CristianQiu/Unity-URP-Volumetric-Light
+   https://github.com/CristianQiu/Unity-URP-Volumetric-Light/blob/main/LICENSE.md
+
+5. jiaozi158/UnitySSReflectionURP. MIT, Unity 2022.2+/URP 14+. Conditional
+   prototype, not drop-in: its setup requires Deferred variants retained at
+   original build time, even for Forward. Those may be stripped from the game.
+   Ignores transparent objects; not a guaranteed improvement to the ocean.
+   https://github.com/jiaozi158/UnitySSReflectionURP
+   https://github.com/jiaozi158/UnitySSReflectionURP/blob/main/Documentation/Documentation.md
+   https://github.com/jiaozi158/UnitySSReflectionURP/blob/main/LICENSE
+
+6. jiaozi158/UnitySSGIURP. MIT, Unity 2022.3.35f1+/URP14. High effort,
+   experimental: screen-space bounce light needs temporal/motion-vector
+   checks, with possible ghosting. Less benefit over sky and distant terrain.
+   https://github.com/jiaozi158/UnitySSGIURP
+   https://github.com/jiaozi158/UnitySSGIURP/blob/main/LICENSE.md
+
+Existing Weather already supplies volumetric clouds, cloud shadows, fog,
+ocean waves, sky phenomena and high-altitude atmosphere. Replacing those
+is a substantial feature change. Third-party candidates above were researched
+from their own documentation; no runtime compatibility or performance claim
+is made for packages not integrated here.

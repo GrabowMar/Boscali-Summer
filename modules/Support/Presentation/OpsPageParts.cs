@@ -13,9 +13,6 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation
 {
-    /// <summary>How many lines a front card keeps. The panel picks one from its height: secondary lines go first, the OPEN button never shrinks.</summary>
-    internal enum CardTier : byte { Core, Mid, Full }
-
     /// <summary>Absolute-placement helpers shared by the OPS page parts (kit text, pips and outlined tags only; colours come from <see cref="AvInk"/>).</summary>
     internal static class OpsParts
     {
@@ -90,13 +87,14 @@ namespace BoscaliSummer.Modules.Support.Presentation
     }
 
     /// <summary>
-    /// One front on the OPS page, always in the same field order: domain and room name with the codename and a status stamp, the current blocker,
-    /// readiness and superiority, your support, the programme (FUNDING and BUILDING are different phases), the queue and the directive
-    /// (no event history: OPS shows state, not logs). A tier drops the secondary lines on a short panel; OPEN is always there. Absolute layout, no policy.
+    /// One front on the OPS page: domain and room name with the codename, a status stamp and OPEN; the superiority bar with the pilot's grade;
+    /// the directive and the queue count; then one quiet line that is the blocker when there is one, else the programme in hand, else nothing.
+    /// Absolute layout, no policy.
     /// </summary>
     internal sealed class FrontCardPart : AvPart
     {
         private const float PadX = 12f;
+        public const float Height = 98f;
         private static readonly string[] Rooms = { "ORBIT", "NETWORK", "SHADOW" };
         private static readonly string[] GradeWords = BuildWords("G", "", CallSheet.MaxGrade);
         private static readonly string[] QueueWords = BuildWords("", "/" + FrontRules.MaxQueue, FrontRules.MaxQueue);
@@ -108,32 +106,30 @@ namespace BoscaliSummer.Modules.Support.Presentation
             return words;
         }
 
-        public static float HeightOf(CardTier tier) => tier == CardTier.Full ? 150f : tier == CardTier.Mid ? 111f : 90f;
-
         private readonly FrontSkin skin = new FrontSkin();
-        private readonly bool mid, full;
-        private readonly float height;
         private readonly AvFrame back;
         private readonly Image rail;
-        private readonly TMP_Text icon, name, codename, stampIcon, blocker, readiness, supLabel, supWord, supValue, support;
-        private readonly TMP_Text buildName, buildNote, queueLabel, queueCount, queueLine, dirLabel, dirValue;
+        private readonly TMP_Text icon, name, codename, stampIcon, blocker, readiness, supLabel, supWord, supValue;
+        private readonly TMP_Text buildName, buildNote, queueLabel, queueCount, dirLabel, dirValue;
         private readonly OpsTag stamp, phase;
         private readonly Image supWell, supFill, supNeedle;
         private readonly Image[] pips, queuePips;
         private readonly FrontBar buildBar;
         private readonly AvControl open;
+        private readonly UnityEngine.UI.RawImage emblem;
         private float width = 458f, barX, barW;
         private FrontCardView shown;
         private bool painted;
         private FrontStatus lastStatus = (FrontStatus)255;
 
-        public FrontCardPart(RectTransform parent, Front front, Action<Front> onOpen, CardTier tier)
+        public FrontCardPart(RectTransform parent, Front front, Action<Front> onOpen)
         {
-            mid = tier >= CardTier.Mid; full = tier >= CardTier.Full;
-            height = HeightOf(tier);
             Rect = AvLay.Child(parent, "Front " + front);
-            back = FrontKit.Panel(Rect, "Back", 0f, 0f, width, height, 6f, 7f);
-            rail = FrontKit.Solid(Rect, "Rail", 0f, 0f, 3f, height, Color.clear);
+            back = FrontKit.Panel(Rect, "Back", 0f, 0f, width, Height, 6f, 7f);
+            rail = FrontKit.Solid(Rect, "Rail", 0f, 0f, 3f, Height, Color.clear);
+            // The front's emblem as a faint watermark at the card's right, under every word.
+            emblem = FrontArt.Fill(Rect, FrontArt.Emblem(front), 0f, 0f, 84f, 84f, Color.white.WithAlpha(NOAvionics.AvBundle.OverlayAlpha(0.17f)));
+            if (emblem != null) emblem.raycastTarget = false;
 
             // Header: domain and room, codename, status stamp, OPEN.
             icon = AvIcons.Make(Rect, front == Front.Space ? AvIcon.Satellite : front == Front.Cyber ? AvIcon.Antenna : AvIcon.UsersGroup, 16f, AvInk.Ink);
@@ -148,44 +144,36 @@ namespace BoscaliSummer.Modules.Support.Presentation
             open.SingleLine();
             open.Help = "Open the " + FrontRules.Name(front) + " front window: map, rail, programmes and perks.";
 
-            blocker = FrontKit.Mono(Rect, "Blocker", PadX, 33f, 434f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
-
-            // The pilot's skill grade pips with the grade, then the superiority bar with its word and value.
+            // The pilot's skill grade pips with the grade, then the superiority bar with its power, word and value.
             pips = OpsParts.Pips(Rect, "Pip", CallSheet.MaxGrade - 1); // the paid grades 2..6; grade 1 is free
-            readiness = FrontKit.Mono(Rect, "Readiness", 86f, 51f, 26f, 18f, 12f, TextAlignmentOptions.MidlineLeft, true);
-            supLabel = FrontKit.Mono(Rect, "SupLabel", 114f, 51f, 70f, 18f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
+            readiness = FrontKit.Mono(Rect, "Readiness", 86f, 36f, 26f, 18f, 12f, TextAlignmentOptions.MidlineLeft, true);
+            supLabel = FrontKit.Mono(Rect, "SupLabel", 114f, 36f, 70f, 18f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
             supLabel.text = "SUPERIORITY";
             supWell = FrontKit.Solid(Rect, "SupWell", 0f, 0f, 0f, 12f, Color.clear);
             supFill = FrontKit.Solid(Rect, "SupFill", 0f, 0f, 0f, 10f, Color.clear);
             supNeedle = FrontKit.Solid(Rect, "SupNeedle", 0f, 0f, 3f, 16f, Color.clear);
-            supWord = FrontKit.Mono(Rect, "SupWord", 0f, 51f, 84f, 18f, 11f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
-            supValue = FrontKit.Mono(Rect, "SupValue", 0f, 51f, 42f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
+            supWord = FrontKit.Mono(Rect, "SupWord", 0f, 36f, 84f, 18f, 11f, TextAlignmentOptions.MidlineLeft, true, 0.5f);
+            supValue = FrontKit.Mono(Rect, "SupValue", 0f, 36f, 42f, 18f, 11f, TextAlignmentOptions.MidlineRight, true);
 
-            support = FrontKit.Mono(Rect, "Support", PadX, 71f, 280f, 16f, 11f, TextAlignmentOptions.MidlineLeft);
+            dirLabel = FrontKit.Mono(Rect, "DirLabel", PadX, 58f, 72f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
+            dirLabel.text = "DIRECTIVE";
+            dirValue = FrontKit.Mono(Rect, "DirValue", 86f, 58f, 200f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
+            queueLabel = FrontKit.Mono(Rect, "QueueLabel", 0f, 58f, 44f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
+            queueLabel.text = "QUEUE";
+            queuePips = OpsParts.Pips(Rect, "QueuePip", FrontRules.MaxQueue);
+            queueCount = FrontKit.Mono(Rect, "QueueCount", 0f, 58f, 34f, 16f, 11f, TextAlignmentOptions.MidlineRight, true);
 
-            if (mid)
-            {
-                phase = new OpsTag(Rect, "Phase", 10f);
-                buildName = FrontKit.Mono(Rect, "BuildName", 80f, 89f, 150f, 18f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
-                buildBar = new FrontBar(Rect, skin, 236f, 93f, 100f, 10f);
-                buildNote = FrontKit.Mono(Rect, "BuildNote", 0f, 89f, 104f, 18f, 10.5f, TextAlignmentOptions.MidlineRight);
-            }
-            if (full)
-            {
-                queueLabel = FrontKit.Mono(Rect, "QueueLabel", PadX, 109f, 44f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
-                queueLabel.text = "QUEUE";
-                queuePips = OpsParts.Pips(Rect, "QueuePip", FrontRules.MaxQueue);
-                queueCount = FrontKit.Mono(Rect, "QueueCount", 112f, 109f, 30f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
-                queueLine = FrontKit.Mono(Rect, "QueueLine", 146f, 109f, 300f, 16f, 10.5f, TextAlignmentOptions.MidlineLeft);
-                dirLabel = FrontKit.Mono(Rect, "DirLabel", PadX, 127f, 72f, 16f, 10f, TextAlignmentOptions.MidlineLeft, false, 0.5f);
-                dirLabel.text = "DIRECTIVE";
-                dirValue = FrontKit.Mono(Rect, "DirValue", 86f, 127f, 360f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
-            }
+            // The last line: the blocker or the programme, never both.
+            blocker = FrontKit.Mono(Rect, "Blocker", PadX, 78f, 434f, 16f, 11f, TextAlignmentOptions.MidlineLeft, true);
+            phase = new OpsTag(Rect, "Phase", 10f);
+            buildName = FrontKit.Mono(Rect, "BuildName", 80f, 78f, 150f, 16f, 11.5f, TextAlignmentOptions.MidlineLeft, true);
+            buildBar = new FrontBar(Rect, skin, 236f, 81f, 100f, 10f);
+            buildNote = FrontKit.Mono(Rect, "BuildNote", 0f, 78f, 104f, 16f, 10.5f, TextAlignmentOptions.MidlineRight);
             skin.Add(StyleStatic);
             LayoutFor(width);
         }
 
-        public override float Measure(float w) => height;
+        public override float Measure(float w) => Height;
 
         public override void Place(AvSlot s)
         {
@@ -196,30 +184,25 @@ namespace BoscaliSummer.Modules.Support.Presentation
         private void LayoutFor(float w)
         {
             width = w;
-            AvLay.Place(back.rectTransform, 0f, 0f, w, height);
-            AvLay.Place(rail.rectTransform, 0f, 0f, 3f, height);
+            AvLay.Place(back.rectTransform, 0f, 0f, w, Height);
+            AvLay.Place(rail.rectTransform, 0f, 0f, 3f, Height);
             AvLay.Place(icon.rectTransform, 12f, 9f, 18f, 18f);
+            if (emblem != null) FrontArt.Place(emblem, w - 190f, 7f, 84f, 84f);
             stamp.Place(228f, 7f, 124f, 22f, 22f);
             AvLay.Place(stampIcon.rectTransform, 234f, 11f, 14f, 14f);
             AvLay.Place(open.Rect, w - 82f, 5f, 72f, 26f);
-            AvLay.Place(blocker.rectTransform, PadX, 33f, w - 2f * PadX, 16f);
-            OpsParts.PlacePips(pips, 12f, 54f, 11f, 11f, 14f);
+            OpsParts.PlacePips(pips, 12f, 39f, 11f, 11f, 14f);
             barX = 186f; barW = Mathf.Max(80f, w - barX - 150f);
-            AvLay.Place(supWell.rectTransform, barX, 54f, barW, 12f);
-            AvLay.Place(supWord.rectTransform, barX + barW + 8f, 51f, 84f, 18f);
-            AvLay.Place(supValue.rectTransform, w - 54f, 51f, 42f, 18f);
-            AvLay.Place(support.rectTransform, PadX, 71f, w - 2f * PadX, 16f);
-            if (mid)
-            {
-                phase.Place(PadX, 90f, 62f, 16f);
-                AvLay.Place(buildNote.rectTransform, w - 116f, 89f, 104f, 18f);
-            }
-            if (full)
-            {
-                OpsParts.PlacePips(queuePips, 58f, 112f, 10f, 10f, 13f);
-                AvLay.Place(queueLine.rectTransform, 146f, 109f, w - 158f, 16f);
-                AvLay.Place(dirValue.rectTransform, 86f, 127f, w - 98f, 16f);
-            }
+            AvLay.Place(supWell.rectTransform, barX, 39f, barW, 12f);
+            AvLay.Place(supWord.rectTransform, barX + barW + 8f, 36f, 84f, 18f);
+            AvLay.Place(supValue.rectTransform, w - 54f, 36f, 42f, 18f);
+            AvLay.Place(dirValue.rectTransform, 86f, 58f, w - 270f, 16f);
+            AvLay.Place(queueLabel.rectTransform, w - 134f, 58f, 44f, 16f);
+            OpsParts.PlacePips(queuePips, w - 90f, 61f, 10f, 10f, 13f);
+            AvLay.Place(queueCount.rectTransform, w - 44f, 58f, 34f, 16f);
+            AvLay.Place(blocker.rectTransform, PadX, 78f, w - 2f * PadX, 16f);
+            phase.Place(PadX, 78f, 62f, 16f);
+            AvLay.Place(buildNote.rectTransform, w - 116f, 78f, 104f, 16f);
             if (painted) Paint(shown); // the superiority bar depends on the width
         }
 
@@ -230,9 +213,8 @@ namespace BoscaliSummer.Modules.Support.Presentation
             supWell.color = AvInk.Ground.WithAlpha(0.92f);
             supNeedle.color = AvInk.Ink;
             Color dim = AvInk.Dim;
-            supLabel.color = dim; codename.color = dim; icon.color = dim;
+            supLabel.color = dim; codename.color = dim; icon.color = dim; queueLabel.color = dim; dirLabel.color = dim;
             name.color = AvInk.Ink;
-            if (full) { queueLabel.color = dim; dirLabel.color = dim; }
         }
 
         public override void Restyle()
@@ -261,40 +243,34 @@ namespace BoscaliSummer.Modules.Support.Presentation
             stampIcon.color = FrontKit.Tone(status);
             stamp.Tone(StatusWord(c.Status), status);
 
-            FrontKit.Set(blocker, c.Alert ?? "", c.AlertTone == AvState.Inert ? AvInk.Dim : FrontKit.Tone(c.AlertTone));
-
             FrontKit.Set(readiness, GradeWords[Mathf.Clamp(c.Grade, 0, CallSheet.MaxGrade)], AvInk.Ink);
             OpsParts.Fill(pips, c.Grade - 1, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
             Color tone = FrontKit.Tone(c.Tone);
             float half = barW * 0.5f, len = Mathf.Abs(c.Superiority) / 100f * half;
             supFill.color = AvInk.State(c.Tone).WithAlpha(c.Known ? 0.85f : 0f);
-            AvLay.Place(supFill.rectTransform, barX + half + (c.Superiority >= 0 ? 0f : -len), 55f, len, 10f);
-            AvLay.Place(supNeedle.rectTransform, barX + half + c.Superiority / 100f * half - 1.5f, 52f, 3f, 16f);
+            AvLay.Place(supFill.rectTransform, barX + half + (c.Superiority >= 0 ? 0f : -len), 40f, len, 10f);
+            AvLay.Place(supNeedle.rectTransform, barX + half + c.Superiority / 100f * half - 1.5f, 37f, 3f, 16f);
             supNeedle.gameObject.SetActive(c.Known);
             FrontKit.Set(supLabel, c.Known && !string.IsNullOrEmpty(c.Power) ? c.Power : "SUPERIORITY", AvInk.Ink); // the power the bar earns: what every perk of this front is scaled by
             FrontKit.Set(supWord, c.Word, tone);
             FrontKit.Set(supValue, c.Known ? FrontKit.Signed(c.Superiority) : "—", tone);
 
-            FrontKit.Set(support, c.Known
-                ? "YOUR SUPPORT " + c.Available + " AVAILABLE" + (c.ArmedPerks > 0 ? " · " + c.ArmedPerks + " ARMED" : "") + (c.PendingPerks > 0 ? " · " + c.PendingPerks + " PENDING" : "")
-                : "YOUR SUPPORT —", AvInk.Ink);
+            FrontKit.Set(dirValue, c.Known ? c.Directive : "—", AvInk.Ink);
+            FrontKit.Set(queueCount, c.Known ? QueueWords[Mathf.Clamp(c.QueueCount, 0, FrontRules.MaxQueue)] : "—", AvInk.Ink);
+            OpsParts.Fill(queuePips, c.Known ? c.QueueCount : 0, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
 
-            if (mid)
+            bool blocked = !string.IsNullOrEmpty(c.Alert);
+            bool building = !blocked && c.Phase != ProgrammePhase.None;
+            FrontKit.Set(blocker, blocked ? c.Alert : "", c.AlertTone == AvState.Inert ? AvInk.Dim : FrontKit.Tone(c.AlertTone));
+            phase.Show(building);
+            buildBar.Show(building);
+            if (building)
             {
-                AvState ps = c.Phase == ProgrammePhase.Building ? AvState.Ready : c.Phase == ProgrammePhase.Funding ? AvState.Info : AvState.Inert;
-                phase.Tone(c.Phase == ProgrammePhase.Building ? "BUILDING" : c.Phase == ProgrammePhase.Funding ? "FUNDING" : "IDLE", ps);
-                FrontKit.Set(buildName, c.Building, c.Phase != ProgrammePhase.None ? AvInk.Ink : AvInk.Dim);
-                buildBar.Show(c.Phase != ProgrammePhase.None);
+                phase.Tone(c.Phase == ProgrammePhase.Building ? "BUILDING" : "FUNDING", c.Phase == ProgrammePhase.Building ? AvState.Ready : AvState.Info);
                 buildBar.Set(c.BuildProgress, c.Phase == ProgrammePhase.Building ? AvInk.State(AvState.Ready) : AvInk.Select);
-                FrontKit.Set(buildNote, c.BuildNote ?? "", AvInk.Dim);
             }
-            if (full)
-            {
-                FrontKit.Set(queueCount, c.Known ? QueueWords[Mathf.Clamp(c.QueueCount, 0, FrontRules.MaxQueue)] : "—", AvInk.Ink);
-                OpsParts.Fill(queuePips, c.Known ? c.QueueCount : 0, AvInk.Select, AvInk.Frame.WithAlpha(0.45f));
-                FrontKit.Set(queueLine, !string.IsNullOrEmpty(c.Queue) ? "NEXT " + c.Queue : "", AvInk.Dim);
-                FrontKit.Set(dirValue, c.Known ? c.Directive : "—", AvInk.Ink);
-            }
+            FrontKit.Set(buildName, building ? c.Building : "", AvInk.Ink);
+            FrontKit.Set(buildNote, building ? c.BuildNote ?? "" : "", AvInk.Dim);
         }
     }
 

@@ -80,6 +80,7 @@
     <Reference Include="UnityEngine"><HintPath>$(ManagedDir)\UnityEngine.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(ManagedDir)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.PhysicsModule"><HintPath>$(ManagedDir)\UnityEngine.PhysicsModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.TerrainModule"><HintPath>$(ManagedDir)\UnityEngine.TerrainModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ParticleSystemModule"><HintPath>$(ManagedDir)\UnityEngine.ParticleSystemModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.ImageConversionModule"><HintPath>$(ManagedDir)\UnityEngine.ImageConversionModule.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.AudioModule"><HintPath>$(ManagedDir)\UnityEngine.AudioModule.dll</HintPath><Private>false</Private></Reference>
@@ -137,6 +138,8 @@
     </EmbeddedResource>
     <!-- Console ground texture (see AvionicsUi/Assets/PROVENANCE.txt). Optional: without it consoles keep a flat ground. -->
     <EmbeddedResource Include="AvionicsUi\Assets\console-ground.png" LogicalName="NOAvionics.console-ground.png" />
+    <!-- One line illustration per console, shown in the room a short page leaves (AvBundle.ConsoleArt; see AvionicsUi/Assets/PROVENANCE.txt). -->
+    <EmbeddedResource Include="AvionicsUi\Assets\Art\*.png" LogicalName="NOAvionics.art.%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup Label="Radio station assets">
@@ -172,6 +175,11 @@
   </ItemGroup>
 
 
+  <ItemGroup Label="AgX tonemapping">
+    <EmbeddedResource Include="modules\Effects\Assets\agx.bundle" LogicalName="BoscaliSummer.Effects.agx.bundle" />
+    <EmbeddedResource Include="modules\Effects\Assets\PROVENANCE.txt" LogicalName="BoscaliSummer.Effects.AgxProvenance.txt" />
+  </ItemGroup>
+
   <ItemGroup Label="Weather shader bundle">
     <!-- Canopy rain shader, embedded so the dressing works with zero loose files.
          Source of truth is modules/Weather/Assets/Source/CanopyRain.shader; rebuild with
@@ -191,6 +199,10 @@
     <EmbeddedResource Include="Core\Fx\Assets\particles.bundle" Condition="Exists('Core\Fx\Assets\particles.bundle')">
       <LogicalName>BoscaliSummer.Fx.particles.bundle</LogicalName>
     </EmbeddedResource>
+    <!-- Built in Blender by modules/SeaStructures/Assets/Source/build_rig.py and build_fort.py. Without them no sea structure is built. -->
+    <EmbeddedResource Include="modules\SeaStructures\Assets\*.seamodel">
+      <LogicalName>BoscaliSummer.Sea.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
     <!-- Built by tools/Compile-KaijuAssets.ps1. Optional: without it the Kaiju summon reports the bundle missing. -->
     <EmbeddedResource Include="modules\Spooktober\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Spooktober\Kaiju\Assets\kaiju.bundle')">
       <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
@@ -209,12 +221,21 @@
     <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
       <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="modules\Spooktober\Assets\hell-meshes.bin" Condition="Exists('modules\Spooktober\Assets\hell-meshes.bin')" LogicalName="BoscaliSummer.Spooktober.hell-meshes.bin" />
     <!-- Spooktober's own sounds (ElevenLabs, see modules/Spooktober/Assets/Sfx/LICENSES.txt), served by Core/Fx/SfxClips. -->
+    <!-- Complete raster case files, including all static print (see Dossiers/PROVENANCE.txt). -->
+    <EmbeddedResource Include="modules\Spooktober\Assets\Dossiers\*.png" LogicalName="BoscaliSummer.Spooktober.Dossiers.%(Filename)%(Extension)" />
     <EmbeddedResource Include="modules\Spooktober\Assets\Sfx\*.wav">
       <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Weather\Assets\surfaces.bundle" Condition="Exists('modules\Weather\Assets\surfaces.bundle')">
+      <LogicalName>BoscaliSummer.Weather.surfaces.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Weather\Assets\sky.bundle" Condition="Exists('modules\Weather\Assets\sky.bundle')">
+      <LogicalName>BoscaliSummer.Weather.sky.bundle</LogicalName>
     </EmbeddedResource>
     <!-- The orbit deck's baked cloud tile (tools/Bake-OrbitClouds.py), drawn by FlightCloud from 16 km up. -->
     <EmbeddedResource Include="modules\Weather\Assets\orbit-clouds.png">
@@ -242,6 +263,9 @@
   <ItemGroup Label="Cockpit pilot shader bundle">
     <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
       <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Immersion\Assets\pilot-models.bundle" Condition="Exists('modules\Immersion\Assets\pilot-models.bundle')">
+      <LogicalName>BoscaliSummer.Immersion.pilot-models.bundle</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Immersion\Assets\Kneeboard\*.png">
       <LogicalName>BoscaliSummer.Immersion.Kneeboard.%(Filename)%(Extension)</LogicalName>

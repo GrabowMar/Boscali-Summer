@@ -91,14 +91,6 @@ namespace BoscaliSummer.Modules.Wing.Domain
 
         public static string Livery(string label) => WmcText.Cut(label, LiveryChars);
 
-        public static string Hint(bool client, bool hasAirframe, bool custom)
-        {
-            if (client) return ClientWhy;
-            if (!hasAirframe) return "Pick an airframe to edit its loadout.";
-            return custom ? "A saved preset, not the aircraft in the air: SUPPLY FIT CUSTOM flies it. Click a station to fit a store."
-                : "Standard stores shown: the first change saves them as this airframe's CUSTOM loadout for SUPPLY FIT.";
-        }
-
         private static void Part(StringBuilder sb, int n, string one, string many)
         {
             if (n <= 0) return;

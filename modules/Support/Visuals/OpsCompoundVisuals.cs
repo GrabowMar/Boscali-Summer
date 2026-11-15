@@ -134,12 +134,30 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 {
                     if (pair.Key == null) continue;
                     if (rows.Count == want) framed = pair.Key;
+                    DynamicMap map = SceneSingleton<DynamicMap>.i;
+                    UnitMapIcon icon = null;
+                    bool hasIcon = map != null && DynamicMap.TryGetMapIcon(pair.Key, out icon) && icon != null;
                     rows.Add(new Dictionary<string, object>
                     {
                         ["name"] = pair.Key.NetworkUniqueName,
                         ["model"] = pair.Value.Model != null ? pair.Value.Model.name : null,
                         ["hidden"] = pair.Value.Hidden.Count,
+                        ["own"] = map != null && map.HQ == pair.Key.NetworkHQ,
+                        ["icon"] = hasIcon,
+                        ["iconShown"] = hasIcon && icon.gameObject.activeInHierarchy && icon.iconImage != null && icon.iconImage.enabled,
+                        ["iconSize"] = pair.Key.definition != null ? pair.Key.definition.mapIconSize : -1f,
                     });
+                }
+            // Control group: every other own ground vehicle with an icon, and how many of those icons show.
+            int controlIcons = 0, controlShown = 0;
+            DynamicMap dm = SceneSingleton<DynamicMap>.i;
+            if (dm != null && args != null && args.ContainsKey("openMap")) dm.Maximize();
+            if (dm != null)
+                foreach (MapIcon m in dm.mapIcons)
+                {
+                    if (!(m is UnitMapIcon u) || !(u.unit is GroundVehicle) || u.unit.NetworkHQ != dm.HQ || live != null && live.dressed.ContainsKey(u.unit)) continue;
+                    controlIcons++;
+                    if (u.gameObject.activeInHierarchy && u.iconImage != null && u.iconImage.enabled) controlShown++;
                 }
             if (framed != null)
             {
@@ -152,7 +170,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 camera.SetDesiredFoV(50f, 50f);
                 SceneSingleton<DynamicMap>.i?.Minimize();
             }
-            return new Dictionary<string, object> { ["ok"] = true, ["count"] = rows.Count, ["dressed"] = rows };
+            return new Dictionary<string, object> { ["ok"] = true, ["count"] = rows.Count, ["dressed"] = rows, ["controlIcons"] = controlIcons, ["controlShown"] = controlShown };
         }
 
         /// <summary>A compound blob unpacked off the main thread: plain arrays, no Unity objects.</summary>

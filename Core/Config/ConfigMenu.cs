@@ -64,6 +64,7 @@ namespace BoscaliSummer.Core.Config
             new[] { "1 Battlefield", "Garrisons", "Enabled", "Zone garrisons" },
             new[] { "1 Battlefield", "Fires", "Enabled", "Fire ignition and spread" },
             new[] { "1 Battlefield", "CombatAdjust", "Enabled", "Combat adjustments (fog, missile failures, smoke)" },
+            new[] { "1 Battlefield", "SeaStructures", "Enabled", "Sea structures (oil platforms, sea forts)" },
             new[] { "1 Battlefield", "Weather", "Enabled", "Dynamic weather" },
             new[] { "1 Battlefield", "Kaiju", "Enabled", "Kaiju" },
             new[] { "1 Battlefield", "Kaiju", "Summon", "KAIJU: summon / dismiss" },

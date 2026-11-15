@@ -6,18 +6,18 @@ namespace BoscaliSummer.Modules.Command.Domain
     /// <summary>
     /// The relief map's baked grey shade: one hillshade value per heightfield sample,
     /// multiplied with the intel texture by an unlit material. Pure so the look stays
-    /// testable. Steep ground sits deeper in its own shadow than its facing alone
-    /// gives, and high ground lifts slightly toward the snowfields.
+    /// testable. Broad, soft lighting keeps valleys readable under tactical overlays;
+    /// steep ground has a restrained slope shadow and high ground a slight lift.
     /// </summary>
     internal static class ReliefLight
     {
         /// <summary>Samples of shore glow falloff; beyond reads as open ground or sea.</summary>
         internal const int CoastReach = 6;
-        private const float Base = 150f;
-        private const float Gain = 90f;
-        private const float Minimum = 80f;
-        private const float Maximum = 248f;
-        private const float PeakLift = 12f;
+        private const float Base = 164f;
+        private const float Gain = 72f;
+        private const float Minimum = 108f;
+        private const float Maximum = 242f;
+        private const float PeakLift = 10f;
 
         /// <summary>
         /// Distance of every cell to the nearest cell of the opposite medium: 0 touches
@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (float.IsNaN(heightAboveSea)) heightAboveSea = 0f;
             if (float.IsNaN(peakHeight)) peakHeight = 1f;
             float light = Base + Gain * Scalar.Clamp(facing, -1f, 1f);
-            light *= 1f - Math.Min(Math.Max(slopeDrop, 0f) / 40f, 1f) * .2f;
+            light *= 1f - Math.Min(Math.Max(slopeDrop, 0f) / 40f, 1f) * .12f;
             if (land)
             {
                 light += PeakLift * Math.Min(Math.Max(heightAboveSea, 0f) /
@@ -89,6 +89,26 @@ namespace BoscaliSummer.Modules.Command.Domain
             if (light < Minimum) return (byte)Minimum;
             if (light > Maximum) return (byte)Maximum;
             return (byte)Math.Round(light);
+        }
+
+        /// <summary>
+        /// Crest weight from positive height curvature, normalized to a 160 m reference cell on each axis.
+        /// Water, shore rims, planes and valleys receive no highlight; the caller excludes sheet boundaries.
+        /// </summary>
+        internal static float Ridge(float center, float west, float east, float south, float north,
+            float cellXMetres, float cellZMetres, int coast, bool dryLand)
+        {
+            if (!dryLand || coast <= 1 || cellXMetres <= 0f || cellZMetres <= 0f ||
+                !float.IsFinite(center) || !float.IsFinite(west) || !float.IsFinite(east) ||
+                !float.IsFinite(south) || !float.IsFinite(north) ||
+                !float.IsFinite(cellXMetres) || !float.IsFinite(cellZMetres)) return 0f;
+
+            // Double intermediates also keep extreme finite inputs from turning a flat surface into NaN.
+            double sx = 160.0 / cellXMetres, sz = 160.0 / cellZMetres;
+            double crest = .25 * ((2.0 * center - west - east) * sx * sx +
+                                  (2.0 * center - south - north) * sz * sz);
+            double t = Math.Clamp((crest - 1.5) / 10.5, 0.0, 1.0);
+            return (float)(t * t * (3.0 - 2.0 * t)) * Math.Min(1f, (coast - 1) * .5f);
         }
     }
 }

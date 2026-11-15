@@ -114,6 +114,8 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 - **Layered skies** with volumetric cloud, in-cloud whiteout, rain on the canopy and thunder.
 - **Fronts, cells and storms** that drive the day's weather.
 - **MET OFFICE:** the host's weather console. Pin a sky, hold the weather, run a set-piece. Clients read along.
+- **AgX tonemapping:** gentler bright highlights, with BASE, PUNCHY and HUE looks. **SET > WORLD > COLOUR GRADE** also offers an optional **CINEMATIC** look inspired by BF4: cool shadows, light bloom, horizontal lens streaks and subtle grain. AgX starts on; CINEMATIC starts off. Both apply live and preserve automatic exposure and G-LOC.
+- **Image quality:** **SKY DITHER** reduces sky/fog colour banding. **EDGE SMOOTHING > SMAA** adds optional edge smoothing and works with RCAS sharpening; **GAME** restores native anti-aliasing. Missing shader or texture resources leave the game settings in place.
 
 </td>
 <td width="50%" valign="top">
@@ -244,7 +246,7 @@ Start any mission and pick **FULL EXPERIENCE** at the mission prompt to have eve
 
 | | |
 | --- | --- |
-| <kbd>C</kbd> | The interaction menu: weapons, HUD, flight, wing, comms, cockpit, support, view, defence and targets. C is the default; change it under **CONTROLS** at the mission prompt or **SET → THIS PILOT → COCKPIT → KEYS**. |
+| <kbd>C</kbd> | The interaction menu: weapons, HUD, flight, wing, comms, cockpit, support, view, defence and targets. C is the default; change it under **CONTROLS** at the mission prompt or **SET → THIS PILOT → VISUALS → KEYS**. |
 | <kbd>Map</kbd> | Tap for the MFD map, hold for the big holo map |
 | <kbd>F1</kbd> | Settings window, if ConfigurationManager is installed: on/off switches for the mod's systems, and the keys. Tuning values are in the config file only. |
 | <kbd>Ctrl</kbd> + <kbd>O</kbd> | MET OFFICE weather console. The host controls it, clients read along. |
@@ -255,7 +257,7 @@ Start any mission and pick **FULL EXPERIENCE** at the mission prompt to have eve
 
 Settings live in `BepInEx/config/com.marci.boscalisummer.cfg`. Modules depend on each other in places, so turning one off can hide features in another.
 
-The TAC BOARD's options are yours alone and apply at once, even in flight: **SET → THIS PILOT → COCKPIT**, the **HUD** branch of the C ring, or `[TacBoard]` in the config file.
+The TAC BOARD's options are yours alone and apply at once, even in flight: **SET → THIS PILOT → HUD**, the **HUD** branch of the C ring, or `[TacBoard]` in the config file.
 
 > [!WARNING]
 > **Multiplayer is experimental.** Every player, host included, must run the **same mod version**. The host decides shared rules such as fires, destruction, progression, support prices and events.
@@ -329,7 +331,7 @@ They need **Blueprinter**. Cargo-launched systems also need an aircraft with a c
 <summary><b>The interaction menu opens when I press C for something else</b></summary>
 <br>
 
-C is only the default. Change the **MENU KEY** under **CONTROLS** on the mission prompt, or in **SET → THIS PILOT → COCKPIT → KEYS**: click it, then press the key you want. Esc keeps the old key, and Backspace leaves the menu with no key. The note under the button warns when the key you chose is also one of the game's own controls, because a press then does both.
+C is only the default. Change the **MENU KEY** under **CONTROLS** on the mission prompt, or in **SET → THIS PILOT → VISUALS → KEYS**: click it, then press the key you want. Esc keeps the old key, and Backspace leaves the menu with no key. The note under the button warns when the key you chose is also one of the game's own controls, because a press then does both.
 
 </details>
 
@@ -337,7 +339,7 @@ C is only the default. Change the **MENU KEY** under **CONTROLS** on the mission
 <summary><b>An alarm or voice warning is too loud, too quiet or unwanted</b></summary>
 <br>
 
-**SET → THIS PILOT → PERF**, under **IMMERSION**, has **COCKPIT ALARMS** (the reworked lock, launch, stall and radar-warning tones) and **VOICE WARNINGS** (PULL UP, TERRAIN, OVER G, BINGO FUEL). Switching **COCKPIT ALARMS** off brings back the game's own tones. Switching **VOICE WARNINGS** off silences the spoken calls.
+**SET → THIS PILOT → VISUALS**, under **COCKPIT AUDIO**, has **COCKPIT ALARMS** (the reworked lock, launch, stall and radar-warning tones) and **VOICE WARNINGS** (PULL UP, TERRAIN, OVER G, BINGO FUEL). Switching **COCKPIT ALARMS** off brings back the game's own tones. Switching **VOICE WARNINGS** off silences the spoken calls.
 
 </details>
 
@@ -505,6 +507,7 @@ Boscali Summer's own code is released under the [MIT licence](LICENSE). Versions
 - **Tabler Icons** (MIT) and the **Barlow Condensed**, **JetBrains Mono** and **Rajdhani** fonts (SIL OFL), in `AvionicsUi/Assets/LICENSES`;
 - **[RainyGlassShader](https://github.com/toadstorm/RainyGlassShader)** by toadstorm (LGPL-2.1), the source of the canopy rain, in `modules/Weather/Assets/Source`;
 - the cloud noise by Anthony Ibrahim (MIT), in `modules/Weather/Visuals`;
+- **[AgX Tonemapping Unity](https://github.com/meenphie/AgX-Tonemapping-Unity)** LUTs by meenphie, based on Troy Sobotka and Blender's AgX; source commit and asset terms are recorded in [the provenance file](modules/Effects/Assets/PROVENANCE.txt). That upstream commit has no explicit redistribution licence; resolve the LUT terms before publishing a build containing them;
 - sound effects and voice clips, listed in the `LICENSES.txt` files under `Core/Fx/Sfx`, `modules/Immersion/Assets/Voice` and `modules/Spooktober/Assets/Sfx`;
 - the creature model, from the [Free Creature Rig Project](https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project) on CGTrader.
 

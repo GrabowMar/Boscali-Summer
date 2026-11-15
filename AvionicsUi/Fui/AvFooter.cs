@@ -82,8 +82,7 @@ namespace NOAvionics
             hint = next; hintName = nextName;
             AvText.Set(text, hint ?? baseText);
             AvText.Set(name, hintName);
-            Tick();
-            Arrange();
+            Arrange();   // the 2 Hz Tick keeps the clock column; a hover only swaps the words
             Restyle();
         }
 
@@ -222,7 +221,7 @@ namespace NOAvionics
             AvText.Set(tagText, hint != null ? "TIP" : "SYS");
             name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
             order.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
-            sop.color = AvStyleHost.FuiInk("decor", AvTheme.Disabled);
+            sop.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);   // readable: it labels the line beside it
             art.Paint(slab, AvStyleHost.FuiFill("decor", AvTheme.Hairline), AvStyleHost.FuiFill("slab info", AvTheme.RailInfo));
             status[0].color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
             for (int i = 1; i < status.Length; i++) status[i].color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);

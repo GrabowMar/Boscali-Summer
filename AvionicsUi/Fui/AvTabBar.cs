@@ -32,6 +32,7 @@ namespace NOAvionics
                 int index = i;
                 tabs[i] = AvControl.Make(Rect, new AvControl.Spec(items[i].label, () => Select(index), AvButtonStyle.Default, items[i].icon), "tab");
                 tabs[i].SingleLine();
+                tabs[i].Cue = AvUiCue.Navigate;
             }
             Selected = -1;
         }
@@ -134,6 +135,7 @@ namespace NOAvionics
             {
                 UnityEngine.UI.Image bar = AvLay.Solid(Rect, "Glide", Color.clear);
                 bar.raycastTarget = false;
+                AvLay.Nest((RectTransform)bar.transform, false);   // the band moves every frame of its glide; only its own canvas rebuilds
                 glide = bar.gameObject.AddComponent<AvTabGlide>();
                 glide.Bar = bar;
             }

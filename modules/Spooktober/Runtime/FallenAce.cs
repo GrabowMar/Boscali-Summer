@@ -351,9 +351,17 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         /// finite-difference velocities restart (zero = no previous value), so the jump is no impact. Embers at both ends.</summary>
         private static void Blink(Aircraft ace, Vector3 to, Quaternion turn)
         {
+            Embers(ace.transform.position);
+            Relocate(ace, to, turn);
+            Embers(to);
+            Blinks++;
+        }
+
+        /// <summary>Shared by the ace's blink and the Hell dimension: move every connected body without a false impact.</summary>
+        internal static void Relocate(Aircraft ace, Vector3 to, Quaternion turn)
+        {
             Transform root = ace.transform;
             Vector3 from = root.position;
-            Embers(from);
             bodies.Clear();
             foreach (Rigidbody rb in ace.GetComponentsInChildren<Rigidbody>()) bodies.Add(rb);
             if (ace.partLookup != null)
@@ -379,8 +387,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 foreach (UnitPart part in ace.partLookup)
                     if (part != null && !part.transform.IsChildOf(root)) ResetPrev(part.gameObject);
             bodies.Clear();
-            Embers(to);
-            Blinks++;
+            if (GameManager.IsLocalAircraft(ace)) SceneSingleton<CameraStateManager>.i?.CheckOriginShift();
         }
 
         private static void ResetPrev(GameObject o)

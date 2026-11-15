@@ -109,6 +109,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private int canopyAircraftId;
         private readonly TerrainRainDressing terrainRain = new TerrainRainDressing();
         private readonly RainAtmosphere atmosphere = new RainAtmosphere();
+        private readonly AtmosphereSky skyAtmosphere = new AtmosphereSky();
         private readonly SunDisc sunDisc = new SunDisc();
         private readonly SunShaftsPass sunShafts = new SunShaftsPass();
         private readonly CloudDressing clouds = new CloudDressing();
@@ -221,6 +222,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             context.AddClientEffect(flightClouds);
             context.AddClientEffect(terrainRain);
             context.AddClientEffect(atmosphere);
+            context.AddClientEffect(skyAtmosphere);
             context.AddClientEffect(lightning);
             context.AddClientEffect(canopyShader);
         }
@@ -238,6 +240,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             TeardownRainSystems();
             terrainRain.Reset();
             atmosphere.Restore();
+            skyAtmosphere.Restore();
             clouds.Restore();
             HighAltitudeSky.Clear();
             flightClouds?.Restore();
@@ -293,6 +296,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             TeardownRainSystems();
             terrainRain.Reset();
             atmosphere.Restore();
+            skyAtmosphere.Restore();
             clouds.Restore();
             HighAltitudeSky.Clear();
             flightClouds?.Restore();
@@ -597,25 +601,29 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 clouds.Restore();
                 HighAltitudeSky.Clear();
             }
+            skyAtmosphere.Tick(LevelInfo.i, view, wantClouds && flightClouds != null && flightClouds.Active,
+                Mathf.InverseLerp(80f, 10f, localWeather.VisibilityKm), atmosphere.LastNightLight);
             Trace();
 
-            if (liveWeather)
+            LevelInfo terrainLevel = LevelInfo.i;
+            bool wetTerrain = liveWeather && settings.TerrainRainEnabled.Value;
+            bool detailTerrain = !Application.isBatchMode && settings != null && settings.TerrainDetailEnabled.Value &&
+                terrainLevel != null && terrainLevel.LoadedMapSettings != null && view != null &&
+                GameManager.gameState != GameState.Encyclopedia;
+            if (wetTerrain || detailTerrain)
             {
-                if (settings.TerrainRainEnabled.Value)
-                {
-                    terrainRain.SetLighting(sunDirection, terrainSunColor, RenderSettings.fogColor * lightLevel,
-                        RenderSettings.fogDensity, Time.time); // render-only: the ripple phase follows the game's time scale, not the weather field
-                    terrainRain.Update(LevelInfo.i.LoadedMapSettings != null ? LevelInfo.i.LoadedMapSettings.transform : null,
-                        SceneSingleton<CameraStateManager>.i?.mainCamera,
-                        EffectiveRainIntensity(), Time.deltaTime, Field, weatherTime, forcedRainIntensity);
-                }
-                else terrainRain.Reset();
+                WeatherLight groundLight = liveWeather
+                    ? new WeatherLight(sunDirection, terrainSunColor, false) : WeatherLighting.Resolve(terrainLevel);
+                terrainRain.SetLighting(groundLight.Direction, groundLight.Colour, RenderSettings.fogColor * lightLevel,
+                    RenderSettings.fogDensity, Time.time); // render-only: the ripple phase follows the game's time scale
+                terrainRain.Update(terrainLevel.LoadedMapSettings != null ? terrainLevel.LoadedMapSettings.transform : null,
+                    view, wetTerrain ? EffectiveRainIntensity() : 0f, Time.deltaTime,
+                    wetTerrain ? Field : null, weatherTime, wetTerrain ? forcedRainIntensity : null,
+                    wetTerrain, detailTerrain, detailTerrain ? SurfaceShaderBundle.Terrain : null,
+                    detailTerrain ? SurfaceShaderBundle.Detail : null);
             }
-            else
-            {
-                terrainRain.Reset();
-                atmosphere.Restore();
-            }
+            else terrainRain.Reset();
+            if (!liveWeather) atmosphere.Restore();
             PublishEnvironment(cameras, view, weatherTime, liveWeather);
         }
 
@@ -767,16 +775,18 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             HighAltitudeSky.Publish(viewHeight, LevelInfo.i != null ? LevelInfo.i.sun : null);
             UpdateLighting();
 
-            // Night sky (2026-10-18): aurora on clear nights (seeded per mission: about seven missions in ten get one), and sprites and
+            // Night sky: occasional aurora on clear nights, and sprites and
             // jets that the lightning below fires over distant night storms.
             bool skyPhenomena = settings.SkyPhenomenaEnabled.Value;
             lightning.Phenomena = skyPhenomena ? phenomena : null;
             if (skyPhenomena)
             {
                 uint skySeed = unchecked((uint)missionSeed);
-                float auroraNight = WeatherMath.Hash01(skySeed, 77, 1) < 0.7f ? 0.55f + 0.45f * WeatherMath.Hash01(skySeed, 78, 1) : 0f;
+                float auroraNight = WeatherMath.Hash01(skySeed, 77, 1) < 0.2f ? 0.4f + 0.45f * WeatherMath.Hash01(skySeed, 78, 1) : 0f;
                 float sunUp = LevelInfo.i != null && LevelInfo.i.sun != null ? -LevelInfo.i.sun.transform.forward.y : 1f;
-                phenomena.Tick(currentCam, sunUp, Mathf.Clamp01(1f - localWeather.SkyCover), auroraNight, skySeed, missionTime);
+                Light nightMoon = LevelInfo.i != null ? LevelInfo.i.moon : null;
+                float moonlight = nightMoon != null && nightMoon.isActiveAndEnabled && -nightMoon.transform.forward.y > 0f ? nightMoon.intensity : 0f;
+                phenomena.Tick(currentCam, sunUp, Mathf.Clamp01(1f - localWeather.SkyCover), auroraNight, skySeed, missionTime, moonlight);
             }
             else phenomena.Reset();
 
@@ -1091,11 +1101,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// </summary>
         private void TryPrewarmShaders()
         {
-            if (prewarmAttempted || Application.isBatchMode || settings == null || !settings.Enabled.Value)
+            if (prewarmAttempted || Application.isBatchMode || settings == null ||
+                !(settings.Enabled.Value || settings.TerrainDetailEnabled.Value))
                 return;
-            if (settings.CinematicCloudsEnabled.Value)
+            if (settings.Enabled.Value && settings.CinematicCloudsEnabled.Value)
                 WeatherVolumeDressing.WarmNoise();
-            if (!settings.TerrainRainEnabled.Value &&
+            if (!settings.TerrainDetailEnabled.Value && !settings.OceanWavesEnabled.Value && !settings.TerrainRainEnabled.Value &&
                 !(settings.CanopyRainEnabled.Value && settings.CanopyShaderEnabled.Value))
                 return;
             prewarmAttempted = true;

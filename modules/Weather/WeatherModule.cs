@@ -51,6 +51,9 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("RAIN", "TERRAIN WET PASS",
                 "Wet, darker ground near you in rain: extra nearby-terrain draw passes. Applies now.",
                 context.Settings.Weather.TerrainRainEnabled, ClientPreset.Heavy);
+            context.AddClientSetting("GROUND", "TERRAIN DETAIL",
+                "Fine soil and rock relief nearby, fading into the native terrain at distance. Applies now.",
+                context.Settings.Weather.TerrainDetailEnabled, ClientPreset.Light);
             context.AddClientLevel("RAIN", "RAIN DENSITY", "How many falling-rain streaks you see. The particle budget stays fixed.",
                 context.Settings.Weather.RainDensity, .25f, 2f, .25f, requires: rain);
             context.AddClientSetting("RAIN", "RAIN SOUND",
@@ -61,8 +64,8 @@ namespace BoscaliSummer.Modules.Weather
                 context.Settings.Weather.ReducedFlashes);
             WeatherSettings weather = context.Settings.Weather;
             ClientSettingToggle clouds = context.AddClientSetting("SKY", "CINEMATIC CLOUDS",
-                "Volumetric clouds for the current weather state: fronts, cumulus and storm towers. " +
-                "Falls back to native clouds if the shader is unavailable. Client-local; applies now.",
+                "Volumetric clouds, atmospheric sky, sunset scattering and a faint galactic night sky. " +
+                "Falls back to the native sky if the shaders are unavailable. Client-local; applies now.",
                 weather.CinematicCloudsEnabled, ClientPreset.Light);
             // SET > PERFORMANCE: one quality strip plus the four knobs it sets; touching a knob shows CUSTOM.
             context.AddClientChoice("WEATHER QUALITY", "CLOUD QUALITY",
@@ -91,13 +94,16 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "DARK NIGHTS",
                 "Darker, moonlit blue-grey nights: a new moon is truly dark, a full moon lights the ground. Client-local; applies now.",
                 context.Settings.Weather.DarkNightsEnabled);
-            context.AddClientSetting("SEA", "OCEAN WAVES",
+            ClientSettingToggle oceanWaves = context.AddClientSetting("SEA", "OCEAN WAVES",
                 "Waves that follow the wind and build under storms, with whitecaps, gale streaks and surf. " +
                 "Off restores the game's own water. Client-local; applies now.",
                 context.Settings.Weather.OceanWavesEnabled, ClientPreset.Light);
             context.AddClientSetting("SEA", "SEA SPRAY",
                 "Spray behind aircraft flying low and fast over water. Client-local; applies now.",
                 context.Settings.Weather.SeaSprayEnabled);
+            context.AddClientSetting("SEA", "SURFACE WAKES",
+                "Moving ships leave stern wakes; aircraft downwash breaks up the custom ocean surface. Requires OCEAN WAVES.",
+                context.Settings.Weather.OceanInteractionsEnabled, ClientPreset.Light, oceanWaves);
 
             context.AddHostSettings(new HostSettingsTable("WEATHER", HostSettingsPage.Effects)
                 .Toggle(1, weather.TapeMoves, "CHANGING WEATHER",

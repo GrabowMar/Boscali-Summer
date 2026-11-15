@@ -173,7 +173,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Supply();
                 Tiles();
                 Sitrep();
-                Misc();
                 Banner();
                 Footer(hasSnap);
                 Gates();
@@ -232,7 +231,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 string chip = StrWords.Chip(mode), head = StrWords.Head(mode), why = "", @do = "";
                 int count = -1; string label = "";
                 float since = Since;
-                int checkCount = 0;
 
                 switch (mode)
                 {
@@ -255,7 +253,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                         Split(TheaterWords.Empty(snap.Reason, Math.Max(0f, snap.ReasonSeconds - since)), out why, out @do);
                         count = snap.ReasonSeconds > 0f ? Remaining(snap.ReasonSeconds - since) : -1;
                         label = count < 0 ? "" : snap.Reason == TheaterEmptyReason.CalledOff ? "BACK IN THE DECK IN" : "NEXT REVIEW IN";
-                        checkCount = Checklist(b);
                         break;
                     case StrBoardMode.Reduced:
                         head = StrWords.ReducedHead(snap.Reason);
@@ -288,7 +285,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 Put(ref b.Do, show ? @do : "");
                 Put(ref b.CountSeconds, show ? count : -1);
                 Put(ref b.CountLabel, show ? label : "");
-                Put(ref b.CheckCount, checkCount);
             }
 
             // Whole seconds left of a countdown: counted up so it never reads 00:00 while something is still to come.
@@ -300,31 +296,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 int n = p == null ? 0 : Math.Min(p.Length, StrViewModel.MaxProposals);
                 for (int i = 0; i < n; i++) if (p[i] != null && p[i].Recommended) return "O" + (i + 1);
                 return "O1";
-            }
-
-            private static readonly TheaterEmptyReason[] CheckOrder =
-            {
-                TheaterEmptyReason.StaffFault, TheaterEmptyReason.NoTerritoryField, TheaterEmptyReason.NoFronts,
-                TheaterEmptyReason.NoFriendlyGroundNearFront, TheaterEmptyReason.FrontsQuiet, TheaterEmptyReason.PostureTooCautious,
-            };
-
-            // The no-opening checklist follows the engine's reason order (N-17). Rows before the blocking reason pass, the blocking row
-            // fails with the engine's own sentence, the rest are not checked yet. A reason that is not on the list leaves every row unchecked.
-            private int Checklist(StrBanner b)
-            {
-                TheaterEmptyReason reason = snap.Reason == TheaterEmptyReason.CalledOff ? TheaterEmptyReason.PostureTooCautious : snap.Reason;
-                int block = Array.IndexOf(CheckOrder, reason);
-                string engineDo = "";
-                if (block >= 0) { Split(TheaterWords.Empty(snap.Reason, Math.Max(0f, snap.ReasonSeconds - Since)), out _, out engineDo); }
-                for (int i = 0; i < CheckOrder.Length; i++)
-                {
-                    StrTri pass = block < 0 || i > block ? StrTri.Unknown : i < block ? StrTri.Yes : StrTri.No;
-                    string todo = pass == StrTri.No ? engineDo : pass == StrTri.Unknown ? "NOT CHECKED YET" : "";
-                    StrCheck c = b.Checks[i];
-                    string label = StrWords.CheckLabel(CheckOrder[i]);
-                    if (c.Pass != pass || c.Label != label || c.Do != todo) { b.Checks[i] = new StrCheck { Label = label, Do = todo, Pass = pass }; Changed = true; }
-                }
-                return CheckOrder.Length;
             }
 
             // Rule 13: line 1 is the mode's strip with the worst age of the feeds present, line 2 by precedence.
@@ -340,9 +311,7 @@ namespace BoscaliSummer.Modules.Command.Domain
                 switch (mode)
                 {
                     case StrBoardMode.Operation:
-                        status = "BOARD " + (stale ? "STALE" : "CURRENT") + age +
-                                 (string.IsNullOrEmpty(f.FactionCode) ? "" : StrWords.Dot + "FACTION " + f.FactionCode) +
-                                 StrWords.Dot + FrontCountText();
+                        status = "BOARD " + (stale ? "STALE" : "CURRENT") + age;
                         break;
                     case StrBoardMode.Proposals:
                         status = StrWords.Status(mode) + (m.Banner.CountSeconds >= 0
@@ -373,12 +342,6 @@ namespace BoscaliSummer.Modules.Command.Domain
                 if (note == null && noticeOn && ui.Notice.Length > 0) note = ui.Notice;
                 Put(ref m.FooterStatus, status);
                 Put(ref m.FooterNote, note ?? StrWords.Flavour(mode));
-            }
-
-            private string FrontCountText()
-            {
-                int n = snap?.Fronts == null ? 0 : Math.Min(snap.Fronts.Length, StrViewModel.MaxFronts);
-                return n.ToString(CultureInfo.InvariantCulture) + (n == 1 ? " PLATFORM" : " PLATFORMS");
             }
 
             // The rows carry their own gate result, so a part never calls a gate itself. Everything a gate reads is filled by now.

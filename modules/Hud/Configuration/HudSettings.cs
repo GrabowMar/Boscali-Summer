@@ -57,8 +57,16 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             }
 
             Shade = config.Bind(section, "Shade", d.Shade,
-                new ConfigDescription("Strength of the one soft backdrop behind every HUD block of the mod (the board, the left column, the TAC MAP, the wing strip, the centre alerts); 0 draws none." + live,
+                new ConfigDescription("Strength of an optional dark backdrop behind every HUD block of the mod (the board, the left column, the TAC MAP, the wing strip, the centre alerts); 0 (the default) draws none and the HUD reads as glowing light on the visor." + live,
                     new AcceptableValueRange<float>(0f, 1f)));
+            // 2026-11-15 turned the backdrop off by default (the HUD's words glow instead); a file still holding the old untouched default 0.45 takes the new one, once.
+            ConfigEntry<int> noBackdrop = config.Bind(section, "GlowDefaultShade", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a Shade left at the old default (0.45) has moved to the new one (0).", new AcceptableValueRange<int>(0, 1)));
+            if (noBackdrop.Value < 1)
+            {
+                if (System.Math.Abs(Shade.Value - 0.45f) < 0.001f) Shade.Value = d.Shade;
+                noBackdrop.Value = 1;
+            }
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
                 "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. Manual pages and their titles remain available at every level." + live);

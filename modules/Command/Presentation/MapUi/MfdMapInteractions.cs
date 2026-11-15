@@ -150,6 +150,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DrawMark(map);
             DrawBanner(map);
             MapSelectionDeck.Tick(map);
+            MfdFieldLog.Tick(map);
             if (!MapUiPointer.OverControls() && map.TryGetCursorCoordinates(out GlobalPosition pointer)) cursor = pointer;
             TickMarkTool(map);
             // An armed tool owns the right button: the card goes and no right press is latched for it.
@@ -925,6 +926,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             bannerWhat = null;
             bannerPrompt = null;
             MapSelectionDeck.Reset();
+            MfdFieldLog.Reset();
             mark = null;
             cursor = null;
         }
@@ -937,6 +939,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MapPicker.Disarm(MarkOwner);   // a closed map disarms
             ReleasePause();
             MapSelectionDeck.Hide();
+            MfdFieldLog.Hide();
             if (banner != null) banner.gameObject.SetActive(false);
             if (markGlyph != null) Object.Destroy(markGlyph.gameObject);
             markGlyph = null;

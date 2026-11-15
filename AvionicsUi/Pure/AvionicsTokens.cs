@@ -98,25 +98,25 @@ namespace NOAvionics
         public const float FontLead = 13f;
         public const float FontBody = 12f;
         public const float FontSmall = 11f;
-        public const float FontMicro = 10f;
+        public const float FontMicro = 11f;   // = AvTypeScale.Floor: one floor for every console
 
         // --------------------------------------------------------------------- layout
-        public const float PanelWidth = 480f;
+        public const float PanelWidth = 512f;   // a multiple of the 8 px grid module (AvGrid snaps the column)
         public const float PanelHeight = 596f;
 
         /// <summary>
         /// The tallest a panel may grow when its column has the room.
         ///
         /// The left bay runs from the canvas's bottom margin up to under the news ticker:
-        /// 1026px at 1080p (<see cref="BayReserve"/>). The map's old left log panel took the
+        /// 1064px at 1080p (<see cref="BayReserve"/>). The map's old left log panel took the
         /// top of it; the log is on EVN LOG now, so a panel fills the bay.
         /// <see cref="PanelHeight"/> stays the floor and the fallback, so a screen with no
         /// measurable canvas is exactly what it always was.
         /// </summary>
-        public const float PanelHeightMax = 1026f;
+        public const float PanelHeightMax = 1064f;
 
-        /// <summary>What the bay keeps off the canvas height: the news ticker (8 margin + 30), one 8 px gutter under it, and the 8 px
-        /// bottom margin.</summary>
-        public const float BayReserve = 54f;
+        /// <summary>What the bay keeps off the canvas height: the 8 px top and bottom margins (the news ticker runs over the map only since
+        /// 2026-11-15).</summary>
+        public const float BayReserve = 16f;
     }
 }

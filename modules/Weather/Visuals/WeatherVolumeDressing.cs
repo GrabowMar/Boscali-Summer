@@ -199,9 +199,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Keep native clouds until the reduced pass has proved it runs on this camera.
             bool passAvailable = wantHalfResolution && compositeMaterial != null;
             pass.Bind(camera, renderer, material, compositeMaterial, passAvailable, temporalUpdate, onRender);
+            bool excluded = WeatherCloudPass.IsWeatherExcluded(camera);
             bool passRunning = pass.ExecutedFrame >= 0 && pass.ExecutedFrame >= Time.frameCount - 2;
             halfResolution = passAvailable && passRunning;
-            if (wantHalfResolution && !halfResolution)
+            if (wantHalfResolution && !halfResolution && !excluded)
             {
                 // Balanced quality never silently promotes an unavailable reduced pass to full resolution.
                 renderer.enabled = false;
@@ -246,8 +247,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             displayedTape = field.Tape;
             displayedFrame = field.Frame;
             displayedHeading = field.PrevailingHeading;
-            renderer.enabled = !wantHalfResolution || halfResolution;
-            probePass.Bind(renderer.enabled ? material : null);
+            renderer.enabled = !excluded && (!wantHalfResolution || halfResolution);
+            probePass.Bind(renderer.enabled || excluded ? material : null);
+            if (excluded)
+            {
+                HideReason = "camera supplies its own atmosphere";
+                shadows.Restore();
+            }
             if (renderer.enabled)
             {
                 HideReason = null;

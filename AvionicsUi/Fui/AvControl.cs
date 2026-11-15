@@ -5,7 +5,7 @@ using UnityEngine.EventSystems;
 
 namespace NOAvionics
 {
-    /// <summary>Kit v2 button: five styles × six states, painted from avionics.fui.avss, with an optional icon.</summary>
+    /// <summary>Kit v2 button: six styles × six states, painted from avionics.fui.avss, with an optional icon.</summary>
     public sealed class AvControl : MonoBehaviour
     {
         public struct Spec
@@ -22,6 +22,7 @@ namespace NOAvionics
         private string classes, baseClass;
         private bool hover, pressed, latched, armed, interactable = true, iconRight, iconOnly;
         private Color? accent;
+        private AvUiCue cue = AvUiCue.Press;
 
         public RectTransform Rect => (RectTransform)transform;
         public event Action Clicked;
@@ -61,7 +62,15 @@ namespace NOAvionics
             AvHit hit = AvHit.On(c.frame);
             hit.Hover = h => { c.hover = h; if (h && c.interactable) c.fx?.Play(AvFxKind.Shine, 0.15f); c.Restyle(); };
             hit.Press = p => { c.pressed = p; c.Restyle(); };
-            hit.Click = e => { if (e.button == PointerEventData.InputButton.Left) c.Clicked?.Invoke(); };
+            hit.Refuses = true;
+            hit.Click = e =>
+            {
+                if (e.button != PointerEventData.InputButton.Left) return;
+                bool was = c.latched;
+                c.Clicked?.Invoke();
+                // A click that latched or released the control says so; anything else plays the control's own cue.
+                hit.Cue = c.cue != AvUiCue.Press || c.latched == was ? c.cue : c.latched ? AvUiCue.Engage : AvUiCue.Release;
+            };
             c.fx = AvFx.On(c.frame);
             c.Restyle();
             return c;
@@ -90,8 +99,11 @@ namespace NOAvionics
         /// </summary>
         public Color? Accent { get => accent; set { accent = value; Restyle(); } }
 
-        /// <summary>Corner tick length; 0 for packed controls (segmented switches, tool rows) where every button's ticks read as noise.</summary>
+        /// <summary>Corner tick length. The ticks show only under the pointer or on a latched/armed control; 0 removes them outright.</summary>
         public float Bracket { get => frame.Bracket; set { if (frame.Bracket == value) return; frame.Bracket = value; frame.SetVerticesDirty(); } }
+
+        /// <summary>The click cue: Press unless set (tabs navigate).</summary>
+        public AvUiCue Cue { get => cue; set { cue = value; frame.GetComponent<AvHit>().Cue = value; } }
 
         /// <summary>The icon glyph, for a caller that turns it (a compass needle); null when the button has none.</summary>
         public TMP_Text Glyph => glyph;
@@ -141,7 +153,7 @@ namespace NOAvionics
             }
             frame.Paint(back, edge);
             text.color = ink;
-            Color bracket = (accent ?? ink).WithAlpha(interactable && hover ? 1f : latched || armed ? 0.85f : interactable ? 0.42f : 0.16f);
+            Color bracket = (accent ?? ink).WithAlpha(!interactable ? 0f : hover ? 1f : latched || armed ? 0.85f : 0f);
             if (bracket != frame.BracketColor) { frame.BracketColor = bracket; frame.SetVerticesDirty(); }
             if (glyph != null) glyph.color = ink;
             rail.color = railInk ?? (s.Rail.HasValue ? AvStyleHost.Resolve(s.Rail, Color.clear) : Color.clear);

@@ -1,0 +1,39 @@
+AgX Tonemapping Unity LUTs
+========================
+Upstream: https://github.com/meenphie/AgX-Tonemapping-Unity
+Commit: aec9c6adf09557e087358957725261db670068ec
+Retrieved: 2026-11-15
+Author: meenphie
+
+Source/agx-base.exr and its .meta: AgX Luts/AgX - Base Contrast.exr
+Source/agx-punchy.exr and its .meta: AgX Luts/AgX - Punchy.exr
+Source/agx-hue.exr and its .meta: AgX Luts/Look/AgX - Hue.exr
+EXR data and copied import metadata are unchanged upstream files. The build
+uses the upstream 32-slice 3D texture layout, retains sRGB import, and uses
+uncompressed RGBAHalf with bilinear filtering and clamp addressing.
+
+Source/AgxLutComposite.shader is the mod's small native-LUT composition pass.
+Its coordinate mapping follows the connected nodes in upstream
+URP/FullScreen LUT.shadergraph; no ShaderGraph runtime dependency is needed.
+Source/CinematicStreak.shader is the mod's original optional light-streak
+shader: highlight extraction, an 11-tap horizontal filter and additive
+composition. It contains no third-party shader source.
+
+Upstream attributes AgX to Troy Sobotka and Blender's AgX implementation.
+The inspected upstream commit does not include a LICENSE file or an explicit
+redistribution license. This provenance record does not grant one. Verify
+the asset redistribution terms with the upstream author before publishing
+these third-party LUT assets or the bundle containing them.
+
+Rebuild: powershell -File tools/Build-AgxAssets.ps1
+Requires Unity 2022.3.62f3. Output: modules/Effects/Assets/agx.bundle.
+The build also renders an HDR grey ramp for each imported look and checks
+finite values, monotonic response and black/white endpoints.
+The separate streak shader check renders a synthetic warm light, checks
+horizontal spread without vertical/corner haze, finite output, preservation
+of scene brightness and source hue, and original output at zero strength.
+Measured linear output for a neutral input of 0.18: Base 0.176025, Punchy
+0.0957642, Hue 0.247192. The RGBAHalf imports report dataSRGB=false; a
+non-sRGB-import control gives the same Base result. The EXRs' output is
+already suitable for the linear internal LUT. No extra gamma conversion
+is performed by the composition shader.

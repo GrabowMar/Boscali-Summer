@@ -52,7 +52,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public static string FitDetail(string fit)
         {
             if (fit == CallSpec.YourLoadout) return "YOUR LOADOUT: the loadout you set for this airframe, as you would fly it.";
-            if (fit != null) return "CUSTOM: the loadout built for this airframe on LOADOUT.";
+            if (fit != null) return "CUSTOM: the loadout built for this airframe with EDIT LOADOUT.";
             return "AUTO: the game arms it for the mission, as it arms its own AI.";
         }
 
