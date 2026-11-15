@@ -2,9 +2,9 @@ using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
-    /// <summary>ORDERS' queue (spec 2026-10-04 §4.2): a map order placed with shift held (or the QUEUE toggle on) is appended as a
+    /// <summary>ORDERS' queue (spec 2026-10-04 §4.2): a map order placed with shift held is appended as a
     /// <see cref="PlanStep"/> to the scope's element lane in the wing plan, instead of replacing the element's task. The plan runs from
-    /// ORDERS' RUN (or BEHAVIOUR › SORTIE's EXECUTE).</summary>
+    /// ORDERS' RUN.</summary>
     internal static class WmcQueue
     {
         /// <summary>The plan step a map click makes (move, orbit, CAP, SWEEP, land, cargo); attack and route keep shift's own meaning.</summary>

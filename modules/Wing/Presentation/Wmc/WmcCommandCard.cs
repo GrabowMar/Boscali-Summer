@@ -11,8 +11,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>ORDERS' command card (spec 2026-10-04 §4.2; mockup board/orders.html): the 24 orders of <see cref="OrderGrid"/> as a 4 × 6
     /// grid of keys. Each key is a kit button with the wing-key letter (<see cref="ChordResolver.OrderKeys"/>) in its top-left corner, a
     /// group colour rail across its top, the kind of input it needs ("PT" a map point, "TGT" an enemy, "AREA" an area) bottom right, an
-    /// LED bottom left while an element is flying it (the element letters; clear of the label, which a top-right plate covered), and a
-    /// short reason beside it when it cannot be pressed. Kit gap: a key
+    /// LED bottom left while an element is flying it (the element letters; clear of the label, which a top-right plate covered). A key
+    /// that cannot be pressed is greyed, its reason in its help (the per-key reason words were cut 2026-11-15). Kit gap: a key
     /// with corner marks is not a kit control, so the marks are text and plates drawn over a kit <see cref="AvControl"/>.</summary>
     internal sealed class WmcCommandCard : AvPart
     {
@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         public readonly AvControl[] Cells = new AvControl[Count];
         private readonly Image[] rails = new Image[Count], leds = new Image[Count];
-        private readonly TMP_Text[] keys = new TMP_Text[Count], marks = new TMP_Text[Count], ledText = new TMP_Text[Count], whys = new TMP_Text[Count];
+        private readonly TMP_Text[] keys = new TMP_Text[Count], marks = new TMP_Text[Count], ledText = new TMP_Text[Count];
         // The row's group in the left gutter (ATK, DEF...), in its rail colour: the spec's "six labelled rows".
         private readonly TMP_Text[] rowTags = new TMP_Text[OrderGrid.Rows];
 
@@ -44,7 +44,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 marks[k] = Mark(r, "Input", AvTextRole.Micro, TextAlignmentOptions.BottomRight);
                 leds[k] = AvLay.Solid(r, "Led", Color.clear);
                 ledText[k] = Mark(r, "LedText", AvTextRole.Micro, TextAlignmentOptions.Center);
-                whys[k] = Mark(r, "Why", AvTextRole.Micro, TextAlignmentOptions.BottomLeft);
                 leds[k].gameObject.SetActive(false);
                 ledText[k].gameObject.SetActive(false);
             }
@@ -70,10 +69,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvLay.Place(rails[k].rectTransform, 0f, 0f, w, 3f);
                 AvLay.Place(keys[k].rectTransform, 5f, 1f, 18f, 18f);
                 AvLay.Place(marks[k].rectTransform, w - 44f, KeyH - 19f, 40f, 18f);
-                bool led = leds[k].gameObject.activeSelf;
                 AvLay.Place(leds[k].rectTransform, 4f, KeyH - 15f, LedW, 12f);
                 AvLay.Place(ledText[k].rectTransform, 4f, KeyH - 18f, LedW, 18f);
-                AvLay.Place(whys[k].rectTransform, led ? LedW + 8f : 5f, KeyH - 19f, w - 50f - (led ? LedW + 3f : 0f), 18f);
             }
         }
 
@@ -94,26 +91,27 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             {
                 leds[k].gameObject.SetActive(on);
                 ledText[k].gameObject.SetActive(on);
-                float w = Cells[k].Rect.rect.width;
-                AvLay.Place(whys[k].rectTransform, on ? LedW + 8f : 5f, KeyH - 19f, w - 50f - (on ? LedW + 3f : 0f), 18f);
             }
             if (on) AvText.Set(ledText[k], letters);
         }
 
-        /// <summary>The reason a key is off, in a word or two ("HOST", "NO AC", "SOON"); empty when it is pressable.</summary>
-        public void SetWhy(int k, string word) => AvText.Set(whys[k], word ?? "");
+        /// <summary>Hides key <paramref name="k"/>, leaving its place in the grid empty (LAND and CARGO while the wing has no
+        /// helicopter). A key that is off for a moment stays shown, greyed, with the reason in its help.</summary>
+        public void SetShown(int k, bool on)
+        {
+            if (Cells[k].gameObject.activeSelf != on) Cells[k].gameObject.SetActive(on);
+        }
 
         public override void Restyle()
         {
             Color hint = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo), caution = AvStyleHost.FuiColor("caution", AvTheme.RailCaution);
+            Color key = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             Color ink = AvStyleHost.FuiColor("ground", AvTheme.TextInk);
             for (int k = 0; k < Count; k++)
             {
                 Cells[k].Restyle();
                 keys[k].color = key;
                 marks[k].color = hint;
-                whys[k].color = caution;
                 leds[k].color = AvStyleHost.FuiColor("select", AvTheme.Accent);
                 ledText[k].color = ink;
                 rails[k].color = WmcState.Color(OrderGrid.RowRail(k / OrderGrid.Columns));

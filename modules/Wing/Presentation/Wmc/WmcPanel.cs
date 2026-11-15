@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public bool CommandShowing => Visible && shell != null
             && ((shell.CurrentPage == WmcTabs.Roster && tactical != null && tactical.Sub != WmcTactical.SubRoute)
                 || (shell.CurrentPage == WmcTabs.Behaviour && behaviour != null));
-        /// <summary>ROSTER › ORDERS is showing: the QUEUE toggle stays on only here.</summary>
+        /// <summary>ROSTER › ORDERS is showing (the map draws the queued plan only then).</summary>
         public bool OrdersShowing => Visible && shell != null && shell.CurrentPage == WmcTabs.Roster && tactical != null && tactical.Sub == WmcTactical.SubOrders;
         public WmcContext Context => context;
         public WmcMapOverlay Overlay => overlay;

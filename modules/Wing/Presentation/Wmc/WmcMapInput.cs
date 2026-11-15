@@ -114,8 +114,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             // the COMMAND scope row); elsewhere the right-click stays the game's.
             bool command = WmcPanel.Instance != null && WmcPanel.Instance.CommandShowing;
             selected = c != null && command ? c.Selection.Count : 0;
-            // ADD (the QUEUE toggle) belongs to ORDERS: left on elsewhere, every right-click would queue silently.
-            if (c != null && c.Queue && (WmcPanel.Instance == null || !WmcPanel.Instance.OrdersShowing)) c.Queue = false;
             canOrder = c != null && c.CanOrder;
             // The panel gone or the map closed: an armed tool ends with it (every map tool does, rule B).
             if (!visible || (Armed && !DynamicMap.mapMaximized))
@@ -184,7 +182,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 : DynamicMap.GetFactionMode(unit.NetworkHQ, false) == FactionMode.Enemy ? MapPointer.Enemy : MapPointer.Other;
             MapClick click = MapOrders.Resolve(Mode, selected > 0, pointer, shift);
             if (click == MapClick.None) return;
-            if ((shift || c.Queue) && WmcQueue.TryKind(click, out PlanKind queued))
+            if (shift && WmcQueue.TryKind(click, out PlanKind queued))
             {
                 WmcQueue.Append(c, queued, point, radius);
                 return;

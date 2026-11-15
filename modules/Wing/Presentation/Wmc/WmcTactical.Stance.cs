@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             key = key * 7 + lit;
             if (key == stanceKey) return;
             stanceKey = key;
-            stanceSection.SetCaption(c.ScopeLabel + " · TAP OR WING + 1-6");
+            stanceSection.SetCaption("TAP OR WING + 1-6");
             for (int i = 0; i < StanceBook.Slots; i++)
             {
                 Stance s = book.Slot(i);
