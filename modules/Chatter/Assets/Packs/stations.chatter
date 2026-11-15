@@ -222,3 +222,43 @@
 [*] Fuel critical, <n> percent. Disengage and land.
 [*] That is bingo. Turn for home and do not argue with the gauge.
 [*] <n> percent. You land in the next few minutes, one way or another.
+
+# ---------------------------------------------------------------- more AWACS (2026-11-15)
+
+@awacs.sam emergency
+[*] SAM launch, your <clock>! Break!
+[*] Surface to air missile, <clock>! Defend!
+[*] SAM in the air, your <clock>! Get low and notch it!
+[*] Ground launch at your <clock>! Break now!
+[*] SAM, <clock>! Chaff and break!
+
+@awacs.picture1 status
+[*] Picture, single group, <bra>.
+[*] Skywatch picture: one group, <bra>. Type <type>.
+[*] Single group, <bra>. That is all I see.
+[*] One contact on my scope, <bra>. Keep it in mind.
+
+@awacs.picturemany status
+[*] Picture, <n> groups. Nearest <bra>.
+[*] Skywatch picture: <n> hostile groups. Lead group <bra>.
+[*] Busy sky. <n> groups, nearest <bra>.
+[*] I count <n> hostile groups. Closest is <bra>.
+[* night] <n> groups out there in the dark. Nearest <bra>.
+
+@awacs.friendlydown tactical
+[*] We lost a friendly <type>. Stay alert.
+[*] Friendly down, a <type>. Watch your sector.
+[*] Skywatch shows a friendly <type> gone from the scope.
+[*] Lost contact with a friendly <type>. Somebody is hunting out there.
+[*] Friendly <type> is down. Keep your eyes open.
+
+# ---------------------------------------------------------------- more tower (2026-11-15)
+
+@tower.startup ambient
+[*] Tower has you on the ramp. Field is open, call when ready.
+[*] Good to see you. Field is clear, taxi when you are set.
+[*] Tower. You are on the board for departure. Take your time.
+[*] Ground crew reports you fueled and armed. Ready when you are.
+[*] Field is quiet. Start up and call for taxi.
+[* night] Tower. Night operations, the field lights are on. Call for taxi.
+[* rain] Tower. Wet runway today. Call for taxi when ready.

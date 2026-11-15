@@ -81,7 +81,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             PlaceRoot(area);
 
-            float badgeWidth = Mathf.Min(columns.Panel.width, Mathf.Max(MinimumBadgeWidth, area.width - 180f));
+            // A folded panel column resolves at zero: the badge keeps its own minimum, and drops the desk words that no longer fit.
+            float badgeWidth = Mathf.Max(MinimumBadgeWidth, Mathf.Min(columns.Panel.width, Mathf.Max(MinimumBadgeWidth, area.width - 180f)));
             if (!MfdLayout.Near(builtSize, area.size) || Mathf.Abs(builtBadgeWidth - badgeWidth) >= 0.5f || labelA == null)
             {
                 Rebuild(area.size, badgeWidth);
@@ -208,6 +209,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 root = go.GetComponent<RectTransform>();
                 root.SetParent(canvas.transform, worldPositionStays: false);
             }
+            // Its own nested canvas (2026-11-15): the marquee moves every frame, and inside the map screen's canvas each move
+            // re-batched the rail, the docked panel and the log with it. Nothing here takes clicks, so it needs no raycaster.
+            if (root.GetComponent<Canvas>() == null) root.gameObject.AddComponent<Canvas>();
             // The chrome child (built in Rebuild) carries the one background/frame mesh;
             // root itself is a plain layout node.
         }
@@ -268,6 +272,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 lastLogLive ? "// LOG LIVE" : "// LOG STANDBY", TextAlignmentOptions.MidlineRight);
             MfdChromeLay.Place(deskLabel.rectTransform, new Rect(badgeWidth - 145f, 0f, 112f, size.y));
             deskLabel.color = AvStyleHost.FuiColor("ink-dim", AvTheme.Dim);
+            deskLabel.gameObject.SetActive(badgeWidth >= 260f);
 
             // 3. Masked Viewport
             float viewportX = badgeWidth + 10f;

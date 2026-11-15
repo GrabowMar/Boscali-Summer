@@ -1,0 +1,27 @@
+# Allied net (2026-11-15): other friendly flights near the player. Their kills, their losses, their thanks. Voiced by the built-in allied packs.
+
+@allied.splash ambient
+[*] Splash one! Got him!
+[*] Scratch one bandit!
+[*] Target down! That is a kill!
+[*] Splash! He is going in!
+[*] Bandit destroyed. Resuming patrol.
+[*] Got one! Somebody confirm that!
+[*] Kill! He is burning!
+[*] Splash one <type>.
+
+@allied.lastwords tactical
+[*] I am hit! I am hit! Going down!
+[*] Mayday, mayday! I cannot hold it!
+[*] Losing control! Ejecting!
+[*] They got me! Punching out!
+[*] Engine is gone! I am going in!
+[*] Eject, eject, eject!
+
+@allied.thanks status
+[*] Thanks for the save! I owe you one.
+[*] That was close. Good shooting!
+[*] He was right on me. Thanks!
+[*] Nice kill! You saved my neck.
+[*] Bandit off my tail. Appreciate it!
+[*] Whoever that was, thank you!

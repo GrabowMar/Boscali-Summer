@@ -24,6 +24,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private const long MaxPackBytes = 1024 * 1024;
 
         private readonly ChatterDirector director = new ChatterDirector();
+        private readonly ChatterQuestions questions = new ChatterQuestions();
+        private readonly RadioAsks asks = new RadioAsks();
         private readonly Dictionary<string, ChatterSpeaker> stations = new Dictionary<string, ChatterSpeaker>(StringComparer.Ordinal);
         private readonly HashSet<string> warned = new HashSet<string>(StringComparer.Ordinal);
         private readonly CommandNet command = new CommandNet();
@@ -59,6 +61,28 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public bool Say(ChatterSpeaker speaker, string key, string text, ChatterPriority priority = ChatterPriority.Status) =>
             director.Say(Time.time, speaker, key, text, priority);
 
+        public bool Ask(ChatterSpeaker speaker, string evt, string key, Action yes, Action no = null, params (string Name, string Value)[] facts)
+        {
+            // Held before the line is raised: a free channel airs it inside Raise, and the question must already be waiting for it.
+            if (speaker == null || Application.isBatchMode || !questions.Ask(Time.time, key, evt, speaker.Id, Guard(yes), Guard(no))) return false;
+            if (director.Raise(Time.time, evt, speaker, key, facts)) return true;
+            questions.Withdraw(key);
+            return false;
+        }
+
+        /// <summary>The pilot's answer (the sim hook and the keys). False when no question is open.</summary>
+        public bool Answer(bool yes) => questions.Answer(Time.time, yes);
+
+        public ChatterQuestions Questions => questions;
+
+        internal ChatterVoices Voices => voices;
+
+        private Action Guard(Action action) => action == null ? null : () =>
+        {
+            try { action(); }
+            catch (Exception e) { log?.LogWarning("[Chatter] a radio answer failed: " + e.Message); }
+        };
+
         public bool Scripted(in ChatterAired line)
         {
             // COMMS stands down under the maximised map, so the script's own plate presents the line there.
@@ -91,6 +115,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public void ResetForScene()
         {
             director.Reset(UnityEngine.Random.Range(1, int.MaxValue));
+            questions.Reset();
+            asks.Reset();
             stations.Clear();
             command.Reset();
             flight?.Reset();
@@ -127,11 +153,21 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     ReadWorld(me);
                     command.Tick(this, me);
                     flight.Tick(me);
+                    asks.Tick(this, me);
                     foreach (string evt in director.Unknown)
                         if (warned.Add(evt)) log?.LogWarning("[Chatter] no pack has the event '" + evt + "'; nothing is said for it.");
                 }
                 director.Tick(Time.time, canTalk);
             }
+            // The answer keys are read only while a question is up, and never while the pilot types.
+            if (questions.Open && !BoscaliSummer.Core.Ui.MapTool.Typing())
+            {
+                if (settings.AnswerDown(true)) questions.Answer(Time.time, true);
+                else if (settings.AnswerDown(false)) questions.Answer(Time.time, false);
+            }
+            questions.Tick(Time.time);
+            strip?.Question(questions.Open, questions.Until - Time.time, questions.Window, settings.AnswerKey(true), settings.AnswerKey(false),
+                Time.time - questions.AnsweredAt < ChatterQuestions.EchoSeconds ? questions.LastAnswer : null);
             strip?.Tick(flying);
         }
 
@@ -165,6 +201,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 line.Seconds = Mathf.Max(line.Seconds, spoken);
             }
             ChatterAudio.Transmit(line.Seconds);
+            // A question's line opens its answer window, and its row stays up for as long as the window is open.
+            if (questions.OnAired(line)) line.Seconds += ChatterQuestions.AnswerSeconds;
             if (strip == null && !Application.isBatchMode) strip = new ChatterStrip(transform);
             strip?.Show(line);
             // The MFD's tactical log keeps the radio with the game's own messages.

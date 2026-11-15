@@ -366,6 +366,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (screen == null || dock == null) return;
             if (!IsDocked(screen)) return;
+            // Shown on a folded column (a hotkey, a mod opening its own page): the column opens, or the panel would spill over the map.
+            if (MfdColumnFold.Folded) MfdColumnFold.Unfold(false);
 
             var rt = screen.transform as RectTransform;
             if (rt == null) return;

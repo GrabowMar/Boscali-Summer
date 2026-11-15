@@ -33,8 +33,11 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         private readonly AvHudHost host;
         private readonly Row[] rows = new Row[Rows];
-        private readonly TextMeshProUGUI shelf, channel;
-        private readonly RectTransform shelfLead, shelfLine, shelfEnd, bracket;
+        private readonly TextMeshProUGUI shelf, channel, prompt;
+        private readonly RectTransform shelfLead, shelfLine, shelfEnd, bracket, promptTrack, promptBar;
+        private const float PromptHeight = 34f;
+        private bool promptOn;
+        private float promptFill;
         private readonly StringBuilder sb = new StringBuilder(320);
         private int used;
         private TMP_FontAsset face;
@@ -50,6 +53,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             shelfLine = Bar("ShelfLine");
             shelfEnd = Bar("ShelfEnd");
             bracket = Bar("Bracket");
+            prompt = Label("Prompt", LeftHudStack.BodySize);
+            promptTrack = Bar("PromptTrack");
+            promptBar = Bar("PromptBar");
             for (int i = 0; i < Rows; i++)
             {
                 TextMeshProUGUI text = Label("Row" + i, LeftHudStack.BodySize);
@@ -124,9 +130,28 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             while (used > 1 && Height() > MaxHeight) DropOldest();
         }
 
+        /// <summary>
+        /// The YES/NO prompt under the rows (2026-11-15): while a question is open, YES and NO with their keys and a bar that drains over the answer window; for a moment
+        /// after it closes, the answer that was given (YES, NO or NO ANSWER). Words and colour both carry the state.
+        /// </summary>
+        public void Question(bool open, float left, float window, string yesKey, string noKey, string echo)
+        {
+            promptOn = open || !string.IsNullOrEmpty(echo);
+            if (!promptOn) { prompt.text = ""; return; }
+            promptFill = open && window > 0f ? Mathf.Clamp01(left / window) : 0f;
+            sb.Clear();
+            if (open)
+                sb.Append("<color=#9EE6B8>YES</color> <color=#9AA7B0><size=80%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
+                  .Append("<color=#FFB86B>NO</color> <color=#9AA7B0><size=80%>[").Append(Plain(noKey)).Append("]</size></color>");
+            else
+                sb.Append("<color=#9AA7B0><size=80%>ANSWER</size></color>  <color=#")
+                  .Append(echo == "YES" ? "9EE6B8" : echo == "NO" ? "FFB86B" : "9AA7B0").Append('>').Append(echo).Append("</color>");
+            prompt.text = sb.ToString();
+        }
+
         private float Height()
         {
-            float h = ShelfHeight;
+            float h = ShelfHeight + (promptOn ? PromptHeight : 0f);
             for (int i = 0; i < used; i++) h += rows[i].Height + RowGap;
             return h;
         }
@@ -190,6 +215,26 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 float alpha = now <= row.Until ? 1f : Mathf.Clamp01(1f - (now - row.Until) / FadeSeconds);
                 row.Text.alpha = alpha * (row.Scripted || i == used - 1 ? 1f : 0.92f);
             }
+            if (promptOn)
+            {
+                float barWidth = Width - Indent - 8f;
+                cursor -= PromptHeight - RowGap;
+                AvHudHost.Place(prompt.rectTransform, Left + Indent, cursor + 6f, barWidth, PromptHeight - 8f);
+                prompt.maxVisibleCharacters = 99999;
+                prompt.alpha = 1f;
+                Color track = frame;
+                track.a = promptFill > 0f ? 0.25f : 0f;
+                SetBar(promptTrack, Left + Indent, cursor + 2f, barWidth, 2f, track);
+                Color fill = Color.Lerp(new Color(1f, 0.72f, 0.42f), new Color(0.62f, 0.9f, 0.72f), promptFill);
+                fill.a = promptFill > 0f ? 0.9f : 0f;
+                SetBar(promptBar, Left + Indent, cursor + 2f, barWidth * promptFill, 2f, fill);
+                cursor -= RowGap;
+            }
+            else
+            {
+                SetBar(promptTrack, 0f, 0f, 0f, 0f, Color.clear);
+                SetBar(promptBar, 0f, 0f, 0f, 0f, Color.clear);
+            }
             SetBar(bracket, Left + 1f, cursor + RowGap, 1f, bodyTop - cursor - RowGap, frame);
             LeftHudStack.CommsBottom = top + Height();
             paintedTop = top;
@@ -222,12 +267,13 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             Material material = LeftHudStack.FontMaterial;
             if (face == next && faceMaterial == material) return;
             face = next; faceMaterial = material;
-            shelf.font = channel.font = face;
-            shelf.fontSharedMaterial = channel.fontSharedMaterial = material != null ? material : face.material;
+            shelf.font = channel.font = prompt.font = face;
+            shelf.fontSharedMaterial = channel.fontSharedMaterial = prompt.fontSharedMaterial = material != null ? material : face.material;
             shelf.fontSize = 100f;
             float advance = shelf.GetPreferredValues("MMMMMMMM", 0f, 0f).x / 8f / 100f;
             float scale = 0.65f / Mathf.Max(0.1f, advance);
             shelf.fontSize = channel.fontSize = LeftHudStack.HeaderSize * scale;
+            prompt.fontSize = LeftHudStack.BodySize * scale * 1.1f;
             for (int i = 0; i < Rows; i++)
             {
                 TextMeshProUGUI text = rows[i].Text;
@@ -242,6 +288,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         {
             for (int i = 0; i < Rows; i++) if (rows[i].Text != null) rows[i].Text.text = "";
             used = 0;
+            promptOn = false;
+            prompt.text = "";
             LeftHudStack.CommsBottom = 0f;
             host.SetVisible(false);
         }
@@ -263,6 +311,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 case ChatterNet.Tower: return "TWR";
                 case ChatterNet.Command: return "CMD";
                 case ChatterNet.Enemy: return "SIGINT";
+                case ChatterNet.Allied: return "ALLY";
                 default: return "FLT";
             }
         }
@@ -276,6 +325,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 case ChatterNet.Tower: return "118.700";
                 case ChatterNet.Command: return "30.550 FM";
                 case ChatterNet.Enemy: return "9.4 GHz";
+                case ChatterNet.Allied: return "255.400";
                 default: return "251.000";
             }
         }
@@ -288,6 +338,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 case ChatterNet.Tower: return "FFCF70";
                 case ChatterNet.Command: return "E6EDF2";
                 case ChatterNet.Enemy: return "FF5A4E";
+                case ChatterNet.Allied: return "9EE6B8";
                 default: return ColorUtility.ToHtmlStringRGB(VanillaHudStyle.Colours.AllClear);
             }
         }

@@ -46,6 +46,17 @@ namespace BoscaliSummer.Modules.Compatibility
                 "Who draws contrails, dust wake, bullet cracks, airfield lights and the missile boom. The other side's copy is switched off.",
                 s.Overlaps, new[] { "BOSCALI", "KELLY'S" }, kelly);
 
+            const string Expansion = "EXPANSION 2082";
+            ClientSettingToggle expansion = context.AddClientSetting(Expansion, "EXPANSION LINK",
+                "Drive the Expansion2082 ship pack's switches from here. Its ships, carrier and catapult work beside Boscali as they are; off leaves its config alone.",
+                s.Expansion2082Link);
+            expansion.Gate = () => ForeignMods.Find(ForeignMods.Expansion2082) == null ? "Expansion2082 is not installed." : null;
+            context.AddClientSetting(Expansion, "SHIP HAZE",
+                "Engine haze on Expansion2082's ships when they run fast or come under attack.", s.ShipHaze, requires: expansion);
+            context.AddClientSetting(Expansion, "SHIP AA RULES",
+                "Expansion2082's ship missile defence: one interceptor per inbound missile and no wasted shots. Off: ships fire as vanilla does, under Boscali's combat rules.",
+                s.ShipAaRules, requires: expansion);
+
             ClientSettingToggle keys = context.AddClientSetting(Keys, "MOVE CLASHING KEYS",
                 "A NoAtmoFX key on one of ours moves to a Ctrl chord (F8: Alt). Boscali's own keys ignore Ctrl and Alt chords, so Kelly's Ctrl+F8 panel is safe.",
                 s.MoveKeys);

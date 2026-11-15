@@ -18,12 +18,17 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
     internal sealed class ChatterVoices
     {
         private const int MaxPacks = 8, MaxClipsPerPack = 256;
+        /// <summary>The built-in station packs (2026-11-15, ElevenLabs; words in modules/Chatter/Assets/Voices/voices.tsv), embedded and unpacked to the BepInEx cache.</summary>
+        private const string BuiltInPrefix = "BoscaliSummer.ChatterVoices.";
+        private static List<string> builtInFolders;
         private const long MaxFileBytes = 16L * 1024 * 1024, MaxDecodedBytes = 128L * 1024 * 1024;
         private const float MaxClipSeconds = 20f;
 
         private sealed class Pack
         {
             public string Name, Net = "wing", Character;
+            /// <summary>Shipped with the mod: kept compressed in memory, and a pilot's own pack for the same net wins over it.</summary>
+            public bool BuiltIn;
             public readonly List<string> Personas = new List<string>();
             public readonly List<string> Files = new List<string>();
             public AudioClip[] Clips;
@@ -43,6 +48,11 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private int loadingPack, loadingFile;
         private long decodedBytes;
 
+        /// <summary>Clips decoded and ready; lines that were voiced; built-in packs loaded (for the sim and the log).</summary>
+        public int ClipsReady { get; private set; }
+        public int Voiced { get; private set; }
+        public int BuiltInPacks { get { int n = 0; foreach (Pack p in packs) if (p.BuiltIn) n++; return n; } }
+
         public ChatterVoices(ManualLogSource logger, string dataRoot)
         {
             log = logger;
@@ -61,13 +71,53 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public void Activate(string selected, ChatterLibrary library)
         {
             Deactivate();
+            foreach (string folder in BuiltInFolders())
+            {
+                try { Load(folder, Path.GetFileName(folder), library, true); }
+                catch (Exception e) { log?.LogWarning("[Chatter] built-in voices unavailable: " + e.Message); }
+            }
+            int builtIn = packs.Count;
             foreach (string raw in (selected ?? "").Split(','))
             {
                 string name = raw.Trim();
-                if (name.Length == 0 || packs.Count >= MaxPacks) continue;
-                try { Load(name, library); }
+                if (name.Length == 0 || packs.Count - builtIn >= MaxPacks) continue;
+                try
+                {
+                    string folder = Find(name);
+                    if (folder == null) log?.LogWarning("[Chatter] voice pack not found: " + name);
+                    else Load(folder, name, library, false);
+                }
                 catch (Exception e) { log?.LogWarning("[Chatter] voice pack unavailable: " + name + ": " + e.Message); }
             }
+        }
+
+        /// <summary>The built-in packs as folders in the BepInEx cache, written once per game run (a file is rewritten only when its size changed).</summary>
+        private List<string> BuiltInFolders()
+        {
+            if (builtInFolders != null) return builtInFolders;
+            builtInFolders = new List<string>();
+            try
+            {
+                var assembly = typeof(ChatterVoices).Assembly;
+                string root = Path.Combine(Paths.CachePath, "BoscaliSummer", "voices");
+                var folders = new SortedSet<string>(StringComparer.Ordinal);
+                foreach (string name in assembly.GetManifestResourceNames())
+                {
+                    if (!name.StartsWith(BuiltInPrefix, StringComparison.Ordinal)) continue;
+                    // "<pack>\<file>" (MSBuild RecursiveDir), never deeper.
+                    string[] parts = name.Substring(BuiltInPrefix.Length).Split('\\', '/');
+                    if (parts.Length != 2 || parts[0].Length == 0 || parts[1].Length == 0) continue;
+                    string folder = Path.Combine(root, parts[0]), file = Path.Combine(folder, parts[1]);
+                    byte[] bytes = BoscaliSummer.Core.Util.EmbeddedResources.ReadAll(assembly, name, (int)MaxFileBytes);
+                    if (bytes == null) continue;
+                    Directory.CreateDirectory(folder);
+                    if (!File.Exists(file) || new FileInfo(file).Length != bytes.Length) File.WriteAllBytes(file, bytes);
+                    folders.Add(folder);
+                }
+                builtInFolders.AddRange(folders);
+            }
+            catch (Exception e) { log?.LogWarning("[Chatter] could not unpack the built-in voices: " + e.Message); }
+            return builtInFolders;
         }
 
         public void Deactivate()
@@ -80,6 +130,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             assigned.Clear();
             loadingPack = loadingFile = 0;
             decodedBytes = 0;
+            ClipsReady = 0;
         }
 
         private string Find(string name)
@@ -96,11 +147,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return null;
         }
 
-        private void Load(string name, ChatterLibrary library)
+        private void Load(string folder, string name, ChatterLibrary library, bool builtIn)
         {
-            string folder = Find(name);
-            if (folder == null) { log?.LogWarning("[Chatter] voice pack not found: " + name); return; }
-            var pack = new Pack { Name = name };
+            var pack = new Pack { Name = name, BuiltIn = builtIn };
             string manifest = Path.Combine(folder, "pack.txt");
             if (File.Exists(manifest) && new FileInfo(manifest).Length < 4096)
                 foreach (string row in File.ReadAllLines(manifest))
@@ -162,12 +211,15 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 try
                 {
                     if (request.result == UnityWebRequest.Result.Success) clip = DownloadHandlerAudioClip.GetContent(request);
-                    long bytes = clip == null ? 0 : (long)clip.samples * clip.channels * sizeof(float);
+                    // A built-in clip stays compressed in memory: count its file, not its samples.
+                    long bytes = clip == null ? 0 : packs[loadingPack].BuiltIn ? new FileInfo(packs[loadingPack].Files[loadingFile]).Length
+                        : (long)clip.samples * clip.channels * sizeof(float);
                     if (clip != null && clip.loadState == AudioDataLoadState.Loaded && clip.length > 0f && clip.length <= MaxClipSeconds &&
                         bytes > 0 && decodedBytes + bytes <= MaxDecodedBytes)
                     {
                         packs[loadingPack].Clips[loadingFile] = clip;
                         decodedBytes += bytes;
+                        ClipsReady++;
                         clip = null;
                     }
                 }
@@ -189,6 +241,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 {
                     string file = pack.Files[loadingFile];
                     request = UnityWebRequestMultimedia.GetAudioClip(new Uri(file).AbsoluteUri, TypeOf(file));
+                    if (pack.BuiltIn && request.downloadHandler is DownloadHandlerAudioClip handler) handler.compressed = true;
                     request.timeout = 10;
                     request.SendWebRequest();
                     return;
@@ -228,6 +281,11 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     source = go.AddComponent<AudioSource>();
                     source.spatialBlend = 0f;
                     source.playOnAwake = false;
+                    source.priority = 16;
+                    // The radio sound: a UHF set's narrow voice band and a little clipping, on every recorded voice.
+                    go.AddComponent<AudioHighPassFilter>().cutoffFrequency = 320f;
+                    go.AddComponent<AudioLowPassFilter>().cutoffFrequency = 3400f;
+                    go.AddComponent<AudioDistortionFilter>().distortionLevel = 0.18f;
                 }
                 uint h = Hash(line.SpeakerId);
                 source.outputAudioMixerGroup = sound.InterfaceMixer;
@@ -236,6 +294,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 source.pitch = 0.96f + ((h >> 8) & 0xFF) / 255f * 0.08f;
                 source.clip = clip;
                 source.Play();
+                Voiced++;
                 return clip.length / source.pitch;
             }
             catch (Exception e)
@@ -254,6 +313,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 foreach (Pack p in packs) if (p.Character == line.Character) scratch.Add(p);
             if (scratch.Count == 0 && !string.IsNullOrEmpty(line.Persona))
                 foreach (Pack p in packs) if (p.Net == net && p.Character == null && p.Personas.Contains(line.Persona)) scratch.Add(p);
+            if (scratch.Count == 0)
+                foreach (Pack p in packs) if (p.Net == net && p.Character == null && p.Personas.Count == 0 && !p.BuiltIn) scratch.Add(p);
             if (scratch.Count == 0)
                 foreach (Pack p in packs) if (p.Net == net && p.Character == null && p.Personas.Count == 0) scratch.Add(p);
             pack = scratch.Count == 0 ? null : scratch[(int)(Hash(line.SpeakerId) % (uint)scratch.Count)];

@@ -90,6 +90,12 @@ namespace NOAvionics
         /// </summary>
         public Color? Accent { get => accent; set { accent = value; Restyle(); } }
 
+        /// <summary>Corner tick length; 0 for packed controls (segmented switches, tool rows) where every button's ticks read as noise.</summary>
+        public float Bracket { get => frame.Bracket; set { if (frame.Bracket == value) return; frame.Bracket = value; frame.SetVerticesDirty(); } }
+
+        /// <summary>The icon glyph, for a caller that turns it (a compass needle); null when the button has none.</summary>
+        public TMP_Text Glyph => glyph;
+
         /// <summary>Swap the button's icon after build (play/pause); no-op when the button has none.</summary>
         public void SetIcon(AvIcon icon) { if (glyph != null && icon != AvIcon.None) { AvIcons.Set(glyph, icon, AvGridTokens.IconInline); glyph.color = text.color; } }
 

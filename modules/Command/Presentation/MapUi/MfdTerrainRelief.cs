@@ -161,6 +161,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly Dictionary<int, int> stackIndex = new Dictionary<int, int>();
         private static readonly List<ClusterMark> clusters = new List<ClusterMark>(MaximumClusters);
         private static readonly List<CountMark> counts = new List<CountMark>(MaximumClusters);
+        /// <summary>The counts' own layer, filed right above the map image: chrome and cards built earlier or later all draw over it.</summary>
+        private static RectTransform countLayer;
         // Swapped on every regroup, so only the icons whose state really changed are toggled.
         private static HashSet<Image> hiddenIcons = new HashSet<Image>();
         private static HashSet<Image> nextHidden = new HashSet<Image>();
@@ -1211,15 +1213,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 point = default;
                 return false;
             }
-            return TryProjectAtHeight(worldX, worldZ, GroundHeight(worldX, worldZ) + 1f,
-                out point);
+            return ProjectAt(worldX, worldZ, GroundHeight(worldX, worldZ) + 1f, out point);
         }
 
         private static bool TryProjectAtHeight(float worldX, float worldZ, float modelY,
             out Vector2 point)
         {
             point = default;
-            if (!IsDrawing || source == null || owner?.mapBackground == null) return false;
+            if (!IsDrawing || source == null) return false;
+            return ProjectAt(worldX, worldZ, modelY, out point);
+        }
+
+        // The callers checked IsDrawing and the source. While the pose is exact this is one multiply and touches no Unity object: roads,
+        // fronts and the STR ink reproject ~9,000 points a frame while the view moves, and the per-point map/image/rect look-ups (four
+        // native calls each) were most of that work (2026-11-15 profile). The camera path below still checks what it reads.
+        private static bool ProjectAt(float worldX, float worldZ, float modelY, out Vector2 point)
+        {
+            point = default;
             var model = new Vector3(worldX / source.MapSize.x * ModelSpanX, modelY, worldZ / source.MapSize.y * ModelSpanZ);
             if (poseExact)
             {
@@ -1229,6 +1239,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 point = new Vector2(at.x, at.y);
                 return true;
             }
+            if (owner?.mapBackground == null || owner.mapImage == null) return false;
             Vector3 world = sceneRoot.transform.position + model;
             Vector3 screen = camera.WorldToViewportPoint(world);
             if (screen.z <= 0f) return false;
@@ -2039,6 +2050,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Vector2 local = default;
             bool show = inView && RectTransformUtility.ScreenPointToLocalPointInRectangle(viewport,
                 screen, uiCamera, out local);
+            // An STR pin outranks a tally: the counts' layer sits over the map image, where the pins live, so a count that lands on a pin
+            // stands down instead of printing over its number (2026-11-15).
+            if (show && StrMapOverlay.Active != null &&
+                StrMapOverlay.Active.ContainsTag(screen + new Vector2(14f, 10f) * viewport.lossyScale.x)) show = false;
             if (mark.Root.gameObject.activeSelf != show) mark.Root.gameObject.SetActive(show);
             if (show) mark.Root.anchoredPosition = local + new Vector2(14f, 10f);
         }
@@ -2048,7 +2063,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (index < counts.Count) return counts[index];
             var go = new GameObject("NOAvionics.ContactCount", typeof(RectTransform), typeof(CanvasRenderer));
             RectTransform rect = go.GetComponent<RectTransform>();
-            rect.SetParent(viewport, false);
+            rect.SetParent(CountLayer(viewport), false);
             // A quiet tally beside the stack, not a block: small, borderless, half-glass.
             rect.sizeDelta = new Vector2(20f, 14f);
             AvFrame fill = go.AddComponent<AvFrame>();
@@ -2062,6 +2077,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             var mark = new CountMark { Root = rect, Text = label };
             counts.Add(mark);
             return mark;
+        }
+
+        // A count made straight under the viewport the first time a stack appeared was the viewport's last child, so it painted over the
+        // STR card, the plate and the decks built before it (2026-11-15). One layer, filed once after the map image, keeps them all under the chrome.
+        private static RectTransform CountLayer(RectTransform viewport)
+        {
+            if (countLayer != null && countLayer.parent == viewport) return countLayer;
+            if (countLayer != null) Object.Destroy(countLayer.gameObject);
+            countLayer = AvLay.Child(viewport, "NOAvionics.ContactCounts");
+            AvLay.Fill(countLayer);
+            Transform image = owner != null && owner.mapImage != null ? owner.mapImage.transform : null;
+            if (image != null && image.parent == viewport) countLayer.SetSiblingIndex(image.GetSiblingIndex() + 1);
+            return countLayer;
         }
 
         internal static void RehideNativeGrid()
@@ -2137,6 +2165,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             selectedForClusters.Clear();
             foreach (CountMark mark in counts) if (mark.Root != null) Object.Destroy(mark.Root.gameObject);
             counts.Clear();
+            if (countLayer != null) Object.Destroy(countLayer.gameObject);
+            countLayer = null;
             stackIndex.Clear();
             stackImages.Clear();
             nextHidden.Clear();
@@ -2265,11 +2295,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public bool TryProject(float worldX, float worldZ, out float mapX, out float mapY)
         {
             mapX = mapY = 0f;
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (!IsActive || map?.mapImage == null) return false;
-            RectTransform rect = MfdTerrainRelief.MapImageRect(map.mapImage);
-            if (rect == null || !MfdTerrainRelief.TryProject(worldX, worldZ, rect.rect, out Vector2 at))
-                return false;
+            // No map/image/rect look-up per point: the relief projects into the map image it draws for, and its rect was never read.
+            if (!MfdTerrainRelief.TryProject(worldX, worldZ, default, out Vector2 at)) return false;
             mapX = at.x;
             mapY = at.y;
             return true;

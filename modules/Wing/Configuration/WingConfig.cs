@@ -6,6 +6,7 @@ using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Runtime;
+using KeyCode = UnityEngine.KeyCode;
 namespace BoscaliSummer.Modules.Wing.Configuration
 {
     internal enum RadioLevel { Off, Essential, Full }
@@ -88,6 +89,8 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         public ConfigEntry<string> VoicePacks { get; }
         public ConfigEntry<string> PackConditions { get; }
         public ConfigEntry<float> VoicePackVolume { get; }
+        public ConfigEntry<KeyboardShortcut> AnswerYes { get; }
+        public ConfigEntry<KeyboardShortcut> AnswerNo { get; }
         public ConfigEntry<bool> VerboseLogging { get; }
         public ConfigEntry<bool> DevTools { get; }
         public ConfigEntry<bool> Overlay { get; }
@@ -98,6 +101,8 @@ namespace BoscaliSummer.Modules.Wing.Configuration
         string IChatterSettings.PackConditions => PackConditions.Value;
         float IChatterSettings.VoicePackVolume => VoicePackVolume.Value;
         string IChatterSettings.DataRoot => DataRoot;
+        bool IChatterSettings.AnswerDown(bool yes) => (yes ? AnswerYes : AnswerNo).Value.IsDown();
+        string IChatterSettings.AnswerKey(bool yes) => (yes ? AnswerYes : AnswerNo).Value.ToString().ToUpperInvariant();
 
         public WingConfig(ConfigFile c)
         {
@@ -171,6 +176,11 @@ namespace BoscaliSummer.Modules.Wing.Configuration
                 "can keep lines behind a word of its own, such as profanity, and you switch them on here.", null, new ConfigurationManagerAttributes { Order = 75 }));
             VoicePackVolume = c.Bind("Radio", "VoicePackVolume", 0.8f, new ConfigDescription(
                 "Voice pack volume.", new AcceptableValueRange<float>(0f, 1f), new ConfigurationManagerAttributes { Order = 76 }));
+            AnswerYes = c.Bind("Radio", "AnswerYes", new KeyboardShortcut(KeyCode.Y), new ConfigDescription(
+                "Answer YES to a radio question (a new contract, an OPS perk, drones, the wing asking to engage or to clear your six). Only read while a question is up.",
+                null, new ConfigurationManagerAttributes { Order = 74 }));
+            AnswerNo = c.Bind("Radio", "AnswerNo", new KeyboardShortcut(KeyCode.N), new ConfigDescription(
+                "Answer NO to a radio question. No answer within the window also counts as NO.", null, new ConfigurationManagerAttributes { Order = 73 }));
             ContactCalls = c.Bind("Radio", "ContactCalls", true, new ConfigDescription(
                 "Wingmen call new enemy aircraft within 40 km with bearing, range, altitude and aspect from you. Scout Ahead " +
                 "reports ground contacts either way.", null, new ConfigurationManagerAttributes { Order = 78 }));

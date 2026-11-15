@@ -1,0 +1,116 @@
+# YES/NO questions (2026-11-15). A station asks, the pilot answers with the radio's YES or NO key (no answer is NO), and the asker replies.
+# The ask events open the prompt only when their line goes on air; the yes/no events are the replies.
+
+# ---------------------------------------------------------------- command: contracts
+
+@command.askcontract tactical
+[*] New tasking on the board: <title>. Can you take it?
+[*] Command has work for you. <title>. Will you take it?
+[*] Contract up: <title>. You want it?
+[*] We need a flight on <title>. Are you available?
+[*] Priority job: <title>. Can you handle it?
+[* night] Night work, if you want it: <title>. Taking it?
+
+@command.contractyes status
+[*] Copy. It is yours. Marked on your HUD.
+[*] Good. Contract is assigned to you. Do not let us down.
+[*] Acknowledged. You have the job. Target data is on your display.
+[*] Copy that. Tasking confirmed. Good hunting.
+[*] Understood. It is on your board now.
+
+@command.contractno status
+[*] Understood. We will pass it on.
+[*] Copy. Another flight will take it.
+[*] Negative, copied. It stays on the board.
+[*] Roger. We will find someone else.
+
+@command.contractdone status
+[*] Contract complete: <title>. Payment is on its way.
+[*] Good work. <title> is done. The money is wired.
+[*] Command confirms <title> complete. Nicely done.
+[*] That is the job done. Funds transferred.
+[*] Tasking complete. Command is pleased.
+
+# ---------------------------------------------------------------- command: OPS perks
+
+@command.askperk tactical
+[*] OPS here. <perk> is ready. Want it?
+[*] <perk> is up and waiting on your word. Use it?
+[*] OPS has <perk> on standby. Do you want it?
+[*] <perk> is ready for tasking. Shall we arm it?
+
+@command.perkyes status
+[*] Armed. Put your aim on the target.
+[*] Copy, it is armed. Aim where you want it.
+[*] Armed and waiting. Point it and call it.
+
+@command.perkno status
+[*] Understood. Holding it in reserve.
+[*] Copy. It stays on the shelf.
+[*] Roger. We keep it ready.
+
+@command.askfire tactical
+[*] <perk> is armed on your aim. Fire?
+[*] Your aim is the target. Release <perk>?
+[*] Standing by on <perk>. Send it?
+
+@command.fireyes status
+[*] Fired. Stand by for effect.
+[*] Release confirmed. It is on its way.
+[*] Shot away. Watch the target.
+
+@command.fireno status
+[*] Holding. It stays armed until you call it.
+[*] Copy, holding fire.
+[*] Understood. Standing by.
+
+# ---------------------------------------------------------------- command: VANGUARD drones
+
+@command.askdrones tactical
+[*] Vanguard here. Drones are up and you have a target. Send them?
+[*] Your drones can take that target. Commit them?
+[*] Drones on station. Want them on your target?
+[*] Vanguard control. Shall we put the drones on it?
+
+@command.dronesyes status
+[*] Drones committed. Moving to your target.
+[*] Copy. Drones are on it.
+[*] Vanguard is engaging your target.
+
+@command.dronesno status
+[*] Understood. Drones hold.
+[*] Copy, drones stay on task.
+[*] Roger, drones holding.
+
+# ---------------------------------------------------------------- wing: engage and clear the six (text only: the wingmen are not recorded)
+
+@wingask.engage tactical
+[*] <lead>, that bandit is in reach. Permission to engage?
+[*] Request permission to engage, <lead>.
+[*] Bandit in range. Do we engage?
+[*] Clear us in, <lead>? Say the word.
+
+@wingask.engageyes tactical
+[*] Copy! Engaging!
+[*] Cleared hot. We are going in.
+[*] Roger, committing on the bandit.
+
+@wingask.engageno status
+[*] Copy, holding formation.
+[*] Understood. Staying on your wing.
+[*] Roger, we hold.
+
+@wingask.six emergency
+[*] <lead>, you have a shooter on you! Want me on your six?
+[*] Missile on you, <lead>! I can clear your six. Say it!
+[*] You are spiked! Want me to cover you?
+
+@wingask.sixyes tactical
+[*] On my way! Hang in there!
+[*] Moving to your six. Keep turning!
+[*] I have you covered. Coming in!
+
+@wingask.sixno status
+[*] Copy, staying on task.
+[*] Understood. Good luck.
+[*] Roger. Holding position.

@@ -9,7 +9,7 @@ namespace BoscaliSummer.Modules.Ares.Configuration
         public AresSettings(ConfigFile config)
         {
             Enabled = config.Bind("Ares", "Enabled", true,
-                "ARES game-master console on the MISC screen, locked behind the cheating warning: spawn and manage units, god powers and cheats. " +
+                "ARES game-master console on the MISC screen: spawn and manage units, god powers and cheats. " +
                 "Host only. Applies at the next launch.");
         }
     }

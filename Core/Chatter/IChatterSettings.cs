@@ -20,5 +20,11 @@ namespace BoscaliSummer.Core.Chatter
 
         /// <summary>The folder that holds the pilot's data files; voice packs are looked for in its <c>voicepacks</c> folder.</summary>
         string DataRoot { get; }
+
+        /// <summary>The radio's YES (true) or NO (false) answer key went down this frame.</summary>
+        bool AnswerDown(bool yes);
+
+        /// <summary>The answer key as the prompt shows it ("Y").</summary>
+        string AnswerKey(bool yes);
     }
 }

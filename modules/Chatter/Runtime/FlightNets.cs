@@ -13,21 +13,27 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
     /// <summary>
     /// The nets that talk about the player's own flight (docs/CHATTER_PACKS.md): the AWACS (new bandits, a missile launched at you, your kills), the tower of the base you
     /// are at (clearances, off the ground, home again, the field under attack), intercepted enemy pilots (your missile coming at them, their shot at you, the one you just
-    /// shot down, the mate who saw it) and the command net's base captures. It only reads the game: the missile warning receiver, the side's track file, kill messages, the
-    /// airbase lists. The enemy net is rationed, so it colours a fight without burying the calls that matter.
+    /// shot down, the mate who saw it) and the command net's base captures. Since 2026-11-15 also the AWACS picture every three minutes, SAM calls, friendly losses, and
+    /// the allied net (other friendly flights' kills, last words and thanks). It only reads the game: the missile warning receiver, the side's track file, kill messages,
+    /// the airbase lists. The enemy and allied nets are rationed, so they colour a fight without burying the calls that matter.
     /// </summary>
     internal sealed class FlightNets
     {
         public const string Awacs = ChatterStations.Awacs;
         private const float BanditRange = 60000f, MateRange = 30000f, EnemyGap = 9f, MissileGap = 6f;
+        private const float PictureRange = 80000f, GroupRadius = 8000f, PictureSeconds = 180f, FriendlyRange = 40000f, AlliedRange = 25000f,
+            ThanksRange = 3000f, AlliedGap = 8f, WingmanRange = 2500f;
 
         private static readonly string[] EnemyFlights = { "VOLK", "TALON", "GRIM", "IRON", "PIKE", "WRAITH", "HOLLOW", "SABRE" };
+        private static readonly string[] AlliedFlights = { "VIPER", "HAMMER", "LANCER", "COBRA", "BRONCO", "DAGGER", "HUNTER", "RAPIER" };
         private static readonly string[] EnemyPersonas = { "zealot", "merc", "conscript" };
         private static readonly string[] Clock = { "twelve", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven" };
         private static readonly Regex Tags = new Regex("<[^>]*>", RegexOptions.Compiled);
 
         private readonly IChatter chatter;
-        private readonly Dictionary<uint, ChatterSpeaker> enemies = new Dictionary<uint, ChatterSpeaker>();
+        private readonly Dictionary<uint, ChatterSpeaker> enemies = new Dictionary<uint, ChatterSpeaker>(), allies = new Dictionary<uint, ChatterSpeaker>();
+        private readonly List<Vec3> groups = new List<Vec3>();
+        private float nextPicture, lastAllied = float.NegativeInfinity;
         private readonly HashSet<uint> called = new HashSet<uint>();
         private readonly List<FactionHQ> headquarters = new List<FactionHQ>();
         private readonly System.Random rng = new System.Random();
@@ -51,7 +57,10 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             foreach (FactionHQ hq in headquarters) if (hq != null) hq.onAirbaseAdded -= OnAirbase;
             headquarters.Clear();
             enemies.Clear();
+            allies.Clear();
             called.Clear();
+            nextPicture = Time.time + PictureSeconds / 2f;
+            lastAllied = float.NegativeInfinity;
             tower = null;
             checkedIn = wasAirborne = alarm = missiles = false;
             grounded = true;
@@ -74,6 +83,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 }
             TickGround();
             TickBandits();
+            TickPicture();
             if (missiles && (warning == null || warning.knownMissiles == null || warning.knownMissiles.Count == 0))
             {
                 missiles = false;
@@ -97,6 +107,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             // A new aircraft starts on the ground or in the air as it is: no "airborne" call for an air start.
             grounded = player.radarAlt < 3f;
             wasAirborne = !grounded;
+            // A ground start at a field: the tower says hello once the pilot is in the seat.
+            if (grounded && player.speed < 5f && NearTower(player.transform.position) != null) chatter.Raise("tower.startup", tower);
         }
 
         // ------------------------------------------------------------------ tower
@@ -209,6 +221,39 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 ("bra", bra), ("type", TypeOf(nearest)));
         }
 
+        /// <summary>Every three minutes while airborne, the controller's picture: how many hostile groups (aircraft within 8 km of each other count once) within 80 km, and the nearest.</summary>
+        private void TickPicture()
+        {
+            if (Time.time < nextPicture || me.radarAlt < 30f) return;
+            nextPicture = Time.time + PictureSeconds;
+            FactionHQ hq = me.NetworkHQ;
+            if (hq.trackingDatabase == null) return;
+            Vec3 from = Pure(me.GlobalPosition());
+            groups.Clear();
+            Aircraft nearest = null;
+            Vec3 nearestAt = default;
+            float best = PictureRange * PictureRange;
+            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
+            {
+                TrackingInfo t = pair.Value;
+                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || u.NetworkHQ == null || u.NetworkHQ == hq || enemy.radarAlt < 20f) continue;
+                Vec3 at = Pure(t.GetPosition());
+                float d = (at - from).SqrLength;
+                if (d > PictureRange * PictureRange) continue;
+                // ponytail: greedy grouping, first aircraft seeds a group; fine for the handful a theatre holds.
+                bool joined = false;
+                foreach (Vec3 g in groups) if ((g - at).SqrLength < GroupRadius * GroupRadius) { joined = true; break; }
+                if (!joined) groups.Add(at);
+                if (d < best) { best = d; nearest = enemy; nearestAt = at; }
+            }
+            if (nearest == null) return;
+            Vec3 vel = nearest.rb != null ? Pure(nearest.rb.velocity) : Vec3.Zero;
+            string bra = Bra.Format(from, nearestAt, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
+            ChatterSpeaker awacs = chatter.Station(ChatterNet.Awacs, Awacs);
+            if (groups.Count == 1) chatter.Raise("awacs.picture1", awacs, null, ("bra", bra), ("type", TypeOf(nearest)));
+            else chatter.Raise("awacs.picturemany", awacs, null, ("n", groups.Count.ToString(CultureInfo.InvariantCulture)), ("bra", bra));
+        }
+
         private void OnInbound(MissileWarning.OnMissileWarning e)
         {
             try
@@ -222,8 +267,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     Vector3 local = me.transform.InverseTransformPoint(missile.transform.position);
                     int hour = Mathf.RoundToInt(Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg / 30f);
                     hour = (hour % 12 + 12) % 12;
-                    chatter.Raise("awacs.missile", chatter.Station(ChatterNet.Awacs, Awacs), "awacs.missile:" + missile.GetInstanceID().ToString(CultureInfo.InvariantCulture),
-                        ("clock", Clock[hour] + " o'clock"));
+                    // A shot from the ground is called as a SAM.
+                    chatter.Raise(missile.owner is Aircraft ? "awacs.missile" : "awacs.sam", chatter.Station(ChatterNet.Awacs, Awacs),
+                        "awacs.missile:" + missile.GetInstanceID().ToString(CultureInfo.InvariantCulture), ("clock", Clock[hour] + " o'clock"));
                 }
                 if (missile.owner is Aircraft shooter && shooter.NetworkHQ != me.NetworkHQ) Enemy("enemy.fox", shooter, 0.6f);
             }
@@ -246,17 +292,92 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         /// <summary>A kill message: the player's own kill is confirmed by the AWACS, and an aircraft's pilot or a mate nearby is heard.</summary>
         public void OnKill(PersistentID killerID, PersistentID killedID)
         {
-            if (me == null || !UnitRegistry.TryGetPersistentUnit(killerID, out PersistentUnit killer) || !ReferenceEquals(killer.unit, me)) return;
-            if (!UnitRegistry.TryGetPersistentUnit(killedID, out PersistentUnit victim) || victim.unit is Missile || victim.GetHQ() == me.NetworkHQ) return;
+            if (me == null || me.NetworkHQ == null || !UnitRegistry.TryGetPersistentUnit(killedID, out PersistentUnit victim) || victim.unit is Missile) return;
+            bool known = UnitRegistry.TryGetPersistentUnit(killerID, out PersistentUnit killer);
+            if (!known || !ReferenceEquals(killer.unit, me))
+            {
+                OthersKill(known ? killer : null, victim, killedID);
+                return;
+            }
+            if (victim.GetHQ() == me.NetworkHQ) return;
             string type = victim.definition != null ? victim.definition.unitName : victim.unitName;
             chatter.Raise("awacs.splash", chatter.Station(ChatterNet.Awacs, Awacs), "awacs.splash:" + killedID.Id.ToString(CultureInfo.InvariantCulture),
                 ("target", type));
             if (!(victim.unit is Aircraft down)) return;
+            // A friendly the bandit was chasing says thanks.
+            Aircraft saved = NearestFriendly(down.transform.position, ThanksRange);
+            if (saved != null && rng.NextDouble() < 0.6) Allied("allied.thanks", saved, 1f);
             ChatterSpeaker lost = EnemySpeaker(down);
             lost.CanTalk = null;                // the last transmission goes out whatever became of the aircraft
             if (rng.NextDouble() < 0.5 && Enemy("enemy.lastwords", down, 1f)) return;
             Aircraft mate = NearestEnemy(down);
             if (mate != null) Enemy("enemy.matedown", mate, 1f, ("who", Title(lost.Callsign)));
+        }
+
+        // ------------------------------------------------------------------ allied flights (2026-11-15)
+
+        /// <summary>
+        /// Somebody else's kill near the player: a friendly aircraft lost within 40 km is called by the AWACS (and, half the time, its pilot's last words go out first);
+        /// a friendly flight's kill within 25 km is that pilot's splash call.
+        /// </summary>
+        private void OthersKill(PersistentUnit killer, PersistentUnit victim, PersistentID killedID)
+        {
+            Vector3 here = me.transform.position;
+            string type = victim.definition != null ? victim.definition.unitName : victim.unitName;
+            if (victim.GetHQ() == me.NetworkHQ && victim.unit is Aircraft lost && !ReferenceEquals(lost, me) && (lost.transform.position - here).sqrMagnitude < FriendlyRange * FriendlyRange)
+            {
+                if (!IsLikelyWingman(lost) && rng.NextDouble() < 0.5)
+                {
+                    ChatterSpeaker pilot = AlliedSpeaker(lost);
+                    pilot.CanTalk = null;               // the last transmission goes out whatever became of the aircraft
+                    Allied("allied.lastwords", lost, 1f);
+                }
+                chatter.Raise("awacs.friendlydown", chatter.Station(ChatterNet.Awacs, Awacs), "friendlydown:" + killedID.Id.ToString(CultureInfo.InvariantCulture),
+                    ("type", string.IsNullOrEmpty(type) ? "aircraft" : type));
+                return;
+            }
+            if (killer != null && killer.unit is Aircraft friend && friend.NetworkHQ == me.NetworkHQ && !ReferenceEquals(friend, me) && !friend.disabled &&
+                victim.GetHQ() != me.NetworkHQ && victim.unit is Aircraft && (friend.transform.position - here).sqrMagnitude < AlliedRange * AlliedRange && !IsLikelyWingman(friend))
+                Allied("allied.splash", friend, 0.7f, ("type", string.IsNullOrEmpty(type) ? "bandit" : type));
+        }
+
+        /// <summary>
+        /// ponytail: no contract names the player's wingmen to this module, so a friendly within 2.5 km of the player is taken for one (the wing net speaks for those).
+        /// A wing roster contract would make this exact.
+        /// </summary>
+        private bool IsLikelyWingman(Aircraft aircraft) => (aircraft.transform.position - me.transform.position).sqrMagnitude < WingmanRange * WingmanRange;
+
+        private Aircraft NearestFriendly(Vector3 at, float range)
+        {
+            Aircraft nearest = null;
+            float best = range * range;
+            foreach (Aircraft a in UnitRegistry.allAircraft)
+            {
+                if (a == null || ReferenceEquals(a, me) || a.disabled || a.NetworkHQ != me.NetworkHQ || IsLikelyWingman(a)) continue;
+                float d = (a.transform.position - at).sqrMagnitude;
+                if (d >= best) continue;
+                best = d;
+                nearest = a;
+            }
+            return nearest;
+        }
+
+        private bool Allied(string evt, Aircraft speaker, float chance, params (string, string)[] facts)
+        {
+            if (Time.time - lastAllied < AlliedGap || rng.NextDouble() > chance) return false;
+            if (!chatter.Raise(evt, AlliedSpeaker(speaker), null, facts)) return false;
+            lastAllied = Time.time;
+            return true;
+        }
+
+        private ChatterSpeaker AlliedSpeaker(Aircraft aircraft)
+        {
+            uint id = aircraft.persistentID.Id;
+            if (allies.TryGetValue(id, out ChatterSpeaker speaker)) return speaker;
+            string callsign = AlliedFlights[(id / 4) % AlliedFlights.Length] + " " + (id % 4 + 1).ToString(CultureInfo.InvariantCulture);
+            speaker = new ChatterSpeaker("allied:" + id.ToString(CultureInfo.InvariantCulture), ChatterNet.Allied, callsign) { CanTalk = () => aircraft != null && !aircraft.disabled };
+            allies[id] = speaker;
+            return speaker;
         }
 
         private bool Enemy(string evt, Aircraft speaker, float chance, params (string, string)[] facts)

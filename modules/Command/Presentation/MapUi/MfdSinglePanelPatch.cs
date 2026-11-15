@@ -33,6 +33,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             hasSelection = false;
         }
 
+        /// <summary>A screen the mod showed itself (the column fold reopening its panel) becomes the one open panel.</summary>
+        public static void Adopt(MFDScreen screen)
+        {
+            lastOpened = screen;
+            hasSelection = true;
+        }
+
         public static void Reconcile(VirtualMFD mfd)
         {
             if (mfd == null || !MfdPresentation.Expanded) return;
@@ -84,6 +91,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             lastOpened = pressed.isActive ? pressed : null;
             hasSelection = true;
             MfdPanelDock.CloseOthers(mfd, lastOpened);
+            // A rail key on a folded column opens it with the pressed panel.
+            if (lastOpened != null && MfdColumnFold.Folded) MfdColumnFold.Unfold(false);
             MfdRailPatch.ReLayoutForActiveScreen(lastOpened);
         }
 

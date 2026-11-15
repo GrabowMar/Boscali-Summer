@@ -7,12 +7,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The theater front as one vector line: our blue washing out on our side, their red on
-    /// theirs, a dark casing with a bright core between them, and teeth pointing into enemy
-    /// ground. Heat shows as an amber glow and core. A trace with no clear side keeps a cool glow.
+    /// theirs, a dark casing with a bright core between them. Heat shows as an amber glow and
+    /// core. A trace with no clear side keeps a cool glow. No teeth (2026-11-15): spaced by
+    /// screen distance they popped in and out on every zoom step, and the two washes already
+    /// say whose ground is whose.
     ///
-    /// <para>Shape is decided in world space (corner-cut smoothing, teeth at fixed metres along
-    /// the trace) once per front change, so the line and its teeth hold still while the camera
-    /// pans, zooms or orbits; only the projection runs per view. Bounded by
+    /// <para>Shape is decided in world space (corner-cut smoothing) once per front change, so the
+    /// line holds still while the camera pans, zooms or orbits; only the projection runs per view. Bounded by
     /// <see cref="MaximumSamples"/> and a hard vertex ceiling, hottest trace first.</para>
     /// </summary>
     [RequireComponent(typeof(CanvasRenderer))]
@@ -26,9 +27,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const int MaximumVertices = 30000;
         private const float StationStep = 5f;
         private const float WashWidth = 10f, CasingHalf = 2.1f, CoreHalf = .75f;
-        // Teeth sit at fixed metres along a trace. Zoomed out, every other one drops (spacing doubles) rather than
-        // sliding, so the survivors stay put. Size follows the projection's scale, clamped.
-        private const float ToothWorld = 240f, ToothSpacingWorld = 600f, ToothGapPx = 16f, ToothMinPx = 4f, ToothMaxPx = 9f;
         private const float HotPressure = .35f;
 
         private static readonly Color32 Casing = new Color32(3, 8, 12, 225);
@@ -36,7 +34,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly Color32 HotGlow = new Color32(255, 160, 60, 120);
         private static readonly Color32 OwnWash = Alpha(TacticalSectorGrid.FriendlyTint, 120);
         private static readonly Color32 TheirWash = Alpha(TacticalSectorGrid.HostileTint, 120);
-        private static readonly Color32 OwnTooth = Lift(TacticalSectorGrid.FriendlyTint, .25f);
         private static readonly Color32 HotCore = new Color32(255, 222, 170, 250);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
@@ -55,8 +52,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly Vector2[] world = new Vector2[MaximumSmooth];
         private readonly Vector2[] projected = new Vector2[MaximumSmooth];
         private readonly Vector2[] stations = new Vector2[MaximumSamples];
-        private readonly float[] stationMetres = new float[MaximumSamples];
-        private readonly float[] pixelsPerMetre = new float[MaximumSamples];
 
         private TacticalSectorGrid grid;
         private ulong drawnFrontlineHash;
@@ -168,39 +163,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Paint(vh, 1f / scale);
         }
 
-        /// <summary>Stations every <paramref name="density"/> pixels, each carrying its metres along the trace and the local scale.</summary>
+        /// <summary>Stations every <paramref name="density"/> pixels along the projected trace.</summary>
         private int Sample(int from, int count, float density, int written)
         {
-            float travel = 0f, metres = 0f, scaleHere = 0f;
+            float travel = 0f;
             for (int p = from; p + 1 < from + count && written < MaximumSamples; p++)
             {
                 Vector2 a = projected[p], delta = projected[p + 1] - a;
-                float segment = delta.magnitude, span = (world[p + 1] - world[p]).magnitude;
-                if (span > 1f) scaleHere = segment / span;
+                float segment = delta.magnitude;
                 if (segment > .01f)
                 {
                     float at = travel;
                     for (; at < segment && written < MaximumSamples; at += density)
-                    {
-                        float k = at / segment;
-                        stations[written] = a + delta * k;
-                        stationMetres[written] = metres + span * k;
-                        pixelsPerMetre[written++] = scaleHere;
-                    }
+                        stations[written++] = a + delta * (at / segment);
                     travel = at - segment;
                 }
-                metres += span;
             }
-            if (written < MaximumSamples)
-            {
-                stations[written] = projected[from + count - 1];
-                stationMetres[written] = metres;
-                pixelsPerMetre[written++] = scaleHere;
-            }
+            if (written < MaximumSamples) stations[written++] = projected[from + count - 1];
             return written;
         }
 
-        /// <summary>Back to front: glow, both washes, casing, core, teeth.</summary>
+        /// <summary>Back to front: glow, both washes, casing, core.</summary>
         private void Paint(VertexHelper vh, float toLocal)
         {
             for (int t = 0; t < traceCount; t++)
@@ -220,32 +203,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 MapStroke.Ribbon(vh, stations, start, end, toLocal, CasingHalf, 1.2f, Casing, loop);
                 MapStroke.Ribbon(vh, stations, start, end, toLocal, CoreHalf, .9f, hot ? HotCore : Ink, loop);
-                if (side != 0) Teeth(vh, start, end, side, toLocal);
-            }
-        }
-
-        /// <summary>
-        /// A tooth wherever the trace crosses a multiple of the spacing, the spacing doubled until
-        /// neighbours keep <see cref="ToothGapPx"/> apart on screen. Fixed in metres, so they never swim.
-        /// </summary>
-        private void Teeth(VertexHelper vh, int start, int end, int side, float toLocal)
-        {
-            for (int i = start + 1; i + 1 < end; i++)
-            {
-                float ppm = pixelsPerMetre[i];
-                if (!(ppm > 1e-6f)) continue;
-                float spacing = ToothSpacingWorld;
-                while (spacing * ppm < ToothGapPx && spacing < 1e6f) spacing *= 2f;
-                if (Mathf.Floor(stationMetres[i] / spacing) == Mathf.Floor(stationMetres[i - 1] / spacing)) continue;
-
-                float reach = Mathf.Clamp(ToothWorld * ppm, ToothMinPx, ToothMaxPx), half = reach * .55f;
-                Vector2 along = (stations[i + 1] - stations[i - 1]).normalized;
-                Vector2 into = new Vector2(along.y, -along.x) * side;   // into their ground
-                Vector2 foot = stations[i] + into * (CasingHalf * .5f);
-                Vector2 tip = foot + into * (CasingHalf + reach);
-                Triangle(vh, (foot - along * (half + 1.1f)) * toLocal, (foot + along * (half + 1.1f)) * toLocal,
-                    (tip + into * 1.3f) * toLocal, Casing);
-                Triangle(vh, (foot - along * half) * toLocal, (foot + along * half) * toLocal, tip * toLocal, OwnTooth);
             }
         }
 
@@ -274,20 +231,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         private static Color32 Alpha(Color32 c, byte a) { c.a = a; return c; }
-
-        private static Color32 Lift(Color32 c, float toWhite)
-            => new Color32((byte)(c.r + (255 - c.r) * toWhite), (byte)(c.g + (255 - c.g) * toWhite), (byte)(c.b + (255 - c.b) * toWhite), 255);
-
-        private static void Triangle(VertexHelper vh, Vector2 a, Vector2 b, Vector2 c, Color32 ink)
-        {
-            int first = vh.currentVertCount;
-            UIVertex vert = UIVertex.simpleVert;
-            vert.color = ink;
-            vert.position = a; vh.AddVert(vert);
-            vert.position = b; vh.AddVert(vert);
-            vert.position = c; vh.AddVert(vert);
-            vh.AddTriangle(first, first + 1, first + 2);
-        }
 
         private static Vector2 ToPixels(Vector2 point, Rect rect, float worldSizeX, float worldSizeZ, float scale)
         {

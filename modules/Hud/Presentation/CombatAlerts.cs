@@ -37,7 +37,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private TMP_FontAsset font;
         private Material fontMaterial;
         private TextMeshProUGUI word, detail, calloutWord, calloutSub;
-        private TMP_Text bannerIcon, calloutIcon;
+        private TMP_Text bannerIcon, calloutIcon, callIcon;
+        /// <summary>The detail row's text width and whether its call icon shows (both set when the line is written, not per frame); a missile pip's spacing.</summary>
+        private float detailTextW;
+        private bool callShown;
+        private const float PipStep = 12f;
         private readonly TextMeshProUGUI[] ringLabels = new TextMeshProUGUI[RingMax];
         private readonly int[] ringKeys = new int[RingMax];
         private Image shade;
@@ -100,6 +104,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bannerIcon = Icon(banner, TopCentre.WordPt);
             detail = Text(banner, "Detail", TopCentre.DetailPt, TopCentre.LineSpacing);
             detail.overflowMode = TextOverflowModes.Ellipsis;
+            callIcon = Icon(banner, TopCentre.DetailPt + 4f);
 
             callout = Holder(root, "Callout");
             calloutGroup = callout.gameObject.AddComponent<CanvasGroup>();
@@ -238,7 +243,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bannerX = x;
             word.rectTransform.anchoredPosition = new Vector2(x + wordHalf - wordWidth * 0.5f, wordY);
             bannerIcon.rectTransform.anchoredPosition = new Vector2(x - wordHalf + TopCentre.WordPt * 0.5f, wordY);
-            detail.rectTransform.anchoredPosition = new Vector2(x, detailY);
+            // The detail row, centred as one block: a pip per missile inbound (the nearest bright), the call's icon, the call word.
+            int pips = kind == AlertKind.Missile ? Mathf.Min(inputs.Missiles, AlertText.PipMax) : 0;
+            float pipW = pips * PipStep, iconW = callShown ? TopCentre.DetailPt + 4f + IconGap * 0.5f : 0f;
+            float gap = pips > 0 && (iconW > 0f || detailTextW > 0f) ? IconGap * 2f : 0f, left = x - (pipW + gap + iconW + detailTextW) * 0.5f;
+            if (callIcon.gameObject.activeSelf != callShown) callIcon.gameObject.SetActive(callShown);
+            callIcon.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + (TopCentre.DetailPt + 4f) * 0.5f, detailY);
+            detail.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + iconW + detailTextW * 0.5f, detailY);
             float detailWidth = (half - TopCentre.Arm * 2f) * 2f;      // the detail stays between the brackets (an ellipsis past them)
             if (detail.rectTransform.sizeDelta.x != detailWidth) detail.rectTransform.sizeDelta = new Vector2(detailWidth, TopCentre.DetailPt * 1.5f);
             shade.rectTransform.anchoredPosition = new Vector2(x, (top + bottom) * 0.5f);
@@ -248,6 +259,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             word.color = tone.WithAlpha(calm || AlertText.Lit(kind, now - board.Since(kind), inputs.MissileTtiS) ? 1f : 0.15f);
             bannerIcon.color = word.color;
             detail.color = tone.WithAlpha(0.9f);
+            callIcon.color = detail.color;
 
             // The brackets close in from wide when the alert comes up (the lane's enter time); a warning's chevrons run in from the outside, a caution's stand still.
             float open = calm ? 1f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - board.Since(kind)) / TopCentre.EnterS)), wide = half + (1f - open) * 40f;
@@ -256,6 +268,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Rgba ink = tone.ToRgba();
             AvStrokes.Bracket(b, x - wide, bottom, wide * 2f, top - bottom, TopCentre.Arm, TopCentre.Stroke, ink);
             TopCentre.Hazard(b, x, wordY, wordHalf, ink, warning && !calm ? (int)(now * 6f) % 3 : -1);
+            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, left + PipStep * (i + 0.5f), detailY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : 0.55f));
             // A timed alert burns a fuse along the banner's foot, between the brackets' arms: full at 10 s to impact (or to the ground), gone at none.
             float share = AlertText.Countdown(kind, inputs);
             if (!float.IsNaN(share))
@@ -279,6 +292,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             detailKey = key;
             string line = new string(buf, 0, n);
             detail.text = also < 0 ? line : "+" + AlertText.Word((AlertKind)also) + (n > 0 ? " · " + line : "");
+            detailTextW = detail.text.Length > 0 ? detail.GetPreferredValues(detail.text).x : 0f;
+            AvIcon call = kind == AlertKind.Missile && also < 0 ? AlertText.CallIcon(AlertText.MissileCall(inputs.Seeker, inputs.MissileTtiS)) : AvIcon.None;
+            callShown = call != AvIcon.None;
+            if (callShown) AvIcons.Set(callIcon, call, TopCentre.DetailPt + 4f);
         }
 
         private void PaintRing(Aircraft aircraft, ThreatWatch threats, float now, float w, float h, VanillaHudStyle.Palette palette)

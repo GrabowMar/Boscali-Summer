@@ -22,6 +22,11 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static readonly Color HaloTint = new Color(1f, 0.93f, 0.82f, 1f), RayTint = new Color(1f, 0.97f, 0.92f, 1f);
         private static LensFlareDataSRP data;
         private static Texture2D rays;
+        // The ray picture is 262k atan2/sqrt samples (a 34 ms frame the first time the sun came into view): painted on a worker, ahead of need.
+        private static System.Threading.Tasks.Task<Color32[]> rayPixels;
+
+        /// <summary>Starts painting the ray picture off the main thread; call early (idempotent).</summary>
+        internal static void Prewarm() => rayPixels ??= System.Threading.Tasks.Task.Run(RayPixels);
 
         private Light sun;
         private GameObject proxy;
@@ -40,6 +45,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         public void Tick(LevelInfo level, Camera camera, bool on, float dt, float transmission = 1f)
         {
+            if (on) Prewarm();
             Light current = level != null ? level.sun : null;
             if (current != sun) Release();
             sun = current;
@@ -229,6 +235,21 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         private static Texture2D Rays()
         {
             if (rays != null) return rays;
+            Prewarm();
+            rays = new Texture2D(RaySize, RaySize, TextureFormat.RGBA32, true, true)
+            {
+                name = "BoscaliSummer.SunGlare.Rays",
+                wrapMode = TextureWrapMode.Clamp,
+                filterMode = FilterMode.Trilinear,
+                hideFlags = HideFlags.DontSave
+            };
+            rays.SetPixels32(rayPixels.Result); // waits only if the sun is seen before the worker is done
+            rays.Apply(true, true);
+            return rays;
+        }
+
+        private static Color32[] RayPixels()
+        {
             const int Bins = 1024, Count = 8;
             var strength = new float[Bins];
             var length = new float[Bins];
@@ -260,16 +281,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                     byte v = (byte)(255f * Mathf.Lerp(strength[bin], strength[next], blend) * along * along * Mathf.Sqrt(along));
                     pixels[y * RaySize + x] = new Color32(v, v, v, v);
                 }
-            rays = new Texture2D(RaySize, RaySize, TextureFormat.RGBA32, true, true)
-            {
-                name = "BoscaliSummer.SunGlare.Rays",
-                wrapMode = TextureWrapMode.Clamp,
-                filterMode = FilterMode.Trilinear,
-                hideFlags = HideFlags.DontSave
-            };
-            rays.SetPixels32(pixels);
-            rays.Apply(true, true);
-            return rays;
+            return pixels;
         }
     }
 }

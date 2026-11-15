@@ -128,8 +128,25 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return TopCentre.Lit(age, ttiS < 3f ? TopCentre.UrgentHz : TopCentre.BlinkHz);
         }
 
+        /// <summary>Most missile pips the banner draws, one per missile inbound.</summary>
+        public const int PipMax = 6;
+
+        /// <summary>The missile banner's one call, the THREAT page's words: IR is FLARE; radar is BEAM, then CHAFF inside <see cref="ThreatMath.ChaffNowS"/>; anything else gets none (Inbound).</summary>
+        public static ThreatCue MissileCall(string seeker, float ttiS)
+        {
+            ThreatSeeker s = ThreatMath.ClassOf(seeker);
+            if (s == ThreatSeeker.Ir) return ThreatCue.Flare;
+            if (s != ThreatSeeker.Radar) return ThreatCue.Inbound;
+            return !float.IsNaN(ttiS) && ttiS <= ThreatMath.ChaffNowS ? ThreatCue.Chaff : ThreatCue.Beam;
+        }
+
+        public static string CallWord(ThreatCue c) => c == ThreatCue.Flare ? "FLARE" : c == ThreatCue.Chaff ? "CHAFF" : c == ThreatCue.Beam ? "BEAM" : "";
+
+        /// <summary>The call's picture: a flare's flame, chaff's cloud, the beam's sideways flight path; None for no call.</summary>
+        public static AvIcon CallIcon(ThreatCue c) => c == ThreatCue.Flare ? AvIcon.Flame : c == ThreatCue.Chaff ? AvIcon.Cloud : c == ThreatCue.Beam ? AvIcon.FlightPath : AvIcon.None;
+
         /// <summary>
-        /// The detail line under the word into <paramref name="b"/>; returns its length. "2 INBOUND · ARH · 4.2KM · 6S · BEAM + CHAFF" (the THREAT page's advice for the seeker),
+        /// The detail line under the word into <paramref name="b"/>; returns its length. Missile: the call word alone ("BEAM", "CHAFF", "FLARE"),
         /// "TERRAIN · 3S", "HLT RADAR · 35KM", "RTB · K92 HIGHWAY STRIP · 22KM".
         /// </summary>
         public static int Detail(char[] b, AlertKind kind, in AlertInputs a, AvUnits units)
@@ -138,12 +155,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             switch (kind)
             {
                 case AlertKind.Missile:
-                    if (a.Missiles > 1) { n = AvNumFormat.Write(b, n, a.Missiles, 0); n = AvNumFormat.Append(b, n, " INBOUND"); }
-                    if (!string.IsNullOrEmpty(a.Seeker)) n = Up(b, Sep(b, n), a.Seeker);
-                    if (Finite(a.MissileRangeM)) n = Up(b, Sep(b, n), a.MissileRangeM, units);
-                    if (Finite(a.MissileTtiS)) { n = AvNumFormat.Write(b, Sep(b, n), Math.Max(0f, a.MissileTtiS), 0); n = AvNumFormat.Append(b, n, "S"); }
-                    ThreatSeeker seeker = ThreatMath.ClassOf(a.Seeker);
-                    if (seeker != ThreatSeeker.Other) n = AvNumFormat.Append(b, Sep(b, n), seeker == ThreatSeeker.Ir ? "FLARES" : "BEAM + CHAFF");
+                    // One call word only (2026-11-15, user: "too verbose"): the count is pips, the time the fuse, the direction the ring.
+                    n = AvNumFormat.Append(b, n, CallWord(MissileCall(a.Seeker, a.MissileTtiS)));
                     break;
                 case AlertKind.PullUp:
                     n = AvNumFormat.Append(b, n, "TERRAIN");

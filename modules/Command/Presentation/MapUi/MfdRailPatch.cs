@@ -347,6 +347,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             dynamicMap.mapScaleCurrent = Mathf.Min(size.x, size.y);
 
             EnsureMapFrame(dynamicMap.maximizedMapCanvas, columns);
+            MfdColumnFold.Ensure(dynamicMap.maximizedMapCanvas, columns);
             Patches.GridLabelsPatch.RepositionCornerReadouts(dynamicMap.gridLabels);
         }
 
@@ -534,6 +535,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ReLayout(panelWidth);
         }
 
+        /// <summary>The panel column folded or opened: lay everything out again for the shown screen, even at an unchanged width.</summary>
+        public static void ReLayoutNow()
+        {
+            MFDScreen screen = MfdSinglePanelPatch.ActiveScreen;
+            currentPanelWidth = screen != null && screen.isActive ? MfdPanelDock.VisibleWidth(screen) : AvTokens.PanelWidth;
+            ReLayout(currentPanelWidth);
+        }
+
         /// <summary>
         /// Re-resolve grid and update map, rail and panel dock when the panel column widens.
         /// </summary>
@@ -606,6 +615,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdColumnFold.Hide();
             MfdNewsTicker.Restore();
             MfdLogPanel.Park();
             MfdMapFooter.Restore();
@@ -639,6 +649,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             buttons.Clear();
             containers.Clear();
             if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            MfdColumnFold.Reset();
             MfdNewsTicker.Reset();
             MfdLogPanel.Reset();
             MfdMapFooter.Reset();

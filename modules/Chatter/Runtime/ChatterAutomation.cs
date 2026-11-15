@@ -72,6 +72,39 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return new Dictionary<string, object> { ["ok"] = true, ["step"] = step, ["accepted"] = accepted };
         }
 
+        private static int simYes, simNo;
+
+        /// <summary>
+        /// The YES/NO questions (2026-11-15). <c>step</c>: ask (COMMAND asks about a made-up contract; its answer only counts), allied (an allied pilot's splash call),
+        /// yes / no (the pilot's key), state. Every step returns the state: open, asked, answered, last answer, the counted yes/no, and the voices (built-in packs,
+        /// clips decoded, lines voiced).
+        /// </summary>
+        public static Dictionary<string, object> Question(Dictionary<string, object> args)
+        {
+            if (!Guard(out ChatterHost host, out Dictionary<string, object> failure)) return failure;
+            string step = args != null && args.TryGetValue("step", out object value) ? value as string : "state";
+            bool ok = true;
+            switch (step)
+            {
+                case "ask":
+                    ok = host.Ask(host.Station(ChatterNet.Command, "COMMAND"), "command.askcontract", "sim-contract:" + Time.frameCount, () => simYes++, () => simNo++,
+                        ("title", "Strike the radar site"));
+                    break;
+                case "allied":
+                    ok = host.Raise("allied.splash", new ChatterSpeaker("allied:sim", ChatterNet.Allied, "VIPER 2"), "sim-allied:" + Time.frameCount, ("type", "Vortex"));
+                    break;
+                case "yes": ok = host.Answer(true); break;
+                case "no": ok = host.Answer(false); break;
+            }
+            ChatterQuestions q = host.Questions;
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["step"] = step, ["accepted"] = ok, ["open"] = q.Open, ["asked"] = q.Asked, ["answered"] = q.Answered, ["last"] = q.LastAnswer,
+                ["yes"] = simYes, ["no"] = simNo, ["builtInPacks"] = host.Voices?.BuiltInPacks ?? 0, ["clips"] = host.Voices?.ClipsReady ?? 0,
+                ["voiced"] = host.Voices?.Voiced ?? 0,
+            };
+        }
+
         /// <summary>The radio's state: packs, lines aired and dropped, what waits, and the last lines as the log has them.</summary>
         public static Dictionary<string, object> Read(Dictionary<string, object> args)
         {

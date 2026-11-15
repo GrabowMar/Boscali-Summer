@@ -10,10 +10,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// One pooled tag of the STR overlay: the plate that names an item on the map, its number in a box, its words, and for a front or the effort the same
     /// tug-of-war lane the panel draws. The plate is the only raycast object of an item (B4): the glyph under it is ink and takes no input. A click selects
     /// the item through the hub; the card commits. The tag is counter-scaled to the map image, so it is the same size on screen at every zoom.
+    /// At rest every numbered tag is its number chip alone (2026-11-15, the worded plates crowded the relief): the main effort's chip is filled, the rest
+    /// are outlined; the cursor opens the words, the lane and the effort chip.
     /// </summary>
     internal sealed class StrMapTag : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler
     {
-        private const float RowH = 17f, Pad = 6f, LaneW = 84f, LaneH = 6f, MinW = 70f, MaxW = 300f, Gap = 4f, RestPad = 2f;
+        private const float RowH = 15f, Pad = 5f, LaneW = 72f, LaneH = 5f, MinW = 64f, MaxW = 280f, Gap = 4f, RestPad = 0f;
 
         internal StrItemId Id;
         internal StrTagKind Kind;
@@ -79,13 +81,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             string number, rest, chipText = effort ? s.Text ?? "" : "", second = effort ? s.Note ?? "" : s.Sub ?? "";
             SplitNumber(effort ? s.Sub ?? "" : s.Text ?? "", out number, out rest);
             bool twoRows = full && (hasLane || (rest.Length > 0 && second.Length > 0));
-            bool bare = !full && number.Length > 0 && (hasLane || (s.Kind == StrTagKind.Proposal && s.Ghost && !s.Hot && !s.Selected));
+            bool bare = !full && number.Length > 0;
             string row1 = bare ? "" : rest.Length > 0 || twoRows ? rest : second;
             if (!twoRows) second = "";
 
             box.SetActive(number.Length > 0);
-            if (number.Length > 0) box.SetOutline(number, ink.WithAlpha(fade));
-            chip.SetActive(effort && chipText.Length > 0);
+            if (number.Length > 0)
+            {
+                if (bare && effort) box.Set(number, ink.WithAlpha(fade));
+                else if (bare) box.SetChip(number, ink.WithAlpha(fade));
+                else box.SetOutline(number, ink.WithAlpha(fade));
+            }
+            chip.SetActive(!bare && effort && chipText.Length > 0);
             if (effort) chip.Set(chipText, ink.WithAlpha(fade));
             AvText.Set(title, row1);
             title.gameObject.SetActive(row1.Length > 0);
@@ -98,7 +105,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // Size: row one is the box, the title and the chip; row two is the lane and its words.
             float pad = full ? Pad : RestPad;
-            float boxW = number.Length > 0 ? box.WidthFor() : 0f, chipW = effort && chipText.Length > 0 ? chip.WidthFor() : 0f;
+            float boxW = number.Length > 0 ? box.WidthFor() - (bare ? 4f : 0f) : 0f, chipW = !bare && effort && chipText.Length > 0 ? chip.WidthFor() : 0f;
             float titleW = row1.Length > 0 ? Mathf.Ceil(AvText.Width(title)) : 0f;
             float w1 = boxW;
             if (titleW > 0f) w1 += (w1 > 0f ? Gap : 0f) + titleW;
@@ -107,7 +114,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float w = Mathf.Clamp(Mathf.Max(w1, w2) + 2f * pad, full ? MinW : 0f, MaxW), h = 2f * pad - 2f + RowH + (twoRows ? RowH - 2f : 0f);
             root.sizeDelta = new Vector2(w, h);
 
-            float x = pad, top = pad - 1f;
+            float x = pad, top = Mathf.Max(0f, pad - 1f);
             if (boxW > 0f) { box.Place(x, top, boxW, RowH - 2f); x += boxW + Gap; }
             float chipX = w - pad - chipW;
             AvLay.Place(title.rectTransform, x, top, Mathf.Max(20f, (chipW > 0f ? chipX - Gap : w - pad) - x), RowH - 2f);
@@ -116,14 +123,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (hasLane && twoRows) { lane.Place(pad, y2 + (RowH - 2f - LaneH) * 0.5f + 1f, LaneW, LaneH); sx += LaneW + 6f; }
             AvLay.Place(sub.rectTransform, sx, y2 - 1f, Mathf.Max(20f, w - sx - pad), RowH - 2f);
 
-            Paint(ink, fade, s.Hot, s.Selected);
+            Paint(ink, fade, s.Hot, s.Selected, bare);
         }
 
-        private void Paint(Color ink, float fade, bool hot, bool selected)
+        private void Paint(Color ink, float fade, bool hot, bool selected, bool bare)
         {
-            // At rest the plate is glass with a hairline, so the map reads through it; hover and selection bring the full ink back.
+            // A bare chip is its own plate (the plate stays as the invisible hit target); a worded plate is glass with a hairline, and hover and
+            // selection bring the full ink back.
             bool lit = selected || hot;
-            plate.Paint(AvInk.Ground.WithAlpha(lit ? 0.94f : 0.55f * fade), ink.WithAlpha(lit ? 1f : 0.38f * fade));
+            if (bare && !lit) plate.Paint(Color.clear, Color.clear);
+            else plate.Paint(AvInk.Ground.WithAlpha(lit ? 0.94f : 0.55f * fade), ink.WithAlpha(lit ? 1f : 0.38f * fade));
             plate.Stroke = lit ? 1.4f : 1f;
             plate.Bracket = selected ? 4f : 0f;
             plate.BracketColor = ink;

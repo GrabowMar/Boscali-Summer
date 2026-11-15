@@ -18,6 +18,8 @@ namespace BoscaliSummer.Core.Game
         public const string KellyAirfield = "aaron.boscali.airfield-lighting";
         public const string KellyMissileBoom = "aaron.boscali.missile-unified";
         public const string KellyControls = "aaron.boscali.control-unified";
+        /// <summary>Expansion2082 (kingwixly): a Blueprinter ship pack - super carrier, ekranoplan, drone boats.</summary>
+        public const string Expansion2082 = "Blueprinter.shippack1";
 
         /// <summary>Another mod draws the clouds: our volumetric clouds, sun shafts and lightning stand down.</summary>
         public static bool SkyYielded;

@@ -77,7 +77,7 @@ namespace BoscaliSummer.Core.Ui
             ("WORLD EFFECTS", "Contrails at altitude, dust wakes on low passes, a crack on near misses, canopy-muffled sound."),
             ("NIGHT", "Darker moonlit nights, cockpit night lighting, goggles that flip down and warm up."),
             ("VANGUARD", "TORCH, SUNSPEAR, STORMCELL, WATCHTOWER and MANTA stores; send drones where you look."),
-            ("STR MAP", "Striped fronts with teeth, offensive arrows, and offensives you draw yourself."),
+            ("STR MAP", "Two-tone front lines, offensive arrows, and offensives you draw yourself."),
             ("COCKPIT SOUND", "Softer RWR tones and missile alarm, gentler switch clicks."),
             ("PERFORMANCE", "Lighter building damage and smoother distant clouds.")
         };

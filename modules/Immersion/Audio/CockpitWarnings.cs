@@ -19,6 +19,7 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         private AudioSource tone, voice;
         private Aircraft bound;
         private LandingGear.GearState gear;
+        private Warning speaking;
         private float lastPullUp = -10f, canopyAt = -1f;
 
         internal int Said { get; private set; }
@@ -84,23 +85,27 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             switch (rules.Step(input, now))
             {
                 case Warning.PullUp:
-                    if (now - lastPullUp > EpisodeGap && Play(tone, "gpws-whoop", .8f)) Say("vo-pull-up", SfxClips.Get("gpws-whoop").length);
-                    else Say("vo-pull-up", 0f);
+                    if (now - lastPullUp > EpisodeGap && Play(tone, "gpws-whoop", .8f)) Say(Warning.PullUp, "vo-pull-up", SfxClips.Get("gpws-whoop").length);
+                    else Say(Warning.PullUp, "vo-pull-up", 0f);
                     lastPullUp = now;
                     break;
-                case Warning.Terrain: Say("vo-terrain", 0f); break;
-                case Warning.OverG: Say("vo-over-g", 0f); break;
+                case Warning.Terrain: Say(Warning.Terrain, "vo-terrain", 0f); break;
+                case Warning.OverG: Say(Warning.OverG, "vo-over-g", 0f); break;
                 case Warning.Bingo:
                     Play(tone, "master-caution", .8f);
-                    Say("vo-bingo", .35f);
+                    Say(Warning.Bingo, "vo-bingo", .35f);
                     break;
             }
         }
 
-        private void Say(string name, float delay)
+        /// <summary>The voice says one warning at a time: a more urgent one (PULL UP over TERRAIN over OVER G over BINGO) cuts a less urgent one mid-phrase, like a real VWS.</summary>
+        private void Say(Warning warning, string name, float delay)
         {
             AudioClip clip = SfxClips.Get(name);
-            if (clip == null || voice.isPlaying || !Route(voice)) return;
+            if (clip == null || !Route(voice)) return;
+            if (voice.isPlaying && warning <= speaking) return;
+            voice.Stop();
+            speaking = warning;
             voice.clip = clip;
             voice.PlayDelayed(delay);
             Said++;

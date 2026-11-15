@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Immersion.Patches
     [HarmonyPatch(typeof(SoundManager), nameof(SoundManager.PlayRadarWarningOneShot))]
     internal static class RadarToneSwapPatch
     {
-        private const float NewGap = 0.8f;
+        private const float NewGap = 1.5f; // at spawn every emitter is new at once: one bell, not a pile of rings
         private const float SweepGap = 1.2f;
 
         private static float lastNew = -10f;

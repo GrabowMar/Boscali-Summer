@@ -35,7 +35,7 @@ rod-impact.wav         The boom is an ElevenLabs sound-effects generation (eleve
                        the crack, rolling thunder tail and debris patter layered around it are synthesized (scratch mix, numpy).
 
 radar-new.wav          SOFT COCKPIT TONES. ElevenLabs sound-effects generations (eleven_text_to_sound_v2) made for this mod on 2026-10-26:
-radar-sweep.wav        a warm bell (flow UCZg7H7zpuQU23nIS2cK) and a felt mallet tick (flow xJjlb2IRagwLkLwMIREt), cut and levelled by
+radar-sweep.wav        a warm bell (flow UCZg7H7zpuQU23nIS2cK; 2026-11-15 cut to 0.45 s with a 0.25 s fade, its long ring stacked into an echo at spawn) and a felt mallet tick (flow xJjlb2IRagwLkLwMIREt), cut and levelled by
                        tools/Build-SoundClips.py.
 missile-alert.wav      COCKPIT ALARMS, 2026-10-27. ElevenLabs flow 89lBGhO1h2QbcoVgyTWO, generated for this mod: sound effects
 missile-alarm-0..2.wav (eleven_text_to_sound_v2) and the warning voice "Levi A." (eleven_v3, ElevenLabs library voice). The

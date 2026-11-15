@@ -20,6 +20,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
         {
             public ParticleSystem Cone, Tips;
             public int Seen;
+            /// <summary>Left and right wingtip as a point in the owning wing part's space (follows sweep, flex and break-off).</summary>
+            public Transform[] TipPart = new Transform[2];
+            public Vector3[] TipLocal = new Vector3[2];
         }
 
         private readonly Dictionary<Aircraft, Craft> crafts = new Dictionary<Aircraft, Craft>();
@@ -92,12 +95,78 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             float half = a.definition != null && a.definition.width > 2f ? a.definition.width * .5f : a.maxRadius * .8f;
             Transform t = a.transform, datum = Datum.origin;
             var colour = new Color(light, light, light, .85f * Mathf.Clamp01(tips * 2f));
-            for (int side = -1; side <= 1; side += 2)
+            // Ribbons alternate left/right by particle index, so both sides always emit (a lost wing falls back to the guess).
+            for (int i = 0; i < 2; i++)
+            {
+                Transform part = c.TipPart[i];
+                Vector3 at = part != null && part.IsChildOf(t)
+                    ? part.TransformPoint(c.TipLocal[i])
+                    : t.position + t.right * ((i == 0 ? -1 : 1) * half * .97f) - t.forward * 1.5f;
                 c.Tips.Emit(new ParticleSystem.EmitParams
                 {
-                    position = datum.InverseTransformPoint(t.position + t.right * (side * half * .97f) - t.forward * 1.5f),
-                    startColor = colour, startSize = 1.3f, startLifetime = TipLife, applyShapeToPosition = false,
+                    position = datum.InverseTransformPoint(at),
+                    startColor = colour, startSize = .45f, startLifetime = TipLife, applyShapeToPosition = false,
                 }, 1);
+            }
+        }
+
+        /// <summary>
+        /// Finds each wingtip once per aircraft: the outermost mesh point of the lifting parts (AeroPart with wing area),
+        /// taken at the tip's trailing edge where the vortex leaves. Stores (part, point in part space).
+        /// Readable meshes give the true vertex; others fall back to the mesh bounds' outer corners.
+        /// </summary>
+        private static void FindTips(Aircraft a, Craft c)
+        {
+            Transform root = a.transform;
+            float[] best = { .5f, .5f };
+            foreach (AeroPart wing in a.GetComponentsInChildren<AeroPart>(true))
+            {
+                if (wing.WingArea <= 0f) continue;
+                foreach (MeshFilter mf in wing.GetComponentsInChildren<MeshFilter>(true))
+                {
+                    Mesh mesh = mf.sharedMesh;
+                    if (mesh == null || mf.GetComponentInParent<UnitPart>() != wing) continue;
+                    Transform mt = mf.transform;
+                    for (int i = 0; i < 2; i++)
+                    {
+                        float side = i == 0 ? -1f : 1f;
+                        if (!Outer(mesh, mt, root, side, out Vector3 tip, out float reach) || reach <= best[i]) continue;
+                        best[i] = reach;
+                        c.TipPart[i] = wing.transform;
+                        c.TipLocal[i] = wing.transform.InverseTransformPoint(mt.TransformPoint(tip));
+                    }
+                }
+            }
+        }
+
+        /// <summary>Outermost point of a mesh on one side (aircraft space x * side): the aft-most point within 25 cm of the tip, in mesh space.</summary>
+        private static bool Outer(Mesh mesh, Transform mt, Transform root, float side, out Vector3 tip, out float reach)
+        {
+            tip = Vector3.zero;
+            reach = 0f;
+            Vector3[] pts;
+            if (mesh.isReadable) pts = mesh.vertices;
+            else
+            {
+                Bounds b = mesh.bounds;
+                pts = new Vector3[8];
+                for (int k = 0; k < 8; k++)
+                    pts[k] = b.center + Vector3.Scale(b.extents, new Vector3((k & 1) == 0 ? -1 : 1, (k & 2) == 0 ? -1 : 1, (k & 4) == 0 ? -1 : 1));
+            }
+            if (pts.Length == 0) return false;
+            Matrix4x4 m = root.worldToLocalMatrix * mt.localToWorldMatrix;
+            float max = float.MinValue;
+            for (int k = 0; k < pts.Length; k++) max = Mathf.Max(max, m.MultiplyPoint3x4(pts[k]).x * side);
+            float aft = float.MaxValue;
+            for (int k = 0; k < pts.Length; k++)
+            {
+                Vector3 p = m.MultiplyPoint3x4(pts[k]);
+                if (p.x * side < max - .25f || p.z >= aft) continue;
+                aft = p.z;
+                tip = pts[k];
+            }
+            reach = max;
+            return true;
         }
 
         private static Craft Make(Aircraft a)
@@ -153,7 +222,8 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             ts.enabled = false;
             var grow = tips.sizeOverLifetime;
             grow.enabled = true;
-            grow.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(1f, 3.5f)));
+            // Tight at the tip, opening slowly as the vortex core spreads.
+            grow.size = new ParticleSystem.MinMaxCurve(1f, new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(.3f, 1.8f), new Keyframe(1f, 4f)));
             var tf = tips.colorOverLifetime;
             tf.enabled = true;
             var tg = new Gradient();
@@ -170,7 +240,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             trails.worldSpace = false;
             Quiet(tipGo.GetComponent<ParticleSystemRenderer>(), Contrails.Material() ?? puff, true);
             tips.Play();
-            return new Craft { Cone = cone, Tips = tips };
+            var craft = new Craft { Cone = cone, Tips = tips };
+            FindTips(a, craft);
+            return craft;
         }
 
         private static void Quiet(ParticleSystemRenderer r, Material m, bool ribbon)

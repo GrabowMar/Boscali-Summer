@@ -13,6 +13,13 @@ namespace BoscaliSummer.Core.Contracts
 
         bool Say(ChatterSpeaker speaker, string key, string text, ChatterPriority priority = ChatterPriority.Status);
 
+        /// <summary>
+        /// A YES/NO question (2026-11-15, after Ace Combat 8): raises <paramref name="evt"/> for the speaker; once that line is on air the pilot answers with the radio's
+        /// YES or NO key, no answer is NO, and the matching action runs (it re-checks its own world: the thing asked about may be gone). False when the radio will not
+        /// ask now: another question is up, <paramref name="key"/> closed less than 90 s ago, or the line itself was refused.
+        /// </summary>
+        bool Ask(ChatterSpeaker speaker, string evt, string key, System.Action yes, System.Action no = null, params (string Name, string Value)[] facts);
+
         /// <summary>Shows a mission script's already paced dialogue in COMMS immediately. False when no readout can present it.</summary>
         bool Scripted(in ChatterAired line);
 

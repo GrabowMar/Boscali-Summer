@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
@@ -27,7 +28,8 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
         private ManualLogSource log;
         private string applied;
         private float nextTick, nextLink;
-        private bool linkWritten;
+        private bool linkWritten, apiLooked;
+        private MethodInfo apiConditions, apiBase, apiClear;
 
         internal void Configure(CompatibilitySettings compat, ClientSettingsBoard keys, ManualLogSource logger)
         {
@@ -64,10 +66,15 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
 
             string picture = (noAtmo != null) + "|" + settings.Rain.Value + "|" + settings.MoveKeys.Value + "|" +
                 (krop != null) + (field != null) + (boom != null) + "|" + settings.Overlaps.Value;
+            BaseUnityPlugin expansion = settings.Expansion2082Link.Value ? ForeignMods.Find(ForeignMods.Expansion2082) : null;
+            picture += "|" + (expansion != null) + settings.ShipHaze.Value + settings.ShipAaRules.Value;
             if (picture != applied)
             {
                 applied = picture;
                 Push(noAtmo, krop, field, boom, kellyDraws);
+                Set(expansion, "Haze", "Sweat", settings.ShipHaze.Value);
+                foreach (string key in new[] { "OneShotPerMissile", "MindYourOwn", "ShellsArentMissiles" })
+                    Set(expansion, "Targeting", key, settings.ShipAaRules.Value);
             }
             Link(noAtmo);
         }
@@ -105,42 +112,67 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
             }
         }
 
+        /// <summary>
+        /// Every 5 s feeds NoAtmoFX (1.3+) our sky at the camera through its integration API (NoAtmoFX.NoAtmoFXApi,
+        /// reflection, no DLL reference). The API input is a target its clouds glide to, ranks below the player's own
+        /// F11 override and is sent from host to clients - the old ConditionsOverride cfg write sat in the player's
+        /// menu slot and beat host sync. Older NoAtmoFX has no API and simply keeps the mission weather.
+        /// </summary>
         private void Link(BaseUnityPlugin noAtmo)
         {
             if (Time.unscaledTime < nextLink) return;
             nextLink = Time.unscaledTime + 5f;
-            ConfigEntry<float> entry = null;
-            float value = -1f;
-            if (noAtmo != null && settings.WeatherLink.Value && noAtmo.Config.TryGetEntry("Weather", "ConditionsOverride", out entry))
+            if (noAtmo != null && settings.WeatherLink.Value && FindApi(noAtmo) && TrySky(out WeatherViewSample sky) &&
+                Call(apiConditions, Conditions(sky.Cover, sky.Rain01)) && Call(apiBase, sky.CloudBase))
             {
-                Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera;
-                if (cam != null && ModuleServices.TryGet(out IWeatherView view) && !(view is Object lost && lost == null))
-                {
-                    GlobalPosition at = cam.transform.position.ToGlobalPosition();
-                    if (view.TrySample(at.x, at.z, out WeatherViewSample sky)) value = Conditions(sky.Cover, sky.Rain01);
-                }
+                linkWritten = true;
+                return;
             }
-            // The link may have just been switched off, so the entry is looked up whatever the settings say.
-            if (value < 0f) { Unlink(entry ?? Entry(ForeignMods.Find(ForeignMods.NoAtmoFx))); return; }
-            if (Mathf.Abs(entry.Value - value) < .02f) return;
-            // Not saved on every nudge: NoAtmoFX smooths a change over minutes, and its file keeps the mission's -1.
-            ConfigFile file = noAtmo.Config;
-            bool save = file.SaveOnConfigSet;
-            file.SaveOnConfigSet = false;
-            try { entry.Value = value; }
-            finally { file.SaveOnConfigSet = save; }
-            linkWritten = true;
+            Unlink();
         }
 
-        private static ConfigEntry<float> Entry(BaseUnityPlugin noAtmo) =>
-            noAtmo != null && noAtmo.Config.TryGetEntry("Weather", "ConditionsOverride", out ConfigEntry<float> e) ? e : null;
+        private static bool TrySky(out WeatherViewSample sky)
+        {
+            sky = default;
+            Camera cam = SceneSingleton<CameraStateManager>.i?.mainCamera;
+            if (cam == null || !ModuleServices.TryGet(out IWeatherView view) || (view is Object lost && lost == null)) return false;
+            GlobalPosition at = cam.transform.position.ToGlobalPosition();
+            return view.TrySample(at.x, at.z, out sky);
+        }
 
-        /// <summary>Hands NoAtmoFX back the mission's own weather (-1), saved, if we were driving it.</summary>
-        private void Unlink(ConfigEntry<float> entry)
+        private bool FindApi(BaseUnityPlugin noAtmo)
+        {
+            if (apiLooked) return apiConditions != null;
+            apiLooked = true;
+            System.Type api = noAtmo.GetType().Assembly.GetType("NoAtmoFX.NoAtmoFXApi");
+            apiConditions = api?.GetMethod("SetConditions", new[] { typeof(float) });
+            apiBase = api?.GetMethod("SetCloudBase", new[] { typeof(float) });
+            apiClear = api?.GetMethod("ClearWeather", System.Type.EmptyTypes);
+            if (apiConditions == null || apiBase == null || apiClear == null)
+            {
+                apiConditions = null;
+                log?.LogInfo("[Compatibility] NoAtmoFX has no integration API (older than 1.3.0); weather link off.");
+            }
+            return apiConditions != null;
+        }
+
+        private bool Call(MethodInfo method, params object[] args)
+        {
+            try { method.Invoke(null, args); return true; }
+            catch (System.Exception e)
+            {
+                log?.LogWarning("[Compatibility] NoAtmoFX " + method.Name + " failed; weather link off: " + (e.InnerException ?? e).Message);
+                apiConditions = null;
+                return false;
+            }
+        }
+
+        /// <summary>Hands NoAtmoFX back the mission's own weather if we were driving it (its clouds glide back).</summary>
+        private void Unlink()
         {
             if (!linkWritten) return;
             linkWritten = false;
-            if (entry != null) entry.Value = -1f;
+            if (apiClear != null) Call(apiClear);
         }
 
         private static bool Get(BaseUnityPlugin plugin, string section, string key, bool fallback) =>
@@ -161,11 +193,11 @@ namespace BoscaliSummer.Modules.Compatibility.Runtime
 
         public void ResetForScene() => nextTick = nextLink = 0f;
 
-        private void OnApplicationQuit() => Unlink(Entry(ForeignMods.Find(ForeignMods.NoAtmoFx)));
+        private void OnApplicationQuit() => Unlink();
 
         private void OnDestroy()
         {
-            Unlink(Entry(ForeignMods.Find(ForeignMods.NoAtmoFx)));
+            Unlink();
             ForeignMods.ClearYields();
         }
     }

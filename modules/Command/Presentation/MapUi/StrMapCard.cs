@@ -7,15 +7,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The click card of the selected item (annex 05 P10): a header row (chip, title, close), the item's words, and a button row only when the item has
-    /// something to commit (pick or redirect, accept, send wing). Built once under the map viewport and registered with the pointer guard, so wheel, drag and clicks stop at it; it never raises itself.
+    /// something to commit (pick or redirect, accept, send wing). Built once under the map viewport and registered with the pointer guard, so wheel, drag and clicks stop at it.
+    /// It lifts itself to the top of the viewport once each time it opens (never per frame): the map's stack counts and later-built layers painted over it.
     /// Every press goes through the hub, the same command path the panel uses, and a refused button shows its reason on the footer line.
     /// </summary>
     internal sealed class StrMapCardMarker : MonoBehaviour { }
 
     internal sealed class StrMapCard
     {
-        internal const float Width = 236f, MaxHeight = 160f, Gap = 6f, Margin = 6f;
-        private const float Pad = 6f, HeadH = 18f, ButtonH = 18f, CloseW = 18f;
+        internal const float Width = 220f, MaxHeight = 160f, Gap = 6f, Margin = 6f;
+        private const float Pad = 6f, HeadH = 16f, ButtonH = 20f, CloseW = 16f;
 
         private readonly StrMapOverlay owner;
         private readonly StrControls controls;
@@ -43,7 +44,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame.Stroke = 1.2f;
             frame.raycastTarget = true;
             chip = new StrSlab(root, "Chip");
-            title = AvText.Make(root, "Title", AvTextRole.Head, "", TextAlignmentOptions.MidlineLeft);
+            title = AvText.Make(root, "Title", AvTextRole.Label, "", TextAlignmentOptions.MidlineLeft);
             AvText.Fit(title, false);
             title.raycastTarget = false;
             for (int i = 0; i < lines.Length; i++)
@@ -96,7 +97,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         internal void Show(Rect tag, Rect viewport, float bottomReserve, bool rebind)
         {
-            if (!root.gameObject.activeSelf) { root.gameObject.SetActive(true); rebind = true; }
+            if (!root.gameObject.activeSelf) { root.gameObject.SetActive(true); root.SetAsLastSibling(); rebind = true; }
             if (rebind || shown != plan.Id) { Bind(); shown = plan.Id; }
 
             float x = tag.xMax + Gap;

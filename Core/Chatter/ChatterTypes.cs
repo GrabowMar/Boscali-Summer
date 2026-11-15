@@ -1,7 +1,7 @@
 namespace BoscaliSummer.Core.Chatter
 {
     /// <summary>Who is talking: each net has its own look on the board and its own share of the settings.</summary>
-    internal enum ChatterNet : byte { Wing, Awacs, Tower, Command, Enemy }
+    internal enum ChatterNet : byte { Wing, Awacs, Tower, Command, Enemy, Allied }
 
     /// <summary>How badly a line needs the channel. A Tactical line cuts an Ambient or Status line that is on air; an Emergency cuts anything but another Emergency.</summary>
     internal enum ChatterPriority : byte { Ambient, Status, Tactical, Emergency }

@@ -6,13 +6,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The overlay's own chrome under the map viewport (decision D10: no layer registry, the STR overlay owns these): the layer plate at the top left with its
-    /// three toggles and the board's age, and the legend strip at the bottom with one swatch per shape the map shows. Both register with the pointer guard
-    /// and carry no map input.
+    /// The overlay's own chrome under the map viewport (decision D10: no layer registry, the STR overlay owns these): the layer plate at the top left and
+    /// the legend strip at the bottom with one swatch per shape the map shows. Both register with the pointer guard and carry no map input.
+    /// The plate is one slim row since 2026-11-15, in the map console's language: the STR key, the three layer toggles packed as one quiet switch (lit
+    /// = shown), DRAW as the one tool (pen, lit while armed), and the board's age or the DRAW prompt as dim text at the end.
     /// </summary>
     internal sealed class StrMapChrome
     {
-        private const float PlateH = 56f, ToggleH = 22f, LegendRow = 18f, LegendPad = 6f, SwatchW = 24f;
+        private const float PlateH = 28f, ToggleH = 20f, LegendRow = 18f, LegendPad = 6f, SwatchW = 24f;
 
         private readonly StrMapOverlay owner;
         private readonly StrControls controls;
@@ -36,7 +37,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             this.controls = controls;
 
             plate = Panel(viewport, "StrLayerPlate", new Vector2(0f, 1f), new Vector2(12f, -8f), out plateFrame);
-            plateTitle = AvText.Make(plate, "Title", AvTextRole.Micro, "STR LAYER", TextAlignmentOptions.MidlineLeft);
+            plateTitle = AvText.Make(plate, "Title", AvTextRole.Micro, "STR", TextAlignmentOptions.MidlineLeft);
             AvText.Fit(plateTitle, false);
             plateTitle.raycastTarget = false;
             plateLine = AvText.Make(plate, "Line", AvTextRole.Micro, "", TextAlignmentOptions.MidlineLeft);
@@ -45,7 +46,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fronts = Toggle(StrLayers.Fronts);
             operation = Toggle(StrLayers.Operation);
             sorties = Toggle(StrLayers.Sorties);
-            draw = new StrButton(plate, "DRAW", AvButtonStyle.Default, () => owner.ToggleDraw());
+            draw = new StrButton(plate, "DRAW", AvButtonStyle.Default, () => owner.ToggleDraw(), AvIcon.Pencil);
+            draw.Control.Bracket = 0f;
 
             legend = Panel(viewport, "StrLegend", new Vector2(0f, 0f), new Vector2(12f, 10f), out legendFrame);
             for (int i = 0; i < swatches.Length; i++)
@@ -91,7 +93,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private StrButton Toggle(StrLayers layer)
         {
-            return new StrButton(plate, layer.ToString().ToUpperInvariant(), AvButtonStyle.Default, () =>
+            var toggle = new StrButton(plate, layer.ToString().ToUpperInvariant(), AvButtonStyle.Quiet, () =>
             {
                 IStrHub hub = owner.Hub;
                 if (hub == null) return new StrAct(StrWhy.NoBoard, "NO BOARD YET");
@@ -100,50 +102,51 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 hub.SetLayer(layer, !on);
                 return new StrAct(StrWhy.None, "", true);
             });
+            toggle.Control.Bracket = 0f;
+            return toggle;
         }
 
-        /// <summary>The plate: three latched toggles that mirror the interface state, and the board's age.</summary>
+        /// <summary>The plate: three latched toggles that mirror the interface state, DRAW, and the board's age, on one row.</summary>
         internal void BindPlate(StrViewModel vm, in StrUiState ui)
         {
-            Bind(fronts, "layer.fronts", "FRONTS", ui.ShowFronts, "Platform badges and lane bars of every front.");
-            Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "The main effort, its axis, groups and wave route, and the proposals.");
-            Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "Sortie markers and zones, and the enemy command posts when the host reports any.");
+            Bind(fronts, "layer.fronts", "FRONTS", ui.ShowFronts, "STR layer: platform badges and lane bars of every front. Lit = shown.");
+            Bind(operation, "layer.operation", "OPERATION", ui.ShowOperation, "STR layer: the main effort, its axis, groups and wave route, and the proposals. Lit = shown.");
+            Bind(sorties, "layer.sorties", "SORTIES", ui.ShowSorties, "STR layer: sortie markers and zones, and the enemy command posts when the host reports any. Lit = shown.");
             draw.Bind(controls, "layer.draw", "DRAW", () => StrMapOverlay.DrawArmed ? new StrAct(StrWhy.None, "") : StrGate.DrawGate(vm),
                 "Draw your own offensive: right-press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
             string line = string.IsNullOrEmpty(Note) ? StrPanelText.LayerLine(vm) : Note;
 
-            float x = 8f, y = 6f;
-            float titleW = Mathf.Ceil(AvText.Width(plateTitle)) + 6f;
+            float x = 8f, y = (PlateH - ToggleH) * 0.5f;
+            float titleW = Mathf.Ceil(AvText.Width(plateTitle)) + 5f;
             AvLay.Place(plateTitle.rectTransform, x, y, titleW, ToggleH);
-            x += titleW + 4f;
+            x += titleW;
             x = Place(fronts, x, y);
             x = Place(operation, x, y);
             x = Place(sorties, x, y);
-            x = Place(draw, x + 6f, y);
+            x = Place(draw, x + 8f, y);
             if (line != lastLine)
             {
                 lastLine = line;
                 AvText.Set(plateLine, line);
             }
-            plateLine.color = AvInk.Dim;
+            plateLine.color = string.IsNullOrEmpty(Note) ? AvInk.Dim : AvInk.Ink;
             plateTitle.color = AvInk.Key;
             float lineW = Mathf.Ceil(AvText.Width(plateLine));
-            AvLay.Place(plateLine.rectTransform, 8f, y + ToggleH + 4f, Mathf.Max(lineW, 40f), 14f);
-            plate.sizeDelta = new Vector2(Mathf.Max(x + 4f, 8f + lineW + 8f), PlateH);
+            AvLay.Place(plateLine.rectTransform, x + 8f, y, Mathf.Max(lineW, 20f), ToggleH);
+            plate.sizeDelta = new Vector2(x + 8f + lineW + 10f, PlateH);
             plateFrame.Paint(AvInk.Ground.WithAlpha(0.9f), AvInk.Frame.WithAlpha(0.9f));
         }
 
         private void Bind(StrButton button, string id, string text, bool on, string help) =>
             button.Bind(controls, id, text, () => new StrAct(StrWhy.None, ""), help, on);
 
-        private float Place(StrButton button, float x, float y)
+        // Toggles pack 2 px apart so the three read as one switch; the width is the control's own (label, plus the icon when it has one).
+        private static float Place(StrButton button, float x, float y)
         {
-            float w = Mathf.Ceil(AvText.Width(TextOf(button))) + 22f;
+            float w = Mathf.Ceil(button.Control.PreferredWidth) + 4f;
             button.Place(x, y, w, ToggleH);
-            return x + w + 3f;
+            return x + w + 2f;
         }
-
-        private static TMP_Text TextOf(StrButton button) => button.Control.GetComponentInChildren<TMP_Text>(true);
 
         /// <summary>The legend: one swatch and caption per shape the plan contains, flowed across the viewport width and wrapped to a second row when it must.</summary>
         internal void BindLegend(StrOverlayPlan plan, float width)

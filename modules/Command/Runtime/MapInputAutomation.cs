@@ -70,6 +70,13 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "fit":
                     ReliefNavigator.Fit();
                     break;
+                // 2026-11-15 map pass: fold or open the panel column; open the STR card on the first numbered pin.
+                case "fold":
+                    MfdColumnFold.Toggle();
+                    break;
+                case "strcard":
+                    if (!OpenStrCard()) return Failure("MapInputAutomation", "strcard", "no STR pin on the map");
+                    break;
                 case "camerapath":
                     MfdTerrainRelief.DirectDrawOff = Bool(args, "on");
                     break;
@@ -92,6 +99,21 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     return new Dictionary<string, object> { ["zones"] = zones.ToString(), ["player"] = $"{at.x:0}/{at.z:0}" };
             }
             return State(map);
+        }
+
+        private static bool OpenStrCard()
+        {
+            StrMapOverlay overlay = StrMapOverlay.Active;
+            if (overlay == null || overlay.Hub == null) return false;
+            overlay.RefreshNow();
+            for (int i = 0; i < overlay.Plan.TagCount; i++)
+            {
+                if (!overlay.TryGetTagScreenPoint(overlay.Plan.Tags[i].Id, out _)) continue;
+                overlay.Hub.Select(overlay.Plan.Tags[i].Id, false);
+                overlay.RefreshNow();
+                return overlay.CardView != null && overlay.CardView.Visible;
+            }
+            return false;
         }
 
         private static void Select(DynamicMap map, int count)
@@ -151,6 +173,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
             ["pose"] = MfdTerrainRelief.IsDrawing ? AvNum.Fixed(MfdTerrainRelief.Yaw, 2) + "/" + AvNum.Fixed(MfdTerrainRelief.Pitch, 2) + "/" +
                 AvNum.Fixed(MfdTerrainRelief.Zoom, 3) + "/" + AvNum.Fixed(MfdTerrainRelief.Rig.FocusX, 2) + "/" + AvNum.Fixed(MfdTerrainRelief.Rig.FocusZ, 2) : "",
             ["directOff"] = MfdTerrainRelief.DirectDrawOff ? 1f : 0f,
+            ["columnFolded"] = MfdColumnFold.Folded ? 1f : 0f,
+            ["strTags"] = (float)(StrMapOverlay.Active != null ? StrMapOverlay.Active.Plan.TagCount : 0),
+            ["strCard"] = StrMapOverlay.Active?.CardView != null && StrMapOverlay.Active.CardView.Visible ? 1f : 0f,
         };
     }
 }

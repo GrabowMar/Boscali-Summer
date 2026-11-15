@@ -73,6 +73,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
             text.color = ink;
         }
 
+        /// <summary>A map chip: the word in <paramref name="ink"/> on dark glass, so it reads over any ground.</summary>
+        internal void SetChip(string value, Color ink)
+        {
+            AvText.Set(text, value);
+            frame.Paint(AvInk.Ground.WithAlpha(0.86f), ink.WithAlpha(0.95f));
+            text.color = ink;
+        }
+
         /// <summary>Width the word wants, with its side padding.</summary>
         internal float WidthFor() => Mathf.Ceil(AvText.Width(text)) + 14f;
 

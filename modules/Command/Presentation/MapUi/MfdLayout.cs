@@ -65,9 +65,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             public Vector2 Canvas;
         }
 
-        /// <summary>Resolve the columns for a canvas using AvGrid geometry authority.</summary>
+        /// <summary>Resolve the columns for a canvas using AvGrid geometry authority. A folded panel column (<see cref="MfdColumnFold"/>) resolves at
+        /// zero width, so every caller (map, rail, dock, log, ticker, footer) agrees the map has its room.</summary>
         public static Columns Resolve(Vector2 canvasSize, float panelWidth = AvTokens.PanelWidth)
         {
+            if (MfdColumnFold.Folded) panelWidth = 0f;
             var spec = AvGridSpec.Default;
             spec.Gutter = Gutter;
             spec.Margin = Margin;

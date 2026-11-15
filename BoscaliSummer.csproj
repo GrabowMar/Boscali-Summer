@@ -204,6 +204,7 @@
     <EmbeddedResource Include="modules\Support\Assets\Art\*.png" LogicalName="BoscaliSummer.Support.Art.%(Filename)%(Extension)" />
     <!-- OPS building compounds (Visuals/OpsCompoundVisuals), baked by assets/OpsMobileCompounds/Source/build_compounds.py. -->
     <EmbeddedResource Include="modules\Support\Assets\Compounds\*.opsc" LogicalName="BoscaliSummer.Support.Compounds.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="modules\Support\Assets\Compounds\Textures\*.png" LogicalName="BoscaliSummer.Support.Compounds.Textures.%(Filename)%(Extension)" />
     <!-- Built by tools/Compile-SpooktoberAssets.ps1. Optional: without it the rad look is embers only. -->
     <EmbeddedResource Include="modules\Spooktober\Assets\spooktober.bundle" Condition="Exists('modules\Spooktober\Assets\spooktober.bundle')">
       <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
@@ -254,6 +255,10 @@
     <!-- The built-in radio dialogue (docs/CHATTER_PACKS.md); ChatterHost loads every BoscaliSummer.Chatter.*.chatter. -->
     <EmbeddedResource Include="modules\Chatter\Assets\Packs\*.chatter">
       <LogicalName>BoscaliSummer.Chatter.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- The built-in station voices (ElevenLabs, words in voices.tsv); ChatterVoices unpacks every BoscaliSummer.ChatterVoices.<pack>\<file> to the BepInEx cache. -->
+    <EmbeddedResource Include="modules\Chatter\Assets\Voices\**\*.mp3;modules\Chatter\Assets\Voices\**\pack.txt">
+      <LogicalName>BoscaliSummer.ChatterVoices.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <!-- The built-in mission scripts (docs/SCENARIOS.md); ScenarioLibrary loads every BoscaliSummer.Scenario.*.scenario. -->
     <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg;modules\Scenario\Assets\*.webm">

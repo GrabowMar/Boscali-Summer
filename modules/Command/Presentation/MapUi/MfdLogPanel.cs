@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             added |= CaptureChanges(killSource == null ? null : killSource.text, ref lastKillRaw, previousKills, true);
             bool pruned = PruneHistory();
 
-            if (!DynamicMap.mapMaximized)
+            if (!DynamicMap.mapMaximized || MfdColumnFold.Folded)
             {
                 HidePanel();
                 return;

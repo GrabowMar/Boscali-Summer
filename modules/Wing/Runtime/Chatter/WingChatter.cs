@@ -91,6 +91,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 contactClock = 0f;
                 CallContacts(wing);
+                AskSix(wing);
             }
             TickTalk(wing, now);
         }
@@ -322,9 +323,47 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                     pendingKey = key;
                     pendingEvent = evt;
                     pendingId = c.Id;
+                    if (c.Air) AskEngage(wing, speaker);
                 }
                 else Contacts.Forget(c.Id);
             }
+        }
+
+        // ------------------------------------------------------------------ YES/NO questions (2026-11-15)
+
+        /// <summary>After a bandit call, a wing that is not already fighting asks to engage. YES is the C menu's ENGAGE; the radio asks this at most every 90 s.</summary>
+        private void AskEngage(WingService wing, WingMember m)
+        {
+            foreach (WingMember w in wing.Members) if (w.Engaged && !w.Released && w.Alive) return;
+            ChatterSpeaker s = SpeakerFor(m);
+            chatter.Ask(s, "wingask.engage", "wingask.engage",
+                () =>
+                {
+                    if (!ModuleServices.TryGet<IWingOrders>(out var orders) || orders.Members == 0) return;
+                    orders.Engage();
+                    chatter.Raise("wingask.engageyes", s);
+                },
+                () => chatter.Raise("wingask.engageno", s));
+        }
+
+        /// <summary>A missile on the player while a wingman flies: the nearest one offers to clear the six. YES is the C menu's CLEAR MY SIX.</summary>
+        private void AskSix(WingService wing)
+        {
+            Aircraft player = wing.Player;
+            if (player == null || player.disabled) return;
+            MissileWarning warning = player.GetComponent<MissileWarning>();
+            if (warning == null || warning.knownMissiles == null || warning.knownMissiles.Count == 0) return;
+            WingMember m = NearestFlying(wing, player.GlobalPosition().ToVec3());
+            if (m == null) return;
+            ChatterSpeaker s = SpeakerFor(m);
+            chatter.Ask(s, "wingask.six", "wingask.six",
+                () =>
+                {
+                    if (!ModuleServices.TryGet<IWingOrders>(out var orders) || orders.Members == 0) return;
+                    orders.ClearMySix();
+                    chatter.Raise("wingask.sixyes", s);
+                },
+                () => chatter.Raise("wingask.sixno", s));
         }
 
         private static WingMember NearestFlying(WingService wing, Vec3 at)
