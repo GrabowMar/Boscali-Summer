@@ -300,7 +300,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 {
                     // More turrets than hardpoints: double up beside the weapon hardpoints, 7 m along.
                     SeaMount b = layout.Mounts[spare++ % layout.Mounts.Length];
-                    at = new SeaMount(b.Section, b.At.x, b.At.y, b.At.z + (b.At.z > 0f ? -7f : 7f), b.Yaw, kind);
+                    at = new SeaMount(b.Section, new Vector3(b.At.x, b.At.y, b.At.z + (b.At.z > 0f ? -7f : 7f)), b.Yaw, kind);
                 }
                 Place(mount, turretOf[mount], at, node[at.Section]);
                 Dress(mount, layout);
