@@ -122,9 +122,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The most page slots: two, one above the other.</summary>
         public const int MaxSlots = 2;
 
-        /// <summary>The page columns: always one (the spine's), in WIDE and in STACK; kept as a function so callers say what they mean.</summary>
-        public static int Columns(BoardLayout layout, int pages) => 1;
-
         /// <summary>
         /// The blocks of a board. Everything but the stores (WIDE) hangs in the SPINE, the right-hand 440 column under the box's top-right corner: lamp line, SYSTEMS, the pages,
         /// gauge line, ticker. The pages are one column of at most two, in slot order, right under SYSTEMS. SYSTEMS never moves with the pages, and the pages never move with what hangs under them.

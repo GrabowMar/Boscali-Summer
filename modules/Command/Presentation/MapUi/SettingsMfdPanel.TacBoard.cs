@@ -54,8 +54,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 i => { board.ScopeMode = ScopeModes[i]; if (ScopeModes[i] == BoardScopeMode.Manual) board.PageCount = 2; }, on, off);
             Func<bool> manual = () => board.Enabled && board.ScopeMode == BoardScopeMode.Manual;
             Func<string> notManual = () => board.Enabled ? "Set SCOPE to MANUAL to choose pages." : "Turn on TAC BOARD first.";
-            BoardPageRow(flow, page, "PAGE 1", () => board.Page1, p => board.Page1 = p, () => board.Page2, manual, notManual);
-            BoardPageRow(flow, page, "PAGE 2", () => board.Page2, p => board.Page2 = p, () => board.Page1, manual, notManual);
+            // The steppers show what the board will show (a stored page that is no longer choosable, or twice, reads as the board reads it).
+            Func<BoardPage> first = () => ShownPage(board.Page1, BoardPage.Systems, BoardPage.Threat), second = () => ShownPage(board.Page2, first(), Array.IndexOf(BoardPageChoices, board.Page2) >= 0 || first() == BoardPage.Wing ? BoardPage.Shot : BoardPage.Wing);
+            BoardPageRow(flow, page, "PAGE 1", first, p => board.Page1 = p, second, manual, notManual);
+            BoardPageRow(flow, page, "PAGE 2", second, p => board.Page2 = p, first, manual, notManual);
             BoardStrip(flow, page, "DECLUTTER", BoardDeclutterNames, BoardDeclutterBriefs,
                 () => (int)board.Declutter, i => board.Declutter = (BoardDeclutter)i, on, off);
 
@@ -98,6 +100,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// A MANUAL page slot: a stepper over <see cref="BoardPageChoices"/> that skips the other slot's page (the board keeps two distinct pages). A stored page outside the list
         /// (an old config's DOCK, say) shows by name until the first step.
         /// </summary>
+        /// <summary>The page a slot shows: <paramref name="stored"/> when it is choosable and not the <paramref name="earlier"/> slot's, else <paramref name="fallback"/>, else the first choice that is free (BoardOptions.Sanitize's rule).</summary>
+        private static BoardPage ShownPage(BoardPage stored, BoardPage earlier, BoardPage fallback)
+        {
+            if (Array.IndexOf(BoardPageChoices, stored) >= 0 && stored != earlier) return stored;
+            if (fallback != earlier) return fallback;
+            foreach (BoardPage choice in BoardPageChoices) if (choice != earlier) return choice;
+            return fallback;
+        }
+
+        private static string PageWord(BoardPage page)
+        {
+            switch (page)
+            {
+                case BoardPage.Threat: return "THREAT";
+                case BoardPage.Shot: return "SHOT";
+                case BoardPage.Approach: return "APPROACH";
+                case BoardPage.Wing: return "WING";
+                case BoardPage.Strike: return "STRIKE";
+                default: return "--";
+            }
+        }
+
         private AvRow BoardPageRow(AvFlow flow, int page, string title, Func<BoardPage> get, Action<BoardPage> set, Func<BoardPage> other,
             Func<bool> enabled, Func<string> reason)
         {
@@ -112,7 +136,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 set(BoardPageChoices[at]);
             }
-            return Stepper(flow, page, title, () => System.Text.RegularExpressions.Regex.Replace(get().ToString(), "(?<=[a-z])(?=[A-Z])", " ").ToUpperInvariant(),
+            return Stepper(flow, page, title, () => PageWord(get()),
                 Step, () => true, () => true, "The page this slot shows in MANUAL: THREAT, SHOT, APPROACH, WING or STRIKE.", enabled, reason);
         }
 

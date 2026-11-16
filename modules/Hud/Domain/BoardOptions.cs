@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, Shade = 0f,
             Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
-            PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
+            PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Approach, Page4 = BoardPage.Strike, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
             Sway = true, Corners = true, CentreAlerts = true,
