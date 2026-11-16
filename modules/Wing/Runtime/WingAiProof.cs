@@ -31,13 +31,15 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             return new Dictionary<string, object> { { "ok", n > 0 }, { "spawned", n } };
         }
 
-        /// <summary>{verb: move|engage|rtb|formup|shape, numbers?: [wingman numbers], element?, x?, z?, alt?, shape?, confirm?}: one player
-        /// order; <c>confirm</c> presses ENGAGE a second time when the first is refused as outnumbered.</summary>
+        /// <summary>{verb: move|engage|rtb|formup|shape|call, numbers?: [wingman numbers], element?, x?, z?, alt?, shape?, confirm?, lead?}: one
+        /// player order; <c>call</c> is the bare call (one wingman, SUPPLY's draft and base rules); <c>lead</c> anchors the wing on that aircraft
+        /// first (it calls in place of a player); <c>confirm</c> presses ENGAGE a second time when the first is refused as outnumbered.</summary>
         public static Dictionary<string, object> Order(Dictionary<string, object> args)
         {
             WingService w = WingService.Instance;
             if (!InSimRun) return Failure("WingAiProof", "Order", "requires a nomodkit scenario run");
             if (w?.Selection == null) return Failure("WingAiProof", "Order", "the wing is not active");
+            if (Arg(args, "leadUnit") is Aircraft lead && !lead.disabled) w.SetAnchor(lead);
             WingScope scope = WingScope.Wing;
             if (Arg(args, "numbers") is List<object> numbers)
             {
@@ -65,6 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 case "rtb": order = WingOrder.Of(OrderKind.Rtb, scope); break;
                 case "formup": order = WingOrder.Of(OrderKind.FormUp, scope); break;
                 case "shape": order = new WingOrder { Kind = OrderKind.SetShape, Scope = scope, Text = Text(args, "shape") }; break;
+                case "call": order = new WingOrder { Kind = OrderKind.Call, Number = 1 }; break;
                 default: return Failure("WingAiProof", "Order", $"unknown verb '{verb}'");
             }
             OrderResult r = WingOrders.Run(order);
@@ -80,6 +83,27 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             {
                 { "ok", true }, { "accepted", r.Accepted ? 1 : 0 }, { "text", text ?? "" }, { "element", r.Element }, { "confirmed", confirmed ? 1 : 0 },
             };
+        }
+
+        /// <summary>{field?: "carrier" or a field name}: presses the radial's NEXT FIELD (as the player's own aircraft, the anchor standing in)
+        /// until the launch field is that one; answers its name and how many land fields are friendly and ON, or fails having gone round once.</summary>
+        public static Dictionary<string, object> Pick(Dictionary<string, object> args)
+        {
+            WingService w = WingService.Instance;
+            if (!InSimRun) return Failure("WingAiProof", "Pick", "requires a nomodkit scenario run");
+            Aircraft caller = w == null ? null : w.Player != null ? w.Player : w.Leader;
+            if (caller == null) return Failure("WingAiProof", "Pick", "no player or anchor aircraft");
+            string want = Text(args, "field") ?? "carrier";
+            List<Airbase> fields = WingService.FriendlyFields(caller);
+            int land = fields.FindAll(b => !b.AttachedAirbase && WingRequisition.IsOn(b)).Count;
+            for (int i = 0; i < fields.Count; i++)
+            {
+                Airbase f = w.NextField(caller);
+                if (f == null || !(want == "carrier" ? f.AttachedAirbase : string.Equals(f.name, want, StringComparison.OrdinalIgnoreCase))) continue;
+                WingLog.Logger.LogInfo($"[WingAiProof] pick: launch field {f.name} ({land} land fields ON)");
+                return new Dictionary<string, object> { { "ok", true }, { "field", f.name }, { "land", land } };
+            }
+            return Failure("WingAiProof", "Pick", $"NEXT FIELD never reached '{want}'");
         }
 
         /// <summary>{steps: [{lane, kind, x?, z?, radius?, end?, seconds?}]}: loads and executes a plan (kind and end by PlanKind / PlanEnd name).</summary>

@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         public static void NextField()
         {
             if (!Ready(out WingService w) || w.Player == null) return;
-            Airbase field = w.NextField(w.Player, CallAirframe());
+            Airbase field = w.NextField(w.Player);
             WingToast.Show(field != null
                 ? $"Launch field: {field.name} ({(field.transform.position - w.Player.transform.position).magnitude / 1000f:0} km)"
                 : "No friendly field to launch from");
