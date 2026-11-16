@@ -160,6 +160,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The board's box (<see cref="BoardBox"/>) while it is on the screen, else no size.</summary>
         public RectF KeepClearBox => root != null && root.gameObject.activeInHierarchy ? BoardBox : default;
 
+        /// <summary>The board is drawn (its root is up: switched off, stale and torn down all take it down) and the WING page holds one of the laid-out slots. <c>IHudBoard.ShowsWing</c>.</summary>
+        public bool ShowsWing
+        {
+            get
+            {
+                if (root == null || !root.gameObject.activeInHierarchy) return false;
+                for (int i = 0; i < selectedCount; i++)
+                    if (selectedPages[i] != null && selectedPages[i].Id == ScopePage.Wing) return true;
+                return false;
+            }
+        }
+
         /// <summary>The board's box in device pixels from the screen's top-left corner (y down): false while the board is not drawn. <c>IHudBoard.TryGetScreenBox</c>.</summary>
         public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
         {

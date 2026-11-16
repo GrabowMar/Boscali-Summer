@@ -4,6 +4,8 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
@@ -64,6 +66,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int ladderVersion = -1;
         private bool ladderShown;
         private int shownMembers;
+        private bool boardShowsWing;
 
         public void Activate() => Reset();
 
@@ -78,8 +81,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             WingService wing = WingService.Instance;
             PlayerAutopilot ap = PlayerAutopilot.Instance;
-            bool any = (wing != null && wing.Members.Count > 0) || (ap != null && ap.Session.Engaged) || WingChordInput.Held;
-            if (hud == null || !hud.isActiveAndEnabled || !any)
+            // The TAC BOARD's WING page already lists the roster: the strip keeps only the autopilot line and the Call Ladder then (Hud module off: no board, no page).
+            boardShowsWing = ModuleServices.TryGet(out IHudBoard board) && board.ShowsWing;
+            bool show = hud != null && WingHudShow.ShouldShow(hud.isActiveAndEnabled, wing != null ? wing.Members.Count : 0, boardShowsWing,
+                ap != null && ap.Session.Engaged, WingChordInput.Held);
+            if (!show)
             {
                 if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
                 return;
@@ -207,7 +213,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (background != null && background.color != HudSprites.BackdropColor) background.color = HudSprites.BackdropColor;
             SetLadder(false);
             bool changed = !stripSized;
-            int n = wing != null ? Mathf.Min(wing.Members.Count, rows.Length) : 0;
+            int n = wing != null && !boardShowsWing ? Mathf.Min(wing.Members.Count, rows.Length) : 0;
             shownMembers = n;
             int worst = 0, inSlot = 0;
             for (int i = 0; i < rows.Length; i++)

@@ -137,6 +137,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return panel != null && panel.TryGetScreenBox(out left, out top, out right, out bottom);
         }
 
+        public bool ShowsWing => panel != null && panel.ShowsWing;
+
         /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
         private static readonly string[] ReadSites =
         {
