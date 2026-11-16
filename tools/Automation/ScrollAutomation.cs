@@ -11,6 +11,7 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 
+// Preserve the hook name used by nomodkit scenarios; this driver spans multiple modules.
 namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>

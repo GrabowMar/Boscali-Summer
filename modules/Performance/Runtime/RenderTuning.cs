@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Performance.Configuration;
 using HarmonyLib;
@@ -9,7 +10,7 @@ using UnityEngine.Rendering.Universal;
 namespace BoscaliSummer.Modules.Performance.Runtime
 {
     /// <summary>Lifetime and explicit opt-ins for savings in the existing renderer.</summary>
-    internal sealed class RenderTuning : MonoBehaviour, ISceneService
+    internal sealed class RenderTuning : MonoBehaviour, ISceneService, IRenderTuning
     {
         private static RenderTuning live;
         // Registration belongs to the relief's lifetime, independently of this service.
@@ -30,6 +31,12 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 return float.IsNaN(value) || float.IsInfinity(value) ? 0f : Mathf.Clamp01(value);
             }
         }
+
+        bool IRenderTuning.IndependentSharpening => IndependentSharpening;
+        bool IRenderTuning.OptimizeCinematicStreaks => OptimizeCinematicStreaks;
+        float IRenderTuning.SharpenStrength => SharpenStrength;
+        void IRenderTuning.RegisterReliefCamera(Camera camera) => RegisterReliefCamera(camera);
+        void IRenderTuning.UnregisterReliefCamera(Camera camera) => UnregisterReliefCamera(camera);
 
         // Feature callbacks, not GPU pass timings. The normal direct-draw relief path never calls this feature.
         internal static int ReliefAoCalls { get; private set; }

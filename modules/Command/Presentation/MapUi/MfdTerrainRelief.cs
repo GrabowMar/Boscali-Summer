@@ -5,8 +5,8 @@ using System.IO;
 using BepInEx;
 using HarmonyLib;
 using BoscaliSummer.Modules.Command.Domain;
-using BoscaliSummer.Modules.Performance.Runtime;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Util;
 using TMPro;
 using UnityEngine;
@@ -981,7 +981,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             data.requiresDepthTexture = false;
             data.antialiasing = AntialiasingMode.None;
             data.volumeLayerMask = 0;
-            RenderTuning.RegisterReliefCamera(camera);
+            if (ModuleServices.TryGet(out IRenderTuning renderTuning)) renderTuning.RegisterReliefCamera(camera);
             // The tilt haze fades toward the view's own background.
             if (ground != null) groundMaterial.SetColor("_Haze", camera.backgroundColor);
         }
@@ -2327,7 +2327,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Release()
         {
             Restore();
-            RenderTuning.UnregisterReliefCamera(camera);
+            if (ModuleServices.TryGet(out IRenderTuning renderTuning)) renderTuning.UnregisterReliefCamera(camera);
             if (sceneRoot != null) Object.Destroy(sceneRoot);
             sceneRoot = null;
             foreach (Mesh mesh in meshes) if (mesh != null) Object.Destroy(mesh);

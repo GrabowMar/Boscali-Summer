@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             header = AvLay.Solid(root, "Header", Color.clear);
             AvSurfaceGradient.ApplyHeader(header);
             title = AvText.Make(root, "Title", AvTextRole.Head, "MAP CONTROLS", TextAlignmentOptions.MidlineLeft);
-            title.fontSize = 15f;
+            AvText.Size(title, 15f);
             title.characterSpacing = 1f;
             title.raycastTarget = false;
             AvText.Fit(title, false);

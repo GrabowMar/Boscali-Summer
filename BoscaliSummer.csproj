@@ -36,6 +36,11 @@
     <EmbeddedResource Include="AvionicsUi\ThirdParty\**\*.txt" />
   </ItemGroup>
 
+  <!-- Cross-module scenario drivers are development tools, not module dependencies. -->
+  <ItemGroup Condition="'$(PublicRelease)' != 'true'">
+    <Compile Include="tools\Automation\ScrollAutomation*.cs" />
+  </ItemGroup>
+
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
     <ManagedDir>$(GameDir)\NuclearOption_Data\Managed</ManagedDir>

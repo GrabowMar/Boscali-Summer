@@ -6,9 +6,9 @@ using BepInEx.Logging;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Effects.Configuration;
 using BoscaliSummer.Modules.Effects.Domain;
-using BoscaliSummer.Modules.Performance.Runtime;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -97,9 +97,10 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             nextApply = Time.unscaledTime + ApplySeconds;
 
             bool on = settings.Enabled.Value;
-            bool independentSharpen = RenderTuning.IndependentSharpening;
+            ModuleServices.TryGet(out IRenderTuning renderTuning);
+            bool independentSharpen = renderTuning?.IndependentSharpening == true;
             sharpening.Apply(!nightVision && ((on && settings.SharpenEnabled.Value) || independentSharpen),
-                independentSharpen ? RenderTuning.SharpenStrength : settings.SharpenStrength.Value);
+                independentSharpen ? renderTuning.SharpenStrength : settings.SharpenStrength.Value);
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             postQuality.Apply(level != null && cameras != null ? cameras.mainCamera : null,
@@ -108,7 +109,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 settings.AgxLook.Value, cameras != null ? cameras.mainCamera : null, logger);
             cinematic.Apply(settings.Cinematic, level, transform, cameras != null ? cameras.mainCamera : null,
                 settings.Cinematic.Enabled.Value ? agx.GetShader("Hidden/Boscali/CinematicStreak", logger) : null,
-                RenderTuning.OptimizeCinematicStreaks);
+                renderTuning?.OptimizeCinematicStreaks == true);
             if (!on || level == null || level.PostProcessing == null)
             {
                 Teardown();

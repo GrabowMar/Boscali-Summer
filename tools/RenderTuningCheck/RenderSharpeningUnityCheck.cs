@@ -47,9 +47,14 @@ public static class RenderSharpeningUnityCheck
         var first = ScriptableObject.CreateInstance<UniversalRenderPipelineAsset>();
         var replacement = ScriptableObject.CreateInstance<UniversalRenderPipelineAsset>();
         var root = new GameObject("Independent sharpening lifecycle check");
+        Type registryType = GradeType.Assembly.GetType("BoscaliSummer.Core.Services.ServiceRegistry", true);
+        PropertyInfo activeRegistry = GradeType.Assembly.GetType("BoscaliSummer.Core.Services.ModuleServices", true).GetProperty("Active", All);
+        object previousRegistry = activeRegistry.GetValue(null);
         MonoBehaviour grade = null;
         try
         {
+            object registry = Activator.CreateInstance(registryType, true);
+            activeRegistry.SetValue(null, registry);
             SetBaseline(first, UpscalingFilterSelection.Point, false, 0.73f);
             SetBaseline(replacement, UpscalingFilterSelection.Linear, true, 0.19f);
             var firstBaseline = new Snapshot(first);
@@ -74,6 +79,10 @@ public static class RenderSharpeningUnityCheck
 
             Entry<bool>(performance, "IndependentSharpening").Value = true;
             Entry<float>(performance, "IndependentSharpenStrength").Value = 0.25f;
+            Tick(grade);
+            firstBaseline.Check("an absent render-tuning service leaves independent sharpening off");
+            Type renderContract = GradeType.Assembly.GetType("BoscaliSummer.Core.Contracts.IRenderTuning", true);
+            registryType.GetMethod("Add", All).MakeGenericMethod(renderContract).Invoke(registry, new object[] { tuning });
             Tick(grade);
             CheckSharpen(first, 0.25f, "independent sharpening applies with colour grade off");
             Check(GradeType.GetField("holder", All).GetValue(grade) == null,
@@ -142,6 +151,7 @@ public static class RenderSharpeningUnityCheck
         {
             if (grade != null) Call(grade, "ReleaseFx");
             Object.DestroyImmediate(root);
+            activeRegistry.SetValue(null, previousRegistry);
             GraphicsSettings.renderPipelineAsset = graphics;
             QualitySettings.renderPipeline = quality;
             Object.DestroyImmediate(first);

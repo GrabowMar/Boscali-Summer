@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Modules.Performance.Runtime;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Modules;
 using BoscaliSummer.Core.Ui;
 using UnityEngine;
@@ -25,8 +26,9 @@ namespace BoscaliSummer.Modules.Performance
                 .Configure(context.Settings.Performance);
             context.AddSceneService<BaseGameTuning>(91)
                 .Configure(context.Settings.Performance);
-            context.AddSceneService<RenderTuning>(93)
-                .Configure(context.Settings.Performance);
+            var renderTuning = context.AddSceneService<RenderTuning>(93);
+            renderTuning.Configure(context.Settings.Performance);
+            context.AddService<IRenderTuning>(renderTuning);
             context.AddClientSetting("FRAME BUDGET", "ADAPTIVE FX",
                 "After sustained slow flight frames, halve scalable Boscali cosmetic budgets. " +
                 "Takes effect after sampling; no mission or game restart.",
