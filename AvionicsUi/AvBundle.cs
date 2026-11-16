@@ -146,7 +146,7 @@ namespace NOAvionics
         private static void LoadFx(Action<string> log)
         {
             if (fxBundle != null) return;
-            try { LoadFxFromBytes(ReadResource(FxResourceName, 512 * 1024), log); }
+            try { LoadFxFromBytes(ReadResource(FxResourceName, 1024 * 1024), log); }
             catch (Exception e) { log?.Invoke("avionics-fx.bundle error: " + e.Message); }
         }
 
