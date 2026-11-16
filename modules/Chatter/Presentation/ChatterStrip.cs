@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         /// <summary>The column's width on this screen (HudZones.ColumnWidth): 562 at 16:9, less on a narrower one; the lines wrap to it.</summary>
         private float width = HudZones.WideLog;
         private float Width => width;
-        private const float Left = LeftHudStack.Left, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = 154f;      // the COMMS zone's height (HudZones)
+        private const float Left = LeftHudStack.Left, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = HudZones.CommsHeight;
         private const float LingerSeconds = 4f, FadeSeconds = 0.7f, CharsPerSecond = 55f;
 
         private struct Row

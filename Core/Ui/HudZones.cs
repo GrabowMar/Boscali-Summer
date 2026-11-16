@@ -23,7 +23,7 @@ namespace BoscaliSummer.Core.Ui
         public const float Margin = 12f, Gutter = 16f, RefHeight = 1080f, FullWidth = 1920f;
         private const float NarrowMin = 281f;
         /// <summary>The wide LOG / COMMS / NOTICE column's width.</summary>
-        public const float WideLog = 562f;
+        public const float WideLog = 562f, CommsHeight = 154f;
 
         private enum Side { Left, Centre, Right }
 
@@ -33,7 +33,7 @@ namespace BoscaliSummer.Core.Ui
             switch (z)
             {
                 case HudZone.Log: side = Side.Left; x = 12; y = 12; w = 562; h = 101; break;
-                case HudZone.Comms: side = Side.Left; x = 12; y = 129; w = 562; h = 154; break;
+                case HudZone.Comms: side = Side.Left; x = 12; y = 129; w = 562; h = CommsHeight; break;
                 case HudZone.Cue: side = Side.Left; x = 12; y = 299; w = 281; h = 96; break;
                 case HudZone.Notice: side = Side.Left; x = 12; y = 411; w = 562; h = 16; break;
                 case HudZone.Route: side = Side.Left; x = 12; y = 443; w = 281; h = 133; break;

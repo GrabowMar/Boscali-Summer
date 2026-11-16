@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -104,7 +105,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Between blocks that stand beside or above each other (HERO and SAT 12 in WIDE; PWR BUS and EXPENDABLES, HERO and SAT in STACK).</summary>
         public const float BlockGap = 10f;
         /// <summary>What hangs under the page: the gauge line 8 under it.</summary>
-        public const float PageGap = 16f, GaugeGap = 6f;
+        public const float PageGap = HudZones.Gutter, GaugeGap = 6f;
         /// <summary>The gauge line: one line of 12, or two with a row pitch of 18; the gauges are <see cref="GaugeSpace"/> apart.</summary>
         public const float GaugeLine1 = 12f, GaugeLine2 = 30f, GaugePitch = 18f, GaugeSpace = 16f;
 
