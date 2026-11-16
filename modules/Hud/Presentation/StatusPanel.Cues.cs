@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // The CUE stack (HUD holo pass E, 2026-10-13): the game's short messages on grey boxes (the action report: weapon safety, flight assist, radar, gear, damage failures; the reserve notice; the funds line; the score line), drawn by the mod
     // at the LEFT edge in the visor's language, in place of the game's boxes. The messages are captured as the game shows them (Patches/CueFeedPatch.cs: text, the game's time for it, whether its colour marks a failure, into CueFeed.Log, the
-    // newest four) and painted here: a stack 12 units in from the left and 281 wide (the CUE zone, HudZones: 299 down, lower when COMMS grew past its zone), newest on top, at most three, 40 apart.
+    // newest four) and painted here: a stack 12 units in from the left and 281 wide (the CUE zone, HudZones: 299 down, lower when COMMS grew past its zone), newest on top, at most two, 40 apart.
     // The NOTICE line (2026-11-16) shares this tree: the board's notice ticker, one line under the stack (the NOTICE zone, or 16 under the last cue), drawn whether the board is on or not; the Corners option and the gate govern it as they do the cues. One cue is a DIM class word on a short
     // captioned shelf (SYS, WPN, DMG, FUNDS, RSV) and under it the message in regular capitals, BRIGHT at 16 (AMBER for a caution, RED for an alert; 14, then whole words, when it is long), with a soft shade behind it. A cue SHOWS for 0.32 s
     // (two bracket halves snap in from 46 units outside, the message decodes left to right, an underline draws, the whole cue is a tone brighter for 0.12 s), HOLDS for as long as the game keeps its own line (at least 1.2 s) and FADES for

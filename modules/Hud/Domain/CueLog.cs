@@ -57,7 +57,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal sealed class CueLog
     {
-        public const int Capacity = 4, MaxShown = 3;
+        public const int Capacity = 4, MaxShown = 2;
         public const float MinLife = 1.2f, DefaultSeconds = 5f, MaxSeconds = 60f;
         /// <summary>A native box shows text but this log holds no live cue of its source for this long: the capture is not seeing the game's messages (<see cref="Healthy"/>).</summary>
         public const float MissSeconds = 0.6f;
