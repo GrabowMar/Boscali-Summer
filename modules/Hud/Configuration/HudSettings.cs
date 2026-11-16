@@ -74,13 +74,13 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
                 "Manual keeps the pages chosen for each slot; Off hides the tactical pages. Legacy Auto also means Manual." + live);
             PageCount = config.Bind(section, "PageCount", d.PageCount,
-                new ConfigDescription("Full information pages shown, at most two across and two down (Wide puts two side by side, Stack one above the other). Each slot is selected manually; SYSTEMS always shows on its own." + live,
+                new ConfigDescription("Full information pages shown, one or two, stacked in one column on the right edge. Each slot is selected manually; SYSTEMS always shows on its own." + live,
                     new AcceptableValueRange<int>(1, BoardOptions.MaxPages)));
             const string slot = " SYSTEMS is not a choice: it always shows in its own block.";
             Page1 = config.Bind(section, "Page1", d.Page1, "Information page in the first slot; events never replace it." + slot + live);
             Page2 = config.Bind(section, "Page2", d.Page2, "Information page in the second slot (PageCount at least 2)." + slot + live);
-            Page3 = config.Bind(section, "Page3", d.Page3, "Information page in the third slot (PageCount at least 3)." + slot + live);
-            Page4 = config.Bind(section, "Page4", d.Page4, "Information page in the fourth slot (PageCount 4)." + slot + live);
+            Page3 = config.Bind(section, "Page3", d.Page3, "Ignored: the board has two page slots. Kept only so old configs load." + slot + live);
+            Page4 = config.Bind(section, "Page4", d.Page4, "Ignored: the board has two page slots. Kept only so old configs load." + slot + live);
             ShowStores = config.Bind(section, "ShowStores", d.ShowStores,
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 

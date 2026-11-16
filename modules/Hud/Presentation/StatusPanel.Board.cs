@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            // The pilot's size unless the whole board would not fit the screen at it (four pages at a large size on a small screen): then as big as fits.
+            // The pilot's size unless the whole board would not fit the screen at it (two pages at a large size on a small screen): then as big as fits.
             float availableHeight = screenH - (underNative ? Math.Max(0f, screenTop - dock.rect.yMin) : 0f);
             float requestedUnit = baseUnit * Mathf.Clamp(Options.Scale, BoardOptions.ScaleMin, BoardOptions.ScaleMax);
             unit = ScopeLayout.FitUnit(requestedUnit, pixel, screenW, availableHeight, end.Width, end.Height);
