@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -90,7 +91,7 @@ namespace BoscaliSummer.Core.Game
         /// Width 0 turns it off; <see cref="SetEdge"/> re-applies it to every material already made.
         /// </summary>
         internal const float EdgeDefault = 0.16f, EdgeMax = 0.25f, EdgeFaceBack = 1.1f;
-        private static readonly Color EdgeColour = new Color(2f / 255f, 16f / 255f, 10f / 255f, 0.82f);
+        private static readonly Color EdgeColour = new Color(HudInk.TextEdge.R, HudInk.TextEdge.G, HudInk.TextEdge.B, HudInk.TextEdge.A);
         internal static float Edge { get; private set; } = EdgeDefault;
 
         /// <summary>The pilot's <c>TacBoard.TextEdge</c> (0 off, to <see cref="EdgeMax"/>): live, on every glow material made so far and on those made later.</summary>
@@ -113,7 +114,7 @@ namespace BoscaliSummer.Core.Game
         }
 
         /// <summary>A word in the HUD ink (<see cref="Glow(Material, Color)"/> in <see cref="Colours"/>.AllClear): what a label gets that does not follow its own colour.</summary>
-        internal static Material Glow(Material native) => Glow(native, Colours.AllClear);
+        internal static Material Glow(Material native) => Glow(native, Ink);
 
         /// <summary>
         /// The mod's HUD words as light on the visor (2026-11-15, user: no dark shadows, "brighter and very slight glow to imitate augmented reality"): a copy of the native label
@@ -128,7 +129,7 @@ namespace BoscaliSummer.Core.Game
             Color32 c = tint;
             long key = ((long)native.GetInstanceID() << 16) ^ ((c.r >> 4) << 8 | (c.g >> 4) << 4 | (c.b >> 4));
             if (glows.TryGetValue(key, out Material m) && m != null) return m;
-            if (glows.Count >= 64 && tint != Colours.AllClear) return Glow(native);
+            if (glows.Count >= 64 && tint != Ink) return Glow(native);
             m = new Material(native) { name = native.name + " (Boscali AR glow)", hideFlags = HideFlags.HideAndDontSave };
             // BROKEN HELMET (2026-11-16): the mod's own copy of TMP's SDF shader when the fx bundle has it (the visor glitch tears, splits and drops out the words with it;
             // identical to the stock shader while no glitch runs), else the stock one.
@@ -147,7 +148,7 @@ namespace BoscaliSummer.Core.Game
             return m;
         }
 
-        /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
+        /// <summary>Vanilla HUD colours, live so a custom theme carries over. AllClear is INK (the theme colour as it looks on sky, HudInk.Ink); Warning is CAUTION and Alert WARNING.</summary>
         internal static Palette Colours
         {
             get
@@ -159,7 +160,7 @@ namespace BoscaliSummer.Core.Game
                     if (theme != null)
                         return new Palette
                         {
-                            AllClear = theme.AllClear,
+                            AllClear = Washed(theme.AllClear),
                             Warning = theme.Warning,
                             Alert = theme.Alert
                         };
@@ -170,12 +171,28 @@ namespace BoscaliSummer.Core.Game
 
                 return new Palette
                 {
-                    AllClear = VanillaGreen,
+                    AllClear = Washed(VanillaGreen),
                     Warning = VanillaYellow,
                     Alert = VanillaRed
                 };
             }
         }
+
+        /// <summary>
+        /// The visor's colour roles (HudStandard): INK is the game's HUD colour as it looks on sky, INK-HI that lifted toward white, INK-DIM the ink at one alpha, CAUTION the theme's amber, WARNING its red. All live (a custom theme
+        /// recolours the whole display). INFO (allied, radio, navigation) is INK-HI: the HUD theme has no cool tone.
+        /// </summary>
+        internal static Color Ink => Colours.AllClear;
+        internal static Color InkHi => ToColor(HudInk.Hi(ToRgba(Colours.AllClear)));
+        internal static Color InkDim => ToColor(HudInk.Dim(ToRgba(Colours.AllClear)));
+        internal static Color Caution => Colours.Warning;
+        internal static Color WarningRed => Colours.Alert;
+
+        /// <summary>The theme's all-clear colour as INK (<see cref="HudInk.Ink"/>: the game's additive wash on sky added).</summary>
+        private static Color Washed(Color theme) => ToColor(HudInk.Ink(ToRgba(theme)));
+
+        private static NOAvionics.Rgba ToRgba(Color c) => new NOAvionics.Rgba(c.r, c.g, c.b, 1f);
+        private static Color ToColor(NOAvionics.Rgba c) => new Color(c.R, c.G, c.B, c.A);
 
         public static void Initialise()
         {

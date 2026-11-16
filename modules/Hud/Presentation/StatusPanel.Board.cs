@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static ScopePalette Palette()
         {
             ColorTheme theme = ThemeManager.Active.ColorTheme;
-            return new ScopePalette(ToRgba(theme.AllClear), ToRgba(theme.Warning), ToRgba(theme.Alert));
+            return new ScopePalette(HudInk.Ink(ToRgba(theme.AllClear)), ToRgba(theme.Warning), ToRgba(theme.Alert));
         }
 
         private static Rgba ToRgba(Color c) => new Rgba(c.r, c.g, c.b, 1f);
