@@ -1,0 +1,117 @@
+using NOAvionics;
+
+namespace BoscaliSummer.Core.Contracts
+{
+    /// <summary>The five type steps of the in-flight HUD (2026-11-16 standard): nothing else is ever set.</summary>
+    internal enum HudStep : byte { Label, Body, Value, Emphasis, Hero }
+
+    /// <summary>
+    /// THE TYPE SCALE of the visor, in reference pixels on a 1080-high screen: LABEL 12 (captions, units, secondary labels), BODY 14 (rows, log lines, strip values), VALUE 16 (the number or word the pilot acts on, spoken
+    /// radio text), EMPHASIS 22 (state words), HERO 44 (one numeral per block). Regular for LABEL and BODY, bold for VALUE and up (or a warning word). One tracking per step, rows on a 4 px grid (20 BODY, 16 LABEL).
+    /// Pure: compiled into the tests.
+    /// </summary>
+    internal static class HudType
+    {
+        public const float Label = 12f, Body = 14f, Value = 16f, Emphasis = 22f, Hero = 44f;
+
+        /// <summary>Row pitches on the 4 px grid: a BODY row, a LABEL row, a gap between blocks (<c>HudZones.Gutter</c>) and between a shelf and its content.</summary>
+        public const float BodyRow = 20f, LabelRow = 16f, ShelfGap = 4f;
+
+        /// <summary>
+        /// The board is drawn in design units at the pilot's Scale (0.85 by default, which the zones are cut for), so a step asked for in the board is drawn at <c>step * BoardBoost</c> design units: it lands on the step's reference
+        /// pixels at the default Scale.
+        /// </summary>
+        public const float BoardBoost = 1f / 0.85f;
+
+        public static float Of(HudStep step)
+        {
+            switch (step)
+            {
+                case HudStep.Body: return Body;
+                case HudStep.Value: return Value;
+                case HudStep.Emphasis: return Emphasis;
+                case HudStep.Hero: return Hero;
+                default: return Label;
+            }
+        }
+
+        /// <summary>The step an arbitrary size belongs to (the nearest: up to 12.5 LABEL, 15 BODY, 18 VALUE, 30 EMPHASIS, above that HERO). Nothing is smaller than LABEL.</summary>
+        public static HudStep StepOf(float size)
+        {
+            if (size <= 12.5f) return HudStep.Label;
+            if (size <= 15f) return HudStep.Body;
+            if (size <= 18f) return HudStep.Value;
+            return size <= 30f ? HudStep.Emphasis : HudStep.Hero;
+        }
+
+        /// <summary>The reference pixels of the step <paramref name="size"/> belongs to.</summary>
+        public static float Snap(float size) => Of(StepOf(size));
+
+        /// <summary>The weight rule: bold from VALUE up. A warning word is bold whatever its step (<paramref name="warning"/>).</summary>
+        public static bool Bold(HudStep step, bool warning = false) => warning || step >= HudStep.Value;
+
+        /// <summary>TMP characterSpacing (1/100 em) of a step: caps at LABEL and BODY track 2, VALUE 1, EMPHASIS and HERO 0. Mixed case (spoken text) tracks 0.</summary>
+        public static float Tracking(HudStep step) => step <= HudStep.Body ? 2f : step == HudStep.Value ? 1f : 0f;
+    }
+
+    /// <summary>
+    /// THE COLOUR ROLES of the visor. INK is the game's own HUD colour (<c>ColorTheme.AllClear</c>, the colour the native heading tape, ladder and gauges are drawn in); INK-HI is the ink lifted <see cref="HiLift"/> toward
+    /// white; INK-DIM the ink at <see cref="DimAlpha"/>; CAUTION the theme's amber, WARNING its red. INFO (allied, radio, navigation) is INK-HI: the game's palette has no cool tone in the HUD theme and the mod
+    /// ships none. TEXT EDGE is the one dark rim of every glyph. Line art takes the three alpha steps of <see cref="Lines"/>.
+    /// </summary>
+    internal static class HudInk
+    {
+        /// <summary>How far toward white INK-HI is (LAYOUT.md 1) and the alpha of INK-DIM: decided by capture on bright cloud and dark terrain (0.8 stays legible on both with the text edge).</summary>
+        public const float HiLift = 0.70f, DimAlpha = 0.80f;
+
+        /// <summary>The line alphas: full, mid (rules, ticks, frames) and low (leaders, grids). Nothing else.</summary>
+        public const float LineFull = 1f, LineMid = 0.7f, LineLow = 0.4f;
+
+        /// <summary>The text edge: a dark green rim (2, 16, 10) at 0.82, the same on every glyph.</summary>
+        public static readonly Rgba TextEdge = new Rgba(2f / 255f, 16f / 255f, 10f / 255f, 0.82f);
+
+        /// <summary>
+        /// The game draws its own HUD (tape, ladder, gauges) in the theme's all-clear colour on an ADDITIVE material, so on sky the light of the sky is added to it: the default (0, 1, 0) reads as a pale mint (measured 96, 248, 152
+        /// on the heading tape in look5/steady.png). The mod's words and line art are alpha blended (additive vanished on bright cloud), so INK is the theme colour plus that wash, clamped: the same instrument on the same sky.
+        /// </summary>
+        public static readonly Rgba SkyWash = new Rgba(0.38f, 0f, 0.60f);
+
+        /// <summary>INK: the game's HUD colour as it looks on sky (<see cref="SkyWash"/> added), opaque.</summary>
+        public static Rgba Ink(Rgba game) => new Rgba(Clamp(game.R + SkyWash.R), Clamp(game.G + SkyWash.G), Clamp(game.B + SkyWash.B));
+
+        private static float Clamp(float v) => v > 1f ? 1f : v;
+
+        public static Rgba Hi(Rgba ink) => Mix(ink.WithAlpha(1f), new Rgba(1f, 1f, 1f), HiLift);
+
+        public static Rgba Dim(Rgba ink) => ink.WithAlpha(DimAlpha);
+
+        /// <summary>The line alpha step nearest to <paramref name="alpha"/>: 1, 0.7 or 0.4. A fade (under 0.3) passes through unsnapped.</summary>
+        public static float Line(float alpha)
+        {
+            if (alpha >= 0.85f) return alpha > 1f ? 1f : LineFull;
+            if (alpha >= 0.55f) return LineMid;
+            return alpha >= 0.3f ? LineLow : alpha;
+        }
+
+        /// <summary>A text alpha: full or INK-DIM's. Under 0.5 it is a fade and passes through.</summary>
+        public static float Text(float alpha)
+        {
+            if (alpha >= 0.95f) return 1f;
+            return alpha >= 0.5f ? DimAlpha : alpha;
+        }
+
+        /// <summary>A lamp: lit is the role colour at full, unlit the ink at the low line alpha (still a readable word).</summary>
+        public static float Lamp(bool lit) => lit ? LineFull : LineLow;
+
+        private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
+    }
+
+    /// <summary>THE LINE WEIGHTS, design units: hairline (rules, ticks, frames), standard (rails, scope rings, brackets), heavy (the one emphasised element of a block, the banner bar).</summary>
+    internal static class HudStroke
+    {
+        public const float Hairline = 1f, Standard = 1.5f, Heavy = 2f;
+
+        /// <summary>The stroke a width asked for belongs to.</summary>
+        public static float Snap(float w) => w <= 1.25f ? Hairline : w <= 1.75f ? Standard : Heavy;
+    }
+}
