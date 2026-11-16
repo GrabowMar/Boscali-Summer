@@ -12,9 +12,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly string[] FinishNames = { "CLEAR", "GLASS", "CRT", "CUSTOM" };
         private static readonly string[] FinishBriefs =
         {
-            "CLEAR: nothing over the display. Maximum readability; power-on and jamming still show.",
-            "GLASS: coated cover glass: soft sky light at the top, a faint canopy reflection, a bright rim and a gentle bezel shadow. The default.",
-            "CRT: phosphor tube: fine scanlines, rounded dark corners and a slow refresh band, with a little glass.",
+            "CLEAR: a clean display with no surface finish. Panel feedback and interference remain controlled separately.",
+            "GLASS: smoked cover glass, restrained reflections, square edge glints and a fine bezel shadow. The default.",
+            "CRT: fine phosphor scanlines and a slow refresh band, with a little glass and square edge shading.",
             "CUSTOM: tune reflection, texture, edge shading and signal yourself on the dials that open below.",
         };
 
@@ -47,9 +47,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             FinishRing(flow, tune, page, "GLASS REFLECTION", settings.DisplayGlass,
                 "Sky light, canopy reflection and the glass rim across the maximized MFD. 0% is a matte screen.");
             FinishRing(flow, tune, page, "SCAN TEXTURE", settings.DisplayScanlines, "Phosphor scanlines (one dark row in three screen pixels) and the refresh band. 0% is off.");
-            FinishRing(flow, tune, page, "EDGE SHADING", settings.DisplayVignette, "Bezel shadow on the edges and a rounded falloff into the corners. 0% is off.");
+            FinishRing(flow, tune, page, "EDGE SHADING", settings.DisplayVignette, "A narrow square bezel shadow around the display. 0% is off.");
             FinishRing(flow, tune, page, "LIVE SIGNAL", settings.DisplayLife,
-                "The display powers on from a line, a slow refresh band rolls down it, and jamming breaks the picture up harder. 0% is a still display.");
+                "A brief edge sweep marks display opening; a slow refresh band and interference add signal motion. Content stays readable throughout. 0% is still.");
             void RefreshFinish()
             {
                 finishStrip.Refresh();
@@ -66,13 +66,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Echo("PANEL FX — " + settings.AvionicsFxTier.Value.ToString().ToUpperInvariant());
                     Changed();
                 }));
-            fx.Options[0].Help = "OFF: no panel animation or glass effects at all. Cheapest.";
+            fx.Options[0].Help = "OFF: stop animated panel effects. SCREEN FINISH still controls the display surface.";
             fx.Options[1].Help = "LITE: keep the scan and shine effects, drop the heavier passes.";
             fx.Options[2].Help = "FULL: every panel effect the scheme defines.";
             flow.Ticker.Add(page, AvTickRate.Slow, fx.Refresh);
             ToggleCell(flow, page, "REDUCED MOTION", "Snap every panel animation to its end state, WMC included.",
                 () => settings.AvionicsReducedMotion.Value, v => settings.AvionicsReducedMotion.Value = v);
-            ToggleCell(flow, page, "BLUR BEHIND", "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).",
+            ToggleCell(flow, page, "BLUR BEHIND", "Soften the world behind floating windows. OFF keeps the static glass surface.",
                 () => settings.AvionicsBlurBehind.Value, v => settings.AvionicsBlurBehind.Value = v);
             ToggleCell(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
                 () => settings.DisplayAutoLight.Value, v => { settings.DisplayEffects.Value = true; settings.DisplayAutoLight.Value = v; });

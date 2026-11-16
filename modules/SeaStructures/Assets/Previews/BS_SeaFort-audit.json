@@ -1,0 +1,102 @@
+{
+  "model": "BS_SeaFort",
+  "blender": "5.2.1 LTS",
+  "triangles": 37272,
+  "sections": 16,
+  "pieces": 120,
+  "hit_boxes": 22,
+  "hardpoints": 16,
+  "bounds_m": [
+    [
+      -98.40791320800781,
+      -25.299999237060547,
+      -15.0
+    ],
+    [
+      38.18175506591797,
+      21.799999237060547,
+      67.44999694824219
+    ]
+  ],
+  "zero_area_faces": 0,
+  "palette_materials": 1,
+  "textures": {
+    "uv_coverage": 0.39435943408146196,
+    "maps": {
+      "albedo": [
+        4096,
+        4096
+      ],
+      "normal": [
+        2048,
+        2048
+      ],
+      "surface": [
+        2048,
+        2048
+      ]
+    },
+    "pixels": {
+      "albedo": {
+        "rgb_std": [
+          0.2383856624364853,
+          0.24402913451194763,
+          0.24391214549541473
+        ]
+      },
+      "normal": {
+        "xy_std": [
+          0.0022097767796367407,
+          0.0017021768726408482
+        ],
+        "inverted_fraction": 0.0
+      },
+      "surface": {
+        "metal_max": 1.0,
+        "smoothness_std": 0.13230642676353455
+      },
+      "detailmask": {
+        "max": 1.0,
+        "mean": 0.3216356933116913
+      }
+    },
+    "detail": {
+      "maps": {
+        "albedo": [
+          1024,
+          1024
+        ],
+        "normal": [
+          1024,
+          1024
+        ]
+      },
+      "tiling": 32.0,
+      "albedo_scale": 0.3,
+      "normal_scale": 0.45,
+      "mask": "albedo alpha; glass and reserved swatches excluded"
+    },
+    "small_fitting_swatch_faces": 15817,
+    "small_fitting_policy": "Below 1.5 texels width in the 2K maps or an empty baked centroid: nondegenerate paint/shade swatch in reserved strip; flat normal.",
+    "padding": "6 px albedo / 3 px data; deliberately compact for numerous small rigid parts",
+    "source_materials": [
+      "Sea.Source.00",
+      "Sea.Source.01",
+      "Sea.Source.02",
+      "Sea.Source.03",
+      "Sea.Source.04",
+      "Sea.Source.05",
+      "Sea.Source.06",
+      "Sea.Source.07",
+      "Sea.Source.08",
+      "Sea.Source.09",
+      "Sea.Source.10",
+      "Sea.Source.11",
+      "Sea.Source.12",
+      "Sea.Source.13",
+      "Sea.Source.14",
+      "Sea.Source.15"
+    ]
+  },
+  "notes": "Separate intersecting industrial assemblies; uncapped rail/truss ends are intentional. Section vertex groups in editable blend."
+}

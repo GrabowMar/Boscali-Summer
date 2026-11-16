@@ -1,21 +1,31 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
-    /// A purely cosmetic launch streak: a bright trail climbing away from an off-map launch
-    /// site over the ascent to orbit insertion. Deliberately not a vanilla Missile — there is
-    /// nothing to arm, guide, detonate or collide with; the mechanic (insertion time, first
-    /// pass) lives entirely in the orbital model. Every client plays it independently the
-    /// first time it sees a satellite in ascent, so no extra network message is needed.
+    /// A purely cosmetic launch streak shared by satellite completion cues and ASAT flights.
+    /// It owns no weapon, collision, satellite availability or network authority.
     /// </summary>
     internal static class SatelliteLaunchVisuals
     {
         private static Material trailMaterial;
+        private static readonly List<GameObject> active = new List<GameObject>();
+
+        public static void Reset()
+        {
+            foreach (GameObject effect in active) if (effect != null) Object.Destroy(effect);
+            active.Clear();
+            Object.Destroy(trailMaterial);
+            trailMaterial = null;
+        }
 
         public static void Play(Vector3 launchPoint, float duration)
         {
+            if (GameManager.IsHeadless || Datum.origin == null || !float.IsFinite(duration)) return;
+            active.RemoveAll(effect => effect == null);
             var go = new GameObject("BoscaliSatelliteLaunch");
+            active.Add(go);
             // Under the datum: a floating-origin shift carries the rocket, its light and its trail together.
             go.transform.SetParent(Datum.origin, false);
             go.transform.position = launchPoint;
@@ -53,7 +63,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 foreach (ParticleSystem ps in new[] { effect.Flame, effect.Smoke })
                 {
                     var main = ps.main;
-                    main.simulationSpace = ParticleSystemSimulationSpace.World;
+                    main.simulationSpace = ParticleSystemSimulationSpace.Custom;
+                    main.customSimulationSpace = Datum.origin;
                     main.startSpeed = new ParticleSystem.MinMaxCurve(0f, 3f);
                 }
             }
@@ -65,6 +76,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         {
             if (GameManager.IsHeadless) return;
             var pad = new GameObject("BoscaliSatelliteLaunchPad");
+            active.Add(pad);
             pad.transform.SetParent(Datum.origin, false);
             pad.transform.position = point;
             var flash = SupportParticles.Layer(pad.transform, "Ignition flash", true, 8, 1.2f, 160f, new Color(4f, 2.6f, 1.2f));
@@ -99,6 +111,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private float nextSmoke;
         private float elapsed;
         private float duration;
+        private bool burnedOut;
         private Vector3 origin; // datum-space (global) launch point
         private Vector3 heading;
 
@@ -115,13 +128,14 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private Vector3 At(float seconds)
         {
             float t = Mathf.Clamp01(seconds / duration);
-            float climb = 1f - (1f - t) * (1f - t);
-            return origin + Vector3.up * (ClimbHeight * climb) + heading * (Downrange * t * t);
+            float climb = t * t * (2f - t);
+            return origin + Vector3.up * (ClimbHeight * climb) + heading * (Downrange * t * t * t);
         }
 
         private void Update()
         {
-            elapsed += Time.deltaTime;
+            if (burnedOut || Time.deltaTime <= 0f) return;
+            elapsed = Mathf.Min(duration, elapsed + Time.deltaTime);
             transform.localPosition = At(elapsed);
             if (Flame != null)
             {
@@ -139,7 +153,15 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 float scale = cam != null ? Mathf.Clamp(Vector3.Distance(cam.transform.position, transform.position) * 0.0035f / NozzleWidth, 1f, 10f) : 1f;
                 Trail.widthMultiplier = NozzleWidth * scale;
             }
-            if (elapsed >= duration) Destroy(gameObject);
+            if (elapsed >= duration)
+            {
+                burnedOut = true;
+                Light glow = GetComponent<Light>();
+                if (glow != null) glow.enabled = false;
+                if (Trail != null) Destroy(Trail.gameObject);
+                // Let the existing exhaust wake expire in datum space instead of deleting it at cutoff.
+                Destroy(gameObject, TrailSeconds);
+            }
         }
 
         private void OnDestroy()

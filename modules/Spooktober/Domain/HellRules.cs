@@ -22,10 +22,10 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         public const int MaxAlive = 32;            // ground attackers on the field
         public const int MaxAir = 8;
         public const int MaxWave = 18;
-        public const float PortalRadius = 70f;
+        public const float PortalRadius = 145f;
         public const float MaxGateScale = 2.2f;
         public const int Wardens = 4;
-        public const float WardenRing = 170f;
+        public const float WardenRing = 360f;
         public const int Anchors = 3;
         public const float EntryHeight = 45f;
         public const float DimensionRadius = 7000f;

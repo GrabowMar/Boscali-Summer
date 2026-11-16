@@ -1,0 +1,285 @@
+{
+  "name": "gamemode-play-heavyweight",
+  "mission": "Heavyweight",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 420,
+  "description": "Native hangar load, real MountedCargo release, physical delivery, duplicate Fire and host role swap. Aircraft repositioning/freezing and shortened deadlines are explicit fixtures; no piloted-flight balance, full duration or multiplayer proof.",
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "altitude": 500,
+      "speed": 100,
+      "heading": 0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "prepare"
+      },
+      "store": "spawn"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "hold_source"
+      },
+      "store": "hold"
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "loaded"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "destination"
+      },
+      "store": "positioned"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "fire"
+      },
+      "store": "release"
+    },
+    {
+      "op": "wait",
+      "seconds": 20
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "delivered"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "duplicate"
+      },
+      "store": "duplicate"
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "stable"
+    },
+    {
+      "op": "capture",
+      "name": "heavyweight-physical-delivery",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "deadline"
+      },
+      "store": "endFirstLeg"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "halftime"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "deadline"
+      },
+      "store": "endIntermission"
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodePlayProbe.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "secondLeg"
+    },
+    {
+      "op": "capture",
+      "name": "heavyweight-role-swap",
+      "hide_ui": false
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "spawn.allowed",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "hold.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.sourceReady",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "positioned.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "release.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "release.ammoBefore",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "release.ammoAfter",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "delivered.score0",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "delivered.score1",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "duplicate.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "duplicate.duplicateAmmoAfter",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "stable.score0",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "endFirstLeg.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "halftime.phase",
+      "value": "Intermission"
+    },
+    {
+      "check": "result_equals",
+      "path": "halftime.score0",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "halftime.aircraftCount",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "halftime.containers",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "endIntermission.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "secondLeg.phase",
+      "value": "Running"
+    },
+    {
+      "check": "result_equals",
+      "path": "secondLeg.leg",
+      "value": 2
+    },
+    {
+      "check": "result_equals",
+      "path": "secondLeg.transportingTeam",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "secondLeg.score0",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "secondLeg.score1",
+      "value": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "(Gamemode|Heavyweight).*Exception|Exception.*(Gamemode|Heavyweight)",
+      "max": 0
+    }
+  ]
+}

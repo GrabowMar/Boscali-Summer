@@ -14,6 +14,8 @@ namespace NOAvionics
     public sealed class AvTicker : MonoBehaviour
     {
         public const int MaxEntries = 256;
+        /// <summary>The console hosted by this ticker, or null for windows and other UI surfaces.</summary>
+        public AvConsole Console { get; internal set; }
         private static readonly ProfilerMarker TickMarker = new ProfilerMarker("NOA.UI.Tick");
         private static readonly ProfilerMarker RestyleMarker = new ProfilerMarker("NOA.UI.Restyle");
 
@@ -22,8 +24,21 @@ namespace NOAvionics
         private readonly List<AvPart> parts = new List<AvPart>(64);
         private float nextFast, nextSlow;
         private int generation = -1;
+        private long nextLayoutPass;
+        // Zero outside a tick. Nested flows use this only to avoid repeating a completed safety sweep.
+        internal long LayoutPass { get; private set; }
 
-        public int ActivePage { get; set; }
+        private int activePage;
+        public int ActivePage
+        {
+            get => activePage;
+            set
+            {
+                if (activePage == value) return;
+                activePage = value;
+                nextFast = nextSlow = float.NegativeInfinity;
+            }
+        }
 
         /// <summary>Raised each time the console or window comes back on screen (never in an offline harness).</summary>
         public Action Shown;
@@ -31,7 +46,12 @@ namespace NOAvionics
         /// <summary>Presentation-only animation cleanup; live data stays on its bounded tick rates.</summary>
         public Action Frame;
 
-        private void OnEnable() { if (Application.isPlaying) Shown?.Invoke(); }
+        private void OnEnable()
+        {
+            // A newly shown page/window gets current data on its first frame, after its owner finishes setup.
+            nextFast = nextSlow = float.NegativeInfinity;
+            if (Application.isPlaying) Shown?.Invoke();
+        }
 
         public bool Add(int page, AvTickRate rate, Action tick)
         {
@@ -68,16 +88,22 @@ namespace NOAvionics
         {
             using (TickMarker.Auto())
             {
-                for (int i = 0; i < entries.Count; i++)
+                long previousPass = LayoutPass;
+                LayoutPass = ++nextLayoutPass;
+                try
                 {
-                    Entry e = entries[i];
-                    if (e.Page >= 0 && e.Page != ActivePage) continue;
-                    if ((e.Rate == AvTickRate.Fast && fast) || (e.Rate == AvTickRate.Slow && slow))
+                    for (int i = 0; i < entries.Count; i++)
                     {
-                        try { e.Tick(); }
-                        catch (Exception ex) { Debug.LogWarning("[NOAvionics] tick failed and was removed: " + ex.Message); entries.RemoveAt(i); i--; }
+                        Entry e = entries[i];
+                        if (e.Page >= 0 && e.Page != ActivePage) continue;
+                        if ((e.Rate == AvTickRate.Fast && fast) || (e.Rate == AvTickRate.Slow && slow))
+                        {
+                            try { e.Tick(); }
+                            catch (Exception ex) { Debug.LogWarning("[NOAvionics] tick failed and was removed: " + ex.Message); entries.RemoveAt(i); i--; }
+                        }
                     }
                 }
+                finally { LayoutPass = previousPass; }
             }
         }
     }

@@ -196,8 +196,9 @@ namespace NOAvionics
             styledLook = look; styledGen = AvStyleHost.FuiGeneration; styledTrailing = trailing.Count;
             string st = !interactable ? "disabled" : armed ? "armed" : hover ? "hover" : null;
             AvStyle r = AvStyleHost.FuiStyle("row " + AvStates.Class(state), st);
-            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert),
-                r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear);
+            Color edge = r.Border.HasValue ? AvStyleHost.Resolve(r.Border, Color.clear) : Color.clear;
+            if (interactable && armed && hover) edge = Color.Lerp(edge, AvInk.Ink, .35f);
+            frame.Paint(AvStyleHost.Resolve(r.Background, AvTheme.SurfaceInert), edge);
             rail.color = AvStyleHost.Resolve(r.Rail, AvTheme.RailInfo);
             name.color = !interactable ? AvInk.Muted : AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
             sub.color = !interactable ? AvInk.Muted : AvStyleHost.FuiInk("row-sub", AvTheme.Dim);

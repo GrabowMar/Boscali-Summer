@@ -4,8 +4,8 @@ using System.Collections.Generic;
 namespace BoscaliSummer.Core.Game
 {
     /// <summary>
-    /// Which optional modules the player switched off for the mission being played. Nothing is
-    /// off unless the player said so, at the mission-start prompt or in a remembered choice.
+    /// Optional module choices plus required exclusions for the mission being played.
+    /// Gamemode rules remain enforced when the player changes an optional selection.
     /// </summary>
     internal static class MissionProfile
     {
@@ -18,6 +18,7 @@ namespace BoscaliSummer.Core.Game
         };
 
         private static HashSet<string> disabled = new HashSet<string>(StringComparer.Ordinal);
+        private static HashSet<string> requiredDisabled = new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>The selection changed; the module host loads and unloads to match.</summary>
         public static event Action Changed;
@@ -25,12 +26,24 @@ namespace BoscaliSummer.Core.Game
 
         /// <summary>The plumbing every other module leans on; never offered as a switch.</summary>
         public static bool IsCore(string id) =>
-            id == "mission-profile" || id == "scenario" || id == "pmc" || id == "session" || id == "hud" || id == "performance" ||
+            id == "mission-profile" || id == "scenario" || id == "gamemodes" || id == "pmc" || id == "session" || id == "hud" || id == "performance" ||
             id == "compatibility";
 
         public static bool IsBattlefield(string id) => Array.IndexOf(BattlefieldModules, id) >= 0;
 
-        public static bool AllowsModule(string id) => id != null && (IsCore(id) || !disabled.Contains(id));
+        public static bool AllowsModule(string id) => id != null && (IsCore(id) || !disabled.Contains(id) && !requiredDisabled.Contains(id));
+
+        internal static bool RequiredOff(string id) => requiredDisabled.Contains(id) && !IsCore(id);
+
+        /// <summary>Mission rules remain in force even if the pilot changes an optional module selection.</summary>
+        public static void SetRequiredDisabled(IEnumerable<string> ids)
+        {
+            var next = new HashSet<string>(ids ?? Array.Empty<string>(), StringComparer.Ordinal);
+            next.RemoveWhere(IsCore);
+            if (next.SetEquals(requiredDisabled)) return;
+            requiredDisabled = next;
+            Changed?.Invoke();
+        }
 
         /// <summary>Free Flight keeps the terrain and civilian buildings clear of mod fortifications.</summary>
         public static bool AllowsFortifications(string missionName) =>

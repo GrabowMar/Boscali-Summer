@@ -6,10 +6,9 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The overlay's own chrome under the map viewport (decision D10: no layer registry, the STR overlay owns these): the layer plate at the top left and
-    /// the legend strip at the bottom with one swatch per shape the map shows. Both register with the pointer guard and carry no map input.
-    /// The plate is one slim row since 2026-11-15, in the map console's language: the STR key, the three layer toggles packed as one quiet switch (lit
-    /// = shown), DRAW as the one tool (pen, lit while armed), and the board's age or the DRAW prompt as dim text at the end.
+    /// STR owns its three layer switches, gated DRAW action and board/tool feedback. Expanded layout hosts them in the map
+    /// drawer; stock layout retains its floating plate. The passive shape legend remains on the map. Both register with
+    /// the pointer guard, and reparenting refreshes the plate's cached canvas without changing its actions or gates.
     /// </summary>
     internal sealed class StrMapChrome
     {
@@ -18,6 +17,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private readonly StrMapOverlay owner;
         private readonly StrControls controls;
         private readonly RectTransform plate, legend;
+        private readonly RectTransform mapChrome;
         private readonly AvFrame plateFrame, legendFrame;
         private readonly TMP_Text plateTitle, plateLine;
         private readonly StrButton fronts, operation, sorties, draw;
@@ -30,11 +30,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private bool legendBuilt;
         private int legendCount;
         private float viewportWidth = -1f, legendHeight;
+        private float plateWidth = -1f;
+        private bool embedded, shown = true;
 
         internal StrMapChrome(RectTransform viewport, StrMapOverlay owner, StrControls controls)
         {
             this.owner = owner;
             this.controls = controls;
+            mapChrome = viewport;
 
             plate = Panel(viewport, "StrLayerPlate", new Vector2(0f, 1f), new Vector2(12f, -8f), out plateFrame);
             plateTitle = AvText.Make(plate, "Title", AvTextRole.Micro, "STR", TextAlignmentOptions.MidlineLeft);
@@ -73,6 +76,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Shows or hides both pieces; the legend also stays hidden while the plan has no shapes to explain.</summary>
         internal void SetShown(bool on)
         {
+            shown = on;
             if (plate.gameObject.activeSelf != on) plate.gameObject.SetActive(on);
             bool legendOn = on && legendCount > 0;
             if (legend.gameObject.activeSelf != legendOn) legend.gameObject.SetActive(legendOn);
@@ -116,14 +120,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "Draw your own offensive: right-press on a front, drag to the objective, release. Esc cancels.", StrMapOverlay.DrawArmed);
             string line = string.IsNullOrEmpty(Note) ? StrPanelText.LayerLine(vm) : Note;
 
-            float x = 8f, y = (PlateH - ToggleH) * 0.5f;
-            float titleW = Mathf.Ceil(AvText.Width(plateTitle)) + 5f;
-            AvLay.Place(plateTitle.rectTransform, x, y, titleW, ToggleH);
-            x += titleW;
-            x = Place(fronts, x, y);
-            x = Place(operation, x, y);
-            x = Place(sorties, x, y);
-            x = Place(draw, x + 8f, y);
             if (line != lastLine)
             {
                 lastLine = line;
@@ -131,10 +127,70 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             plateLine.color = string.IsNullOrEmpty(Note) ? AvInk.Dim : AvInk.Ink;
             plateTitle.color = AvInk.Key;
+            RefreshLayout(true);
+        }
+
+        /// <summary>The drawer's slot can change without a new board revision. Keep this a cheap geometry check.</summary>
+        internal void RefreshLayout(bool force = false)
+        {
+            if (plate == null) return;
+            bool docked = MfdMapControls.Shown;
+            RectTransform host = docked ? MfdMapControls.TheaterSlot : mapChrome;
+            if (host == null)
+            {
+                if (plate.gameObject.activeSelf) plate.gameObject.SetActive(false);
+                return;
+            }
+            float width = docked ? host.rect.width : -1f;
+            bool moved = plate.parent != host;
+            if (moved)
+            {
+                // The pointer guard caches its canvas, so a canvas change needs a fresh registration.
+                MapUiPointer.Unregister(plate);
+                plate.SetParent(host, false);
+                // Inside a scroll viewport its full rect may extend over the map; the drawer guards only its visible bounds.
+                if (!docked) MapUiPointer.Register(plate);
+            }
+            if (plate.gameObject.activeSelf != shown) plate.gameObject.SetActive(shown);
+            if (!force && !moved && embedded == docked && Mathf.Abs(plateWidth - width) < .5f) return;
+            embedded = docked;
+            plateWidth = width;
+            plateFrame.gameObject.SetActive(!docked);
+            if (docked)
+            {
+                AvLay.Fill(plate);
+                AvLay.Place(plateTitle.rectTransform, 0f, 0f, 34f, 28f);
+                float available = Mathf.Max(4f, width - 42f);
+                float total = fronts.Control.PreferredWidth + operation.Control.PreferredWidth + sorties.Control.PreferredWidth + draw.Control.PreferredWidth + 48f;
+                float scale = Mathf.Min(1f, available / total), x = 42f;
+                x = PlaceDocked(fronts, x, scale);
+                x = PlaceDocked(operation, x, scale);
+                x = PlaceDocked(sorties, x, scale);
+                PlaceDocked(draw, x, scale);
+                AvLay.Place(plateLine.rectTransform, 0f, 34f, Mathf.Max(1f, width), 22f);
+                return;
+            }
+            plate.anchorMin = plate.anchorMax = plate.pivot = new Vector2(0f, 1f);
+            plate.anchoredPosition = new Vector2(12f, -8f);
+            float stockX = 8f, y = (PlateH - ToggleH) * .5f;
+            float titleW = Mathf.Ceil(AvText.Width(plateTitle)) + 5f;
+            AvLay.Place(plateTitle.rectTransform, stockX, y, titleW, ToggleH);
+            stockX += titleW;
+            stockX = Place(fronts, stockX, y);
+            stockX = Place(operation, stockX, y);
+            stockX = Place(sorties, stockX, y);
+            stockX = Place(draw, stockX + 8f, y);
             float lineW = Mathf.Ceil(AvText.Width(plateLine));
-            AvLay.Place(plateLine.rectTransform, x + 8f, y, Mathf.Max(lineW, 20f), ToggleH);
-            plate.sizeDelta = new Vector2(x + 8f + lineW + 10f, PlateH);
+            AvLay.Place(plateLine.rectTransform, stockX + 8f, y, Mathf.Max(lineW, 20f), ToggleH);
+            plate.sizeDelta = new Vector2(stockX + 8f + lineW + 10f, PlateH);
             plateFrame.Paint(AvInk.Ground.WithAlpha(0.9f), AvInk.Frame.WithAlpha(0.9f));
+        }
+
+        private static float PlaceDocked(StrButton button, float x, float scale)
+        {
+            float width = (button.Control.PreferredWidth + 8f) * scale;
+            button.Place(x, 0f, width, 28f);
+            return x + width + 4f * scale;
         }
 
         private void Bind(StrButton button, string id, string text, bool on, string help) =>

@@ -6,43 +6,60 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// The map console at the top right of the big map (2026-11-15 redesign of the 2026-10-29 deck): ONE box instead of a deck
-    /// with a view bar under it. Top to bottom: the selection header (count, hostile/own split, fold), the selection actions
-    /// (FRAME / SAME TYPE / CLEAR) as quiet tool buttons, the CLICK / DRAG / BOX choices as compact segmented switches (the
-    /// latched one in force; each writes its setting, so it is kept between sessions), the relief's view row while the 3D relief
-    /// draws (<see cref="MfdMapOrbitControls"/> builds into <see cref="ViewSlot"/>), and the line for feedback, hover help and the
-    /// cursor's fix. The chevron folds it to the header. On the flat map and the relief alike.
+    /// Selection controls for the map drawer: count, FRAME / SAME TYPE / CLEAR, and the persistent CLICK / DRAG / BOX modes.
+    /// The drawer owns their frame, folding and feedback line. Stock layout retains the compact floating console, including
+    /// its relief view row and fold, so disabling the expanded layout does not remove map actions.
     /// </summary>
     internal static class MapSelectionDeck
     {
         internal const float Width = 396f, HeadH = 30f, ViewRowH = 24f;
         private const float Pad = 8f, RowH = 22f, SegH = 20f, LineH = 14f, Gap = 4f, SegGap = 2f, GroupGap = 12f;
 
-        private static RectTransform root, body, viewSlot;
+        private static RectTransform root, body, viewSlot, chromeLayer;
         private static AvFrame back;
-        private static TMP_Text count, split;
+        private static TMP_Text count, split, clickKey, dragKey, sideKey;
         private static AvFooter line;
         private static AvControl frameButton, typeButton, clearButton, fold;
         private static readonly AvControl[] click = new AvControl[2], drag = new AvControl[2], side = new AvControl[3];
-        private static float nextRead, modesBottom;
+        private static float nextRead, modesBottom, contentWidth = -1f;
         private static int lastTotal = -1, lastHostile = -1, lastOwn = -1;
-        private static bool folded, viewShown;
+        private static bool folded, viewShown, embedded;
 
         internal static bool Contains(Vector2 screen) =>
-            root != null && root.gameObject.activeInHierarchy && MapUiPointer.Contains(root, screen);
+            root != null && root.gameObject.activeInHierarchy &&
+            MapUiPointer.Contains(embedded ? MfdMapControls.Root : root, screen);
 
         /// <summary>The console's feedback line, where the view row shows its hover help too.</summary>
-        internal static AvFooter Footer => line;
+        internal static AvFooter Footer => embedded ? MfdMapControls.Footer : line;
 
         /// <summary>Where the relief's view row goes; inactive while the relief does not draw or the console is folded.</summary>
-        internal static RectTransform ViewSlot => viewSlot;
+        internal static RectTransform ViewSlot => MfdMapControls.Shown ? MfdMapControls.ViewSlot : viewSlot;
 
         /// <summary>Folded to its header (client-local, kept until the game closes).</summary>
-        internal static bool Folded => folded;
+        internal static bool Folded => embedded ? MfdMapControls.Folded : folded;
 
         /// <summary>Read-back for the automation hook.</summary>
         internal static bool Shown => root != null && root.gameObject.activeInHierarchy;
         internal static string CountText => count != null ? count.text : null;
+        internal static string StatusLine => Line();
+
+        /// <summary>The drawer asks before placement; the first build refines the conservative two-row estimate using the real font.</summary>
+        internal static float HeightForWidth(float width)
+        {
+            if (clickKey == null || dragKey == null || sideKey == null) return 118f;
+            float x = 0f;
+            int wraps = 0;
+            FitGroup(GroupWidth(clickKey, click), width, ref x, ref wraps);
+            FitGroup(GroupWidth(dragKey, drag), width, ref x, ref wraps);
+            FitGroup(GroupWidth(sideKey, side), width, ref x, ref wraps);
+            return 86f + wraps * 32f;
+        }
+
+        private static void FitGroup(float groupWidth, float width, ref float x, ref int wraps)
+        {
+            if (x > 0f && x + groupWidth > width) { x = 0f; wraps++; }
+            x += groupWidth + GroupGap;
+        }
 
         private const string ChromeName = "NOAvionics.MapChrome";
 
@@ -53,17 +70,37 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// </summary>
         internal static RectTransform ChromeLayer(RectTransform viewport)
         {
-            if (viewport.Find(ChromeName) is RectTransform found) return found;
-            RectTransform layer = AvLay.Child(viewport, ChromeName);
-            AvLay.Fill(layer);
-            return layer;
+            if (chromeLayer != null && chromeLayer.parent == viewport) return chromeLayer;
+            if (viewport.Find(ChromeName) is RectTransform found) return chromeLayer = found;
+            chromeLayer = AvLay.Child(viewport, ChromeName);
+            AvLay.Fill(chromeLayer);
+            return chromeLayer;
         }
 
         internal static void Tick(DynamicMap map)
         {
             RectTransform viewport = map.mapBackground.rectTransform;
-            if (root == null || root.parent == null || root.parent.parent != viewport) Build(ChromeLayer(viewport));
+            bool docked = MfdMapControls.Shown;
+            RectTransform mapChrome = ChromeLayer(viewport);
+            RectTransform host = docked ? MfdMapControls.SelectionSlot : mapChrome;
+            if (host == null) { Hide(); return; }
+            if (root == null || root.parent != host || embedded != docked) Build(host, docked);
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
+            if (embedded)
+            {
+                bool visible = root.gameObject.activeInHierarchy;
+                if (visible && Mathf.Abs(contentWidth - host.rect.width) >= .5f) LayoutEmbedded(host.rect.width);
+                // The relief's tick does not run while disabled; keep its drawer controls visibly unavailable in that state.
+                if (visible && !MfdTerrainRelief.IsDrawing) MfdMapOrbitControls.Tick(map);
+                if (Time.unscaledTime < nextRead) return;
+                nextRead = Time.unscaledTime + .1f;
+                // The passive STR legend still belongs above map imagery, even though controls now live outside the viewport.
+                if (mapChrome.GetSiblingIndex() < viewport.childCount - 2) mapChrome.SetAsLastSibling();
+                Counts(map);
+                if (!visible) return;
+                Choices();
+                return;
+            }
             bool view = MfdTerrainRelief.IsDrawing;
             if (view != viewShown) { viewShown = view; Apply(); }
             if (Time.unscaledTime < nextRead) return;
@@ -137,27 +174,32 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return "";
         }
 
-        private static void Build(RectTransform layer)
+        private static void Build(RectTransform layer, bool docked)
         {
             Reset();
+            embedded = docked;
             var go = new GameObject("NOAvionics.MapSelectionDeck", typeof(RectTransform));
             root = go.GetComponent<RectTransform>();
             root.SetParent(layer, false);
             root.anchorMin = root.anchorMax = root.pivot = new Vector2(1f, 1f);
             root.anchoredPosition = new Vector2(-12f, -8f);
-            back = MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, Width, HeadH),
-                AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.96f),
-                AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(.9f), AvChamfer.Diagonal(5f));
+            if (!embedded)
+                back = MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, Width, HeadH),
+                    AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.96f),
+                    AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(.9f), AvChamfer.Diagonal(5f));
             Color muted = AvStyleHost.FuiColor("muted", AvTheme.Dim);
 
             // Header: always shown, folded or not. The count reads first; the split says whose.
             count = Text(root, "Count", AvTextRole.DataStrong, "", new Rect(Pad + 2f, -5f, 100f, 20f), muted);
             split = Text(root, "Split", AvTextRole.DataSmall, "", new Rect(Pad + 106f, -6f, Width - Pad - 106f - 34f, 18f), muted);
             split.richText = true;
-            fold = AvControl.Make(root, new AvControl.Spec("", Fold, AvButtonStyle.Quiet, AvIcon.ChevronUp));
-            MfdChromeLay.Place(fold.Rect, new Rect(Width - 30f, -5f, 24f, 20f));
-            fold.Bracket = 0f;
-            fold.Help = "Fold the map console to its header, or open it again.";
+            if (!embedded)
+            {
+                fold = AvControl.Make(root, new AvControl.Spec("", Fold, AvButtonStyle.Quiet, AvIcon.ChevronUp));
+                MfdChromeLay.Place(fold.Rect, new Rect(Width - 30f, -5f, 24f, 20f));
+                fold.Bracket = 0f;
+                fold.Help = "Fold the map console to its header, or open it again.";
+            }
 
             var bodyGo = new GameObject("Body", typeof(RectTransform));
             body = bodyGo.GetComponent<RectTransform>();
@@ -175,13 +217,24 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // The choices flow as segmented switches and wrap when the next group does not fit.
             float x = Pad;
             y -= RowH + Gap + 2f;
-            Group(click, "CLICK", new[] { "ADDS", "ONLY" }, SetClick, ref x, ref y,
+            clickKey = Group(click, "CLICK", new[] { "ADDS", "ONLY" }, SetClick, ref x, ref y,
                 "What a click on a track does: ADDS builds the selection up (a second click drops it); ONLY makes it the only one. Shift or Ctrl + click always adds.");
-            Group(drag, "DRAG", new[] { "PANS", "BOXES" }, SetDrag, ref x, ref y,
+            dragKey = Group(drag, "DRAG", new[] { "PANS", "BOXES" }, SetDrag, ref x, ref y,
                 "What a plain left drag does: PANS moves the map; BOXES draws a box that adds. Shift-drag does the other one, Ctrl-drag always drops.");
-            Group(side, "BOX", new[] { "ALL", "HOSTILE", "OWN" }, SetSide, ref x, ref y,
+            sideKey = Group(side, "BOX", new[] { "ALL", "HOSTILE", "OWN" }, SetSide, ref x, ref y,
                 "Which tracks a selection box picks up, adding or dropping.");
             modesBottom = -y + SegH + Gap + 2f;
+
+            if (embedded)
+            {
+                AvLay.Fill(root);
+                AvLay.Fill(body);
+                root.gameObject.AddComponent<AvHelpScope>().Footer = MfdMapControls.Footer;
+                nextRead = 0f;
+                LayoutEmbedded(layer.rect.width);
+                MfdMapControls.RequestRefresh();
+                return;
+            }
 
             var slotGo = new GameObject("ViewSlot", typeof(RectTransform));
             viewSlot = slotGo.GetComponent<RectTransform>();
@@ -218,6 +271,44 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fold.SetIcon(folded ? AvIcon.ChevronDown : AvIcon.ChevronUp);
         }
 
+        // The drawer owns the frame, fold and feedback line. Reflow these controls only when its slot changes width.
+        private static void LayoutEmbedded(float width)
+        {
+            contentWidth = width;
+            float usable = Mathf.Max(1f, width), third = Mathf.Max(1f, (usable - Gap * 2f) / 3f);
+            MfdChromeLay.Place(count.rectTransform, new Rect(0f, 0f, 108f, 18f));
+            MfdChromeLay.Place(split.rectTransform, new Rect(112f, 0f, Mathf.Max(1f, usable - 112f), 18f));
+            MfdChromeLay.Place(frameButton.Rect, new Rect(0f, -22f, third, 28f));
+            MfdChromeLay.Place(typeButton.Rect, new Rect(third + Gap, -22f, third, 28f));
+            MfdChromeLay.Place(clearButton.Rect, new Rect((third + Gap) * 2f, -22f, third, 28f));
+            float x = 0f, y = -54f;
+            PlaceGroup(clickKey, click, usable, ref x, ref y);
+            PlaceGroup(dragKey, drag, usable, ref x, ref y);
+            PlaceGroup(sideKey, side, usable, ref x, ref y);
+        }
+
+        private static void PlaceGroup(TMP_Text key, AvControl[] controls, float width, ref float x, ref float y)
+        {
+            float keyWidth = Mathf.Ceil(AvText.Width(key)) + 5f, total = GroupWidth(key, controls);
+            if (x > 0f && x + total > width) { x = 0f; y -= 32f; }
+            MfdChromeLay.Place(key.rectTransform, new Rect(x, y, keyWidth, 28f));
+            x += keyWidth;
+            for (int i = 0; i < controls.Length; i++)
+            {
+                float w = Mathf.Max(28f, Mathf.Ceil(controls[i].PreferredWidth));
+                MfdChromeLay.Place(controls[i].Rect, new Rect(x, y, w, 28f));
+                x += w + SegGap;
+            }
+            x += GroupGap - SegGap;
+        }
+
+        private static float GroupWidth(TMP_Text key, AvControl[] controls)
+        {
+            float total = Mathf.Ceil(AvText.Width(key)) + 5f;
+            for (int i = 0; i < controls.Length; i++) total += Mathf.Max(28f, Mathf.Ceil(controls[i].PreferredWidth)) + (i > 0 ? SegGap : 0f);
+            return total;
+        }
+
         private static TMP_Text Text(RectTransform parent, string name, AvTextRole role, string value, Rect area, Color color)
         {
             TMP_Text t = AvText.Make(parent, name, role, value, TextAlignmentOptions.MidlineLeft);
@@ -239,7 +330,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
 
         /// <summary>One segmented switch: its key, then its options packed 2 px apart; wraps to a new row when it does not fit.</summary>
-        private static void Group(AvControl[] slots, string key, string[] names, System.Action<int> set, ref float x, ref float y, string help)
+        private static TMP_Text Group(AvControl[] slots, string key, string[] names, System.Action<int> set, ref float x, ref float y, string help)
         {
             TMP_Text label = Text(body, key, AvTextRole.Micro, key, new Rect(0f, 0f, 40f, SegH), AvStyleHost.FuiColor("key", AvTheme.RailInfo));
             float keyW = Mathf.Ceil(AvText.Width(label)) + 5f, total = keyW;
@@ -262,6 +353,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 x += w + SegGap;
             }
             x += GroupGap - SegGap;
+            return label;
         }
 
         private static void SetClick(int i) { var e = Plugin.Settings?.Command?.MapClickAdds; if (e != null) e.Value = i == 0; }
@@ -279,16 +371,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Scene reset, or a viewport change: the console is rebuilt on the next tick (the fold is kept).</summary>
         internal static void Reset()
         {
-            if (root != null) Object.Destroy(root.gameObject);
+            if (root != null) { root.gameObject.SetActive(false); Object.Destroy(root.gameObject); }
             root = body = viewSlot = null;
             back = null;
-            count = split = null;
+            count = split = clickKey = dragKey = sideKey = null;
             line = null;
             frameButton = typeButton = clearButton = fold = null;
             for (int i = 0; i < click.Length; i++) click[i] = null;
             for (int i = 0; i < drag.Length; i++) drag[i] = null;
             for (int i = 0; i < side.Length; i++) side[i] = null;
             lastTotal = lastHostile = lastOwn = -1;
+            contentWidth = -1f;
         }
     }
 }

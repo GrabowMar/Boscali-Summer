@@ -437,9 +437,9 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             else { lean = pitchLean = pedals = 0f; }
             // Contact follows the native lever after animation, including when optional body motion is off.
             if (StickBound) SolveArm(stickOnRight ? rightUpper : leftUpper, stickOnRight ? rightLower : leftLower,
-                StickHand, stick.TransformPoint(stickGrip), stick.rotation * stickRotation);
+                StickHand, stick.TransformPoint(stickGrip), stick.rotation * stickRotation, Vector3.zero);
             if (ThrottleBound) SolveArm(stickOnRight ? leftUpper : rightUpper, stickOnRight ? leftLower : rightLower,
-                ThrottleHand, throttle.TransformPoint(throttleGrip), throttle.rotation * throttleRotation);
+                ThrottleHand, throttle.TransformPoint(throttleGrip), throttle.rotation * throttleRotation, -frame.up);
             neck.rotation = FrameRotation(Quaternion.Euler(headPitch * .15f, headYaw * .15f, 0)) * neck.rotation;
             Head.rotation = FrameRotation(Quaternion.Euler(headPitch * .85f, headYaw * .85f, 0)) * Head.rotation;
             UpdateHeadMask();
@@ -447,7 +447,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private Quaternion FrameRotation(Quaternion rotation) => frame.rotation * rotation * Quaternion.Inverse(frame.rotation);
 
-        private static void SolveArm(Transform upper, Transform lower, Transform hand, Vector3 target, Quaternion gripRotation)
+        private static void SolveArm(Transform upper, Transform lower, Transform hand, Vector3 target, Quaternion gripRotation, Vector3 elbowDown)
         {
             if (upper == null || lower == null || hand == null) return;
             Vector3 origin = upper.position, elbow = lower.position, end = hand.position;
@@ -473,6 +473,14 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Vector3 direction = reach.normalized;
             Vector3 pole = elbow - origin;
             pole -= direction * Vector3.Dot(pole, direction);
+            bool lowElbow = elbowDown.sqrMagnitude > .5f;
+            if (lowElbow)
+            {
+                // A bent throttle arm hangs beside the torso. The imported lap pole can
+                // point at the cockpit camera after a large reach/orientation change.
+                Vector3 down = Vector3.ProjectOnPlane(elbowDown, direction);
+                if (down.sqrMagnitude > .000001f) pole = down;
+            }
             if (pole.sqrMagnitude < .000001f) pole = Vector3.Cross(direction, upper.right);
             if (pole.sqrMagnitude < .000001f) return;
             Vector3 axis = hand.localPosition.normalized;
@@ -495,10 +503,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 float limit = radius <= .025f ? 180f : 2f * Mathf.Asin(.025f / radius) * Mathf.Rad2Deg;
                 PlaceForearm(origin, direction, Quaternion.AngleAxis(30f, direction) * pole, a, b, distance, target, lower.rotation, lowerHinge,
                     hand, gripRotation, out _, out float probe);
-                // Secant steps on swivel -> roll: first toward no roll within the elbow-travel cap, then,
-                // only if the forearm would still roll past 90 (a bent arm), as far as keeps it at 90.
+                // The throttle stays within the travel cap around its downward pole.
+                // A wrist-roll correction must not lift it back into the player's view.
                 float lastSwivel = 30f, lastTwist = probe, swivel = 0f;
-                for (int phase = 0; phase < 2; phase++)
+                for (int phase = 0; phase < (lowElbow ? 1 : 2); phase++)
                 {
                     float goal = phase == 0 ? 0f : Mathf.Sign(twist) * 90f, range = phase == 0 ? limit : 180f;
                     if (phase == 1 && Mathf.Abs(twist) <= 90f) break;
@@ -529,7 +537,10 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 twist = WristRoll(lower.rotation, hand, gripRotation, axis);
             }
             // Turning the palm rolls the forearm; it should not twist the wrist joint.
-            lower.rotation *= Quaternion.AngleAxis(Mathf.Clamp(twist, -90f, 90f), axis);
+            // The imported lap hinge is not a neutral palm reference; the tucked
+            // throttle arm needs more relative roll to keep its glove cuff continuous.
+            float pronation = lowElbow ? 135f : 90f;
+            lower.rotation *= Quaternion.AngleAxis(Mathf.Clamp(twist, -pronation, pronation), axis);
             // Keep the owned wrist exactly on its anchor at full throw. The reach guard
             // bounds segment extension to eight centimetres; native bones remain untouched.
             hand.position = target;

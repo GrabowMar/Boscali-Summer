@@ -214,7 +214,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             switch (row.Kind)
             {
                 case MenuKind.Toggle when row.ArmedPip:
-                    Pip(x, cy, 14f * t, row.IsOn, blocked, A(row.IsOn && !focus ? P.Amber : col, a), false);
+                    Pip(x, cy, 14f * t, row.IsOn, blocked, A(row.IsOn && !focus ? P.Amber : col, a));
                     break;
                 case MenuKind.Toggle when row.Checkbox:
                 {
@@ -224,7 +224,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                     break;
                 }
                 case MenuKind.Picker:
-                    Pip(x, cy, 14f * t, row.Selected, row.Hatched, A(col, a), true);
+                    Pip(x, cy, 14f * t, row.Selected, row.Hatched, A(col, a));
                     break;
                 case MenuKind.Submenu:
                     text.Draw("›", MenuFont.Header, 24f * t, MenuRect.Of(x, cy - 15f * t, 14f * t, 30f * t), MenuTextPool.Align.Center, TC(focus ? col : P.InkHi, a));
@@ -232,13 +232,13 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             }
         }
 
-        /// <summary>Square (or chamfered) 2 px pip: solid = selected / armed, hollow = ready, hatched = empty or cooling down.</summary>
-        private void Pip(float x, float cy, float size, bool solid, bool hatched, Rgba col, bool chamfer)
+        /// <summary>Square 2 px pip: solid = selected / armed, hollow = ready, hatched = empty or cooling down.</summary>
+        private void Pip(float x, float cy, float size, bool solid, bool hatched, Rgba col)
         {
-            float y = cy - size / 2f, c = chamfer ? size * 0.3f : 0f;
+            float y = cy - size / 2f;
             if (solid) Fill(x + 2f, y + 2f, size - 4f, size - 4f, col);
-            Line(x, y, x + size - c, y, 2f, col); Line(x + size - c, y, x + size, y + c, 2f, col);
-            Line(x + size, y + c, x + size, y + size, 2f, col); Line(x + size, y + size, x, y + size, 2f, col); Line(x, y + size, x, y, 2f, col);
+            Line(x, y, x + size, y, 2f, col); Line(x + size, y, x + size, y + size, 2f, col);
+            Line(x + size, y + size, x, y + size, 2f, col); Line(x, y + size, x, y, 2f, col);
             if (hatched && !solid)
                 for (int i = 1; i <= 3; i++)
                 {

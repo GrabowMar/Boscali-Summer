@@ -139,7 +139,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 subscribedToLog = false;
             }
 
-            if (root != null) UnityEngine.Object.Destroy(root.gameObject);
+            if (root != null)
+            {
+                // A same-frame reopen must not find a root already queued for destruction.
+                root.gameObject.SetActive(false);
+                root.name = RootName + ".Retired";
+                UnityEngine.Object.Destroy(root.gameObject);
+            }
             root = null;
             chrome = null;
             viewport = null;

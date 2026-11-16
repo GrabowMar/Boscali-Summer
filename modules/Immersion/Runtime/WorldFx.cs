@@ -15,6 +15,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
     /// aircraft over land, the near-miss bullet crack, the cockpit muffle on explosions and quiet parked AI. Client-local
     /// and cosmetic; the patches read the static flags below so they exit at once when a feature is off.
     /// </summary>
+    [DefaultExecutionOrder(9)] // Native camera shifts at 2 and detail processing finishes at 8.
     internal sealed class WorldFx : MonoBehaviour, ISceneService, IClientEffect
     {
         internal static WorldFx Live { get; private set; }
@@ -27,6 +28,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private readonly DustWake dust = new DustWake();
         private readonly AirfieldLights airfield = new AirfieldLights();
         private readonly CityLights city = new CityLights();
+        private readonly VegetationDressing vegetation = new VegetationDressing();
+        private readonly WorldDetailDressing worldDetail = new WorldDetailDressing();
         private readonly Vapour vapour = new Vapour();
         private readonly MissileBoom boom = new MissileBoom();
         private readonly ArApproach tunnel = new ArApproach();
@@ -34,6 +37,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private NearMissCrack crack;
 
         internal NearMissCrack Crack => crack ??= new NearMissCrack(gameObject);
+
+        internal void RecordDetailBlast(GlobalPosition position, float radius) => worldDetail.RecordBlast(position, radius);
 
         public void Configure(ImmersionSettings immersionSettings)
         {
@@ -53,6 +58,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             ParkedArmed = on && settings.ParkedAircraftEnabled.Value;
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             if (cam == null) return;
+            vegetation.Tick(cam.mainCamera, on && settings.ForestVariationEnabled.Value, on && settings.UnderbrushEnabled.Value);
             Vector3 eye = cam.transform.position;
             float dt = Time.deltaTime, light = Daylight();
             contrails.Tick(eye, own && settings.ContrailsEnabled.Value, light);
@@ -67,6 +73,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             vapour.Tick(eye, on && settings.VapourEnabled.Value, Humidity(), light);
             Optics(cam.mainCamera, global, on && settings.SkyOpticsEnabled.Value, dt);
             boom.Tick(eye, on && settings.MissileBoomEnabled.Value && !ForeignMods.MissileBoomYielded, transform);
+        }
+
+        private void LateUpdate()
+        {
+            bool on = settings != null && settings.Enabled.Value && !Application.isBatchMode;
+            worldDetail.Tick(SceneSingleton<CameraStateManager>.i?.mainCamera, on && settings.UnderbrushEnabled.Value);
         }
 
         /// <summary>Sky optics read the weather at the camera and 4 km toward the antisolar point (where a rainbow's rain falls).</summary>
@@ -112,6 +124,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             crack?.Reset();
             airfield.Reset();
             city.Reset();
+            vegetation.Reset();
+            worldDetail.Reset();
             vapour.Reset();
             boom.Reset();
             tunnel.Reset();
@@ -134,6 +148,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["cracks"] = crack != null ? crack.Played : 0;
             state["airfields"] = airfield.Fields;
             state["cityLights"] = city.Lights;
+            state["styledForests"] = vegetation.StyledForests;
+            state["styledGrass"] = vegetation.StyledGrass;
+            state["worldDetailInstances"] = worldDetail.Visible;
+            state["worldDetailDraws"] = worldDetail.DrawCalls;
             state["vapourTracked"] = vapour.Tracked;
             state["vapourCone"] = vapour.PeakCone;
             state["vapourTip"] = vapour.PeakTip;

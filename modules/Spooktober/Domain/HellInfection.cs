@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
                     if (nx < 0 || nz < 0 || nx >= Side || nz >= Side) continue;
                     int index = nz * Side + nx;
                     float distance = Dx[d] != 0 && Dz[d] != 0 ? 1.41421356f : 1f;
-                    float candidate = Math.Max(boundary[index], current.cost + distance * (.07f + .03f * CellNoise(seed, index)));
+                    float candidate = Math.Max(boundary[index], current.cost + distance * (.14f + .05f * CellNoise(seed, index)));
                     if (candidate > FinalCost || candidate >= costs[index]) continue;
                     if (!float.IsPositiveInfinity(costs[index])) queue.Remove((costs[index], index));
                     costs[index] = candidate;
@@ -183,6 +183,7 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
 
         internal static float Phase(float now, float born) =>
             float.IsFinite(now) && float.IsFinite(born) ? Clamp01((now - born) / Duration) : 0f;
+        internal static float ContactDelay(SampleValue point) => point.Coverage >= .2f ? point.Arrival * (Duration - 2f) + 1f : float.PositiveInfinity;
         private static float Clamp01(float value) => Math.Max(0f, Math.Min(1f, value));
         private static float Smooth(float value) => value * value * (3f - 2f * value);
         private static float CellNoise(int seed, int index)

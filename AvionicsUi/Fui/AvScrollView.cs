@@ -9,6 +9,7 @@ namespace NOAvionics
     /// </summary>
     public sealed class AvScrollView
     {
+        private Image track, thumb;
         public ScrollRect Scroll { get; }
         public RectTransform Viewport { get; }
 
@@ -40,28 +41,42 @@ namespace NOAvionics
         public void Place(float width, float height)
         {
             AvLay.Place(Viewport, 0f, 0f, width, height);
-            AvLay.Place((RectTransform)Bar.transform, width - AvGridTokens.Pad - AvGridTokens.Gutter + 2f, 2f, 4f, height - 4f);
+            // Overlay the panel edge: no blank column is deducted from the flow. The wide invisible
+            // target overlaps only the outer few pixels of a card, outside its text/control padding.
+            AvLay.Place((RectTransform)Bar.transform, width - 12f, 2f, 12f, Mathf.Max(0f, height - 4f));
         }
 
         public void Restyle()
         {
-            Bar.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline);
-            Bar.handleRect.GetComponent<Image>().color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
+            track.color = AvStyleHost.FuiFill("scrollbar", AvTheme.Hairline).WithAlpha(.12f);
+            thumb.color = AvStyleHost.FuiFill("scrollbar-thumb", AvTheme.Frame);
         }
 
-        private static Scrollbar MakeScrollbar(RectTransform parent)
+        private Scrollbar MakeScrollbar(RectTransform parent)
         {
             RectTransform bar = AvLay.Child(parent, "Scrollbar");
-            var track = bar.gameObject.AddComponent<Image>();
-            track.raycastTarget = true;
+            var hit = bar.gameObject.AddComponent<Image>();
+            hit.color = Color.clear;
+            hit.raycastTarget = true;
+            track = Rail(bar, "Track");
             RectTransform area = AvLay.Child(bar, "Area"); AvLay.Fill(area);
             RectTransform handle = AvLay.Child(area, "Handle"); AvLay.Fill(handle);
-            handle.gameObject.AddComponent<Image>();
+            thumb = Rail(handle, "Thumb");
             var sb = bar.gameObject.AddComponent<Scrollbar>();
             sb.direction = Scrollbar.Direction.BottomToTop;
             sb.handleRect = handle;
-            sb.targetGraphic = handle.GetComponent<Image>();
+            sb.targetGraphic = thumb;
             return sb;
+        }
+
+        private static Image Rail(RectTransform parent, string name)
+        {
+            Image image = AvLay.Solid(parent, name, Color.clear);
+            RectTransform r = image.rectTransform;
+            r.anchorMin = Vector2.zero; r.anchorMax = new Vector2(0f, 1f);
+            r.pivot = new Vector2(0f, 0.5f);
+            r.sizeDelta = new Vector2(3f, 0f); r.anchoredPosition = new Vector2(7f, 0f);
+            return image;
         }
     }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -13,8 +14,12 @@ namespace NOAvionics
         private static int revision;
         private static Texture2D scanTexture, edgeTexture;
         private int appliedRevision = -1;
+        private int appliedFxRevision = -1;
+        private float appliedLight = -1f;
         private RawImage scanlines, vignette;
         private bool shaderMode;
+        private static bool glitchVisible;
+        private static readonly List<AvDisplayGlass> visible = new List<AvDisplayGlass>(4);
         private static readonly int ReflectionId = Shader.PropertyToID("_Reflection");
         private static readonly int ScanId = Shader.PropertyToID("_Scan");
         private static readonly int EdgeId = Shader.PropertyToID("_Edge");
@@ -25,34 +30,81 @@ namespace NOAvionics
         private static float life = .6f;
 
         /// <summary>
-        /// Live signal (0..1) of the full-display finish: the power-on raster, the slow refresh sweep and how hard a
+        /// Live signal (0..1) of the full-display finish: the edge commissioning trace, the slow refresh sweep and how hard a
         /// jam or hit breaks the picture up. 0 is a still display. Needs the Glass2 shader; ignored without it.
         /// </summary>
         public static void ConfigureLife(float value)
         {
-            life = Mathf.Clamp01(value);
+            value = Mathf.Clamp01(value);
+            if (Mathf.Approximately(life, value)) return;
+            life = value;
             revision++;
+            RefreshVisible();
         }
 
-        // The raster opens from a line each time the full display comes on (shader side: _NOA_Boot).
+        // A brief edge trace commissions the display without covering its content (shader side: _NOA_Boot).
         private void PowerOn()
         {
-            if (shaderMode && effects && life > 0f && !AvFxDriver.ReducedMotion && Application.isPlaying)
+            if (shaderMode && effects && life > 0f && AvFxDriver.Tier == AvFxTier.Full && !AvFxDriver.ReducedMotion && Application.isPlaying)
                 Shader.SetGlobalFloat(BootId, AvFxDriver.Now);
         }
 
-        private void OnEnable() => PowerOn();
+        private void OnEnable()
+        {
+            if (!visible.Contains(this)) visible.Add(this);
+            AvFxDriver.Changed += SettingsChanged;
+            SettingsChanged();
+            PowerOn();
+        }
+
+        private void OnDisable()
+        {
+            visible.Remove(this);
+            AvFxDriver.Changed -= SettingsChanged;
+        }
+
+        private void SettingsChanged() { appliedRevision = -1; Update(); }
+
+        private static void RefreshVisible()
+        {
+            for (int i = 0; i < visible.Count; i++) visible[i].SettingsChanged();
+        }
+
+        internal static bool HasLiveDisplay
+        {
+            get
+            {
+                if (!effects || AvFxDriver.Tier != AvFxTier.Full || AvFxDriver.ReducedMotion) return false;
+                for (int i = 0; i < visible.Count; i++)
+                {
+                    AvDisplayGlass display = visible[i];
+                    if (display.shaderMode && display.image != null && display.image.canvas != null && display.image.canvas.isActiveAndEnabled)
+                        return true;
+                }
+                return false;
+            }
+        }
+
+        internal static void SetGlitchVisible(bool value)
+        {
+            if (glitchVisible == value) return;
+            glitchVisible = value;
+            RefreshVisible();
+        }
 
         // Presentation values only: the owning feature binds and persists its settings.
         public static void Configure(bool enabled, float glass, bool adaptToLight,
             float scan, float edge)
         {
+            glass = Mathf.Clamp01(glass); scan = Mathf.Clamp01(scan); edge = Mathf.Clamp01(edge);
+            if (effects == enabled && reflection == glass && autoLight == adaptToLight && scanStrength == scan && edgeStrength == edge) return;
             effects = enabled;
-            reflection = Mathf.Clamp01(glass);
+            reflection = glass;
             autoLight = adaptToLight;
-            scanStrength = Mathf.Clamp01(scan);
-            edgeStrength = Mathf.Clamp01(edge);
+            scanStrength = scan;
+            edgeStrength = edge;
             revision++;
+            RefreshVisible();
         }
 
         public static Image Attach(RectTransform content)
@@ -115,30 +167,40 @@ namespace NOAvionics
         public void Update()
         {
             float now = Time.unscaledTime;
-            if (image == null || (appliedRevision == revision && now < nextLightSample)) return;
+            bool changed = appliedRevision != revision || appliedFxRevision != AvFxDriver.Revision;
+            bool sampleLight = effects && autoLight && reflection > 0f;
+            if (image == null || (!changed && (!sampleLight || now < nextLightSample))) return;
             nextLightSample = now + 0.75f;
             appliedRevision = revision;
+            appliedFxRevision = AvFxDriver.Revision;
 
-            float ambient = Mathf.Clamp01(RenderSettings.ambientIntensity);
-            Light sun = RenderSettings.sun;
-            float daylight = sun != null && sun.enabled
-                ? Mathf.Clamp01(Vector3.Dot(-sun.transform.forward, Vector3.up) * sun.intensity)
-                : 0f;
-            float level = autoLight
-                ? 0.45f + 0.55f * Mathf.Clamp01(ambient * 0.55f + daylight * 0.45f) : 1f;
+            float level = 1f;
+            if (sampleLight)
+            {
+                float ambient = Mathf.Clamp01(RenderSettings.ambientIntensity);
+                Light sun = RenderSettings.sun;
+                float daylight = sun != null && sun.enabled
+                    ? Mathf.Clamp01(Vector3.Dot(-sun.transform.forward, Vector3.up) * sun.intensity) : 0f;
+                level = 0.45f + 0.55f * Mathf.Clamp01(ambient * 0.55f + daylight * 0.45f);
+            }
             if (shaderMode)
             {
                 Material m = image.material;
-                m.SetFloat(ReflectionId, reflection * .45f);
-                m.SetFloat(ScanId, scanStrength);
-                m.SetFloat(EdgeId, edgeStrength);
-                // Older asset bundles still expose the retired colour-wash property.
-                m.SetFloat(TintStrengthId, 0f);
-                m.SetFloat(LightId, level);
-                m.SetFloat(LifeId, AvFxDriver.ReducedMotion ? 0f : life);
-                image.color = Color.white;
-                // Stays on while effects are on: the EMP/jam glitch draws through this quad too.
-                image.enabled = effects;
+                bool motion = AvFxDriver.Tier == AvFxTier.Full && !AvFxDriver.ReducedMotion;
+                if (changed)
+                {
+                    m.SetFloat(ReflectionId, reflection * .45f);
+                    m.SetFloat(ScanId, scanStrength);
+                    m.SetFloat(EdgeId, edgeStrength);
+                    // Older asset bundles still expose the retired colour-wash property.
+                    if (m.HasProperty(TintStrengthId)) m.SetFloat(TintStrengthId, 0f);
+                    m.SetFloat(LifeId, motion ? life : 0f);
+                    image.color = Color.white;
+                    // CLEAR has no transparent full-screen draw. A real jam wakes the same quad.
+                    image.enabled = effects && (reflection > 0f || scanStrength > 0f || edgeStrength > 0f || (motion && (life > 0f || glitchVisible)));
+                }
+                if (changed || !Mathf.Approximately(appliedLight, level)) m.SetFloat(LightId, level);
+                appliedLight = level;
                 return;
             }
             image.color = new Color(1f, 1f, 1f, effects ? reflection * level * .45f : 0f);

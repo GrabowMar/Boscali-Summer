@@ -9,6 +9,7 @@ if (-not $ProjectDirectory) { $ProjectDirectory = Join-Path $repo '.nomodkit/agx
 $ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
 New-UnityCheckProject $ProjectDirectory '{"dependencies":{"com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}' -Folders 'Assets/Agx', 'Assets/Editor', 'BundleOutput'
 Copy-Item -Path "$repo/modules/Effects/Assets/Source/*" -Destination "$ProjectDirectory/Assets/Agx/" -Recurse -Force
+Copy-Item -Path "$repo/tools/AgxAssets/StreakParityCheck.cs", "$repo/tools/AgxAssets/StreakParity.shader" -Destination "$ProjectDirectory/Assets/Editor/" -Force
 Set-Content -LiteralPath "$ProjectDirectory/Assets/Editor/BuildAgxBundle.cs" -Value @'
 using System;
 using System.IO;
@@ -87,6 +88,19 @@ public static class BuildAgxBundle
                 BuildTarget.StandaloneWindows64) == null) throw new Exception("AgX bundle build failed");
             if (ShaderUtil.ShaderHasError(shader) || ShaderUtil.ShaderHasError(streakShader))
                 throw new Exception("Effects shader compilation failed");
+            // Exercise the player bundle: successful editor compilation alone does not
+            // prove that the shipped shader retained executable passes after stripping.
+            var bundle = AssetBundle.LoadFromFile(Path.GetFullPath("BundleOutput/agx.bundle"));
+            if (bundle == null) throw new Exception("Built AgX bundle could not be loaded");
+            try
+            {
+                var builtShader = bundle.LoadAsset<Shader>("Assets/Agx/CinematicStreak.shader");
+                if (builtShader == null) throw new Exception("Built streak shader missing");
+                var builtMaterial = new Material(builtShader);
+                try { samples += StreakParityCheck.Run(builtMaterial); }
+                finally { UnityEngine.Object.DestroyImmediate(builtMaterial); }
+            }
+            finally { bundle.Unload(true); }
             File.WriteAllText("result.txt", "PASS: shaders compiled; three 32-cubed LUTs bundled; finite, monotonic HDR grey ramp; streak shader checks below.\n" + samples);
             EditorApplication.Exit(0);
         }

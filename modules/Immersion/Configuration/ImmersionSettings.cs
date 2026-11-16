@@ -46,6 +46,8 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
         public ConfigEntry<bool> ParkedAircraftEnabled { get; }
         public ConfigEntry<bool> AirfieldLightsEnabled { get; }
         public ConfigEntry<bool> CityLightsEnabled { get; }
+        public ConfigEntry<bool> ForestVariationEnabled { get; }
+        public ConfigEntry<bool> UnderbrushEnabled { get; }
         public ConfigEntry<bool> VapourEnabled { get; }
         public ConfigEntry<bool> MissileBoomEnabled { get; }
         public ConfigEntry<bool> CanopyFrostEnabled { get; }
@@ -133,6 +135,10 @@ namespace BoscaliSummer.Modules.Immersion.Configuration
                 "Night airfield lighting: runway and taxiway edges, threshold bars, approach lights with a sequenced flasher, PAPI and the tower beacon.");
             CityLightsEnabled = config.Bind(section, "CityLightsEnabled", true,
                 "Night city lights: lit windows and sodium street lamps on map buildings, fading in at dusk; a destroyed building goes dark.");
+            ForestVariationEnabled = config.Bind(section, "ForestVariationEnabled", false,
+                "Mixed tree crowns, heights and colours using the native forest renderer. Client-local; applies now.");
+            UnderbrushEnabled = config.Bind(section, "UnderbrushEnabled", false,
+                "Handcrafted bushes, rocks and fallen wood nearby. Uses bounded instanced draws and reduces distant ground cover. Client-local; applies now.");
             VapourEnabled = config.Bind(section, "VapourEnabled", true,
                 "In humid air: a transonic vapour cone near Mach 1 and white wingtip vapour above about 3 G.");
             MissileBoomEnabled = config.Bind(section, "MissileBoomEnabled", true,

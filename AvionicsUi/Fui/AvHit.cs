@@ -11,7 +11,17 @@ namespace NOAvionics
         public Action<PointerEventData> Click;
         public Action<bool> Hover;
         public Action<bool> Press;
-        public bool Interactable = true;
+        private bool interactable = true;
+        public bool Interactable
+        {
+            get => interactable;
+            set
+            {
+                if (interactable == value) return;
+                interactable = value;
+                if (!value) ClearPointer();
+            }
+        }
         /// <summary>The cue a click plays once its handler has run (the handler may set it for that click, or play a cue of its own).</summary>
         public AvUiCue Cue = AvUiCue.Press;
         /// <summary>A click while not interactable answers with the soft refusal (disabled buttons).</summary>
@@ -25,14 +35,21 @@ namespace NOAvionics
             return hit != null ? hit : g.gameObject.AddComponent<AvHit>();
         }
 
-        public void OnPointerEnter(PointerEventData e) { if (Interactable) { hovered = true; Hover?.Invoke(true); AvUiSound.Play(AvUiCue.Hover); } }
+        public void OnPointerEnter(PointerEventData e) { if (Interactable && !hovered) { hovered = true; Hover?.Invoke(true); AvUiSound.Play(AvUiCue.Hover); } }
         public void OnPointerExit(PointerEventData e) => ClearPointer();
         // A window that hit-tests its own controls clicks on the press (a fresh event, eligibleForClick false); if the event system also hears that press it
         // clicks again on release, and a toggle (an armed map pick) undid itself: only held while the button was. The release click of that press is dropped.
         private int downFrame = -10, synthFrame = -10;
 
-        public void OnPointerDown(PointerEventData e) { downFrame = Time.frameCount; if (Interactable) { pressed = true; Press?.Invoke(true); } }
-        public void OnPointerUp(PointerEventData e) { if (pressed) { pressed = false; Press?.Invoke(false); } }
+        public void OnPointerDown(PointerEventData e)
+        {
+            downFrame = Time.frameCount;
+            if (Interactable && e.button == PointerEventData.InputButton.Left && !pressed) { pressed = true; Press?.Invoke(true); }
+        }
+        public void OnPointerUp(PointerEventData e)
+        {
+            if (e.button == PointerEventData.InputButton.Left && pressed) { pressed = false; Press?.Invoke(false); }
+        }
         private void OnDisable() => ClearPointer();
 
         private void ClearPointer()

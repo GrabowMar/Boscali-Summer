@@ -34,6 +34,9 @@ namespace BoscaliSummer.Core.Game
         /// <summary>Picker groups to add to the game's mission list (the scripted missions). Asked whenever the game reads its list.</summary>
         internal static Func<IReadOnlyList<MissionGroup>> ExtraGroups;
 
+        /// <summary>Required rules of a mod gamemode, or null for ordinary missions.</summary>
+        internal static Func<Mission, string[]> PresetModulesOff;
+
         /// <summary>
         /// For a scripted mission, the modules its script switches off; null for every other mission. A scripted mission is never prompted for: its script has
         /// already said what runs.
@@ -81,16 +84,25 @@ namespace BoscaliSummer.Core.Game
                 // resolve leaves no peace from the mission before.
                 FactionPeace.Set(null);
                 FactionPeace.Set(ScriptedPeace?.Invoke(mission));
+                string[] preset = PresetModulesOff?.Invoke(mission);
+                string[] scripted = preset == null ? ScriptedModulesOff?.Invoke(mission) : null;
+                MissionProfile.SetRequiredDisabled(preset ?? scripted);
                 if (settings == null) return;
-                string[] scripted = ScriptedModulesOff?.Invoke(mission);
+                string name = mission.Name ?? "";
+                bool remembered = Remembered().TryGetValue(name, out string list);
+                if (preset != null)
+                {
+                    // Required mode rules are a separate mask; preserve the pilot's optional choices.
+                    MissionProfile.SetDisabled(MissionProfile.Parse(remembered ? list : settings.MissionDisabledModules.Value));
+                    PendingMission = null;
+                    return;
+                }
                 if (scripted != null)
                 {
                     MissionProfile.SetDisabled(scripted);
                     PendingMission = null;
                     return;
                 }
-                string name = mission.Name ?? "";
-                bool remembered = Remembered().TryGetValue(name, out string list);
                 MissionProfile.SetDisabled(MissionProfile.Parse(remembered ? list : settings.MissionDisabledModules.Value));
                 // A nomodkit sim has no one to answer the prompt, and it would cover the mission it drives.
                 bool sim = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO"));
@@ -102,7 +114,12 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The start prompt's answer. A plain start also becomes the selection the next prompt opens with.</summary>
         internal static void Confirm(string mission, IEnumerable<string> disabled, bool rememberMission, bool neverAsk)
         {
-            string list = MissionProfile.Format(disabled);
+            var optional = new HashSet<string>(disabled, StringComparer.Ordinal);
+            optional.RemoveWhere(MissionProfile.RequiredOff);
+            string prior = Remembered().TryGetValue(mission, out string saved) ? saved : settings.MissionDisabledModules.Value;
+            foreach (string id in MissionProfile.Parse(prior))
+                if (MissionProfile.RequiredOff(id)) optional.Add(id);
+            string list = MissionProfile.Format(optional);
             if (rememberMission)
             {
                 Dictionary<string, string> map = Remembered();
@@ -183,11 +200,14 @@ namespace BoscaliSummer.Core.Game
             if (__result == null || ExtraGroups == null) return;
             try
             {
-                IReadOnlyList<MissionGroup> extra = ExtraGroups();
-                if (extra == null || extra.Count == 0) return;
                 var expanded = new List<MissionGroup>(__result);
-                foreach (MissionGroup group in extra)
-                    if (group != null && !expanded.Contains(group)) expanded.Add(group);
+                foreach (Func<IReadOnlyList<MissionGroup>> provider in ExtraGroups.GetInvocationList())
+                {
+                    IReadOnlyList<MissionGroup> extra = provider();
+                    if (extra == null) continue;
+                    foreach (MissionGroup group in extra)
+                        if (group != null && !expanded.Contains(group)) expanded.Add(group);
+                }
                 if (expanded.Count != __result.Length) __result = expanded.ToArray();
             }
             catch (Exception e) { PatchGuard.Report("MissionGroups", e); }

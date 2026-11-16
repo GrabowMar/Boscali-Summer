@@ -314,6 +314,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             ops?.ResetForScene();
             Visuals.OpsFlightVisuals.Reset();
             Visuals.FrontEffectVisuals.Reset();
+            Visuals.SatelliteLaunchVisuals.Reset();
             Visuals.AreaFx.Reset();
             Visuals.StagedBlastFx.Reset();
             Visuals.LaseFx.Reset();

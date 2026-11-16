@@ -7,6 +7,8 @@ removes the disconnected hose and repairs only the old look-down neck lining.
 Material variations are authored separately by Build-PilotTextures.py.
 """
 import json
+import hashlib
+import importlib.util
 from pathlib import Path
 import numpy as np
 
@@ -190,11 +192,22 @@ def main():
     assert original['vertexCount']==7106 and len(original['triangles'])==11171*3
     assert len(original['bindposes'])==16*16
     cleaned=repair_neck_lining(without_dangling_hose(original))
+    spec=importlib.util.spec_from_file_location('pilot_cloth_cleanup',ROOT/'tools/PilotClothCleanup.py')
+    cleanup=importlib.util.module_from_spec(spec);spec.loader.exec_module(cleanup)
+    cleaned,details=cleanup.finish_native(cleaned)
     for key in ('vertices','normals','tangents','uv','boneWeights','bindposes'):
         assert np.isfinite(np.asarray(cleaned[key])).all(),key+' contains a non-finite value'
     weights=np.asarray(cleaned['boneWeights']).reshape(-1,4)
     assert weights.min()>=0 and abs(weights.sum(1)-1).max()<1e-6
     assert min(cleaned['boneIndices'])>=0 and max(cleaned['boneIndices'])<=15
+    # Distal arms/gloves and lower legs retain the original authored identity.
+    indices=np.asarray(original['boneIndices']).reshape(-1,4)[:6710];weights0=np.asarray(original['boneWeights']).reshape(-1,4)[:6710]
+    protected=(weights0*np.isin(indices,[5,6,8,9,10,11,12,13,14,15])).sum(1)>.5
+    preserved={}
+    for key,width in STREAM_WIDTHS.items():
+        a=np.asarray(cleaned[key]).reshape(-1,width)[:6710];b=np.asarray(original[key]).reshape(-1,width)[:6710]
+        preserved[key]=bool(np.array_equal(a[protected],b[protected]));assert preserved[key],key+' changed outside upper garment'
+    hashes={}
     for style in ('standard','recon','rescue','nightops'):
         model=dict(cleaned)
         model['name']='pilot-first-person'+('' if style=='standard' else '-'+style)
@@ -202,7 +215,10 @@ def main():
         path.write_text(json.dumps(model,separators=(',',':'))+'\n',encoding='utf-8')
         restored=json.loads(path.read_text(encoding='utf-8'))
         assert all(restored[k]==value for k,value in cleaned.items() if k!='name')
-    print('RESULT original cloth preserved; hose removed, lining-only10mmrecess+darkclothUV repair: four models,6710vertices/10471triangles each')
+        hashes[path.name]=hashlib.sha256(path.read_bytes()).hexdigest()
+    audit={'vertices':cleaned['vertexCount'],'triangles':len(cleaned['triangles'])//3,'bindposesExactOriginal':cleaned['bindposes']==original['bindposes'],'protectedDistalArmGloveLegStreamsExactOriginal':preserved,'allStreamsFinite':True,'maxWeightSumError':float(abs(np.asarray(cleaned['boneWeights']).reshape(-1,4).sum(1)-1).max()),'details':details,'modelSHA256':hashes,'baselineSHA256':hashlib.sha256(BASE.read_bytes()).hexdigest()}
+    review=ROOT/'assets/PilotModels/Review';review.mkdir(exist_ok=True,parents=True);(review/'pilot-model-build.json').write_text(json.dumps(audit,indent=2))
+    print('RESULT '+json.dumps(audit))
 
 
 if __name__=='__main__':main()

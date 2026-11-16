@@ -1,0 +1,16 @@
+{
+  "name": "gamemode-warbox", "mission": "WarBox", "mods": ["boscalisummer"], "timeout_s": 300,
+  "description": "Native campaign startup and operation profile, with scoreboard capture. Does not establish a four-hour campaign duration, performance or balance.",
+  "ops": [
+    {"op":"wait","seconds":20},
+    {"op":"call","method":"BoscaliSummer.Modules.Gamemodes.Runtime.GamemodeAutomation.State","store":"state"},
+    {"op":"capture","name":"warbox-brief","hide_ui":false}, {"op":"end"}
+  ],
+  "checks": [
+    {"check":"status_ok"},
+    {"check":"result_equals","path":"state.mode","value":"WarBox"},
+    {"check":"result_equals","path":"state.dynamicOperations","value":true},
+    {"check":"result_above","path":"state.ground","min":1},
+    {"check":"log_match","pattern":"(Gamemode|WarBox).*Exception|Exception.*(Gamemode|WarBox)","max":0}
+  ]
+}

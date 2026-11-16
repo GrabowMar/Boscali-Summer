@@ -120,6 +120,12 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 Mesh mesh = renderer is SkinnedMeshRenderer skin ? skin.sharedMesh :
                     renderer.GetComponent<MeshFilter>()?.sharedMesh;
                 if (mesh == null || mesh.vertexCount == 0) continue;
+                // Native terrain/grass helpers have meshes but no surface materials; copying them draws magenta proxies.
+                Material[] materials = renderer.sharedMaterials;
+                bool hasMaterial = false;
+                for (int i = 0; i < materials.Length; i++)
+                    if (materials[i] != null) { hasMaterial = true; break; }
+                if (!hasMaterial) continue;
                 var part = new GameObject("PreviewMesh", typeof(MeshFilter), typeof(MeshRenderer));
                 part.layer = PreviewLayer;
                 part.transform.SetParent(model.transform, false);
@@ -133,7 +139,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     scale.z / Mathf.Max(.0001f, Mathf.Abs(rootScale.z)));
                 part.GetComponent<MeshFilter>().sharedMesh = mesh;
                 MeshRenderer copy = part.GetComponent<MeshRenderer>();
-                copy.sharedMaterials = renderer.sharedMaterials;
+                copy.sharedMaterials = materials;
                 copy.shadowCastingMode = ShadowCastingMode.Off;
                 copy.receiveShadows = false;
                 if (!knownBounds) { bounds = copy.bounds; knownBounds = true; }

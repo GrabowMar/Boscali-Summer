@@ -963,6 +963,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         names[row].text = nameAt(at);
                         live[row].text = known ? AvNum.Fixed(current, 0) : "\u2014";
                         lost[row].text = known ? AvNum.Fixed(dead, 0) : "\u2014";
+                        lost[row].color = known && dead > 0 ? AvTheme.Warning : AvTheme.Dim;
                         extra[row].text = known && reserve >= 0 ? AvNum.Fixed(reserve, 0) : "\u2014";
                         icons[row].sprite = iconAt(at);
                         icons[row].enabled = icons[row].sprite != null;
@@ -990,6 +991,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     bool any = known > 0;
                     totalLive.text = any ? AvNum.Fixed(sumLive, 0) : "\u2014";
                     totalLost.text = any ? AvNum.Fixed(sumLost, 0) : "\u2014";
+                    totalLost.color = any && sumLost > 0 ? AvTheme.Warning : AvTheme.Dim;
                     totalExtra.text = any && reserveKnown > 0 ? AvNum.Fixed(sumReserve, 0) : "\u2014";
                     bool shownTotals = count > 0;
                     totalRule.gameObject.SetActive(shownTotals); totalName.gameObject.SetActive(shownTotals);
@@ -1045,7 +1047,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         liveHeading = AvText.Make(Rect, "LiveHeading", AvTextRole.Micro, "LIVE", TextAlignmentOptions.MidlineRight);
                         lostHeading = AvText.Make(Rect, "LostHeading", AvTextRole.Micro, "LOST", TextAlignmentOptions.MidlineRight);
                         extraHeading = AvText.Make(Rect, "ExtraHeading", AvTextRole.Micro, "RSV", TextAlignmentOptions.MidlineRight);
-                        liveHeading.color = extraHeading.color = AvTheme.Dim; lostHeading.color = AvTheme.Warning;
+                        liveHeading.color = lostHeading.color = extraHeading.color = AvTheme.Dim;
                     }
                     AvLay.Place(liveHeading.rectTransform, Inset + w * .57f, 41f, w * .12f, 14f);
                     AvLay.Place(lostHeading.rectTransform, Inset + w * .71f, 41f, w * .12f, 14f);
@@ -1061,14 +1063,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     empty.color = AvTheme.TextPrimary;
                     totalRule.color = AvTheme.Hairline;
                     totalName.color = totalLive.color = AvTheme.TextPrimary;
-                    totalLost.color = AvTheme.Warning; totalExtra.color = AvTheme.Dim;
+                    totalExtra.color = AvTheme.Dim;
+                    if (liveHeading != null) liveHeading.color = lostHeading.color = extraHeading.color = AvTheme.Dim;
                     for (int i = 0; i < Capacity; i++)
                     {
                         names[i].color = live[i].color = AvTheme.TextPrimary;
-                        lost[i].color = AvTheme.Warning; extra[i].color = AvTheme.Dim;
+                        extra[i].color = AvTheme.Dim;
                         bars[i].Paint(AvTheme.Warning, AvTheme.Hairline.WithAlpha(.4f));
                     }
                     previous.Restyle(); next.Restyle();
+                    Render();   // Reapply the value-dependent loss colours after a theme change.
                 }
             }
 

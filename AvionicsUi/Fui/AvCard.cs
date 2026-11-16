@@ -21,7 +21,7 @@ namespace NOAvionics
             if (!string.IsNullOrEmpty(titleText)) title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
             if (title != null) AvText.Fit(title, false);
             body = AvLay.Child(Rect, "Body");
-            // The nested flow uses the card's inner width; it keeps its own pad = Inset and no gutter.
+            // The nested flow follows the measured card width, with standard flow padding and no gutter.
             Flow = new AvFlow(body, ticker, width, 0f);
             Flow.Host = this;
             Restyle();
@@ -31,7 +31,7 @@ namespace NOAvionics
 
         public override float Measure(float width)
         {
-            Flow.Relayout();
+            Flow.EnsureLayout(width);
             return (title != null ? TitleH : 0f) + Flow.ContentHeight;
         }
 

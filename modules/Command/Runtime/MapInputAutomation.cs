@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
     /// shows (<c>deck</c>, <c>deckCount</c>, <c>keys</c>, <c>banner</c>, <c>pauseHeld</c>, <c>pauseKey</c>, <c>card</c>,
     /// <c>cardActions</c>, <c>cardFacts</c>, <c>cardHeight</c>, <c>rightRule</c>, <c>selected</c>). Hosted single-player sims only.
     /// </summary>
-    public static class MapInputAutomation
+    public static partial class MapInputAutomation
     {
         private const string TestOwner = "boscali.test.tool";
 
@@ -47,9 +47,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "disarm":
                     MapPicker.Disarm(TestOwner);
                     break;
-                // MAP TOOLS (panels fold phase 2): the console on its TOOLS page, and its RANGE mark tool armed / put down.
+                // Compatibility action for map-input: tools now live in the drawer's PLOT page.
                 case "tools":
-                    AvConsole.Open("MAP", "TOOLS");
+                    MfdMapControls.SelectTab(2);
                     break;
                 case "mark":
                     MfdMapInteractions.ArmMark(MfdMapInteractions.MarkTool.Range);
@@ -84,6 +84,14 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "fold":
                     MfdColumnFold.Toggle();
                     break;
+                case "controls-fold":
+                case "controls-selecttab":
+                case "controls-cancel":
+                case "controls-key":
+                case "controls-native-key":
+                    return ControlsAction(map, args);
+                case "controls-press":
+                    return PressDrawerControl(map, args);
                 case "strcard":
                     if (!OpenStrCard()) return Failure("MapInputAutomation", "strcard", "no STR pin on the map");
                     break;
@@ -194,18 +202,18 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static Dictionary<string, object> State(DynamicMap map)
         {
-            // The MAP console's open page as text (empty while it is not up): TOOLS shows MARK's LANDING ZONE and COM's MARKERS.
-            AvConsole mapConsole = AvConsole.Find("MAP");
+            // Read the actually shown drawer rather than the retired MAP console.
             var text = new System.Text.StringBuilder();
-            if (mapConsole != null && mapConsole.Root.gameObject.activeInHierarchy && mapConsole.CurrentPage >= 0)
-                foreach (TMPro.TMP_Text t in mapConsole.Page(mapConsole.CurrentPage).Content.GetComponentsInChildren<TMPro.TMP_Text>(false))
+            if (MfdMapControls.Shown && !MfdMapControls.Folded)
+                foreach (TMPro.TMP_Text t in MfdMapControls.Root.GetComponentsInChildren<TMPro.TMP_Text>(false))
                     text.Append(t.text).Append('|');
             string page = text.ToString();
             Dictionary<string, object> state = Read(map);
-            state["mapPage"] = mapConsole?.CurrentPageName ?? "";
+            state["mapPage"] = MfdMapControls.Shown && !MfdMapControls.Folded ? new[] { "VIEW", "LAYERS", "PLOT" }[MfdMapControls.SelectedTab] : "";
             state["plotShown"] = page.Contains("MARKERS") ? 1f : 0f;
             state["markShown"] = page.Contains("LANDING ZONE") ? 1f : 0f;
             state["markArmed"] = MfdMapInteractions.ArmedMark != MfdMapInteractions.MarkTool.None ? 1f : 0f;
+            ReadControls(map, state);
             return state;
         }
 

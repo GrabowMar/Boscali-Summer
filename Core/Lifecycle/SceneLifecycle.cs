@@ -41,7 +41,16 @@ namespace BoscaliSummer.Core.Lifecycle
             ResetAll();
         }
 
-        internal void ResetAll()
+        internal void ResetAll() => Reset(null);
+
+        /// <summary>Initialize newly installed modules without clearing services in the running mission.</summary>
+        internal void ResetModules(ISet<string> moduleIds)
+        {
+            if (moduleIds == null) throw new ArgumentNullException(nameof(moduleIds));
+            Reset(moduleIds);
+        }
+
+        private void Reset(ISet<string> moduleIds)
         {
             if (!sorted)
             {
@@ -52,6 +61,7 @@ namespace BoscaliSummer.Core.Lifecycle
             for (int i = 0; i < entries.Count; i++)
             {
                 Entry entry = entries[i];
+                if (moduleIds != null && !moduleIds.Contains(entry.ModuleId)) continue;
                 try
                 {
                     entry.Service.ResetForScene();

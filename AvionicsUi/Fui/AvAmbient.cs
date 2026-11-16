@@ -3,14 +3,14 @@ using System;
 namespace NOAvionics
 {
     /// <summary>
-    /// Ambient cockpit facts for idle chrome: a footer's status column.
+    /// Ambient cockpit facts for idle chrome: a footer's compact telemetry line.
     /// The host mod supplies them; nothing here invents a reading. With no provider the consumers stay hidden.
     /// </summary>
     public static class AvAmbient
     {
         public const int Lines = 3;
 
-        /// <summary>Line <c>0..2</c> of the footer status column (mission clock, link, airframe). Null or empty hides the line.</summary>
+        /// <summary>Field <c>0..2</c> of footer telemetry (mission clock, link, airframe). Null or empty omits its text.</summary>
         public static Func<int, string> Status;
 
         internal static string Line(int index)

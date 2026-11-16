@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
         public CommandSettings(ConfigFile config)
         {
             DisplayLife = config.Bind("Command", "DisplayLife", 0.5f,
-                new ConfigDescription("Live signal on the maximized MFD: the power-on raster, the slow refresh sweep and harder jam and hit break-up. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
+                new ConfigDescription("Live signal on the maximized MFD: a brief edge commissioning sweep, slow refresh band and stronger interference. Content remains readable when opening. 0 keeps the display still.", new AcceptableValueRange<float>(0f, 1f)));
             TerrainGhost = config.Bind("Command", "TerrainGhost", 0f,
                 new ConfigDescription("Visor terrain ghost: a very faint wire relief of the real ground around and below your aircraft, drawn over the cockpit view in the HUD's green. Ground that can hit you glows brighter in the same green. 0 turns it off, 1 is clearly visible. Needs a map with baked terrain. Applies now; no restart.", new AcceptableValueRange<float>(0f, 1f)));
             MapHoldKey = config.Bind("Command", "MapHoldKey", KeyCode.V,

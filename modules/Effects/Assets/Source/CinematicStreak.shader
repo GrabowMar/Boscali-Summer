@@ -54,6 +54,24 @@ Shader "Hidden/Boscali/CinematicStreak"
             scene.rgb += tex2D(_BoscaliStreakTex, input.uv).rgb * _StreakParams.z;
             return scene;
         }
+
+        // Procedural triangle with texture-space UVs on both top- and bottom-origin APIs.
+        v2f_img AddVertex(uint vertexID : SV_VertexID)
+        {
+            v2f_img output;
+            float2 uv = float2((vertexID << 1) & 2, vertexID & 2);
+            output.pos = float4(uv * 2.0 - 1.0, 0.0, 1.0);
+            #if UNITY_UV_STARTS_AT_TOP
+                uv.y = 1.0 - uv.y;
+            #endif
+            output.uv = uv;
+            return output;
+        }
+
+        float4 AddStreak(v2f_img input) : SV_Target
+        {
+            return float4(tex2D(_BoscaliStreakTex, input.uv).rgb * _StreakParams.z, 0.0);
+        }
         ENDCG
 
         Pass
@@ -78,6 +96,16 @@ Shader "Hidden/Boscali/CinematicStreak"
             #pragma target 3.0
             #pragma vertex vert_img
             #pragma fragment Compose
+            ENDCG
+        }
+        Pass
+        {
+            Blend One One
+            ColorMask RGB
+            CGPROGRAM
+            #pragma target 3.5
+            #pragma vertex AddVertex
+            #pragma fragment AddStreak
             ENDCG
         }
     }

@@ -1459,8 +1459,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
                             // Which side: the hold field itself, one pixel of blend across its zero.
                             float hold = column.HLow + column.HDelta * ty;
-                            float slope = (float)Math.Sqrt(gx2 + column.Gy2);
-                            float friendly = slope > 1e-6f ? ClampF(hold / slope + 0.5f, 0f, 1f) : hold >= 0f ? 1f : 0f;
+                            float slopeSquared = gx2 + column.Gy2;
+                            float friendly = hold >= 0f ? 1f : 0f;
+                            // Outside the one-pixel blend this is already clamped to one side.
+                            // Keep the original calculation at the boundary and near-zero slope;
+                            // only definite interiors skip the per-pixel square root and divide.
+                            if (slopeSquared <= 1e-12f || hold * hold <= slopeSquared * .250001f)
+                            {
+                                float slope = (float)Math.Sqrt(slopeSquared);
+                                friendly = slope > 1e-6f ? ClampF(hold / slope + 0.5f, 0f, 1f) : friendly;
+                            }
 
                             if (hatched)
                             {
@@ -1568,9 +1576,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
         }
 
         /// <summary>Pixels inside the border where the rim line peaks; it is twice this wide.</summary>
-        private const float RimInset = 1.25f;
-        private const float RimStrength = 1.6f;
-        private const float HatchStrength = 0.9f;
+        private const float RimInset = 0.9f;
+        private const float RimStrength = 0.7f;
+        private const float HatchStrength = 0.55f;
         /// <summary>How far contested ground's wash fades between the hairlines.</summary>
         private const float NoMansLandFade = 0.55f;
         /// <summary>Steps of hold the tint can tell apart; the display hash re-bakes on one step.</summary>

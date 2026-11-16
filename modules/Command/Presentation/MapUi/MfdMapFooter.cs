@@ -1,5 +1,6 @@
 using NOAvionics;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -14,8 +15,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// objects side by side on wide screens and in two rows where width is scarce.</para>
     ///
     /// <para>The native objects remain authoritative. Their scripts keep updating their text,
-    /// active state and button actions; only their parent and RectTransform presentation are
-    /// snapshotted. Minimise restores every value and sibling index exactly.</para>
+    /// active state and button actions. Parent, geometry, font and material are snapshotted;
+    /// neutral readouts use shared ink while warning colours remain native. Minimise restores
+    /// presentation and the latest native colour, including changes while expanded.</para>
     /// </summary>
     internal static class MfdMapFooter
     {
@@ -46,6 +48,42 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private float originalAlpha;
             private bool originalBlocksRaycasts;
             private bool imagesSuppressed;
+            private List<TextState> texts;
+
+            private sealed class TextState
+            {
+                public TMP_Text Text;
+                public TMP_FontAsset Font;
+                public Material Material;
+                public Color NativeColor, AppliedColor;
+            }
+
+            public void StyleText(bool instrument = false)
+            {
+                if (Target == null) return;
+                if (texts == null)
+                {
+                    texts = new List<TextState>();
+                    TMP_FontAsset face = AvType.Face(instrument ? AvFace.Mono : AvFace.CondStrong);
+                    foreach (TMP_Text label in Target.GetComponentsInChildren<TMP_Text>(true))
+                    {
+                        texts.Add(new TextState { Text = label, Font = label.font, Material = label.fontSharedMaterial,
+                            NativeColor = label.color, AppliedColor = label.color });
+                        if (face != null) { label.font = face; label.fontSharedMaterial = face.material; }
+                    }
+                }
+                foreach (TextState entry in texts)
+                {
+                    if (entry.Text == null) continue;
+                    if (entry.Text.color != entry.AppliedColor) entry.NativeColor = entry.Text.color;
+                    Color native = entry.NativeColor;
+                    // Neutral native readouts are white or phosphor green. Preserve warning and team colours.
+                    bool neutral = Mathf.Abs(native.r - native.g) < .04f && Mathf.Abs(native.g - native.b) < .04f;
+                    bool phosphor = native.g > .5f && native.g > native.r * 1.35f && native.g > native.b * 1.35f;
+                    entry.AppliedColor = neutral || phosphor ? AvInk.Ink.WithAlpha(native.a) : native;
+                    if (entry.Text.color != entry.AppliedColor) entry.Text.color = entry.AppliedColor;
+                }
+            }
 
             private struct ImageState
             {
@@ -126,6 +164,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             public void Restore()
             {
+                if (texts != null)
+                {
+                    foreach (TextState entry in texts)
+                    {
+                        if (entry.Text == null) continue;
+                        Color native = entry.Text.color != entry.AppliedColor ? entry.Text.color : entry.NativeColor;
+                        entry.Text.font = entry.Font;
+                        entry.Text.fontSharedMaterial = entry.Material;
+                        entry.Text.color = native;
+                    }
+                    texts = null;
+                }
                 if (originalCanvasGroup != null)
                 {
                     originalCanvasGroup.alpha = originalAlpha;
@@ -206,6 +256,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Tick()
         {
             if (footer == null) return;
+            instruments?.StyleText(true);
+            airbase?.StyleText();
+            spectator?.StyleText();
+            unitDebug?.StyleText();
 
             // Late adoption if UnitDebug was instantiated or activated after initial layout
             if ((unitDebug == null || unitDebug.Target == null) && Time.unscaledTime >= nextUnitProbe)
@@ -326,9 +380,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static Rect ResolveArea(MfdLayout.Columns columns)
         {
-            float top = columns.Map.y - columns.Map.height - MfdLayout.Gutter;
-            float bottom = -columns.Canvas.y * 0.5f + MfdLayout.Margin;
-            return new Rect(columns.Map.x, top, columns.Map.width, Mathf.Max(0f, top - bottom));
+            return columns.Footer;
         }
 
         private static void PlaceFooter(Rect area)
@@ -470,6 +522,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     Mathf.Min(target.sizeDelta.x, maxWidth),
                     target.sizeDelta.y);
             }
+            snapshot.StyleText(slot == instrumentsSlot);
         }
 
         private static RectTransform FindOrCreateLayer(RectTransform parent, string name)

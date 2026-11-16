@@ -6,8 +6,8 @@ using HarmonyLib;
 namespace BoscaliSummer.Modules.Immersion.Patches
 {
     /// <summary>
-    /// Composes the mod's owned rotational offset on the cockpit pivot and removes that
-    /// write on leaving. Native free look, head tracking and translation remain untouched.
+    /// Composes the owned motion and the local pilot body's small eye-position correction,
+    /// removing only those writes on leaving. Native free look and head tracking remain authoritative.
     /// </summary>
     [HarmonyPatch(typeof(CameraCockpitState), "UpdateState")]
     internal static class CockpitHeadRotationPatch

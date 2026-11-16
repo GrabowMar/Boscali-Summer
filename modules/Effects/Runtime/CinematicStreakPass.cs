@@ -17,23 +17,25 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         private Camera camera;
         private Material material;
         private float strength, exposure;
-        private bool hooked;
+        private bool hooked, optimize;
 
         internal int ExecutedFrame { get; private set; } = -1;
+        internal bool OptimizedLastFrame { get; private set; }
 
         internal CinematicStreakPass() { renderPassEvent = RenderPassEvent.AfterRenderingTransparents; }
 
         /// <summary>The caller owns the material. A null target/material or zero strength unhooks the pass.</summary>
-        internal void Bind(Camera target, Material streakMaterial, float amount, float postExposure)
+        internal void Bind(Camera target, Material streakMaterial, float amount, float postExposure, bool optimize = false)
         {
             if (target == null || streakMaterial == null || !(amount > 0f))
             {
                 Dispose();
                 return;
             }
-            if (camera != target) ExecutedFrame = -1;
+            if (camera != target) { ExecutedFrame = -1; OptimizedLastFrame = false; }
             camera = target;
             material = streakMaterial;
+            this.optimize = optimize;
             strength = Mathf.Clamp01(amount);
             exposure = float.IsNaN(postExposure) || float.IsInfinity(postExposure) ? 0f : Mathf.Clamp(postExposure, -16f, 16f);
             if (hooked) return;
@@ -55,11 +57,13 @@ namespace BoscaliSummer.Modules.Effects.Runtime
 
         public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
         {
+            OptimizedLastFrame = false;
             if (material == null || renderingData.cameraData.camera != camera || strength <= 0f ||
                 !renderingData.cameraData.isHdrEnabled) return;
             RenderTextureDescriptor frame = renderingData.cameraData.cameraTargetDescriptor;
             frame.depthBufferBits = 0;
             frame.msaaSamples = 1;
+            frame.bindMS = false;
             frame.useMipMap = false;
             frame.autoGenerateMips = false;
             RenderTextureDescriptor low = frame;
@@ -74,20 +78,52 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             try
             {
                 ScriptableRenderer renderer = renderingData.cameraData.renderer;
-                cmd.GetTemporaryRT(Frame, frame, FilterMode.Bilinear);
+                RenderTexture source = renderer.cameraColorTargetHandle.rt;
+                // A bindMS target has no sampleable resolved surface. Keep the copy path
+                // for different sampling/layouts, including fractional quarter-size footprints.
+                bool direct = optimize && material.passCount >= 4 && source != null &&
+                    source.IsCreated() && !source.bindTextureMS && !source.useDynamicScale && !source.useMipMap &&
+                    source.memorylessMode == RenderTextureMemoryless.None &&
+                    source.filterMode == FilterMode.Bilinear && source.wrapModeU == TextureWrapMode.Clamp &&
+                    source.wrapModeV == TextureWrapMode.Clamp &&
+                    source.graphicsFormat == frame.graphicsFormat &&
+                    source.dimension == TextureDimension.Tex2D && source.volumeDepth == 1 &&
+                    (frame.width & 3) == 0 && (frame.height & 3) == 0 &&
+                    source.width == frame.width && source.height == frame.height &&
+                    !camera.stereoEnabled && camera.rect == new Rect(0f, 0f, 1f, 1f);
+                if (!direct) cmd.GetTemporaryRT(Frame, frame, FilterMode.Bilinear);
                 cmd.GetTemporaryRT(Extract, low, FilterMode.Bilinear);
                 cmd.GetTemporaryRT(Blur, low, FilterMode.Bilinear);
-                cmd.Blit(renderer.cameraColorTargetHandle, Frame);
-                cmd.Blit(Frame, Extract, material, 0);
+                if (direct)
+                {
+                    // Keep the necessary MSAA resolve, but avoid copying its full HDR
+                    // result into another texture before the quarter-resolution extract.
+                    if (source.antiAliasing > 1) cmd.ResolveAntiAliasedSurface(source);
+                    cmd.Blit(source, Extract, material, 0);
+                }
+                else
+                {
+                    cmd.Blit(renderer.cameraColorTargetHandle, Frame);
+                    cmd.Blit(Frame, Extract, material, 0);
+                }
                 cmd.Blit(Extract, Blur, material, 1);
                 cmd.SetGlobalTexture(StreakTexture, Blur);
-                cmd.Blit(Frame, renderer.cameraColorTargetHandle, material, 2);
+                if (direct)
+                {
+                    // Blend into the existing scene. Load is required; ColorMask RGB
+                    // leaves the camera's alpha and individual MSAA samples intact.
+                    cmd.SetRenderTarget(renderer.cameraColorTargetHandle, RenderBufferLoadAction.Load, RenderBufferStoreAction.Store);
+                    cmd.SetViewport(new Rect(0f, 0f, frame.width, frame.height));
+                    cmd.DrawProcedural(Matrix4x4.identity, material, 3, MeshTopology.Triangles, 3);
+                }
+                else cmd.Blit(Frame, renderer.cameraColorTargetHandle, material, 2);
                 cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
                 cmd.ReleaseTemporaryRT(Blur);
                 cmd.ReleaseTemporaryRT(Extract);
-                cmd.ReleaseTemporaryRT(Frame);
+                if (!direct) cmd.ReleaseTemporaryRT(Frame);
                 context.ExecuteCommandBuffer(cmd);
                 ExecutedFrame = Time.frameCount;
+                OptimizedLastFrame = direct;
             }
             finally { CommandBufferPool.Release(cmd); }
         }
@@ -99,7 +135,9 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             camera = null;
             material = null;
             strength = 0f;
+            optimize = false;
             ExecutedFrame = -1;
+            OptimizedLastFrame = false;
         }
     }
 }

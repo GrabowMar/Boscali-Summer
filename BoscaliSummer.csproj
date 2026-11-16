@@ -121,6 +121,11 @@
       <LogicalName>BoscaliSummer.Assets.nobp</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup Label="Skylark aircraft artwork">
+    <EmbeddedResource Include="assets\SkylarkVTOL\Unity\skylark.bundle" Condition="Exists('assets\SkylarkVTOL\Unity\skylark.bundle')">
+      <LogicalName>BoscaliSummer.SkylarkAssets.bundle</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
     <!-- FUI fonts, icon font and UI shaders, built by tools/Compile-AvionicsUiAssets.ps1
          (Unity 2022.3.62f3). Optional at build time: without it the kit uses vanilla fonts
@@ -203,6 +208,9 @@
     <EmbeddedResource Include="modules\SeaStructures\Assets\*.seamodel">
       <LogicalName>BoscaliSummer.Sea.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="modules\SeaStructures\Assets\Textures\*.png">
+      <LogicalName>BoscaliSummer.Sea.Textures.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
     <!-- Built by tools/Compile-KaijuAssets.ps1. Optional: without it the Kaiju summon reports the bundle missing. -->
     <EmbeddedResource Include="modules\Spooktober\Kaiju\Assets\kaiju.bundle" Condition="Exists('modules\Spooktober\Kaiju\Assets\kaiju.bundle')">
       <LogicalName>BoscaliSummer.Kaiju.kaiju.bundle</LogicalName>
@@ -222,6 +230,7 @@
       <LogicalName>BoscaliSummer.Spooktober.spooktober.bundle</LogicalName>
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Spooktober\Assets\hell-meshes.bin" Condition="Exists('modules\Spooktober\Assets\hell-meshes.bin')" LogicalName="BoscaliSummer.Spooktober.hell-meshes.bin" />
+      <EmbeddedResource Include="modules\Spooktober\Assets\hell-particles.bundle" Condition="Exists('modules\Spooktober\Assets\hell-particles.bundle')" LogicalName="BoscaliSummer.Spooktober.hell-particles.bundle" />
     <!-- Spooktober's own sounds (ElevenLabs, see modules/Spooktober/Assets/Sfx/LICENSES.txt), served by Core/Fx/SfxClips. -->
     <!-- Complete raster case files, including all static print (see Dossiers/PROVENANCE.txt). -->
     <EmbeddedResource Include="modules\Spooktober\Assets\Dossiers\*.png" LogicalName="BoscaliSummer.Spooktober.Dossiers.%(Filename)%(Extension)" />
@@ -261,6 +270,8 @@
   </ItemGroup>
 
   <ItemGroup Label="Cockpit pilot shader bundle">
+    <EmbeddedResource Include="modules\Immersion\Assets\world-detail.bundle" Condition="Exists('modules\Immersion\Assets\world-detail.bundle')" LogicalName="BoscaliSummer.WorldDetail.bundle" />
+    <EmbeddedResource Include="modules\Immersion\Assets\WorldDetail\world-detail.png" LogicalName="BoscaliSummer.WorldDetail.png" />
     <EmbeddedResource Include="modules\Immersion\Assets\pilot.bundle" Condition="Exists('modules\Immersion\Assets\pilot.bundle')">
       <LogicalName>BoscaliSummer.Immersion.pilot.bundle</LogicalName>
     </EmbeddedResource>

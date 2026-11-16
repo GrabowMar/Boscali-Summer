@@ -5,6 +5,7 @@ using System.IO;
 using BepInEx;
 using HarmonyLib;
 using BoscaliSummer.Modules.Command.Domain;
+using BoscaliSummer.Modules.Performance.Runtime;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Util;
 using TMPro;
@@ -194,8 +195,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Material controlMaterial;
         private static Material seaControlMaterial;
         private static Material gridMaterial;
-        private static readonly Color32 MinorGrid = new Color32(64, 136, 146, 50);
-        private static readonly Color32 MajorGrid = new Color32(96, 166, 178, 100);
+        private static readonly Color32 MinorGrid = new Color32(88, 125, 132, 36);
+        private static readonly Color32 MajorGrid = new Color32(112, 150, 158, 72);
         private static Material waterMaterial;
         private static Texture2D styleTexture;
         private static Camera camera;
@@ -890,6 +891,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 groundMaterial.SetFloat("_MetersPerUnit", 81920f / (VerticalScale * ModelWidth));
                 groundMaterial.SetFloat("_SeaLevel", seaLevel);
                 groundMaterial.SetFloat("_PeakMeters", Mathf.Max(200f, peakMeters));
+                // Reuse the shader's depth/coast ramp: teal water separates from blue friendly control
+                // without another layer, texture read or redraw while the map rests.
+                groundMaterial.SetColor("_Deep", new Color(.07f, .17f, .21f, 1f));
+                groundMaterial.SetColor("_Shallow", new Color(.17f, .37f, .37f, 1f));
+                groundMaterial.SetColor("_Coast", new Color(.46f, .65f, .61f, 1f));
                 // The shallows reach the same ground distance on every map: 4 samples at Heartland's 160 m a sample, 2 on
                 // Archipelago's 320 m, where 4 drew a blocky 1.3 km halo.
                 float sampleMeters = Mathf.Max(source.MapSize.x, source.MapSize.y) / (Samples - 1);
@@ -928,7 +934,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // With the bundled ground shader the seabed already wears the water's colours: the plane only glazes it.
             waterMaterial = new Material(seaShader) {
                 mainTexture = Texture2D.whiteTexture,
-                color = new Color(32f / 255f, 51f / 255f, 78f / 255f, ground != null ? SeaSurfaceAlpha * .5f : SeaSurfaceAlpha) };
+                color = new Color(.08f, .18f, .23f, ground != null ? SeaSurfaceAlpha * .5f : SeaSurfaceAlpha) };
             if (waterMaterial.HasProperty("_Surface")) waterMaterial.SetFloat("_Surface", 1f);
             if (waterMaterial.HasProperty("_SrcBlend")) waterMaterial.SetFloat("_SrcBlend", 5f);
             if (waterMaterial.HasProperty("_DstBlend")) waterMaterial.SetFloat("_DstBlend", 10f);
@@ -975,6 +981,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             data.requiresDepthTexture = false;
             data.antialiasing = AntialiasingMode.None;
             data.volumeLayerMask = 0;
+            RenderTuning.RegisterReliefCamera(camera);
             // The tilt haze fades toward the view's own background.
             if (ground != null) groundMaterial.SetColor("_Haze", camera.backgroundColor);
         }
@@ -2320,6 +2327,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static void Release()
         {
             Restore();
+            RenderTuning.UnregisterReliefCamera(camera);
             if (sceneRoot != null) Object.Destroy(sceneRoot);
             sceneRoot = null;
             foreach (Mesh mesh in meshes) if (mesh != null) Object.Destroy(mesh);

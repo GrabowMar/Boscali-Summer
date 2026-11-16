@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
             reply["newest"] = log.Entries.Count > 0 ? log.Entries[0].Category + " " + log.Entries[0].Text : "";
             reply["offset"] = float.IsNaN(locatedX) ? -1f : MapFocus.CentreOffset(locatedX, locatedZ);
             reply["evnHeight"] = NOAvionics.AvConsole.Find("EVN")?.Root.rect.height ?? -1f;   // the left bay, under the ticker
-            reply["fieldLog"] = MfdFieldLog.Shown;   // the map's bottom-right corner log and what it prints
+            reply["fieldLog"] = MfdFieldLog.Shown;   // the log above the open panel column and what it prints
             reply["fieldLogText"] = MfdFieldLog.BodyText ?? "";
             if (action != "locate") return reply;
 

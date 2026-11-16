@@ -19,6 +19,7 @@ namespace NOAvionics
         private UnityEngine.UI.Image rail;
         private TMP_Text text, glyph;
         private AvFx fx;
+        private AvHit hit;
         private string classes, baseClass;
         private bool hover, pressed, latched, armed, interactable = true, iconRight, iconOnly;
         private Color? accent;
@@ -38,9 +39,8 @@ namespace NOAvionics
             AvLay.Fill(c.frame.rectTransform);
             c.rail = AvLay.Solid(root, "Rail", Color.clear);
             c.rail.rectTransform.anchorMin = new Vector2(0f, 0f); c.rail.rectTransform.anchorMax = new Vector2(1f, 0f);
-            // The rail starts after the bottom-left cut, so it never pokes out past the chamfer.
-            c.rail.rectTransform.pivot = new Vector2(0.5f, 0f); c.rail.rectTransform.sizeDelta = new Vector2(-5f, 2f);
-            c.rail.rectTransform.anchoredPosition = new Vector2(2.5f, 0f);
+            c.rail.rectTransform.pivot = new Vector2(0.5f, 0f); c.rail.rectTransform.sizeDelta = new Vector2(0f, 2f);
+            c.rail.rectTransform.anchoredPosition = Vector2.zero;
             if (spec.Icon != AvIcon.None)
             {
                 c.glyph = AvIcons.Make(root, spec.Icon, AvGridTokens.IconInline, Color.white);
@@ -59,7 +59,7 @@ namespace NOAvionics
             c.text.rectTransform.offsetMax = new Vector2(-8f, 0f);
             if (c.glyph != null && !c.iconOnly) { if (c.iconRight) c.text.rectTransform.offsetMax = new Vector2(-24f, 0f); else c.text.rectTransform.offsetMin = new Vector2(24f, 0f); }
             if (spec.OnClick != null) c.Clicked += spec.OnClick;
-            AvHit hit = AvHit.On(c.frame);
+            AvHit hit = c.hit = AvHit.On(c.frame);
             hit.Hover = h => { c.hover = h; if (h && c.interactable) c.fx?.Play(AvFxKind.Shine, 0.15f); c.Restyle(); };
             hit.Press = p => { c.pressed = p; c.Restyle(); };
             hit.Refuses = true;
@@ -90,20 +90,20 @@ namespace NOAvionics
 
         public bool Latched { get => latched; set { if (latched == value) return; latched = value; if (value) fx?.Play(AvFxKind.Shine, 0.2f); Restyle(); } }
         public bool Armed { get => armed; set { if (armed == value) return; armed = value; fx?.Set(value ? AvFxKind.Glow : AvFxKind.None, 0.5f, 10f); Restyle(); } }
-        public bool Interactable { get => interactable; set { if (interactable == value) return; interactable = value; if (!value) pressed = false; frame.GetComponent<AvHit>().Interactable = value; Restyle(); } }
+        public bool Interactable { get => interactable; set { if (interactable == value) return; interactable = value; hit.Interactable = value; Restyle(); } }
         public string Label { get => text.text; set => AvText.Set(text, value); }
 
         /// <summary>
-        /// A console's own accent over the scheme (the OPS rooms are different consoles): a primary control fills with it, a latched one
+        /// A console's own accent over the scheme (the OPS rooms are different consoles): a primary control takes its wash and rail, a latched one
         /// takes its wash, edge and rail, the rest keep a hairline of it. A danger control keeps its own red. Null = the scheme's look.
         /// </summary>
-        public Color? Accent { get => accent; set { accent = value; Restyle(); } }
+        public Color? Accent { get => accent; set { if (accent == value) return; accent = value; Restyle(); } }
 
         /// <summary>Corner tick length. The ticks show only under the pointer or on a latched/armed control; 0 removes them outright.</summary>
         public float Bracket { get => frame.Bracket; set { if (frame.Bracket == value) return; frame.Bracket = value; frame.SetVerticesDirty(); } }
 
         /// <summary>The click cue: Press unless set (tabs navigate).</summary>
-        public AvUiCue Cue { get => cue; set { cue = value; frame.GetComponent<AvHit>().Cue = value; } }
+        public AvUiCue Cue { get => cue; set { cue = value; hit.Cue = value; } }
 
         /// <summary>The icon glyph, for a caller that turns it (a compass needle); null when the button has none.</summary>
         public TMP_Text Glyph => glyph;
@@ -146,8 +146,8 @@ namespace NOAvionics
             if (accent.HasValue && interactable && !classes.Contains("danger"))
             {
                 Color a = accent.Value;
-                if (classes.Contains("primary")) { back = a.WithAlpha(hover || pressed ? 0.95f : 0.82f); edge = a; ink = Color.Lerp(Color.black, a, 0.1f); }
-                else if (latched || armed || pressed) { back = a.WithAlpha(0.18f); edge = a; ink = Color.Lerp(Color.white, a, 0.25f); railInk = a; }
+                if (classes.Contains("primary")) { back = a.WithAlpha(pressed ? 0.36f : hover ? 0.25f : 0.14f); edge = a; ink = Color.Lerp(Color.white, a, 0.15f); railInk = a; }
+                else if (latched || armed || pressed) { back = a.WithAlpha(pressed ? 0.32f : hover ? 0.22f : 0.18f); edge = a; ink = Color.Lerp(Color.white, a, 0.25f); railInk = a; }
                 else if (hover) { back = a.WithAlpha(0.1f); edge = a.WithAlpha(0.8f); ink = Color.white; }
                 else edge = a.WithAlpha(0.35f);
             }
@@ -157,6 +157,7 @@ namespace NOAvionics
             if (bracket != frame.BracketColor) { frame.BracketColor = bracket; frame.SetVerticesDirty(); }
             if (glyph != null) glyph.color = ink;
             rail.color = railInk ?? (s.Rail.HasValue ? AvStyleHost.Resolve(s.Rail, Color.clear) : Color.clear);
+            if (!interactable) rail.color = rail.color.WithAlpha(rail.color.a * .55f);
         }
     }
 }

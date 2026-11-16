@@ -4,14 +4,15 @@ using UnityEngine.UI;
 namespace NOAvionics
 {
     /// <summary>
-    /// The FUI frame (samolevsky vocabulary): chamfered fill + 1 px stroke + optional corner brackets,
+    /// The FUI frame: square fill + fine stroke + optional corner brackets,
     /// all in ONE mesh and one draw. Colours are vertex colours so a state change dirties only this
     /// Graphic's vertices; the Graphic's own colour stays white so it batches with its siblings.
     /// </summary>
     public sealed class AvFrame : MaskableGraphic
     {
+        // Kept for existing module builders; frames now have one standardized rectangular silhouette.
         public AvChamfer Chamfer;
-        public float Stroke = 0.65f;
+        public float Stroke = 0.8f;
         public float Bracket;
         public bool Fill = true;
         public Color FillColor = new Color(0f, 0f, 0f, 0.5f);
@@ -49,9 +50,9 @@ namespace NOAvionics
         {
             vh.Clear();
             Rect r = GetPixelAdjustedRect();
-            AvV2[] outer = AvMeshMath.ChamferPolygon(r.xMin, r.yMin, r.xMax, r.yMax, Chamfer, outerScratch);
+            AvV2[] outer = AvMeshMath.ChamferPolygon(r.xMin, r.yMin, r.xMax, r.yMax, default, outerScratch);
             float s = Mathf.Max(0f, Stroke);
-            AvV2[] inner = AvMeshMath.ChamferPolygon(r.xMin + s, r.yMin + s, r.xMax - s, r.yMax - s, AvMeshMath.Inset(Chamfer, s), innerScratch);
+            AvV2[] inner = AvMeshMath.ChamferPolygon(r.xMin + s, r.yMin + s, r.xMax - s, r.yMax - s, default, innerScratch);
 
             if (Fill && FillColor.a > 0f)
             {
@@ -64,9 +65,9 @@ namespace NOAvionics
                 {
                     float inset = Mathf.Max(6f, s + 2f);
                     AvMesh.Quad(vh, r.xMin + inset, r.yMax - 2f, r.xMax - inset, r.yMax - 1.25f,
-                        new Color(.64f, .77f, .79f, .075f * FillColor.a));
-                    AvMesh.Quad(vh, r.xMin + inset, r.yMin + 1f, r.xMax - inset, r.yMin + 3f,
-                        new Color(0f, 0f, 0f, .28f * FillColor.a));
+                        new Color(.78f, .88f, .92f, .08f * FillColor.a));
+                    AvMesh.Quad(vh, r.xMin + inset, r.yMin + 1f, r.xMax - inset, r.yMin + 2f,
+                        new Color(0f, 0f, 0f, .12f * FillColor.a));
                 }
             }
             if (s > 0f && StrokeColor.a > 0f)
@@ -86,36 +87,20 @@ namespace NOAvionics
             }
             if (Bracket > 0f && BracketColor.a > 0f)
             {
-                // Reticle corners top-left and bottom-right (where those are square; the top-right keeps room for keys), and a short slash parallel to each cut one (tactical-display vocabulary).
+                // Registration ticks stay square and leave the top-right clear for controls.
                 float t = Mathf.Max(1f, s), L = Mathf.Min(Bracket, Mathf.Min(r.width, r.height) * 0.4f);
-                if (Chamfer.TL <= 0f) { Quad(vh, r.xMin, r.yMax - t, r.xMin + L, r.yMax); Quad(vh, r.xMin, r.yMax - L, r.xMin + t, r.yMax); }
-                if (Chamfer.BR <= 0f) { Quad(vh, r.xMax - L, r.yMin, r.xMax, r.yMin + t); Quad(vh, r.xMax - t, r.yMin, r.xMax, r.yMin + L); }
-                Slash(vh, outer[2], outer[3], -1f, -1f, Chamfer.TR, t);   // top-right cut, slash sits inside it
-                Slash(vh, outer[6], outer[7], 1f, 1f, Chamfer.BL, t);     // bottom-left cut
-                Slash(vh, outer[0], outer[1], 1f, -1f, Chamfer.TL, t);
-                Slash(vh, outer[4], outer[5], -1f, 1f, Chamfer.BR, t);
+                Quad(vh, r.xMin, r.yMax - t, r.xMin + L, r.yMax); Quad(vh, r.xMin, r.yMax - L, r.xMin + t, r.yMax);
+                Quad(vh, r.xMax - L, r.yMin, r.xMax, r.yMin + t); Quad(vh, r.xMax - t, r.yMin, r.xMax, r.yMin + L);
             }
         }
 
-        // A stroke parallel to a chamfer edge (a→b), pushed inward along (dx, dy), half the cut's length; nothing for small cuts.
-        private void Slash(VertexHelper vh, AvV2 a, AvV2 b, float dx, float dy, float cut, float t)
-        {
-            if (cut < 8f) return;   // on a small cut the slash is a stray dot, not a mark
-            float o = 2.5f + t, mx = (a.X + b.X) * 0.5f + dx * o, my = (a.Y + b.Y) * 0.5f + dy * o;
-            float hx = (b.X - a.X) * 0.25f, hy = (b.Y - a.Y) * 0.25f, nx = dx * t * 0.5f, ny = dy * t * 0.5f;
-            int c = vh.currentVertCount;
-            vh.AddVert(new Vector3(mx - hx - nx, my - hy - ny), BracketColor, Vector4.zero);
-            vh.AddVert(new Vector3(mx + hx - nx, my + hy - ny), BracketColor, Vector4.zero);
-            vh.AddVert(new Vector3(mx + hx + nx, my + hy + ny), BracketColor, Vector4.zero);
-            vh.AddVert(new Vector3(mx - hx + nx, my - hy + ny), BracketColor, Vector4.zero);
-            vh.AddTriangle(c, c + 1, c + 2); vh.AddTriangle(c, c + 2, c + 3);
-        }
-
-        // A quiet top light gives the glass depth without a texture, material instance or extra draw.
+        // Diffuse top light and a darker lower plane give even dark fills depth. Keep alpha intact:
+        // opaque reading planes stay opaque, and selection washes retain their semantic tint.
         private Color SurfaceColor(Rect r, float y)
         {
             float t = Mathf.InverseLerp(r.yMin, r.yMax, y);
-            Color c = Color.Lerp(FillColor * 0.68f, FillColor, t);
+            Color c = Color.Lerp(FillColor * 0.80f, FillColor, t);
+            c = Color.Lerp(c, new Color(.78f, .88f, .92f, FillColor.a), .035f * t);
             c.a = FillColor.a;
             return c;
         }

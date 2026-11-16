@@ -227,7 +227,7 @@ namespace BoscaliSummer.Modules.Support.Domain.Fronts
             switch (o)
             {
                 case FrontOutcome.NoPad: case FrontOutcome.NoDataCenter: case FrontOutcome.NoCamp: case FrontOutcome.PadFull: case FrontOutcome.DataCenterFull:
-                case FrontOutcome.CampFull: case FrontOutcome.KindUp: case FrontOutcome.UplinksMax: case FrontOutcome.DataCentersMax: case FrontOutcome.TrucksMax:
+                case FrontOutcome.CampFull: case FrontOutcome.KindUp: case FrontOutcome.BirdsUp: case FrontOutcome.UplinksMax: case FrontOutcome.DataCentersMax: case FrontOutcome.TrucksMax:
                 case FrontOutcome.CampsMax: case FrontOutcome.TeamCap: case FrontOutcome.FobMax: case FrontOutcome.NoHeldBuilding: return true;
                 default: return false;
             }

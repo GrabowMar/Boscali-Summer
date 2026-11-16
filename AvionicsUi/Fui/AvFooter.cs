@@ -7,14 +7,14 @@ namespace NOAvionics
     /// <summary>
     /// Console footer: the console's help strip, at a fixed height (a hover must never move the page above it).
     /// Idle, a state-coloured SYS tag leads the status line; under it the page's standing orders show one at a time (SOP, with
-    /// pips; they turn over on the slow tick); the right end carries the ambient status column (<see cref="AvAmbient"/>).
+    /// pips; they turn over on the slow tick); a slim bottom line carries ambient status (<see cref="AvAmbient"/>).
     /// Hovering a control with help swaps in a TIP tag, the control's own name and its help sentence, in the same layout.
     /// Text shrinks toward the 11 px floor; an order that still cannot fit waits for a turn with more room.
     /// A compact strip (under 36 px) keeps one line: tag and text.
     /// </summary>
     public sealed class AvFooter : AvPart
     {
-        private const float TagW = 34f, StatusW = 124f, Top = 7f, Bottom = 6f, Indent = TagW + 2f * AvGridTokens.Pad;
+        private const float TagW = 28f, StatusH = 17f, Top = 6f, Bottom = 5f, Indent = TagW + 2f * AvGridTokens.Pad;
         private const int Dwell = 16;   // slow ticks (0.5 s each) an order stays up
 
         private readonly Image back;
@@ -27,7 +27,7 @@ namespace NOAvionics
         private string baseValue = "", baseText = "", hint, hintName = "";
         private string[] orders;
         private int orderIndex, orderTicks;
-        private bool statusShown = true, statusAvailable;
+        private bool statusShown = true, statusAvailable, orderOnly;
         private float width = AvTokens.PanelWidth, height = AvGridTokens.Footer;
 
         public AvFooter(RectTransform parent)
@@ -55,9 +55,9 @@ namespace NOAvionics
             order = AvText.Make(Rect, "Order", AvTextRole.ProseSmall, "", TextAlignmentOptions.TopLeft, true);
             for (int i = 0; i < status.Length; i++)
             {
-                status[i] = AvText.Make(Rect, "Status" + i, AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
+                status[i] = AvText.Make(Rect, "Status" + i, AvTextRole.DataSmall, "",
+                    i == 0 ? TextAlignmentOptions.MidlineLeft : i == status.Length - 1 ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Center);
                 AvText.Fit(status[i], false);
-                PinRight(status[i].rectTransform, AvGridTokens.Pad, 9f + i * 19f, StatusW, 18f);
             }
             ShowStatus(false);
             Arrange();
@@ -82,7 +82,8 @@ namespace NOAvionics
             hint = next; hintName = nextName;
             AvText.Set(text, hint ?? baseText);
             AvText.Set(name, hintName);
-            Arrange();   // the 2 Hz Tick keeps the clock column; a hover only swaps the words
+            ShowStatus(statusAvailable);
+            Arrange();   // Help borrows the telemetry line without changing the footer's outer height.
             Restyle();
         }
 
@@ -95,11 +96,11 @@ namespace NOAvionics
             Arrange();
         }
 
-        /// <summary>Refreshes the idle status column and turns the standing orders over; the owning console or window calls it on its slow tick.</summary>
+        /// <summary>Refreshes the idle telemetry line and turns the standing orders over; the owning console or window calls it on its slow tick.</summary>
         public void Tick()
         {
             bool any = false, turned = false;
-            // The clock column stays up under hover help too: the strip keeps one layout, only its words change.
+            // Keep the values fresh while help temporarily borrows their space.
             for (int i = 0; i < status.Length; i++)
             {
                 string line = AvAmbient.Line(i);
@@ -118,19 +119,19 @@ namespace NOAvionics
             if (ShowStatus(any) | turned) Arrange();
         }
 
-        // True when the column's visibility changed (the text column width with it).
+        // True when the telemetry line changes the available reading height.
         private bool ShowStatus(bool on)
         {
             statusAvailable = on;
             // Keep the reading/help column usable on compact consoles; ambient facts yield first.
-            on &= AvConsoleLook.Clock && width - (Indent + AvGridTokens.Pad + StatusW + 14f) >= 160f && height >= AvGridTokens.Footer;
+            on &= hint == null && AvConsoleLook.Clock && width >= 300f && height >= AvGridTokens.Footer;
             if (on == statusShown) return false;
             statusShown = on;
             foreach (TMP_Text line in status) line.enabled = on;
             return true;
         }
 
-        /// <summary>Re-reads <see cref="AvConsoleLook"/> (clock column, standing orders, hover help).</summary>
+        /// <summary>Re-reads <see cref="AvConsoleLook"/> (telemetry line, standing orders, hover help).</summary>
         public void Relook()
         {
             if (!AvConsoleLook.HoverHelp && hint != null) SetHint(null);
@@ -154,16 +155,23 @@ namespace NOAvionics
         private void Arrange()
         {
             bool compact = height < 36f, hovering = hint != null;
-            float right = AvGridTokens.Pad + (statusShown ? StatusW + 14f : 0f);
+            float right = AvGridTokens.Pad;
             float colW = Mathf.Max(0f, width - Indent - right);
+            float readingHeight = height - (statusShown ? StatusH : 0f);
+            if (statusShown)
+            {
+                float statusW = (width - 2f * AvGridTokens.Pad) / status.Length;
+                for (int i = 0; i < status.Length; i++)
+                    AvLay.Place(status[i].rectTransform, AvGridTokens.Pad + i * statusW, height - StatusH, statusW, StatusH);
+            }
             float tagH = Mathf.Min(16f, Mathf.Max(0f, height));
             AvLay.Place(badge, AvGridTokens.Pad, compact ? (height - tagH) * .5f : Top, TagW, tagH);
 
             bool named = hovering && !compact && hintName.Length > 0;
             name.enabled = named;
             float y = compact ? 0f : Top - 1f;
-            if (named) { AvLay.Place(name.rectTransform, Indent, Top, colW, 16f); y = Top + 19f; }
-            float room = compact ? height : Mathf.Max(0f, height - y - Bottom);
+            if (named) { AvLay.Place(name.rectTransform, Indent, Top, colW, 14f); y = Top + 15f; }
+            float room = compact ? height : Mathf.Max(0f, readingHeight - y - Bottom);
 
             // Idle: the status takes what it needs and the order gets the rest, if one fits there.
             float textH = room;
@@ -171,10 +179,11 @@ namespace NOAvionics
             if (!compact && !hovering && orders != null && AvConsoleLook.Orders)
             {
                 float statusH = baseText.Length > 0 ? Mathf.Min(AvText.Height(text, colW), room) : 0f;
-                float oy = y + statusH + (statusH > 0f ? 3f : 0f), oroom = height - Bottom - oy;
+                float oy = y + statusH + (statusH > 0f ? 3f : 0f), oroom = readingHeight - Bottom - oy;
                 for (int k = 0; k < orders.Length && !showOrder && oroom >= 14f; k++)
                 {
                     int i = (orderIndex + k) % orders.Length;
+                    if (string.IsNullOrWhiteSpace(orders[i])) continue;
                     AvText.Set(order, orders[i]);
                     if (AvText.Height(order, colW) <= oroom + 1f) { orderIndex = i; showOrder = true; }
                 }
@@ -184,13 +193,17 @@ namespace NOAvionics
                     AvLay.Place(order.rectTransform, Indent, oy, colW, oroom);
                     float gy = Mathf.Max(oy + 1f, Top + 20f);   // under the badge even when there is no status line
                     AvLay.Place(sop.rectTransform, AvGridTokens.Pad, gy, TagW, 13f);
-                    art.SetPips(orders.Length, orderIndex, AvGridTokens.Pad, gy + 16f, TagW);
+                    art.SetPips(orders.Length, orderIndex, AvGridTokens.Pad, Mathf.Min(gy + 14f, readingHeight - 3f), TagW);
                 }
             }
-            order.enabled = sop.enabled = showOrder;
+            order.enabled = showOrder;
+            bool nextOrderOnly = showOrder && baseText.Length == 0;
+            sop.enabled = showOrder && !nextOrderOnly;
             if (!showOrder) art.SetPips(0, 0, 0f, 0f, 0f);
             AvLay.Place(text.rectTransform, Indent, y, colW, compact ? height : textH);
-            art.SetLayout(TagW, statusShown ? right - 7f : -1f);
+            art.SetLayout(TagW, statusShown ? readingHeight : -1f);
+            // Without a status line the order occupies its place, so its tag belongs there too.
+            if (orderOnly != nextOrderOnly) { orderOnly = nextOrderOnly; Restyle(); }
         }
 
         private static string Clean(string label)
@@ -200,25 +213,20 @@ namespace NOAvionics
             return s.StartsWith("//") ? s.Substring(2).TrimStart() : s;
         }
 
-        private static void PinRight(RectTransform t, float right, float top, float w, float h)
-        {
-            t.anchorMin = t.anchorMax = t.pivot = new Vector2(1f, 1f);
-            t.anchoredPosition = new Vector2(-right, -top);
-            t.sizeDelta = new Vector2(w, h);
-        }
-
         public override float Measure(float width) => AvGridTokens.Footer;
 
         public override void Restyle()
         {
             AvStyle s = AvStyleHost.FuiStyle("footer " + AvStates.Class(state));
-            back.color = AvStyleHost.Resolve(s.Background, AvTheme.SurfaceInert);
+            // Help and status are reading planes; underlying map labels must not ghost through them.
+            back.color = AvStyleHost.Resolve(s.Background, AvTheme.SurfaceInert).WithAlpha(1f);
             text.color = AvStyleHost.Resolve(hint != null ? AvStyleHost.FuiStyle("title").Color : s.Color, AvTheme.Dim);
             // Help reads in the info colour, the status in its state's, so a glance tells which one the strip is showing.
-            Color slab = AvStyleHost.FuiFill("slab " + (hint != null ? "info" : state == AvState.Inert ? "ready" : AvStates.Class(state)), AvTheme.Accent);
-            tag.Paint(slab, Color.clear);
-            tagText.color = AvStyleHost.FuiInk("slab", Color.black);
-            AvText.Set(tagText, hint != null ? "TIP" : "SYS");
+            bool tip = hint != null || orderOnly;
+            Color slab = AvStyleHost.FuiFill("slab " + (tip ? "info" : state == AvState.Inert ? "ready" : AvStates.Class(state)), AvTheme.Accent);
+            tag.Paint(slab.WithAlpha(.16f), Color.clear);
+            tagText.color = slab;
+            AvText.Set(tagText, tip ? "TIP" : "SYS");
             name.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
             order.color = AvStyleHost.FuiInk("page-index", AvTheme.Dim);
             sop.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);   // readable: it labels the line beside it
@@ -228,12 +236,12 @@ namespace NOAvionics
         }
     }
 
-    /// <summary>The footer's line art in one mesh: the tag's accent on the top edge, the status column rule and the standing-order pips.</summary>
+    /// <summary>The footer's line art in one mesh: accent, telemetry divider and standing-order pips.</summary>
     public sealed class AvFooterGraphic : MaskableGraphic
     {
         private const float PipW = 5f, PipH = 2f, PipGap = 2f;
         private Color accent = Color.white, rule = Color.white, pipOn = Color.white;
-        private float tagW, columnRight = -1f, pipX, pipTop, pipRoom;
+        private float tagW, telemetryTop = -1f, pipX, pipTop, pipRoom;
         private int pips, pipIndex;
 
         public void Paint(Color accentColor, Color ruleColor, Color pipColor)
@@ -244,11 +252,11 @@ namespace NOAvionics
         }
 
         /// <param name="tagWidth">Width of the tag whose accent runs along the top edge.</param>
-        /// <param name="columnRightEdge">Distance of the status column rule from the right edge; negative hides it.</param>
-        public void SetLayout(float tagWidth, float columnRightEdge)
+        /// <param name="telemetryTop">Telemetry line's top measured from the footer top; negative hides it.</param>
+        public void SetLayout(float tagWidth, float telemetryTop)
         {
-            if (Mathf.Approximately(tagWidth, tagW) && Mathf.Approximately(columnRightEdge, columnRight)) return;
-            tagW = tagWidth; columnRight = columnRightEdge;
+            if (Mathf.Approximately(tagWidth, tagW) && Mathf.Approximately(this.telemetryTop, telemetryTop)) return;
+            tagW = tagWidth; this.telemetryTop = telemetryTop;
             SetVerticesDirty();
         }
 
@@ -266,10 +274,10 @@ namespace NOAvionics
             if (r.width < 40f || r.height < 4f) return;
             float x0 = r.xMin + AvGridTokens.Pad;
             AvMesh.Quad(vh, x0, r.yMax - 2f, x0 + tagW, r.yMax, accent);
-            if (columnRight >= 0f && r.height > 24f)
+            if (telemetryTop >= 0f && r.height > 24f)
             {
-                float x = r.xMax - columnRight;
-                AvMesh.Quad(vh, x, r.yMin + 9f, x + 1f, r.yMax - 9f, rule);
+                float y = r.yMax - telemetryTop;
+                AvMesh.Quad(vh, x0, y, r.xMax - AvGridTokens.Pad, y + .65f, rule);
             }
             if (pips < 2) return;
             int shown = Mathf.Min(pips, Mathf.FloorToInt((pipRoom + PipGap) / (PipW + PipGap)));

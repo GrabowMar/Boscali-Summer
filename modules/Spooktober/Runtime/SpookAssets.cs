@@ -9,9 +9,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
     internal static class SpookAssets
     {
         private const string Resource = "BoscaliSummer.Spooktober.spooktober.bundle";
+        private const string ParticleResource = "BoscaliSummer.Spooktober.hell-particles.bundle";
         private static AssetBundle bundle;
+        private static AssetBundle particleBundle;
+        private static GameObject portalParticles;
         private static Shader radGhost, hellfire, hellPortal, hellMatter, hellSky, ashSurface, hellInfection;
         private static bool attempted;
+        private static bool particlesAttempted;
 
         public static Shader RadGhost { get { Load(); return radGhost; } }
         /// <summary>Hell's Army units (solid charred body, lava cracks); null when missing, like <see cref="RadGhost"/>.</summary>
@@ -22,11 +26,29 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         internal static Shader HellSky { get { Load(); return hellSky; } }
         internal static Shader AshSurface { get { Load(); return ashSurface; } }
         internal static Shader HellInfection { get { Load(); return hellInfection; } }
+        /// <summary>The RQL-authored prefab contains only native Unity particle components, with materials assigned by the portal.</summary>
+        internal static GameObject PortalParticles { get { LoadParticles(); return portalParticles; } }
 
         internal static void Release()
         {
             if (bundle != null) bundle.Unload(true);
+            if (particleBundle != null) particleBundle.Unload(true);
+            particleBundle = null; portalParticles = null; particlesAttempted = false;
             bundle = null; radGhost = null; hellfire = null; hellPortal = null; hellMatter = null; hellSky = null; ashSurface = null; hellInfection = null; attempted = false;
+        }
+
+        private static void LoadParticles()
+        {
+            if (particlesAttempted) return;
+            particlesAttempted = true;
+            try
+            {
+                byte[] data = EmbeddedResources.ReadAll(typeof(SpookAssets).Assembly, ParticleResource, 512 * 1024);
+                particleBundle = data != null ? AssetBundle.LoadFromMemory(data) : null;
+                portalParticles = particleBundle != null ? particleBundle.LoadAsset<GameObject>("assets/hellparticles/hellportalparticles.prefab") : null;
+            }
+            catch (Exception error) { Debug.LogWarning("[Spooktober] hell-particles.bundle: " + error.Message); }
+            if (portalParticles == null) Debug.LogWarning("[Spooktober] Authored portal particles unavailable; using the small native ash fallback");
         }
 
         private static void Load()

@@ -533,7 +533,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             string prompt = MapPicker.IsBusy ? MapPicker.Prompt : null;
             RectTransform viewport = map.mapBackground.rectTransform;
-            if (string.IsNullOrEmpty(prompt))
+            if (string.IsNullOrEmpty(prompt) || MfdMapControls.Shown)
             {
                 if (banner != null && banner.gameObject.activeSelf) banner.gameObject.SetActive(false);
                 return;

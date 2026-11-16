@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         private Material streakMaterial;
 
         internal void Apply(CinematicSettings settings, LevelInfo level, Transform parent,
-            Camera world = null, Shader streakShader = null)
+            Camera world = null, Shader streakShader = null, bool optimizeStreaks = false)
         {
             float strength = settings != null && settings.Enabled.Value ? Unit(settings.Strength.Value) : 0f;
             Volume native = level != null ? level.PostProcessing : null;
@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             vignette.smoothness.Override(Mathf.Lerp(nativeVignette != null ? nativeVignette.smoothness.value : 0.2f, 0.45f, strength));
             float noise = nativeGrain != null && nativeGrain.active ? nativeGrain.intensity.value : 0f;
             grain.intensity.Override(Mathf.Clamp01(noise + 0.025f * strength));
-            ApplyStreak(world, streakShader, glow);
+            ApplyStreak(world, streakShader, glow, optimizeStreaks);
         }
 
         private void Ensure(Volume native, Transform parent)
@@ -125,6 +125,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             state["cinematicBloom"] = bloom != null && bloom.active ? bloom.intensity.value : 0f;
             state["cinematicStreakFrameAge"] = streak != null && streak.ExecutedFrame >= 0
                 ? Time.frameCount - streak.ExecutedFrame : -1;
+            state["cinematicStreakOptimized"] = streak != null && streak.OptimizedLastFrame;
         }
 
         internal void Release()
@@ -152,7 +153,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             grain = null;
         }
 
-        private void ApplyStreak(Camera world, Shader shader, float strength)
+        private void ApplyStreak(Camera world, Shader shader, float strength, bool optimize)
         {
             if (world == null || shader == null || !shader.isSupported || strength <= 0f)
             {
@@ -163,7 +164,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             if (streakMaterial == null)
                 streakMaterial = new Material(shader) { name = "BoscaliSummer.CinematicStreak", hideFlags = HideFlags.HideAndDontSave };
             streak ??= new CinematicStreakPass();
-            streak.Bind(world, streakMaterial, strength, Exposure());
+            streak.Bind(world, streakMaterial, strength, Exposure(), optimize);
         }
 
         private void ReleaseStreak()

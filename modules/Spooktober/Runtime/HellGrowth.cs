@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Modules.Spooktober.Domain;
 using RoadPathfinding;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -19,11 +20,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         internal static int Count { get; private set; }
         internal static int Forms { get; private set; }
 
-        internal static Handle Create(Transform parent, int seed, Vector3 centerLocal, float radius, float strength, float sizeScale = 1f)
+        internal static Handle Create(Transform parent, int seed, Vector3 centerLocal, float radius, float strength, float sizeScale = 1f,
+            HellInfection infection = null, float infectionBorn = 0f)
         {
             if (parent == null || !float.IsFinite(radius) || radius < 40f) return null;
             var handle = new Handle();
-            try { handle.Build(parent, seed, centerLocal, radius, strength, sizeScale); return handle; }
+            try { handle.Build(parent, seed, centerLocal, radius, strength, sizeScale, infection, infectionBorn); return handle; }
             catch (Exception e)
             {
                 Plugin.Logger.LogWarning("[Spooktober] basalt growth: " + e.Message);
@@ -40,20 +42,24 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             private readonly List<ProtectedStrip> clear = new List<ProtectedStrip>();
             private readonly List<TerrainPatch> patches = new List<TerrainPatch>();
             private readonly List<ParticleSystem> vents = new List<ParticleSystem>();
+            private readonly List<float> ventStarts = new List<float>();
             private readonly float[] baseHeights = new float[GroupCount + 1];
             private float born, strength, radius, sizeScale, nextHaze, lastAge = -1f, lastStrength = -1f;
             private int seed, forms, terrainStage = -1;
             private bool counted, disposed;
             private Vector3 firstForm;
             private bool haveForm;
+            private HellInfection infection;
             internal int TerrainRevision { get; private set; }
 
-            internal void Build(Transform parent, int randomSeed, Vector3 centerLocal, float zoneRadius, float targetStrength, float scale)
+            internal void Build(Transform parent, int randomSeed, Vector3 centerLocal, float zoneRadius, float targetStrength, float scale,
+                HellInfection field, float infectionBorn)
             {
                 root = new GameObject("Hell grown basalt");
                 root.transform.SetParent(parent, false);
                 root.transform.localPosition = centerLocal;
-                born = Time.time;
+                infection = field;
+                born = infection != null ? infectionBorn : Time.time;
                 seed = randomSeed;
                 radius = zoneRadius;
                 sizeScale = Mathf.Clamp(scale, .25f, 6f);
@@ -62,11 +68,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 Count++;
                 ProtectAccess();
                 BuildForms();
-                BuildStratum();
-                PrepareTerrain();
+                if (infection == null) { BuildStratum(); PrepareTerrain(); }
                 var runner = root.AddComponent<GrowthRunner>();
                 runner.Owner = this;
-                Advance(born);
+                Advance(Time.time);
             }
 
             internal void SetStrength(float value)
@@ -82,7 +87,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             internal void Advance(float now)
             {
                 if (disposed || root == null) return;
-                float age = Mathf.Clamp01((now - born) / GrowSeconds);
+                float age = infection != null ? HellInfection.Phase(now, born) : Mathf.Clamp01((now - born) / GrowSeconds);
                 RefreshHaze(now, age);
                 if (age == lastAge && strength == lastStrength && terrainStage >= 0) return;
                 lastAge = age;
@@ -90,7 +95,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 for (int i = 0; i < groups.Count; i++)
                 {
                     float delay = i == GroupCount ? 0f : i * .1f;
-                    float grown = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((age - delay) / (1f - delay))) * strength;
+                    float grown;
+                    if (infection != null)
+                    {
+                        float start = InfectionGroupStart(i);
+                        grown = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - born - start) / (HellInfection.Duration - start))) * strength;
+                    }
+                    else grown = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((age - delay) / (1f - delay))) * strength;
                     Transform group = groups[i];
                     if (group.gameObject.activeSelf != grown > .001f) group.gameObject.SetActive(grown > .001f);
                     group.localScale = new Vector3(1f, Mathf.Max(.001f, grown), 1f);
@@ -111,7 +122,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 var models = new[] { Model.Read("hell_spire_a"), Model.Read("hell_spire_b"), Model.Read("hell_arch"), Model.Read("hell_vent") };
                 var builders = new Builder[GroupCount];
                 for (int i = 0; i < builders.Length; i++) builders[i] = new Builder();
-                int wanted = Math.Min(FormsPerZone, MaxForms - Forms);
+                int wanted = Math.Min(infection != null ? 48 : FormsPerZone, MaxForms - Forms);
                 for (int attempt = 0; forms < wanted && attempt < wanted * 20; attempt++)
                 {
                     int kind = forms % 13 == 0 ? 2 : forms % 7 == 0 ? 3 : forms % 2;
@@ -120,6 +131,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                     float angle = Next(random) * Mathf.PI * 2f;
                     float distance = Mathf.Lerp(.34f, .9f, Mathf.Sqrt(Next(random))) * radius;
                     Vector3 probe = new Vector3(Mathf.Cos(angle) * distance, 0f, Mathf.Sin(angle) * distance);
+                    float arrival = 0f;
+                    if (infection != null)
+                    {
+                        HellInfection.SampleValue at = infection.Sample(probe.x / radius, probe.z / radius);
+                        if (at.Coverage <= .45f || at.Arrival > .85f) continue;
+                        arrival = at.Arrival;
+                    }
                     if (!Sample(probe, out Vector3 local)) continue;
                     float targetHeight = (kind == 2 ? Mathf.Lerp(28f, 65f, Next(random)) : kind == 3 ? Mathf.Lerp(8f, 18f, Next(random)) :
                         Mathf.Lerp(sizeScale > 1.1f ? 22f : 10f, 100f, Mathf.Pow(Next(random), .85f))) * sizeScale;
@@ -129,18 +147,20 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                     if (Protected(local, footprint + 10f)) continue;
                     Quaternion turn = Quaternion.Euler(0f, Next(random) * 360f, 0f);
                     Matrix4x4 matrix = Matrix4x4.TRS(local, turn, scale) * Matrix4x4.Translate(new Vector3(-model.Bounds.center.x, -model.Bounds.min.y, -model.Bounds.center.z));
-                    int group = forms % GroupCount;
+                    int group = infection != null ? Math.Min(GroupCount - 1, (int)(arrival * GroupCount)) : forms % GroupCount;
                     builders[group].Add(model, matrix);
                     baseHeights[group] = Mathf.Min(baseHeights[group], local.y);
                     if (!haveForm) { haveForm = true; firstForm = local; }
-                    if (kind == 3 && vents.Count < 2) Vent(local);
+                    if (kind == 3 && vents.Count < 2) Vent(local, infection != null ? InfectionGroupStart(group) : 0f);
                     forms++;
                     Forms++;
                 }
                 for (int i = 0; i < builders.Length; i++) AddGroup(builders[i].Finish("Basalt needles " + i), i);
             }
 
-            private void Vent(Vector3 local)
+            private static float InfectionGroupStart(int group) => Math.Min(36f, (group + 1f) / GroupCount * 38f + 2f);
+
+            private void Vent(Vector3 local, float start)
             {
                 ParticleSystem ps = RadGhostLook.NewEmbers("Hell vent ash", root.transform, 3f * sizeScale, 120, Ash);
                 ps.gameObject.SetActive(false);
@@ -163,6 +183,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 ps.gameObject.SetActive(true);
                 ps.Play();
                 vents.Add(ps);
+                ventStarts.Add(start);
             }
 
             private void RefreshHaze(float now, float age)
@@ -172,10 +193,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
                 if (camera == null) camera = Camera.main;
                 float range = sizeScale > 1.1f ? 6000f : 3000f;
-                float rate = 10f * FxBus.Scales.Particles * strength * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.2f, .9f, age));
-                foreach (ParticleSystem ps in vents)
+                for (int i = 0; i < vents.Count; i++)
                 {
+                    ParticleSystem ps = vents[i];
                     if (ps == null) continue;
+                    float plumeAge = infection != null ? Mathf.Clamp01((now - born - ventStarts[i]) / (HellInfection.Duration - ventStarts[i])) : age;
+                    float rate = 10f * FxBus.Scales.Particles * strength * Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.2f, .9f, plumeAge));
                     bool near = camera != null && (camera.transform.position - ps.transform.position).sqrMagnitude < range * range;
                     var emission = ps.emission;
                     emission.enabled = near && rate > .01f;
@@ -368,6 +391,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 foreach (Mesh mesh in meshes) if (mesh != null) Object.Destroy(mesh);
                 meshes.Clear();
                 vents.Clear();
+                ventStarts.Clear();
                 groups.Clear();
                 if (root != null) Object.Destroy(root);
                 root = null;

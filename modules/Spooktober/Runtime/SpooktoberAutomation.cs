@@ -16,7 +16,7 @@ namespace BoscaliSummer.Spooktober
     /// nomodkit single-player test hook (tests/ingame/spooktober.json); inert outside a sim run. Actions: status,
     /// reset (fresh progress), spawn / defeat (boss = Kaiju|FallenAce|HellsArmy), dismiss,
     /// hell_status / hell_enter (Hell's Army's gate; tests/ingame/spooktober-hell.json),
-    /// hell_infection_status (bounded breach growth; tests/ingame/spooktober-hell-infection.json),
+    /// hell_infection_status / hell_city_breach_pose (bounded growth and native city setup; tests/ingame/spooktober-hell-infection*.json),
     /// ace_status, ace_hurt (how = wound|eject|hull) and fake_join (on = true|false; tests/ingame/spooktober-ace.json), relaunch (a new mission:
     /// progress re-read), rad (the look's readout), look (the free camera on the ace or the player) and
     /// tune ("_Knob": value on every material wearing the look).
@@ -41,6 +41,7 @@ namespace BoscaliSummer.Spooktober
                     SpookBosses.Settings.Progress.Value = "";
                     SpookStore.Init(SpookBosses.Settings);
                     SpookBosses.Dismiss(); // and nothing left on the field: the next scenario starts clean
+                    infectionCityTarget = null;
                     break;
                 case "spawn":
                 case "defeat":
@@ -93,6 +94,8 @@ namespace BoscaliSummer.Spooktober
                     return HellStatus(action, null);
                 case "hell_infection_status":
                     return InfectionStatus(action);
+                case "hell_city_breach_pose":
+                    return CityBreachPose(action);
                 case "hell_enter":
                     // As if the host flew through the portal (HellRules.Crossed is pinned by the unit tests).
                     if (!HellGate.Alive) return Failure("SpooktoberAutomation", action, "no gate open");
@@ -152,6 +155,72 @@ namespace BoscaliSummer.Spooktober
         private static int infectionPortal, matureMeshId, matureMeshBuilds;
         private static float matureRadius, matureCoverage;
         private static bool infectionMature;
+        private static MapBuilding infectionCityTarget;
+
+        /// <summary>Position the pilot for the ordinary first 7 km site probe near an existing, live scene building.</summary>
+        private static Dictionary<string, object> CityBreachPose(string action)
+        {
+            if (HellGate.Alive || !GameManager.GetLocalAircraft(out Aircraft own) || own == null || own.disabled)
+                return Failure("SpooktoberAutomation", action, "requires a live pilot and no open gate");
+            MapBuilding[] buildings = UnityEngine.Object.FindObjectsOfType<MapBuilding>();
+            Vector3 from = own.transform.position;
+            Array.Sort(buildings, (a, b) => (a.transform.position - from).sqrMagnitude.CompareTo((b.transform.position - from).sqrMagnitude));
+            int plans = 0;
+            foreach (MapBuilding building in buildings)
+            {
+                if (building == null || GameAccess.GetMapBuildingHitPoints(building) <= 0f) continue;
+                Bounds bounds = default;
+                bool found = false;
+                foreach (Collider collider in building.GetComponentsInChildren<Collider>())
+                {
+                    if (!collider.enabled || collider.isTrigger || collider.bounds.size.sqrMagnitude < .01f) continue;
+                    if (!found) { bounds = collider.bounds; found = true; } else bounds.Encapsulate(collider.bounds);
+                }
+                if (!found || bounds.size.x < 8f || bounds.size.z < 8f || bounds.size.y < 3f ||
+                    bounds.size.x > 120f || bounds.size.z > 120f || bounds.size.y > 120f) continue;
+                GlobalPosition target = bounds.center.ToGlobalPosition();
+                foreach (float distance in new[] { 250f, 300f, 350f, 200f })
+                    for (int direction = 0; direction < 16; direction++)
+                    {
+                        Vector3 offset = Quaternion.Euler(0f, direction * 22.5f, 0f) * Vector3.forward * distance;
+                        // Put the normal site probe in the middle of its 20 m seed cell, away from rounding boundaries.
+                        var desired = new GlobalPosition(Mathf.Round((target.x + offset.x) / 20f) * 20f, target.y,
+                            Mathf.Round((target.z + offset.z) / 20f) * 20f);
+                        if (!GroundPlacement.DryGround(desired.ToLocalPosition(), out Vector3 parcel)) continue;
+                        bool occupied = false;
+                        foreach (Collider collider in Physics.OverlapSphere(parcel + Vector3.up * 10f, 170f,
+                                     PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                            if (collider.GetComponentInParent<MapBuilding>() != null || collider.GetComponentInParent<Building>() != null)
+                            { occupied = true; break; }
+                        if (occupied) continue;
+                        GlobalPosition global = parcel.ToGlobalPosition();
+                        int seed = unchecked(Mathf.RoundToInt(global.x * .05f) * 73856093 ^ Mathf.RoundToInt(global.z * .05f) * 19349663);
+                        if (++plans > 256) return Failure("SpooktoberAutomation", action, "no strong city front within 256 dry-parcel plans");
+                        var sample = new HellInfection(seed).Sample((target.x - global.x) / 760f, (target.z - global.z) / 760f);
+                        if (sample.Coverage <= .4f || sample.Arrival >= .8f) continue;
+                        infectionCityTarget = building;
+                        Vector3 pilot = parcel - Vector3.forward * 7000f;
+                        pilot.y = Datum.LocalSeaY + 3000f;
+                        FallenAce.Relocate(own, pilot, Quaternion.Inverse(own.transform.rotation));
+                        // Keep the next normal spawn probe on this seed cell, even after a slow setup frame.
+                        foreach (Rigidbody body in own.GetComponentsInChildren<Rigidbody>()) body.velocity = Vector3.zero;
+                        if (own.partLookup != null)
+                            foreach (UnitPart part in own.partLookup)
+                                if (part != null && !part.transform.IsChildOf(own.transform))
+                                    foreach (Rigidbody body in part.GetComponentsInChildren<Rigidbody>()) body.velocity = Vector3.zero;
+                        Dictionary<string, object> result = Status(action, "normal spawn's first 7 km probe targets a dry city parcel");
+                        result["target_name"] = building.name;
+                        result["target_alive"] = true;
+                        result["target_position"] = new[] { target.x, target.y, target.z };
+                        result["parcel_position"] = new[] { global.x, global.y, global.z };
+                        result["sample_coverage"] = sample.Coverage;
+                        result["sample_arrival"] = sample.Arrival;
+                        result["seed"] = seed;
+                        return result;
+                    }
+            }
+            return Failure("SpooktoberAutomation", action, "no live modest scene building with a dry nearby breach parcel");
+        }
 
         private static Dictionary<string, object> InfectionStatus(string action)
         {
@@ -458,6 +527,12 @@ namespace BoscaliSummer.Spooktober
             result["spawned_air"] = HellGate.SpawnedAir;
             result["wardens"] = HellGate.Guards.Count;
             result["gate_scale"] = portal != null ? portal.Scale : 0f;
+            result["portal_radius"] = portal != null ? portal.Radius : 0f;
+            result["portal_world_radius"] = portal != null ? portal.Radius * portal.Scale : 0f;
+            result["portal_authored_effects"] = portal != null && portal.AuthoredEffects;
+            result["portal_particle_budget"] = portal != null ? portal.ParticleBudget : 0;
+            result["portal_particle_count"] = portal != null ? portal.ParticleCount : 0;
+            result["portal_effect_systems"] = portal != null ? portal.EffectSystems : 0;
             result["spawned"] = HellGate.Spawned;
             result["army"] = HellGate.Units.Count;
             result["cleanup_requested"] = HellGate.CleanupRequested;
@@ -494,11 +569,22 @@ namespace BoscaliSummer.Spooktober
             result["infection_fields"] = HellTerritory.InfectionFields;
             result["infection_growing"] = HellTerritory.InfectionGrowing;
             result["infection_mesh_builds"] = HellTerritory.InfectionMeshBuilds;
+            result["infection_destroyed_buildings"] = HellInfectionDamage.DestroyedBuildings;
+            result["infection_destroyed_map_buildings"] = HellInfectionDamage.DestroyedMapBuildings;
+            result["infection_destroyed_facilities"] = HellInfectionDamage.DestroyedFacilities;
+            result["infection_touched_pending"] = HellInfectionDamage.TouchedPending;
+            result["infection_scheduled_buildings"] = HellInfectionDamage.ScheduledTargets;
+            result["infection_surviving_touched"] = HellInfectionDamage.SurvivingTouched;
+            result["infection_discovery_pending"] = HellInfectionDamage.DiscoveryPending;
+            result["infection_failed_demolitions"] = HellInfectionDamage.FailedDemolitions;
+            result["infection_max_footprint_probes"] = HellInfectionDamage.MaxFootprintProbes;
+            result["infection_city_target_alive"] = infectionCityTarget != null && GameAccess.GetMapBuildingHitPoints(infectionCityTarget) > 0f;
             result["breach_age"] = HellTerritory.BreachAge;
             result["breach_growing"] = HellTerritory.BreachGrowing;
             result["breach_coverage"] = HellTerritory.BreachCoverage;
             result["breach_radius"] = HellTerritory.BreachRadius;
             result["breach_mesh_builds"] = HellTerritory.BreachMeshBuilds;
+            result["breach_road_samples"] = HellTerritory.BreachRoadSamples;
             result["breach_mesh_id"] = HellTerritory.BreachMeshId;
             result["ground_surface"] = HellTerritory.InfectionFields > 0
                 ? HellGroundSurface.InfectionMaterial()?.shader?.name ?? "" : HellGroundSurface.SourceName;

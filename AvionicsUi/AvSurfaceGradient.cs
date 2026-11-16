@@ -10,6 +10,9 @@ namespace NOAvionics
     {
         private Color top = Color.white, bottom = Color.white;
 
+        public static void ApplyHeader(Graphic target) =>
+            Apply(target, Color.white, new Color(.76f, .82f, .86f, 1f));
+
         public static void Apply(Graphic target, Color top, Color bottom)
         {
             if (target == null) return;

@@ -19,7 +19,8 @@ namespace NOAvionics
         private Func<bool> get;
         private Action<bool> set;
         private string onWord, offWord;
-        private bool on, hover, interactable = true;
+        private bool on, hover, pressed, interactable = true;
+        private AvHit hit;
         private AvFx fx;
         private AvSlot lastSlot;
         private bool placed;
@@ -44,8 +45,9 @@ namespace NOAvionics
             c.stateWord = AvText.Make(c.Rect, "State", AvTextRole.DataSmall, "", TextAlignmentOptions.TopRight);
             AvText.Fit(c.stateWord, false); // custom state words shrink into the 34 px box, never spill
             c.fx = AvFx.On(c.frame);
-            AvHit hit = AvHit.On(c.frame);
+            AvHit hit = c.hit = AvHit.On(c.frame);
             hit.Hover = h => { c.hover = h; c.Restyle(); c.Hovered?.Invoke(h); };
+            hit.Press = p => { c.pressed = p; c.Restyle(); };
             hit.Click = e =>
             {
                 if (e.button == PointerEventData.InputButton.Right) { c.OnRightClick?.Invoke(); c.Refresh(); return; }
@@ -59,7 +61,7 @@ namespace NOAvionics
         public bool Interactable
         {
             get => interactable;
-            set { if (interactable == value) return; interactable = value; frame.GetComponent<AvHit>().Interactable = value; Restyle(); }
+            set { if (interactable == value) return; interactable = value; hit.Interactable = value; Restyle(); }
         }
 
         public void Refresh()
@@ -100,10 +102,10 @@ namespace NOAvionics
 
         public override void Restyle()
         {
-            int look = (interactable ? 0 : 1) | (on ? 2 : 0) | (hover ? 4 : 0);
+            int look = (interactable ? 0 : 1) | (on ? 2 : 0) | (hover ? 4 : 0) | (pressed ? 8 : 0);
             if (look == styledLook && styledGen == AvStyleHost.FuiGeneration) return;
             styledLook = look; styledGen = AvStyleHost.FuiGeneration;
-            string st = !interactable ? "disabled" : on ? "on" : hover ? "hover" : null;
+            string st = !interactable ? "disabled" : pressed ? "pressed" : on ? "on" : hover ? "hover" : null;
             AvStyle c = AvStyleHost.FuiStyle("cell", st);
             Color fill = AvStyleHost.Resolve(c.Background, AvTheme.SurfaceInert), edge = AvStyleHost.Resolve(c.Border, AvTheme.Hairline);
             if (on && !interactable)
@@ -112,11 +114,12 @@ namespace NOAvionics
                 fill = AvStyleHost.Resolve(selected.Background, fill); fill.a *= .7f;
                 edge = AvStyleHost.Resolve(selected.Border, edge).WithAlpha(.75f);
             }
-            if (on && interactable && hover) edge = Color.Lerp(edge, AvInk.Ink, .35f);
+            if (on && interactable && hover && !pressed) edge = Color.Lerp(edge, AvInk.Ink, .35f);
             frame.Paint(fill, edge);
             title.color = AvStyleHost.Resolve(c.Color, AvTheme.TextPrimary);
             sub.color = interactable ? AvStyleHost.FuiInk("cell-sub", AvTheme.Dim) : AvInk.Muted;
             stateWord.color = AvStyleHost.FuiInk("cell-state", AvTheme.Disabled, on ? "on" : null);
+            if (!interactable) stateWord.color = Color.Lerp(sub.color, stateWord.color, .5f);
             led.color = AvStyleHost.FuiFill("cell-led", AvTheme.RailInert, on ? "on" : null);
             if (!interactable) led.color = led.color.WithAlpha(.75f);
             if (glyph != null) glyph.color = on ? led.color : sub.color;

@@ -8,9 +8,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         private Transform pivot;
         private Quaternion baseRotation;
         private Quaternion writtenRotation;
+        private Vector3 basePosition, writtenPosition;
+        private bool positionApplied;
+        internal const float PlayerBodyEyeForwardMetres = .03f;
         public bool IsApplied { get; private set; }
 
-        internal void Apply(Transform target, Quaternion offset)
+        internal void Apply(Transform target, Quaternion offset, Vector3 worldPositionOffset = default)
         {
             Remove();
             if (target == null) return;
@@ -18,6 +21,14 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             baseRotation = pivot.localRotation;
             writtenRotation = baseRotation * offset;
             pivot.localRotation = writtenRotation;
+            positionApplied = worldPositionOffset.sqrMagnitude > 0f;
+            if (positionApplied)
+            {
+                basePosition = pivot.localPosition;
+                Vector3 localOffset = pivot.parent != null ? pivot.parent.InverseTransformVector(worldPositionOffset) : worldPositionOffset;
+                writtenPosition = basePosition + localOffset;
+                pivot.localPosition = writtenPosition;
+            }
             IsApplied = true;
         }
 
@@ -25,7 +36,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             if (IsApplied && pivot != null && SameWrite(pivot.localRotation, writtenRotation))
                 pivot.localRotation = baseRotation;
+            if (IsApplied && positionApplied && pivot != null && (pivot.localPosition - writtenPosition).sqrMagnitude < 1e-12f)
+                pivot.localPosition = basePosition;
             IsApplied = false;
+            positionApplied = false;
             pivot = null;
         }
 

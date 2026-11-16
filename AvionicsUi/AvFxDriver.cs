@@ -21,14 +21,17 @@ namespace NOAvionics
         public static Func<float> GlitchSource { get; set; }
         public static int Revision { get; private set; }
         public static float Now => Time.unscaledTime * AvFxPacking.AnimationSpeed;
+        internal static event Action Changed;
 
         public static void Configure(AvFxTier tier, bool reducedMotion)
         {
+            if (Tier == tier && ReducedMotion == reducedMotion) return;
             Tier = tier;
             ReducedMotion = reducedMotion;
             AvReveal.Snap = reducedMotion || tier == AvFxTier.Off;
             Shader.SetGlobalFloat(TierId, (float)tier);
             Revision++;
+            Changed?.Invoke();
         }
 
         public static Material FxMaterial
@@ -88,21 +91,26 @@ namespace NOAvionics
 
         private sealed class Updater : MonoBehaviour
         {
-            private float glitch;
+            private float glitch, sentGlitch = -1f;
 
             private void Update()
             {
-                Shader.SetGlobalFloat(NowId, Now);
                 AvConsole.ParkHidden();
+                float now = Now;
+                bool panelEffects = AvFx.TickActive(now);
+                bool liveDisplay = AvDisplayGlass.HasLiveDisplay;
+                if (panelEffects || liveDisplay) Shader.SetGlobalFloat(NowId, now);
                 float target = 0f;
-                if (Tier == AvFxTier.Full && GlitchSource != null)
+                if (liveDisplay && GlitchSource != null)
                 {
                     try { target = Mathf.Clamp01(GlitchSource()); } catch (Exception) { GlitchSource = null; }
                 }
                 float delta = Time.unscaledDeltaTime * AvFxPacking.AnimationSpeed;
                 glitch = Mathf.MoveTowards(glitch, target, delta * 3f);
-                kick = Tier == AvFxTier.Full ? Mathf.MoveTowards(kick, 0f, delta * 2f) : 0f;
-                Shader.SetGlobalFloat(GlitchId, ReducedMotion ? 0f : Mathf.Max(glitch, kick));
+                kick = liveDisplay ? Mathf.MoveTowards(kick, 0f, delta * 2f) : 0f;
+                float signal = liveDisplay ? Mathf.Max(glitch, kick) : 0f;
+                if (!Mathf.Approximately(sentGlitch, signal)) { Shader.SetGlobalFloat(GlitchId, signal); sentGlitch = signal; }
+                AvDisplayGlass.SetGlitchVisible(signal > .001f);
             }
         }
     }

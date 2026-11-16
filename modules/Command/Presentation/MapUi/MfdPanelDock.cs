@@ -71,6 +71,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static RectTransform dock;
         private static readonly List<Docked> docked = new List<Docked>();
         private static readonly List<RectTransform> slots = new List<RectTransform>();
+        private sealed class ConsoleSize
+        {
+            public MFDScreen Screen;
+            public AvConsole Console;
+            public float Height;
+        }
+        private static readonly List<ConsoleSize> consoleSizes = new List<ConsoleSize>();
 
 
         /// <summary>Build or re-find the dock, sized and placed on the panel column.</summary>
@@ -110,6 +117,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 if (slots[i] != null) slots[i].sizeDelta = dock.sizeDelta;
             }
+            for (int i = 0; i < consoleSizes.Count; i++)
+                if (consoleSizes[i].Console.Root != null) consoleSizes[i].Console.SetHeight(dockHeight);
+            for (int i = 0; i < docked.Count; i++)
+                if (docked[i].Screen != null && docked[i].Screen.isActive)
+                    AlignToBottom(docked[i].Screen, docked[i].Screen.transform.parent as RectTransform);
 
             // Do not paint a full-height dock backing. It was the source of the isolated
             // blue-green tint below a 596px MFD: the dock is deliberately taller so it can
@@ -125,6 +137,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // Last, not first: the dock is a sibling of the map on the same canvas, and
             // sibling order is draw order. First would file every panel behind the map.
             dock.SetAsLastSibling();
+            MfdFieldLog.Ensure(canvas, columns);
 
             return dock;
         }
@@ -144,6 +157,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Dock(MFDScreen screen, bool left)
         {
             if (screen == null || dock == null) return;
+            // MAP is the independent drawer below the viewport in the expanded layout.
+            // Keep its native controller alive, but do not build a second set of tools in the left bay.
+            if (MfdPresentation.Expanded && screen.GetComponent<MapOptions>() != null)
+            {
+                if (screen.isActive) screen.CloseScreen(UnityEngine.Screen.width * Vector3.left);
+                return;
+            }
 
             var rt = screen.transform as RectTransform;
             if (rt == null) return;
@@ -206,6 +226,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             // it into the visible column.
             MfdScreenChromePatch.SyncDockedState(screen);
             MfdPresentation.Apply(screen);
+            FitConsoles(screen);
             AlignToBottom(screen, slot);
         }
 
@@ -295,6 +316,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static float VisibleHeight(MFDScreen screen)
         {
             if (screen == null) return 0f;
+            for (int i = 0; i < consoleSizes.Count; i++)
+                if (consoleSizes[i].Screen == screen && consoleSizes[i].Console.Root != null)
+                    return consoleSizes[i].Console.Root.rect.height;
 
             var display = screen.displayPanel == null
                 ? null
@@ -342,6 +366,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static float AvailableHeight(float fallback) =>
             dock == null || dock.rect.height <= 1f ? fallback : dock.rect.height;
 
+        // Discover on docking/show only: lazy native presenters can appear on first show, and SET owns two consoles.
+        // The existing ticker carries its console reference, so this neither guesses by id nor scans the UI every frame.
+        private static void FitConsoles(MFDScreen screen)
+        {
+            if (screen == null || dock == null) return;
+            foreach (AvTicker ticker in screen.GetComponentsInChildren<AvTicker>(true))
+            {
+                AvConsole console = ticker.Console;
+                if (console == null) continue;
+                bool known = false;
+                for (int i = 0; i < consoleSizes.Count; i++)
+                    if (consoleSizes[i].Console == console) { known = true; break; }
+                if (!known) consoleSizes.Add(new ConsoleSize { Screen = screen, Console = console, Height = console.Root.rect.height });
+                console.SetHeight(dock.rect.height);
+            }
+        }
+
         /// <summary>Whether a screen point lies over the instrument column the dock owns.</summary>
         public static bool ContainsScreenPoint(Vector2 screenPoint) =>
             MapUiPointer.Contains(dock, screenPoint);
@@ -382,7 +423,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!attached) VanillaMfdRebuild.OnShown(screen);
             // HUD and MIS build their console on first show, after the align above measured the stock
             // 596 px panel: re-align against the console that is now attached, or ~300 px hang below the screen.
-            if (attached) AlignToBottom(screen, slot);
+            FitConsoles(screen);
+            AlignToBottom(screen, slot);
         }
 
         /// <summary>Dock every screen the two mods own, on both vanilla bezel columns.</summary>
@@ -470,6 +512,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Put every docked screen back where it came from.</summary>
         public static void Restore()
         {
+            MfdFieldLog.Hide();
             // A toggle can run before the next structure sweep notices a newly installed
             // screen. Rescue those template siblings before destroying any slot.
             int slotCount = slots.Count;
@@ -483,6 +526,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             // Restore each native displayPanel pointer before moving the screen out of the
             // dock; a late CloseScreen/ShowScreen callback will then always see native UI.
+            for (int i = 0; i < consoleSizes.Count; i++)
+                if (consoleSizes[i].Console.Root != null) consoleSizes[i].Console.SetHeight(consoleSizes[i].Height);
+            consoleSizes.Clear();
             VanillaMfdRebuild.Restore();
 
             for (int i = 0; i < docked.Count; i++) docked[i].Restore();

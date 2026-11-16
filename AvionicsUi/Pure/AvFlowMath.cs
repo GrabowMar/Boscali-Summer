@@ -9,12 +9,12 @@ namespace NOAvionics
         public AvSlot(float x, float y, float w, float h) { X = x; Y = y; W = w; H = h; }
     }
 
-    /// <summary>Kit v2 grid (spec §5.3). The gutter is always reserved: scroll bars live in it, text never does.</summary>
+    /// <summary>Shared instrument grid. Scrollbars overlay the outer padding; content has symmetric margins.</summary>
     public static class AvGridTokens
     {
-        public const float Pad = 8f, Gap = 5f, Gutter = 6f;
+        public const float Pad = 8f, Gap = 5f, Gutter = 0f;
         public const float RowDense = 24f, Row = 28f, ToolCell = 38f;
-        public const float Tab = 28f, Header = 28f, ChipStrip = 18f, Metric = 50f, Footer = 76f;
+        public const float Tab = 30f, Header = 32f, ChipStrip = 18f, Metric = 50f, Footer = 64f;
         public const float IconInline = 14f, IconHead = 16f, IconTool = 20f;
     }
 

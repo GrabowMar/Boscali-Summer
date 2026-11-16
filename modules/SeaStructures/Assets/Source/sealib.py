@@ -2,12 +2,13 @@
 
 A model is sections (the parts that take damage) made of pieces (what falls off as a section loses hit points).
 Geometry is authored in world metres, Blender frame: x east, y north, z up, sea level z = 0. Each face carries a
-palette index; shading (ambient occlusion, waterline grime, panel jitter) is baked per face corner and exported as the
-V coordinate of a colour ramp the mod builds from the palette, so no texture files ship.
+palette index; ambient shading and layered marine finishes bake into portable UV texture maps. The palette and shade
+remain in the format for compatibility, while version 2 carries the actual atlas UVs used by the game.
 
 Output: <key>.seamodel (read by modules/SeaStructures/Domain/SeaLayout.cs) and preview renders.
 """
 import math
+import json
 import os
 import random
 import struct
@@ -31,6 +32,7 @@ PALETTE = [
     ("navy",     (0.340, 0.380, 0.410)),  # 12 fort steel
     ("blue",     (0.190, 0.280, 0.390)),  # 13 containers
     ("green",    (0.200, 0.300, 0.250)),  # 14 helideck
+    ("runway",   (0.095, 0.110, 0.120)),  # 15 matte anti-skid flight surface
 ]
 C = {name: i for i, (name, _) in enumerate(PALETTE)}
 
@@ -99,9 +101,44 @@ class Model:
 
     # ---------------------------------------------------------------- solids
 
-    def box(self, c, s, paint, top=None, hit=False, yaw=0.0, cell=7.0):
+    def box(self, c, s, paint, top=None, hit=False, yaw=0.0, cell=7.0, bevel=0.0):
         c, h = Vector(c), Vector(s) * 0.5
         ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+
+        if bevel > 0:
+            # One-segment edge breaks: flat main faces, twelve bevels, eight corner triangles.
+            b = min(bevel, min(h) * 0.45)
+            def world(v):
+                return c + Vector((v[0] * ca - v[1] * sa, v[0] * sa + v[1] * ca, v[2]))
+            for axis in range(3):
+                u, v = (axis + 1) % 3, (axis + 2) % 3
+                for sign in (-1, 1):
+                    face = []
+                    for su, sv in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+                        p = [0.0] * 3
+                        p[axis], p[u], p[v] = sign * h[axis], su * (h[u] - b), sv * (h[v] - b)
+                        face.append(world(p))
+                    self.face(face, top if top is not None and axis == 2 and sign == 1 else paint, centre=c, cell=cell)
+            for axis in range(3):
+                u, v = (axis + 1) % 3, (axis + 2) % 3
+                for su in (-1, 1):
+                    for sv in (-1, 1):
+                        face = []
+                        for end, inset in ((-1, 0), (1, 0), (1, 1), (-1, 1)):
+                            p = [0.0] * 3
+                            p[axis] = end * (h[axis] - b)
+                            p[u], p[v] = su * (h[u] - b * inset), sv * (h[v] - b * (1 - inset))
+                            face.append(world(p))
+                        self.face(face, paint, centre=c)
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    for sz in (-1, 1):
+                        signs = (sx, sy, sz)
+                        self.face([world([signs[k] * (h[k] if k == axis else h[k] - b) for k in range(3)])
+                                   for axis in range(3)], paint, centre=c)
+            if hit:
+                self.hit(c, s)
+            return
 
         def p(x, y, z):
             return c + Vector((x * h.x * ca - y * h.y * sa, x * h.x * sa + y * h.y * ca, z * h.z))
@@ -261,16 +298,25 @@ class Model:
         self.p = keep
 
     def stair(self, a, b, width, paint):
-        """A straight stair flight from a (low) to b (high): two stringers and a tread plane."""
+        """Open industrial stair: individual horizontal treads, stringers and guarded sides."""
         a, b = Vector(a), Vector(b)
         side = (b - a).cross(Vector((0, 0, 1))).normalized() * (width * 0.5)
         self.tube(a + side, b + side, 0.09, paint, n=4, caps=False)
         self.tube(a - side, b - side, 0.09, paint, n=4, caps=False)
-        self.face([a - side, a + side, b + side, b - side], paint)
-        self.face([b - side, b + side, a + side, a - side], paint)
+        count = max(2, math.ceil(abs(b.z - a.z) / 0.25))
+        run = Vector((b.x - a.x, b.y - a.y, 0)) / count
+        for i in range(count):
+            start = a.lerp(b, (i + 1) / count)
+            self.face([start - side - run, start + side - run, start + side, start - side], paint,
+                      centre=start - Vector((0, 0, 1)))
+            self.tube(start - side, start + side, 0.045, paint, n=4, caps=False)
         up = Vector((0, 0, 1.0))
-        self.tube(a + side + up, b + side + up, 0.04, paint, n=3, caps=False)
-        self.tube(a - side + up, b - side + up, 0.04, paint, n=3, caps=False)
+        for sign in (-1, 1):
+            for level in (0.5, 1.0):
+                self.tube(a + side * sign + up * level, b + side * sign + up * level, 0.04, paint, n=4, caps=False)
+            for i in range(max(2, math.ceil((b - a).length / 2)) + 1):
+                pos = a.lerp(b, i / max(2, math.ceil((b - a).length / 2))) + side * sign
+                self.tube(pos, pos + up, 0.045, paint, n=4, caps=False)
 
     def helideck(self, c, r, z, deck, edge, mark, ring):
         """An octagonal landing deck: plate, sloped safety net, landing circle and H. Core plate; net and marks are loose."""
@@ -284,8 +330,19 @@ class Model:
             a, b = Vector((pts[i][0], pts[i][1], z - 0.25)), Vector((pts[j][0], pts[j][1], z - 0.25))
             ao = Vector((c[0] + (pts[i][0] - c[0]) * k, c[1] + (pts[i][1] - c[1]) * k, z + 0.25))
             bo = Vector((c[0] + (pts[j][0] - c[0]) * k, c[1] + (pts[j][1] - c[1]) * k, z + 0.25))
-            self.face([a, b, bo, ao], edge)
-            self.face([ao, bo, b, a], edge)
+            self.tube(ao, bo, 0.065, edge, n=4)
+            for row in (0.25, 0.5, 0.75):
+                self.tube(a.lerp(ao, row), b.lerp(bo, row), 0.025, edge, n=3, caps=False)
+            spans = max(2, math.ceil((b - a).length / 0.8))
+            for j in range(spans + 1):
+                self.tube(a.lerp(b, j / spans), ao.lerp(bo, j / spans), 0.025, edge, n=3, caps=False)
+            # Inset perimeter paint and low, protected edge lights.
+            pa = Vector((c[0], c[1], z + 0.045)).lerp(Vector((pts[i][0], pts[i][1], z + 0.045)), 0.94)
+            pb = Vector((c[0], c[1], z + 0.045)).lerp(Vector((pts[(i + 1) % n][0], pts[(i + 1) % n][1], z + 0.045)), 0.94)
+            self.tube(pa, pb, 0.075, mark, n=4)
+            mid = (a + b) * 0.5
+            self.cyl((mid.x, mid.y), 0.18, z, z + 0.16, edge, n=6)
+            self.cyl((mid.x, mid.y), 0.11, z + 0.16, z + 0.30, C["green"], n=6)
         self.piece(core=False)
         zz = z + 0.04
         seg = 24
@@ -300,6 +357,28 @@ class Model:
             self.face([(c[0] + x0, c[1] + y0, zz), (c[0] + x1, c[1] + y0, zz), (c[0] + x1, c[1] + y1, zz), (c[0] + x0, c[1] + y1, zz)], mark,
                       centre=(c[0], c[1], zz - 5))
 
+    def stencil(self, text, c, height, paint, yaw=0.0):
+        """Flat, clipped block numerals for deck identifiers; no font or texture dependency."""
+        glyphs = {"0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+                  "5": "afgcd", "6": "afgecd", "7": "abc", "8": "abcdefg", "9": "abfgcd"}
+        segments = {"a": (0, .45, .6, .10), "g": (0, 0, .6, .10), "d": (0, -.45, .6, .10),
+                    "f": (-.25, .225, .10, .32), "b": (.25, .225, .10, .32),
+                    "e": (-.25, -.225, .10, .32), "c": (.25, -.225, .10, .32)}
+        ca, sa = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+        for index, char in enumerate(text):
+            offset = (index - (len(text) - 1) * .5) * .78
+            for segment in glyphs[char]:
+                x, y, w, h = segments[segment]
+                cut = .025
+                pts = [(-w / 2 + cut, -h / 2), (w / 2 - cut, -h / 2), (w / 2, -h / 2 + cut),
+                       (w / 2, h / 2 - cut), (w / 2 - cut, h / 2), (-w / 2 + cut, h / 2),
+                       (-w / 2, h / 2 - cut), (-w / 2, -h / 2 + cut)]
+                face = []
+                for px, py in pts:
+                    xx, yy = (px + x + offset) * height, (py + y) * height
+                    face.append((c[0] + xx * ca - yy * sa, c[1] + xx * sa + yy * ca, c[2]))
+                self.face(face, paint, centre=(c[0], c[1], c[2] - 1))
+
     # ---------------------------------------------------------------- output
 
     def stats(self):
@@ -310,6 +389,7 @@ class Model:
 
     def build(self, out_dir, preview_dir, views):
         """Bake shading, write the .seamodel, render previews."""
+        print("Blender " + bpy.app.version_string)
         for s in self.sections:
             s.pieces = [p for p in s.pieces if p.faces]
             assert s.boxes, s.name + " has no hit box"
@@ -327,8 +407,17 @@ class Model:
         mesh = bpy.data.meshes.new(self.key)
         mesh.from_pydata(verts, [], polys)
         mesh.update()
+        assert not mesh.validate(), "Generated geometry needed repair"
+        mesh.calc_loop_triangles()
+        assert all(p.area > 1e-10 for p in mesh.polygons), "Zero-area face"
+        assert len(mesh.loop_triangles) < (140000 if self.kind == 0 else 110000), "Triangle budget exceeded"
         obj = bpy.data.objects.new(self.key, mesh)
         bpy.context.scene.collection.objects.link(obj)
+        vertex_at = 0
+        for si, section in enumerate(self.sections):
+            count = sum(len(vs) for piece in section.pieces for vs, _ in piece.faces)
+            obj.vertex_groups.new(name="%02d %s" % (si, section.name)).add(list(range(vertex_at, vertex_at + count)), 1.0, 'REPLACE')
+            vertex_at += count
         ao = mesh.color_attributes.new("ao", 'FLOAT_COLOR', 'CORNER')
         mat = bpy.data.materials.new("bake")
         mesh.materials.append(mat)
@@ -354,15 +443,32 @@ class Model:
         rng = random.Random(7)
         shade = [0.0] * len(mesh.loops)
         for poly in mesh.polygons:
-            jitter = 1.0 + rng.uniform(-0.045, 0.045)
+            jitter = 1.0 + rng.uniform(-0.018, 0.018)
             for li in poly.loop_indices:
                 z = mesh.vertices[mesh.loops[li].vertex_index].co.z
                 occ = ao.data[li].color[0]
                 grime = 0.62 + 0.38 * min(1.0, max(0.0, (z + 1.0) / 6.0)) if z < 5.0 else 1.0
                 shade[li] = max(0.0, min(1.0, (0.35 + 0.65 * occ) * grime * jitter))
 
+        from sea_textures import bake_textures
+        texture_report = bake_textures(obj, paints, shade, PALETTE, os.path.join(out_dir, "Textures"))
+        mesh = obj.data
         self._write(os.path.join(out_dir, self.key + ".seamodel"), mesh, shade)
         self._preview(mesh, obj, sea_obj, paints, shade, preview_dir, views)
+        models = os.path.abspath(os.path.join(out_dir, "Models"))
+        os.makedirs(models, exist_ok=True)
+        bpy.context.preferences.filepaths.save_version = 0
+        bpy.ops.wm.save_as_mainfile(filepath=os.path.join(models, self.key + ".blend"), compress=True)
+        report = {"model": self.key, "blender": bpy.app.version_string, "triangles": len(mesh.loop_triangles),
+                  "sections": len(self.sections), "pieces": sum(len(s.pieces) for s in self.sections),
+                  "hit_boxes": sum(len(s.boxes) for s in self.sections), "hardpoints": len(self.mounts),
+                  "bounds_m": [list(v) for v in (Vector(tuple(min(p[k] for p in verts) for k in range(3))),
+                                                   Vector(tuple(max(p[k] for p in verts) for k in range(3))))],
+                  "zero_area_faces": 0, "palette_materials": 1, "textures": texture_report,
+                  "notes": "Separate intersecting industrial assemblies; uncapped rail/truss ends are intentional. Section vertex groups in editable blend."}
+        with open(os.path.join(preview_dir, self.key + "-audit.json"), "w") as f:
+            json.dump(report, f, indent=2)
+        print("RESULT " + json.dumps(report))
 
     def _write(self, path, mesh, shade):
         out = bytearray()
@@ -375,7 +481,8 @@ class Model:
         def unity(v):  # Blender (x, y, z up) -> Unity (x, y up, z)
             return (v[0], v[2], v[1])
         out.extend(b"BSSM")
-        out.extend(struct.pack("<BB", 1, self.kind))
+        # Version 2 extends each v1 vertex record with two float32 atlas UV coordinates.
+        out.extend(struct.pack("<BB", 2, self.kind))
         text(self.key)
         text(self.unit)
         out.extend(struct.pack("<B", len(PALETTE)))
@@ -404,17 +511,18 @@ class Model:
                         for k in range(3):
                             lo[k], hi[k] = min(lo[k], co[k]), max(hi[k], co[k])
                         key = (round(co.x, 3), round(co.y, 3), round(co.z, 3), round(n.x * 127), round(n.y * 127), round(n.z * 127),
-                               paint, round(shade[li] * 255))
+                               paint, round(shade[li] * 255), *tuple(mesh.uv_layers['Atlas'].data[li].uv))
                         if key not in index:
                             index[key] = len(table)
                             table.append(key)
                         ids.append(index[key])
-                    for k in range(1, len(ids) - 1):  # Blender winds counter-clockwise; the axis swap makes that clockwise in Unity
-                        tri.extend((ids[0], ids[k], ids[k + 1]))
+                    # Swapping Y/Z reflects the geometry: reverse winding so it still agrees with the exported normal.
+                    for k in range(1, len(ids) - 1):
+                        tri.extend((ids[0], ids[k + 1], ids[k]))
                 centre, size = (lo + hi) * 0.5, hi - lo
                 out.extend(struct.pack("<B6fI", 1 if p.core else 0, *unity(centre), *unity(size), len(table)))
-                for (x, y, z, nx, ny, nz, paint, sh) in table:
-                    out.extend(struct.pack("<3f3bBB", x, z, y, nx, nz, ny, paint, sh))
+                for (x, y, z, nx, ny, nz, paint, sh, u, v) in table:
+                    out.extend(struct.pack("<3f3bBB2f", x, z, y, nx, nz, ny, paint, sh, u, v))
                 out.extend(struct.pack("<I", len(tri)))
                 out.extend(struct.pack("<%d%s" % (len(tri), "H" if len(table) < 65536 else "I"), *tri))
                 tris += len(tri) // 3
@@ -427,20 +535,7 @@ class Model:
 
     def _preview(self, mesh, obj, sea_obj, paints, shade, preview_dir, views):
         os.makedirs(preview_dir, exist_ok=True)
-        col = mesh.color_attributes.new("col", 'FLOAT_COLOR', 'CORNER')
-        for poly in mesh.polygons:
-            rgb = PALETTE[paints[poly.index]][1]
-            for li in poly.loop_indices:
-                k = 0.2 + 0.8 * shade[li]
-                col.data[li].color = (rgb[0] * k, rgb[1] * k, rgb[2] * k, 1.0)
-        mat = mesh.materials[0]
-        mat.use_nodes = True
-        nodes = mat.node_tree.nodes
-        bsdf = nodes.get("Principled BSDF")
-        attr = nodes.new("ShaderNodeVertexColor")
-        attr.layer_name = "col"
-        mat.node_tree.links.new(attr.outputs["Color"], bsdf.inputs["Base Color"])
-        bsdf.inputs["Roughness"].default_value = 0.7
+        # bake_textures installs the same albedo/normal/surface maps used by the native game material.
         water = bpy.data.materials.new("water")
         water.use_nodes = True
         wb = water.node_tree.nodes.get("Principled BSDF")
@@ -454,13 +549,16 @@ class Model:
         except TypeError:
             scene.render.engine = 'BLENDER_EEVEE_NEXT'
         scene.render.resolution_x, scene.render.resolution_y = 1600, 900
+        scene.render.image_settings.file_format = 'PNG'
+        scene.view_settings.view_transform = 'AgX'
+        scene.view_settings.look = 'AgX - Medium High Contrast'
         world = scene.world
         world.use_nodes = True
         bg = world.node_tree.nodes.get("Background")
         bg.inputs[0].default_value = (0.55, 0.66, 0.78, 1)
-        bg.inputs[1].default_value = 0.9
+        bg.inputs[1].default_value = 0.65
         sun = bpy.data.objects.new("sun", bpy.data.lights.new("sun", 'SUN'))
-        sun.data.energy = 3.2
+        sun.data.energy = 2.8
         sun.rotation_euler = (math.radians(52), 0, math.radians(35))
         scene.collection.objects.link(sun)
         cam = bpy.data.objects.new("cam", bpy.data.cameras.new("cam"))

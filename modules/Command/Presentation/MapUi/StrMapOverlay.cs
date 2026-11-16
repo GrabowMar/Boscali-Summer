@@ -114,12 +114,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             DynamicMap map = SceneSingleton<DynamicMap>.i;
             IStrHub hub = Hub;
             if (hub == null || map == null || map.mapImage == null || map.mapBackground == null || !DynamicMap.mapMaximized) { Hide(); return; }
+            // A replaced maximized canvas can retire the drawer before the world overlay receives its scene reset.
+            if (root != null && chrome != null && chrome.Plate == null) Teardown();
             if (root == null && !Build(map)) return;
 
             StrViewModel vm = hub.Current;
             StrUiState ui = hub.Ui;
             StrLayers layers = (ui.ShowFronts ? StrLayers.Fronts : 0) | (ui.ShowOperation ? StrLayers.Operation : 0) | (ui.ShowSorties ? StrLayers.Sorties : 0);
             if (!Visible) { Visible = true; chrome.SetShown(true); planRevision = -1; gate.Reset(); reliefGate.Reset(); }
+            chrome.RefreshLayout();
             bool worldOn = layers != StrLayers.None;
             if (root.gameObject.activeSelf != worldOn) root.gameObject.SetActive(worldOn);
 
@@ -137,8 +140,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
             IMapProjection projection = ModuleServices.TryGet(out IMapProjection p) && p.IsActive ? p : null;
             Relief = projection != null;
-            // The legend owns the bottom-left corner and wraps short of the field log in the bottom-right one.
-            if (planChanged) chrome.BindLegend(Plan, map.mapBackground.rectTransform.rect.width - MfdFieldLog.WidthTaken);
+            if (planChanged) chrome.BindLegend(Plan, map.mapBackground.rectTransform.rect.width);
 
             if (planChanged) tagsStale = true;
             bool poseChanged = (projection != null ? reliefGate : gate).ShouldRebuild(Pose(map, projection), now);

@@ -29,7 +29,8 @@ namespace BoscaliSummer.Modules.Immersion
             typeof(ExplosionMufflePatch),
             typeof(ParkedEnterPatch),
             typeof(ParkedLeavePatch),
-            typeof(ParkedNavLightPatch)
+            typeof(ParkedNavLightPatch),
+            typeof(WorldDetailBlastPatch)
         };
 
         public ModuleMetadata Metadata => Module;
@@ -146,6 +147,12 @@ namespace BoscaliSummer.Modules.Immersion
             context.AddClientSetting(World, "CITY LIGHTS",
                 "At night: lit windows and sodium street lamps on every town, fading in at dusk. A building that is destroyed goes dark.",
                 s.CityLightsEnabled, ClientPreset.Light, master);
+            context.AddClientSetting("GROUND", "FOREST VARIETY",
+                "Mixed tree crowns, heights and colours using the native forest renderer. Client-local; applies now.",
+                s.ForestVariationEnabled, ClientPreset.Light, master);
+            context.AddClientSetting("GROUND", "GROUND VEGETATION",
+                "Handcrafted bushes, rocks and fallen wood nearby. Uses bounded instanced draws and reduces distant ground cover. Client-local; applies now.",
+                s.UnderbrushEnabled, ClientPreset.Light, master);
             context.AddClientSetting(World, "VAPOUR",
                 "In humid air: a vapour cone around aircraft near Mach 1 and white vapour ribbons off the wingtips in hard turns (above about 3 G).",
                 s.VapourEnabled, ClientPreset.Light, master);

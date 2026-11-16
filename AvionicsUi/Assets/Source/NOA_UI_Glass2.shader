@@ -1,9 +1,9 @@
 // Full-display screen finish (third generation, 2026-11-06): one premultiplied overlay quad over the whole maximized MFD.
 // alpha darkens what is under it, rgb adds light. Every term is smooth and resolution-honest: no noise, smudges or grain.
-//   _Reflection  coated cover glass: sky light pooled at the top, a soft canopy-bow band, a thin rim where glass meets bezel.
+//   _Reflection  coated instrument glass: narrow square rims, corner registration glints, quiet sky reflection.
 //   _Scan        phosphor raster: fine scanlines on physical pixels (1 dark row in 3) and a slow, faint refresh band.
-//   _Edge        inset bezel shadow: contact shadow on every edge plus a rounded-corner falloff (tube or recessed glass).
-//   _Light       ambient level (dims reflections at night).   _Life  power-on raster + refresh band + EMP motion.
+//   _Edge        square inset bezel shadow, clear through the reading area.
+//   _Light       ambient level (dims reflections at night).   _Life  edge commissioning sweep + refresh band + EMP motion.
 //   _Wear        retired (kept so older settings and the build check stay valid).   _Frost  frosted fallback when blur is off.
 // Technique after mob-sakai/UIEffect (one shared material, parameters per draw); no UIEffect code is copied.
 // Built into avionics-fx.bundle by nomodkit tools/Compile-AvionicsFxAssets.ps1.
@@ -69,20 +69,22 @@ Shader "NOA/UI/Glass2"
                 float life = _Life * step(1.5, _NOA_FxTier);   // motion needs the Full tier; C# sends 0 under reduced motion
                 float2 e = min(uv, 1.0 - uv) * float2(aspect, 1.0);   // distance to the nearest edge, square units
 
-                // Glass: sky pooled at the top, the canopy bow as one soft diagonal band, and a hairline rim of light just
-                // inside the top and left edges (the coating catching the cockpit). Smooth gradients only.
-                float sky = exp(-(1.0 - uv.y) * 4.0) * 0.07;
+                // Coated glass catches light at its machined edges. The centre stays clear for maps and text.
+                float2 px = min(uv, 1.0 - uv) * _ScreenParams.xy;
+                float2 edgeLine = 1.0 - smoothstep(0.6, 1.8, px);
+                float2 edgeLeg = 1.0 - smoothstep(12.0, 16.0, px);
+                float registration = max(edgeLine.x * edgeLeg.y, edgeLine.y * edgeLeg.x);
+                float sky = exp(-(1.0 - uv.y) * 6.0) * 0.025;
                 float band = uv.x * 0.55 + (1.0 - uv.y) * 0.85 - 0.55;
-                float bow = smoothstep(0.30, 0.0, abs(band)); bow *= bow * 0.04;
-                float rim = (exp(-(1.0 - uv.y) * 900.0) + exp(-uv.x * aspect * 900.0)) * 0.10;
+                float bow = smoothstep(0.22, 0.0, abs(band)); bow *= bow * 0.008;
+                float rim = (exp(-(1.0 - uv.y) * _ScreenParams.y * 0.7) + exp(-uv.x * _ScreenParams.x * 0.7)) * 0.20;
+                rim += registration * 0.22;
                 float lit = (sky + bow + rim) * lerp(0.35, 1.0, _Light) * _Reflection;
                 rgb += lit * half3(0.90, 0.96, 1.0); a += lit * 0.6;
 
-                // Bezel: a tight contact shadow on every edge and a rounded falloff into the corners.
-                float contact = exp(-e.x * 60.0) + exp(-e.y * 60.0);
-                float2 d = (uv - 0.5) * 2.0;                                             // -1..1 across the glass
-                float corner = saturate(pow(abs(d.x), 6.0) + pow(abs(d.y), 6.0));       // superellipse: rounded rectangle
-                a += saturate(contact * 0.45 + corner * 0.55) * 0.55 * _Edge;
+                // A narrow square contact shadow seats the glass; no vignette washes over the reading area.
+                float contact = exp(-e.x * 100.0) + exp(-e.y * 100.0);
+                a += saturate(contact) * 0.38 * _Edge;
 
                 // Raster: one dark row in three physical pixels (crisp at any canvas scale) and a soft refresh band that
                 // drifts down every twelve seconds.
@@ -117,19 +119,15 @@ Shader "NOA/UI/Glass2"
                     a += step(0.92, hash11(beat + 19.0)) * 0.18 * G;
                 }
 
-                // Power-on: a line opens into the raster; outside it the screen is still dark.
-                float bt = (_NOA_Now - _NOA_Boot) / 0.34;
+                // Power-on: a quick commissioning trace runs down the side rails and locks the corner marks.
+                // Content is immediately usable; no black cover, zoom, or full-screen flash.
+                float bt = (_NOA_Now - _NOA_Boot) / 0.24;
                 if (life > 0.001 && bt >= 0.0 && bt < 1.0)
                 {
-                    float halfH = 0.5 * smoothstep(0.12, 0.80, bt) + 0.003;
-                    float halfW = 0.5 * smoothstep(0.0, 0.22, bt);
-                    float dy = abs(uv.y - 0.5), dx = abs(uv.x - 0.5);
-                    float inside = step(dy, halfH) * step(dx, halfW);
                     float fade = (1.0 - bt) * (1.0 - bt);
-                    float edgeGlow = smoothstep(0.02, 0.0, abs(dy - halfH)) * step(dx, halfW);
-                    float glow = (inside * 0.12 + edgeGlow * 0.45) * fade;
-                    rgb = rgb * inside + glow;
-                    a = lerp(1.0, a, inside) + glow;
+                    float trace = smoothstep(0.025, 0.0, abs(uv.y - (1.0 - bt))) * exp(-e.x * 400.0);
+                    float glow = (trace * 0.50 + registration * fade * 0.24) * life;
+                    rgb += glow * half3(0.74, 0.94, 1.0); a += glow * 0.3;
                 }
 
                 a = saturate(a) * i.color.a;

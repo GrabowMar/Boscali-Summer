@@ -124,7 +124,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 pressed = false;
                 return;
             }
-            if (Armed && Input.GetKeyDown(KeyCode.Escape) && !WmcNameField.Typing)
+            if (Armed && BoscaliSummer.Core.Ui.MapTool.CancelPressed() && !WmcNameField.Typing)
             {
                 Disarm();
                 WingToast.Show("Map tool cancelled");

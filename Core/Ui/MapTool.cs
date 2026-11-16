@@ -24,7 +24,13 @@ namespace BoscaliSummer.Core.Ui
         }
 
         /// <summary>Esc this frame, unless it went to a text field.</summary>
-        internal static bool CancelPressed() => Input.GetKeyDown(KeyCode.Escape) && !Typing();
+        private static int cancelFrame = -10;
+
+        /// <summary>The drawer's Cancel key follows the same owner cleanup as Escape, across Update ordering.</summary>
+        internal static void RequestCancel() => cancelFrame = Time.frameCount;
+
+        internal static bool CancelPressed() => Time.frameCount - cancelFrame <= 1 ||
+            (Input.GetKeyDown(KeyCode.Escape) && !Typing());
 
         internal static bool IsClick(Vector2 down, Vector2 up) => (up - down).sqrMagnitude <= ClickSlop * ClickSlop;
     }

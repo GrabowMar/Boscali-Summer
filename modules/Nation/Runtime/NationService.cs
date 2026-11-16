@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Nation.Runtime
     /// </summary>
     internal sealed partial class NationService : MonoBehaviour, ISceneService, INationView, INationModifiers
     {
-        private static readonly string[] Missions = { "Escalation", "Terminal Control", "Domination" };
+        private static readonly string[] Missions = { "Escalation", "Terminal Control", "Domination", "WarBox" };
         private static readonly float[] SiteRings = { 1500f, 2000f, 2600f };
         private const int SiteBearings = 12;
         private const int MissionPlants = 12;

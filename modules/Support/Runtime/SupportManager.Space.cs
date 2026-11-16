@@ -181,11 +181,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
             if (network == null) return;
             CyberFeed.Update(network);
             SofFeed.Update(network);
+            OpsFeed.Want(true); // launch cues need the live pads even while the ORBIT window is closed
             OpsFeed.Update(network);
             FrontFeed.Want(true); // POWER scales every perk tile, so the client always wants its faction's fronts
             FrontFeed.Update(network);
             Visuals.OpsFlightVisuals.Tick(opsMirror, MissionNow());
-            Visuals.FrontEffectVisuals.Tick(frontMirror, MissionNow());
+            Visuals.FrontEffectVisuals.Tick(frontMirror, opsMirror, MissionNow());
             float t = Time.unscaledTime;
             if (spaceMirror.NeedsFull && t >= nextResync)
             {

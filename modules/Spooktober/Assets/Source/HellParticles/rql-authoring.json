@@ -1,0 +1,1172 @@
+{
+  "source": "https://github.com/IvanMurzak/Unity-AI-ParticleSystem",
+  "commit": "b51172a9cac5f7e01cb790c4ab91347d8e821319",
+  "module": "com.IvanMurzak.Unity.MCP.Editor.Rql.Particles.ParticleSystemModule",
+  "transport": "direct RqlEngine; no MCP server",
+  "baseRadius": 145,
+  "totalCap": 260,
+  "native_simulation": [
+    {
+      "emitter": "Smoke",
+      "seconds": 15,
+      "particles": 74,
+      "cap": 96
+    },
+    {
+      "emitter": "Ash",
+      "seconds": 15,
+      "particles": 86,
+      "cap": 120
+    },
+    {
+      "emitter": "Cinders",
+      "seconds": 15,
+      "particles": 12,
+      "cap": 32
+    },
+    {
+      "emitter": "Arcs",
+      "seconds": 15,
+      "particles": 0,
+      "cap": 12
+    }
+  ],
+  "calls": [
+    {
+      "query": "particles | where name == \u0022Smoke\u0022 | set main.loop = true, main.playOnAwake = false, main.duration = 12, main.simulationSpace = \u0022Local\u0022, main.cullingMode = \u0022Automatic\u0022, emission.enabled = true, emission.rateOverDistance = 0, shape.enabled = true, shape.shapeType = \u0022Circle\u0022, shape.radius = 145, shape.radiusThickness = 0.35, shape.rotation.x = -90, colorOverLifetime.enabled = true, colorOverLifetime.color = hell.fade(), collision.enabled = false, trails.enabled = false, lights.enabled = false, subEmitters.enabled = false",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@1",
+            "main.loop",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@1",
+            "main.playOnAwake",
+            true,
+            false
+          ],
+          [
+            "ParticleSystem@1",
+            "main.duration",
+            5,
+            12
+          ],
+          [
+            "ParticleSystem@1",
+            "main.simulationSpace",
+            "Local",
+            "Local"
+          ],
+          [
+            "ParticleSystem@1",
+            "main.cullingMode",
+            "Automatic",
+            "Automatic"
+          ],
+          [
+            "ParticleSystem@1",
+            "emission.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@1",
+            "emission.rateOverDistance",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@1",
+            "shape.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@1",
+            "shape.shapeType",
+            "Cone",
+            "Circle"
+          ],
+          [
+            "ParticleSystem@1",
+            "shape.radius",
+            1,
+            145
+          ],
+          [
+            "ParticleSystem@1",
+            "shape.radiusThickness",
+            1,
+            0.35
+          ],
+          [
+            "ParticleSystem@1",
+            "shape.rotation.x",
+            0,
+            -90
+          ],
+          [
+            "ParticleSystem@1",
+            "colorOverLifetime.enabled",
+            false,
+            true
+          ],
+          [
+            "ParticleSystem@1",
+            "colorOverLifetime.color",
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][2]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            },
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][4]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            }
+          ],
+          [
+            "ParticleSystem@1",
+            "collision.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@1",
+            "trails.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@1",
+            "lights.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@1",
+            "subEmitters.enabled",
+            false,
+            false
+          ]
+        ],
+        "total": 18,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 126.889
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Ash\u0022 | set main.loop = true, main.playOnAwake = false, main.duration = 12, main.simulationSpace = \u0022Local\u0022, main.cullingMode = \u0022Automatic\u0022, emission.enabled = true, emission.rateOverDistance = 0, shape.enabled = true, shape.shapeType = \u0022Circle\u0022, shape.radius = 145, shape.radiusThickness = 0.35, shape.rotation.x = -90, colorOverLifetime.enabled = true, colorOverLifetime.color = hell.fade(), collision.enabled = false, trails.enabled = false, lights.enabled = false, subEmitters.enabled = false",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@2",
+            "main.loop",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@2",
+            "main.playOnAwake",
+            true,
+            false
+          ],
+          [
+            "ParticleSystem@2",
+            "main.duration",
+            5,
+            12
+          ],
+          [
+            "ParticleSystem@2",
+            "main.simulationSpace",
+            "Local",
+            "Local"
+          ],
+          [
+            "ParticleSystem@2",
+            "main.cullingMode",
+            "Automatic",
+            "Automatic"
+          ],
+          [
+            "ParticleSystem@2",
+            "emission.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@2",
+            "emission.rateOverDistance",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@2",
+            "shape.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@2",
+            "shape.shapeType",
+            "Cone",
+            "Circle"
+          ],
+          [
+            "ParticleSystem@2",
+            "shape.radius",
+            1,
+            145
+          ],
+          [
+            "ParticleSystem@2",
+            "shape.radiusThickness",
+            1,
+            0.35
+          ],
+          [
+            "ParticleSystem@2",
+            "shape.rotation.x",
+            0,
+            -90
+          ],
+          [
+            "ParticleSystem@2",
+            "colorOverLifetime.enabled",
+            false,
+            true
+          ],
+          [
+            "ParticleSystem@2",
+            "colorOverLifetime.color",
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][2]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            },
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][4]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            }
+          ],
+          [
+            "ParticleSystem@2",
+            "collision.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@2",
+            "trails.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@2",
+            "lights.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@2",
+            "subEmitters.enabled",
+            false,
+            false
+          ]
+        ],
+        "total": 18,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.44
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Cinders\u0022 | set main.loop = true, main.playOnAwake = false, main.duration = 12, main.simulationSpace = \u0022Local\u0022, main.cullingMode = \u0022Automatic\u0022, emission.enabled = true, emission.rateOverDistance = 0, shape.enabled = true, shape.shapeType = \u0022Circle\u0022, shape.radius = 145, shape.radiusThickness = 0.35, shape.rotation.x = -90, colorOverLifetime.enabled = true, colorOverLifetime.color = hell.fade(), collision.enabled = false, trails.enabled = false, lights.enabled = false, subEmitters.enabled = false",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@3",
+            "main.loop",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@3",
+            "main.playOnAwake",
+            true,
+            false
+          ],
+          [
+            "ParticleSystem@3",
+            "main.duration",
+            5,
+            12
+          ],
+          [
+            "ParticleSystem@3",
+            "main.simulationSpace",
+            "Local",
+            "Local"
+          ],
+          [
+            "ParticleSystem@3",
+            "main.cullingMode",
+            "Automatic",
+            "Automatic"
+          ],
+          [
+            "ParticleSystem@3",
+            "emission.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@3",
+            "emission.rateOverDistance",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@3",
+            "shape.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@3",
+            "shape.shapeType",
+            "Cone",
+            "Circle"
+          ],
+          [
+            "ParticleSystem@3",
+            "shape.radius",
+            1,
+            145
+          ],
+          [
+            "ParticleSystem@3",
+            "shape.radiusThickness",
+            1,
+            0.35
+          ],
+          [
+            "ParticleSystem@3",
+            "shape.rotation.x",
+            0,
+            -90
+          ],
+          [
+            "ParticleSystem@3",
+            "colorOverLifetime.enabled",
+            false,
+            true
+          ],
+          [
+            "ParticleSystem@3",
+            "colorOverLifetime.color",
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][2]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            },
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][4]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            }
+          ],
+          [
+            "ParticleSystem@3",
+            "collision.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@3",
+            "trails.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@3",
+            "lights.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@3",
+            "subEmitters.enabled",
+            false,
+            false
+          ]
+        ],
+        "total": 18,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.29799999999999999
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Arcs\u0022 | set main.loop = true, main.playOnAwake = false, main.duration = 12, main.simulationSpace = \u0022Local\u0022, main.cullingMode = \u0022Automatic\u0022, emission.enabled = true, emission.rateOverDistance = 0, shape.enabled = true, shape.shapeType = \u0022Circle\u0022, shape.radius = 145, shape.radiusThickness = 0.35, shape.rotation.x = -90, colorOverLifetime.enabled = true, colorOverLifetime.color = hell.fade(), collision.enabled = false, trails.enabled = false, lights.enabled = false, subEmitters.enabled = false",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@4",
+            "main.loop",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@4",
+            "main.playOnAwake",
+            true,
+            false
+          ],
+          [
+            "ParticleSystem@4",
+            "main.duration",
+            5,
+            12
+          ],
+          [
+            "ParticleSystem@4",
+            "main.simulationSpace",
+            "Local",
+            "Local"
+          ],
+          [
+            "ParticleSystem@4",
+            "main.cullingMode",
+            "Automatic",
+            "Automatic"
+          ],
+          [
+            "ParticleSystem@4",
+            "emission.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@4",
+            "emission.rateOverDistance",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@4",
+            "shape.enabled",
+            true,
+            true
+          ],
+          [
+            "ParticleSystem@4",
+            "shape.shapeType",
+            "Cone",
+            "Circle"
+          ],
+          [
+            "ParticleSystem@4",
+            "shape.radius",
+            1,
+            145
+          ],
+          [
+            "ParticleSystem@4",
+            "shape.radiusThickness",
+            1,
+            0.35
+          ],
+          [
+            "ParticleSystem@4",
+            "shape.rotation.x",
+            0,
+            -90
+          ],
+          [
+            "ParticleSystem@4",
+            "colorOverLifetime.enabled",
+            false,
+            true
+          ],
+          [
+            "ParticleSystem@4",
+            "colorOverLifetime.color",
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][2]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            },
+            {
+              "colorKeys": "GradientColorKey[][2]",
+              "alphaKeys": "GradientAlphaKey[][4]",
+              "mode": "Blend",
+              "colorSpace": "Uninitialized"
+            }
+          ],
+          [
+            "ParticleSystem@4",
+            "collision.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@4",
+            "trails.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@4",
+            "lights.enabled",
+            false,
+            false
+          ],
+          [
+            "ParticleSystem@4",
+            "subEmitters.enabled",
+            false,
+            false
+          ]
+        ],
+        "total": 18,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.47699999999999998
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Smoke\u0022 | set main.maxParticles = 96, main.startLifetime = [7,12], main.startSpeed = [1.2,3], main.startSize = [20,38], main.startColor = \u0022#29262952\u0022, main.gravityModifier = 0, emission.rateOverTime = 8",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@1",
+            "main.maxParticles",
+            1000,
+            96
+          ],
+          [
+            "ParticleSystem@1",
+            "main.startLifetime",
+            5,
+            [
+              7,
+              12
+            ]
+          ],
+          [
+            "ParticleSystem@1",
+            "main.startSpeed",
+            5,
+            [
+              1.2,
+              3
+            ]
+          ],
+          [
+            "ParticleSystem@1",
+            "main.startSize",
+            1,
+            [
+              20,
+              38
+            ]
+          ],
+          [
+            "ParticleSystem@1",
+            "main.startColor",
+            "#FFFFFFFF",
+            "#29262952"
+          ],
+          [
+            "ParticleSystem@1",
+            "main.gravityModifier",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@1",
+            "emission.rateOverTime",
+            10,
+            8
+          ]
+        ],
+        "total": 7,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 2.4489999999999998
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Ash\u0022 | set main.maxParticles = 120, main.startLifetime = [7,12], main.startSpeed = [0.2,0.6], main.startSize = [0.3,0.8], main.startColor = \u0022#77716a7f\u0022, main.gravityModifier = 0.012, emission.rateOverTime = 9",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@2",
+            "main.maxParticles",
+            1000,
+            120
+          ],
+          [
+            "ParticleSystem@2",
+            "main.startLifetime",
+            5,
+            [
+              7,
+              12
+            ]
+          ],
+          [
+            "ParticleSystem@2",
+            "main.startSpeed",
+            5,
+            [
+              0.2,
+              0.6
+            ]
+          ],
+          [
+            "ParticleSystem@2",
+            "main.startSize",
+            1,
+            [
+              0.3,
+              0.8
+            ]
+          ],
+          [
+            "ParticleSystem@2",
+            "main.startColor",
+            "#FFFFFFFF",
+            "#77716A7F"
+          ],
+          [
+            "ParticleSystem@2",
+            "main.gravityModifier",
+            0,
+            0.012
+          ],
+          [
+            "ParticleSystem@2",
+            "emission.rateOverTime",
+            10,
+            9
+          ]
+        ],
+        "total": 7,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.19600000000000001
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Cinders\u0022 | set main.maxParticles = 32, main.startLifetime = [1.5,3], main.startSpeed = [2,5], main.startSize = [0.35,0.9], main.startColor = \u0022#913520a0\u0022, main.gravityModifier = 0.07, emission.rateOverTime = 6",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@3",
+            "main.maxParticles",
+            1000,
+            32
+          ],
+          [
+            "ParticleSystem@3",
+            "main.startLifetime",
+            5,
+            [
+              1.5,
+              3
+            ]
+          ],
+          [
+            "ParticleSystem@3",
+            "main.startSpeed",
+            5,
+            [
+              2,
+              5
+            ]
+          ],
+          [
+            "ParticleSystem@3",
+            "main.startSize",
+            1,
+            [
+              0.35,
+              0.9
+            ]
+          ],
+          [
+            "ParticleSystem@3",
+            "main.startColor",
+            "#FFFFFFFF",
+            "#913520A0"
+          ],
+          [
+            "ParticleSystem@3",
+            "main.gravityModifier",
+            0,
+            0.07
+          ],
+          [
+            "ParticleSystem@3",
+            "emission.rateOverTime",
+            10,
+            6
+          ]
+        ],
+        "total": 7,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.16300000000000001
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Arcs\u0022 | set main.maxParticles = 12, main.startLifetime = [0.12,0.28], main.startSpeed = [12,25], main.startSize = [0.5,1], main.startColor = \u0022#64304050\u0022, main.gravityModifier = 0, emission.rateOverTime = 2",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "member",
+          "old",
+          "new"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@4",
+            "main.maxParticles",
+            1000,
+            12
+          ],
+          [
+            "ParticleSystem@4",
+            "main.startLifetime",
+            5,
+            [
+              0.12,
+              0.28
+            ]
+          ],
+          [
+            "ParticleSystem@4",
+            "main.startSpeed",
+            5,
+            [
+              12,
+              25
+            ]
+          ],
+          [
+            "ParticleSystem@4",
+            "main.startSize",
+            1,
+            [
+              0.5,
+              1
+            ]
+          ],
+          [
+            "ParticleSystem@4",
+            "main.startColor",
+            "#FFFFFFFF",
+            "#64304050"
+          ],
+          [
+            "ParticleSystem@4",
+            "main.gravityModifier",
+            0,
+            0
+          ],
+          [
+            "ParticleSystem@4",
+            "emission.rateOverTime",
+            10,
+            2
+          ]
+        ],
+        "total": 7,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.14799999999999999
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Smoke\u0022 | select name, main.maxParticles, main.startLifetime, main.startSpeed, main.startSize, main.startColor, emission.rateOverTime, shape.radius",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "name",
+          "main.maxParticles",
+          "main.startLifetime",
+          "main.startSpeed",
+          "main.startSize",
+          "main.startColor",
+          "emission.rateOverTime",
+          "shape.radius"
+        ],
+        "rows": [
+          [
+            "Smoke",
+            96,
+            [
+              7,
+              12
+            ],
+            [
+              1.2,
+              3
+            ],
+            [
+              20,
+              38
+            ],
+            "#29262952",
+            8,
+            145
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 19,
+          "elapsedMs": 1.893
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Smoke\u0022 | call Simulate(15)",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "method",
+          "result"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@1",
+            "Simulate(float seconds)",
+            null
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 3.1760000000000002
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Ash\u0022 | select name, main.maxParticles, main.startLifetime, main.startSpeed, main.startSize, main.startColor, emission.rateOverTime, shape.radius",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "name",
+          "main.maxParticles",
+          "main.startLifetime",
+          "main.startSpeed",
+          "main.startSize",
+          "main.startColor",
+          "emission.rateOverTime",
+          "shape.radius"
+        ],
+        "rows": [
+          [
+            "Ash",
+            120,
+            [
+              7,
+              12
+            ],
+            [
+              0.2,
+              0.6
+            ],
+            [
+              0.3,
+              0.8
+            ],
+            "#77716A7F",
+            9,
+            145
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 19,
+          "elapsedMs": 0.111
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Ash\u0022 | call Simulate(15)",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "method",
+          "result"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@2",
+            "Simulate(float seconds)",
+            null
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.48099999999999998
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Cinders\u0022 | select name, main.maxParticles, main.startLifetime, main.startSpeed, main.startSize, main.startColor, emission.rateOverTime, shape.radius",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "name",
+          "main.maxParticles",
+          "main.startLifetime",
+          "main.startSpeed",
+          "main.startSize",
+          "main.startColor",
+          "emission.rateOverTime",
+          "shape.radius"
+        ],
+        "rows": [
+          [
+            "Cinders",
+            32,
+            [
+              1.5,
+              3
+            ],
+            [
+              2,
+              5
+            ],
+            [
+              0.35,
+              0.9
+            ],
+            "#913520A0",
+            6,
+            145
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 19,
+          "elapsedMs": 0.075999999999999998
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Cinders\u0022 | call Simulate(15)",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "method",
+          "result"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@3",
+            "Simulate(float seconds)",
+            null
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.28299999999999997
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Arcs\u0022 | select name, main.maxParticles, main.startLifetime, main.startSpeed, main.startSize, main.startColor, emission.rateOverTime, shape.radius",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "name",
+          "main.maxParticles",
+          "main.startLifetime",
+          "main.startSpeed",
+          "main.startSize",
+          "main.startColor",
+          "emission.rateOverTime",
+          "shape.radius"
+        ],
+        "rows": [
+          [
+            "Arcs",
+            12,
+            [
+              0.12,
+              0.28
+            ],
+            [
+              12,
+              25
+            ],
+            [
+              0.5,
+              1
+            ],
+            "#64304050",
+            2,
+            145
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 19,
+          "elapsedMs": 0.067000000000000004
+        }
+      }
+    },
+    {
+      "query": "particles | where name == \u0022Arcs\u0022 | call Simulate(15)",
+      "result": {
+        "rql": "0.1",
+        "ok": true,
+        "kind": "rows",
+        "columns": [
+          "$ref",
+          "method",
+          "result"
+        ],
+        "rows": [
+          [
+            "ParticleSystem@4",
+            "Simulate(float seconds)",
+            null
+          ]
+        ],
+        "total": 1,
+        "stats": {
+          "visited": 4,
+          "membersRead": 4,
+          "elapsedMs": 0.108
+        }
+      }
+    }
+  ]
+}

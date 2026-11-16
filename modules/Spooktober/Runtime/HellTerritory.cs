@@ -26,12 +26,15 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             internal GameObject Ground;
             internal Mesh Mesh;
             internal Material Material;
-            internal float DrawnRadius;
             internal HellGrowth.Handle Growth;
-            internal int GrowthRevision;
             internal HellInfection Infection;
             internal float InfectionBorn;
             internal int MeshBuilds;
+            internal int RoadSamples;
+            internal int SurfaceSide;
+            internal bool[] SurfaceValid;
+            internal Vector3[] SurfaceVertices;
+            internal Vector2[] SurfaceArrival;
         }
 
         private const int MaxZones = 32, MaxDressed = 64;
@@ -65,6 +68,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         internal static bool BreachGrowing => breach?.Infection != null && BreachAge < HellInfection.Duration;
         internal static float BreachRadius => breach?.Radius ?? 0f;
         internal static int BreachMeshBuilds => breach?.MeshBuilds ?? 0;
+        internal static int BreachRoadSamples => breach?.RoadSamples ?? 0;
         internal static int BreachMeshId => breach?.Mesh != null ? breach.Mesh.GetInstanceID() : 0;
         internal static float BreachCoverage
         {
@@ -86,7 +90,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
         internal static void Frame(float now)
         {
-            if (now < next || !GameAccess.IsServer() || !HellGate.Alive || HellSide.Side.HQ == null) return;
+            if (!GameAccess.IsServer() || !HellGate.Alive || HellSide.Side.HQ == null) return;
+            HellInfectionDamage.Frame(now);
+            if (now < next) return;
             float elapsed = previous > 0f ? Mathf.Clamp(now - previous, 0f, 2f) : 1f;
             previous = now;
             next = now + 1f;
@@ -340,7 +346,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 Vector3 centerLocal = Datum.origin.InverseTransformPoint(zone.Center.ToLocalPosition());
                 zone.Growth = HellGrowth.Create(Datum.origin, seed, centerLocal, zone.Radius, 1f, 1f, zone.Infection, zone.InfectionBorn);
             }
-            const int side = HellInfection.Side;
+            const int side = HellInfection.Side * 2 - 1;
             var vertices = new Vector3[side * side];
             var uv = new Vector2[vertices.Length];
             var arrival = new Vector2[vertices.Length];
@@ -365,10 +371,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                             near = zone.Infection.Sample(nx + ox * step, nz + oz * step).Coverage > 0f;
                     if (!near) continue;
                     Vector3 origin = new Vector3(center.x + dx, center.y + 500f, center.z + dz);
-                    if (!Surface(origin, out RaycastHit hit) || hit.point.y <= Datum.LocalSeaY + .5f || hit.normal.y < .5f) continue;
+                    if (!Surface(origin, out RaycastHit hit, out bool paved) || hit.point.y <= Datum.LocalSeaY + .5f || hit.normal.y < .5f) continue;
+                    if (paved) zone.RoadSamples++;
                     vertices[index] = hit.point - center + Vector3.up * .18f;
                     valid[index] = true;
                 }
+            HellGroundEnvelope.Raise(vertices, valid, side, Matrix4x4.TRS(center, Quaternion.identity, Vector3.one), center.y + 500f, .18f);
             for (int z = 0; z < side - 1; z++)
                 for (int x = 0; x < side - 1; x++)
                 {
@@ -379,6 +387,10 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             if (triangles.Count == 0) return;
             zone.Mesh = new Mesh { name = "Hell sooted ash surface" };
             zone.Mesh.vertices = vertices;
+            zone.SurfaceValid = valid;
+            zone.SurfaceSide = side;
+            zone.SurfaceVertices = vertices;
+            zone.SurfaceArrival = arrival;
             zone.Mesh.uv = uv;
             zone.Mesh.uv2 = arrival;
             zone.Mesh.SetTriangles(triangles, 0);
@@ -397,9 +409,9 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             renderer.SetPropertyBlock(clock);
             renderer.shadowCastingMode = ShadowCastingMode.Off;
             renderer.receiveShadows = true;
-            zone.DrawnRadius = zone.Radius;
             zone.MeshBuilds++;
             infectionMeshBuilds++;
+            HellInfectionDamage.Register(zone);
 
             void Add(int a, int b, int c)
             {
@@ -411,15 +423,34 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             }
         }
 
-        private static bool Surface(Vector3 from, out RaycastHit hit)
+        internal static bool Surface(Vector3 from, out RaycastHit hit, out bool paved)
         {
             hit = default;
+            paved = false;
             for (int i = 0; i < 8 && Physics.Raycast(from, Vector3.down, out hit, 2000f, PhysicsLayers.StaticsMask,
                      QueryTriggerInteraction.Ignore); i++)
             {
-                if (hit.collider != null && (GameAssets.i == null || hit.collider.sharedMaterial == GameAssets.i.terrainMaterial)) return true;
-                from = hit.point + Vector3.down * .05f; // buildings wear their own hell material; the crust belongs on terrain
+                if (hit.collider != null)
+                {
+                    if (GameAssets.i == null || hit.collider.sharedMaterial == GameAssets.i.terrainMaterial) return true;
+                    if (IsRoadSurface(hit.collider)) { paved = true; return true; }
+                }
+                from = hit.point + Vector3.down * .05f; // skip buildings; the crust follows terrain and paved roads
             }
+            return false;
+        }
+
+        private static bool IsRoadSurface(Collider collider)
+        {
+            if (!(collider is MeshCollider road) || road.GetComponentInParent<Building>() != null) return false;
+            string meshName = road.sharedMesh != null ? road.sharedMesh.name : "";
+            if (meshName.IndexOf("_roads", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                meshName.IndexOf("decalRoads", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+            Renderer renderer = road.GetComponent<Renderer>();
+            if (renderer == null) return false;
+            foreach (Material material in renderer.sharedMaterials)
+                if (material != null && (material.name.StartsWith("road_", StringComparison.OrdinalIgnoreCase) ||
+                    material.name.StartsWith("asphalt", StringComparison.OrdinalIgnoreCase))) return true;
             return false;
         }
 
@@ -438,10 +469,15 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             zone.Ground = null;
             zone.Mesh = null;
             zone.Material = null;
+            zone.SurfaceValid = null;
+            zone.SurfaceSide = 0;
+            zone.SurfaceVertices = null;
+            zone.SurfaceArrival = null;
         }
 
         internal static void Clear(bool restoreOwnership = true)
         {
+            HellInfectionDamage.Clear(!restoreOwnership);
             foreach (Zone zone in Active)
             {
                 // A native callback can throw after changing ownership, before Controlled is committed.

@@ -127,6 +127,7 @@ namespace BoscaliSummer.Core
                 // The third side scripted missions can seat the pilot on.
                 new BoscaliSummer.Modules.Pmc.PmcModule(),
                 new BoscaliSummer.Modules.Scenario.ScenarioModule(),
+                new BoscaliSummer.Modules.Gamemodes.GamemodesModule(),
                 new SessionModule(),
                 new FireAndDestructionModule(),
                 new UrbanCombatModule(),
@@ -185,6 +186,7 @@ namespace BoscaliSummer.Core
             // Always installed for the cutscene camera mission scripts play; its private production tools keep their own switch.
             if (!Application.isBatchMode) modules.Add(new CinematographyModule());
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
+            modules.Add(new BoscaliSummer.Modules.Skylark.SkylarkModule());
             return modules.ToArray();
         }
 
@@ -214,21 +216,18 @@ namespace BoscaliSummer.Core
             // Remove all gameplay patches before tearing down any of their services.
             for (int i = loadedModules.Count - 1; i >= 0; i--)
                 if (!keep.Contains(loadedModules[i].Metadata.Id)) loadedModules[i].Harmony.UnpatchSelf();
-            bool removed = false;
             for (int i = loadedModules.Count - 1; i >= 0; i--)
             {
                 LoadedModule loaded = loadedModules[i];
                 if (keep.Contains(loaded.Metadata.Id)) continue;
                 loaded.Context.Rollback();
                 loadedModules.RemoveAt(i);
-                removed = true;
                 logger.LogInfo("Module switched off for this mission: " + loaded.Metadata.DisplayName + ".");
             }
             var additions = new List<IModule>();
             foreach (IModule module in ModulesForProfile())
                 if (!keep.Contains(module.Metadata.Id)) additions.Add(module);
             if (additions.Count > 0) Load(additions);
-            else if (removed) sceneLifecycle.ResetAll();
         }
 
         private void ResetForMission()
@@ -304,7 +303,11 @@ namespace BoscaliSummer.Core
                 }
             }
 
-            sceneLifecycle.ResetAll();
+            // Hot-loading a cockpit option must not restart an ongoing match or clear world state.
+            // Existing services reset only at the actual mission/scene boundary.
+            var addedIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (LoadedModule candidate in candidates) addedIds.Add(candidate.Metadata.Id);
+            sceneLifecycle.ResetModules(addedIds);
             var started = new Dictionary<string, bool>(StringComparer.Ordinal);
             foreach (string id in existing) started[id] = true;
             for (int i = 0; i < candidates.Count; i++)

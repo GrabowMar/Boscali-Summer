@@ -382,7 +382,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             public ShapeWindow(Transform root, System.Action<string> applied)
             {
                 apply = applied;
-                window = AvWindow.Build(root, "wmc-shapes", "FORMATION · ALL SHAPES", 440f, 560f, 220);
+                window = AvWindow.Build(root, "wmc-shapes", "FORMATION · ALL SHAPES", 440f, 620f, 220);
                 AvFlow body = window.Body;
                 title = body.Section(AvIcon.LayersSubtract, "FAMILY", "");
                 familyTabs = body.Add(new WmcButtonGrid(body.Content, MaxFamilies, MaxFamilies, i => new AvControl.Spec("", () => PickFamilyTab(i))));
@@ -399,6 +399,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
             public void Close(bool drop)
             {
+                // Scene teardown may destroy the parent canvas before the panel releases its window.
+                if (window.Root == null) return;
                 if (window.Visible) window.Hide();
                 if (drop) Object.Destroy(window.Root.gameObject);
             }

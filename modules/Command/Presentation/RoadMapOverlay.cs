@@ -11,7 +11,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation
 {
     /// <summary>The game's road network (`LevelInfo.roadNetwork`) drawn on the MAP relief as projected
-    /// vector lines: amber over a dark halo. Relief only, like the hover ranges; one bounded UI mesh that
+    /// vector lines: quiet sand ink, leaving amber to orders. Relief only, like the hover ranges; one bounded UI mesh that
     /// rebuilds only when the relief view changes, on every terrain render, or it slides behind the ground.</summary>
     internal sealed class RoadMapOverlay : MonoBehaviour, ISceneService
     {
@@ -85,12 +85,11 @@ namespace BoscaliSummer.Modules.Command.Presentation
         [DefaultExecutionOrder(101)] // After the relief commits its pose.
         private sealed class RoadGraphic : MaskableGraphic
         {
-            // A UI mesh holds 65k vertices, 4 per point per pass. Thinning to 2 px steps keeps a whole
-            // theater (about 9.7k points on Heartland) under it; past the budget the remaining roads drop.
-            private const int VertexBudget = 60000;
+            // One feathered ribbon uses half the former halo + ink geometry. Keep the same point
+            // allowance (and 2 px thinning) at half the vertex budget; roads past it still drop.
+            private const int VertexBudget = 30000;
             private const float MinimumStepPixels = 2f;
-            private static readonly Color32 Halo = new Color32(12, 16, 20, 150);
-            private static readonly Color32 Ink = new Color32(235, 205, 120, 230);
+            private static readonly Color32 Ink = new Color32(194, 186, 155, 210);
 
             private Vector2[] points = new Vector2[256];
             private int count, revision = -1;
@@ -141,15 +140,14 @@ namespace BoscaliSummer.Modules.Command.Presentation
                 }
             }
 
-            /// <summary>Draws the pending run, halo then ink; false once the vertex budget is spent.</summary>
+            /// <summary>Draws the pending run as one feathered stroke; false once the vertex budget is spent.</summary>
             private bool Flush(VertexHelper vh, float scale)
             {
                 int length = count;
                 count = 0;
                 if (length < 2) return true;
-                if (vh.currentVertCount + length * 8 > VertexBudget) return false;
-                MapStroke.Ribbon(vh, points, 0, length, 1f / scale, 1.7f, 1f, Halo);
-                MapStroke.Ribbon(vh, points, 0, length, 1f / scale, .75f, .8f, Ink);
+                if (vh.currentVertCount + length * MapStroke.RibbonVertices > VertexBudget) return false;
+                MapStroke.Ribbon(vh, points, 0, length, 1f / scale, .7f, .8f, Ink);
                 return true;
             }
         }

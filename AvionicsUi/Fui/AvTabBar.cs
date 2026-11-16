@@ -130,7 +130,7 @@ namespace NOAvionics
         /// </summary>
         private void Glide(int from, int to)
         {
-            if (AvFxDriver.ReducedMotion) return;
+            if (AvFxDriver.ReducedMotion || AvFxDriver.Tier == AvFxTier.Off) return;
             if (glide == null)
             {
                 UnityEngine.UI.Image bar = AvLay.Solid(Rect, "Glide", Color.clear);
@@ -151,10 +151,10 @@ namespace NOAvionics
         public override void Restyle() { foreach (AvControl t in tabs) t.Restyle(); }
     }
 
-    /// <summary>Per-frame driver of the tab bar's select-rail glide (unscaled time; about a fifth of a second).</summary>
+    /// <summary>Brief select-rail feedback, active only while moving.</summary>
     internal sealed class AvTabGlide : MonoBehaviour
     {
-        private const float Seconds = .22f;
+        private const float Seconds = .14f;
         internal UnityEngine.UI.Image Bar;
         private Vector3 from, to;
         private float t = 1f;
@@ -170,10 +170,15 @@ namespace NOAvionics
 
         private void Update()
         {
+            if (AvFxDriver.ReducedMotion || AvFxDriver.Tier == AvFxTier.Off) { Stop(); return; }
             t += Time.unscaledDeltaTime / Seconds;
             Step();
-            if (t >= 1f) { Bar.enabled = false; enabled = false; }
+            if (t >= 1f) Stop();
         }
+
+        private void OnDisable() { if (Bar != null) Bar.enabled = false; }
+
+        private void Stop() { t = 1f; Bar.enabled = false; enabled = false; }
 
         private void Step()
         {

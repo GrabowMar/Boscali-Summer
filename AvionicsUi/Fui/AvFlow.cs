@@ -18,17 +18,19 @@ namespace NOAvionics
         private static readonly ProfilerMarker RelayoutMarker = new ProfilerMarker("NOA.UI.Relayout");
         private readonly List<AvPart[]> lines = new List<AvPart[]>(32);
         private readonly List<int> lineColumns = new List<int>(32);
-        private readonly AvFlowMath math;
+        private AvFlowMath math;
+        private readonly float gutter;
         private const int MaxSuspects = 64;
         private readonly List<AvPart> suspects = new List<AvPart>(8);
         private bool pending, tickHooked;
         private Canvas pageCanvas;
+        private long measuredPass;
         private float[] heights = Array.Empty<float>(), grow = Array.Empty<float>();
         private bool[] live = Array.Empty<bool>();
 
         public AvFlow(RectTransform content, AvTicker ticker, float width, float gutter = AvGridTokens.Gutter)
         {
-            Content = content; Ticker = ticker; Width = width;
+            Content = content; Ticker = ticker; Width = width; this.gutter = gutter;
             math = new AvFlowMath(width, AvGridTokens.Pad, gutter);
             HookTicks();
         }
@@ -38,7 +40,7 @@ namespace NOAvionics
 
         public RectTransform Content { get; }
         public AvTicker Ticker { get; }
-        public float Width { get; }
+        public float Width { get; private set; }
         public float Inner => math.Inner;
         public float ContentHeight { get; private set; }
 
@@ -134,10 +136,29 @@ namespace NOAvionics
         // Safety net for parts whose text changes without Changed() (custom parts writing TMP directly).
         private void SlowTick()
         {
-            if (pending || !Visible()) return;
+            if (!Visible()) return;
+            // A parent card may already have measured this flow during the same tick.
+            // Only skip the duplicate scheduled sweep; explicit measurements still inspect direct TMP edits.
+            if (!pending && suspects.Count == 0 && Ticker != null && Ticker.LayoutPass != 0 && measuredPass == Ticker.LayoutPass) return;
+            EnsureLayout(Width);
+        }
+
+        // Card measurement and safety sweeps share the same check. Re-measure for direct TMP edits,
+        // including offline flows, but only place children when their geometry actually changes.
+        internal void EnsureLayout(float width)
+        {
+            width = Mathf.Max(0f, width);
+            if (Mathf.Abs(width - Width) > 0.5f)
+            {
+                Width = width;
+                math = new AvFlowMath(width, AvGridTokens.Pad, gutter);
+                pending = true;
+            }
             for (int i = 0; i < lines.Count && !pending; i++)
                 foreach (AvPart p in lines[i]) if (Moved(p)) { pending = true; break; }
+            suspects.Clear();
             if (pending) Relayout();
+            measuredPass = Ticker != null ? Ticker.LayoutPass : 0;
         }
 
         private bool Visible()

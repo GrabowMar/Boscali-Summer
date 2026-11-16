@@ -52,21 +52,15 @@ Further controls
    C:/Users/marci/.nomodkit/runs/20261115-220311-77ca-sim-post-quality
    This sequential smoke check is not a controlled performance benchmark.
 
-Other candidates (researched; not installed)
+Other candidates and native features
 ------------------------------------------
-3. Built-in SSAO. Medium effort: runtime renderer feature/resources, downsample
-   and depth reconstruction first. Could add contact depth around aircraft,
-   cockpit recesses and compounds, but verify custom material normals and
-   camera-stack interaction. Downsampling reduces AO pixel count fourfold.
-   Shipped URP DLL contains the internal feature/settings; reflection can
-   create it. A pilot could use InterleavedGradient, Depth, AfterOpaque,
-   Low samples and Medium blur. AfterOpaque avoids surface shader variants,
-   but multiplies all opaque light, including direct/emissive light. Validate
-   the retained shader variants, cockpit depth clearing, no duplicate native
-   AO, silhouettes and cost before enabling. A mod-owned wrapper on the live
-   renderer feature list avoids rebuilding/disposal of the whole renderer.
-   If vendoring a stripped shader, pin URP14.0.12 and preserve its Unity
-   Companion License; those shader sources are not MIT.
+3. Built-in SSAO is already active in the inspected native renderer
+   (2026-11-16 trial: AfterOpaque=false, intensity 0.5, radius 2.5).
+   Do not add duplicate AO. Performance's optional MAP AO SKIP targets only
+   the unused before-opaque AO on Boscali's unlit relief fallback camera;
+   normal direct map drawing already avoids the camera pipeline. World and
+   sensor AO remain native. Native radius, sample and blur tuning would need
+   a separate visual/cost comparison before adopting new values.
    https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/post-processing-ssao.html
 
 4. CristianQiu/Unity-URP-Volumetric-Light. MIT, Unity 2022.3+, DX11, forward and

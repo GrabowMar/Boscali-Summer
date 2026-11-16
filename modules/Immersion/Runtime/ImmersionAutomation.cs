@@ -11,6 +11,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
     /// <summary>Explicit client-local hooks for nomodkit cockpit acceptance scenarios.</summary>
     public static class ImmersionAutomation
     {
+        public static Dictionary<string, object> PilotSnapshot(Dictionary<string, object> args)
+            => CockpitPilot.Live != null ? CockpitPilot.Live.DebugSnapshot()
+                : Failure("ImmersionAutomation", "PilotSnapshot", "No local cockpit pilot");
+
         public static Dictionary<string, object> Readout(Dictionary<string, object> args)
         {
             ImmersionManager manager = ImmersionManager.Live;

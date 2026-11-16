@@ -8,8 +8,8 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
     internal enum SeaKind { OilRig = 0, SeaFort = 1 }
     internal enum MountKind { Gun = 0, Missile = 1, Store = 2 }
 
-    /// <summary>One piece of a section: what falls off together. Geometry is relative to the section's origin; the U
-    /// coordinate picks the paint, V the baked shade.</summary>
+    /// <summary>One piece of a section: what falls off together. Geometry is relative to the section's origin; UVs
+    /// address the model atlas in version 2, or the paint/shade ramp in version 1.</summary>
     internal sealed class SeaPiece
     {
         public bool Core; // never falls: goes only when the section does
@@ -60,6 +60,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
     /// </summary>
     internal sealed class SeaLayout
     {
+        public int Version = 1;
         public SeaKind Kind;
         public string Key, UnitName;
         public byte[] Palette; // rgb triples
@@ -68,15 +69,19 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
 
         public int Paints => Palette.Length / 3;
 
-        public Vector2 PaintUv(int paint, float shade) => new Vector2((paint + 0.5f) / Paints, shade);
+        // Version 2 reserves the bottom 2% of every atlas for small runtime-generated fittings.
+        public Vector2 PaintUv(int paint, float shade) => new Vector2((paint + 0.5f) / Paints,
+            Version >= 2 ? 0.004f + 0.012f * Mathf.Clamp01(shade) : shade);
 
         public static SeaLayout Read(byte[] bytes)
         {
             using (var r = new BinaryReader(new MemoryStream(bytes)))
             {
-                if (r.ReadByte() != 'B' || r.ReadByte() != 'S' || r.ReadByte() != 'S' || r.ReadByte() != 'M' || r.ReadByte() != 1)
-                    throw new InvalidDataException("not a version 1 .seamodel");
-                var layout = new SeaLayout { Kind = (SeaKind)r.ReadByte(), Key = Text(r), UnitName = Text(r) };
+                if (r.ReadByte() != 'B' || r.ReadByte() != 'S' || r.ReadByte() != 'S' || r.ReadByte() != 'M')
+                    throw new InvalidDataException("not a .seamodel");
+                byte version = r.ReadByte();
+                if (version != 1 && version != 2) throw new InvalidDataException("unsupported .seamodel version " + version);
+                var layout = new SeaLayout { Version = version, Kind = (SeaKind)r.ReadByte(), Key = Text(r), UnitName = Text(r) };
                 layout.Palette = r.ReadBytes(r.ReadByte() * 3);
                 float paints = layout.Paints;
                 layout.Sections = new SeaSection[r.ReadByte()];
@@ -101,7 +106,9 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
                         {
                             piece.Vertices[v] = Vec(r);
                             piece.Normals[v] = new Vector3(r.ReadSByte() / 127f, r.ReadSByte() / 127f, r.ReadSByte() / 127f);
-                            piece.Uv[v] = new Vector2((r.ReadByte() + 0.5f) / paints, r.ReadByte() / 255f);
+                            byte paint = r.ReadByte(), shade = r.ReadByte();
+                            piece.Uv[v] = version == 2 ? new Vector2(r.ReadSingle(), r.ReadSingle()) :
+                                new Vector2((paint + 0.5f) / paints, shade / 255f);
                         }
                         piece.Triangles = new int[r.ReadUInt32()];
                         for (int t = 0; t < piece.Triangles.Length; t++) piece.Triangles[t] = count < 65536 ? r.ReadUInt16() : (int)r.ReadUInt32();

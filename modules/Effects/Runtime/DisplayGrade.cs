@@ -8,6 +8,7 @@ using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Effects.Configuration;
 using BoscaliSummer.Modules.Effects.Domain;
+using BoscaliSummer.Modules.Performance.Runtime;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -57,6 +58,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
 
         public void ResetForScene()
         {
+            sharpening.Restore();
             postQuality.Restore();
             cinematic.Release();
             agx.Restore();
@@ -83,17 +85,21 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         }
 
         private void OnDestroy() => ReleaseFx();
+        private void OnDisable() => ReleaseFx();
 
         private void Update()
         {
             // Display LUTs and channel mixing must not recolour a calibrated phosphor/thermal picture.
             bool nightVision = GameAccess.TryGetNightVisionState(out _, out bool active) && active;
             if (holder != null) holder.SetActive(!nightVision);
+            if (nightVision) sharpening.Restore();
             if (settings == null || Time.unscaledTime < nextApply) return;
             nextApply = Time.unscaledTime + ApplySeconds;
 
             bool on = settings.Enabled.Value;
-            sharpening.Apply(on && settings.SharpenEnabled.Value, settings.SharpenStrength.Value);
+            bool independentSharpen = RenderTuning.IndependentSharpening;
+            sharpening.Apply(!nightVision && ((on && settings.SharpenEnabled.Value) || independentSharpen),
+                independentSharpen ? RenderTuning.SharpenStrength : settings.SharpenStrength.Value);
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             postQuality.Apply(level != null && cameras != null ? cameras.mainCamera : null,
@@ -101,7 +107,8 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             agx.Apply(settings.AgxEnabled.Value && level != null && level.PostProcessing != null,
                 settings.AgxLook.Value, cameras != null ? cameras.mainCamera : null, logger);
             cinematic.Apply(settings.Cinematic, level, transform, cameras != null ? cameras.mainCamera : null,
-                settings.Cinematic.Enabled.Value ? agx.GetShader("Hidden/Boscali/CinematicStreak", logger) : null);
+                settings.Cinematic.Enabled.Value ? agx.GetShader("Hidden/Boscali/CinematicStreak", logger) : null,
+                RenderTuning.OptimizeCinematicStreaks);
             if (!on || level == null || level.PostProcessing == null)
             {
                 Teardown();

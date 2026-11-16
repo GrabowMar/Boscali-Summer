@@ -25,8 +25,6 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             Shader shader = SpookAssets.HellInfection;
             if (shader == null) return null;
             infection = new Material(shader) { name = "Hell Branching Infection" };
-            // Preserve the existing ground_surface readout: the infection's colour is the same soot source.
-            if (SourceName.Length == 0) SourceName = SpookAssets.AshSurface?.name ?? "Boscali/SootedWasteland";
             return infection;
         }
 

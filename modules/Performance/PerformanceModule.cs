@@ -14,7 +14,8 @@ namespace BoscaliSummer.Modules.Performance
         public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => new[]
         {
-            typeof(RemoteTurretSearchPatch), typeof(SleepingTurretPatch), typeof(DistantTracerPatch)
+            typeof(RemoteTurretSearchPatch), typeof(SleepingTurretPatch), typeof(DistantTracerPatch),
+            typeof(ReliefAmbientOcclusionPatch)
         };
 
         public void Install(ModuleContext context)
@@ -23,6 +24,8 @@ namespace BoscaliSummer.Modules.Performance
             context.AddSceneService<PerformanceMonitor>(90)
                 .Configure(context.Settings.Performance);
             context.AddSceneService<BaseGameTuning>(91)
+                .Configure(context.Settings.Performance);
+            context.AddSceneService<RenderTuning>(93)
                 .Configure(context.Settings.Performance);
             context.AddClientSetting("FRAME BUDGET", "ADAPTIVE FX",
                 "After sustained slow flight frames, halve scalable Boscali cosmetic budgets. " +
@@ -45,6 +48,22 @@ namespace BoscaliSummer.Modules.Performance
                 context.Settings.Performance.RenderScaleCap, ClientPreset.LastResort);
             context.AddClientLevel("BASE GAME", "RESOLUTION", "3D world resolution under RENDER SCALE. Lower is faster and softer.",
                 context.Settings.Performance.RenderScale, .5f, 1f, .05f, requires: scale);
+            context.AddClientSetting("BASE GAME", "MAP AO SKIP",
+                "Skip unused ambient occlusion on the relief map's fallback camera. " +
+                "The normal map path already avoids this work. World and sensor shading stay unchanged.",
+                context.Settings.Performance.SkipReliefAmbientOcclusion);
+            context.AddClientSetting("BASE GAME", "CHEAPER LIGHT STREAKS",
+                "Reduce rendering work for CINEMATIC light glow when supported. " +
+                "Only helps while cinematic light streaks are enabled; keeps the original path as fallback.",
+                context.Settings.Performance.OptimizeCinematicStreaks);
+            ClientSettingToggle sharpen = context.AddClientSetting("BASE GAME", "INDEPENDENT SHARPEN",
+                "Sharpen the picture with native FidelityFX RCAS without enabling COLOUR GRADE. " +
+                "Can help a reduced render scale look clearer; adds GPU work. " +
+                "While on, the strength below takes priority over grade sharpening.",
+                context.Settings.Performance.IndependentSharpening);
+            context.AddClientLevel("BASE GAME", "SHARPEN STRENGTH",
+                "How strongly independent sharpening restores detail. High values can emphasize noise and halos.",
+                context.Settings.Performance.IndependentSharpenStrength, 0f, 1f, .1f, requires: sharpen);
             context.AddClientSetting("BASE GAME", "SCENE CLEANUP",
                 "Unload unused assets and collect garbage on scene transitions " +
                 "(menu/mission loads), never during flight. Frees memory; loads take slightly longer. Client-local.",

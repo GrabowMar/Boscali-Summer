@@ -1,18 +1,19 @@
-/* Portal · FUI x F-35 hybrid. Cyan = ready/key, amber = caution, red = danger. friendly/hostile follow the game. */
+/* Portal · smoked instrument glass. Cyan = selection/ready, amber = caution, red = danger.
+   The nearly opaque ground protects text over bright terrain; inner plates supply the frost depth. */
 :root {
-  ground:          #090F11 ff;
-  surface:         #162025 ff;
-  surface-raised:  #263339 ff;
-  surface-inert:   #10191D ff;
-  surface-sunken:  #0B1215 ff;
-  hairline:        #53636B 80;
-  frame:           #83969D 98;
-  ink:             #F3F0E8;
-  ink-dim:         #B4C4CA;
-  ink-muted:       #90A5AE;
-  key:             #55D9EF;
-  select:          #55D9EF;
-  ready:           #55D9EF;
+  ground:          #0B1419 f5;
+  surface:         #20343E e8;
+  surface-raised:  #2D4652 f2;
+  surface-inert:   #12232B e8;
+  surface-sunken:  #0C171D f5;
+  hairline:        #78939F 58;
+  frame:           #A5BEC8 a8;
+  ink:             #EDF5F7;
+  ink-dim:         #C0D1D8;
+  ink-muted:       #A2B8C2;
+  key:             #8DDEEA;
+  select:          #8DDEEA;
+  ready:           #8DDEEA;
   caution:         #F5BA56;
   effort:          #F5BA56;
   danger:          #FF695B;

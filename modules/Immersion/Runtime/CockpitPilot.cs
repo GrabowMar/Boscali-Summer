@@ -35,12 +35,83 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         internal static CockpitPilot Live { get; private set; }
         /// <summary>Automation only: redraw the kneeboard card to measure a warm render.</summary>
         internal void DebugRefreshKneeboard() => kneeboard.MarkDirty();
+#if !PUBLIC_RELEASE
+        internal Dictionary<string, object> DebugSnapshot()
+        {
+            if (!rig.Valid || aircraft == null || aircraft.cockpit == null || camera == null)
+                return new Dictionary<string, object> { ["ok"] = false, ["error"] = "No local cockpit pilot" };
+            Matrix4x4 local = aircraft.cockpit.transform.worldToLocalMatrix;
+            SkinnedMeshRenderer native = PilotRenderer?.GetValue(pilot) as SkinnedMeshRenderer;
+            Transform[] bones = rig.BodyRenderer.bones;
+            var names = new string[bones.Length];
+            var posed = new float[bones.Length * 16];
+            var original = new float[bones.Length * 16];
+            var bind = new float[bones.Length * 16];
+            Matrix4x4[] bindposes = rig.BodyRenderer.sharedMesh.bindposes;
+            Transform[] nativeBones = native != null ? native.bones : bones;
+            for (int i = 0; i < bones.Length; i++)
+            {
+                names[i] = bones[i].name;
+                CopyMatrix(local * bones[i].localToWorldMatrix, posed, i * 16);
+                CopyMatrix(local * nativeBones[i].localToWorldMatrix, original, i * 16);
+                CopyMatrix(bindposes[i], bind, i * 16);
+            }
+            Vector3 eye = local.MultiplyPoint3x4(camera.transform.position);
+            Vector3 markerEye = nativeEye != null ? local.MultiplyPoint3x4(nativeEye.position) : Vector3.zero;
+            Vector3 canonicalEye = nativeHead != null ? local.MultiplyPoint3x4(nativeHead.TransformPoint(CanonicalHeadEye)) : Vector3.zero;
+            Transform viewPoint = aircraft.cockpitViewPoint;
+            Vector3 baseEye = viewPoint != null ? local.MultiplyPoint3x4(viewPoint.position) : Vector3.zero;
+            var controlsState = new List<object>();
+            void Controls(Array values, FieldInfo transform, string kind)
+            {
+                if (values == null || transform == null) return;
+                foreach (object value in values)
+                {
+                    Transform lever = value != null ? transform.GetValue(value) as Transform : null;
+                    if (lever == null) continue;
+                    var meshes = new List<object>();
+                    foreach (MeshFilter filter in lever.GetComponentsInChildren<MeshFilter>(true))
+                        if (filter.sharedMesh != null) meshes.Add(new Dictionary<string, object> {
+                            ["name"] = filter.sharedMesh.name, ["localToWorld"] = Matrix(local * filter.transform.localToWorldMatrix) });
+                    controlsState.Add(new Dictionary<string, object> { ["kind"] = kind, ["name"] = lever.name,
+                        ["localToWorld"] = Matrix(local * lever.localToWorldMatrix), ["meshes"] = meshes });
+                }
+            }
+            Controls(controls != null ? Joysticks?.GetValue(controls) as Array : null, StickTransform, "stick");
+            Controls(controls != null ? Throttles?.GetValue(controls) as Array : null, ThrottleTransform, "throttle");
+            return new Dictionary<string, object> {
+                ["ok"] = true, ["airframe"] = aircraft.name, ["model"] = rig.Model.ToString(),
+                ["fieldOfView"] = camera.fieldOfView, ["aspect"] = camera.aspect, ["nearClip"] = camera.nearClipPlane,
+                ["boneNames"] = names, ["boneLocalToWorld"] = posed, ["nativeBoneLocalToWorld"] = original, ["bindposes"] = bind,
+                ["cockpitLocalToWorld"] = Matrix(Matrix4x4.identity), ["cameraLocalToWorld"] = Matrix(local * camera.transform.localToWorldMatrix),
+                ["projectionMatrix"] = Matrix(camera.projectionMatrix), ["rendererLocalToWorld"] = Matrix(local * rig.BodyRenderer.transform.localToWorldMatrix),
+                ["helmetEyePosition"] = new[] { eye.x, eye.y, eye.z },
+                ["nativeEyePosition"] = nativeEye != null ? new[] { markerEye.x, markerEye.y, markerEye.z } : null,
+                ["canonicalEyePosition"] = nativeHead != null ? new[] { canonicalEye.x, canonicalEye.y, canonicalEye.z } : null,
+                ["cockpitViewPointPosition"] = viewPoint != null ? new[] { baseEye.x, baseEye.y, baseEye.z } : null,
+                ["nativeEyeLocalToWorld"] = nativeEye != null ? Matrix(local * nativeEye.localToWorldMatrix) : null,
+                ["cockpitViewPointLocalToWorld"] = viewPoint != null ? Matrix(local * viewPoint.localToWorldMatrix) : null,
+                ["bodyEyeAlignmentLocal"] = new[] { bodyEyeAlignment.x, bodyEyeAlignment.y, bodyEyeAlignment.z },
+                ["bodyEyeAlignmentValid"] = bodyEyeAlignmentValid, ["controls"] = controlsState };
+        }
+        private static void CopyMatrix(Matrix4x4 matrix, float[] values, int start)
+        { for (int r = 0; r < 4; r++) for (int c = 0; c < 4; c++) values[start + r * 4 + c] = matrix[r, c]; }
+        private static float[] Matrix(Matrix4x4 matrix)
+        { var values = new float[16]; CopyMatrix(matrix, values, 0); return values; }
+#endif
         internal void SetKneeboardGallery(IKneeboardGallery gallery) => kneeboard.Gallery = gallery;
         private ImmersionSettings settings;
         private ManualLogSource logger;
         private Aircraft aircraft;
         private Pilot pilot;
         private Camera camera;
+        private Transform nativeHead, nativeEye;
+        private Vector3 bodyEyeAlignment;
+        private bool bodyEyeAlignmentValid, eyeAlignmentPending;
+        private const float MaximumEyeAlignmentMetres = .5f;
+        // Vortex's verified eye in the shared native head's model units (inherited scale 100).
+        // The owned body's compatibility gate requires the native 3,814-vertex mesh and sixteen matching bind poses.
+        private static readonly Vector3 CanonicalHeadEye = new Vector3(0f, .001139988f, .000939970f);
         private Cockpit controls;
         private UniversalAdditionalCameraData cameraData;
         private bool controlsBound, stickExpected, throttleExpected, kneeboardOnRight;
@@ -55,6 +126,26 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
 
         internal static bool IsLocalAircraft(Aircraft followed) => followed != null &&
             GameManager.GetLocalAircraft(out Aircraft local) && local == followed;
+
+        internal bool TryBodyEyeOffset(Aircraft owner, out Vector3 worldOffset)
+        {
+            worldOffset = Vector3.zero;
+            if (!bodyEyeAlignmentValid || nativeHead == null || nativeEye == null || owner == null || owner != aircraft ||
+                owner.cockpit == null || !rig.Valid || rig.BodyRenderer == rig.Renderer) return false;
+            worldOffset = owner.cockpit.transform.TransformVector(bodyEyeAlignment);
+            return true;
+        }
+
+        private void CacheBodyEyeAlignment()
+        {
+            bodyEyeAlignment = Vector3.zero; bodyEyeAlignmentValid = false;
+            if (nativeHead == null || nativeEye == null || aircraft == null || aircraft.cockpit == null ||
+                aircraft.cockpitViewPoint == null || rig.BodyRenderer == rig.Renderer) return;
+            Vector3 delta = nativeHead.TransformPoint(CanonicalHeadEye) - aircraft.cockpitViewPoint.position;
+            if (!float.IsFinite(delta.sqrMagnitude) || delta.sqrMagnitude > MaximumEyeAlignmentMetres * MaximumEyeAlignmentMetres) return;
+            bodyEyeAlignment = aircraft.cockpit.transform.InverseTransformVector(delta);
+            bodyEyeAlignmentValid = true;
+        }
 
         private void LateUpdate()
         {
@@ -74,6 +165,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             }
             if (!rig.Valid)
             {
+                bodyEyeAlignmentValid = eyeAlignmentPending = false; nativeHead = nativeEye = null;
                 kneeboard.Detach(); reflection.Release(); rig.Release();
                 if (Time.unscaledTime < retryAt) return;
                 retryAt = Time.unscaledTime + 2f;
@@ -83,6 +175,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             {
                 rig.SetModel(settings.PilotModel.Value);
                 rig.CopySeatedPose();
+                if (eyeAlignmentPending && Time.frameCount > bindFrame)
+                {
+                    // Binding unculls the native Animator; sample its next settled pose once.
+                    CacheBodyEyeAlignment();
+                    eyeAlignmentPending = false;
+                }
                 if ((!controlsBound || controls == null || (stickExpected && !rig.StickBound) || (throttleExpected && !rig.ThrottleBound)) &&
                     Time.frameCount > bindFrame + 1 && Time.unscaledTime >= controlsRetryAt)
                 {
@@ -129,6 +227,12 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             var animator = PilotAnimator.GetValue(pilot) as Animator;
             if (!rig.Bind(source, animator, PilotShaderBundle.GetBody(), camera)) { WarnUnavailable(); return false; }
             rig.SetFrame(aircraft.cockpit.transform);
+            // Use native anatomy before the owned head receives presentation rotations.
+            // Compare stable anchors, never the camera child that carries head tracking.
+            nativeHead = source.bones[3];
+            nativeEye = nativeHead.Find("helmetCamPoint");
+            CacheBodyEyeAlignment();
+            eyeAlignmentPending = true;
             kneeboardOnRight = RightKneeboard(aircraft.name, rig.StickOnRight);
             camera.TryGetComponent(out cameraData);
             ModuleServices.TryGet(out ICanopyGlassView canopy);
@@ -279,6 +383,7 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             kneeboard.Detach(); reflection.Release(); rig.Release(); aircraft = null; pilot = null; camera = null; controls = null; cameraData = null;
             controlsBound = stickExpected = throttleExpected = false;
             kneeboardOnRight = false;
+            nativeHead = nativeEye = null; bodyEyeAlignment = Vector3.zero; bodyEyeAlignmentValid = eyeAlignmentPending = false;
             retryAt = controlsRetryAt = 0; warnedAircraft = 0; reportedControls = -1;
         }
         public void ReleaseFx() { ResetForScene(); kneeboard.Release(); PilotShaderBundle.Release(); }

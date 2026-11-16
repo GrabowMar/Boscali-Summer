@@ -9,19 +9,14 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// FIELD LOG, the game log in the big map's bottom-right corner (2026-11-15: phase 6 had taken the log off the map onto EVN LOG; the user
-    /// wants it back, in the corner, so the panel column keeps its full height). The newest lines of <see cref="ITacticalLog"/> in the one log
-    /// look (<see cref="LogLine"/>), newest on top; EVN LOG holds all of them with filters and LOCATE; the chevron folds it to its header. It lives
-    /// in the map chrome layer (<see cref="MapSelectionDeck.ChromeLayer"/>); the STR legend wraps short of it (<see cref="WidthTaken"/>) and the
-    /// game's grid readouts in that corner stand above it (<see cref="Reserve"/>). Read only and client-local; it redraws when the log moves.
+    /// FIELD LOG above the left MFD panel, sharing the column's width and layout authority. The newest lines of
+    /// <see cref="ITacticalLog"/> use <see cref="LogLine"/>; the chevron returns the body's height to the panel.
+    /// Folding the column hides the log too, leaving the whole map clear. Read only and client-local; text redraws on a log or width change.
     /// </summary>
     internal static class MfdFieldLog
     {
-        private const float MaxWidth = 390f, HeadH = 26f, BodyH = 120f, Pad = 8f, Margin = 10f, Inset = 12f;
+        private const float HeadH = 32f, BodyH = 120f, Pad = 8f;
         private const int Lines = 8;
-
-        /// <summary>Width taken from the viewport's right edge (inset and a gap included), for the STR legend to wrap short of.</summary>
-        internal const float WidthTaken = MaxWidth + Inset + 12f;
 
         private static RectTransform root;
         private static AvFrame back;
@@ -32,23 +27,28 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static float width = -1f;
         private static readonly StringBuilder text = new StringBuilder(1024);
 
-        /// <summary>Height taken from the viewport's bottom edge (with its margin), for the game's grid readouts to stand above. Known before
-        /// the box is first built, so the layout pass that places the readouts on open already agrees.</summary>
-        internal static float Reserve => Margin + Height;
-
-        private static float Height => folded ? HeadH : HeadH + BodyH;
+        /// <summary>Known before construction, so the log and dock reserve the same space on first open.</summary>
+        internal static float Height => folded ? HeadH : HeadH + BodyH;
 
         /// <summary>Read-back for the sims.</summary>
         internal static bool Shown => root != null && root.gameObject.activeInHierarchy;
         internal static string BodyText => body != null ? body.text : null;
 
+        /// <summary>The dock places both parts of the left bay in one layout pass.</summary>
+        internal static void Ensure(Canvas canvas, MfdLayout.Columns columns)
+        {
+            if (canvas == null || columns.Log.width <= 0f) { Hide(); return; }
+            if (root == null || root.parent != canvas.transform) Build((RectTransform)canvas.transform);
+            root.anchoredPosition = MfdLayout.TopLeftOf(columns.Log);
+            if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
+            float w = columns.Log.width;
+            if (Mathf.Abs(w - width) > 0.5f) { width = w; Apply(); revision = int.MinValue; }   // a new width refits the lines
+        }
+
         internal static void Tick(DynamicMap map)
         {
-            RectTransform viewport = map.mapBackground.rectTransform;
-            if (root == null || root.parent == null || root.parent.parent != viewport) Build(MapSelectionDeck.ChromeLayer(viewport));
-            if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
-            float w = Mathf.Min(MaxWidth, viewport.rect.width - 2f * Inset);
-            if (Mathf.Abs(w - width) > 0.5f) { width = w; Apply(); revision = int.MinValue; }   // a new width refits the lines
+            if (!MfdRailPatch.IsApplied || MfdColumnFold.Folded) { Hide(); return; }
+            if (!Shown || folded) return;
 
             ITacticalLog log = ModuleServices.TryGet(out ITacticalLog found) ? found : null;
             int now = log == null ? int.MinValue + 1 : log.Revision;
@@ -81,9 +81,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             Reset();
             root = AvLay.Child(layer, "NOAvionics.FieldLog");
-            root.anchorMin = root.anchorMax = root.pivot = new Vector2(1f, 0f);
-            root.anchoredPosition = new Vector2(-Inset, Margin);
-            back = MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, MaxWidth, Height),
+            root.anchorMin = root.anchorMax = new Vector2(.5f, .5f);
+            root.pivot = new Vector2(0f, 1f);
+            back = MfdChromeLay.Panel(root, "Back", new Rect(0f, 0f, AvTokens.PanelWidth, Height),
                 AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(.92f),
                 AvStyleHost.FuiColor("frame", AvTheme.Frame).WithAlpha(.9f), AvChamfer.Diagonal(5f));
             back.raycastTarget = true;   // the pointer guard keeps wheel and drag off the map behind it
@@ -91,11 +91,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Color key = AvStyleHost.FuiColor("key", AvTheme.RailInfo);
             TMP_Text icon = AvIcons.Make(root, AvIcon.ListDetails, AvGridTokens.IconHead, key);
             MfdChromeLay.Place(icon.rectTransform, new Rect(Pad, -(HeadH - 14f) * 0.5f, 14f, 14f));
-            TMP_Text title = Label("Title", AvTextRole.Head, "FIELD LOG", key);
+            TMP_Text title = Label("Title", AvTextRole.Head, "FIELD LOG", AvInk.Ink);
             MfdChromeLay.Place(title.rectTransform, new Rect(Pad + 20f, 0f, 76f, HeadH));
             caption = Label("Caption", AvTextRole.Micro, "", AvStyleHost.FuiColor("ink-dim", AvTheme.Dim));
 
-            fold = AvControl.Make(root, new AvControl.Spec("", Fold, AvButtonStyle.Quiet, AvIcon.ChevronDown));
+            fold = AvControl.Make(root, new AvControl.Spec("", Fold, AvButtonStyle.Quiet, AvIcon.ChevronUp));
             fold.Bracket = 0f;
             fold.Help = "Fold the field log to its header, or open it again.";
 
@@ -123,24 +123,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void Apply()
         {
             if (root == null) return;
-            float w = width > 0f ? width : MaxWidth, h = Height;
+            float w = width > 0f ? width : AvTokens.PanelWidth, h = Height;
             root.sizeDelta = new Vector2(w, h);
             back.rectTransform.sizeDelta = new Vector2(w, h);
-            float foldX = w - Pad - 22f;
-            MfdChromeLay.Place(fold.Rect, new Rect(foldX, -3f, 22f, 20f));
+            float foldX = w - HeadH;
+            MfdChromeLay.Place(fold.Rect, new Rect(foldX, 0f, HeadH, HeadH));
             float captionX = Pad + 100f;
             MfdChromeLay.Place(caption.rectTransform, new Rect(captionX, 0f, Mathf.Max(0f, foldX - 6f - captionX), HeadH));
             MfdChromeLay.Place(body.rectTransform, new Rect(Pad + 2f, -HeadH, w - 2f * Pad - 2f, BodyH - Pad));
             body.gameObject.SetActive(!folded);
-            fold.SetIcon(folded ? AvIcon.ChevronUp : AvIcon.ChevronDown);
+            if (folded) AvText.Set(caption, "EXPAND TO READ");
+            fold.SetIcon(folded ? AvIcon.ChevronDown : AvIcon.ChevronUp);
         }
 
         private static void Fold()
         {
             folded = !folded;
             Apply();
-            DynamicMap map = SceneSingleton<DynamicMap>.i;
-            if (map != null) Patches.GridLabelsPatch.RepositionCornerReadouts(map.gridLabels);
+            revision = int.MinValue;
+            MfdRailPatch.ReLayoutNow();
         }
 
         /// <summary>Map closed: the viewport goes back into the cockpit's small map; the box hides and is kept for the next open.</summary>

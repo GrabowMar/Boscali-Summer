@@ -395,7 +395,13 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
         {
             RemoveCameraOffset();
             if (!presenting || !IsEnabled || cameras == null || cameras.currentState != cameras.cockpitState || cameras.cameraPivot == null) return;
-            cameraOffset.Apply(cameras.cameraPivot, Time.unscaledTime < debugLookUntil ? composedOffset * debugLook : composedOffset);
+            Aircraft aircraft = boundAircraft;
+            Vector3 eyeOffset = Vector3.zero;
+            CockpitPilot body = CockpitPilot.Live;
+            if (settings.PilotBodyEnabled.Value && CockpitPilot.IsLocalAircraft(aircraft) && body != null &&
+                body.TryBodyEyeOffset(aircraft, out eyeOffset))
+                eyeOffset += aircraft.cockpit.transform.forward * CockpitCameraOffset.PlayerBodyEyeForwardMetres;
+            cameraOffset.Apply(cameras.cameraPivot, Time.unscaledTime < debugLookUntil ? composedOffset * debugLook : composedOffset, eyeOffset);
         }
 
         internal void RemoveCameraOffset() => cameraOffset.Remove();

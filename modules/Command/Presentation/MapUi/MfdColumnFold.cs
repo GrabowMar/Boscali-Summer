@@ -6,8 +6,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// <summary>
     /// Folds the panel column of the expanded map (2026-11-15): a drawer tab on the map's left edge. Folded, the column's width goes
     /// to the map (<see cref="MfdLayout.Resolve"/> lays it out at zero) and the shown panel is closed (so it stops refreshing too); the
-    /// map's field log stays in its corner. The tab opens it again with the same panel; a rail key, or any docked screen being shown, opens it with that
-    /// screen. Client-local, kept until the game closes.
+    /// field log above it hides too. The tab opens it again with the same panel; a rail key, or any docked screen being shown, opens it with that
+    /// screen. Starts folded; the player's choice is client-local and kept until the game closes.
     /// </summary>
     internal static class MfdColumnFold
     {
@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static AvControl button;
         private static MFDScreen stowed;
 
-        internal static bool Folded { get; private set; }
+        internal static bool Folded { get; private set; } = true;
 
         /// <summary>Builds or moves the tab to the map's left edge, half way down. Called with every layout pass.</summary>
         internal static void Ensure(Canvas canvas, MfdLayout.Columns columns)

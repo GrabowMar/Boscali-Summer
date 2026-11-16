@@ -26,13 +26,13 @@ namespace BoscaliSummer.Modules.Scenario
         {
             var library = new ScenarioLibrary(Path.Combine(Paths.ConfigPath, "BoscaliSummer", "scenarios"), context.Logger);
             var missions = new ScenarioMissions(library, context.Logger);
-            BoscaliMission.ExtraGroups = missions.Groups;
+            BoscaliMission.ExtraGroups += missions.Groups;
             BoscaliMission.ScriptedModulesOff = mission => missions.ScriptOf(mission)?.Without.ToArray();
             BoscaliMission.ScriptedPeace = mission => FactionPeace.Of(missions.ScriptOf(mission));
             LaunchMissionPatch.Resolve = missions.Launch;
             context.OnTeardown(() =>
             {
-                BoscaliMission.ExtraGroups = null;
+                BoscaliMission.ExtraGroups -= missions.Groups;
                 BoscaliMission.ScriptedModulesOff = null;
                 BoscaliMission.ScriptedPeace = null;
                 LaunchMissionPatch.Resolve = null;

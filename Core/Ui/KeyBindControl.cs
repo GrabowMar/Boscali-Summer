@@ -64,6 +64,7 @@ namespace BoscaliSummer.Core.Ui
 
         private void Toggle()
         {
+            consumedFrame = Time.frameCount;
             listening = !listening;
             listenFrame = Time.frameCount;
             Show();
@@ -86,6 +87,7 @@ namespace BoscaliSummer.Core.Ui
         private void Listen()
         {
             if (!Input.anyKeyDown) return;
+            consumedFrame = Time.frameCount;
             if (Input.GetKeyDown(KeyCode.Escape)) { listening = false; Show(); return; }
             if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete)) { Bind(KeyCode.None); return; }
             keyboard ??= Keyboard();
@@ -99,6 +101,9 @@ namespace BoscaliSummer.Core.Ui
             entry.Value = key;
             Show();
         }
+
+        private int consumedFrame = -1;
+        internal bool ConsumingKeyboard => listening || consumedFrame == Time.frameCount;
 
         private void Show()
         {

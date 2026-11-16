@@ -7,8 +7,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The theater front as one vector line: our blue washing out on our side, their red on
-    /// theirs, a dark casing with a bright core between them. Heat shows as an amber glow and
-    /// core. A trace with no clear side keeps a cool glow. No teeth (2026-11-15): spaced by
+    /// theirs, a dark casing with a bright core between them. Heat shows in the amber
+    /// core; broad glows obscured nearby roads and contacts. No teeth (2026-11-15): spaced by
     /// screen distance they popped in and out on every zoom step, and the two washes already
     /// say whose ground is whose.
     ///
@@ -26,15 +26,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const int MaximumSamples = 1600;
         private const int MaximumVertices = 30000;
         private const float StationStep = 5f;
-        private const float WashWidth = 10f, CasingHalf = 2.1f, CoreHalf = .75f;
+        private const float WashWidth = 7f, CasingHalf = 1.7f, CoreHalf = .65f;
         private const float HotPressure = .35f;
 
         private static readonly Color32 Casing = new Color32(3, 8, 12, 225);
-        private static readonly Color32 CoolGlow = new Color32(90, 200, 230, 70);
-        private static readonly Color32 HotGlow = new Color32(255, 160, 60, 120);
-        private static readonly Color32 OwnWash = Alpha(TacticalSectorGrid.FriendlyTint, 120);
-        private static readonly Color32 TheirWash = Alpha(TacticalSectorGrid.HostileTint, 120);
-        private static readonly Color32 HotCore = new Color32(255, 222, 170, 250);
+        private static readonly Color32 OwnWash = Alpha(TacticalSectorGrid.FriendlyTint, 96);
+        private static readonly Color32 TheirWash = Alpha(TacticalSectorGrid.HostileTint, 96);
+        private static readonly Color32 HotCore = new Color32(255, 203, 126, 250);
 
         /// <summary>The front's own ink; the map legend swatch reads it from here.</summary>
         internal static readonly Color32 Ink = new Color32(228, 241, 245, 245);
@@ -183,7 +181,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             return written;
         }
 
-        /// <summary>Back to front: glow, both washes, casing, core.</summary>
+        /// <summary>Back to front: both washes, casing, core. No separate glow geometry.</summary>
         private void Paint(VertexHelper vh, float toLocal)
         {
             for (int t = 0; t < traceCount; t++)
@@ -194,8 +192,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
                 int index = order[t], side = ourSide[index];
                 bool hot = pressures[index] >= HotPressure, loop = closed[index];
-                if (hot || side == 0)
-                    MapStroke.Ribbon(vh, stations, start, end, toLocal, .5f, hot ? 16f : 10f, hot ? HotGlow : CoolGlow, loop);
                 if (side != 0)
                 {
                     MapStroke.Band(vh, stations, start, end, toLocal, side, WashWidth, OwnWash, loop);

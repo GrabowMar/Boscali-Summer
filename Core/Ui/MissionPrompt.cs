@@ -9,14 +9,13 @@ using UnityEngine;
 namespace BoscaliSummer.Core.Ui
 {
     /// <summary>
-    /// The mission-start prompt: which Boscali Summer systems run in this mission. It opens on
-    /// the map screen once a mission is running and stays out of the cockpit. Systems on the left
-    /// by category; on the right a live tally, the hovered system's card and the update notes.
+    /// Mission dashboard on the native faction screen, with a shared systems page also reachable
+    /// through F1. Native mission actions retain their game-owned authority and transitions.
     /// </summary>
-    internal sealed class MissionPrompt : MonoBehaviour
+    internal sealed partial class MissionPrompt : MonoBehaviour
     {
-        // Five columns plus the side panel show every module and the start row without scrolling at 1080p.
-        private const float Width = 1700f, Height = 920f, SideWidth = 420f;
+        // The shared scroll viewport keeps long feature descriptions and custom modules reachable.
+        private const float Width = 1700f, Height = 960f, SideWidth = 420f;
         private const int Columns = 5;
 
         /// <summary>Module id, the name a pilot knows it by, one line for the tile, the info card text, its icon.</summary>
@@ -84,6 +83,7 @@ namespace BoscaliSummer.Core.Ui
         };
 
         private readonly HashSet<string> off = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> initialOff = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<AvCell> cells = new List<AvCell>();
         private readonly AvSection[] sections = new AvSection[Categories.Length];
         private AvWindow window;
@@ -102,10 +102,7 @@ namespace BoscaliSummer.Core.Ui
 
         private void Update()
         {
-            string pending = BoscaliMission.PendingMission;
-            bool wanted = pending != null && MissionManager.IsRunning && Cursor.lockState != CursorLockMode.Locked;
-            if (window != null && (!wanted || pending != mission)) Close();
-            if (wanted && window == null) Open(pending);
+            UpdateDashboard();
         }
 
         private void OnDisable() => Close();
@@ -117,28 +114,33 @@ namespace BoscaliSummer.Core.Ui
             cells.Clear();
             foreach (ModuleMetadata module in Offered)
                 if (!MissionProfile.AllowsModule(module.Id)) off.Add(module.Id);
+            initialOff.Clear();
+            initialOff.UnionWith(off);
 
             string title = string.IsNullOrEmpty(name) ? "UNTITLED" : name.ToUpperInvariant();
-            window = AvWindow.Build(transform, "mission-systems", "MISSION SYSTEMS / " + title, Width, Height, 30010);
+            window = AvWindow.Build(transform, "mission-dashboard", "BOSCALI SUMMER   /   MISSION CONTROL", Width, Height, 30010);
             // It opens over the faction screen, whose text would read through glass.
             window.Opaque = true;
-            window.CloseControl.Help = "Start with the systems shown.";
-            window.Closed += () => Done(false, false);
-            var split = window.Body.Add(new Split(window.Body.Content, window.Ticker,
+            window.CloseControl.Rect.gameObject.SetActive(false);
+            BuildDashboard();
+            systems = window.Body.Add(new Split(window.Body.Content, window.Ticker,
                 Width - 2f * AvGridTokens.Pad - AvGridTokens.Gutter, SideWidth));
-            BuildSystems(split.Left);
-            BuildSide(split.Right, title);
-            window.Footer.Set("A battlefield system switched on here joins a mission already under way. F1 > Mission brings this prompt back.");
+            BuildSystems(systems.Left);
+            BuildSide(systems.Right, title);
+            systems.SetShown(false);
+            window.Footer.Set("MISSION CONTROL  /  Select a faction to deploy. Configure your systems before joining the fight.");
             RefreshCells();
             window.Show();
+            Active = this;
         }
 
         private void BuildSystems(AvFlow body)
         {
             body.Add(new AvNote(body.Content,
                 "Choose what Boscali Summer runs in this mission. Cockpit systems leave it as its author made it; battlefield systems change it."));
+            body.Buttons(new AvControl.Spec("APPLY SYSTEMS / RETURN TO DEPLOYMENT", () => Done(false, false), AvButtonStyle.Primary, AvIcon.CircleCheck)).MinHeight = 40;
             body.Buttons(
-                new AvControl.Spec("ALL ON / FULL EXPERIENCE", () => Preset(false), icon: AvIcon.CircleCheck),
+                new AvControl.Spec("ENABLE AVAILABLE SYSTEMS", () => Preset(false), icon: AvIcon.CircleCheck),
                 new AvControl.Spec("BATTLEFIELD OFF / IMMERSION ONLY", () => Preset(true), icon: AvIcon.Pilot));
             for (int c = 0; c < Categories.Length; c++)
             {
@@ -157,9 +159,9 @@ namespace BoscaliSummer.Core.Ui
             }
             body.Space(6f);
             body.Buttons(
-                new AvControl.Spec("START", () => Done(false, false), AvButtonStyle.Primary, AvIcon.PlayerPlay),
-                new AvControl.Spec("START / KEEP FOR THIS MISSION", () => Done(true, false), icon: AvIcon.Bookmark),
-                new AvControl.Spec("START / NEVER ASK AGAIN", () => Done(false, true), icon: AvIcon.Lock));
+                new AvControl.Spec("APPLY SYSTEMS", () => Done(false, false), AvButtonStyle.Primary, AvIcon.CircleCheck),
+                new AvControl.Spec("APPLY / REMEMBER MISSION", () => Done(true, false), icon: AvIcon.Bookmark),
+                new AvControl.Spec("APPLY / USE AS DEFAULT", () => Done(false, true), icon: AvIcon.Lock));
         }
 
         private void BuildSide(AvFlow side, string title)
@@ -206,6 +208,13 @@ namespace BoscaliSummer.Core.Ui
                 // Running and locked: a click only shows its card.
                 cell = grid.Toggle(title, sub, () => true, _ => ShowInfo(id, title, info, icon), icon, "CORE");
                 cell.Help = "Always on: other systems lean on it.";
+            }
+            else if (MissionProfile.RequiredOff(id))
+            {
+                cell = grid.Toggle(title, "Disabled by mission rules", () => false, null, icon, offWord: "LOCK");
+                cell.Interactable = false;
+                cell.Help = "This mission's rules disable this system.";
+                return;
             }
             else if (Array.FindIndex(Offered, module => module.Id == id) < 0)
             {
@@ -256,6 +265,7 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>Switching a module on brings what it needs; switching one off takes what needs it.</summary>
         private void Set(string id, bool on)
         {
+            if (on && MissionProfile.RequiredOff(id)) return;
             if (on ? !off.Remove(id) : !off.Add(id)) return;
             foreach (ModuleMetadata module in Offered)
             {
@@ -271,6 +281,8 @@ namespace BoscaliSummer.Core.Ui
             if (immersionOnly)
                 foreach (ModuleMetadata module in Offered)
                     if (MissionProfile.IsBattlefield(module.Id)) off.Add(module.Id);
+            foreach (ModuleMetadata module in Offered)
+                if (MissionProfile.RequiredOff(module.Id)) off.Add(module.Id);
             RefreshCells();
         }
 
@@ -323,16 +335,24 @@ namespace BoscaliSummer.Core.Ui
         {
             if (window == null) return;
             BoscaliMission.Confirm(mission, off, keepForMission, neverAsk);
-            Close();
+            initialOff.Clear();
+            initialOff.UnionWith(off);
+            if (nativeMenu != null) SelectPage(false);
+            else Close();
         }
 
         private void Close()
         {
+            RestoreNative();
+            if (Active == this) Active = null;
             if (window == null) return;
             AvWindow closing = window;
             window = null;
             closing.Hide();
             Destroy(closing.Root.gameObject);
+            deck = null;
+            systems = null;
+            nativeMenu = null;
         }
 
         /// <summary>Two flows side by side: the systems list and a fixed-width side panel.</summary>

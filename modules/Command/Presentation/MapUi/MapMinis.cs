@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             internal Vector3[] Points;
             internal byte[] Shade;
             internal int[] Triangles;
-            /// <summary>Where the body ends; the dark base slab after it is skipped for airborne contacts.</summary>
+            /// <summary>Where the body ends; the dark footprint after it is skipped for airborne contacts.</summary>
             internal int BodyPoints, BodyTriangles;
         }
 
@@ -379,12 +379,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
         }
 
-        /// <summary>The dark slab a ground contact stands on: contrast on any terrain, and a footprint.</summary>
+        /// <summary>A dark footprint separates a grounded contact from the terrain. One quad is enough:
+        /// the former base box's sides were subpixel, but cost another 16 vertices per contact.</summary>
         private static void Base(Draft shape, float width, float length)
         {
             shape.BodyPoints = shape.Points.Count;
             shape.BodyTriangles = shape.Triangles.Count;
-            Box(shape, 0f, -.02f, 0f, width + .08f, .04f, length + .08f, 0f, .1f);
+            Face(shape, Vector3.zero, Vector3.right * ((width + .08f) * .5f),
+                Vector3.forward * ((length + .08f) * .5f), Vector3.up, .1f);
         }
 
         /// <summary>A box by centre and size, optionally pitched nose-up about its own centre.</summary>
@@ -455,7 +457,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static byte Tone(Vector3 normal, float tone)
         {
             float lit = Mathf.Abs(normal.y) > .7f ? (normal.y > 0f ? .94f : .3f)
-                : .3f + .36f * Mathf.Abs(Vector3.Dot(normal, new Vector3(.8f, 0f, .6f)));
+                : .46f + .22f * Vector3.Dot(normal, new Vector3(.8f, 0f, .6f));
             return (byte)(255f * Mathf.Clamp01(lit * tone));
         }
     }

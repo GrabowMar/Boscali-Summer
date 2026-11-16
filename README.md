@@ -37,7 +37,13 @@ Nuclear Option hands you a jet and a war. **Boscali Summer builds everything aro
 
 Start with **Twelve Miles Out** in the mission picker's **Boscali Summer** group. It's coup morning in the Ignus archipelago, and you fly for a private security firm keeping a freighter convoy afloat while the republic falls apart behind you.
 
-Every other mission runs the mod too. When a mission starts, a prompt on the map screen asks which systems run in it: **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own mix. It can remember the answer for that mission or stop asking.
+The **Boscali Summer Gamemodes** mission group adds three modes:
+
+- **WarBox:** a long combined-arms sandbox with four times the escalation thresholds and strategic delays, larger reserves, native logistics and the MIS dynamic contract board. Brief, fly, recover and report; native strategic objectives decide victory.
+- **Fuzzball:** airborne team combat, equal plane access and no ground forces or ships. First to 75 enemy aircraft kills, or the higher score after 20 minutes, wins.
+- **Heavyweight:** cargo transport against interception. Load container cargo at Maris Airport, fly the displayed route and unload at the destination. Each delivered crate scores one point. After 20 minutes and a 60-second changeover, teams swap roles on the same routes. Highest total wins; equal totals draw.
+
+These modes enforce their gameplay module rules. Ordinary missions run the mod too: a prompt on the map screen asks which systems run in them, with **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it), or your own mix. It can remember the answer for that mission or stop asking.
 
 > [!CAUTION]
 > **Alpha.** Expect bugs, balance problems, performance dips and settings that reset between versions. Multiplayer is not reliable.

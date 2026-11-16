@@ -18,6 +18,11 @@ TestResults/
 /reports/
 /output/
 /trajectory-*.json
+# Keep reproducible module checks despite local catch-all tests/ exclusions.
+!/tools/tests/
+/tools/tests/*
+!/tools/tests/Gamemodes.Tests/
+!/tools/tests/Gamemodes.MissionTests/
 
 # ---------------------------------------------------------------------------------------------
 # Documentation: Markdown is local-only (specs, plans, agent notes); only these are published
@@ -29,6 +34,7 @@ TestResults/
 /docs/*
 !/docs/COMMUNITY_FIXES_2026-10-14.md
 !/docs/MISSION_COMPATIBILITY.md
+!/docs/GAMEMODES.md
 
 # ---------------------------------------------------------------------------------------------
 # Source art stays local: Blender files, textures, previews and versioned bundle exports.

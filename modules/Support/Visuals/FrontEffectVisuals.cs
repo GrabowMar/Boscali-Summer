@@ -1,37 +1,36 @@
 using NuclearOption.Networking;
+using BoscaliSummer.Modules.Support.Domain.Ops;
+using BoscaliSummer.Modules.Support.Runtime;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
-    /// Client-side cue for a finished LAUNCH SATELLITE programme: when the mirrored SPACE front log gains a new Effect row ("SATELLITE ON STATION"), the cosmetic launch
-    /// streak (<see cref="SatelliteLaunchVisuals"/>) climbs from the faction's rear airbase (the owned one farthest from enemy-held ground). Dedupe is by log time with a
-    /// tolerance (the mirror shifts host times onto the client clock), and rows older than <see cref="MaxAge"/> are history, not news.
+    /// Client-side cue for a finished LAUNCH SATELLITE programme. The host event is played once per kind,
+    /// from a live launch pad in the matching faction/scene mirror. Initial snapshot history stays quiet.
     /// </summary>
     internal static class FrontEffectVisuals
     {
-        private const float MaxAge = 20f, Tolerance = 1.5f, LaunchSeconds = 16f;
-        private static float lastTime = -1f;
+        private const float LaunchSeconds = 16f;
+        private static readonly SatelliteLaunchTracker launches = new SatelliteLaunchTracker();
 
-        public static void Reset() => lastTime = -1f;
+        public static void Reset() => launches.Reset();
 
-        public static void Tick(FrontMirror mirror, float now)
+        public static void Tick(FrontMirror mirror, OpsMirror ops, float now)
         {
-            if (GameManager.IsHeadless || mirror == null || !mirror.Known) return;
-            var log = mirror.State.Fronts[(int)Front.Space].Log;
-            bool play = false;
-            float newest = lastTime;
-            for (int i = 0; i < log.Count; i++)
-            {
-                FrontLogRow row = log[i];
-                if (row.Code != (byte)FrontLogCode.Effect) continue;
-                if (row.Time > lastTime + Tolerance && now - row.Time < MaxAge) play = true;
-                if (row.Time > newest) newest = row.Time;
-            }
-            lastTime = newest;
-            if (!play || !GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null) return;
-            if (TryRearAirbase(player.HQ, out Vector3 site)) SatelliteLaunchVisuals.Play(site, LaunchSeconds);
+            if (GameManager.IsHeadless) return;
+            // Slots are stable across snapshots; avoid a random airbase or a destroyed pad.
+            OpsSiteRow? pad = null;
+            if (mirror != null && mirror.Known && ops != null && ops.Known && ops.State.Active &&
+                ops.State.Faction == mirror.State.Faction && ops.State.Epoch == mirror.State.Epoch)
+                foreach (OpsSiteRow candidate in ops.State.Sites)
+                    if (candidate.State == SiteState.Up && (!pad.HasValue || candidate.Slot < pad.Value.Slot)) pad = candidate;
+            byte fresh = launches.Observe(mirror, now, pad.HasValue);
+            if (fresh == 0 || !pad.HasValue ||
+                !SupportTargeting.TryMapPoint(new GlobalPosition(pad.Value.X, 0f, pad.Value.Z), out Vector3 site)) return;
+            for (int kind = 0; kind < 3; kind++)
+                if ((fresh & (1 << kind)) != 0) SatelliteLaunchVisuals.Play(site, LaunchSeconds);
         }
 
         /// <summary>The owned airbase whose nearest enemy-held airbase is farthest away.</summary>

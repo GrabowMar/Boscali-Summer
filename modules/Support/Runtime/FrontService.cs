@@ -258,6 +258,8 @@ namespace BoscaliSummer.Modules.Support.Runtime
             {
                 Apply(f, e, now);
                 Trim(f);
+                Sample(f); // completed pads and birds must be visible to the next queue request
+                f.CacheAt = float.NegativeInfinity;
             }
             catch (Exception ex)
             {
@@ -602,13 +604,27 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// </summary>
         private FrontOutcome Queue(FactionFront f, Front front, ProgrammeId id, byte kind, bool hasPoint, float x, float z, bool human, float now)
         {
+            if (human)
+            {
+                if (front == Front.Space && space != null) space.TryGetState(f.Owner, out _);
+                Sample(f);
+            }
+            // Completed rows leave the book before their world effect runs. Reserve their SPACE capacity until that frame.
+            FrontWorld world = f.World;
+            if (front == Front.Space)
+                foreach (var item in pending)
+                {
+                    if (item.Side != f) continue;
+                    if (item.Event.Id == ProgrammeId.LaunchSatellite) world.BirdsUp |= (byte)(1 << item.Event.Kind);
+                    else if (item.Event.Id == ProgrammeId.UplinkSite) world.PadsLive++;
+                }
             if (id != ProgrammeId.LaunchSatellite) kind = 0; // a client's kind bits on any other row would ride the mirror and fail every reader's kind check
             // A pick for a build the quartermaster already queued places that build (the automatic row was built first elsewhere, and its cap refused the pick).
             if (human && hasPoint && Placement(f.Owner, f.Book.Side(front), id, true, x, z) == FrontOutcome.None && f.Book.AdoptPick(front, id, x, z, now))
                 return FrontOutcome.Queued;
-            FrontOutcome r = f.Book.RefusalCode(front, id, kind, f.World);
+            FrontOutcome r = f.Book.RefusalCode(front, id, kind, world);
             if (r == FrontOutcome.None) r = Placement(f.Owner, f.Book.Side(front), id, hasPoint, x, z);
-            if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, f.World, now);
+            if (r == FrontOutcome.None) r = f.Book.Enqueue(front, id, kind, hasPoint, x, z, 0, human, world, now);
             if (!human && (r == FrontOutcome.NoSpot || r == FrontOutcome.NoSite || r == FrontOutcome.NotHeld)) f.BlockedUntil[(int)front, (int)id] = now + BlockedSeconds;
             if (hasPoint && r != FrontOutcome.None)
                 Plugin.Logger?.LogInfo("[Support.Fronts] " + f.Owner.name + " " + FrontWords.Programme(id) + " at " + Mathf.RoundToInt(x) + ", " + Mathf.RoundToInt(z) + " refused: " + r + ".");

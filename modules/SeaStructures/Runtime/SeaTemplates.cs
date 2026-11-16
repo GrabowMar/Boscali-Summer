@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Util;
@@ -12,15 +13,15 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.SeaStructures.Runtime
 {
     /// <summary>
-    /// Meshes and the one material the sections share. The models come from the embedded .seamodel files
-    /// (modules/SeaStructures/Assets, built in Blender by Assets/Source). Their paint is a palette: the mod draws it as a
-    /// ramp texture, one column per paint, dark at the bottom, and each vertex's UV picks its paint and its baked shade.
+    /// Meshes and one shared material per model. Version 2 models use embedded albedo, tangent normal and surface
+    /// atlases; legacy models retain their palette/shade ramp. Damaged sections keep the same UVs and material.
     /// </summary>
     internal static class SeaArt
     {
         private const int Column = 4, Rows = 32;
-        private static Material material;
+        private static readonly Dictionary<SeaKind, Material> Materials = new Dictionary<SeaKind, Material>();
         private static readonly Dictionary<int, Mesh> Full = new Dictionary<int, Mesh>();
+        private static Texture2D detailAlbedo, detailNormal;
 
         /// <summary>Point the domain at the embedded model files (idempotent).</summary>
         public static void Bind()
@@ -31,12 +32,118 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
 
         public static Material Material(SeaLayout layout)
         {
-            if (material != null) return material;
-            // Both models carry the same palette (sealib.PALETTE), so one ramp and one material serve every structure.
-            var ramp = new Texture2D(layout.Paints * Column, Rows, TextureFormat.RGB24, false, true)
+            if (Materials.TryGetValue(layout.Kind, out Material known) && known != null) return known;
+            Texture2D albedo = null, normal = null, surface = null;
+            Material material = null;
+            try
+            {
+                if (layout.Version >= 2)
+                {
+                    albedo = Atlas(layout.Key, "albedo", false);
+                    normal = Atlas(layout.Key, "normal", true);
+                    surface = Atlas(layout.Key, "surface", true);
+                }
+                else LegacyTextures(layout, out albedo, out surface);
+                Shader lit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                material = new Material(lit) { name = "BoscaliSummer.Sea." + layout.Key, hideFlags = HideFlags.HideAndDontSave };
+                if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", albedo);
+                if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", albedo);
+                if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
+                if (material.HasProperty("_Color")) material.SetColor("_Color", Color.white);
+                if (normal != null && material.HasProperty("_BumpMap"))
+                {
+                    material.SetTexture("_BumpMap", normal);
+                    material.SetFloat("_BumpScale", 1f);
+                    material.EnableKeyword("_NORMALMAP");
+                }
+                if (material.HasProperty("_MetallicGlossMap"))
+                {
+                    material.SetTexture("_MetallicGlossMap", surface);
+                    material.EnableKeyword("_METALLICSPECGLOSSMAP");
+                    material.EnableKeyword("_METALLICGLOSSMAP");
+                }
+                if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 1f);
+                if (material.HasProperty("_GlossMapScale")) material.SetFloat("_GlossMapScale", 1f);
+                if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
+                if (layout.Version >= 2)
+                {
+                    if (detailAlbedo == null) detailAlbedo = Atlas("Sea", "detail_albedo", true, true);
+                    if (detailNormal == null) detailNormal = Atlas("Sea", "detail_normal", true, true);
+                    // Opaque base alpha stores the material mask: glass and tiny palette fittings receive no grain.
+                    material.SetTexture("_DetailMask", albedo);
+                    material.SetTexture("_DetailAlbedoMap", detailAlbedo);
+                    material.SetTexture("_DetailNormalMap", detailNormal);
+                    material.SetTextureScale("_DetailAlbedoMap", new Vector2(32f, 32f));
+                    material.SetFloat("_DetailNormalMapScale", 0.45f);
+                    if (material.HasProperty("_DetailAlbedoMapScale"))
+                    {
+                        material.SetFloat("_DetailAlbedoMapScale", 0.30f);
+                        material.EnableKeyword("_DETAIL_SCALED");
+                    }
+                    else
+                    {
+                        material.SetFloat("_UVSec", 0f); // Standard uses UV0 and its unscaled multiply-by-two variant.
+                        material.EnableKeyword("_DETAIL_MULX2");
+                    }
+                    if (material.HasProperty("_Surface")) material.SetFloat("_Surface", 0f);
+                    if (material.HasProperty("_AlphaClip")) material.SetFloat("_AlphaClip", 0f);
+                }
+                Materials[layout.Kind] = material;
+                return material;
+            }
+            catch
+            {
+                if (material != null) UnityEngine.Object.Destroy(material);
+                if (albedo != null) UnityEngine.Object.Destroy(albedo);
+                if (normal != null) UnityEngine.Object.Destroy(normal);
+                if (surface != null) UnityEngine.Object.Destroy(surface);
+                throw;
+            }
+        }
+
+        private static Texture2D Atlas(string key, string map, bool linear, bool repeat = false)
+        {
+            string resource = "BoscaliSummer.Sea.Textures." + key + "_" + map + ".png";
+            byte[] bytes = EmbeddedResources.ReadAll(typeof(SeaArt).Assembly, resource, 64 * 1024 * 1024);
+            if (bytes == null) throw new InvalidDataException("missing sea texture " + resource);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, true, linear)
+            {
+                name = key + "_" + map, hideFlags = HideFlags.HideAndDontSave,
+                wrapMode = repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 8
+            };
+            int size = repeat ? 1024 : map == "albedo" ? 4096 : 2048;
+            if (!ImageConversion.LoadImage(texture, bytes, false) || texture.width != size || texture.height != size)
+            {
+                UnityEngine.Object.Destroy(texture);
+                throw new InvalidDataException("invalid " + size + "px sea texture " + resource);
+            }
+            texture.Apply(true, false);
+            // Native GPU compression keeps the colour/mask atlases small. Preserve normal gradients instead
+            // of feeding an RGB normal map through colour-block compression; its alpha stays 1 for URP RG/AG unpacking.
+            if (!map.EndsWith("normal") && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5)) texture.Compress(true);
+            texture.Apply(false, true);
+            return texture;
+        }
+
+        private static void LegacyTextures(SeaLayout layout, out Texture2D ramp, out Texture2D surface)
+        {
+            ramp = new Texture2D(layout.Paints * Column, Rows, TextureFormat.RGB24, false, true)
             {
                 name = "BoscaliSummer.Sea.Ramp", hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear
             };
+            // Use the same palette UVs for surface response: glazing, bare steel and matte paint remain one draw material.
+            surface = new Texture2D(layout.Paints * Column, 1, TextureFormat.RGBA32, false, true)
+            {
+                name = "BoscaliSummer.Sea.Surface", hideFlags = HideFlags.HideAndDontSave,
+                wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear
+            };
+            for (int p = 0; p < layout.Paints; p++)
+            {
+                float smooth = p == 7 ? 0.68f : p == 2 ? 0.38f : p == 5 ? 0.08f : p == 6 || p == 15 ? 0.14f : 0.24f;
+                var response = new Color(p == 2 ? 1f : 0f, 0f, 0f, smooth);
+                for (int x = 0; x < Column; x++) surface.SetPixel(p * Column + x, 0, response);
+            }
+            surface.Apply(false, true);
             for (int p = 0; p < layout.Paints; p++)
                 for (int row = 0; row < Rows; row++)
                 {
@@ -45,14 +152,6 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                     for (int x = 0; x < Column; x++) ramp.SetPixel(p * Column + x, row, colour);
                 }
             ramp.Apply(false, true);
-            Shader lit = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
-            material = new Material(lit) { name = "BoscaliSummer.Sea.Paint", hideFlags = HideFlags.HideAndDontSave };
-            if (material.HasProperty("_BaseMap")) material.SetTexture("_BaseMap", ramp);
-            if (material.HasProperty("_MainTex")) material.SetTexture("_MainTex", ramp);
-            if (material.HasProperty("_BaseColor")) material.SetColor("_BaseColor", Color.white);
-            if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0.22f);
-            if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0.1f);
-            return material;
         }
 
         /// <summary>The undamaged mesh of a section, shared.</summary>
@@ -73,6 +172,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             mesh.SetNormals(data.Normals);
             mesh.SetUVs(0, data.Uv);
             mesh.SetTriangles(data.Triangles, 0);
+            mesh.RecalculateTangents();
             mesh.RecalculateBounds();
             return mesh;
         }
@@ -94,6 +194,9 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         private static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
         private static readonly FieldInfo Structural = AccessTools.Field(typeof(UnitPart), "structuralThreshold");
         private static readonly FieldInfo HangarAircraft =AccessTools.Field(typeof(Hangar), "availableAircraft");
+        private static readonly FieldInfo TurretStations = AccessTools.Field(typeof(Turret), "weaponStations");
+        private static readonly FieldInfo TurretParts = AccessTools.Field(typeof(Turret), "criticalParts");
+        private static readonly FieldInfo LaunchPoints = AccessTools.Field(typeof(MissileLauncher), "launchTransforms");
 
         private static readonly GameObject[] Templates = new GameObject[2];
         private static readonly string[] DonorKeys = new string[2];
@@ -179,6 +282,9 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             // equipment parts (magazines, cell blocks) and the hull parts themselves.
             var mounts = new List<Transform>();
             var turretOf = new Dictionary<Transform, Transform>();
+            var kinds = new Dictionary<Transform, MountKind>();
+            var controllers = new HashSet<Transform>();
+            var fixedLaunchers = new HashSet<Transform>();
             foreach (Turret turret in go.GetComponentsInChildren<Turret>(true))
             {
                 Transform r = turret.transform;
@@ -188,6 +294,29 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 mounts.RemoveAll(m => m.IsChildOf(r));
                 mounts.Add(r);
                 turretOf[r] = turret.transform;
+                bool missile = r.GetComponentInChildren<MissileLauncher>(true) != null;
+                // Frigate CMLauncher controls launchers on separate hull parts. Its transform is only fire control,
+                // so keep the controller but do not spend a physical hardpoint on it or classify it as a gun.
+                if (TurretStations?.GetValue(turret) is WeaponStation[] stations)
+                    foreach (WeaponStation station in stations)
+                        foreach (Weapon weapon in station.Weapons)
+                            missile |= weapon is MissileLauncher;
+                kinds[r] = missile ? MountKind.Missile : MountKind.Gun;
+                if (missile && r.GetComponentInChildren<Weapon>(true) == null) controllers.Add(r);
+            }
+            // Preserve the actual fixed cruise launch assemblies too: these are referenced by WeaponStation rather
+            // than parented below its Turret. Leaving them on the donor hull moves their launch points into the island.
+            foreach (MissileLauncher launcher in go.GetComponentsInChildren<MissileLauncher>(true))
+            {
+                if (Under(launcher.transform, mounts)) continue;
+                Transform r = launcher.transform;
+                if (LaunchPoints?.GetValue(launcher) is Transform[] points)
+                    foreach (Transform point in points)
+                        if (point != null && !point.IsChildOf(r)) point.SetParent(r, true);
+                mounts.Add(r);
+                turretOf[r] = r;
+                kinds[r] = MountKind.Missile;
+                fixedLaunchers.Add(r);
             }
             var stores = new List<Transform>();
             var hull = new List<ShipPart>();
@@ -291,19 +420,26 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             int spare = 0;
             foreach (Transform mount in mounts)
             {
-                MountKind kind = mount.GetComponentInChildren<MissileLauncher>(true) != null ? MountKind.Missile : MountKind.Gun;
+                MountKind kind = kinds[mount];
                 int slot = free.FindIndex(i => layout.Mounts[i].Kind == kind);
                 if (slot < 0) slot = free.FindIndex(i => layout.Mounts[i].Kind != MountKind.Store);
                 SeaMount at;
-                if (slot >= 0) { at = layout.Mounts[free[slot]]; free.RemoveAt(slot); }
+                if (slot >= 0)
+                {
+                    at = layout.Mounts[free[slot]];
+                    if (!controllers.Contains(mount)) free.RemoveAt(slot);
+                }
                 else
                 {
                     // More turrets than hardpoints: double up beside the weapon hardpoints, 7 m along.
-                    SeaMount b = layout.Mounts[spare++ % layout.Mounts.Length];
-                    at = new SeaMount(b.Section, b.At.x, b.At.y, b.At.z + (b.At.z > 0f ? -7f : 7f), b.Yaw, kind);
+                    var weapons = new List<SeaMount>();
+                    foreach (SeaMount point in layout.Mounts) if (point.Kind != MountKind.Store) weapons.Add(point);
+                    SeaMount b = weapons[spare++ % weapons.Count];
+                    at = new SeaMount(b.Section, b.At + new Vector3(0f, 0f, b.At.z > 0f ? -7f : 7f), b.Yaw, kind);
                 }
-                Place(mount, turretOf[mount], at, node[at.Section]);
-                Dress(mount, layout);
+                Place(mount, turretOf[mount], at, node[at.Section], fixedLaunchers.Contains(mount));
+                // VLS/cruise apertures are part of the authored structure; their donor hull mesh was not a separate
+                // weapon model. Keep native firing code and hit boxes without drawing an opaque magazine over it.
             }
             for (int i = 0; i < stores.Count; i++)
             {
@@ -316,6 +452,21 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                     Dress(stores[i], layout);
                 }
                 else stores[i].position = new Vector3(4f + 2f * i, -8f, 0f);
+            }
+
+            // A control-only turret owns launchers elsewhere in the hierarchy. Keep its native magazine dependencies
+            // and subscribe to each launcher's new supporting section when the serialized clone wakes on every peer.
+            foreach (Transform controller in controllers)
+            {
+                Turret turret = turretOf[controller].GetComponent<Turret>();
+                var dependencies = new List<UnitPart>((UnitPart[])TurretParts.GetValue(turret));
+                foreach (WeaponStation station in turret.GetWeaponStations())
+                    foreach (Weapon weapon in station.Weapons)
+                    {
+                        UnitPart owner = weapon.GetComponentInParent<UnitPart>(true); // the template holder is inactive
+                        if (owner != null && !dependencies.Contains(owner)) dependencies.Add(owner);
+                    }
+                TurretParts.SetValue(turret, dependencies.ToArray());
             }
 
             // A part whose owner the game would look up through a grandparent that is no longer a part.
@@ -337,6 +488,12 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             Rigidbody body = go.GetComponent<Rigidbody>();
             if (body != null) body.constraints = RigidbodyConstraints.FreezeAll;
             foreach (Hangar hangar in go.GetComponentsInChildren<Hangar>(true)) HangarAircraft?.SetValue(hangar, new AircraftDefinition[0]);
+            foreach (Airbase airbase in go.GetComponentsInChildren<Airbase>(true))
+            {
+                // The physical flight deck is player-usable, but the donor ship's AI approaches no longer describe it.
+                airbase.runways = Array.Empty<Airbase.Runway>();
+                airbase.verticalLandingPoints = Array.Empty<Airbase.VerticalLandingPoint>();
+            }
             go.AddComponent<SeaStructure>().Kind = (int)layout.Kind;
             go.GetComponent<NetworkIdentity>().PrefabHash = hash;
 
@@ -377,22 +534,48 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         }
 
         /// <summary>Stand a mount on its hardpoint: pivot over the point, lowest mesh on the deck, facing the yaw.</summary>
-        private static void Place(Transform mount, Transform pivot, SeaMount at, Transform section)
+        private static void Place(Transform mount, Transform pivot, SeaMount at, Transform section, bool preserveTilt = false)
         {
             mount.SetParent(section, true);
-            mount.rotation = Quaternion.Euler(0f, at.Yaw, 0f);
+            if (preserveTilt)
+            {
+                float heading = Mathf.Atan2(mount.forward.x, mount.forward.z) * Mathf.Rad2Deg;
+                mount.rotation = Quaternion.AngleAxis(at.Yaw - heading, Vector3.up) * mount.rotation;
+            }
+            else mount.rotation = Quaternion.Euler(0f, at.Yaw, 0f);
             float low = float.MaxValue;
+            bool hatchPlane = false;
             foreach (MeshFilter filter in mount.GetComponentsInChildren<MeshFilter>(true))
             {
                 Renderer r = filter.GetComponent<Renderer>();
                 if (filter.sharedMesh == null || r == null || r.forceRenderingOff) continue;
                 low = Mathf.Min(low, Lowest(filter.transform, filter.sharedMesh.bounds));
             }
+            if (low == float.MaxValue && !preserveTilt)
+                foreach (MissileLauncher launcher in mount.GetComponentsInChildren<MissileLauncher>(true))
+                {
+                    hatchPlane = true;
+                    // A renderless VLS hardpoint denotes its hatch plane. The frigate's launch points are 1 m below
+                    // its controller, below even the magazine hit-box bottom; aligning that box would bury launches.
+                    if (LaunchPoints?.GetValue(launcher) is Transform[] points && points.Length > 0)
+                    {
+                        foreach (Transform point in points) if (point != null) low = Mathf.Min(low, point.position.y);
+                    }
+                    else low = Mathf.Min(low, launcher.transform.position.y);
+                }
             if (low == float.MaxValue)
                 foreach (BoxCollider box in mount.GetComponentsInChildren<BoxCollider>(true))
                     low = Mathf.Min(low, Lowest(box.transform, new Bounds(box.center, box.size)));
             if (low == float.MaxValue) low = pivot.position.y;
             mount.position += new Vector3(at.At.x - pivot.position.x, at.At.y - low, at.At.z - pivot.position.z);
+            if (hatchPlane)
+                foreach (BoxCollider box in mount.GetComponentsInChildren<BoxCollider>(true))
+                {
+                    // The native VLS damage volume is the magazine below the hatches, not an invisible obstacle
+                    // above them after aligning the launch plane to the authored deck.
+                    float top = box.transform.TransformPoint(box.center + Vector3.up * box.size.y * 0.5f).y;
+                    box.center += box.transform.InverseTransformVector(Vector3.up * (at.At.y - top));
+                }
         }
 
         private static float Lowest(Transform t, Bounds b)

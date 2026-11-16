@@ -60,11 +60,13 @@ namespace BoscaliSummer.Modules.Support.Runtime
                     request = m.FrontSetDirective((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (FrontDirective)Mathf.Clamp((int)Number(args, "directive", 1f), 0, 6));
                     break;
                 case "queue": // optional kind (satellite) and a picked point when both x and z are given, else automatic placement
+#if !PUBLIC_RELEASE
                     if (Has(args, "bearing") && Has(args, "metres") && NearHeldBase(Number(args, "bearing", 0f), Number(args, "metres", 1500f), out float px, out float pz))
                     {   // dev: a pick at a bearing and range from the pilot's nearest held land airbase (the log names the point, to compare with the "built at" line)
                         args["x"] = px; args["z"] = pz;
                         Plugin.Logger?.LogInfo("[Support.Sim] picked " + Mathf.RoundToInt(px) + ", " + Mathf.RoundToInt(pz));
                     }
+#endif
                     request = m.FrontQueue((Front)Mathf.Clamp((int)Number(args, "front", 0f), 0, 2), (ProgrammeId)Mathf.Clamp((int)Number(args, "programme", 0f), 0, FrontRules.Programmes.Length - 1),
                         (byte)Mathf.Clamp((int)Number(args, "kind", 0f), 0, 3), Has(args, "x") && Has(args, "z"), Number(args, "x", 0f), Number(args, "z", 0f));
                     break;

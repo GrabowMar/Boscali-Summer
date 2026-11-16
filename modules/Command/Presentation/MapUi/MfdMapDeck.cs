@@ -327,7 +327,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private static void DestroyOwned(ref GameObject root)
         {
-            if (root != null) Object.Destroy(root);
+            if (root != null)
+            {
+                // EnsureCanvasRoot can run again before Unity drains the destroy queue.
+                root.SetActive(false);
+                root.name += ".Retired";
+                Object.Destroy(root);
+            }
             root = null;
         }
     }

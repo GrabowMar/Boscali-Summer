@@ -4,8 +4,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Autopilot.Presentation
 {
     /// <summary>
-    /// Colour tokens of the v7 menu. Ink, caution and alert follow the player's HUD theme (<see cref="AvTheme"/>: AllClear / Warning / Alert,
-    /// with the kit's fixed fallbacks when no theme is up). Everything else is derived from the ink so a re-themed HUD re-themes the menu.
+    /// Colour tokens of the interaction menu, using the same semantic roles as the avionics consoles.
     /// Ring plates are opaque, the dock tables and bars are translucent (<see cref="Panel"/>), text colours are solid, and dimming is by colour token, never by alpha over the native HUD (alpha-blended text only
     /// holds in Gamma space; the game runs Linear).
     /// </summary>
@@ -13,43 +12,43 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
     {
         private static MenuPalette cached, cachedDim;
         private static Color cachedInk, cachedWarn, cachedAlert;
-        private static int frame = -1;
+        private static int frame = -1, generation = -1;
 
         public readonly Rgba Ink, InkHi, Ink2, InkDim, Hair, Txt, OnInk, OnInk2, Line, Plate, PlateHi, Panel, Scrim, Amber, Red, Casing, Hub, Glow, Flash;
 
         private MenuPalette(Color ink, Color warn, Color alert, float dim)
         {
-            Color inkHi = Scale(ink, 0.99f / Mathf.Max(ink.r, Mathf.Max(ink.g, ink.b)));
-            Color txt = Color.Lerp(ink, Color.white, 0.65f);
-            Ink = Rgb(ink, dim); InkHi = Rgb(inkHi, 1f); Ink2 = Rgb(Color.Lerp(ink, Color.white, 0.1f), dim);
-            InkDim = Rgb(Color.Lerp(ink, new Color(0.3f, 0.4f, 0.34f), 0.45f), 1f);
-            Hair = Rgb(ink, 1f).WithAlpha(0.30f);
-            Txt = Rgb(txt, dim);
+            Color inkHi = Scale(ink, 0.99f / Mathf.Max(0.001f, Mathf.Max(ink.r, Mathf.Max(ink.g, ink.b))));
+            Ink = Rgb(ink, dim); InkHi = Rgb(inkHi, 1f); Ink2 = Rgb(AvInk.Dim, dim);
+            InkDim = Rgb(AvInk.Muted, 1f);
+            Hair = Rgb(AvInk.Hairline, 1f).WithAlpha(0.45f);
+            Txt = Rgb(AvInk.Ink, dim);
             // text on the focus fill: the dark ink, and a lighter solid secondary for state lines (the prototype blended 76% ink over the fill, i.e. 24% toward
             // it; the 13 px regular face is thinner than the browser's, so 15% keeps it readable on the neon)
-            OnInk = new Rgba(0.008f, 0.102f, 0.047f);
+            OnInk = Rgb(AvInk.Ground, 1f);
             OnInk2 = new Rgba(OnInk.R + (inkHi.r - OnInk.R) * 0.15f, OnInk.G + (inkHi.g - OnInk.G) * 0.15f, OnInk.B + (inkHi.b - OnInk.B) * 0.15f);
-            Line = Rgb(ink, dim).WithAlpha(0.70f);
-            Plate = new Rgba(0.008f, 0.071f, 0.039f, 1f); PlateHi = new Rgba(0.004f, 0.094f, 0.051f, 1f);
+            Line = Rgb(AvInk.Frame, dim).WithAlpha(0.70f);
+            Plate = Rgb(AvInk.Surface, 1f); PlateHi = Rgb(AvInk.Raised, 1f);
             // the dock tables, the title and the help bar let the cockpit through; the grey scrim under everything keeps their text readable
-            Panel = Plate.WithAlpha(0.72f);
-            Scrim = new Rgba(0.09f, 0.10f, 0.10f, 0.30f);
+            Panel = Plate.WithAlpha(0.84f);
+            Scrim = Rgb(AvInk.Ground, 1f).WithAlpha(0.30f);
             Amber = Rgb(warn, 1f); Red = Rgb(alert, 1f);
-            Casing = new Rgba(0.004f, 0.063f, 0.039f, 0.85f);
-            Hub = new Rgba(0.008f, 0.059f, 0.031f, 1f);
+            Casing = Rgb(AvInk.Ground, 1f).WithAlpha(0.90f);
+            Hub = Rgb(AvInk.Ground, 1f);
             Glow = Rgb(inkHi, 1f).WithAlpha(0.35f);
-            Flash = new Rgba(0.918f, 1f, 0.941f, 1f);
+            Flash = Rgb(AvInk.Ink, 1f);
         }
 
         /// <summary>The live palette, read from the theme once per frame.</summary>
         public static MenuPalette Get(bool dimmed = false)
         {
-            if (frame != Time.frameCount || cached == null)
+            if (frame != Time.frameCount || cached == null || generation != AvStyleHost.FuiGeneration)
             {
                 frame = Time.frameCount;
-                Color ink = AvTheme.Accent, warn = AvTheme.Warning, alert = AvTheme.Alert;
-                if (cached == null || ink != cachedInk || warn != cachedWarn || alert != cachedAlert)
+                Color ink = AvInk.Select, warn = AvInk.State(AvState.Caution), alert = AvInk.State(AvState.Danger);
+                if (cached == null || generation != AvStyleHost.FuiGeneration || ink != cachedInk || warn != cachedWarn || alert != cachedAlert)
                 {
+                    generation = AvStyleHost.FuiGeneration;
                     cachedInk = ink; cachedWarn = warn; cachedAlert = alert;
                     cached = new MenuPalette(ink, warn, alert, 1f);
                     cachedDim = new MenuPalette(ink, warn, alert, 0.8f);

@@ -55,8 +55,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             /// <summary>Where a panel goes.</summary>
             public Rect Panel;
 
+            /// <summary>The field log above the panel column; empty while the column is folded.</summary>
+            public Rect Log;
+
             /// <summary>What is left for the map, between the panel column and the rail.</summary>
             public Rect Map;
+
+            /// <summary>The collapsible map controls, outside the map's clipped viewport.</summary>
+            public Rect Controls;
+
+            /// <summary>The native clock and context strip; independent of the controls' fold state.</summary>
+            public Rect Footer;
 
             /// <summary>The button rail, against the right edge.</summary>
             public Rect Rail;
@@ -83,15 +92,31 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Rect rail = ToUnityRect(regions.Rail);
             rail.height = Mathf.Max(rail.height, rail.y - (-canvasSize.y * 0.5f + Margin));
 
-            // The news ticker runs over the map and rail only, so the panel column starts at the top margin (2026-11-15).
+            // The field log and panel share one left bay. Folding the log returns its body height to the panel;
+            // folding the column removes the entire bay, without putting the log over the map.
             Rect panel = ToUnityRect(regions.Panel);
             panel.height += canvasSize.y * 0.5f - Margin - panel.y;
             panel.y = canvasSize.y * 0.5f - Margin;
+            Rect log = new Rect(panel.x, panel.y, panel.width, panel.width > 0f ? MfdFieldLog.Height : 0f);
+            float logReserve = log.height > 0f ? log.height + Gutter : 0f;
+            panel.y -= logReserve;
+            panel.height = Mathf.Max(0f, panel.height - logReserve);
+
+            Rect map = ToUnityRect(regions.Map);
+            float footerTop = map.y - map.height - Gutter;
+            float footerBottom = -canvasSize.y * .5f + Margin;
+            Rect footer = new Rect(map.x, footerTop, map.width, Mathf.Max(0f, footerTop - footerBottom));
+            float controlsHeight = MfdMapControls.Height(canvasSize.y);
+            Rect controls = new Rect(map.x, footerTop + Gutter + controlsHeight, map.width, controlsHeight);
+            map.height = Mathf.Max(0f, map.height - controlsHeight - Gutter);
 
             return new Columns
             {
                 Panel = panel,
-                Map = ToUnityRect(regions.Map),
+                Log = log,
+                Map = map,
+                Controls = controls,
+                Footer = footer,
                 Rail = rail,
                 Canvas = canvasSize,
             };

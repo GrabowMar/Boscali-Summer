@@ -175,7 +175,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 MenuPalette p = (dockUp && !sel) || off ? D : P;
                 float x = l.DiscX[i], y = l.DiscY[i], rd = l.Rd;
                 // disc
-                Disc(x, y, rd, sel ? new Rgba(0f, 0.051f, 0.027f) : p.PlateHi);
+                Disc(x, y, rd, sel ? P.Hub : p.PlateHi);
                 if (sel) { Ring(x, y, rd + 3f, 6f, P.Glow.WithAlpha(0.10f)); Ring(x, y, rd + 6f, 6f, P.Glow.WithAlpha(0.05f)); }
                 if (off) AvStrokes.DashedRing(q, x, H - y, rd, 20, 0.55f, 2f, p.Ink2);
                 else Ring(x, y, rd, 2f, sel ? P.InkHi : p.Ink);
@@ -225,7 +225,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 MenuRow row = w >= 0 ? items[w] : null;
                 bool aim = i == c.WheelAim, blocked = row != null && row.IsBlocked, amber = row != null && (row.Kind == MenuKind.Danger || row.NeedsHold);
                 Rgba ink = blocked ? P.InkDim : amber ? P.Amber : aim ? P.InkHi : P.Ink;
-                Disc(x, y, rd, aim ? new Rgba(0f, 0.051f, 0.027f) : P.PlateHi);
+                Disc(x, y, rd, aim ? P.Hub : P.PlateHi);
                 if (aim) { Ring(x, y, rd + 3f, 6f, P.Glow.WithAlpha(0.10f)); Ring(x, y, rd + 6f, 6f, P.Glow.WithAlpha(0.05f)); }
                 Ring(x, y, rd, 2f, ink);
                 string icon = w == MenuController.SlotBack ? "back" : w == MenuController.SlotMore ? "station-next" : row.Kind == MenuKind.Danger ? (row.WarnIcon ?? row.Icon) : row.IconNow;

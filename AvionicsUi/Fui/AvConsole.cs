@@ -17,14 +17,15 @@ namespace NOAvionics
     }
 
     /// <summary>
-    /// The chrome every kit v2 console wears (spec §6.2): chamfered frame, header (id / title / page index),
-    /// chips, metrics, icon tabs, paged scrolling body with a reserved gutter, footer. Owns its canvas split:
+    /// The chrome every kit v2 console wears (spec §6.2): square frame, header (id / title / page index),
+    /// chips, metrics, icon tabs, paged scrolling body with an edge scrollbar, footer. Owns its canvas split:
     /// the console root is a nested canvas, chips + metrics sit on a live child canvas, each page is its own
     /// canvas that is disabled (not deactivated) while hidden.
     /// </summary>
     public sealed class AvConsole
     {
-        private readonly float width, height;
+        private readonly float width;
+        private float height;
         private readonly AvFrame frame;
         private readonly Image headerBack, idPlate, idRail;
         private readonly TMP_Text idText, titleText;
@@ -47,11 +48,7 @@ namespace NOAvionics
         private readonly RawImage consoleArt;
         private float bodyHeight, artShown = -1f;
         private readonly string[][] orders;
-        private readonly TMP_Text bootText;
         private readonly string id;
-        private int bootLine = -1;
-        private float nextBootLine;
-        private bool booted;
         // Hidden consoles keep only their current page active, so coming back on screen regenerates one page of
         // text and graphics instead of all of them; the rest wake one per fast tick behind their disabled canvases.
         private static readonly System.Collections.Generic.List<AvConsole> all = new System.Collections.Generic.List<AvConsole>(16);
@@ -78,8 +75,9 @@ namespace NOAvionics
             AvLay.Place(Root, 0f, 0f, w, h);
             AvLay.Nest(Root, true);
             Ticker = Root.gameObject.AddComponent<AvTicker>();
+            Ticker.Console = this;
 
-            frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(10f));
+            frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(6f));
             AvLay.Fill(frame.rectTransform);
             // Ground: matte terminal glass (one shared texture, tinted per scheme) inside the frame, under everything else.
             Texture2D contours = AvBundle.Ground;
@@ -97,13 +95,13 @@ namespace NOAvionics
             }
             headerBack = AvLay.Solid(Root, "Header", Color.clear);
             idPlate = AvLay.Solid(Root, "IdPlate", Color.clear);
-            AvSurfaceGradient.Apply(headerBack, Color.white, new Color(.65f, .71f, .74f, 1f));
-            AvSurfaceGradient.Apply(idPlate, Color.white, new Color(.65f, .71f, .74f, 1f));
+            AvSurfaceGradient.ApplyHeader(headerBack);
+            AvSurfaceGradient.ApplyHeader(idPlate);
             idRail = AvLay.Solid(Root, "IdRail", Color.clear);   // the key colour under the plate: every console is signed the same way
             idText = AvText.Make(Root, "Id", AvTextRole.Head, id, TextAlignmentOptions.Center);
             titleText = AvText.Make(Root, "Title", AvTextRole.Head, title);
-            titleText.fontSize = 15f;
-            titleText.characterSpacing = 3f;
+            titleText.fontSize = 16f;
+            titleText.characterSpacing = 1.5f;
             AvText.Fit(titleText, false);
 
             live = AvLay.Child(Root, "Live");
@@ -139,10 +137,8 @@ namespace NOAvionics
                 flows[i] = new AvFlow(pageRects[i], Ticker, w);
             }
 
-            scanCover = AvLay.Solid(bodyRect, "ScanCover", Color.clear);
+            scanCover = AvLay.Solid(Root, "HeaderSweep", Color.clear);
             scanCover.enabled = false;
-            bootText = AvText.Make(bodyRect, "Boot", AvTextRole.DataSmall, "", TextAlignmentOptions.TopLeft);
-            bootText.enabled = false;
 
             var decorGo = new GameObject("Decor", typeof(RectTransform), typeof(CanvasRenderer));
             decorGo.transform.SetParent(Root, false);
@@ -190,6 +186,9 @@ namespace NOAvionics
         /// <summary>Opens the screen behind a rail key (no-op when it is already open); false when no such key is up.</summary>
         public static Func<string, bool> PressKey;
 
+        /// <summary>Optional route for a key/page hosted outside a console, such as the map drawer. True means handled.</summary>
+        public static Func<string, string, bool> OpenSurface;
+
         private static readonly System.Collections.Generic.Dictionary<string, AvConsole> byId =
             new System.Collections.Generic.Dictionary<string, AvConsole>(16);
 
@@ -204,6 +203,7 @@ namespace NOAvionics
         public static void Open(string key, string page = null)
         {
             if (string.IsNullOrEmpty(key)) return;
+            if (OpenSurface?.Invoke(key, page) == true) return;
             PressKey?.Invoke(key);
             if (string.IsNullOrEmpty(page)) return;
             AvConsole c = Find(key);
@@ -256,6 +256,26 @@ namespace NOAvionics
         }
 
         public AvFlow Page(int index) => flows[Mathf.Clamp(index, 0, PageCount - 1)];
+
+        /// <summary>Fits the console to its host's available height without changing its width, selected page or data.</summary>
+        public void SetHeight(float value)
+        {
+            if (float.IsNaN(value) || float.IsInfinity(value)) return;
+            value = Mathf.Max(0f, value);
+            if (Mathf.Abs(value - height) < .5f) return;
+            Vector2 offset = CurrentPage >= 0 ? pageRects[CurrentPage].anchoredPosition : Vector2.zero;
+            height = value;
+            Root.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, height);
+            Layout();
+            if (CurrentPage >= 0 && Root.gameObject.activeInHierarchy) flows[CurrentPage].Relayout();
+            scrollView.Scroll.StopMovement();
+            if (CurrentPage >= 0)
+            {
+                offset.y = Mathf.Clamp(offset.y, 0f, Mathf.Max(0f, flows[CurrentPage].ContentHeight - bodyHeight));
+                pageRects[CurrentPage].anchoredPosition = offset;
+            }
+            SeatGround();
+        }
 
         /// <summary>
         /// Standing orders for a page: two to four short usage notes in the unit's own voice, most important first. The footer
@@ -370,8 +390,7 @@ namespace NOAvionics
             }
             scrollView.Place(width, bodyH);
             foreach (AvFlow f in flows) f.ViewportHeight = bodyH;
-            AvLay.Place(scanCover.rectTransform, 0f, 0f, width, bodyH);
-            AvLay.Place(bootText.rectTransform, AvGridTokens.Pad + 4f, AvGridTokens.Pad, width - 2f * AvGridTokens.Pad - 8f, 96f);
+            AvLay.Place(scanCover.rectTransform, 0f, 0f, width, AvGridTokens.Header);
             for (int i = 0; i < PageCount; i++) { pageRects[i].anchoredPosition = Vector2.zero; }
         }
 
@@ -404,70 +423,29 @@ namespace NOAvionics
         private void StartScan()
         {
             if (AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None) return;
-            if (scanFx == null) scanFx = AvFx.On(scanCover);
             if (AvFxDriver.FxMaterial == null) return;
-            scanCover.color = AvStyleHost.FuiColor("ground", AvTheme.Ground);
+            if (scanFx == null) scanFx = AvFx.On(scanCover);
+            scanCover.color = AvStyleHost.FuiBorder("id-plate", AvInk.Select).WithAlpha(.22f);
             scanCover.enabled = true;
-            scanFx.Play(AvFxKind.Scan, 0.9f, 1f); // param 1 = cover mode (P0 shader)
-            scanUntil = Time.unscaledTime + 0.3f / AvFxPacking.AnimationSpeed;
+            scanFx.Play(AvFxKind.Scan, .3f); // non-cover mode: the body and header text remain readable
+            scanUntil = Time.unscaledTime + AvFxPacking.DurationOf(AvFxKind.Scan);
         }
 
         private float scanUntil;
 
-        private void EndScan()
-        {
-            if (scanCover.enabled && Time.unscaledTime >= scanUntil) scanCover.enabled = false;
-        }
-
         private void Animate()
         {
-            if (bootLine < 0 && !scanCover.enabled) return;
-            if (AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None)
+            if (!scanCover.enabled) return;
+            if (Time.unscaledTime >= scanUntil ||
+                AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None)
             {
-                bootLine = -1;
-                bootText.enabled = scanCover.enabled = false;
-                return;
+                scanCover.enabled = false;
+                scanFx?.Clear();
             }
-            BootTick();
-            EndScan();
         }
 
-        private static readonly string[] BootSteps = { "BIT", "BUS A/B", "SYMBOLOGY" };
-
-        // Back on screen: the first time a console powers up it prints its self-test, after that a scan wipe.
-        private void Wake()
-        {
-            if (AvFxPacking.Resolve(AvFxKind.Scan, AvFxDriver.Tier, AvFxDriver.ReducedMotion) == AvFxKind.None ||
-                AvFxDriver.FxMaterial == null) return;
-            if (booted) { StartScan(); return; }
-            booted = true;
-            if (scanFx == null) scanFx = AvFx.On(scanCover);
-            scanFx.Clear();
-            scanCover.color = AvStyleHost.FuiColor("ground", AvTheme.Ground);
-            scanCover.enabled = true;
-            scanUntil = float.MaxValue;
-            bootText.text = "";
-            bootText.enabled = true;
-            bootLine = 0;
-            nextBootLine = Time.unscaledTime;
-        }
-
-        private void BootTick()
-        {
-            if (bootLine < 0 || Time.unscaledTime < nextBootLine) return;
-            nextBootLine = Time.unscaledTime + .025f;
-            if (bootLine == 0) bootText.text = id + " DISPLAY PROCESSOR · " + AvPortalMath.Serial(id);
-            else if (bootLine <= BootSteps.Length) bootText.text += "\n" + BootSteps[bootLine - 1].PadRight(12, '.') + " OK";
-            else
-            {
-                bootLine = -1;
-                bootText.enabled = false;
-                scanUntil = 0f;   // if the wipe cannot play (FX switched off meanwhile) the cover still clears next tick
-                StartScan();
-                return;
-            }
-            bootLine++;
-        }
+        // Opening feedback is confined to the header; no faux boot sequence delays the actual page.
+        private void Wake() => StartScan();
 
         private void Restyle()
         {
@@ -479,9 +457,8 @@ namespace NOAvionics
             idPlate.color = AvStyleHost.Resolve(p.Background, AvTheme.SurfaceRaised);
             idText.color = AvStyleHost.Resolve(p.Color, AvTheme.TextPrimary);
             titleText.color = AvStyleHost.FuiInk("title", AvTheme.TextPrimary);
-            idRail.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+            idRail.color = AvStyleHost.FuiBorder("id-plate", AvInk.Select);
             decor.color = AvStyleHost.FuiFill("decor", AvTheme.Hairline);
-            bootText.color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
             if (groundArt != null)
             {
                 Color g = AvStyleHost.FuiInk("console-ground", AvTheme.TextPrimary.WithAlpha(0.08f));

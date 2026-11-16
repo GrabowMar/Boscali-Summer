@@ -7,13 +7,13 @@ namespace BoscaliSummer.Core.Ui
     internal static class LeftHudStack
     {
         public const float Left = 16f, Width = 560f, Inset = 12f, HeaderSize = 12f, BodySize = 15f;
-        public static float LogBottom, CommsBottom;
+        public static float LogBottom, CommsBottom, MissionBottom;
         /// <summary>The game's own feed box is on screen (the mod's log is not standing in, e.g. in free camera): its bottom edge in screen pixels from the top, else 0.</summary>
         public static float NativeFeedBottomPx;
         public static TMP_FontAsset Font;
         public static Material FontMaterial;
 
         public static float CommsTop => Mathf.Max(144f, LogBottom + 16f);
-        public static float CueTop(float designHeight) => Mathf.Max(Mathf.Round(designHeight * 0.30f), Mathf.Max(LogBottom + 16f, CommsBottom + 20f));
+        public static float CueTop(float designHeight) => Mathf.Max(Mathf.Round(designHeight * 0.30f), Mathf.Max(MissionBottom + 20f, Mathf.Max(LogBottom + 16f, CommsBottom + 20f)));
     }
 }

@@ -1,0 +1,20 @@
+{
+  "name": "gamemode-heavyweight", "mission": "Heavyweight", "mods": ["boscalisummer"], "timeout_s": 240,
+  "description": "Native startup, actual route resolution, transporter leg initialization and scoreboard. Full cargo flight and peer validation remain separate checks.",
+  "ops": [
+    {"op":"wait","seconds":15},
+    {"op":"call","method":"BoscaliSummer.Modules.Gamemodes.Runtime.GamemodeAutomation.State","store":"state"},
+    {"op":"capture","name":"heavyweight-scoreboard","hide_ui":false}, {"op":"end"}
+  ],
+  "checks": [
+    {"check":"status_ok"},
+    {"check":"result_equals","path":"state.mode","value":"Heavyweight"},
+    {"check":"result_equals","path":"state.leg","value":1},
+    {"check":"result_equals","path":"state.transportingTeam","value":0},
+    {"check":"result_equals","path":"state.canFly","value":true},
+    {"check":"result_above","path":"state.sourceHangars","min":1},
+    {"check":"result_equals","path":"state.score0","value":0},
+    {"check":"result_equals","path":"state.score1","value":0},
+    {"check":"log_match","pattern":"(Gamemode|Heavyweight).*Exception|Exception.*(Gamemode|Heavyweight)","max":0}
+  ]
+}

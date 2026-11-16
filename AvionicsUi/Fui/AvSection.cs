@@ -27,7 +27,7 @@ namespace NOAvionics
             icon = AvIcons.Make(Rect, glyph, AvGridTokens.IconHead, Color.white);
             title = AvText.Make(Rect, "Title", AvTextRole.Head, titleText);
             title.font = AvType.Face(AvFace.Cond);
-            title.characterSpacing = 8f;
+            title.characterSpacing = 5f;
             AvText.Fit(title, false);
             caption = AvText.Make(Rect, "Caption", AvTextRole.Micro, captionText ?? "", TextAlignmentOptions.MidlineRight);
             rule = AvLay.Solid(Rect, "Rule", Color.clear);
@@ -68,7 +68,7 @@ namespace NOAvionics
                 twoLines ? Mathf.Max(0f, slot.W - 22f) : captionW, twoLines ? captionH : Line);
             caption.alignment = twoLines ? TextAlignmentOptions.TopLeft : TextAlignmentOptions.MidlineRight;
             AvLay.Place(rule.rectTransform, 0f, slot.H - 1f, slot.W, 1f);
-            AvLay.Place(cap.rectTransform, 0f, slot.H - 2f, 30f, 2f);
+            AvLay.Place(cap.rectTransform, 0f, slot.H - 2f, 16f, 2f);
             AvLay.Place(wash.rectTransform, 0f, 0f, slot.W, slot.H - 1f);
             PaintWash();
         }
@@ -79,15 +79,15 @@ namespace NOAvionics
             icon.color = AvStyleHost.FuiInk("section-icon", AvTheme.RailInfo);
             caption.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
             rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
-            cap.color = title.color;
+            cap.color = icon.color;
             if (placed) PaintWash();
         }
 
         private void PaintWash()
         {
-            Color key = title.color;
+            Color key = icon.color;
             wash.Begin();
-            wash.Add(0f, 0f, lastSlot.W * 0.7f, Mathf.Max(0f, lastSlot.H - 1f), key.WithAlpha(AvBundle.OverlayAlpha(0.22f)), key.WithAlpha(0f), true);
+            wash.Add(0f, 0f, lastSlot.W * 0.7f, Mathf.Max(0f, lastSlot.H - 1f), key.WithAlpha(AvBundle.OverlayAlpha(0.10f)), key.WithAlpha(0f), true);
             wash.End();
         }
     }

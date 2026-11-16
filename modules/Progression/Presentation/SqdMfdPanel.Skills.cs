@@ -358,9 +358,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 switch (state)
                 {
                     case SkillNodeState.Held:
-                        accent = AvTheme.RailReady;
-                        fill = accent.WithAlpha(.16f);
-                        stroke = accent.WithAlpha(.75f);
+                        accent = AvInk.State(AvState.Ready);
+                        stroke = accent.WithAlpha(.55f);
                         break;
                     case SkillNodeState.Open:
                         accent = AvTheme.RailInfo;
@@ -383,7 +382,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 label.color = ink;
                 effect.color = state == SkillNodeState.Locked ? AvTheme.Disabled : SqdTone.Text(AvState.Ready);
                 if (Connector != null)
-                    Connector.color = state == SkillNodeState.Held ? AvTheme.RailReady.WithAlpha(.8f) : AvTheme.Hairline;
+                    Connector.color = state == SkillNodeState.Held ? AvInk.State(AvState.Ready).WithAlpha(.8f) : AvTheme.Hairline;
             }
         }
 
@@ -490,7 +489,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             public override void Restyle()
             {
-                Color[] tones = { AvTheme.RailReady, AvTheme.RailInfo, SqdTone.Select, AvTheme.Disabled };
+                Color[] tones = { AvInk.State(AvState.Ready), AvTheme.RailInfo, SqdTone.Select, AvTheme.Disabled };
                 for (int i = 0; i < legendWords.Length; i++)
                 {
                     legendIcons[i].color = tones[i];

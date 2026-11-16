@@ -18,6 +18,10 @@ namespace BoscaliSummer.Modules.Performance.Configuration
         public ConfigEntry<bool> SkipRemoteTurretSearch { get; }
         public ConfigEntry<bool> ThinDistantTracers { get; }
         public ConfigEntry<bool> SleepDistantUnits { get; }
+        public ConfigEntry<bool> SkipReliefAmbientOcclusion { get; }
+        public ConfigEntry<bool> OptimizeCinematicStreaks { get; }
+        public ConfigEntry<bool> IndependentSharpening { get; }
+        public ConfigEntry<float> IndependentSharpenStrength { get; }
 
         public PerformanceSettings(ConfigFile config)
         {
@@ -72,6 +76,20 @@ namespace BoscaliSummer.Modules.Performance.Configuration
             SleepDistantUnits = config.Bind("Performance", "SleepDistantUnits", false,
                 "Stop drawing aircraft, vehicles and ships more than 15 km away (models, particles, lights). " +
                 "The unit you fly, follow or have targeted always draws. A zoomed camera can show the gap.");
+            SkipReliefAmbientOcclusion = config.Bind("Performance", "SkipReliefAmbientOcclusion", false,
+                "Skip unused native ambient occlusion on Boscali's unlit relief-map camera fallback. " +
+                "The normal direct-draw map already avoids it. World and sensor cameras keep their AO.");
+            OptimizeCinematicStreaks = config.Bind("Performance", "OptimizeCinematicStreaks", false,
+                "Use the cheaper cinematic light-streak path when supported. " +
+                "Only affects CINEMATIC light glow; it does not enable that effect.");
+            IndependentSharpening = config.Bind("Performance", "IndependentSharpening", false,
+                "Use native FidelityFX RCAS sharpening without enabling COLOUR GRADE. " +
+                "Uses IndependentSharpenStrength while on, including when grade sharpening is also on. " +
+                "A quality option with a GPU cost, not a promised FPS improvement. Restores on disable.");
+            IndependentSharpenStrength = config.Bind("Performance", "IndependentSharpenStrength", 0.4f,
+                new ConfigDescription("Sharpening strength while IndependentSharpening is on. " +
+                    "Higher values can emphasize noise and halos; 0.4 is a restrained starting point.",
+                    new AcceptableValueRange<float>(0f, 1f)));
         }
     }
 }

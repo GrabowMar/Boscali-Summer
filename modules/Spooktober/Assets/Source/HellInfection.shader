@@ -52,8 +52,8 @@ Shader "Boscali/HellInfection"
                 float2 p=float2(i.world.x*.83+i.world.y*.56,i.world.y*.83-i.world.x*.56);
                 float broad=noise(p*.11), grain=noise(p*.72), drift=noise(p*.35+17.0);
                 // Connectivity comes entirely from the authored ant network; noise only roughens its soft boundary.
-                float edge=smoothstep(.025,.32,coverage+(broad-.5)*.14+(grain-.5)*.04);
-                float alpha=front*edge;
+                float edge=smoothstep(.02,.8,coverage+(broad-.5)*.14+(grain-.5)*.04);
+                float alpha=front*edge*.94;
                 clip(alpha-.001);
                 float ash=.016+broad*.03+grain*.008;
                 ash+=smoothstep(.72,.9,drift)*.032;

@@ -108,7 +108,7 @@ public static class BuildPilotModels
         if (importer == null) throw new Exception("Missing texture: " + path);
         importer.textureType = normal ? TextureImporterType.NormalMap : TextureImporterType.Default;
         importer.sRGBTexture = !normal && !mask; importer.mipmapEnabled = true;
-        importer.anisoLevel = mask ? 1 : 4; importer.isReadable = false; importer.maxTextureSize = mask ? 1024 : 2048;
+        importer.anisoLevel = mask ? 1 : 4; importer.isReadable = false; importer.maxTextureSize = 2048;
         var platform = importer.GetPlatformTextureSettings("Standalone"); platform.overridden = true;
         platform.maxTextureSize = importer.maxTextureSize; platform.format = normal ? TextureImporterFormat.BC5 : TextureImporterFormat.DXT1;
         importer.SetPlatformTextureSettings(platform); importer.SaveAndReimport(); paths.Add(path);

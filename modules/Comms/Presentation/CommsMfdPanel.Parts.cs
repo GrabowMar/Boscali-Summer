@@ -101,22 +101,27 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 AvText.Set(lineKey, line);
             }
 
-            public override float Measure(float width) => KeyH + 3f + AvGridTokens.Row;
+            private bool Stacked(float width) => width < Swatches.Length * (SwatchW + Gap) - Gap + Between + Widths.Length * 58f;
+
+            public override float Measure(float width) => (KeyH + 3f + AvGridTokens.Row) * (Stacked(width) ? 2f : 1f) + (Stacked(width) ? Gap : 0f);
 
             public override void Place(AvSlot s)
             {
                 base.Place(s);
+                bool stacked = Stacked(s.W);
                 float y = KeyH + 3f, x = 0f;
+                float swatchWidth = Mathf.Min(SwatchW, Mathf.Max(1f, (s.W - (Swatches.Length - 1) * Gap) / Swatches.Length));
                 for (int i = 0; i < Swatches.Length; i++)
                 {
-                    Swatches[i].Place(new AvSlot(x, y, SwatchW, AvGridTokens.Row));
-                    x += SwatchW + Gap;
+                    Swatches[i].Place(new AvSlot(x, y, swatchWidth, AvGridTokens.Row));
+                    x += swatchWidth + Gap;
                 }
-                widthsX = x - Gap + Between;
+                widthsX = stacked ? 0f : x - Gap + Between;
+                float lineY = stacked ? KeyH + 3f + AvGridTokens.Row + Gap : 0f;
                 float ow = AvFlowMath.ColumnWidth(Mathf.Max(0f, s.W - widthsX), Widths.Length, Gap);
-                for (int i = 0; i < Widths.Length; i++) AvLay.Place(Widths[i].Rect, widthsX + i * (ow + Gap), y, ow, AvGridTokens.Row);
-                AvLay.Place(inkKey.rectTransform, 0f, 0f, Mathf.Max(0f, widthsX - Between), KeyH);
-                AvLay.Place(lineKey.rectTransform, widthsX, 0f, Mathf.Max(0f, s.W - widthsX), KeyH);
+                for (int i = 0; i < Widths.Length; i++) AvLay.Place(Widths[i].Rect, widthsX + i * (ow + Gap), lineY + y, ow, AvGridTokens.Row);
+                AvLay.Place(inkKey.rectTransform, 0f, 0f, Mathf.Max(0f, x - Gap), KeyH);
+                AvLay.Place(lineKey.rectTransform, widthsX, lineY, Mathf.Max(0f, s.W - widthsX), KeyH);
             }
 
             public override void Restyle()

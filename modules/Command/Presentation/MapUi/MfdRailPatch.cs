@@ -253,6 +253,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             BuildRail(canvas, columns);
             DockPanels(canvas, columns);
             MfdMapDeck.Ensure(canvas, columns);
+            MfdMapControls.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureNewsTicker(canvas, columns);
             MfdScreenFinish.Ensure(canvas);
@@ -564,6 +565,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             MfdRail.Ensure(canvas, columns);
             MfdPanelDock.Ensure(canvas, columns);
             MfdMapDeck.Ensure(canvas, columns);
+            MfdMapControls.Ensure(canvas, columns);
             EnsureFooter(canvas, columns);
             EnsureNewsTicker(canvas, columns);
             MfdScreenFinish.Ensure(canvas);
@@ -595,6 +597,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < buttons.Count; i++) buttons[i].Restore();
             buttons.Clear();
             MfdRail.Park();
+            MfdMapControls.Hide();
 
             if (!applied)
             {
@@ -606,7 +609,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
 
-            if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            if (mapFrame != null)
+            {
+                mapFrame.SetActive(false);
+                mapFrame.name = MapFrameName + ".Retired";
+                Object.Destroy(mapFrame);
+                mapFrame = null;
+            }
             MfdColumnFold.Hide();
             MfdNewsTicker.Restore();
             MfdMapFooter.Restore();
@@ -639,8 +648,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             currentPanelWidth = AvTokens.PanelWidth;
             buttons.Clear();
             containers.Clear();
-            if (mapFrame != null) { Object.Destroy(mapFrame); mapFrame = null; }
+            if (mapFrame != null)
+            {
+                mapFrame.SetActive(false);
+                mapFrame.name = MapFrameName + ".Retired";
+                Object.Destroy(mapFrame);
+                mapFrame = null;
+            }
             MfdColumnFold.Reset();
+            MfdMapControls.Reset();
             MfdNewsTicker.Reset();
             TacticalLog.Reset();
             MfdMapFooter.Reset();

@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static Chrome chrome;
         private static Vector2 laidSize;
         private static readonly List<MfdRailKey> keys = new List<MfdRailKey>();
+        private static readonly List<Slot> slots = new List<Slot>(16);
 
         /// <summary>The keys in display order.</summary>
         public static IReadOnlyList<MfdRailKey> Keys => keys;
@@ -118,7 +119,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             if (rail == null) return 0;
 
-            var slots = new List<Slot>();
+            slots.Clear();
             Collect(slots, left, leftScreens);
             Collect(slots, right, rightScreens);
 
@@ -188,7 +189,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Refresh()
         {
             for (int i = 0; i < keys.Count; i++)
-                keys[i].SetLatched(keys[i].Screen != null && keys[i].Screen.isActive);
+            {
+                keys[i].RefreshAvailability();
+                keys[i].SetLatched(keys[i].Entry.Code == "MAP" && MfdPresentation.Expanded
+                    ? MfdMapControls.Shown && !MfdMapControls.Folded
+                    : keys[i].Screen != null && keys[i].Screen.isActive);
+            }
         }
 
         private static void Lay()
@@ -256,6 +262,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             chrome = null;
             laidSize = Vector2.zero;
             keys.Clear();
+            slots.Clear();
         }
 
         // Hidden first: Destroy lands at the end of the frame, and a rebuild in the same frame must not draw both.
@@ -322,7 +329,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 plate.SetVerticesDirty();
                 for (int i = 0; i < groupTexts.Count; i++)
                 {
-                    groupTexts[i].color = AvStyleHost.FuiInk("section-title", AvTheme.RailInfo);
+                    groupTexts[i].color = Role("ink-muted", AvTheme.Dim);
                     groupRules[i].color = Role("hairline", AvTheme.Hairline);
                 }
                 for (int i = 0; i < keys.Count; i++) keys[i].Restyle();
@@ -332,14 +339,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
     /// <summary>
     /// One key of the MFD index: glyph, the game's short code and the word the code stands for.
-    /// The open screen's key shows its fill, the accent bar on its edge and ON in its corner.
+    /// The open screen owns the bright edge and filled row. Idle rows share the rail's glass plane.
     /// </summary>
     internal sealed class MfdRailKey
     {
         private const string Class = "rail-key";
-        private const float IconSize = 24f;
-        private const float IconBay = 40f;
-        private const float TextLeft = 48f;
+        private const float IconSize = 20f;
+        private const float IconBay = 34f;
+        private const float TextLeft = 40f;
 
         public readonly MfdRailEntry Entry;
         public readonly Button Source;
@@ -347,14 +354,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private readonly AvFrame frame;
         private readonly AvFx fx;
+        private readonly AvHit hit;
         private readonly Image selection;
         private readonly Image divider;
         private readonly TMP_Text icon;
         private readonly TMP_Text code;
         private readonly TMP_Text name;
-        private readonly TMP_Text on;
         private bool hover;
         private bool pressed;
+        private bool available = true;
 
         public RectTransform Rect { get; }
         public bool Latched { get; private set; }
@@ -369,16 +377,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame = AvFrame.Add(Rect, "Frame", AvChamfer.Diagonal(5f));
             AvLay.Fill(frame.rectTransform);
             frame.Stroke = 1f;
-            frame.Bracket = 5f;
+            frame.Bracket = 0f;
             selection = AvLay.Solid(Rect, "Selection", Color.clear);
             divider = AvLay.Solid(Rect, "Divider", Color.clear);
             icon = AvIcons.Make(Rect, entry.Glyph, IconSize, Color.white);
             code = AvText.Make(Rect, "Code", AvTextRole.Title, entry.Code);
             name = AvText.Make(Rect, "Name", AvTextRole.Micro, entry.Name);
-            on = AvText.Make(Rect, "On", AvTextRole.DataSmall, "", TextAlignmentOptions.MidlineRight);
-
-            AvHit hit = AvHit.On(frame);
+            name.gameObject.SetActive(entry.HasName && entry.Name != entry.Code);
+            hit = AvHit.On(frame);
             hit.Cue = AvUiCue.Open;
+            hit.Refuses = true;
             hit.Hover = on => { hover = on; Restyle(); };
             hit.Press = on => { pressed = on; Restyle(); };
             hit.Click = e => { if (e.button == PointerEventData.InputButton.Left) Press(); };
@@ -389,8 +397,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// <summary>Forward the press to the stowed bezel button, whose own binding opens or closes the screen.</summary>
         public void Press()
         {
-            if (Source != null) Source.onClick.Invoke();
+            RefreshAvailability();
+            if (!available) return;
+            if (Entry.Code == "MAP" && MfdRailPatch.IsApplied)
+            {
+                MfdMapControls.Open();
+                return;
+            }
+            Source.onClick.Invoke();
             MfdRail.Refresh();
+        }
+
+        public void RefreshAvailability()
+        {
+            // The native button is intentionally stowed under an inactive parent; its interactable
+            // flag, not hierarchy activity, tells us whether the command can be used.
+            bool next = Source != null && Source.enabled && Source.interactable;
+            if (available == next) return;
+            available = next;
+            hit.Interactable = next;
+            Restyle();
         }
 
         public void SetLatched(bool on)
@@ -405,18 +431,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             float w = slot.width, h = slot.height;
             MfdChromeLay.Place(Rect, slot);
-            // Inset strip, clear of the frame stroke and the 5 px bottom-left cut, so it never reads taller than the key.
-            MfdChromeLay.Place(selection.rectTransform, new Rect(4f, -7f, 2f, Mathf.Max(0f, h - 14f)));
+            MfdChromeLay.Place(selection.rectTransform, new Rect(0f, 0f, 3f, h));
             MfdChromeLay.Place(icon.rectTransform, new Rect((IconBay - IconSize) * 0.5f + 2f, -(h - IconSize) * 0.5f, IconSize, IconSize));
-            MfdChromeLay.Place(divider.rectTransform, new Rect(IconBay, -8f, 1f, h - 16f));
-            MfdChromeLay.Place(on.rectTransform, new Rect(w - 36f, -4f, 30f, 14f));
+            MfdChromeLay.Place(divider.rectTransform, new Rect(TextLeft, -(h - 1f), w - TextLeft - 4f, 1f));
 
-            AvText.Size(code, Mathf.Clamp(h * 0.31f, 14f, 19f));
+            AvText.Size(code, Mathf.Clamp(h * 0.29f, 14f, 18f));
             float textWidth = w - TextLeft - 6f;
-            if (Entry.HasName)
+            if (Entry.HasName && Entry.Name != Entry.Code)
             {
-                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, -h * 0.13f, textWidth, h * 0.44f));
-                MfdChromeLay.Place(name.rectTransform, new Rect(TextLeft, -h * 0.56f, textWidth, h * 0.30f));
+                MfdChromeLay.Place(code.rectTransform, new Rect(TextLeft, -h * 0.10f, textWidth, h * 0.44f));
+                MfdChromeLay.Place(name.rectTransform, new Rect(TextLeft, -h * 0.56f, textWidth, Mathf.Max(16f, h * 0.30f)));
             }
             else
             {
@@ -426,24 +450,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         public void Restyle()
         {
-            string state = pressed ? "pressed" : hover ? "hover" : Latched ? "latched" : null;
+            string state = !available ? "disabled" : pressed ? "pressed" : Latched ? "latched" : hover ? "hover" : null;
             AvStyle style = AvStyleHost.FuiStyle(Class, state);
             Color hairline = MfdRail.Role("hairline", AvTheme.Hairline);
             Color edge = AvStyleHost.Resolve(style.Border, hairline);
             Color ink = MfdRail.Role("ink", AvTheme.TextPrimary);
             Color quiet = AvStyleHost.Resolve(style.Color, MfdRail.Role("ink-dim", AvTheme.Dim));
-            Color accent = AvStyleHost.Resolve(AvStyleHost.FuiStyle(Class, "latched").Rail, MfdRail.Role("caution", AvTheme.Warning));
+            Color accent = AvStyleHost.Resolve(AvStyleHost.FuiStyle(Class, "latched").Rail, MfdRail.Role("select", AvTheme.Accent));
 
-            frame.Paint(AvStyleHost.Resolve(style.Background, MfdRail.Role("surface-inert", AvTheme.Surface)), edge);
-            frame.BracketColor = edge;
-            frame.SetVerticesDirty();
-            selection.color = Latched ? accent : hover ? accent.WithAlpha(accent.a * 0.45f) : Color.clear;
-            divider.color = hairline;
-            icon.color = quiet;
-            code.color = ink;
+            bool active = available && (Latched || hover || pressed);
+            Color fill = active ? AvStyleHost.Resolve(style.Background, MfdRail.Role("surface-raised", AvTheme.Surface)) : Color.clear;
+            // Selected + hovered remains selected; the brighter edge supplies immediate feedback.
+            if (Latched && hover && available) edge = Color.Lerp(edge, ink, .25f);
+            frame.Paint(fill, active ? edge : Color.clear);
+            selection.color = Latched ? accent.WithAlpha(available ? accent.a : accent.a * .4f)
+                : hover && available ? accent.WithAlpha(accent.a * .45f) : Color.clear;
+            divider.color = active ? Color.clear : hairline;
+            icon.color = available && Latched ? accent : quiet;
+            code.color = available ? Latched ? accent : ink : quiet;
             name.color = quiet;
-            on.color = accent;
-            AvText.Set(on, Latched ? "ON" : "");
         }
     }
 }
