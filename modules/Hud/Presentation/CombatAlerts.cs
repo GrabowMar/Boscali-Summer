@@ -34,6 +34,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly AccessTools.FieldRef<CombatHUD, ThreatList> ThreatListRef = NativeRefs.Field<CombatHUD, ThreatList>("threatList");
 
         private RectTransform canvasRoot, root, banner, callout;
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
         private TMP_FontAsset font;
         private Material fontMaterial;
         private TextMeshProUGUI word, detail, calloutWord, calloutSub;

@@ -66,6 +66,17 @@ namespace BoscaliSummer.Core.Game
             return font != null;
         }
 
+        /// <summary>The visor glitch's text shader in the fx bundle (see AvionicsUi/Assets/Source/NOA_TMP_VisorGlitchSDF.shader).</summary>
+        internal const string GlitchTextShader = "NOA/TMP/VisorGlitchSDF";
+
+        /// <summary>The sim's pin: every glow material made so far runs on the stock TMP shader (true) or the visor glitch one (false), for a pixel comparison of the two.</summary>
+        internal static void UseStockText(bool stock)
+        {
+            Shader shader = stock ? Shader.Find("TextMeshPro/Distance Field") : NOAvionics.AvBundle.Shader(GlitchTextShader);
+            if (shader == null) return;
+            foreach (Material m in glows.Values) if (m != null) m.shader = shader;
+        }
+
         private static readonly System.Collections.Generic.Dictionary<long, Material> glows = new System.Collections.Generic.Dictionary<long, Material>();
         /// <summary>Each copy's native material, so a copy handed in again is re-tinted from its source.</summary>
         private static readonly System.Collections.Generic.Dictionary<Material, Material> sourceOf = new System.Collections.Generic.Dictionary<Material, Material>();
@@ -119,7 +130,10 @@ namespace BoscaliSummer.Core.Game
             if (glows.TryGetValue(key, out Material m) && m != null) return m;
             if (glows.Count >= 64 && tint != Colours.AllClear) return Glow(native);
             m = new Material(native) { name = native.name + " (Boscali AR glow)", hideFlags = HideFlags.HideAndDontSave };
-            Shader sdf = Shader.Find("TextMeshPro/Distance Field");
+            // BROKEN HELMET (2026-11-16): the mod's own copy of TMP's SDF shader when the fx bundle has it (the visor glitch tears, splits and drops out the words with it;
+            // identical to the stock shader while no glitch runs), else the stock one.
+            Shader sdf = NOAvionics.AvBundle.Shader(GlitchTextShader);
+            if (sdf == null) sdf = Shader.Find("TextMeshPro/Distance Field");
             if (sdf != null) m.shader = sdf;
             m.EnableKeyword(ShaderUtilities.Keyword_Underlay);
             m.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(c.r / 255f, c.g / 255f, c.b / 255f, HaloAlpha));

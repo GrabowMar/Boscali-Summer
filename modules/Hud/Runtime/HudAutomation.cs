@@ -237,12 +237,22 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             string flash = Text(args, "flash");
             if (!string.IsNullOrEmpty(flash)) fx.StartFlash(string.Equals(flash, "bright", StringComparison.OrdinalIgnoreCase) ? FlashKind.Bright : FlashKind.Warning);
             if (Has(args, "flashHold")) { float h = Number(args, "flashHold", -1f); fx.HoldFlash = h < 0f ? float.NaN : h; }
+            // BROKEN HELMET: pin the damage level (degrade 0..1, under 0 the real one) and hold a damage burst at that many seconds in (burstHold, negative: the scheduler runs); jam 0..1 pins the jam level (negative: the game's real one).
+            if (Has(args, "degrade")) { float d = Number(args, "degrade", -1f); fx.DegradeForce = d < 0f ? float.NaN : d; }
+            if (Has(args, "burstHold")) { float h = Number(args, "burstHold", -1f); fx.BurstHold = h < 0f ? float.NaN : h; }
+            if (Has(args, "jam")) { float j = Number(args, "jam", -1f); fx.JamForce = j < 0f ? float.NaN : j; }
+            if (Bool(args, "empOn")) fx.EmpForce = 1;
+            string shader = Text(args, "shader");      // "off": the stock UI and text shaders everywhere (the healthy-look comparison), "on": the glitch ones again
+            if (!string.IsNullOrEmpty(shader)) BoscaliSummer.Modules.Hud.Presentation.VisorGlitch.SetDisabled(string.Equals(shader, "off", StringComparison.OrdinalIgnoreCase));
             var result = new Dictionary<string, object>
             {
                 { "ok", true }, { "alpha", fx.Alpha }, { "shift_x", fx.ShiftX }, { "shift_y", fx.ShiftY }, { "tear_board", fx.TearBoard }, { "tear_left", fx.TearLeft },
                 { "flash", fx.Flash }, { "flash_tone", fx.FlashTone.ToString() }, { "g_load", fx.GLoad }, { "glitch", fx.GlitchRunning }, { "emp", fx.EmpRunning }, { "reacting", fx.Reacting },
                 { "breath_mark", fx.BreathMark }, { "scan_at", fx.ScanAt }, { "hit_serial", VisorEvents.HitSerial }, { "booting", board.BootHud.Active },
                 { "scan_shown", board.Brow != null && board.Brow.Shown }, { "live", fx.Live }, { "warn_up", fx.WarnLevel },
+                { "shader_ready", BoscaliSummer.Modules.Hud.Presentation.VisorGlitch.Ready }, { "glitching", fx.Glitching }, { "degrade", fx.DegradeLevel }, { "burst", fx.BurstRunning }, { "jam", fx.JamLevel },
+                { "split", fx.Split }, { "drop", fx.DropDensity }, { "flick", fx.Flick }, { "bars", fx.BarStrength }, { "scramble", fx.Scramble }, { "tear0", fx.Tear[2] }, { "tear1", fx.Tear[6] }, { "tear2", fx.Tear[10] },
+                { "caption", board.Brow != null ? board.Brow.CaptionText : "" },
             };
             Debug.Log("[HudAutomation] Visor: " + Describe(result));
             return result;

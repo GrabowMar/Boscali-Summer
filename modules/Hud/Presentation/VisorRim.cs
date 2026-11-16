@@ -22,6 +22,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const string Designation = "HMD-9 // BOSCALI AEROSPACE";
 
         private RectTransform canvasRoot, root;
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
         private AvVector mesh;
         private ScopeText text;
         private readonly char[] etched = new char[64];

@@ -27,6 +27,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly string[] MissileLabels = { "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9" };
 
         private RectTransform canvasRoot, root, words;
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
         private AvVector rail;
         private ScopeText text;
         private readonly BrowCarets carets = new BrowCarets();
@@ -80,6 +82,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 scan.rectTransform.anchoredPosition = new Vector2(px, Y(py));
             }
             scan.canvasRenderer.SetAlpha(scanAlpha);
+        }
+
+        // BROKEN HELMET (2026-11-16): what the jam and the damage do to the rail's words, display only (nothing another system reads changes): the amber EW JAM word beside the caption while the game says an enemy
+        // jammer is on us, the caption's letters corrupted for the first part of a heavy damage burst (numbers and the carets' words stay whole), and the carets' bearings jittering by a degree or two while jammed.
+        private bool jamWord, drawnJam;
+        private int scrambleSeed, drawnScramble, jitterQ, drawnJitter;
+        private readonly char[] scrambled = new char[64];
+        private const string JamText = "EW JAM", Noise = "#%&@$*/|?!<>=+~";
+
+        /// <summary>The glitch's words (see <see cref="VisorFx"/>): the jam word, a corruption seed for the caption (0: none) and the carets' display jitter in degrees. The rail repaints when one of them steps.</summary>
+        public void ApplyGlitch(bool jam, int scramble, float jitterDeg)
+        {
+            jamWord = jam;
+            scrambleSeed = scramble;
+            jitterQ = (int)Mathf.Round(jitterDeg * (BrowRail.Half / BrowRail.ScaleDeg) * 2f);      // half-pixel steps
         }
 
         /// <summary>What the layer shows now (the sim probe reads it).</summary>
@@ -196,7 +213,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int step = Boot >= 1f ? CurveSegments + 1 : Mathf.Clamp((int)(Boot * CurveSegments), 0, CurveSegments);
             int typed = CaptionBoot >= 1f ? int.MaxValue : Mathf.CeilToInt(captionLen * Mathf.Clamp01(CaptionBoot));
             bool captionChanged = seenLen != captionLen || !SameCaption();
-            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && step == drawnBoot && ink == drawnInk && flashStep == drawnFlash && typed == drawnTyped) return;
+            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && step == drawnBoot && ink == drawnInk && flashStep == drawnFlash && typed == drawnTyped
+                && jamWord == drawnJam && scrambleSeed == drawnScramble && jitterQ == drawnJitter) return;
+            drawnJam = jamWord;
+            drawnScramble = scrambleSeed;
+            drawnJitter = jitterQ;
             drawnFlash = flashStep;
             drawnTyped = typed;
             Paint(refW, ink, step, typed);
@@ -252,7 +273,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; whole && i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
-                Triangle(b, k.X, k.Y + BrowRail.CaretTop, BrowRail.CaretHalf, BrowRail.CaretBase - BrowRail.CaretTop, Of(k.Tone, palette).ToRgba());
+                Triangle(b, k.X + jitterQ * 0.5f, k.Y + BrowRail.CaretTop, BrowRail.CaretHalf, BrowRail.CaretBase - BrowRail.CaretTop, Of(k.Tone, palette).ToRgba());
             }
             rail.Commit();
 
@@ -262,8 +283,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (whole && captionLen > 0)
             {
                 int shown = System.Math.Min(captionLen, typed);
-                if (shown >= captionLen) text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
+                char[] show = caption;
+                if (scrambleSeed != 0 && shown >= captionLen)
+                {
+                    // Corrupted glyphs: three letters of the caption (never a digit, a space or the dots) swapped for noise marks while the burst's first part runs.
+                    System.Array.Copy(caption, scrambled, captionLen);
+                    for (int n = 0; n < 3; n++)
+                    {
+                        int at = (int)(VisorFx.Hash(scrambleSeed * 7 + n * 13) * captionLen);
+                        if (at < captionLen && scrambled[at] >= 'A' && scrambled[at] <= 'Z') scrambled[at] = Noise[(int)(VisorFx.Hash(scrambleSeed * 3 + n) * Noise.Length) % Noise.Length];
+                    }
+                    show = scrambled;
+                }
+                if (shown >= captionLen) text.Draw(new System.ReadOnlySpan<char>(show, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
                 else if (shown > 0) text.Draw(new System.ReadOnlySpan<char>(caption, 0, shown), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f, CaptionY - 540f, CaptionPt, ScopeAlign.Left, ink.WithAlpha(0.95f), false);
+                if (jamWord && shown >= captionLen)
+                    text.Draw(System.MemoryExtensions.AsSpan(JamText), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f - 14f, CaptionY - 540f, CaptionPt, ScopeAlign.Right, palette.Warning, true);      // amber, bold, left of the caption (the board's header stands at its right): the one word that says what is wrong
             }
             for (int i = 0; whole && i < carets.Count; i++)
             {
@@ -272,7 +307,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 label.CopyTo(0, scratch, 0, label.Length);
                 int n = label.Length;
                 if (k.Beyond != 0) scratch[n++] = k.Beyond > 0 ? '>' : '<';
-                text.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), k.LabelX, k.Y + BrowRail.LabelDrop - 540f, BrowRail.LabelPt, ScopeAlign.Center, Of(k.Tone, palette), true);
+                text.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), k.LabelX + jitterQ * 0.5f, k.Y + BrowRail.LabelDrop - 540f, BrowRail.LabelPt, ScopeAlign.Center, Of(k.Tone, palette), true);
             }
             text.End();
         }

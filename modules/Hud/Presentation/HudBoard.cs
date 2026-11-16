@@ -238,8 +238,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Emp = Time.time < BoscaliSummer.Core.Game.VisorEvents.EmpUntil,
                 WarnUp = alerts != null && alerts.WarningUp,
                 OnlineBeat = boot.TakeOnlineBeat(),
+                Degrade = VisorDamage.Level(frame.Damage),
+                Jam = aircraft != null && combat != null ? Mathf.Clamp01(NativeRefs.Get(JamRef, combat)) : 0f,      // the game's own "an enemy jammer is working on my jet" level (CombatHUD.jamAccumulation, 0..1)
+                ShaderOn = VisorGlitch.Ready,
+                ReducedFlashes = ReducedFlashes != null && ReducedFlashes(),
             });
             HearVisor();
+            DriveGlitch();
             if (fx.ResyncDue && aircraft != null && !boot.Active && BootAllowed(aircraft, arcsExternal)) StartBoot(aircraft, BootMode.Resync);
 
             bool booting = boot.Active;
@@ -263,6 +268,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             LeftHudStack.BootAlpha = look.Comms * a;      // the COMMS block (the Chatter module's) follows the left column
         }
 
+        private static readonly HarmonyLib.AccessTools.FieldRef<CombatHUD, float> JamRef = NativeRefs.Field<CombatHUD, float>("jamAccumulation");
+
+        /// <summary>The pilot's reduced-flashes switch (the mod's one photosensitivity option: Weather.ReducedFlashes), handed over by the module.</summary>
+        internal Func<bool> ReducedFlashes;
+
+        /// <summary>
+        /// BROKEN HELMET: the shader's terms for this frame (<see cref="VisorGlitch"/>), the glitch material onto the mod's own HUD holders, the eased centre and scope page, and the brow's jam word, corrupted caption and carets' jitter.
+        /// Skipped, and the globals at rest, while the visor is not allowed (the same gate as every reaction).
+        /// </summary>
+        private void DriveGlitch()
+        {
+            if (!VisorGlitch.Ready) { brow?.ApplyGlitch(false, 0, 0f); return; }
+            VisorGlitch.Attach(panel?.Root);
+            VisorGlitch.Attach(brow?.Root);
+            VisorGlitch.Attach(rim?.Root);
+            VisorGlitch.Attach(arcs?.Root);
+            VisorGlitch.Attach(alerts?.Root);
+            VisorGlitch.Scan(Time.unscaledTime);
+            VisorGlitch.SetCalm(panel?.PageRect);
+            VisorGlitch.Drive(fx);
+            VisorGlitch.ShowStatic(fx.Glitching && fx.BarStrength > 0.02f);
+            brow?.ApplyGlitch(fx.JamUp, fx.Scramble ? fx.ScrambleSeed | 1 : 0, fx.JamJitterDeg);
+        }
+
         /// <summary>
         /// The visor's sounds for what <see cref="fx"/> just did (HMD-9, <see cref="BoscaliSummer.Core.Fx.VisorSound"/>), on the same frame and edge as the look: the hit's glitch burst when the glitch starts, the EMP crackle bed while the stutter runs
         /// (every 0.3 s early on, when the dark slots are most likely, then every 0.9 s), the sharp blip with the warning flash. The real alarm plays by itself; the blip sits under it (never ducked) and the banner ducks the rest.
@@ -270,8 +299,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void HearVisor()
         {
             BoscaliSummer.Core.Fx.VisorSound.Banner = alerts != null && alerts.WarningUp;
-            if (fx.GlitchRunning && !glitchHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Glitch);
-            glitchHeard = fx.GlitchRunning;
+            bool glitching = fx.GlitchRunning || fx.BurstRunning;      // a hit's glitch and each damage burst play the same clip, once at their start (the facade rate-limits)
+            if (glitching && !glitchHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Glitch);
+            glitchHeard = glitching;
             bool warnFlash = fx.Flash > 0f && fx.FlashTone == FlashKind.Warning;
             if (warnFlash && !warnFlashHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Warn);
             warnFlashHeard = warnFlash;
@@ -673,6 +703,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             store.Reset();
             visorSway.Reset();
             fx.Reset();
+            VisorGlitch.Off();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();
@@ -735,6 +766,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             boot.Abort();
             ReleaseBoot();
             fx.Reset();
+            VisorGlitch.Off();
+            brow?.ApplyGlitch(false, 0, 0f);
             panel?.ApplyLook(BoardLook.Rest);
             LeftHudStack.BootAlpha = 1f;
             brow?.ApplyFx(1f, 0f, 0f, 0f, FlashKind.None, 1f, -1f, 0f);

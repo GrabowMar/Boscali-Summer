@@ -1,7 +1,8 @@
 // BROKEN HELMET (2026-11-16): the visor's glitch for the mod's HUD line art and sprites. UI/Default plus a tear, a chromatic split, dropout blocks,
 // scanline shimmer, rolling bars and a flicker, all driven by the globals in NOA_VisorGlitch.cginc (set once a frame; the material carries none).
 // With _BH_Fx.x = 0 it draws what UI/Default draws. Three passes: a red ghost left, a cyan ghost right (both vanish unless a split is asked for), then the picture.
-// One shared material; rect clip and stencil as the stock UI shader, so RectMask2D and Mask keep working. Built into avionics-fx.bundle by tools/Compile-AvionicsFxAssets.ps1.
+// One shared material; rect clip and stencil as the stock UI shader, so RectMask2D and Mask keep working. A fourth pass draws the jam's rolling static bars as light on the one
+// material with _BH_Static = 1 (a full-screen quad), and that material draws none of the other passes. Built into avionics-fx.bundle by tools/Compile-AvionicsFxAssets.ps1.
 Shader "NOA/UI/VisorGlitch"
 {
     Properties
@@ -15,6 +16,7 @@ Shader "NOA/UI/VisorGlitch"
         _StencilReadMask ("Stencil Read Mask", Float) = 255
         _ColorMask ("Color Mask", Float) = 15
         [Toggle(UNITY_UI_ALPHACLIP)] _UseUIAlphaClip ("Use Alpha Clip", Float) = 0
+        _BH_Static ("Static layer (1: this material is the full-screen jam static)", Float) = 0
     }
     SubShader
     {
@@ -48,6 +50,20 @@ Shader "NOA/UI/VisorGlitch"
             #pragma multi_compile_local _ UNITY_UI_CLIP_RECT
             #pragma multi_compile_local _ UNITY_UI_ALPHACLIP
             #define BH_PASS 2
+            #include "NOA_UI_VisorGlitchCore.cginc"
+            ENDCG
+        }
+        Pass
+        {
+            Name "Static"
+            Blend SrcAlpha One
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            #pragma multi_compile_local _ UNITY_UI_CLIP_RECT
+            #pragma multi_compile_local _ UNITY_UI_ALPHACLIP
+            #define BH_PASS 3
             #include "NOA_UI_VisorGlitchCore.cginc"
             ENDCG
         }

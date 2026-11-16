@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Canvas rootCanvas;
         private RectTransform canvasRect;
         private RectTransform root;
+        /// <summary>The panel's holder and its scope page's rect (the visor glitch shader's material goes onto the graphics under the holder; the page is eased to a mild glitch).</summary>
+        internal Transform Root => root;
+        internal RectTransform PageRect => pageRect;
         private CanvasGroup rootGroup;
         private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect, statusRect;
         private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector;

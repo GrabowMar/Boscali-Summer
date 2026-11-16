@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Hud
         {
             HudBoard board = context.AddSceneService<HudBoard>(80);
             board.Configure(context.Settings.TacBoard);
+            board.ReducedFlashes = () => context.Settings.Weather.ReducedFlashes.Value;      // the mod's one photosensitivity option also calms the visor's glitch (no fast flicker, no full dropouts)
             context.AddService<IHudBoard>(board);
             context.AddService<IMissileView>(board);
             context.AddService<ITacBoardSettings>(context.Settings.TacBoard);

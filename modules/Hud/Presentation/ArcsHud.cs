@@ -33,6 +33,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private RectTransform canvasRoot, root;
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
         private readonly Side left = new Side(), right = new Side();
         private readonly NativeFlightArcs natives = new NativeFlightArcs();
         private readonly char[] scratch = new char[24];
