@@ -31,6 +31,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> Sway { get; }
         public ConfigEntry<bool> Corners { get; }
         public ConfigEntry<bool> CentreAlerts { get; }
+        public ConfigEntry<bool> ArPath { get; }
+        public ConfigEntry<bool> ArDomes { get; }
+        public ConfigEntry<bool> ArMissiles { get; }
+        public ConfigEntry<bool> ArBeacons { get; }
+        public ConfigEntry<bool> HudFx { get; }
 
         public HudSettings(ConfigFile config)
         {
@@ -105,6 +110,18 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             CentreAlerts = config.Bind(section, "CentreAlerts", d.CentreAlerts,
                 "Combat alerts at the centre of the screen: a WARNING banner at the top centre (MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL), chevrons round the reticle pointing at every missile inbound, and HIT / DESTROYED / MISSED callouts under it. It stays when the board is switched off." + live);
 
+            const string ar = " AR helmet layer: drawn on the world, only while it matters; it stays when the board is switched off.";
+            ArPath = config.Bind(section, "ArPath", d.ArPath,
+                "Flight path predictor: where the aircraft will be over the next 8 seconds, during a hard pull, and in red with TERRAIN and the seconds left when that path meets the ground." + ar + live);
+            ArDomes = config.Bind(section, "ArDomes", d.ArDomes,
+                "SAM envelopes: the reach of every hostile SAM your side knows about, drawn as a wire envelope once you are near it, the ring at your own height bold; IN SAM ENVELOPE inside." + ar + live);
+            ArMissiles = config.Bind(section, "ArMissiles", d.ArMissiles,
+                "Missile lines: your missiles joined to their targets with the seconds to impact, and every missile coming at you boxed with its next two seconds." + ar + live);
+            ArBeacons = config.Bind(section, "ArBeacons", d.ArBeacons,
+                "Beacons: a pillar of light over the nearest friendly field when fuel is at JOKER or BINGO or the aircraft is damaged, and over a live contract zone." + ar + live);
+            HudFx = config.Bind(section, "HudFx", d.HudFx,
+                "HUD reactions: brackets spin in on a new target, and the HUD glitches for a moment when a hit damages the aircraft (a still band under REDUCED MOTION)." + live);
+
             // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
             BoardOptions saved = d;
             Snapshot(ref saved);
@@ -137,6 +154,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Sway = Sway.Value;
             into.Corners = Corners.Value;
             into.CentreAlerts = CentreAlerts.Value;
+            into.ArPath = ArPath.Value;
+            into.ArDomes = ArDomes.Value;
+            into.ArMissiles = ArMissiles.Value;
+            into.ArBeacons = ArBeacons.Value;
+            into.HudFx = HudFx.Value;
             into.Sanitize();
         }
 
@@ -161,6 +183,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
         bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
+        bool ITacBoardSettings.ArPath { get => ArPath.Value; set => ArPath.Value = value; }
+        bool ITacBoardSettings.ArDomes { get => ArDomes.Value; set => ArDomes.Value = value; }
+        bool ITacBoardSettings.ArMissiles { get => ArMissiles.Value; set => ArMissiles.Value = value; }
+        bool ITacBoardSettings.ArBeacons { get => ArBeacons.Value; set => ArBeacons.Value = value; }
+        bool ITacBoardSettings.HudFx { get => HudFx.Value; set => HudFx.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
         void ITacBoardSettings.ResetToDefaults()
@@ -170,6 +197,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
+                ArPath, ArDomes, ArMissiles, ArBeacons, HudFx,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

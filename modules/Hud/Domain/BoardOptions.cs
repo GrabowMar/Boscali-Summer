@@ -57,6 +57,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Sway, Corners;
         /// <summary>The centre combat layer (2026-10-28): the WARNING banner, the THREAT RING round the reticle and the shot callouts. Independent of <see cref="Enabled"/>.</summary>
         public bool CentreAlerts;
+        /// <summary>The AR helmet layer (2026-11-14, <c>ArLayer</c>): flight path predictor, SAM envelopes, missile lines, home/objective beacons, and the HUD's reactions (lock spin-in, hit glitch). Independent of <see cref="Enabled"/>.</summary>
+        public bool ArPath, ArDomes, ArMissiles, ArBeacons, HudFx;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
@@ -67,6 +69,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
             Sway = true, Corners = true, CentreAlerts = true,
+            ArPath = true, ArDomes = true, ArMissiles = true, ArBeacons = true, HudFx = true,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>

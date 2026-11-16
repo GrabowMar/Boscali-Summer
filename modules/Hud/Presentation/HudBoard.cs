@@ -61,6 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ThirdPersonHudCluster cluster;
         // The centre combat layer (WARNING banner, THREAT RING, shot callouts) and the aircraft it is up for (null: down).
         private CombatAlerts alerts;
+        private ArLayer ar;
         private Aircraft alertAircraft;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
@@ -91,6 +92,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The centre combat layer (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
         internal CombatAlerts Alerts => alerts;
+        internal ArLayer Ar => ar;
 
         private void OnEnable()
         {
@@ -152,13 +154,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The centre combat layer's blink, ring and pop, every frame (its data comes with the 10 Hz read).
             try { alerts?.Frame(alertAircraft, threats, this, Time.unscaledTime); }
             catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
+            // The AR helmet layer: world-locked symbols are projected every frame (the data comes with the 10 Hz read).
+            try { ar?.Frame(missileTracker, threats, Time.unscaledTime); }
+            catch (Exception e) { ar?.Hide(); PatchGuard.Report("Hud.Ar.Frame", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
             if (panel != null)
             {
                 // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
                 visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
-                panel.ApplySway(visorSway.X, visorSway.Y);
+                panel.ApplySway(visorSway.X + (ar != null ? ar.JitterX : 0f), visorSway.Y);      // a hit glitch shakes the board with the AR layer
             }
         }
 
@@ -276,6 +281,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 alertAircraft = showAlerts ? hudAircraft : null;
             }
             catch (Exception e) { PatchGuard.Report("Hud.Alerts", e); }
+
+            // The AR helmet layer (docs/superpowers/specs/2026-11-14-ar-helmet-layer-design.md): the centre alerts' gate, on while any of its switches is.
+            try
+            {
+                bool anyAr = options.ArPath || options.ArDomes || options.ArMissiles || options.ArBeacons || options.HudFx;
+                bool showAr = anyAr && hudAircraft != null && !hudAircraft.disabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                ar ??= new ArLayer();
+                ar.Read(showAr && ar.Ensure(), options, hudAircraft, frame, fuelWatch.Field, now);
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Ar", e); }
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
@@ -419,6 +434,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cluster = null;
             alerts?.Destroy();
             alerts = null;
+            ar?.Destroy();
+            ar = null;
             alertAircraft = null;
             nextRead = 0;
             targetReadout.Release();
@@ -458,6 +475,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             panel?.Hide();
             cluster?.Hide();
             alerts?.Hide();
+            ar?.Hide();
             alertAircraft = null;
             externalHud.Release();
             wingview.Reset();
