@@ -41,8 +41,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly char[] cueChars = new char[96];
         private RectTransform cueRoot, cueSurface;
         private float cueBottom, cueLit;
-        /// <summary>Where the NOTICE line's ink ends as the last paint drew it (design units from the canvas's top; 0: the line is not drawn): the ROUTE slot stands under it.</summary>
-        private float noticeBottom;
         private CanvasGroup cueGroup;
         private AvVector cueVector;
         private ScopeText cueText;
@@ -97,6 +95,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             signature = signature * 31 + Mathf.RoundToInt(LeftHudStack.CueTop);
             noticeOn = noticeHas && Options.ShowTicker;
             signature = signature * 31 + NoticeSignature();
+            signature = signature * 31 + (routeLive ? 1 : 0);      // the NOTICE line yields to a ROUTE face (decided at this present, before this paint)
             if (charge != cueCharge || signature != cueSig || canvasSize != seenCueCanvas || (tick && (shown > 0 || noticeOn)))
             {
                 cueCharge = charge;
@@ -122,7 +121,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void HideCueTree()
         {
             if (cueRoot != null) Show(cueRoot, false);
-            cueBottom = cueLit = noticeBottom = 0f;
+            cueBottom = cueLit = 0f;
             cueCount = 0;
         }
 
@@ -175,18 +174,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 inkBottom = Mathf.Max(inkBottom, y + CueLayout.Pitch - 3f);
                 lit = Mathf.Max(lit, alpha);
             }
-            float noticeEnd = 0f;
             if (noticeOn)
             {
                 ZoneRect zone = HudZones.Ref(HudZone.Notice, canvasW * k);
                 float noticeTop = Mathf.Round(HudZones.NoticeTop(inkBottom));
-                PaintNotice(g, zone.X, noticeTop, zone.W, furniture);
-                noticeEnd = noticeTop + zone.H;
+                if (HudZones.NoticeFits(noticeTop, routeLive)) PaintNotice(g, zone.X, noticeTop, zone.W, furniture);      // else the ROUTE slot has the room: it comes back by itself when there is some
             }
             g.End();
             cueVector.Commit();
             cueCount = shown;
-            noticeBottom = noticeEnd;
             cueBottom = inkBottom;
             cueLit = lit;
         }
@@ -285,7 +281,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueLog.Clear();      // the scene is going: its messages are not the next one's
             if (cueRoot != null) UnityEngine.Object.Destroy(cueRoot.gameObject);
             cueRoot = cueSurface = null;
-            cueBottom = cueLit = noticeBottom = 0f;
+            cueBottom = cueLit = 0f;
             cueGroup = null;
             cueVector = null;
             cueText = null;

@@ -34,6 +34,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // The caption shelf's flag, rebuilt only when what it says changes.
         private string routeFlag, routeFlagTag;
         private int routeFlagKey = -1;
+        private ScopePage routeFlagFace;
 
         /// <summary>The offline check reads these: the face drawn (when one is up), and where its top fell.</summary>
         internal bool RouteDrawn => routeDrawn;
@@ -67,8 +68,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!routeLive || canvasRect == null) { HideRoute(); return; }
             float canvasW = canvasRect.rect.width;
             ZoneRect zone = HudZones.Ref(HudZone.Route, canvasW / baseUnit);
-            // Under the NOTICE line where it is drawn, else under the cue stack; never above the zone's own place.
-            float top = Mathf.Round(Mathf.Max(zone.Y, (noticeBottom > 0f ? noticeBottom : cueBottom) + HudZones.Gutter));
+            // A fixed home: the zone's top. The NOTICE line yields to it (PaintCues, HudZones.NoticeFits); the slot never slides.
+            float top = Mathf.Round(zone.Y);
             Vector2 canvasSize = canvasRect.rect.size;
             bool moved = !routeDrawn || routeFaceDrawn != routeFace || top != routeTop || canvasSize != routeCanvasSeen;
             if (!tick && !moved) return;
@@ -123,6 +124,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!ok) { HideRoute(); return; }
             sig = unchecked(((sig * 31 + (int)routeFace) * 31 + (int)routeUnits) * 31 + (furniture ? 1 : 0));
             if (!moved && sig == routeSig) return;
+            if (routeFaceDrawn != routeFace) routeFlagKey = -1;      // a face switch starts the flag over
             routeSig = sig;
 
             float canvasW = canvasRect.rect.width, canvasH = canvasRect.rect.height;
@@ -169,15 +171,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text(value, x, y, tone, 14f, ScopeAlign.Right, true);
         }
 
-        /// <summary>The caption shelf with a flag built once per change of its key (and tag): <paramref name="a"/>, " · ", <paramref name="b"/>.</summary>
-        private string RouteFlagOf(int key, string tag, string a, string b)
+        /// <summary>
+        /// The caption shelf's flag of <paramref name="face"/>, built only when its inputs change (a face of its own key space): DOCK "TANKER · WORD" (<paramref name="a"/> cut to 14, <paramref name="b"/>), CARGO "WORD · n/m",
+        /// OBJECTIVE "PH n/m" (<paramref name="n"/>, <paramref name="m"/>). Nothing is built before the key test.
+        /// </summary>
+        private string RouteFlagOf(ScopePage face, int key, string a, string b, int n, int m)
         {
-            if (routeFlagKey != key || !ReferenceEquals(routeFlagTag, tag))
+            if (routeFlagFace != face || routeFlagKey != key || !string.Equals(routeFlagTag, a))
             {
+                routeFlagFace = face;
                 routeFlagKey = key;
-                routeFlagTag = tag;
-                if (a != null && a.Length > 14) a = a.Substring(0, 13) + "…";      // a long tanker name: the shelf has room for about 26 characters
-                routeFlag = string.IsNullOrEmpty(a) ? b : a + " · " + b;
+                routeFlagTag = a;
+                if (face == ScopePage.Objective) routeFlag = "PH " + n + "/" + m;
+                else if (face == ScopePage.Cargo) routeFlag = a + " · " + n + "/" + m;
+                else routeFlag = (a.Length > 14 ? a.Substring(0, 13) + "…" : a) + " · " + b;      // a long tanker name: the shelf has room for about 26 characters
             }
             return routeFlag;
         }
@@ -206,7 +213,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             AvUnits u = routeUnits;
             string word = DockPage.Words[(int)d.Phase];
             string tanker = d.Tanker ?? "SKYWELL";
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "DOCK", RouteFlagOf((int)d.Phase, tanker, tanker, word));
+            g.CaptionShelf(0f, 0f, RouteLayout.W, "DOCK", RouteFlagOf(ScopePage.Dock, (int)d.Phase, tanker, word, 0, 0));
             bool bad = DockPage.OutOfFunnel(d), fast = DockPage.TooFastOf(d);
             DockDial(g, d, bad);
             float cone = DockPage.ConeOf(d), cv = DockPage.ClosureIn(d.ClosureMps, u);
@@ -249,7 +256,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintCargo(ScopeCanvas g, in CargoScope d)
         {
             AvUnits u = routeUnits;
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "CARGO", RouteFlagOf(((int)d.Kind * 1000 + d.Ammo) * 1000 + d.Max + 1, null, CargoManifestRules.KindWord(d.Kind), d.Ammo + "/" + d.Max));
+            g.CaptionShelf(0f, 0f, RouteLayout.W, "CARGO", RouteFlagOf(ScopePage.Cargo, ((int)d.Kind * 1000 + d.Ammo) * 1000 + d.Max, CargoManifestRules.KindWord(d.Kind), null, d.Ammo, d.Max));
             // Row 0: the jump light, and the seconds until the zone comes into reach, or what holds the drop.
             BoardRect r0 = RouteLayout.Row(0);
             float y = r0.Y + RowMid;
@@ -315,7 +322,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintObjective(ScopeCanvas g, in ObjectiveScope d)
         {
             AvUnits u = routeUnits;
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "OBJECTIVE", d.PhaseCount > 0 ? RouteFlagOf(d.Current * 64 + d.PhaseCount + 2, null, "PH " + (d.Current + 1), "/" + d.PhaseCount) : null);
+            g.CaptionShelf(0f, 0f, RouteLayout.W, "OBJECTIVE", d.PhaseCount > 0 ? RouteFlagOf(ScopePage.Objective, d.Current * 1024 + d.PhaseCount, null, null, d.Current + 1, d.PhaseCount) : null);
             g.FitText(d.Title, 0f, RouteLayout.Row(0).Y + RowMid, RouteLayout.W, Hi, 14f, 12f, ScopeAlign.Left, true);
 
             // Rows 1 and 2: the distance to the zone's edge (its centre once inside), the deadline and the bearing dial.
