@@ -363,7 +363,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void OnOwnLaunch(Missile missile)
         {
             WeaponInfo info = missile != null ? missile.GetWeaponInfo() : null;
-            if (info == null || !ShotRules.IsDelivery(info.blastDamage, info.jammer)) return;
+            if (info == null || !ShotRules.IsDelivery(Mathf.Max(info.blastDamage, missile.GetYield()), info.jammer)) return;      // WeaponInfo.blastDamage reads 0 for every missile on the 0.34.6 build: the warhead's own yield is the number
             float now = Time.unscaledTime;
             ShotFeed.Ledger.Launch(missile.GetInstanceID(), info.bomb, ShotBook.Short(info), now);
             shotBook.Launched(missile, info, now);
