@@ -42,7 +42,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.StripTop; w = TopCentre.Width; h = TopCentre.BannerTop + TopCentre.BannerHeight - TopCentre.StripTop; break;
                 case HudZone.Callout: side = Side.Centre; x = 888; y = 594; w = 140; h = 38; break;
                 case HudZone.BoardTop: side = Side.Right; x = 1132; y = 6; w = 383; h = 134; break;
-                case HudZone.BoardSpine: side = Side.Right; x = 1531; y = 6; w = 381; h = 624; break;
+                case HudZone.BoardSpine: side = Side.Right; x = 1531; y = 6; w = 381; h = 660; break;
                 case HudZone.Feeds: side = Side.Right; x = 1632; y = 714; w = 264; h = 342; break;
                 default: side = Side.Centre; x = 576; y = 324; w = 768; h = 432; break;
             }
