@@ -119,6 +119,19 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             hidden = false;
         }
 
+        /// <summary>The game's gauge texts and their renderer alphas, "name=alpha ..." (the sim probe's evidence that no native caption or percentage shows behind ours). Allocates: probe only.</summary>
+        internal string TextAlphas()
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (Component gauge in new Component[] { fuel, throttle })
+            {
+                if (gauge == null) continue;
+                foreach (TMP_Text tmp in gauge.GetComponentsInChildren<TMP_Text>(true))
+                    sb.Append(tmp.name).Append('[').Append(tmp.text).Append("]=").Append(tmp.canvasRenderer.GetAlpha().ToString("0.##")).Append(tmp.isActiveAndEnabled ? "" : "(off)").Append(' ');
+            }
+            return sb.ToString();
+        }
+
         /// <summary>The gauges are hidden right now (the sim probe reads it).</summary>
         public bool Hidden => hidden;
 

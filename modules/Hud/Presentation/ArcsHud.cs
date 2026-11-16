@@ -49,6 +49,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // What the last frame drew (the sim probe reads it).
         internal bool Shown => drawing;
         internal bool NativesHidden => natives.Hidden;
+        internal string NativeTexts => natives.TextAlphas();
         internal int FuelLit { get; private set; }
         internal int ThrottleLit { get; private set; }
         internal float FuelRadius { get; private set; }
@@ -73,6 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
             root = CombatAlerts.Holder(canvasRoot, "BoscaliArcs");
+            group = root.gameObject.AddComponent<CanvasGroup>();
+            group.interactable = group.blocksRaycasts = false;
             Build(left, "Fuel", font, fontMaterial);
             Build(right, "Throttle", font, fontMaterial);
             root.gameObject.SetActive(false);
@@ -102,6 +105,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!(k > 0.01f)) { Down(); return; }
             if (!natives.Measure(canvasRoot, out NativeFlightArcs.Arc fuelArc, out NativeFlightArcs.Arc throttleArc, out float detent, out string word)) { Down(); return; }
             if (k != lastK) { root.localScale = new Vector3(k, k, 1f); lastK = k; }
+            float canvasPerPixel = Screen.height > 0 ? canvasRoot.rect.height / Screen.height : 1f;
+            float scale = canvasPerPixel > 0.01f ? k / canvasPerPixel : 1f;
+            if (scale != devPerRef) { devPerRef = scale; left.Signature = right.Signature = int.MinValue; left.X = right.X = float.NaN; }      // a new grid repaints and replaces everything
 
             ControlInputs inputs = aircraft.GetInputs();
             float throttle = Mathf.Clamp01(inputs != null ? inputs.throttle : 0f);
@@ -155,7 +161,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The arc's holder at the game's circle: canvas units to the holder's reference pixels, the axis as a rotation of the segments (the words stay upright).</summary>
         private static void Place(Side s, NativeFlightArcs.Arc arc, float k)
         {
-            float x = arc.X / k, y = arc.Y / k;
+            float x = Snap(arc.X / k), y = Snap(arc.Y / k);      // on the device pixel grid: a word at a fraction of a pixel is smeared
             if (s.X != x || s.Y != y)
             {
                 s.Centre.localPosition = new Vector3(x, y, 0f);
@@ -181,7 +187,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             ScopeText t = s.Text;
             t.Begin();
-            Color word = low ? amber : ink;
+            Color word = low ? amber : Lift(ink);
             int n = 0;
             if (bingo)
             {
@@ -210,7 +216,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!string.IsNullOrEmpty(word))
             {
                 Anchor(axis, radius + EndGap, FlightArcs.At(1f, false), out float x, out float y);
-                t.Draw(word, x, y, PercentPt, OutsideAlign(axis), ink, false);
+                t.Draw(word, x, y, PercentPt, OutsideAlign(axis), Lift(ink), false);
             }
             Caption(t, "THROTTLE", axis, radius, FlightArcs.At(0f, false), ink);
             t.End();
@@ -240,9 +246,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static void Anchor(float axis, float r, float a, out float x, out float y)
         {
             float rad = (axis + a) * Mathf.Deg2Rad;
-            x = r * Mathf.Cos(rad);
-            y = -r * Mathf.Sin(rad);
+            x = Snap(r * Mathf.Cos(rad));
+            y = Snap(-r * Mathf.Sin(rad));
         }
+
+        /// <summary>Device pixels per reference pixel (the holder's scale over the canvas's own unit): set every frame; a reference length is rounded to whole device pixels so no word sits between two.</summary>
+        private static float devPerRef = 1f;
+
+        /// <summary>The words' ink: the HUD green lifted toward white, as the board's and the game's own small labels are. In the pure saturated green its halo (the glow material takes the word's own colour) fattens a 12 px word into a smear.</summary>
+        private static Color Lift(Color ink) => Color.Lerp(ink, Color.white, ScopePalette.HiLift * 0.75f);
+
+        private static float Snap(float refPx) => Mathf.Round(refPx * devPerRef) / devPerRef;
 
         /// <summary>Words on the outside of the arc: right-aligned on the left arc, left-aligned on the right one.</summary>
         private static ScopeAlign OutsideAlign(float axis) => Mathf.Cos(axis * Mathf.Deg2Rad) < 0f ? ScopeAlign.Right : ScopeAlign.Left;
@@ -250,7 +264,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Caption(ScopeText t, string word, float axis, float radius, float endAngle, Color ink)
         {
             Anchor(axis, radius, endAngle, out float x, out float y);
-            t.Draw(word, x, y + CaptionDrop, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
+            t.Draw(word, x, y + CaptionDrop, CaptionPt, ScopeAlign.Center, Lift(ink), false);
         }
 
         private void TickLabel(ScopeText t, string word, float axis, float radius, float a, Color colour)
@@ -260,6 +274,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>The game's gauges back, this layer down: the same frame, every time. Safe to call every frame.</summary>
+        /// <summary>The reactive visor's look (<see cref="VisorFx"/>): the arcs' brightness and the whole layer's shift (the G jitter, a glitch's jump), by group alpha and one position write. Nothing is repainted.</summary>
+        public void ApplyFx(float alpha, float x, float y)
+        {
+            if (root == null) return;
+            if (group != null && group.alpha != alpha) group.alpha = alpha;
+            if (shiftX != x || shiftY != y || shiftK != lastK)
+            {
+                shiftX = x; shiftY = y; shiftK = lastK;
+                root.anchoredPosition = new Vector2(x, y) * (lastK > 0.01f ? lastK : 1f);      // reference pixels to the canvas's units (the holder is scaled by lastK)
+            }
+        }
+
+        private CanvasGroup group;
+        private float shiftX, shiftY, shiftK;
+
         public void Down()
         {
             natives.Show();
@@ -276,6 +305,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;
             canvasRoot = null;
+            group = null;
             drawing = false;
         }
     }
