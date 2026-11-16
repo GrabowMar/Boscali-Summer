@@ -30,13 +30,13 @@ namespace BoscaliSummer.Core.Ui
         public static void Frame(AvQuadBuffer b, float left, float bottom, float right, float top, Rgba ink, float nameW, float stateW)
         {
             float y = top - Header * 0.5f + 1.5f, picTop = top - Header, picBottom = PictureBottom(bottom), arm = 8f;
-            Rgba rule = ink.WithAlpha(0.75f);
+            Rgba rule = ink.WithAlpha(0.85f);
             AvStrokes.Line(b, left, y, left + ShelfLead, y, 1f, rule);
             float from = left + ShelfText + nameW + ShelfGap, to = stateW > 0f ? right - StateInset - stateW - ShelfGap : right;
             if (to > from) AvStrokes.Line(b, from, y, to, y, 1f, rule);
             AvStrokes.Line(b, right, y - 4f, right, y + 4f, 1.5f, ink);
 
-            Rgba faint = ink.WithAlpha(0.3f);
+            Rgba faint = ink.WithAlpha(0.4f);
             AvStrokes.Line(b, left, picBottom, right, picBottom, 1f, faint);
             AvStrokes.Line(b, left, picTop, right, picTop, 1f, faint);
             AvStrokes.Line(b, left, picBottom, left, picTop, 1f, faint);
@@ -55,6 +55,6 @@ namespace BoscaliSummer.Core.Ui
         public static float StripPt(float width) => Mathf.Clamp(width / 21.5f, 8f, 12f);
 
         /// <summary>The rich-text lead of a strip cell: the label dimmed ("RNG "), the value after it full. Pair with <see cref="CellTail"/>.</summary>
-        public const string CellHead = "<alpha=#C0>", CellTail = "<alpha=#FF> ";
+        public const string CellHead = "<alpha=#E0>", CellTail = "<alpha=#FF> ";
     }
 }

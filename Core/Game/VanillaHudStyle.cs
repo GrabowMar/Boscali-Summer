@@ -73,6 +73,34 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The halo's alpha and spread, and the face's dilate (the native face is thin, -0.19, and frayed on bright cloud once there was no backdrop behind it).</summary>
         internal const float HaloAlpha = 0.3f, HaloDilate = 0.05f, HaloSoftness = 0.3f, FaceDilate = -0.06f;
 
+        /// <summary>
+        /// The hair-thin dark edge round every glyph (2026-11-16, the approved mockup's 1 px dark-green rim: small text reads on bright sky and cloud). TMP's own outline, centred on the glyph edge: it
+        /// would eat half its width off the face, so the face dilate is raised by <c>width * EdgeFaceBack</c> and the letters keep today's weight. The colour is the mockup's <c>--edge</c> (2,16,10 at 0.82).
+        /// Width 0 turns it off; <see cref="SetEdge"/> re-applies it to every material already made.
+        /// </summary>
+        internal const float EdgeDefault = 0.16f, EdgeMax = 0.25f, EdgeFaceBack = 1.1f;
+        private static readonly Color EdgeColour = new Color(2f / 255f, 16f / 255f, 10f / 255f, 0.82f);
+        internal static float Edge { get; private set; } = EdgeDefault;
+
+        /// <summary>The pilot's <c>TacBoard.TextEdge</c> (0 off, to <see cref="EdgeMax"/>): live, on every glow material made so far and on those made later.</summary>
+        internal static void SetEdge(float width)
+        {
+            width = float.IsNaN(width) ? EdgeDefault : Mathf.Clamp(width, 0f, EdgeMax);
+            if (width == Edge) return;
+            Edge = width;
+            foreach (Material m in glows.Values) if (m != null) ApplyEdge(m);
+        }
+
+        private static void ApplyEdge(Material m)
+        {
+            bool on = Edge > 0.001f;
+            if (on) m.EnableKeyword(ShaderUtilities.Keyword_Outline); else m.DisableKeyword(ShaderUtilities.Keyword_Outline);
+            m.SetColor(ShaderUtilities.ID_OutlineColor, EdgeColour);
+            m.SetFloat(ShaderUtilities.ID_OutlineWidth, on ? Edge : 0f);
+            m.SetFloat(ShaderUtilities.ID_FaceDilate, FaceDilate + (on ? Edge * EdgeFaceBack : 0f));
+            ShaderUtilities.UpdateShaderRatios(m);
+        }
+
         /// <summary>A word in the HUD ink (<see cref="Glow(Material, Color)"/> in <see cref="Colours"/>.AllClear): what a label gets that does not follow its own colour.</summary>
         internal static Material Glow(Material native) => Glow(native, Colours.AllClear);
 
@@ -93,14 +121,13 @@ namespace BoscaliSummer.Core.Game
             m = new Material(native) { name = native.name + " (Boscali AR glow)", hideFlags = HideFlags.HideAndDontSave };
             Shader sdf = Shader.Find("TextMeshPro/Distance Field");
             if (sdf != null) m.shader = sdf;
-            m.SetFloat(ShaderUtilities.ID_FaceDilate, FaceDilate);
             m.EnableKeyword(ShaderUtilities.Keyword_Underlay);
             m.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(c.r / 255f, c.g / 255f, c.b / 255f, HaloAlpha));
             m.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
             m.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
             m.SetFloat(ShaderUtilities.ID_UnderlayDilate, HaloDilate);
             m.SetFloat(ShaderUtilities.ID_UnderlaySoftness, HaloSoftness);
-            ShaderUtilities.UpdateShaderRatios(m);
+            ApplyEdge(m);      // face dilate, outline and the shader ratios
             glows[key] = m;
             sourceOf[m] = native;
             return m;

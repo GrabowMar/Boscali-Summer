@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         private const int RailQuads = 96, FurnitureQuads = 48, CurveSegments = 40;
         // Mockup weights: rail and major ticks about 1.5 px at full ink (clear against bright sky and cloud), minor ticks thinner and dimmer.
-        private const float Stroke = 1f, CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f, FurnitureAlpha = 0.3f;
+        private const float Stroke = 1f, CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f, FurnitureAlpha = 0.4f;
         private const float CaptionY = 11f, CaptionPt = BrowRail.LabelPt;
         private static readonly string[] MissileLabels = { "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9" };
 
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 BrowRail.Tick(i, out float x, out float y, out float nx, out float ny, out bool major);
                 float len = major ? 10f : 5f;
-                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.6f));
+                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.7f));
             }
             Triangle(b, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
             for (int i = 0; i < carets.Count; i++)
