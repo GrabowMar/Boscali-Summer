@@ -17,7 +17,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     {
         public const int MaxLabel = 22, MaxState = 30;
         /// <summary>The steps of the TAC BOARD cycle rows. BoardDeclutters is in the order of the <c>BoardDeclutter</c> contract enum; BoardScopes is the menu order (the enum is Manual, Off, Auto), mapped in the Runtime adapter (a press moves to the next, wrapping).</summary>
-        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardScopes = { "AUTO", "MANUAL", "OFF" };
+        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardScopes = { "ON", "OFF" };
         /// <summary>Cycle rows over a 0..1 or size option: the names a press steps through and the value each one sets.</summary>
         public static readonly string[] BoardShades = { "OFF", "LOW", "MED", "HIGH" }, BoardSizes = { "SMALL", "NORMAL", "LARGE" }, Ghosts = { "OFF", "FAINT", "CLEAR" };
         public static readonly float[] ShadeSteps = { 0f, 0.35f, 0.7f, 1f }, SizeSteps = { 0.8f, 1f, 1.2f }, GhostSteps = { 0f, 0.35f, 0.8f };
@@ -31,10 +31,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
 
-        /// <summary>The menu order of the SCOPE cycle (AUTO, MANUAL, OFF) against the contract enum (Manual, Off, Auto). A value outside the enum reads as AUTO, as BoardOptions.Sanitize does.</summary>
-        public static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Manual ? 1 : mode == BoardScopeMode.Off ? 2 : 0;
+        /// <summary>The menu order of the SCOPE cycle (ON, OFF) against the contract enum: ON is Auto, and so is the retired Manual or a value outside the enum, as BoardOptions.Sanitize reads them.</summary>
+        public static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Off ? 1 : 0;
 
-        public static BoardScopeMode ScopeAt(int index) => index == 1 ? BoardScopeMode.Manual : index == 2 ? BoardScopeMode.Off : BoardScopeMode.Auto;
+        public static BoardScopeMode ScopeAt(int index) => index == 1 ? BoardScopeMode.Off : BoardScopeMode.Auto;
 
         /// <summary>Index of the step nearest <paramref name="value"/>: where a cycle row over a float option stands.</summary>
         public static int Nearest(float[] steps, float value)
@@ -304,7 +304,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Rows.Add(b.Reg(MenuRow.Toggle("hud/board", "hud", w.BoardOn,
                 F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
                 F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
-            // One SCOPE row replaced the four page pickers (2026-11-16): AUTO lets the board pick its pages, MANUAL shows the two chosen in SET, OFF shows none.
+            // One SCOPE row (2026-11-16): ON shows the board's panels (RWR, FIRES, WING) while each has something to say, OFF shows none. There is nothing to pick.
             MenuRow scope = MenuRow.Cycle("hud/scope", "station-select", "SET SCOPE", "SCOPE: ", BoardScopes, Clamp(w.BoardScope, BoardScopes), "SCOPE: ");
             if (!w.BoardOn) scope.Blocked = "TAC BOARD: OFF";
             c.Rows.Add(b.Reg(scope));

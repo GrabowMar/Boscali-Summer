@@ -6,12 +6,11 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>How much the TAC BOARD shows: everything the switches allow, a leaner board, or only what a pilot in a fight needs.</summary>
     internal enum BoardDeclutter { Full, Lean, Minimal }
 
-    /// <summary>Pages that choose themselves (Auto, the default), pages the pilot picks per slot (Manual), or no tactical pages (Off).</summary>
+    /// <summary>The board's panels (RWR, FIRES, WING) show themselves while they have something to say (Auto, the default), or there are none (Off). Manual is a retired value kept so an old config still parses: it reads as Auto.</summary>
     internal enum BoardScopeMode : byte { Manual = 0, Off = 1, Auto = 2 }
 
     /// <summary>
-    /// The information page selected for a TAC BOARD slot. Values match the HUD's page registry. <see cref="Systems"/> is not a slot choice (the board always shows SYSTEMS in a
-    /// block of its own); it stays in the list so the values, and saved configs, keep their meaning.
+    /// The TAC BOARD's pages; the values match the HUD's page registry (<c>ScopePage</c>). No option names one any more: the board's panels pick their own.
     /// </summary>
     internal enum BoardPage { Threat, Shot, MissileCam, Approach, Wing, Strike, Dock, Objective, Systems, Cargo }
 
@@ -30,12 +29,6 @@ namespace BoscaliSummer.Core.Contracts
         float Shade { get; set; }
         BoardDeclutter Declutter { get; set; }
         BoardScopeMode ScopeMode { get; set; }
-        /// <summary>Full information pages shown, 1 to 4, at most two across and two down.</summary>
-        int PageCount { get; set; }
-        BoardPage Page1 { get; set; }
-        BoardPage Page2 { get; set; }
-        BoardPage Page3 { get; set; }
-        BoardPage Page4 { get; set; }
         /// <summary>The stores, countermeasure and power section. Off restores the native panels.</summary>
         bool ShowStores { get; set; }
         /// <summary>The MISSILE CAM feed picture (the missile card); the page slots do not consult it.</summary>

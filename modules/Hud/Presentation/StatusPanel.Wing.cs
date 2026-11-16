@@ -90,11 +90,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
             if (!allow.ShowGauges) { gaugeCount = gaugeLines = 0; return; }
-            // The pages' own gauges first: every page on the board in slot order, then SYSTEMS (always on the board), up to the row's slots.
-            int own = 0, reg = 0, sources = Options.ScopeMode == BoardScopeMode.Off ? 0 : selectedCount;
+            // The pages' own gauges first: every panel that draws its page, in slot order, then SYSTEMS (always on the board), up to the row's slots.
+            int own = 0, reg = 0, sources = slotPages.Length;
             for (int s = 0; s <= sources && own < GaugeRow.Slots; s++)
             {
-                ScopePageBase p = s < sources ? selectedPages[s] : pages[(int)ScopePage.Systems];
+                if (s < sources && !SlotBody(s)) continue;
+                ScopePageBase p = s < sources ? slotPages[s] : pages[(int)ScopePage.Systems];
                 int n = 0;
                 try { n = Math.Min(p.Gauges(pageScratch), GaugeRow.Slots); }
                 catch (Exception e) { ReportOnce(p, e); }

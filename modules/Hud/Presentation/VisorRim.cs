@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// zone or the minimised map) and run a short way along the edges, a double line sits at the top centre above the brow, a few registration ticks close the line ends, and the tick ladders and cross marks of the old
     /// "frame furniture" run down both sides (the right ladder starts under the board when its box reaches that edge). Along the bottom rim, in the corners the cockpit's dashboard art does not cover, one ETCHED LINE of
     /// tiny text: left a constant helmet designation (flavour, claims nothing), right the real fields: the pilot's callsign, the airframe's type and the sortie time. 1.2 px strokes at about 0.45 alpha; the glyph edge
-    /// and glow come from the shared material. Built like <see cref="BrowHud"/>: a holder under the native HUD canvas scaled by canvas height / 1080, one quad mesh and pooled <see cref="ScopeText"/> labels, repainted only when
+    /// and glow come from the shared material. Built like <see cref="TapeHud"/>: a holder under the native HUD canvas scaled by canvas height / 1080, one quad mesh and pooled <see cref="ScopeText"/> labels, repainted only when
     /// what it draws changed (the sortie clock moves once a second). During the power-on it draws itself in from the corners (<see cref="Boot"/>).
     /// </summary>
     internal sealed class VisorRim
@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float bottom = 0f;
             if (board != null && board.TryGetScreenBox(out float l, out _, out float r, out float b) && r > l && Screen.height > 0 && r >= Screen.width - 40f)
                 bottom = b * 1080f / Screen.height;
-            ladderTop = BrowRail.LadderTop(bottom);
+            ladderTop = VisorFrameMath.LadderTop(bottom);
         }
 
         /// <summary>Every frame: show or hide, follow the screen's size and repaint when what is drawn changed; nothing else.</summary>
@@ -129,14 +129,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Corner(b, cx, 1f, 0f, 16f, 2f, lenTop, lenSide, true, c);
                 Corner(b, cx, 0f, 1f, 22f, 3f, 0f, lenSide, false, c);
                 Corner(b, cx, 1f, 1f, 22f, 3f, 0f, lenSide, false, c);
-            }
-            if (p >= 0.5f)
-            {
-                // The double line at the top centre, above the brow caption.
-                AvStrokes.Line(b, -80f, Y(2.5f), 80f, Y(2.5f), Stroke, c);
-                AvStrokes.Line(b, -50f, Y(5.5f), 50f, Y(5.5f), Stroke, c);
-                AvStrokes.Line(b, -80f, Y(2.5f), -50f, Y(5.5f), Stroke, c);
-                AvStrokes.Line(b, 80f, Y(2.5f), 50f, Y(5.5f), Stroke, c);
             }
             if (p >= 0.65f)
             {

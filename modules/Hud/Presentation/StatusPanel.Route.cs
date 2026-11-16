@@ -9,9 +9,9 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The ROUTE slot (HUD zones, 2026-11-16): the left column's 281 x 133 face under the NOTICE line, showing the first live of DOCK, CARGO, OBJECTIVE (ScopePick.Route) as a compact caption shelf and five rows. It reads what the three
-    // full pages read (ScopeFeeds, the pages' own number formats and rules) and draws none of their plots: DOCK keeps a small funnel dial, OBJECTIVE a small bearing dial, CARGO none. The pages stay polled every present, with the
-    // board on or off (Present / PollRoutePages), so the slot sees them live in Auto and Manual alike. It lives in the cue tree's gate (HUD up, corners on, not suppressed), has its own root, follows the sway and redraws only when
+    // The ROUTE slot (HUD zones, 2026-11-16): the left column's 281 x 133 face under the NOTICE line, showing the first live of APPROACH, DOCK, CARGO, OBJECTIVE (ScopePick.Route) as a compact caption shelf and five rows. It reads what the four
+    // full pages read (ScopeFeeds, the pages' own number formats and rules) and draws none of their plots: APPROACH has a small ILS cross, DOCK a small funnel dial, OBJECTIVE a small bearing dial, CARGO none. The board shows none
+    // of the four (2026-11-16): this face is ROUTE. The pages stay polled every present, with the board on or off (Present / PollRoutePages), so the slot sees them live either way. It lives in the cue tree's gate (HUD up, corners on, not suppressed), has its own root, follows the sway and redraws only when
     // the numbers it shows, its place or the canvas moved (a signature, checked at the 10 Hz tick). Rows with no source in the scope (DOCK FLOW, CARGO OBJ, OBJECTIVE ETA) are not drawn.
     internal sealed partial class StatusPanel
     {
@@ -45,17 +45,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void UpdateRoute()
         {
             int mask = 0;
+            if (pageLive[(int)ScopePage.Approach]) mask |= CuePriority.Bit(ScopePage.Approach);
             if (pageLive[(int)ScopePage.Dock]) mask |= CuePriority.Bit(ScopePage.Dock);
             if (pageLive[(int)ScopePage.Cargo]) mask |= CuePriority.Bit(ScopePage.Cargo);
             if (pageLive[(int)ScopePage.Objective]) mask |= CuePriority.Bit(ScopePage.Objective);
             routeLive = ScopePick.Route((ushort)mask, out routeFace);
         }
 
-        /// <summary>With the board switched off nothing polls the pages: the three faces' pages still do, silently (the board's notices stay with the board).</summary>
+        /// <summary>With the board switched off nothing polls the pages: the four faces' pages still do, silently (the board's notices stay with the board).</summary>
         private void PollRoutePages(float clock)
         {
             if (pages == null) return;
             var silent = new ScopeEnv(clock, routeUnits, null);
+            pageLive[(int)ScopePage.Approach] = PollPage(pages[(int)ScopePage.Approach], silent);
             pageLive[(int)ScopePage.Dock] = PollPage(pages[(int)ScopePage.Dock], silent);
             pageLive[(int)ScopePage.Cargo] = PollPage(pages[(int)ScopePage.Cargo], silent);
             pageLive[(int)ScopePage.Objective] = PollPage(pages[(int)ScopePage.Objective], silent);
@@ -117,9 +119,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             DockScope dock = default;
             CargoScope cargo = default;
             ObjectiveScope objective = default;
+            ApproachScope approach = default;
             bool ok, furniture = Options.Declutter == BoardDeclutter.Full;
             int sig;
-            if (routeFace == ScopePage.Dock) { ok = ScopeFeeds.TryRead(out dock); sig = ok ? DockSig(dock) : 0; }
+            if (routeFace == ScopePage.Approach) { ok = ScopeFeeds.TryRead(out approach); sig = ok ? ApproachSig(approach) : 0; }
+            else if (routeFace == ScopePage.Dock) { ok = ScopeFeeds.TryRead(out dock); sig = ok ? DockSig(dock) : 0; }
             else if (routeFace == ScopePage.Cargo) { ok = ScopeFeeds.TryRead(out cargo) && CargoManifestRules.Present(cargo); sig = ok ? CargoSig(cargo) : 0; }
             else { ok = ScopeFeeds.TryRead(out objective) && objective.Id != 0; sig = ok ? ObjectiveSig(objective) : 0; }
             if (!ok) { HideRoute(); return; }
@@ -135,7 +139,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = furniture;
             g.Begin(Palette(), baseUnit, Whole(canvasH), pixel);
             g.Origin(zone.X, top);      // everything below is in the slot's own units (RouteLayout)
-            if (routeFace == ScopePage.Dock) PaintDock(g, dock);
+            if (routeFace == ScopePage.Approach) PaintApproach(g, approach);
+            else if (routeFace == ScopePage.Dock) PaintDock(g, dock);
             else if (routeFace == ScopePage.Cargo) PaintCargo(g, cargo);
             else PaintObjective(g, objective);
             g.End();
@@ -188,6 +193,71 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 else routeFlag = (a.Length > 14 ? a.Substring(0, 13) + "…" : a) + " · " + b;      // a long tanker name: the shelf has room for about 26 characters
             }
             return routeFlag;
+        }
+
+        // ------------------------------------------------------------------------------------------------ APPROACH
+
+        /// <summary>Pixels per dot of the ILS cross: two dots either side of the centre, the scales' ends 2.6 dots out (<see cref="ApproachMath.LocDots"/>).</summary>
+        private const float ApproachDot = 20f;
+
+        private static int ApproachSig(in ApproachScope d)
+        {
+            unchecked
+            {
+                int h = (int)d.Stage * 4 + (d.Pad ? 1 : 0) + (d.HasIls ? 2 : 0);
+                h = h * 31 + (int)Math.Round(ApproachMath.LocDots(d.LocDeg) * ApproachDot);      // a pixel of the diamond
+                h = h * 31 + (int)Math.Round(ApproachMath.GsDots(d.GsDeg) * ApproachDot);
+                h = h * 31 + (int)(d.DistanceM / 20f);
+                h = h * 31 + (int)Math.Round(d.SinkMps * 10f);
+                h = h * 31 + (d.Pad ? (int)Math.Round(d.PadX) * 31 + (int)Math.Round(d.PadY) : 0);
+                return h * 31 + ((d.Runway ?? d.Field)?.GetHashCode() ?? 0);
+            }
+        }
+
+        /// <summary>
+        /// APPROACH, mostly a picture: the ILS cross at the left, and beside it the runway (or pad), the distance to the threshold over a bar that fills as it closes (from 10 km; a pad from 2 km: the INTERCEPT stage's
+        /// own scale) and the sink rate. The shelf's flag is the stage (INTERCEPT, GLIDE, FLARE, ROLLOUT; a pad's APPROACH, DESCENT, TOUCHDOWN).
+        /// </summary>
+        private void PaintApproach(ScopeCanvas g, in ApproachScope d)
+        {
+            AvUnits u = routeUnits;
+            g.CaptionShelf(0f, 0f, RouteLayout.W, "APPROACH", ApproachWords.Of(d.Stage, d.Pad));
+            ApproachCross(g, d);
+            BoardRect r0 = RouteLayout.RowBesideDial(0), r3 = RouteLayout.RowBesideDial(3);
+            g.FitText(d.Runway ?? d.Field ?? (d.Pad ? "PAD" : "RUNWAY"), r0.X, r0.Y + RowMid, r0.W, Hi, 14f, 12f, ScopeAlign.Left, true);
+            g.Text(ScopeStr.Distance("", d.DistanceM, u, 8), r0.X, RouteLayout.RowBesideDial(1).Y + RouteLayout.RowH, Hi, 22f, ScopeAlign.Left, true);
+            g.Bar(r3.X, r3.Y + 5f, r3.W, 10f, ApproachMath.StageProgress(ApproachStage.Intercept, d.Pad, d.DistanceM, 0f, 0f, 0f, 0f), Ink, 10);
+            bool imperial = u == AvUnits.Imperial;
+            RouteRow(g, RouteLayout.RowBesideDial(4), "SINK", ScopeStr.Cat("", AvUnitTable.Climb(d.SinkMps, u), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", d.SinkMps > ApproachMath.SinkCautionMps ? Amber : Hi);
+        }
+
+        /// <summary>
+        /// The cross: the centre ring is the aircraft, the diamond where the path lies against it (right of and below the centre when the aircraft is left and high, as the old page's funnel had it), amber once a
+        /// deviation is a caution. Over a pad the mark is the pad itself, nose up, the cross's arm standing for the distance left (never less than 50 m). In the flare and on the roll-out there is no beam to show.
+        /// </summary>
+        private static void ApproachCross(ScopeCanvas g, in ApproachScope d)
+        {
+            const float R = 52f;
+            float cx = RouteLayout.Dial * 0.5f, cy = RouteLayout.RowsTop + RouteLayout.Dial * 0.5f;
+            g.Line(cx - R, cy, cx + R, cy, Dim);
+            g.Line(cx, cy - R, cx, cy + R, Dim);
+            for (int k = -2; k <= 2; k++)
+            {
+                if (k == 0) continue;
+                g.Ring(cx + k * ApproachDot, cy, 2f, Dim);
+                g.Ring(cx, cy + k * ApproachDot, 2f, Dim);
+            }
+            g.Ring(cx, cy, 4f, Hi);
+            if (d.Pad)
+            {
+                float k = (R - 6f) / Math.Max(50f, d.DistanceM);
+                g.Box(Mathf.Round(cx + d.PadX * k) - 5f, Mathf.Round(cy - d.PadY * k) - 5f, 11f, 11f, Hi);
+            }
+            else if (d.HasIls)
+            {
+                bool off = ApproachMath.LocCaution(d.LocDeg) || ApproachMath.GsCaution(d.GsDeg);
+                g.Diamond(cx - ApproachMath.LocDots(d.LocDeg) * ApproachDot, cy + ApproachMath.GsDots(d.GsDeg) * ApproachDot, 6f, off ? Amber : Hi, true);
+            }
         }
 
         // ------------------------------------------------------------------------------------------------ DOCK

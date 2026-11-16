@@ -2,7 +2,7 @@
 namespace BoscaliSummer.Core.Ui
 {
     /// <summary>The HUD's zones (spec 2026-11-16 section 3): every element lives in exactly one.</summary>
-    internal enum HudZone { Log, Comms, Cue, Notice, Route, TargetCam, Map, Lane, Brow, Callout, BoardTop, BoardSpine, Feeds, Centre }
+    internal enum HudZone { Log, Comms, Cue, Notice, Route, TargetCam, Map, Lane, Callout, BoardTop, BoardSpine, Feeds, Centre }
 
     /// <summary>A rectangle, top-left origin, y down. Touching edges do not overlap.</summary>
     internal readonly struct ZoneRect
@@ -16,11 +16,11 @@ namespace BoscaliSummer.Core.Ui
 
     /// <summary>
     /// The zone map of the HUD re-layout, in reference pixels of a 1080-high screen. Left zones keep their x, right zones their distance to the right edge, centre zones their distance to
-    /// the centre line. The BROW is the visor's rail (316 wide, 12..104); the LANE is <see cref="TopCentre"/>'s slot and strip (width 312, 112..224). Pure: the test project links it.
+    /// the centre line. The LANE is <see cref="TopCentre"/>'s slot above the game's heading tape (width 312, 144..210): the warning line or the ace card. The visor's frame and the tape's threat marks take no zone. Pure: the test project links it.
     /// </summary>
     internal static class HudZones
     {
-        public const float BrowWidth = 316f, Margin = 12f, Gutter = 16f, RefHeight = 1080f, FullWidth = 1920f;
+        public const float Margin = 12f, Gutter = 16f, RefHeight = 1080f, FullWidth = 1920f;
         private const float NarrowMin = 281f;
         /// <summary>The wide LOG / COMMS / NOTICE column's width.</summary>
         public const float WideLog = 562f, CommsHeight = 154f;
@@ -39,8 +39,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Route: side = Side.Left; x = 12; y = 443; w = 281; h = 133; break;
                 case HudZone.TargetCam: side = Side.Left; x = 12; y = 592; w = 281; h = 200; break;
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
-                case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.BannerTop; w = TopCentre.Width; h = TopCentre.StripTop + TopCentre.StripHeight - TopCentre.BannerTop; break;
-                case HudZone.Brow: side = Side.Centre; x = 960f - BrowWidth * 0.5f; y = 12; w = BrowWidth; h = 92; break;
+                case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.LineTop; w = TopCentre.Width; h = TopCentre.CardHeight; break;
                 case HudZone.Callout: side = Side.Centre; x = 888; y = 594; w = 140; h = 38; break;
                 case HudZone.BoardTop: side = Side.Right; x = 1132; y = 6; w = 383; h = 134; break;
                 case HudZone.BoardSpine: side = Side.Right; x = 1531; y = 6; w = 381; h = 660; break;

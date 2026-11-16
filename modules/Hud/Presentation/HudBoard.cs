@@ -68,7 +68,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private CombatAlerts alerts;
         private Aircraft alertAircraft;
         // The visor's brow rail and frame furniture (cockpit view only).
-        private BrowHud brow;
+        private TapeHud tape;
         // The segmented fuel and throttle arcs (cockpit view only); arcsAt / arcsExternal say when and what the last complete Tick saw, so a Tick that stops running gives the game's gauges back (fail open).
         private ArcsHud arcs;
         private float arcsAt = float.NegativeInfinity;
@@ -112,7 +112,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal CombatAlerts Alerts => alerts;
 
         /// <summary>The visor's brow rail (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
-        internal BrowHud Brow => brow;
+        internal TapeHud Tape => tape;
 
         /// <summary>The segmented fuel and throttle arcs (the sim probe in <c>HudAutomation</c> reads it; null until first wanted).</summary>
         internal ArcsHud Arcs => arcs;
@@ -200,8 +200,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The power-on's clock first: how far each zone has come alive is set before they draw this frame. A throw ends the boot and snaps everything to flying state.
             try { StepBoot(); }
             catch (Exception e) { boot.Abort(); ReleaseBoot(); PatchGuard.Report("Hud.Boot", e); }
-            try { brow?.Frame(); }
-            catch (Exception e) { brow?.Hide(); PatchGuard.Report("Hud.Brow.Frame", e); }
+            try { tape?.Frame(); }
+            catch (Exception e) { tape?.Hide(); PatchGuard.Report("Hud.Tape.Frame", e); }
             try { rim?.Frame(); }
             catch (Exception e) { rim?.Hide(); PatchGuard.Report("Hud.Rim.Frame", e); }
             // The arcs, every frame and BEFORE anything below can fail: they hide the game's own two gauges only in the frame they are drawn, and give them back in the frame they are not wanted.
@@ -249,7 +249,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             bool booting = boot.Active;
             float a = fx.Alpha;
-            brow?.ApplyFx(a, fx.ShiftX, fx.ShiftY, fx.Flash, fx.FlashTone, booting ? 1f : fx.BreathMark, booting ? -1f : fx.ScanAt, fx.ScanAlpha);
+            tape?.ApplyFx(a);
             rim?.ApplyFx(a * (booting ? 1f : fx.BreathRim), fx.Flash, fx.FlashTone);
             arcs?.ApplyFx(a, fx.ShiftX, fx.ShiftY);
             var look = BoardLook.Rest;
@@ -279,9 +279,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void DriveGlitch()
         {
-            if (!VisorGlitch.Ready) { brow?.ApplyGlitch(false, 0, 0f); return; }
+            alerts?.SetJam(fx.JamUp);
+            if (!VisorGlitch.Ready) { tape?.ApplyGlitch(0f); return; }
             VisorGlitch.Attach(panel?.Root);
-            VisorGlitch.Attach(brow?.Root);
+            VisorGlitch.Attach(tape?.Root);
             VisorGlitch.Attach(rim?.Root);
             VisorGlitch.Attach(arcs?.Root);
             VisorGlitch.Attach(alerts?.Root);
@@ -289,7 +290,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             VisorGlitch.SetCalm(panel?.PageRect);
             VisorGlitch.Drive(fx);
             VisorGlitch.ShowStatic(fx.Glitching && fx.BarStrength > 0.02f);
-            brow?.ApplyGlitch(fx.JamUp, fx.Scramble ? fx.ScrambleSeed | 1 : 0, fx.JamJitterDeg);
+            tape?.ApplyGlitch(fx.JamJitterDeg);
         }
 
         /// <summary>
@@ -349,7 +350,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReleaseBoot();
                 return;
             }
-            if (brow != null) { brow.Boot = boot.Progress(BootGroup.Brow); brow.CaptionBoot = boot.Progress(BootGroup.BrowCaption); }
+            if (tape != null) tape.Boot = boot.Progress(BootGroup.Brow);
             if (rim != null) rim.Boot = boot.Progress(BootGroup.Rim);
             if (arcs != null) arcs.Boot = boot.Progress(BootGroup.Arcs);
             bootApplied = true;      // the blocks' own visibility is StepVisor's, each frame
@@ -358,7 +359,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The boot is over (done, cut or failed): every zone as in flight.</summary>
         private void ReleaseBoot()
         {
-            if (brow != null) { brow.Boot = 1f; brow.CaptionBoot = 1f; }
+            if (tape != null) tape.Boot = 1f;
             if (rim != null) rim.Boot = 1f;
             if (arcs != null) arcs.Boot = 1f;
             bootApplied = false;
@@ -520,9 +521,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             try
             {
                 bool showBrow = options.Brow && hudAircraft != null && !hudAircraft.disabled && !thirdPerson && !missileCam && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
-                brow ??= new BrowHud();
-                int scope = options.ScopeMode == BoardScopeMode.Auto ? 0 : options.ScopeMode == BoardScopeMode.Manual ? 1 : 2;
-                brow.Read(showBrow && brow.Ensure(), hudAircraft, frame, scope, this);
+                tape ??= new TapeHud();
+                tape.Read(showBrow && tape.Ensure(), hudAircraft);
                 TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
                 // The rim shares the brow's switch and its view: the frame of the same glass.
                 rim ??= new VisorRim();
@@ -711,8 +711,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alerts?.Destroy();
             alerts = null;
             alertAircraft = null;
-            brow?.Destroy();
-            brow = null;
+            tape?.Destroy();
+            tape = null;
             arcs?.Destroy();
             arcs = null;
             rim?.Destroy();
@@ -761,16 +761,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cluster?.Hide();
             alerts?.Hide();
             alertAircraft = null;
-            brow?.Hide();
+            tape?.Hide();
             rim?.Hide();
             boot.Abort();
             ReleaseBoot();
             fx.Reset();
             VisorGlitch.Off();
-            brow?.ApplyGlitch(false, 0, 0f);
+            tape?.ApplyGlitch(0f);
             panel?.ApplyLook(BoardLook.Rest);
             LeftHudStack.BootAlpha = 1f;
-            brow?.ApplyFx(1f, 0f, 0f, 0f, FlashKind.None, 1f, -1f, 0f);
+            tape?.ApplyFx(1f);
             rim?.ApplyFx(1f, 0f, FlashKind.None);
             arcs?.ApplyFx(1f, 0f, 0f);
             arcs?.Down();

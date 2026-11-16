@@ -17,11 +17,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<float> Shade { get; }
         public ConfigEntry<BoardDeclutter> Declutter { get; }
         public ConfigEntry<BoardScopeMode> ScopeMode { get; }
-        public ConfigEntry<int> PageCount { get; }
-        public ConfigEntry<BoardPage> Page1 { get; }
-        public ConfigEntry<BoardPage> Page2 { get; }
-        public ConfigEntry<BoardPage> Page3 { get; }
-        public ConfigEntry<BoardPage> Page4 { get; }
         public ConfigEntry<bool> ShowStores { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
         public ConfigEntry<bool> ShowLamps { get; }
@@ -75,26 +70,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             }
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
-                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. Manual pages and their titles remain available at every level." + live);
+                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. The panels and their titles remain at every level." + live);
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
-                "Auto picks the pages itself (slot 1 by priority, slot 2 the wing page while a wing is flying); Manual keeps the pages chosen for each slot; Off hides the tactical pages." + live);
-            // 2026-11-16 made Auto a real mode and the default (Manual was the only default before); a file still holding Manual takes Auto, once.
-            ConfigEntry<int> autoScope = config.Bind(section, "AutoScopeDefault", 0,
-                new ConfigDescription("Internal marker, leave as it is: 1 once a ScopeMode left at Manual has moved to the new default (Auto).", new AcceptableValueRange<int>(0, 1)));
-            if (autoScope.Value < 1)
-            {
-                if (ScopeMode.Value == BoardScopeMode.Manual) ScopeMode.Value = d.ScopeMode;
-                autoScope.Value = 1;
-            }
-            PageCount = config.Bind(section, "PageCount", d.PageCount,
-                new ConfigDescription("Full information pages shown, one or two, stacked in one column on the right edge. Each slot is selected manually; SYSTEMS always shows on its own." + live,
-                    new AcceptableValueRange<int>(1, BoardOptions.MaxPages)));
-            const string slot = " SYSTEMS is not a choice: it always shows in its own block.";
-            Page1 = config.Bind(section, "Page1", d.Page1, "Information page in the first slot; events never replace it." + slot + live);
-            Page2 = config.Bind(section, "Page2", d.Page2, "Information page in the second slot (PageCount at least 2)." + slot + live);
-            Page3 = config.Bind(section, "Page3", d.Page3, "Ignored: the board has two page slots. Kept only so old configs load." + slot + live);
-            Page4 = config.Bind(section, "Page4", d.Page4, "Ignored: the board has two page slots. Kept only so old configs load." + slot + live);
+                "Auto shows the board's panels while they have something to say: RWR (threats; one line while clear), FIRES (your weapons in flight, or a strike) and WING (your wingmen); Off hides them. Manual is retired and reads as Auto." + live);
+            if (ScopeMode.Value != BoardScopeMode.Off) ScopeMode.Value = BoardScopeMode.Auto;
             ShowStores = config.Bind(section, "ShowStores", d.ShowStores,
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
@@ -139,14 +119,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 new ConfigDescription("Width of the hair-thin dark edge round every letter of the mod's HUD text, so small words stay sharp on bright sky and cloud; 0 draws none." + live,
                     new AcceptableValueRange<float>(0f, BoardOptions.TextEdgeMax)));
             BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(TextEdge.Value);
-
-            // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
-            BoardOptions saved = d;
-            Snapshot(ref saved);
-            Page1.Value = saved.Page1;
-            Page2.Value = saved.Page2;
-            Page3.Value = saved.Page3;
-            Page4.Value = saved.Page4;
         }
 
         /// <summary>Fill <paramref name="into"/> from the config entries, kept inside their ranges. Reads fields only: it allocates nothing.</summary>
@@ -158,11 +130,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Shade = Shade.Value;
             into.Declutter = Declutter.Value;
             into.ScopeMode = ScopeMode.Value;
-            into.PageCount = PageCount.Value;
-            into.Page1 = Page1.Value;
-            into.Page2 = Page2.Value;
-            into.Page3 = Page3.Value;
-            into.Page4 = Page4.Value;
             into.ShowStores = ShowStores.Value;
             into.PageMissileCam = PageMissileCam.Value;
             into.ShowLamps = ShowLamps.Value;
@@ -188,11 +155,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         float ITacBoardSettings.Shade { get => Shade.Value; set => Shade.Value = value; }
         BoardDeclutter ITacBoardSettings.Declutter { get => Declutter.Value; set => Declutter.Value = value; }
         BoardScopeMode ITacBoardSettings.ScopeMode { get => ScopeMode.Value; set => ScopeMode.Value = value; }
-        int ITacBoardSettings.PageCount { get => PageCount.Value; set => PageCount.Value = value; }
-        BoardPage ITacBoardSettings.Page1 { get => Page1.Value; set => Page1.Value = value; }
-        BoardPage ITacBoardSettings.Page2 { get => Page2.Value; set => Page2.Value = value; }
-        BoardPage ITacBoardSettings.Page3 { get => Page3.Value; set => Page3.Value = value; }
-        BoardPage ITacBoardSettings.Page4 { get => Page4.Value; set => Page4.Value = value; }
         bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
         bool ITacBoardSettings.ShowLamps { get => ShowLamps.Value; set => ShowLamps.Value = value; }
@@ -214,7 +176,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         {
             ConfigEntryBase[] all =
             {
-                Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
+                Enabled, Layout, Scale, Shade, Declutter, ScopeMode, ShowStores,
                 PageMissileCam,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,
             };

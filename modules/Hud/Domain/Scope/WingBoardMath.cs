@@ -7,14 +7,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class WingBoardMath
     {
         /// <summary>The plot: centre and radius in pixels, and the metres its rim stands for (350 m is the half ring).</summary>
-        public const float PlotX = 124f, PlotY = 172f, PlotR = 104f, RimM = 700f;
+        public const float PlotX = 170f, PlotY = 106f, PlotR = 64f, RimM = 700f;
         /// <summary>A wingman further than this many pixels from the centre sits on the rim (a little inside it) with a range tag.</summary>
         public const float ClampR = PlotR - 8f;
         /// <summary>Slot error beyond which a formation member reads as out of its slot, and below which a tether is not drawn.</summary>
         public const float TetherM = 30f, TetherFarM = 120f;
-        /// <summary>The roster's block: first row's top, a full row's height and the step between full rows, and the room the rows may use.</summary>
-        public const float RowsTop = 34f, FullRowH = 62f, FullStep = 66f, RowsRoom = 260f, RowGap = 3f, CompactMinH = 34f, FullTaskMinH = 56f;
-        public const int MaxRows = 7;
+        /// <summary>The roster's block: first row's top, a full row's height and the step between full rows, and the room the rows may use (the WING panel is <see cref="ScopeLayout.WingH"/> high: two full rows, or three compact ones).</summary>
+        public const float RowsTop = 34f, FullRowH = 62f, FullStep = 66f, RowsRoom = 140f, RowGap = 3f, CompactMinH = 34f, FullTaskMinH = 56f;
+        public const int MaxRows = 3, FullRows = 2;
 
         public static float Scale => PlotR / RimM;
 
@@ -71,13 +71,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return n;
         }
 
-        /// <summary>How many rows to draw, how tall, how far apart; whether a row has its task line and whether the ack log has room (three or fewer wingmen).</summary>
-        public static void Rows(int count, out int shown, out float rowH, out float step, out bool taskLine, out bool acks)
+        /// <summary>How many rows to draw, how tall, how far apart, and whether a row has its task line (one or two wingmen).</summary>
+        public static void Rows(int count, out int shown, out float rowH, out float step, out bool taskLine)
         {
             shown = Math.Min(Math.Max(count, 0), MaxRows);
-            if (shown <= 3)
+            if (shown <= FullRows)
             {
-                rowH = FullRowH; step = FullStep; taskLine = true; acks = true;
+                rowH = FullRowH; step = FullStep; taskLine = true;
                 return;
             }
             rowH = (float)Math.Floor((RowsRoom - RowGap * (shown - 1)) / shown);
@@ -85,7 +85,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (rowH < CompactMinH) rowH = CompactMinH;
             step = rowH + RowGap;
             taskLine = rowH >= FullTaskMinH;
-            acks = false;
         }
 
         /// <summary>Formation skeleton: each slot hangs from the nearest of the lead and the slots nearer the lead than it (a finger four reads lead-2, lead-3, 3-4).

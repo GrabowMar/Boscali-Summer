@@ -157,7 +157,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool BoardOn;
         /// <summary>Index into <see cref="MenuCatalog.BoardDeclutters"/>: FULL, LEAN, MIN.</summary>
         public int BoardDeclutter;
-        /// <summary>Index into <see cref="MenuCatalog.BoardScopes"/>: AUTO, MANUAL, OFF.</summary>
+        /// <summary>Index into <see cref="MenuCatalog.BoardScopes"/>: ON, OFF.</summary>
         public int BoardScope;
         /// <summary>Indices into <see cref="MenuCatalog.BoardShades"/> and <see cref="MenuCatalog.BoardSizes"/>.</summary>
         public int BoardShade, BoardSize = 1;

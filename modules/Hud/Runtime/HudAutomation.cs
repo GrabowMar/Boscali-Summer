@@ -208,7 +208,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 { "ok", true }, { "started", started }, { "active", boot.Active }, { "mode", boot.Mode.ToString() }, { "ended", board.BootEnd }, { "age", boot.Age }, { "lines", boot.LineCount }, { "boot_shown", boot.Shown },
                 { "brow", boot.Progress(BootGroup.Brow) }, { "rim", boot.Progress(BootGroup.Rim) }, { "left", boot.Progress(BootGroup.Left) }, { "board", boot.Progress(BootGroup.Board) }, { "arcs", boot.Progress(BootGroup.Arcs) },
                 { "arcs_shown", board.Arcs != null && board.Arcs.Shown }, { "natives_hidden", board.Arcs != null && board.Arcs.NativesHidden }, { "fuel_lit", board.Arcs?.FuelLit ?? -1 },
-                { "rim_shown", board.Rim != null && board.Rim.Shown }, { "etched", board.Rim?.EtchedText ?? "" }, { "brow_shown", board.Brow != null && board.Brow.Shown },
+                { "rim_shown", board.Rim != null && board.Rim.Shown }, { "etched", board.Rim?.EtchedText ?? "" }, { "brow_shown", board.Tape != null && board.Tape.Shown },
             };
             Debug.Log("[HudAutomation] Boot: " + Describe(result));
             return result;
@@ -249,10 +249,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 { "ok", true }, { "alpha", fx.Alpha }, { "shift_x", fx.ShiftX }, { "shift_y", fx.ShiftY }, { "tear_board", fx.TearBoard }, { "tear_left", fx.TearLeft },
                 { "flash", fx.Flash }, { "flash_tone", fx.FlashTone.ToString() }, { "g_load", fx.GLoad }, { "glitch", fx.GlitchRunning }, { "emp", fx.EmpRunning }, { "reacting", fx.Reacting },
                 { "breath_mark", fx.BreathMark }, { "scan_at", fx.ScanAt }, { "hit_serial", VisorEvents.HitSerial }, { "booting", board.BootHud.Active },
-                { "scan_shown", board.Brow != null && board.Brow.Shown }, { "live", fx.Live }, { "warn_up", fx.WarnLevel },
+                { "scan_shown", board.Tape != null && board.Tape.Shown }, { "live", fx.Live }, { "warn_up", fx.WarnLevel },
                 { "shader_ready", BoscaliSummer.Modules.Hud.Presentation.VisorGlitch.Ready }, { "glitching", fx.Glitching }, { "degrade", fx.DegradeLevel }, { "burst", fx.BurstRunning }, { "jam", fx.JamLevel },
                 { "split", fx.Split }, { "drop", fx.DropDensity }, { "flick", fx.Flick }, { "bars", fx.BarStrength }, { "scramble", fx.Scramble }, { "tear0", fx.Tear[2] }, { "tear1", fx.Tear[6] }, { "tear2", fx.Tear[10] },
-                { "caption", board.Brow != null ? board.Brow.CaptionText : "" },
+                { "caption", "" },
             };
             Debug.Log("[HudAutomation] Visor: " + Describe(result));
             return result;
@@ -330,9 +330,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             CombatAlerts alerts = HudBoard.Instance != null ? HudBoard.Instance.Alerts : null;
             var result = new Dictionary<string, object>
             {
-                { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.BannerWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
+                { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.LineWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
                 { "ring", alerts?.RingMarks ?? 0 }, { "callout", alerts?.CalloutText ?? "" }, { "native_list_hidden", alerts != null && alerts.NativeListHidden },
-                { "brow_shown", HudBoard.Instance?.Brow != null && HudBoard.Instance.Brow.Shown }, { "brow_carets", HudBoard.Instance?.Brow?.CaretCount ?? 0 }, { "brow_caption", HudBoard.Instance?.Brow?.CaptionText ?? "" },
+                { "brow_shown", HudBoard.Instance?.Tape != null && HudBoard.Instance.Tape.Shown }, { "brow_carets", HudBoard.Instance?.Tape?.MarkCount ?? 0 }, { "brow_caption", "" }, { "tape", HudBoard.Instance?.Tape?.Describe() ?? "" }, { "call", alerts?.CallText ?? "" },
             };
             Debug.Log("[HudAutomation] Alerts: " + Describe(result));
             return result;

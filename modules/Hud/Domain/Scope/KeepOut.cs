@@ -96,6 +96,15 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return false;
         }
 
+        /// <summary>Whether placed label <paramref name="index"/> sits on something placed before it (the wedge aside): it found no free spot, and THREAT drops such a lesser tag rather than overprint.</summary>
+        public bool Overprints(int index)
+        {
+            int o = index * 4;
+            for (int k = 0; k < index; k++)
+                if (k != wedge && Overlap(box[o], box[o + 1], box[o + 2], box[o + 3], box[k * 4], box[k * 4 + 1], box[k * 4 + 2], box[k * 4 + 3]) > 0f) return true;
+            return false;
+        }
+
         /// <summary>The air a THREAT radar tag keeps round itself (<see cref="OverlapCost"/>): two tags 4 apart read as two, two that touch read as one box (the corner brackets of MSV RADAR and T9K41 met in game).</summary>
         public const float Gap = 4f;
 
@@ -227,7 +236,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// line to its box's nearest point. Two leaders that cross have their tags trade places (each keeps its size, centred where the other was), which sorts a stack of tags by the bearing of their spokes,
         /// unless that would put either on another label or on more of the <paramref name="spokes"/> than before. Returns the number of trades.
         /// </summary>
-        public int Untangle(ReadOnlySpan<float> anchors, ReadOnlySpan<int> own, int n, ReadOnlySpan<float> spokes, float cx = 0f, float cy = 0f, float r = 0f)
+        public int Untangle(ReadOnlySpan<float> anchors, ReadOnlySpan<int> own, int n, ReadOnlySpan<float> spokes, float cx = 0f, float cy = 0f, float r = 0f, float xMin = float.MinValue, float xMax = float.MaxValue)
         {
             rimX = cx; rimY = cy; rimR = r;
             int trades = 0;
@@ -244,6 +253,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                         for (int mode = 0; mode < 2; mode++)
                         {
                             float ax = mode == 0 ? (float)Math.Round(box[b] + box[b + 2] / 2f - box[a + 2] / 2f) : box[a], bx = mode == 0 ? (float)Math.Round(box[a] + box[a + 2] / 2f - box[b + 2] / 2f) : box[b];
+                            if (ax < xMin || bx < xMin || ax + box[a + 2] > xMax || bx + box[b + 2] > xMax) continue;      // a wide tag centred on a narrow one at the edge would leave the scope
                             if (!CanTrade(ax, ay, a, bx, by, b, own[i], own[j], spokes)) continue;
                             box[a] = ax; box[a + 1] = ay; box[b] = bx; box[b + 1] = by;
                             trades++;

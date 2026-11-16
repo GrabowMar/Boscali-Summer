@@ -8,29 +8,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The TAC BOARD's options on the HUD tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
-    /// imports it). Three groups: the board itself, its major parts and the extras. SCOPE (AUTO, MANUAL, OFF) is also the C-menu's HUD row; the two MANUAL page rows live only here. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
+    /// imports it). Three groups: the board itself, its major parts and the extras. SCOPE (ON, OFF) is also the C-menu's HUD row. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
     /// in flight and there is no preview here. Every control but RESET and the kill feed and map restyle (which stay when the board is off) waits on the board's own switch, as the immersion page waits on its master.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
     {
         // Index = the enum's value, so the controls write a choice's index straight to the contract.
-        // SCOPE is listed AUTO, MANUAL, OFF (the contract enum is Manual, Off, Auto): ScopeModes maps a segment back to the enum.
-        private static readonly string[] BoardScopeNames = { "AUTO", "MANUAL", "OFF" };
-        private static readonly BoardScopeMode[] ScopeModes = { BoardScopeMode.Auto, BoardScopeMode.Manual, BoardScopeMode.Off };
+        // SCOPE is listed ON, OFF (the contract enum is Manual, Off, Auto; Manual is retired and reads as Auto): ScopeModes maps a segment back to the enum.
+        private static readonly string[] BoardScopeNames = { "ON", "OFF" };
+        private static readonly BoardScopeMode[] ScopeModes = { BoardScopeMode.Auto, BoardScopeMode.Off };
         private static readonly string[] BoardScopeBriefs =
         {
-            "AUTO: The board picks the page for what is happening.",
-            "MANUAL: Shows the two pages you picked.",
-            "OFF: No pages; stores and systems only.",
+            "ON: RWR, FIRES and WING panels appear while they have something to show.",
+            "OFF: No panels; stores and systems only.",
         };
-        // The pages that can still live on the board; MISSILE CAM, SYSTEMS, DOCK, CARGO and OBJECTIVE have their own homes now.
-        private static readonly BoardPage[] BoardPageChoices = { BoardPage.Threat, BoardPage.Shot, BoardPage.Approach, BoardPage.Wing, BoardPage.Strike };
         private static readonly string[] BoardDeclutterNames = { "FULL", "LEAN", "MIN" };
         private static readonly string[] BoardDeclutterBriefs =
         {
             "FULL: everything the switches below allow.",
             "LEAN: no gauge row, dark lamps or captions.",
-            "MIN: only lock, spike and missile lamps; your selected pages stay visible.",
+            "MIN: only lock, spike and missile lamps; the panels stay visible.",
         };
         private void BuildTacBoardRows(AvFlow flow, int page)
         {
@@ -51,13 +48,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Enabled, v => board.Enabled = v);
             BoardStrip(flow, page, "SCOPE", BoardScopeNames, BoardScopeBriefs,
                 () => Array.IndexOf(ScopeModes, board.ScopeMode),
-                i => { board.ScopeMode = ScopeModes[i]; if (ScopeModes[i] == BoardScopeMode.Manual) board.PageCount = 2; }, on, off);
-            Func<bool> manual = () => board.Enabled && board.ScopeMode == BoardScopeMode.Manual;
-            Func<string> notManual = () => board.Enabled ? "Set SCOPE to MANUAL to choose pages." : "Turn on TAC BOARD first.";
-            // The steppers show what the board will show (a stored page that is no longer choosable, or twice, reads as the board reads it).
-            Func<BoardPage> first = () => ShownPage(board.Page1, BoardPage.Systems, BoardPage.Threat), second = () => ShownPage(board.Page2, first(), Array.IndexOf(BoardPageChoices, board.Page2) >= 0 || first() == BoardPage.Wing ? BoardPage.Shot : BoardPage.Wing);
-            BoardPageRow(flow, page, "PAGE 1", first, p => board.Page1 = p, second, manual, notManual);
-            BoardPageRow(flow, page, "PAGE 2", second, p => board.Page2 = p, first, manual, notManual);
+                i => board.ScopeMode = ScopeModes[i], on, off);
             BoardStrip(flow, page, "DECLUTTER", BoardDeclutterNames, BoardDeclutterBriefs,
                 () => (int)board.Declutter, i => board.Declutter = (BoardDeclutter)i, on, off);
 
@@ -109,50 +100,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 flow.Ticker.TickNow(); // the controls read the new values now, not at the next 2 Hz tick
             }, AvButtonStyle.Default, AvIcon.Refresh)).Controls[0];
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
-        }
-
-        /// <summary>
-        /// A MANUAL page slot: a stepper over <see cref="BoardPageChoices"/> that skips the other slot's page (the board keeps two distinct pages). A stored page outside the list
-        /// (an old config's DOCK, say) shows by name until the first step.
-        /// </summary>
-        /// <summary>The page a slot shows: <paramref name="stored"/> when it is choosable and not the <paramref name="earlier"/> slot's, else <paramref name="fallback"/>, else the first choice that is free (BoardOptions.Sanitize's rule).</summary>
-        private static BoardPage ShownPage(BoardPage stored, BoardPage earlier, BoardPage fallback)
-        {
-            if (Array.IndexOf(BoardPageChoices, stored) >= 0 && stored != earlier) return stored;
-            if (fallback != earlier) return fallback;
-            foreach (BoardPage choice in BoardPageChoices) if (choice != earlier) return choice;
-            return fallback;
-        }
-
-        private static string PageWord(BoardPage page)
-        {
-            switch (page)
-            {
-                case BoardPage.Threat: return "THREAT";
-                case BoardPage.Shot: return "SHOT";
-                case BoardPage.Approach: return "APPROACH";
-                case BoardPage.Wing: return "WING";
-                case BoardPage.Strike: return "STRIKE";
-                default: return "--";
-            }
-        }
-
-        private AvRow BoardPageRow(AvFlow flow, int page, string title, Func<BoardPage> get, Action<BoardPage> set, Func<BoardPage> other,
-            Func<bool> enabled, Func<string> reason)
-        {
-            void Step(int d)
-            {
-                int at = Array.IndexOf(BoardPageChoices, get()), n = BoardPageChoices.Length;
-                if (at < 0) at = d > 0 ? -1 : n;
-                for (int k = 0; k < n; k++)
-                {
-                    at = (at + d + n) % n;
-                    if (BoardPageChoices[at] != other()) break;
-                }
-                set(BoardPageChoices[at]);
-            }
-            return Stepper(flow, page, title, () => PageWord(get()),
-                Step, () => true, () => true, "The page this slot shows in MANUAL: THREAT, SHOT, APPROACH, WING or STRIKE.", enabled, reason);
         }
 
         /// <summary>A labelled choice strip (SCOPE, DECLUTTER): one segment per name, the latched one read from <paramref name="get"/>.</summary>

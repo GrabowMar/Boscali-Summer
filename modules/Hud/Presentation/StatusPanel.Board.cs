@@ -15,13 +15,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         private const float FlashHz = 3f;
         private ScopePageBase[] pages;
-        /// <summary>The pages in the pilot's slots (the first <see cref="selectedCount"/>), and what each page's last <see cref="ScopePageBase.Poll"/> said: it has something to draw.</summary>
-        private readonly ScopePageBase[] selectedPages = new ScopePageBase[ScopeLayout.MaxSlots];
+        /// <summary>
+        /// The three panels, in the spine's order RWR, FIRES, WING (<see cref="ScopeLayout.SlotRwr"/>...): the page each hosts (kept while its slot wipes shut), whether it is drawn (<see cref="slotOpen"/>) and the height it
+        /// settles at (<see cref="slotHeight"/>: 0 when it is not drawn; RWR has its header line alone while <see cref="rwrOpen"/> is false). <see cref="pageLive"/>: what each page's last <see cref="ScopePageBase.Poll"/> said.
+        /// </summary>
+        private readonly ScopePageBase[] slotPages = new ScopePageBase[ScopeLayout.MaxSlots];
+        private readonly bool[] slotOpen = new bool[ScopeLayout.MaxSlots];
+        private readonly float[] slotHeight = new float[ScopeLayout.MaxSlots], slotFull = new float[ScopeLayout.MaxSlots];
+        private bool rwrOpen;
         private readonly bool[] pageLive = new bool[CuePriority.PageCount];
-        private int selectedCount;
-        /// <summary>Auto mode's slot-0 page and when it came up (the board's clock): <see cref="ScopePick.Hold"/> keeps it a minimum time.</summary>
-        private ScopePage autoShown = ScopePage.Threat;
-        private float autoShownAt = float.NegativeInfinity;
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
         private int lastPhase = -1;
         /// <summary>What the pilot's options and declutter level allow, as of the last <see cref="Present"/> (see <see cref="BoardOptions.Effective"/>).</summary>
@@ -46,12 +48,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void BuildBoard()
         {
             pages = ScopePages.Create();
-            selectedCount = 1;
-            autoShown = ScopePage.Threat;
-            autoShownAt = float.NegativeInfinity;
-            selectedPages[0] = pages[(int)ScopePage.Threat];
+            Array.Clear(slotPages, 0, slotPages.Length);
+            Array.Clear(slotOpen, 0, slotOpen.Length);
+            Array.Clear(slotHeight, 0, slotHeight.Length);
+            rwrOpen = false;
             Array.Clear(pageLive, 0, pageLive.Length);
-            transition.Reset();
+            for (int i = 0; i < transitions.Length; i++) transitions[i].Reset();
             wipeSoundKey = int.MinValue;
             lampChange.Reset();
             lastPhase = -1;
@@ -61,7 +63,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void DestroyBoard()
         {
             pages = null;
-            Array.Clear(selectedPages, 0, selectedPages.Length);
+            Array.Clear(slotPages, 0, slotPages.Length);
+            Array.Clear(slotOpen, 0, slotOpen.Length);
             wingPainted = false;
             hasBoard = false;
             headerFault = false;
@@ -80,7 +83,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static Rgba ToRgba(Color c) => new Rgba(c.r, c.g, c.b, 1f);
 
         /// <summary>
-        /// The 10 Hz refresh: lamps, every page's data (<see cref="ScopePageBase.Poll"/>), the pilot's page slots, the gauge row and the ticker, then a
+        /// The 10 Hz refresh: lamps, every page's data (<see cref="ScopePageBase.Poll"/>), which panels are up (<see cref="PickPanels"/>), the gauge row and the ticker, then a
         /// full repaint. <see cref="Animate"/> carries it between ticks.
         /// </summary>
         public void Present(BoardFrame frame)
@@ -93,7 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // keep their own switch (LAYOUT.md 8: "corners stay"), so they are measured, kept fresh and laid out here as for a board that is up.
             if (!Options.Enabled)
             {
-                PollRoutePages(frame.Now);      // the ROUTE slot is the left column's and lives with the board off: its three pages stay polled
+                PollRoutePages(frame.Now);      // the ROUTE slot is the left column's and lives with the board off: its four pages stay polled
                 HideBoard();
                 MeasurePixel();
                 allow = Options.Effective();
@@ -113,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudThreats.Fill(frame.Threat, threatLamps);
 
             MeasurePixel();
-            // Every feed remains polled for notices, warning lamps and dispenser calls. The pilot's selected pages never follow the live mask.
+            // Every feed remains polled for notices, warning lamps and dispenser calls, whether or not a panel shows it.
             allow = Options.Effective();
             var voiced = new ScopeEnv(now, frame.Units, Notice);
             var silent = new ScopeEnv(now, frame.Units, null);
@@ -126,29 +129,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 pageLive[i] = PollPage(pages[i], env);
             }
             UpdateRoute();
-            bool auto = Options.ScopeMode == BoardScopeMode.Auto;
-            if (auto)
-            {
-                // Slot 0 by priority, held for a minimum time (a missile cuts the hold); slot 1 the WING page while it has something to draw, else one slot only.
-                ushort liveMask = 0;
-                for (int i = 0; i < pageLive.Length; i++) if (pageLive[i]) liveMask |= CuePriority.Bit((ScopePage)i);
-                bool missile = frame.Threat.Missiles > 0;      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
-                ScopePage pick = ScopePick.Hold(autoShown, ScopePick.Top(liveMask, missile), now - autoShownAt, missile);
-                if (pick != autoShown) { autoShown = pick; autoShownAt = now; }
-                selectedCount = pageLive[(int)ScopePage.Wing] ? 2 : 1;
-            }
-            else selectedCount = Math.Max(1, Math.Min(ScopeLayout.MaxSlots, Options.PageCount));
-            ushort selected = 0;
-            for (int i = 0; i < selectedCount; i++)
-            {
-                ScopePage id = auto ? (i == 0 ? autoShown : ScopePage.Wing) : Options.PageAt(i);
-                // Sanitize keeps the slots distinct and off SYSTEMS (its own block); options written past it still never paint a page twice in one frame.
-                if (id == ScopePage.Systems || (uint)id >= (uint)pages.Length || CuePriority.Has(selected, id))
-                    for (int candidate = 0; candidate < pages.Length; candidate++)
-                        if (candidate != (int)ScopePage.Systems && !CuePriority.Has(selected, (ScopePage)candidate)) { id = (ScopePage)candidate; break; }
-                selectedPages[i] = pages[(int)id];
-                selected |= CuePriority.Bit(id);
-            }
+            PickPanels(frame.Threat.Missiles > 0);      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
             PollStores();
             MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
@@ -160,13 +141,43 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             CornersFrame(true, true);
         }
 
+        /// <summary>
+        /// Which panels are up and how tall (ScopePick, ScopeLayout): RWR always (its full scope while anything paints us or a missile is inbound, else its header line), FIRES while SHOT or STRIKE is live, WING while there
+        /// are wingmen and the spine has room for it. A panel that closes keeps its page until its slot has wiped shut. With the scope Off there are none.
+        /// </summary>
+        private void PickPanels(bool missile)
+        {
+            ushort liveMask = 0;
+            for (int i = 0; i < pageLive.Length; i++) if (pageLive[i]) liveMask |= CuePriority.Bit((ScopePage)i);
+            bool on = Options.ScopeMode != BoardScopeMode.Off;
+            rwrOpen = on && ScopePick.RwrOpen(liveMask, missile);
+            bool fires = ScopePick.Fires(liveMask, out ScopePage host) && on;
+            float rwrH = on ? ScopeLayout.RwrHeight(rwrOpen) : 0f, firesH = fires ? ScopeLayout.FiresHeight(host) : 0f;
+            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(rwrH, firesH);
+            SetSlot(ScopeLayout.SlotRwr, on ? pages[(int)ScopePage.Threat] : null, rwrH);
+            SetSlot(ScopeLayout.SlotFires, fires ? pages[(int)host] : null, firesH);
+            SetSlot(ScopeLayout.SlotWing, wing ? pages[(int)ScopePage.Wing] : null, ScopeLayout.WingH);
+        }
+
+        private void SetSlot(int slot, ScopePageBase page, float height)
+        {
+            slotOpen[slot] = page != null;
+            slotHeight[slot] = page != null ? height : 0f;
+            if (page == null) return;
+            slotPages[slot] = page;
+            slotFull[slot] = slot == ScopeLayout.SlotRwr ? ScopeLayout.Full : height;      // the body's own height: RWR's scope is laid out full also while it wipes down to its header line
+        }
+
+        /// <summary>The page in <paramref name="slot"/> draws its body (it is open, and RWR is not down to its header line).</summary>
+        private bool SlotBody(int slot) => slotOpen[slot] && (slot != ScopeLayout.SlotRwr || rwrOpen);
+
         /// <summary>The board's box (<see cref="BoardBox"/>) while it is on the screen, else no size.</summary>
         public RectF KeepClearBox => root != null && root.gameObject.activeInHierarchy ? BoardBox : default;
 
-        /// <summary>The board is drawn (its root is up: switched off, stale and torn down all take it down) and the WING page holds one of the laid-out slots. <c>IHudBoard.ShowsWing</c>.</summary>
+        /// <summary>The board is drawn (its root is up: switched off, stale and torn down all take it down) and the WING panel is up. <c>IHudBoard.ShowsWing</c>.</summary>
         public bool ShowsWing => wingPainted && root != null && root.gameObject.activeInHierarchy;
 
-        /// <summary>The last <see cref="Repaint"/> painted the WING page in a visible slot (cleared by every repaint and by hiding or destroying the board; an Animate that skips the repaint leaves the last paint, and this, standing).</summary>
+        /// <summary>The last <see cref="Repaint"/> painted the WING panel (cleared by every repaint and by hiding or destroying the board; an Animate that skips the repaint leaves the last paint, and this, standing).</summary>
         private bool wingPainted;
 
         /// <summary>The board's box in device pixels from the screen's top-left corner (y down): false while the board is not drawn. <c>IHudBoard.TryGetScreenBox</c>.</summary>
@@ -262,9 +273,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int phase = (int)(clock * FlashHz * 2f);
             bool flashChanged = beat && phase != lastPhase;
             bool fast = allow.ShowSystems && pages[(int)ScopePage.Systems].Fast;
-            for (int i = 0; i < selectedCount; i++) fast |= selectedPages[i].Fast;
-            if (!flashChanged && !transition.Running && !fast) return;
-            Repaint(flashChanged || transition.Running);
+            bool wiping = false;
+            for (int i = 0; i < slotPages.Length; i++)
+            {
+                fast |= SlotBody(i) && slotPages[i].Fast;
+                wiping |= transitions[i].Running;
+            }
+            if (!flashChanged && !wiping && !fast) return;
+            Repaint(flashChanged || wiping);
         }
 
         // ------------------------------------------------------------------------------------------------ layout and paint
@@ -275,35 +291,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Repaint(bool shellToo)
         {
             wingPainted = false;
-            bool scopeOn = Options.ScopeMode != BoardScopeMode.Off;
-            // A change of the slots (or their count) wipes the pages in; they are all full pages, so the height only moves when the pages come or go.
+            // Each slot wipes on its own: a panel that comes, goes or changes its page (FIRES: SHOT or STRIKE) wipes, RWR opening from or closing to its header line only changes height.
             int signature = 0;
-            if (scopeOn)
+            for (int i = 0; i < slotPages.Length; i++)
             {
-                signature = selectedCount;
-                for (int i = 0; i < selectedCount; i++) signature = signature * 11 + (int)selectedPages[i].Id + 1;
+                int key = slotOpen[i] ? (int)slotPages[i].Id + 1 : 0;
+                transitions[i].Update(key, slotHeight[i], now);
+                signature = signature * 22 + key * 2 + (i == ScopeLayout.SlotRwr && rwrOpen ? 1 : 0);
             }
-            float target = scopeOn ? ScopeLayout.Full : 0f;
-            // The page wipe's chirp (HMD-9), only when the board itself changed its page in AUTO mode, never for the first page or for the pilot's own slot choice.
+            // The page wipe's chirp (HMD-9) when the panels change, never for the first paint.
             if (signature != wipeSoundKey)
             {
-                if (wipeSoundKey != int.MinValue && scopeOn && Options.ScopeMode == BoardScopeMode.Auto) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Wipe);
+                if (wipeSoundKey != int.MinValue) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Wipe);
                 wipeSoundKey = signature;
             }
-            transition.Update(signature, target, now);
             // A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.
             boardStack = HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
             // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read and its switch is on, whatever the slots or the declutter level.
             ScopePageBase systems = pages[(int)ScopePage.Systems];
             var blocks = new BoardBlocks
             {
-                Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
+                Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, RwrH = transitions[0].Height, FiresH = transitions[1].Height, WingH = transitions[2].Height,
                 StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
-            // Where the wipe is heading: the size, the anchor and the shade go by it, so pages coming in never pump the scale or move the box.
+            // Where the wipes are heading: the size, the anchor and the shade go by it, so panels coming in never pump the scale or move the box.
             BoardBlocks settled = blocks;
-            settled.PageH = target;
+            settled.RwrH = slotHeight[0]; settled.FiresH = slotHeight[1]; settled.WingH = slotHeight[2];
             BoardGeometry end = ScopeLayout.Compute(settled);
             if (geo.Height <= 0f)
             {
@@ -314,7 +328,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(root, true);
 
-            // The pilot's size unless the whole board would not fit the screen at it (two pages at a large size on a small screen): then as big as fits.
+            // The pilot's size unless the whole board would not fit the screen at it (every panel up at a large size on a small screen): then as big as fits.
             float availableHeight = screenH - (underNative ? Math.Max(0f, screenTop - dock.rect.yMin) : 0f);
             float requestedUnit = baseUnit * Mathf.Clamp(Options.Scale, BoardOptions.ScaleMin, BoardOptions.ScaleMax);
             unit = ScopeLayout.FitUnit(requestedUnit, pixel, screenW, availableHeight, end.Width, end.Height);

@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// Where the lamp line's lamps go (LAYOUT.md 3.4), pure. A lamp is a 4 unit square, 3 clear, then its word in bold 12 (7.8 units a letter, rounded up); two groups share the line: the system lamps from the left end
+    /// Where the lamp line's lamps go (LAYOUT.md 3.4), pure. A lamp is a 4 unit square, 3 clear, then its word in bold 12 (7.8 units a letter at the board's type boost, rounded up); two groups share the line: the system lamps from the left end
     /// and the threat lamps (LOCK SPKE MSL) against the right end. At the Full level every lamp has its slot, <see cref="SlotGap"/> apart (less, never under <see cref="MinGap"/>, when the groups would come closer than
     /// <see cref="GroupGap"/>); at Lean and Minimal only the lit ones are drawn and they pack <see cref="PackedGap"/> apart.
     /// </summary>
@@ -76,7 +76,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float Marker = 7f, SlotGap = 10f, PackedGap = 14f, MinGap = 4f, GroupGap = 16f;
 
         /// <summary>The width of a lamp whose word has <paramref name="letters"/> characters.</summary>
-        public static float Width(int letters) => Marker + (letters * 78 + 9) / 10;
+        public static float Width(int letters) => Marker + (float)Math.Ceiling(letters * 7.8f * BoscaliSummer.Core.Contracts.HudType.BoardBoost);
 
         /// <summary>
         /// The left edge of every lamp: <paramref name="left"/> (widths in order) from x 0, <paramref name="right"/> ending at <paramref name="width"/>. <paramref name="slots"/>: the Full level's gaps, else the packed ones.

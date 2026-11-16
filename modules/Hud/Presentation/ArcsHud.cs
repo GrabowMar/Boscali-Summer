@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// detent tick (read off the game's gauge, none when the aircraft has none), its segments past it amber, and the game's own throttle word (79%, AIRBRAKE, AFTERBURNER) at the top end.
     /// <para>They replace the game's two plain arcs (<see cref="NativeFlightArcs"/>) and stand exactly where those are: centre, radius and axis are measured off the game's gauges every frame.
     /// FAIL OPEN: the game's gauges are hidden (renderer alpha only) in the very frame this layer has painted and is showing, and shown again the same frame it is not wanted (<c>want</c> false:
-    /// switch off, external view, pause, map, a board tick gone stale), cannot measure, or throws (<see cref="Fail"/>). Built like <see cref="BrowHud"/>: a holder under the native HUD canvas
+    /// switch off, external view, pause, map, a board tick gone stale), cannot measure, or throws (<see cref="Fail"/>). Built like <see cref="TapeHud"/>: a holder under the native HUD canvas
     /// scaled by canvas height / 1080, one quad mesh and pooled <see cref="ScopeText"/> labels per arc, a mesh rebuilt only when an int signature of what it draws changed (a moving throttle
     /// repaints once per segment, not per frame), no per-frame allocation.</para>
     /// </summary>

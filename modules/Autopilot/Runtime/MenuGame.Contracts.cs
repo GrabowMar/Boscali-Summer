@@ -234,12 +234,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
         private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
 
-        /// <summary>The next scope in menu order. MANUAL shows both page slots (SET holds the two choices), so entering it counts the second one in.</summary>
-        private static void CycleScope(ITacBoardSettings board)
-        {
+        /// <summary>The next scope in menu order (ON, OFF).</summary>
+        private static void CycleScope(ITacBoardSettings board) =>
             board.ScopeMode = MenuCatalog.ScopeAt((MenuCatalog.ScopeIndex(board.ScopeMode) + 1) % MenuCatalog.BoardScopes.Length);
-            if (board.ScopeMode == BoardScopeMode.Manual) board.PageCount = 2;
-        }
 
         /// <summary>Statement over the TAC BOARD options, looked up again when the row is pressed.</summary>
         private static Action OnBoard(Action<ITacBoardSettings> run) =>
