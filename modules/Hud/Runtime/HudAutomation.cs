@@ -266,6 +266,12 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 }
             if (gun == null)
                 return Failure("HudAutomation", "Gun", "no loaded fixed gun");
+            if (Bool(args, "release"))      // drop the designation (the cockpit TARGET CAM scenario)
+            {
+                CombatHUD held = SceneSingleton<CombatHUD>.i;
+                if (held != null) held.DeselectAll(false);
+                return new Dictionary<string, object> { { "ok", true }, { "released", true } };
+            }
             Unit target = NearestEnemy(a, Number(args, "range", 3000f));
             if (target == null)
                 return Failure("HudAutomation", "Gun", "no enemy aircraft in range");
