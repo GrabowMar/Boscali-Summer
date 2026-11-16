@@ -189,7 +189,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
                 return false;
             }
             wasOpen = true; IsOpenNow = true; releasePending = false;
-            soundMark = -4096 + 2 * 16; AvUiSound.Play(AvUiCue.Engage);
+            soundMark = -4096 + 2 * 16; BoscaliSummer.Core.Fx.VisorSound.PlayMenu(AvUiCue.Engage);
             openedAt = lastRefresh = now;
             return true;
         }
@@ -238,7 +238,7 @@ namespace BoscaliSummer.Modules.Autopilot.Presentation
             int mark = controller.Cat * 4096 + (controller.Focus + 3) * 16 + (controller.WheelAim + 1) + (controller.Sub != null ? 1 << 20 : 0);
             if (cue == AvUiCue.Hover && mark != soundMark) cue = AvUiCue.Navigate;
             soundMark = mark;
-            AvUiSound.Play(cue);
+            BoscaliSummer.Core.Fx.VisorSound.PlayMenu(cue);
             if (ran && controller.Open) Refresh(now);
         }
 

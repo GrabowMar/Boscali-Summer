@@ -36,6 +36,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // The reactive visor (2026-11-16, round 2): what happens to the pilot and the jet as a per-frame look of the mod's own symbology (see StepVisor); the load factor is read at 10 Hz.
         private readonly VisorFx fx = new VisorFx();
         private float visorG = 1f, visorGLimit = 9f;
+        private bool glitchHeard, warnFlashHeard;      // the visor sounds follow the reactions' own edges (HMD-9, Core/Fx/VisorSound)
+        private float nextEmpSound, empSoundSince;
         private readonly ThreatWatch threats = new ThreatWatch();
         private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
         private readonly FuelWatch fuelWatch = new FuelWatch();
@@ -237,6 +239,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 WarnUp = alerts != null && alerts.WarningUp,
                 OnlineBeat = boot.TakeOnlineBeat(),
             });
+            HearVisor();
             if (fx.ResyncDue && aircraft != null && !boot.Active && BootAllowed(aircraft, arcsExternal)) StartBoot(aircraft, BootMode.Resync);
 
             bool booting = boot.Active;
@@ -258,6 +261,28 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             panel?.ApplyLook(look);
             LeftHudStack.BootAlpha = look.Comms * a;      // the COMMS block (the Chatter module's) follows the left column
+        }
+
+        /// <summary>
+        /// The visor's sounds for what <see cref="fx"/> just did (HMD-9, <see cref="BoscaliSummer.Core.Fx.VisorSound"/>), on the same frame and edge as the look: the hit's glitch burst when the glitch starts, the EMP crackle bed while the stutter runs
+        /// (every 0.3 s early on, when the dark slots are most likely, then every 0.9 s), the sharp blip with the warning flash. The real alarm plays by itself; the blip sits under it (never ducked) and the banner ducks the rest.
+        /// </summary>
+        private void HearVisor()
+        {
+            BoscaliSummer.Core.Fx.VisorSound.Banner = alerts != null && alerts.WarningUp;
+            if (fx.GlitchRunning && !glitchHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Glitch);
+            glitchHeard = fx.GlitchRunning;
+            bool warnFlash = fx.Flash > 0f && fx.FlashTone == FlashKind.Warning;
+            if (warnFlash && !warnFlashHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Warn);
+            warnFlashHeard = warnFlash;
+            float now = Time.unscaledTime;
+            if (!fx.EmpRunning) nextEmpSound = 0f;
+            else if (now >= nextEmpSound)
+            {
+                if (nextEmpSound == 0f) empSoundSince = now;
+                BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Emp);
+                nextEmpSound = now + (now - empSoundSince < VisorFx.EmpOnsetS ? 0.3f : 0.9f);
+            }
         }
 
         /// <summary>
@@ -345,6 +370,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             settings?.Snapshot(ref options);
             if (panel != null) panel.Options = options;
+            BoscaliSummer.Core.Fx.VisorSound.Level = options.VisorSound;
             HudSprites.Backdrop = ScopeLayout.CloudAlpha * options.Shade;      // the one backdrop every HUD block of the mod stands on
             BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(options.TextEdge);      // the thin dark edge on every glow material
         }

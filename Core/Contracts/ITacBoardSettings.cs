@@ -59,6 +59,8 @@ namespace BoscaliSummer.Core.Contracts
         bool Boot { get; set; }
         /// <summary>The visor reacts like a helmet display to G load, hits, EMP and warnings, and breathes faintly when calm. Never with reduced motion. Cockpit view only.</summary>
         bool Reactive { get; set; }
+        /// <summary>The visor's own sounds (HMD-9: power-up, self-test, glitch, EMP, board, brow and radial menu), 0 (off) to 1.</summary>
+        float VisorSound { get; set; }
         /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to 0.25.</summary>
         float TextEdge { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>

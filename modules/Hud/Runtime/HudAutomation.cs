@@ -249,6 +249,31 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         /// <summary>
+        /// The visor's sound journal (tests/ingame/hud-boot.json, hud-react.json): every visor clip asked for with its time, variation, gain and what became of it (played, ducked, limited), as the facade logged it.
+        /// <c>clear</c> true empties it first; <c>play</c> a clip name (Tick, Wipe, Glitch...) asks for it <c>times</c> (default 1) times in this very frame, which shows the rate limit and the duck.
+        /// Returns the lines joined with " | ", the count, whether a real alarm or voice would duck now, and the level.
+        /// </summary>
+        public static Dictionary<string, object> Sound(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (Bool(args, "clear")) BoscaliSummer.Core.Fx.VisorSound.Journal.Clear();
+            string play = Text(args, "play");
+            if (!string.IsNullOrEmpty(play))
+            {
+                if (!Enum.TryParse(play, true, out BoscaliSummer.Core.Fx.VisorClip clip)) return Failure("HudAutomation", "Sound", "no visor clip called '" + play + "'");
+                int times = (int)Number(args, "times", 1f);
+                for (int i = 0; i < times; i++) BoscaliSummer.Core.Fx.VisorSound.Play(clip);
+            }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "count", BoscaliSummer.Core.Fx.VisorSound.Journal.Count }, { "busy", BoscaliSummer.Core.Fx.VisorSound.Busy() },
+                { "banner", BoscaliSummer.Core.Fx.VisorSound.Banner }, { "level", BoscaliSummer.Core.Fx.VisorSound.Level }, { "journal", string.Join(" | ", BoscaliSummer.Core.Fx.VisorSound.Journal) },
+            };
+            Debug.Log("[HudAutomation] Sound: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
         /// The segmented fuel and throttle arcs as they stand (tests/ingame/hud-arcs.json): whether they are up, whether the game's own two gauges are hidden behind them, the lit segments, the measured circle
         /// and the game's gauges' own alpha. <c>fuel</c> (0..1) first sets every tank to that share of its capacity and <c>throttle</c> (0..1) the player's throttle input, for a capture of a low tank or a full throttle.
         /// </summary>

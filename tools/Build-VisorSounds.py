@@ -301,7 +301,7 @@ for _v in range(2):
 CLIPS["visor-resync-0"] = (resync, -7)
 for _v, _f in enumerate((E7, D7, C7)):
     CLIPS["visor-tick-%d" % _v] = (lambda n, f=_f: tick(n, f), -18)
-CLIPS["visor-ok-0"] = (ok, -10)
+CLIPS["visor-ok-0"] = (ok, -14)
 CLIPS["visor-fault-0"] = (fault, -9)
 CLIPS["visor-align-0"] = (align, -9)
 CLIPS["visor-online-0"] = (online, -6)

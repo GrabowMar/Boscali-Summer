@@ -30,6 +30,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvVector rail;
         private ScopeText text;
         private readonly BrowCarets carets = new BrowCarets();
+        private readonly string[] heardLabels = new string[BrowRail.MaxCarets];
+        private int heardCount;
+        private bool heardPrimed;
         private readonly char[] caption = new char[64], seen = new char[64], scratch = new char[16];
         private int captionLen, seenLen = -1, drawnSig = int.MinValue, drawnBoot = -1;
         private bool on, dirty;
@@ -116,7 +119,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Read(bool show, Aircraft aircraft, BoardFrame frame, int scopeMode, IHudBoard board)
         {
             on = show && aircraft != null;
-            if (!on) return;
+            if (!on) { heardPrimed = false; return; }
             Transform own = aircraft.transform;
             float heading = own.eulerAngles.y;
             carets.Clear();
@@ -149,10 +152,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 carets.Add(BrowRail.RelativeBearing(d.x, d.z, heading), BrowTone.Bright, "LZ", 520f);
             }
             carets.Resolve();
+            HearNewCarets();
 
             CameraStateManager state = SceneSingleton<CameraStateManager>.i;
             Camera cam = state != null ? state.mainCamera : null;
             captionLen = BrowRail.Caption(caption, scopeMode, frame.Systems.NightVision, cam != null ? cam.fieldOfView : float.NaN);
+        }
+
+        /// <summary>A tick (HMD-9) when a caret that was not on the rail at the last read appears: a new missile, emitter, ace or objective, never a refresh of one already there, and not while the power-on draws the rail.</summary>
+        private void HearNewCarets()
+        {
+            bool fresh = false;
+            int used = 0;
+            for (int i = 0; i < carets.Count && !fresh; i++)
+            {
+                bool found = false;
+                for (int j = 0; j < heardCount && !found; j++)
+                    if ((used & (1 << j)) == 0 && (object)heardLabels[j] == (object)carets[i].Label) { used |= 1 << j; found = true; }
+                fresh = !found;
+            }
+            for (int i = 0; i < carets.Count; i++) heardLabels[i] = carets[i].Label;
+            heardCount = carets.Count;
+            if (fresh && heardPrimed && Boot >= 1f) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Caret);
+            heardPrimed = true;
         }
 
         /// <summary>Every frame: show or hide, follow the screen's size and repaint when what is drawn changed; nothing else.</summary>

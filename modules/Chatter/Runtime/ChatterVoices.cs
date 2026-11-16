@@ -120,6 +120,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return builtInFolders;
         }
 
+        /// <summary>A radio voice line is sounding now: the visor's chatter keeps quiet under it (Core/Fx/VisorSound).</summary>
+        internal bool Sounding => source != null && source.isPlaying;
+
         public void Deactivate()
         {
             if (request != null) { request.Abort(); request.Dispose(); request = null; }

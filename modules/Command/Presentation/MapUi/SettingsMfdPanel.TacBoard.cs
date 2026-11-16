@@ -70,6 +70,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             BoardRing(flow, edge, page, "TEXT EDGE", () => board.TextEdge, v => board.TextEdge = v, 0f, 0.25f, .01f, v => v < .005f ? "OFF" : v.ToString("0.00"),
                 "A hair-thin dark edge round every letter of the HUD so small words stay sharp on bright sky. OFF draws none.", () => true, off);
 
+            var snd = flow.Add(new SetRingRow(flow.Content));
+            BoardRing(flow, snd, page, "VISOR SOUND", () => board.VisorSound, v => board.VisorSound = v, 0f, 1f, .05f, v => v < .025f ? "OFF" : AvNum.Percent(v),
+                "The helmet's own sounds: power-up, self-test, glitch on a hit, EMP stutter, warning blip, page wipe, brow ticks, radial menu and radio YES/NO. Quiet under a real alarm or voice. OFF is silent.", () => true, off);
+
             flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", null);
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);

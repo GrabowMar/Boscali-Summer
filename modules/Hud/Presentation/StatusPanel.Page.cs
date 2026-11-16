@@ -11,6 +11,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed partial class StatusPanel
     {
         private readonly ScopeTransition transition = new ScopeTransition();
+        private int wipeSoundKey = int.MinValue;
         private bool scopeBeat;
 
         /// <summary>The wipe's clip is the page's rectangle grown by this on every side (LAYOUT.md 10), so the brackets and the edge are inside it.</summary>

@@ -65,6 +65,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Boot;
         /// <summary>The visor reacts to what happens to the pilot and the jet (2026-11-16): G load, hits, EMP, warning onset, and a faint idle life. Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
         public bool Reactive;
+        /// <summary>Level of the visor's own sounds (the HMD-9 family: power-up, self-test, glitch, EMP, page wipe, brow, radial menu), 0 (off) to 1.</summary>
+        public float VisorSound;
         /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to <see cref="TextEdgeMax"/> (TMP outline units).</summary>
         public float TextEdge;
         public const float TextEdgeMax = 0.25f;
@@ -77,7 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Approach, Page4 = BoardPage.Strike, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, Reactive = true, TextEdge = 0.16f,
+            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, Reactive = true, VisorSound = 0.6f, TextEdge = 0.16f,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>
@@ -87,6 +89,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Scale = Fit(Scale, ScaleMin, ScaleMax, d.Scale);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
             TextEdge = Fit(TextEdge, 0f, TextEdgeMax, d.TextEdge);
+            VisorSound = Fit(VisorSound, 0f, 1f, d.VisorSound);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
             if ((uint)ScopeMode > (uint)BoardScopeMode.Auto) ScopeMode = d.ScopeMode;

@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
@@ -28,9 +29,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private RectTransform canvasRoot, root;
         private AvVector mesh;
         private ScopeText text;
-        private int lineCount, onlineLen, resolvedHeard;
+        private int lineCount, onlineLen, resolvedHeard, startedHeard;
         private float lastK, t;
-        private bool collapsedHeard, onlineBeat;
+        private bool collapsedHeard, onlineBeat, alignHeard;
 
         /// <summary>The boot is running (the zones below are in their boot state).</summary>
         public bool Active => clock.Active;
@@ -57,11 +58,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string closing = string.IsNullOrEmpty(callsign) ? tail : tail + " · " + callsign;
             onlineLen = System.Math.Min(closing.Length, online.Length);
             closing.CopyTo(0, online, 0, onlineLen);
-            resolvedHeard = 0;
-            collapsedHeard = onlineBeat = false;
+            resolvedHeard = startedHeard = 0;
+            collapsedHeard = onlineBeat = alignHeard = false;
             clock.Start(mode, time);
             t = 0f;
-            PlaySound(AvUiCue.Open);
+            PlaySound(mode == BootMode.Full ? VisorClip.PowerUp : VisorClip.Resync);      // the capacitor whine, a relay and the settling chirp, at the moment the line opens
         }
 
         /// <summary>The sim's hold: freeze the boot clock at <paramref name="seconds"/>, or (negative) let it run on.</summary>
@@ -126,6 +127,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             // ALIGN: four corner brackets converging on the boresight.
             VisorBoot.Align(mode, t, out float box, out float alignAlpha);
+            if (!alignHeard && t >= VisorBoot.AlignLockS(mode)) { alignHeard = true; PlaySound(VisorClip.Align); }      // the bracket has closed on the boresight
             if (alignAlpha > 0f)
             {
                 Rgba c = bright.ToRgba().WithAlpha(alignAlpha);
@@ -149,7 +151,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     collapsedHeard = true;
                     onlineBeat = true;      // the end beat (rim and brow flash), once
-                    if (mode == BootMode.Full) PlaySound(AvUiCue.Confirm);
+                    if (mode == BootMode.Full) PlaySound(VisorClip.Online);
                 }
                 // The closing line is the one thing left on the screen: centred where the list was, a size up and full ink so it reads on bright sky.
                 text.Draw(new System.ReadOnlySpan<char>(online, 0, onlineLen), 0f, FirstY - 540f, OnlinePt, ScopeAlign.Center, ink.WithAlpha(onlineAlpha), false);
@@ -205,11 +207,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     text.Draw(new System.ReadOnlySpan<char>(buf, 0, 1), left + (VisorBoot.Cols - 1) * Advance, y, Pt, ScopeAlign.Left, bright, false);
                 }
             }
-            // A soft tick as each line resolves; a caution's tone for an abnormal one.
+            // A tick as each line starts typing; the two-note OK as it resolves, the sour double blip for an amber or red result.
+            while (startedHeard < lineCount && t >= lines[startedHeard].StartS) { PlaySound(VisorClip.Tick); startedHeard++; }
             while (resolvedHeard < resolved)
             {
                 BootLine line = lines[resolvedHeard];
-                PlaySound(line.Tone == BootTone.Ok || line.Tone == BootTone.Info ? AvUiCue.Navigate : AvUiCue.Caution);
+                PlaySound(line.Tone == BootTone.Ok || line.Tone == BootTone.Info ? VisorClip.Ok : VisorClip.Fault);
                 resolvedHeard++;
             }
         }
@@ -220,12 +223,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // Holder units: y up from the centre; the layout above is in screen px from the top.
         private static float Y(float fromTop) => 540f - fromTop;
 
-        // The pilot's UI sound volume rules (AvUiSound.Volume, 0 mutes); the recorded clips are the console's own (ui-open, ui-tab, ui-caution, ui-confirm).
-        private static void PlaySound(AvUiCue cue)
-        {
-            try { AvUiSound.Play(cue); }
-            catch (System.Exception) { /* a missing audio device must never touch the HUD */ }
-        }
+        // The HMD-9 visor sounds (Core/Fx/VisorSound: the option VisorSound and the pilot's UI volume rule them; 0 is silent).
+        private static void PlaySound(VisorClip clip) => VisorSound.Play(clip);
 
         public void Destroy()
         {

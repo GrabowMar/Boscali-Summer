@@ -151,6 +151,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return t < open ? 1f : Clamp01(1f - (t - open) / 0.2f);
         }
 
+        /// <summary>When the ALIGN bracket has closed on the boresight (the lock, which the visor's sound marks).</summary>
+        public static float AlignLockS(BootMode mode) => mode == BootMode.Full ? 1.9f + 0.5f : 0.5f + 0.3f;
+
         /// <summary>The ALIGN bracket: its half size (from 150 down to 26 px, converging on the boresight) and its alpha (steady while it converges, then it blinks off). Alpha 0 outside its window.</summary>
         public static void Align(BootMode mode, float t, out float half, out float alpha)
         {

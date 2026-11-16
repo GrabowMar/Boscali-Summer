@@ -52,6 +52,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             selectedPages[0] = pages[(int)ScopePage.Threat];
             Array.Clear(pageLive, 0, pageLive.Length);
             transition.Reset();
+            wipeSoundKey = int.MinValue;
             lampChange.Reset();
             lastPhase = -1;
             hasBoard = false;
@@ -283,6 +284,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 for (int i = 0; i < selectedCount; i++) signature = signature * 11 + (int)selectedPages[i].Id + 1;
             }
             float target = scopeOn ? ScopeLayout.Full : 0f;
+            // The page wipe's chirp (HMD-9), only when the board itself changed its page in AUTO mode, never for the first page or for the pilot's own slot choice.
+            if (signature != wipeSoundKey)
+            {
+                if (wipeSoundKey != int.MinValue && scopeOn && Options.ScopeMode == BoardScopeMode.Auto) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Wipe);
+                wipeSoundKey = signature;
+            }
             transition.Update(signature, target, now);
             // A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.
             boardStack = HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;

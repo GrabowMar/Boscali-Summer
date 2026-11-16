@@ -35,6 +35,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> Arcs { get; }
         public ConfigEntry<bool> Boot { get; }
         public ConfigEntry<bool> Reactive { get; }
+        public ConfigEntry<float> VisorSound { get; }
         public ConfigEntry<float> TextEdge { get; }
 
         public HudSettings(ConfigFile config)
@@ -130,6 +131,10 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             Reactive = config.Bind(section, "Reactive", d.Reactive,
                 "The visor reacts like a helmet display: the symbols shake and dim a little under heavy G, glitch for a moment when the aircraft is hit, stutter out under an EMP and re-sync after it, flash once when a warning comes up, and breathe faintly when all is calm. Off for a still HUD. Never runs with reduced motion on. Cockpit view only." + live);
 
+            VisorSound = config.Bind(section, "VisorSound", d.VisorSound,
+                new ConfigDescription("Level of the helmet visor's own sounds: the power-up whine and self-test ticks, the glitch crackle on a hit, the EMP stutter, a sharp blip when a warning comes up, the page wipe, the brow's new-contact tick, the radial menu and the radio YES/NO. They keep quiet under a real alarm or voice. 0 is silent; the interface volume still applies." + live,
+                    new AcceptableValueRange<float>(0f, 1f)));
+
             TextEdge = config.Bind(section, "TextEdge", d.TextEdge,
                 new ConfigDescription("Width of the hair-thin dark edge round every letter of the mod's HUD text, so small words stay sharp on bright sky and cloud; 0 draws none." + live,
                     new AcceptableValueRange<float>(0f, BoardOptions.TextEdgeMax)));
@@ -171,6 +176,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Arcs = Arcs.Value;
             into.Boot = Boot.Value;
             into.Reactive = Reactive.Value;
+            into.VisorSound = VisorSound.Value;
             into.TextEdge = TextEdge.Value;
             into.Sanitize();
         }
@@ -200,6 +206,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Arcs { get => Arcs.Value; set => Arcs.Value = value; }
         bool ITacBoardSettings.Boot { get => Boot.Value; set => Boot.Value = value; }
         bool ITacBoardSettings.Reactive { get => Reactive.Value; set => Reactive.Value = value; }
+        float ITacBoardSettings.VisorSound { get => VisorSound.Value; set => VisorSound.Value = value; }
         float ITacBoardSettings.TextEdge { get => TextEdge.Value; set => TextEdge.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
@@ -209,7 +216,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             {
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
-                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, TextEdge,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

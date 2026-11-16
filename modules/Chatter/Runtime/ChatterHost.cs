@@ -50,6 +50,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             log = logger;
             flight = new FlightNets(this);
             voices = new ChatterVoices(logger, chatterSettings.DataRoot);
+            BoscaliSummer.Core.Fx.VisorSound.AddVoiceProbe(VoiceSounding);
             Instance = this;
             director.Aired += OnAired;
             LoadPacks();
@@ -71,7 +72,14 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         }
 
         /// <summary>The pilot's answer (the sim hook and the keys). False when no question is open.</summary>
-        public bool Answer(bool yes) => questions.Answer(Time.time, yes);
+        public bool Answer(bool yes) => Acked(questions.Answer(Time.time, yes), yes);
+
+        /// <summary>The pilot's YES or NO was taken: the visor's ack (HMD-9).</summary>
+        private static bool Acked(bool taken, bool yes)
+        {
+            if (taken) BoscaliSummer.Core.Fx.VisorSound.Play(yes ? BoscaliSummer.Core.Fx.VisorClip.Yes : BoscaliSummer.Core.Fx.VisorClip.No);
+            return taken;
+        }
 
         public ChatterQuestions Questions => questions;
 
@@ -128,8 +136,11 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
 
         private void OnDisable() => strip?.Clear();
 
+        private bool VoiceSounding() => voices != null && voices.Sounding;
+
         private void OnDestroy()
         {
+            BoscaliSummer.Core.Fx.VisorSound.RemoveVoiceProbe(VoiceSounding);
             director.Aired -= OnAired;
             command.Reset();
             flight?.Reset();
@@ -162,8 +173,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             // The answer keys are read only while a question is up, and never while the pilot types.
             if (questions.Open && !BoscaliSummer.Core.Ui.MapTool.Typing())
             {
-                if (settings.AnswerDown(true)) questions.Answer(Time.time, true);
-                else if (settings.AnswerDown(false)) questions.Answer(Time.time, false);
+                if (settings.AnswerDown(true)) Acked(questions.Answer(Time.time, true), true);
+                else if (settings.AnswerDown(false)) Acked(questions.Answer(Time.time, false), false);
             }
             questions.Tick(Time.time);
             strip?.Question(questions.Open, questions.Until - Time.time, questions.Window, settings.AnswerKey(true), settings.AnswerKey(false),
