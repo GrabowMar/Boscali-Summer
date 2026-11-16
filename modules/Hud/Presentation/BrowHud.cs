@@ -21,7 +21,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class BrowHud
     {
         private const int RailQuads = 96, FurnitureQuads = 48, CurveSegments = 40;
-        private const float Stroke = 1f, CurveStroke = 1.2f, FurnitureAlpha = 0.3f;
+        // Mockup weights: rail and major ticks about 1.5 px at full ink (clear against bright sky and cloud), minor ticks thinner and dimmer.
+        private const float Stroke = 1f, CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f, FurnitureAlpha = 0.3f;
         private const float CaptionY = 11f, CaptionPt = BrowRail.LabelPt;
         private static readonly string[] MissileLabels = { "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9" };
 
@@ -159,14 +160,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 1; i <= CurveSegments; i++)
             {
                 BrowRail.Point(i / (float)CurveSegments, out float x, out float y);
-                AvStrokes.Line(b, px, Y(py), x, Y(y), CurveStroke, c.WithAlpha(0.9f));
+                AvStrokes.Line(b, px, Y(py), x, Y(y), CurveStroke, c);
                 px = x; py = y;
             }
             for (int i = 0; i < BrowRail.TickCount; i++)
             {
                 BrowRail.Tick(i, out float x, out float y, out float nx, out float ny, out bool major);
                 float len = major ? 10f : 5f;
-                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), Stroke, c.WithAlpha(major ? 0.9f : 0.55f));
+                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.6f));
             }
             Triangle(b, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
             for (int i = 0; i < carets.Count; i++)
@@ -177,7 +178,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rail.Commit();
 
             text.Begin();
-            text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.8f), false);
+            text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), true);
             for (int i = 0; i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
