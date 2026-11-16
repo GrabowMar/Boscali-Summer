@@ -292,7 +292,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 bool seenOne = targetReadout.Read(camOwner, out Unit seen, out range, out closure) && seen != null;
                 // External: the card is up whenever the pod has a picture (its header names the camera mode with no target). Cockpit: only while a target is locked.
-                if (viewingOwnExternally || seenOne)
+                // The cockpit card has no canvas gate of its own: off while paused, on the big map, in cinematic mode and on a missile ride.
+                if (viewingOwnExternally || (seenOne && !viewingMissile && BoscaliSummer.Core.Game.CockpitOverlayGate.Open()))
                 {
                     cameraTexture = camera.targetTexture;
                     cameraCode = seenOne ? targetReadout.NameOf(seen) : mode;

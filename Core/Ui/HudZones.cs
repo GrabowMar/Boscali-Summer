@@ -74,7 +74,8 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The LOG / COMMS / NOTICE column's width on a screen <paramref name="refW"/> wide in 1080-high design units: the one place painters take it from.</summary>
         public static float ColumnWidth(float refW) => Ref(HudZone.Comms, refW).W;
 
-        public static bool Narrow(float refW) => refW < FullWidth;
+        // Half a pixel of slack: the reference width is a float quotient, and a 16:9 screen can land an ulp under 1920.
+        public static bool Narrow(float refW) => refW < FullWidth - 0.5f;
 
         /// <summary>Where COMMS starts: its own slot, or 16 under a LOG that grew past it.</summary>
         public static float CommsTop(float logBottom) => System.Math.Max(129f, logBottom + Gutter);

@@ -183,7 +183,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             RefreshFace();
             float fit = Mathf.Max(0.1f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
             host.Refresh(Mathf.Max(0.85f, Screen.height / 1080f) / fit);
-            float column = HudZones.ColumnWidth(Screen.width / Mathf.Max(0.1f, host.ScaleFactor));
+            // The 1080-high reference width, as the event log uses: the host's scale has a 0.85 floor, so dividing by it disagrees below 918 px of height.
+            float column = HudZones.ColumnWidth(Screen.width / (float)Mathf.Max(1, Screen.height) * 1080f);
             if (column != width) { width = column; Rewrap(); }
             float canvasHeight = Screen.height / Mathf.Max(0.1f, host.ScaleFactor);
             Paint(canvasHeight);
