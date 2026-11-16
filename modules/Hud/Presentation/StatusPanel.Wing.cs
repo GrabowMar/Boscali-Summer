@@ -121,7 +121,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeCanvas g = shellCanvas;
             shellBeat = false;
             g.Furniture = allow.Furniture;
-            g.Begin(pal, unit, Whole(geo.Height * unit), pixel);
+            g.Begin(pal, unit, Whole(geo.Height * unit), pixel, HudType.BoardBoost);
             if (geo.Lamps.Present) PaintLamps(g, geo.Lamps, flashOn);
             if (geo.Gauges.Present) PaintGauges(g, geo.Gauges, flashOn);
             g.End();

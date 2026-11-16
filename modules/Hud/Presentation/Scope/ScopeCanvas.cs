@@ -43,9 +43,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// DEVICE pixel in the same units (1 when the canvas is drawn 1:1; a CanvasScaler or a camera makes it something else). Hairlines, dashes and rectangle edges are laid on
         /// that grid, so a 1 px line is one device pixel wide and does not shimmer. The surface's own origin is on the grid (the board rounds where it puts it).
         /// </summary>
-        public void Begin(in ScopePalette palette, float unit, float heightPx, float devicePixel = 1f)
+        /// <summary>The words' boost of the surface being painted: 1 on the left column (design units are reference pixels), <see cref="HudType.BoardBoost"/> on the board (design units at the pilot's 0.85 Scale), so a step lands on its reference pixels either way. Static: one surface paints at a time.</summary>
+        public static float TextBoost = 1f;
+
+        public void Begin(in ScopePalette palette, float unit, float heightPx, float devicePixel = 1f, float textBoost = 1f)
         {
             pal = palette;
+            TextBoost = textBoost;
             u = unit;
             pixel = devicePixel > 0.001f ? devicePixel : 1f;
             height = heightPx;
@@ -106,10 +110,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private float Y(float y) => height - (oy + y - lift) * u;
 
-        private Rgba C(ScopeTone tone, float alpha) => pal.Of(tone, alpha);
+        /// <summary>Line art (HudStandard): INK-DIM furniture is the ink at the mid line alpha, every alpha is one of the three line steps.</summary>
+        private Rgba C(ScopeTone tone, float alpha) => tone == Dim || tone == Faint ? pal.Of(Ink, HudInk.Line(alpha * HudInk.LineMid)) : pal.Of(tone, HudInk.Line(alpha));
 
         /// <summary>A stroke width in canvas units: whole device pixels, at least one.</summary>
-        private float Lw(float w) => Math.Max(pixel, Mathf.Round(w * u / pixel) * pixel);
+        private float Lw(float w) => Math.Max(pixel, Mathf.Round((w <= 2.25f ? HudStroke.Snap(w) : w) * u / pixel) * pixel);
 
         /// <summary>A coordinate of an axis-aligned line snapped to the device pixel grid (an odd number of pixels wide to a pixel centre).</summary>
         private float Snap(float v, float lw) => ((int)Math.Round(lw / pixel) & 1) == 1 ? Mathf.Floor(v / pixel) * pixel + pixel * 0.5f : Mathf.Round(v / pixel) * pixel;
@@ -379,17 +384,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // ------------------------------------------------------------------------------------------------ words
 
         /// <summary>The width in design units of <paramref name="s"/> at <paramref name="size"/> (the face is monospaced; a '.' between two digits is <see cref="PageInk.DotAdvance"/> wide).</summary>
-        public static float TextW(ReadOnlySpan<char> s, float size = 12f) => (s.Length * ScopeText.DesignAdvance - PageInk.Decimals(s) * (ScopeText.DesignAdvance - PageInk.DotAdvance)) * size;
+        public static float TextW(ReadOnlySpan<char> s, float size = 12f) => TextW0(s, HudType.Snap(size) * TextBoost);
+
+        private static float TextW0(ReadOnlySpan<char> s, float size) => (s.Length * ScopeText.DesignAdvance - PageInk.Decimals(s) * (ScopeText.DesignAdvance - PageInk.DotAdvance)) * size;
 
         /// <summary>One word. (<paramref name="x"/>, <paramref name="y"/>) is the anchor by <paramref name="align"/>; y is the MIDDLE of the line. Returns the width.</summary>
         public float Text(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 12f, ScopeAlign align = ScopeAlign.Left, bool bold = false, float alpha = 1f)
         {
             if (Open) PageText(s, x, y, size, ref tone, ref bold, ref alpha);
-            if ((tone == Dim || tone == Faint) && alpha < ScopePalette.DimTextFloor) alpha = ScopePalette.DimTextFloor;      // DIM text stays readable: 0.62 of the ink at the least
-            Rgba c = C(tone, alpha);
+            HudStep step = HudType.StepOf(size);
+            bold = HudType.Bold(step, tone == Amber || tone == Red);      // regular for LABEL and BODY, bold from VALUE up or a warning word
+            float drawn = HudType.Of(step) * TextBoost;
+            alpha = tone == Dim || tone == Faint ? (alpha >= 0.5f ? 1f : alpha) : HudInk.Text(alpha);      // INK or INK-DIM (the dim tone carries its own 0.8), nothing between
+            Rgba c = pal.Of(tone, alpha);
             // TMP centres the line box, the canvas "middle" baseline the em box: the glyphs sit a little low unless nudged up.
-            text?.Draw(s, X(x), Y2(y) - size * u * LineNudge, size * u, align, new Color(c.R, c.G, c.B, c.A), bold);
-            return TextW(s, size);
+            text?.Draw(s, X(x), Y2(y) - drawn * u * LineNudge, drawn * u, align, new Color(c.R, c.G, c.B, c.A), bold);
+            return TextW0(s, drawn);
         }
 
         private float Y2(float y) => (oy + y - lift) * u;

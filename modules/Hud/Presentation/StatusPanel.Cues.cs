@@ -164,6 +164,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = furniture;
             g.Begin(Palette(), baseUnit, Whole(canvasH), pixel);
             float inkBottom = 0f, lit = 0f;
+            // ONE shelf for the stack (the newest cue's kind, HudStandard); the rows under it carry no shelf of their own.
+            if (shown > 0 && furniture) g.CaptionShelf(CueLayout.Left, top, CueLayout.Width, CueWords.Of(cueShown[0].Class));
+            top += CueLayout.ShelfBlock;
             for (int i = 0; i < CueLog.MaxShown; i++)
             {
                 cueSpots[i] = default;
@@ -236,10 +239,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // The count stands one gap after the words, not at the zone's edge (a short line would leave it adrift).
                 string words = TickerWords(line);
                 float countW = ScopeCanvas.TextW(tickerCount), wordsRoom = room - countW - 10f, wordsW = Mathf.Min(ScopeCanvas.TextW(words), wordsRoom);
-                g.Text(tickerCount, tx + 10f + wordsW + 10f, cy, tone, 12f, ScopeAlign.Left, true);
+                g.Text(tickerCount, tx + 10f + wordsW + 10f, cy, tone, HudType.Body, ScopeAlign.Left, true);
                 room = wordsRoom;
             }
-            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
+            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, HudType.Body, HudType.Label, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
 
         /// <summary>
@@ -262,7 +265,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string word = CueWords.Of(cue.Class);
             float shelfW = CueLayout.ShelfWidth(word.Length);
 
-            if (furniture) g.FadingShelf(x, y + CueLayout.ShelfRow - 6f, shelfW, word, shelf, alpha);      // CaptionShelf puts its line 6 under the y it is given
             // Two bracket halves: a bar with an arm at each end, pointing at the words.
             g.Line(lBar, barTop, lBar, barBottom, line, alpha);
             g.Line(lBar, barTop, lBar + CueLayout.Arm, barTop, line, alpha);
@@ -271,7 +273,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(rBar, barTop, rBar - CueLayout.Arm, barTop, line, alpha);
             g.Line(rBar, barBottom, rBar - CueLayout.Arm, barBottom, line, alpha);
             CueTimeline.Underline(age, life, out float ulFrom, out float ulTo);
-            if (ulTo - ulFrom > 0.001f) g.Line(hugL + (hugR - hugL) * ulFrom, under, hugL + (hugR - hugL) * ulTo, under, line, line == Dim ? alpha : alpha * 0.55f);
             g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, cue.Size, ScopeAlign.Left, false, alpha);
             cueSpots[place] = new CueSpot { Cue = cue, Y = y, TextX = tx, TextW = textW, LeftBar = lBar, RightBar = rBar, Alpha = alpha, Locked = CueTimeline.Locked(age, cue.Text.Length) };
             return Math.Max(hugR, furniture ? x + shelfW + 8f : 0f);

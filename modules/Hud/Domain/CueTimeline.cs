@@ -150,11 +150,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class CueLayout
     {
         /// <summary>The stack's left edge, 12 in, and its width, 281 (the CUE zone, <c>HudZones</c>); 40 between cues. Its top is the zone's (<c>HudZones.CueTop</c>).</summary>
-        public const float Left = 12f, Width = 281f, Pitch = 40f;
+        public const float Left = 12f, Width = 281f, Pitch = 24f, ShelfBlock = 16f;
         /// <summary>The words start this far in from the left edge (the shelf's caption inset), the bracket halves hug the words this far outside them, an arm is 5 long.</summary>
         public const float TextInset = 12f, HugGap = 8f, Arm = 5f;
         /// <summary>Rows inside a cue's slot: the shelf's line, the message's middle, the underline, the brackets' top and bottom (with the shelf; the bare cue of Lean and Minimal sits <see cref="BareLift"/> higher). The next slot's shelf is 40 on.</summary>
-        public const float ShelfRow = 4f, MessageRow = 21f, UnderlineRow = 31f, BracketTop = 12f, BracketBottom = 31f, BareLift = 8f;
+        public const float ShelfRow = 4f, MessageRow = 11f, UnderlineRow = 21f, BracketTop = 1f, BracketBottom = 21f, BareLift = 0f;
 
         /// <summary>The shelf under the class word: 12 in, the word, 4 clear, then a short hairline and the node.</summary>
         public static float ShelfWidth(int captionChars) => (float)Math.Ceiling(TextInset + captionChars * 12f * 0.65f + 4f + 40f - 0.001f);

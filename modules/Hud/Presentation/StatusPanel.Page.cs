@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.Hud.Domain;
 using UnityEngine;
 using static BoscaliSummer.Core.Contracts.ScopeTone;
@@ -49,7 +50,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeCanvas g = surface.BodyCanvas;
             g.Furniture = allow.Furniture;
             g.Open = true;
-            g.Begin(pal, unit, bp, pixel);
+            g.Begin(pal, unit, bp, pixel, HudType.BoardBoost);
             g.Raise(lift);
             try
             {
@@ -69,7 +70,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g = surface.OverlayCanvas;
             g.Furniture = allow.Furniture;
             g.Open = true;
-            g.Begin(pal, unit, hp, pixel);
+            g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
             PaintHeader(g, current, w, flashOn);
             if (strip && content)
             {
@@ -83,7 +84,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The four corner brackets round the body, and the wipe's edge: the new page is revealed left to right behind it.
             g = surface.FrameCanvas;
-            g.Begin(pal, unit, hp, pixel);
+            g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
             g.Brackets(-3f, 14f, w + 6f, hS - 11f, 10f, Dim);
             if (transition.Wipe < 1f) g.Fill(wipeW - PageGrow - 1f, -PageGrow, 1f, hS + PageGrow * 2f, Hi, 0.9f);
             g.End();
@@ -115,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeCanvas g = statusCanvas;
             g.Furniture = allow.Furniture;
             g.Open = true;
-            g.Begin(pal, unit, Whole((hS + PageGrow * 2f) * unit), pixel);
+            g.Begin(pal, unit, Whole((hS + PageGrow * 2f) * unit), pixel, HudType.BoardBoost);
             g.Origin(PageGrow, PageGrow);
             g.Raise(ScopeLayout.Lift(true));
             try { sys.Paint(g, new PagePaint(w, body, true, ScopeLayout.SafeTop(true), now, units)); }
