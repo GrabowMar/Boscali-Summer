@@ -228,7 +228,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             CombatHUD combat = SceneSingleton<CombatHUD>.i;
             Aircraft aircraft = combat != null ? combat.aircraft : null;
             bool allowed = (settings != null ? settings.Reactive.Value : options.Reactive) && aircraft != null && !aircraft.disabled && !arcsExternal &&
-                !NOAvionics.AvFxDriver.ReducedMotion && BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+                BoscaliSummer.Core.Game.CockpitOverlayGate.Open();   // own switch (Reactive); the kit's panel-animation setting does not govern the visor
             fx.Step(new VisorFxInput
             {
                 Dt = Time.unscaledDeltaTime, Allowed = allowed, G = visorG, GLimit = visorGLimit,
@@ -277,7 +277,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The power-on may run this frame: the option (read live), a live HUD aircraft, the cockpit view, an overlay may show (no pause, map or cinematic) and the pilot has not asked for reduced motion.</summary>
         private bool BootAllowed(Aircraft aircraft, bool external) =>
-            (settings != null ? settings.Boot.Value : options.Boot) && aircraft != null && !aircraft.disabled && !external && !NOAvionics.AvFxDriver.ReducedMotion &&
+            (settings != null ? settings.Boot.Value : options.Boot) && aircraft != null && !aircraft.disabled && !external &&
             BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
 
         /// <summary>Every frame: advance the boot, cut it when it is no longer allowed or a real warning is up, and hand each zone how far it has come alive; when it ends give every zone its flying state back, once.</summary>
