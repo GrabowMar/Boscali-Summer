@@ -99,10 +99,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             RefreshFace();
             if (used == Rows)
             {
-                int oldest = Oldest();
-                ChatterPriority priority = line.Scripted ? ChatterPriority.Tactical : line.Priority;
-                if (priority < Priority(rows[oldest]) || (priority == Priority(rows[oldest]) && !line.Scripted && rows[oldest].Scripted)) return;
-                Drop(oldest);
+                int victim = Victim(used);
+                if (ChatterShed.Rank(line.Scripted, line.Priority) < Rank(rows[victim])) return;
+                Drop(victim);
             }
             bool enemy = line.Net == ChatterNet.Enemy, emergency = line.Priority == ChatterPriority.Emergency;
             string tag = Tag(line.Net), who = Plain(line.Speaker).ToUpperInvariant();
@@ -157,16 +156,16 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             return h;
         }
 
-        private void DropOldest() => Drop(Oldest());
+        /// <summary>Make room: shed the lowest-ranked row that is not the newest (<see cref="ChatterShed"/>).</summary>
+        private void DropOldest() => Drop(Victim(used - 1));
 
-        private int Oldest()
+        /// <summary>The row to shed among the first <paramref name="count"/>: routine traffic by priority before any scripted line, the oldest among equals.</summary>
+        private int Victim(int count)
         {
-            // Shed routine traffic before dialogue, and dialogue before an emergency.
-            int oldest = 0;
-            for (int i = 1; i < used; i++)
-                if (Priority(rows[i]) < Priority(rows[oldest]) ||
-                    (Priority(rows[i]) == Priority(rows[oldest]) && !rows[i].Scripted && rows[oldest].Scripted)) oldest = i;
-            return oldest;
+            int victim = 0;
+            for (int i = 1; i < count; i++)
+                if (Rank(rows[i]) < Rank(rows[victim])) victim = i;
+            return victim;
         }
 
         public void Tick(bool flying)
@@ -244,7 +243,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         private float paintedTop = LeftHudStack.CommsTop;
 
         private static float Clock(in Row row) => row.Scripted ? Time.time : Time.unscaledTime;
-        private static ChatterPriority Priority(in Row row) => row.Scripted ? ChatterPriority.Tactical : row.Priority;
+        private static int Rank(in Row row) => ChatterShed.Rank(row.Scripted, row.Priority);
         private bool HasScripted() { for (int i = 0; i < used; i++) if (rows[i].Scripted) return true; return false; }
         private static string Plain(string text) => (text ?? "").Replace('<', '‹').Replace('>', '›');
 
