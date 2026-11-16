@@ -57,6 +57,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private string missileName;
         private float missileRangeM;
         private bool missileLost;
+        private float missileClosureMps = float.NaN, missileTtiS = float.NaN;
+
+        /// <summary>The target's aspect angle (<see cref="TargetReadout.Aspect"/>; NaN = none) for the TARGET CAM's data strip. Set by the board before <see cref="Present"/>.</summary>
+        public float CardAspectDeg = float.NaN;
+        /// <summary>The picture already carries the game's own tac-screen text (the cockpit): the card then draws no name of its own on it. Set by the board before <see cref="Present"/>.</summary>
+        public bool CardNativeText = true;
 
         private bool builtActive, flightShown;
         private AvVector symbols;
@@ -86,17 +92,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private struct TargetCardWidgets
         {
             public RectTransform Root;
-            public Image Tag;
-            public TextMeshProUGUI TagText;
-            public TextMeshProUGUI Header;
-            public TextMeshProUGUI Range;
-            public TextMeshProUGUI Closure;
+            public TextMeshProUGUI Name;         // the shelf's word at the left (TARGET CAM / MISSILE CAM)
+            public TextMeshProUGUI State;         // the shelf's word at the right (what it looks at, its state)
+            public TextMeshProUGUI PicName;       // on the picture, top left (target name, external views only)
+            public TextMeshProUGUI Count;         // on the picture, bottom left (the missile's countdown)
+            public TextMeshProUGUI Note;          // on the picture, bottom right (SIGNAL LOST)
+            public TextMeshProUGUI[] Cells;       // the data strip's three cells: left, centre, right
             public RawImage Feed;
-            public Image[] Reticle;
             public bool Active;
-            public string LastHeader;
-            public float LastRange;
-            public float LastClosure;
+            public string LastState, LastPicName, LastNote, LastCode, StateText;
+            public float NameW, StateW, StripPt, LastPicW, LastPicH, LastTexAspect;      // LastPicW / H start at -1 (set in BuildTargetCard)
+            public int LastCount;
+            public int[] CellKey;
+            /// <summary>What the mesh draws over the picture (a lock bracket): part of the chrome signature.</summary>
+            public bool Locked;
         }
 
         /// <summary>The flight boxes are on screen (the board asks so that it can take them down the frame third person ends while the missile card stays).</summary>
@@ -106,12 +115,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public bool TargetCardShown => builtActive && card.Active;
 
         /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card.</summary>
-        public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost)
+        public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost, float closureMps = float.NaN, float ttiS = float.NaN)
         {
             missileFeed = feed;
             missileName = name;
             missileRangeM = rangeM;
             missileLost = lost;
+            missileClosureMps = closureMps;
+            missileTtiS = ttiS;
         }
 
         /// <summary>The TAC BOARD's box on the screen (centre-origin, y up, canvas units; no size: no board): the boxes of the cluster keep clear of it (<see cref="ThirdPersonHudLayout.KeepClearOf"/>). Set by the board before <see cref="Present"/>.</summary>
@@ -154,8 +165,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             spd = BuildBox("SPD", "SPD");
             alt = BuildBox("ALT", "ALT");
             hdg = BuildBox("HDG", null, withBar: false);
-            card = BuildTargetCard("TargetCard", "TGT");
-            missile = BuildTargetCard("MissileCard", "MSL");
+            card = BuildTargetCard("TargetCard", "TARGET CAM");
+            missile = BuildTargetCard("MissileCard", "MISSILE CAM");
             // Root is zero-size at screen centre, so this surface's origin is screen centre: RectF space.
             symbols = AvVector.Create(root, "Symbols", 900);
             lastSymbols = 0;
@@ -239,82 +250,65 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             };
         }
 
-        private TargetCardWidgets BuildTargetCard(string name, string tagWord)
+        private TargetCardWidgets BuildTargetCard(string name, string shelfName)
         {
-            const float header = ThirdPersonHudLayout.TargetCardHeaderHeight;
+            const float header = ThirdPersonHudLayout.TargetCardHeaderHeight, strip = FeedCorner.Strip;
             var cardObject = new GameObject(name, typeof(RectTransform));
             RectTransform rect = (RectTransform)cardObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            // Feed stack (2026-10-20 rework, user: "still fugly"): no plate. The MSL, TGT and UAV cards share one chrome in the HUD's own ink,
-            // drawn in PaintSymbols (FeedFrame): a TAC BOARD style header rule and a thin frame with corner ticks round the picture.
+            // Feed stack (2026-11-16 visor look): no plate. The MSL, TGT and UAV cards share one chrome in the HUD's own ink (FeedCorner.Frame, drawn in PaintSymbols): a caption shelf
+            // like the board's, the picture in a faint frame with corner ticks, and a one-line data strip under it. The line art over the picture is drawn there too.
 
             var feedObject = new GameObject("Feed", typeof(RectTransform), typeof(RawImage));
             RectTransform feedRect = (RectTransform)feedObject.transform;
             feedRect.SetParent(rect, false);
             feedRect.anchorMin = new Vector2(0f, 0f);
             feedRect.anchorMax = new Vector2(1f, 1f);
-            feedRect.offsetMin = Vector2.zero;
+            feedRect.offsetMin = new Vector2(0f, strip);
             feedRect.offsetMax = new Vector2(0f, -header);
             RawImage feed = feedObject.GetComponent<RawImage>();
             feed.raycastTarget = false;
 
-            // Centre reticle: four short ticks around a gap, the RWR's plane-cross idiom.
-            var reticle = new Image[4];
-            for (int i = 0; i < 4; i++)
+            // On the picture: the target's name (top left), the missile's countdown (bottom left), SIGNAL LOST (bottom right).
+            TextMeshProUGUI picName = Label(feedRect, "PicName", TextAlignmentOptions.TopLeft, 12f,
+                new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -19f), new Vector2(-8f, -5f));
+            picName.fontStyle = FontStyles.Bold;
+            TextMeshProUGUI count = Label(feedRect, "Count", TextAlignmentOptions.BottomLeft, 22f,
+                new Vector2(0f, 0f), new Vector2(0.6f, 0f), new Vector2(8f, 5f), new Vector2(0f, 32f));
+            count.fontStyle = FontStyles.Bold;
+            TextMeshProUGUI note = Label(feedRect, "Note", TextAlignmentOptions.BottomRight, 12f,
+                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 5f), new Vector2(-8f, 21f));
+
+            // The shelf: the name after the lead rule, the state word at the right end (the rules between them are FeedCorner.Frame's).
+            TextMeshProUGUI title = HudText.Make(rect, "Name", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 12f);
+            title.rectTransform.anchorMin = title.rectTransform.anchorMax = title.rectTransform.pivot = new Vector2(0f, 1f);
+            title.rectTransform.anchoredPosition = new Vector2(FeedCorner.ShelfText, 0f);
+            title.rectTransform.sizeDelta = new Vector2(150f, header - 3f);
+            title.text = shelfName;
+            title.fontStyle = FontStyles.Bold;      // the shelf words hold up over a bright cloud deck
+
+            TextMeshProUGUI state = HudText.Make(rect, "State", font, fontMaterial, TextAlignmentOptions.MidlineRight, 12f);
+            state.rectTransform.anchorMin = state.rectTransform.anchorMax = state.rectTransform.pivot = new Vector2(1f, 1f);
+            state.rectTransform.anchoredPosition = new Vector2(-FeedCorner.StateInset, 0f);
+            state.rectTransform.sizeDelta = new Vector2(170f, header - 3f);
+            state.fontStyle = FontStyles.Bold;
+
+            // The data strip: three cells, left / centre / right, label dim and value full (FeedCorner.CellHead).
+            var cells = new TextMeshProUGUI[3];
+            var keys = new int[3];
+            for (int i = 0; i < 3; i++)
             {
-                var tickObject = new GameObject("Tick" + i, typeof(RectTransform), typeof(Image));
-                RectTransform tick = (RectTransform)tickObject.transform;
-                tick.SetParent(feedRect, false);
-                tick.anchorMin = tick.anchorMax = tick.pivot = new Vector2(0.5f, 0.5f);
-                bool horizontal = i < 2;
-                float sign = i % 2 == 0 ? -1f : 1f;
-                tick.sizeDelta = horizontal ? new Vector2(10f, 1.5f) : new Vector2(1.5f, 10f);
-                tick.anchoredPosition = horizontal ? new Vector2(sign * 11f, 0f) : new Vector2(0f, sign * 11f);
-                reticle[i] = tickObject.GetComponent<Image>();
-                reticle[i].raycastTarget = false;
+                cells[i] = Label(rect, "Cell" + i, i == 0 ? TextAlignmentOptions.MidlineLeft : i == 1 ? TextAlignmentOptions.Midline : TextAlignmentOptions.MidlineRight, 12f,
+                    new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(3f, 0f), new Vector2(-3f, strip));
+                keys[i] = int.MinValue + 1;
             }
-
-            // Closure reads in the feed's lower-right corner, over a small plate.
-            TextMeshProUGUI closure = Label(feedRect, "Closure", TextAlignmentOptions.BottomRight, 12f,
-                new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 4f), new Vector2(-6f, 20f));
-
-            // Header like the TAC BOARD's section titles: the tag word, the name, the range at the right end, over a hairline (FeedFrame).
-            var tagObject = new GameObject("Tag", typeof(RectTransform), typeof(Image));
-            RectTransform tagRect = (RectTransform)tagObject.transform;
-            tagRect.SetParent(rect, false);
-            tagRect.anchorMin = tagRect.anchorMax = tagRect.pivot = new Vector2(0f, 1f);
-            tagRect.anchoredPosition = new Vector2(6f, 0f);
-            tagRect.sizeDelta = new Vector2(30f, header - 3f);
-            Image tag = tagObject.GetComponent<Image>();
-            tag.raycastTarget = false;
-            tag.sprite = AvSprites.White;
-            tag.color = Color.clear;
-            TextMeshProUGUI tagText = Label(tagRect, "TagText", TextAlignmentOptions.MidlineLeft, 12f,
-                Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            tagText.text = tagWord;
-            tagText.fontStyle = FontStyles.Bold;
-
-            TextMeshProUGUI title = HudText.Make(rect, "Header", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 12f,
-                TextOverflowModes.Ellipsis);
-            title.rectTransform.anchorMin = new Vector2(0f, 1f);
-            title.rectTransform.anchorMax = new Vector2(1f, 1f);
-            title.rectTransform.pivot = new Vector2(0f, 1f);
-            title.rectTransform.anchoredPosition = new Vector2(38f, 0f);
-            title.rectTransform.sizeDelta = new Vector2(-38f - 64f, header - 3f);
-
-            TextMeshProUGUI range = HudText.Make(rect, "Range", font, fontMaterial, TextAlignmentOptions.MidlineRight, 12f);
-            range.rectTransform.anchorMin = new Vector2(1f, 1f);
-            range.rectTransform.anchorMax = new Vector2(1f, 1f);
-            range.rectTransform.pivot = new Vector2(1f, 1f);
-            range.rectTransform.anchoredPosition = new Vector2(-2f, 0f);
-            range.rectTransform.sizeDelta = new Vector2(62f, header - 3f);
 
             cardObject.SetActive(false);
             return new TargetCardWidgets
             {
-                Root = rect, Tag = tag, TagText = tagText, Header = title, Range = range,
-                Closure = closure, Feed = feed, Reticle = reticle, Active = false, LastRange = float.NaN, LastClosure = float.NaN
+                Root = rect, Name = title, State = state, PicName = picName, Count = count, Note = note, Cells = cells, CellKey = keys,
+                Feed = feed, Active = false, StripPt = 12f, LastCount = -2, LastPicW = -1f, LastPicH = -1f
             };
         }
 
@@ -405,11 +399,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
             RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, uav, avoid,
                 active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default);
-            PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
-                f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
-
+            // The cards' words first (their widths set where the shelf rules stop), then the mesh over them.
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, targetRect, ink, units);
             PresentMissileCard(missileRect, ink, units);
+            PaintSymbols(screenW, screenH, ink, alert, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
+                f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
         }
 
         /// <summary>The UAV card's box (<see cref="FeedCorner.Uav"/>, screen pixels on its own canvas) in the layout's units; no size while it is down.</summary>
@@ -449,7 +443,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>Brackets round each box, tick scales for the bars, the card's outline and its tag box.
         /// Rebuilt only when the layout or a lit state changes.</summary>
         /// <param name="targetCard">The target card's box, no size while it is down; <paramref name="missileCard"/> the same for the missile card.</param>
-        private void PaintSymbols(float screenW, float screenH, Color ink, Color? spdLit, Color? altLit, Color fuel,
+        private void PaintSymbols(float screenW, float screenH, Color ink, Color alert, Color? spdLit, Color? altLit, Color fuel,
             RectF targetCard, bool flash, float bankDeg, float slipDeg, bool flight, RectF missileCard)
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
@@ -457,6 +451,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Mathf.RoundToInt(targetCard.CenterY + targetCard.Height) * 11 + (flash ? 13 : 0) + (flight ? 19 : 0) +
                 Mathf.RoundToInt(missileCard.CenterX * 3f + missileCard.CenterY + missileCard.Height) * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
                 Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
+            // The cards' chrome: where the shelf rules stop (the words' widths) and whether the lock bracket is drawn.
+            key += (Mathf.RoundToInt(card.NameW) * 3 + Mathf.RoundToInt(card.StateW) * 5 + (card.Locked ? 7 : 0) + Mathf.RoundToInt(missile.NameW) * 11 + Mathf.RoundToInt(missile.StateW) * 13) * 104723;
             if (key == lastSymbols) return;
             lastSymbols = key;
 
@@ -473,10 +469,46 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
                 BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             }
-            if (targetCard.Height > 0f) FeedCorner.Frame(b, targetCard.Left, targetCard.Bottom, targetCard.Right, targetCard.Top, ink.ToRgba());
-            if (missileCard.Height > 0f) FeedCorner.Frame(b, missileCard.Left, missileCard.Bottom, missileCard.Right, missileCard.Top, ink.ToRgba());
+            if (targetCard.Height > 0f)
+            {
+                FeedCorner.Frame(b, targetCard.Left, targetCard.Bottom, targetCard.Right, targetCard.Top, ink.ToRgba(), card.NameW, card.StateW);
+                TargetArt(b, targetCard, card.Locked, ink.ToRgba(), alert.ToRgba());
+            }
+            if (missileCard.Height > 0f)
+            {
+                FeedCorner.Frame(b, missileCard.Left, missileCard.Bottom, missileCard.Right, missileCard.Top, ink.ToRgba(), missile.NameW, missile.StateW);
+                SeekerArt(b, missileCard, ink.ToRgba());
+            }
             BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
+        }
+
+        /// <summary>What the TARGET CAM draws over its picture: range-crosshair ticks, and while a target is locked a red lock bracket round it (the pod keeps the target centred). The text on the picture is the game's own in the cockpit.</summary>
+        private static void TargetArt(AvQuadBuffer b, RectF r, bool locked, Rgba ink, Rgba alert)
+        {
+            float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, h = pt - pb, cx = r.CenterX, cy = (pb + pt) * 0.5f;
+            Rgba tick = ink.WithAlpha(0.8f);
+            AvStrokes.Line(b, cx, pt - 6f, cx, pt - 16f, 1.5f, tick);
+            AvStrokes.Line(b, cx, pb + 6f, cx, pb + 16f, 1.5f, tick);
+            float side = r.Width * 0.2f;
+            AvStrokes.Line(b, r.Left + side, cy, r.Left + side + 10f, cy, 1.5f, tick);
+            AvStrokes.Line(b, r.Right - side, cy, r.Right - side - 10f, cy, 1.5f, tick);
+            if (!locked) return;
+            float bw = h * 0.8f, bh = h * 0.6f;
+            AvStrokes.Bracket(b, cx - bw * 0.5f, cy - bh * 0.5f, bw, bh, 10f, 1.5f, alert);
+        }
+
+        /// <summary>What the MISSILE CAM draws over its picture: the seeker reticle, a dashed circle with a cross of ticks and a centre dot (the countdown is text, bottom left).</summary>
+        private static void SeekerArt(AvQuadBuffer b, RectF r, Rgba ink)
+        {
+            float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, rad = (pt - pb) * 0.34f, cx = r.CenterX, cy = (pb + pt) * 0.5f;
+            AvStrokes.DashedRing(b, cx, cy, rad, 28, 0.55f, 2f, ink);
+            Rgba tick = ink.WithAlpha(0.9f);
+            AvStrokes.Line(b, cx, cy + rad - 10f, cx, cy + rad + 6f, 1.5f, tick);
+            AvStrokes.Line(b, cx, cy - rad + 10f, cx, cy - rad - 6f, 1.5f, tick);
+            AvStrokes.Line(b, cx - rad + 10f, cy, cx - rad - 6f, cy, 1.5f, tick);
+            AvStrokes.Line(b, cx + rad - 10f, cy, cx + rad + 6f, cy, 1.5f, tick);
+            AvStrokes.Fill(b, cx - 1.5f, cy - 1.5f, 3f, 3f, ink);
         }
 
         private static readonly float[] BankTicks = { -45f, -30f, -20f, -10f, 0f, 10f, 20f, 30f, 45f };
@@ -660,42 +692,138 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PresentTargetCard(Texture cameraTexture, string code, float rangeM, float closureMps,
             RectF rect, Color ink, AvUnits units)
         {
-            if (!PresentCard(ref card, rect, cameraTexture, code, rangeM, ink, ink, units)) return;
-
-            // Closing reads in ink, opening dimmer; under 5 m/s either way is "steady".
-            float closureKey = float.IsFinite(closureMps) ? Mathf.Round(AvUnitTable.Speed(closureMps, units) / 5f) : float.NaN;
-            if (!(card.LastClosure == closureKey) && !(float.IsNaN(card.LastClosure) && float.IsNaN(closureKey)))
+            // Locked = the board read a target (a range): its name and "· LOCK" on the shelf, the lock bracket on the picture. The state word is rebuilt only when the code or the lock changed.
+            bool locked = float.IsFinite(rangeM);
+            if (card.StateText == null || !ReferenceEquals(card.LastCode, code) || card.Locked != locked)
             {
-                int len;
-                if (float.IsNaN(closureKey)) len = 0;
-                else if (Mathf.Abs(closureMps) < 5f) len = AvNumFormat.Append(buf, 0, "STEADY");
-                else
+                card.StateText = code == null ? "--" : locked ? code + " · LOCK" : code;
+                card.LastCode = code;
+                card.Locked = locked;
+            }
+            if (!PresentCard(ref card, rect, cameraTexture, card.StateText, ink, ink)) return;
+
+            // The game's own tac-screen text already names the target in the cockpit; in the external views the picture carries no text, so the card names it.
+            string picName = locked && !CardNativeText && code != null ? code : "";
+            if (card.LastPicName != picName)
+            {
+                card.PicName.text = picName;
+                card.LastPicName = picName;
+            }
+            card.PicName.color = ink;
+
+            // RNG, CLS (closing positive), ASP (the target's aspect: 0 tail-on, 180 head-on, R or L of its tail): a cell with no truthful value is blank.
+            if (Changed(ref card, 0, locked ? Mathf.RoundToInt(rangeM / 100f) : int.MinValue))
+                Cell(ref card, 0, locked ? AvUnitTable.DistanceReading(buf, CellStart("RNG"), rangeM, units) : 0);
+            bool closing = float.IsFinite(closureMps);
+            if (Changed(ref card, 1, closing ? Mathf.RoundToInt(AvUnitTable.Speed(closureMps, units) / 5f) : int.MinValue))
+            {
+                int len = 0;
+                if (closing)
                 {
-                    len = AvNumFormat.Append(buf, 0, closureMps > 0f ? "CLOSING " : "OPENING ");
+                    len = CellStart("CLS");
+                    buf[len++] = closureMps >= 0f ? '+' : '-';
                     len = AvUnitTable.SpeedReading(buf, len, Mathf.Abs(closureMps), units);
                 }
-                card.Closure.text = new string(buf, 0, len);
-                card.LastClosure = closureKey;
+                Cell(ref card, 1, len);
             }
-            card.Closure.color = float.IsFinite(closureMps) && closureMps > 5f ? ink : WithAlpha(ink, 0.6f);
+            bool aspect = locked && float.IsFinite(CardAspectDeg);
+            if (Changed(ref card, 2, aspect ? Mathf.RoundToInt(CardAspectDeg) : int.MinValue))
+            {
+                int len = 0;
+                if (aspect)
+                {
+                    int a = Mathf.RoundToInt(CardAspectDeg), mag = Mathf.Abs(a);
+                    len = CellStart("ASP");
+                    len = AvNumFormat.Write(buf, len, mag, 0);
+                    if (mag != 0 && mag != 180) buf[len++] = a > 0 ? 'R' : 'L';
+                }
+                Cell(ref card, 2, len);
+            }
         }
 
-        /// <summary>The missile feed card: the weapon's name, the range to what it guides on, SIGNAL LOST over the held last picture.</summary>
+        /// <summary>The missile feed card: the weapon's name on the shelf, the countdown on the picture, RNG / CLS / T under it, SIGNAL LOST over the held last picture.</summary>
         private void PresentMissileCard(RectF rect, Color ink, AvUnits units)
         {
             Color alert = ThemeManager.Active.ColorTheme.Alert;
-            if (!PresentCard(ref missile, rect, missileFeed, missileName, missileRangeM, ink, missileLost ? alert : ink, units)) return;
-            float key = missileLost ? 1f : 0f;
-            if (missile.LastClosure != key)
+            if (!PresentCard(ref missile, rect, missileFeed, missileName, ink, missileLost ? alert : ink)) return;
+            string note = missileLost ? "SIGNAL LOST" : "";
+            if (missile.LastNote != note)
             {
-                missile.Closure.text = missileLost ? "SIGNAL LOST" : "";
-                missile.LastClosure = key;
+                missile.Note.text = note;
+                missile.LastNote = note;
             }
-            missile.Closure.color = alert;
+            missile.Note.color = alert;
+
+            // The countdown: time to impact, big on the picture, "T-06S" like the mockup; nothing while the weapon is not closing (or lost).
+            bool tti = !missileLost && float.IsFinite(missileTtiS);
+            int seconds = tti ? Mathf.Clamp(Mathf.RoundToInt(missileTtiS), 0, 999) : -1;
+            if (missile.LastCount != seconds)
+            {
+                int len = 0;
+                if (tti)
+                {
+                    len = AvNumFormat.Append(buf, 0, "T-");
+                    if (seconds < 10) buf[len++] = '0';
+                    len = AvNumFormat.Write(buf, len, seconds, 0);
+                    buf[len++] = 'S';
+                }
+                missile.Count.text = len > 0 ? new string(buf, 0, len) : "";
+                missile.LastCount = seconds;
+            }
+            missile.Count.color = ink;
+
+            bool ranged = float.IsFinite(missileRangeM);
+            if (Changed(ref missile, 0, ranged ? Mathf.RoundToInt(missileRangeM / 100f) : int.MinValue))
+                Cell(ref missile, 0, ranged ? AvUnitTable.DistanceReading(buf, CellStart("RNG"), missileRangeM, units) : 0);
+            bool closing = float.IsFinite(missileClosureMps);
+            if (Changed(ref missile, 1, closing ? Mathf.RoundToInt(AvUnitTable.Speed(missileClosureMps, units) / 5f) : int.MinValue))
+            {
+                int len = 0;
+                if (closing)
+                {
+                    len = CellStart("CLS");
+                    buf[len++] = missileClosureMps >= 0f ? '+' : '-';
+                    len = AvUnitTable.SpeedReading(buf, len, Mathf.Abs(missileClosureMps), units);
+                }
+                Cell(ref missile, 1, len);
+            }
+            if (Changed(ref missile, 2, tti ? seconds : int.MinValue))
+            {
+                int len = 0;
+                if (tti)
+                {
+                    len = CellStart("T");
+                    buf[len++] = '-';
+                    if (seconds < 10) buf[len++] = '0';
+                    len = AvNumFormat.Write(buf, len, seconds, 0);
+                    buf[len++] = 'S';
+                }
+                Cell(ref missile, 2, len);
+            }
         }
 
-        /// <summary>What both feed cards share: shown while there is a picture, placed, its feed, header and range written on change. False while hidden.</summary>
-        private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string header, float rangeM, Color ink, Color tone, AvUnits units)
+        /// <summary>True (and remembers it) when strip cell <paramref name="i"/>'s change key moved: the cell's text is then rewritten, not before.</summary>
+        private static bool Changed(ref TargetCardWidgets c, int i, int key)
+        {
+            if (c.CellKey[i] == key) return false;
+            c.CellKey[i] = key;
+            return true;
+        }
+
+        /// <summary>Starts a strip cell's text in <see cref="buf"/>: the dim label and a gap. Returns the length so far.</summary>
+        private int CellStart(string label)
+        {
+            int len = AvNumFormat.Append(buf, 0, FeedCorner.CellHead);
+            len = AvNumFormat.Append(buf, len, label);
+            return AvNumFormat.Append(buf, len, FeedCorner.CellTail);
+        }
+
+        /// <summary>Writes cell <paramref name="i"/> from the first <paramref name="len"/> characters of <see cref="buf"/> (0 = blank). The label alone is no value: a cell is blank, never a label over nothing.</summary>
+        private void Cell(ref TargetCardWidgets c, int i, int len) =>
+            c.Cells[i].text = len > 0 ? new string(buf, 0, len) : "";
+
+        /// <summary>What every feed card shares: shown while there is a picture, placed, its feed fitted, the shelf's words written on change, the strip's size and colour kept. False while hidden.</summary>
+        private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string state, Color ink, Color tone)
         {
             bool show = feed != null;
             if (c.Active != show)
@@ -706,28 +834,45 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!show) return false;
 
             PositionRect(c.Root, rect);
-            c.TagText.color = tone;
-            for (int i = 0; i < c.Reticle.Length; i++) c.Reticle[i].color = WithAlpha(ink, 0.7f);
             if (!ReferenceEquals(c.Feed.texture, feed)) c.Feed.texture = feed;
+            FitPicture(ref c, rect, feed);
 
-            header ??= "--";
-            if (c.LastHeader != header)
+            if (c.NameW <= 0f) c.NameW = Measure(c.Name, c.Name.text);
+            c.Name.color = WithAlpha(ink, 0.95f);
+            state ??= "--";
+            if (c.LastState != state)
             {
-                c.Header.text = header;
-                c.LastHeader = header;
+                c.State.text = state;
+                c.StateW = Measure(c.State, state);
+                c.LastState = state;
             }
-            c.Header.color = ink;
+            c.State.color = tone;
 
-            float rangeKey = float.IsFinite(rangeM) ? Mathf.Round(rangeM / 100f) : -1f;
-            if (c.LastRange != rangeKey)
+            float pt = FeedCorner.StripPt(rect.Width);
+            if (pt != c.StripPt || c.Cells[0].fontSize != pt)
             {
-                int len = rangeKey < 0f ? AvNumFormat.Unknown(buf, 0) : AvUnitTable.DistanceReading(buf, 0, rangeM, units);
-                c.Range.text = new string(buf, 0, len);
-                c.LastRange = rangeKey;
+                c.StripPt = pt;
+                for (int i = 0; i < c.Cells.Length; i++) c.Cells[i].fontSize = pt;
             }
-            c.Range.color = WithAlpha(ink, 0.85f);
+            for (int i = 0; i < c.Cells.Length; i++) c.Cells[i].color = ink;
             return true;
         }
+
+        /// <summary>The picture keeps its texture's aspect: wider than the texture crops the top and bottom, narrower crops the sides (centred). Recomputed only when the size or the texture changed.</summary>
+        private static void FitPicture(ref TargetCardWidgets c, RectF rect, Texture feed)
+        {
+            float w = rect.Width, h = rect.Height - ThirdPersonHudLayout.TargetCardHeaderHeight - FeedCorner.Strip;
+            float ta = feed.height > 0 ? (float)feed.width / feed.height : 16f / 9f;
+            if (w == c.LastPicW && h == c.LastPicH && ta == c.LastTexAspect) return;
+            c.LastPicW = w;
+            c.LastPicH = h;
+            c.LastTexAspect = ta;
+            float pa = h > 1f ? w / h : ta;
+            c.Feed.uvRect = pa > ta ? new Rect(0f, (1f - ta / pa) * 0.5f, 1f, ta / pa) : new Rect((1f - pa / ta) * 0.5f, 0f, pa / ta, 1f);
+        }
+
+        /// <summary>The text's width (a shelf word's, for the rule that runs up to it), measured when the words change.</summary>
+        private static float Measure(TextMeshProUGUI t, string s) => t.font != null && !string.IsNullOrEmpty(s) ? t.GetPreferredValues(s).x : (s?.Length ?? 0) * 7.5f;
 
         /// <summary>Take the cluster out of view without destroying it. Idempotent.</summary>
         public void Hide()

@@ -36,6 +36,23 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
         }
 
+        /// <summary>
+        /// The ridden weapon's guidance now, the same maths as the missile-cam scope (MissileCamScopeFeed.Ride): range to what it guides on, closing speed along the line of sight (positive = closing),
+        /// and the time to impact (NaN while it is not closing). All NaN with no weapon in the air or no target. No allocation.
+        /// </summary>
+        public void Guidance(out float rangeM, out float closureMps, out float ttiS)
+        {
+            rangeM = closureMps = ttiS = float.NaN;
+            Unit target = riding != null && !riding.disabled ? ShotBook.TargetOf(riding) : null;
+            if (target == null) return;
+            Vector3 los = target.transform.position - riding.transform.position;
+            rangeM = los.magnitude;
+            if (rangeM <= 1f) return;
+            Vector3 own = riding.rb != null ? riding.rb.velocity : Vector3.zero, theirs = target.rb != null ? target.rb.velocity : Vector3.zero;
+            closureMps = -Vector3.Dot(theirs - own, los / rangeM);
+            ttiS = BoscaliSummer.Modules.Hud.Domain.ShotMath.TimeToGo(rangeM, closureMps);
+        }
+
         public void Tick(IReadOnlyList<Missile> live, bool allowed, float now)
         {
             if (!allowed)

@@ -301,7 +301,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
             Texture cameraTexture = null;
             string cameraCode = null;
-            float range = float.NaN, closure = float.NaN;
+            float range = float.NaN, closure = float.NaN, aspect = float.NaN;
             Aircraft camOwner = viewingOwnExternally ? ownAircraft : hudAircraft;
             if (camOwner != null && camOwner.targetCam != null &&
                 BoscaliSummer.Core.Game.NativeCamera.ReadMode(camOwner.targetCam) != TargetCam.CamMode.landingMode &&
@@ -315,13 +315,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     cameraTexture = camera.targetTexture;
                     cameraCode = seenOne ? targetReadout.NameOf(seen) : mode;
+                    if (seenOne) aspect = TargetReadout.Aspect(camOwner, seen);
                 }
             }
             // hudAircraft, not ownAircraft: the latter is null in the cockpit, which left the overlay off after any trip outside.
             if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null || !viewingOwnExternally);      // the cockpit's own tac screen keeps its text even while the card shows
 
             // The feed column holds the bottom-right corner in every view (NAV DATA is gone, 2026-10-21).
-            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost);
+            missileFeed.Guidance(out float feedRange, out float feedClosure, out float feedTti);
+            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, feedRange, missileFeed.Lost, feedClosure, feedTti);
+            cluster.CardNativeText = !viewingOwnExternally;      // the cockpit's tac screen prints its own text on the picture
+            cluster.CardAspectDeg = aspect;
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
