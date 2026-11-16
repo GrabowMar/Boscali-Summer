@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class ArcsHud
     {
         private const int Quads = 72;
-        private const float BingoPrefixPt = 12f, PercentPt = 14f, CaptionPt = 12f, TickPt = 12f, TickLength = 18f, LabelInset = 28f, EndGap = 16f, CaptionDrop = 22f;
+        private const float BingoPrefixPt = 12f, PercentPt = 12f, CaptionPt = 12f, TickPt = 12f, TickLength = 18f, LabelInset = 28f, EndGap = 16f, CaptionDrop = 22f;
         private static readonly char[] BingoWord = { 'B', 'I', 'N', 'G', 'O', ' ' };
 
         private sealed class Side
@@ -185,7 +185,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             n = FlightArcs.PercentText(scratch, n, percent);
             Anchor(axis, radius + EndGap, FlightArcs.At(1f, true), out float x, out float y);
-            t.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), x, y, PercentPt, OutsideAlign(axis), word, true);
+            t.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), x, y, PercentPt, OutsideAlign(axis), word, false);
             Caption(t, "FUEL", axis, radius, FlightArcs.At(0f, true), ink);
             if (!float.IsNaN(bingoAt)) TickLabel(t, "B", axis, radius, FlightArcs.At(bingoAt, true), amber);
             if (!float.IsNaN(jokerAt)) TickLabel(t, "J", axis, radius, FlightArcs.At(jokerAt, true), Color.white);
@@ -206,7 +206,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!string.IsNullOrEmpty(word))
             {
                 Anchor(axis, radius + EndGap, FlightArcs.At(1f, false), out float x, out float y);
-                t.Draw(word, x, y, PercentPt, OutsideAlign(axis), ink, true);
+                t.Draw(word, x, y, PercentPt, OutsideAlign(axis), ink, false);
             }
             Caption(t, "THROTTLE", axis, radius, FlightArcs.At(0f, false), ink);
             t.End();
@@ -246,13 +246,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Caption(ScopeText t, string word, float axis, float radius, float endAngle, Color ink)
         {
             Anchor(axis, radius, endAngle, out float x, out float y);
-            t.Draw(word, x, y + CaptionDrop, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), true);
+            t.Draw(word, x, y + CaptionDrop, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
         }
 
         private void TickLabel(ScopeText t, string word, float axis, float radius, float a, Color colour)
         {
             Anchor(axis, radius - LabelInset, a, out float x, out float y);
-            t.Draw(word, x, y, TickPt, ScopeAlign.Center, colour, true);
+            t.Draw(word, x, y, TickPt, ScopeAlign.Center, colour, false);
         }
 
         /// <summary>The game's gauges back, this layer down: the same frame, every time. Safe to call every frame.</summary>
