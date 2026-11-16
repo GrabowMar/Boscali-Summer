@@ -71,7 +71,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static readonly Dictionary<string, Flag<ITacBoardSettings>> BoardFlags = new Dictionary<string, Flag<ITacBoardSettings>>
         {
             ["parts/stores"] = new Flag<ITacBoardSettings>(b => b.ShowStores, (b, v) => b.ShowStores = v),
-            ["parts/pages"] = new Flag<ITacBoardSettings>(b => b.ScopeMode != BoardScopeMode.Off, (b, v) => b.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off),
+            ["parts/pages"] = new Flag<ITacBoardSettings>(b => b.ScopeMode != BoardScopeMode.Off, (b, v) => b.ScopeMode = v ? BoardScopeMode.Auto : BoardScopeMode.Off),
             ["parts/status"] = new Flag<ITacBoardSettings>(b => b.ShowLamps || b.ShowGauges, (b, v) => b.ShowLamps = b.ShowGauges = v),
             ["parts/notices"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
@@ -250,7 +250,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (index < 0) { board.PageCount = Math.Max(1, Math.Min(board.PageCount, slot - 1)); return; }
             var page = (BoardPage)index;
             board.Enabled = true;
-            if (board.ScopeMode == BoardScopeMode.Off) board.ScopeMode = BoardScopeMode.Manual;
+            board.ScopeMode = BoardScopeMode.Manual;      // a hand pick means the pilot is choosing: Auto and Off both give way
             if (slot > board.PageCount) board.PageCount = slot;
             BoardPage[] pages = { board.Page1, board.Page2, board.Page3, board.Page4 };
             for (int i = 0; i < pages.Length; i++)

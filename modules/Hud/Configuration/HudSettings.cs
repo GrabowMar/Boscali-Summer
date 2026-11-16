@@ -72,7 +72,15 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. Manual pages and their titles remain available at every level." + live);
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
-                "Manual keeps the pages chosen for each slot; Off hides the tactical pages. Legacy Auto also means Manual." + live);
+                "Auto picks the pages itself (slot 1 by priority, slot 2 the wing page while a wing is flying); Manual keeps the pages chosen for each slot; Off hides the tactical pages." + live);
+            // 2026-11-16 made Auto a real mode and the default (Manual was the only default before); a file still holding Manual takes Auto, once.
+            ConfigEntry<int> autoScope = config.Bind(section, "AutoScopeDefault", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a ScopeMode left at Manual has moved to the new default (Auto).", new AcceptableValueRange<int>(0, 1)));
+            if (autoScope.Value < 1)
+            {
+                if (ScopeMode.Value == BoardScopeMode.Manual) ScopeMode.Value = d.ScopeMode;
+                autoScope.Value = 1;
+            }
             PageCount = config.Bind(section, "PageCount", d.PageCount,
                 new ConfigDescription("Full information pages shown, one or two, stacked in one column on the right edge. Each slot is selected manually; SYSTEMS always shows on its own." + live,
                     new AcceptableValueRange<int>(1, BoardOptions.MaxPages)));

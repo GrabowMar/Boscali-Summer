@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static BoardOptions Default => new BoardOptions
         {
             Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, Shade = 0f,
-            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Manual,
+            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
@@ -77,7 +77,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             Shade = Fit(Shade, 0f, 1f, d.Shade);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
-            if ((uint)ScopeMode > (uint)BoardScopeMode.Off) ScopeMode = d.ScopeMode;
+            if ((uint)ScopeMode > (uint)BoardScopeMode.Auto) ScopeMode = d.ScopeMode;
             PageCount = System.Math.Clamp(PageCount, 1, MaxPages);
             // Every slot names a real page that is not SYSTEMS (an old config may hold it), and no page twice: a hand-edited duplicate must not paint the same stateful page
             // twice in one frame, and a hidden slot must not turn into one when the count goes up.

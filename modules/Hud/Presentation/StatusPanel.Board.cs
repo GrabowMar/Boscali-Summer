@@ -18,6 +18,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly ScopePageBase[] selectedPages = new ScopePageBase[ScopeLayout.MaxSlots];
         private readonly bool[] pageLive = new bool[CuePriority.PageCount];
         private int selectedCount;
+        /// <summary>Auto mode's slot-0 page and when it came up (the board's clock): <see cref="ScopePick.Hold"/> keeps it a minimum time.</summary>
+        private ScopePage autoShown = ScopePage.Threat;
+        private float autoShownAt = float.NegativeInfinity;
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
         private BoardFrame board;
         private int lastPhase = -1;
@@ -44,6 +47,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             pages = ScopePages.Create();
             selectedCount = 1;
+            autoShown = ScopePage.Threat;
+            autoShownAt = float.NegativeInfinity;
             selectedPages[0] = pages[(int)ScopePage.Threat];
             Array.Clear(pageLive, 0, pageLive.Length);
             transition.Reset();
@@ -115,11 +120,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
                 pageLive[i] = PollPage(pages[i], env);
             }
-            selectedCount = Math.Max(1, Math.Min(ScopeLayout.MaxSlots, Options.PageCount));
+            bool auto = Options.ScopeMode == BoardScopeMode.Auto;
+            if (auto)
+            {
+                // Slot 0 by priority, held for a minimum time (a missile cuts the hold); slot 1 the WING page while it has something to draw, else one slot only.
+                ushort liveMask = 0;
+                for (int i = 0; i < pageLive.Length; i++) if (pageLive[i]) liveMask |= CuePriority.Bit((ScopePage)i);
+                bool missile = frame.Threat.Missiles > 0;      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
+                ScopePage pick = ScopePick.Hold(autoShown, ScopePick.Top(liveMask, missile), now - autoShownAt, missile);
+                if (pick != autoShown) { autoShown = pick; autoShownAt = now; }
+                selectedCount = pageLive[(int)ScopePage.Wing] ? 2 : 1;
+            }
+            else selectedCount = Math.Max(1, Math.Min(ScopeLayout.MaxSlots, Options.PageCount));
             ushort selected = 0;
             for (int i = 0; i < selectedCount; i++)
             {
-                ScopePage id = Options.PageAt(i);
+                ScopePage id = auto ? (i == 0 ? autoShown : ScopePage.Wing) : Options.PageAt(i);
                 // Sanitize keeps the slots distinct and off SYSTEMS (its own block); options written past it still never paint a page twice in one frame.
                 if (id == ScopePage.Systems || (uint)id >= (uint)pages.Length || CuePriority.Has(selected, id))
                     for (int candidate = 0; candidate < pages.Length; candidate++)

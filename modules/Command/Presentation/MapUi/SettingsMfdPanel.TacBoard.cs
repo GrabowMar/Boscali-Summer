@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
             ToggleCell(flow, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
-                () => board.ScopeMode != BoardScopeMode.Off, v => board.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off, on, off);
+                () => board.ScopeMode != BoardScopeMode.Off, v => board.ScopeMode = v ? BoardScopeMode.Auto : BoardScopeMode.Off, on, off);
             ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);

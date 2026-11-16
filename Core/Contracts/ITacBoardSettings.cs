@@ -6,8 +6,8 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>How much the TAC BOARD shows: everything the switches allow, a leaner board, or only what a pilot in a fight needs.</summary>
     internal enum BoardDeclutter { Full, Lean, Minimal }
 
-    /// <summary>Manual page display, or no tactical pages. Auto is a legacy config spelling for Manual.</summary>
-    internal enum BoardScopeMode { Manual = 0, Off = 1, Auto = Manual }
+    /// <summary>Pages that choose themselves (Auto, the default), pages the pilot picks per slot (Manual), or no tactical pages (Off).</summary>
+    internal enum BoardScopeMode : byte { Manual = 0, Off = 1, Auto = 2 }
 
     /// <summary>
     /// The information page selected for a TAC BOARD slot. Values match the HUD's page registry. <see cref="Systems"/> is not a slot choice (the board always shows SYSTEMS in a
