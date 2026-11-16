@@ -123,12 +123,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private static float Floor(float height, RectF uav) =>
             uav.Height > 0f ? Math.Max(uav.Top + CardGap, -height * 0.5f + SafeMargin) : -height * 0.5f + SafeMargin;
 
-        /// <summary>The left-column target-camera card in the TARGET CAM zone (<see cref="HudZones"/>, scaled by <paramref name="height"/> / 1080); collapses (zero height) when there is nothing to show.</summary>
+        /// <summary>The smallest scale the target card's size follows (position keeps the true scale).</summary>
+        public const float TargetCardMinScale = 0.5f;
+
+        /// <summary>The left-column target-camera card in the TARGET CAM zone (<see cref="HudZones"/>): position and width scale with <paramref name="height"/> / 1080 (width floored at half scale), the header stays
+        /// <see cref="TargetCardHeaderHeight"/> over a 16:9 picture; collapses (zero height) when there is nothing to show.</summary>
         public static RectF TargetCard(float width, float height, bool visible)
         {
             ZoneRect z = HudZones.Ref(HudZone.TargetCam, width * HudZones.RefHeight / height);
-            float k = height / HudZones.RefHeight, h = visible ? CardHeight : 0f;
-            return new RectF(-width * 0.5f + z.X * k + TargetCardWidth * 0.5f, height * 0.5f - z.Y * k - h * 0.5f, TargetCardWidth, h);
+            float k = height / HudZones.RefHeight;
+            float w = TargetCardWidth * Math.Max(TargetCardMinScale, k);
+            float h = visible ? TargetCardHeaderHeight + w / TargetCardAspect : 0f;
+            return new RectF(-width * 0.5f + z.X * k + w * 0.5f, height * 0.5f - z.Y * k - h * 0.5f, w, h);
         }
 
         /// <summary>
