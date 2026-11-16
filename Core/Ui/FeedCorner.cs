@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 using UnityEngine;
 
@@ -52,7 +53,7 @@ namespace BoscaliSummer.Core.Ui
         }
 
         /// <summary>The data strip's text size for a card <paramref name="width"/> wide: 12 pt at the full 264, smaller on a narrower card so three cells still fit.</summary>
-        public static float StripPt(float width) => Mathf.Clamp(width / 21.5f, 8f, 12f);
+        public static float StripPt(float width) => HudType.Label;
 
         /// <summary>The rich-text lead of a strip cell: the label dimmed ("RNG "), the value after it full. Pair with <see cref="CellTail"/>.</summary>
         public const string CellHead = "<alpha=#E0>", CellTail = "<alpha=#FF> ";

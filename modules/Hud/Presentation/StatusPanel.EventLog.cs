@@ -122,9 +122,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (p.Furniture)
             {
                 g.Line(p.Left + 1f, cy, p.Left + 1f + EventLogLayout.SpineTick, cy, Dim, alpha);
-                Reveal(g, row.Stamp, p.StampX, cy, Dim, alpha, ref budget);
+                Reveal(g, row.Stamp, p.StampX, cy, Dim, alpha, ref budget, HudType.Label);
             }
-            Reveal(g, word, p.ClassX, cy, Dim, alpha, ref budget);
+            Reveal(g, word, p.ClassX, cy, Dim, alpha, ref budget, HudType.Label);
             float x = p.LineX;
             foreach (EventSpan span in line.Spans)
             {
@@ -132,29 +132,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (span.Swatch)
                 {
                     g.Swatch(x, cy, LogSwatch, new Rgba(((span.Rgb >> 16) & 255) / 255f, ((span.Rgb >> 8) & 255) / 255f, (span.Rgb & 255) / 255f), alpha);
-                    x += EventLogLayout.Advance;
+                    x += EventLogLayout.LineAdvance;
                     budget--;
                 }
                 ScopeTone tone = span.Role == EventRole.Verb && !bright && !span.Own ? Ink : Hi;
-                float emphasis = bright || span.Own ? 1f : 0.9f;
-                x = Reveal(g, span.Text, x, cy, tone, alpha * emphasis, ref budget);
+                float emphasis = 1f;
+                x = Reveal(g, span.Text, x, cy, tone, alpha * emphasis, ref budget, HudType.Body);
             }
-            if (line.Truncated && budget > 0) Reveal(g, "+", x + EventLogLayout.Advance, cy, Dim, alpha, ref budget);
+            if (line.Truncated && budget > 0) Reveal(g, "+", x + EventLogLayout.LineAdvance, cy, Dim, alpha, ref budget, HudType.Body);
         }
 
         /// <summary>
         /// The first <paramref name="budget"/> characters of <paramref name="s"/> at (<paramref name="x"/>, <paramref name="cy"/>); returns where the next word goes. A DIM word fades as INK at DIM's own alpha: <c>ScopeCanvas.Text</c>
         /// keeps a DIM word's alpha at its readable floor, which a fade must go under.
         /// </summary>
-        private static float Reveal(ScopeCanvas g, string s, float x, float cy, ScopeTone tone, float alpha, ref int budget)
+        private static float Reveal(ScopeCanvas g, string s, float x, float cy, ScopeTone tone, float alpha, ref int budget, float size)
         {
             int take = Math.Min(s.Length, budget);
             if (take <= 0 || alpha <= 0f) return x;
             budget -= take;
             ReadOnlySpan<char> shown = s.AsSpan(0, take);
-            if (tone == Dim && alpha < 1f) g.Text(shown, x, cy, Ink, 12f, ScopeAlign.Left, false, alpha * ScopePalette.DimAlpha);
-            else g.Text(shown, x, cy, tone, 12f, ScopeAlign.Left, false, alpha);
-            return x + ScopeCanvas.TextW(shown);
+            if (tone == Dim && alpha < 1f) g.Text(shown, x, cy, Ink, size, ScopeAlign.Left, false, alpha * ScopePalette.DimAlpha);
+            else g.Text(shown, x, cy, tone, size, ScopeAlign.Left, false, alpha);
+            return x + ScopeCanvas.TextW(shown, size);
         }
 
         /// <summary>Nothing of the log is up (the corner is the game's again, or there is no corner).</summary>

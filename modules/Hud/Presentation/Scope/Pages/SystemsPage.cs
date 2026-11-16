@@ -325,8 +325,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             FuelState f = d.Fuel;
             ScopeTone tone = SystemsMath.ToneOf(f.Tone);
-            g.Text("FUEL", x, y, Dim);
-            g.Text(ScopeStr.Pct(SystemsMath.Percent(f.Level)), x + 36f, y, tone == Ink ? Hi : tone, 16f, bold: true);
+            float fw = g.Text("FUEL", x, y, Dim);
+            g.Text(ScopeStr.Pct(SystemsMath.Percent(f.Level)), x + fw + 6f, y, tone == Ink ? Hi : tone, 16f, bold: true);
             if (SystemsMath.EnduranceMinutes(f.EnduranceS, out int min))
             {
                 ScopeTone et = SystemsMath.EndTone(f.EnduranceS);

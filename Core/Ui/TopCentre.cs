@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 
 namespace BoscaliSummer.Core.Ui
@@ -32,11 +33,11 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The WARNING banner is up in the shared slot (set by its owner): the ace card then stays down, the banner wins.</summary>
         public static bool BannerUp;
         /// <summary>The banner word's size, bigger than the other lane words (the mockup's hazard-stripe banner).</summary>
-        public const float BannerWordPt = 36f;
+        public const float BannerWordPt = HudType.Hero;
 
         // The look, one set for every piece in the lane and the centre layer: strokes, corner brackets, the hazard chevrons, shade, type sizes.
         public const float Stroke = 1.5f, Arm = 8f, ChevronSize = 12f, ChevronStroke = 2f, ChevronStep = 12f, ShadeMargin = 16f;
-        public const float WordPt = 28f, NamePt = 22f, DetailPt = 14f, LabelPt = 12f, LeadPt = 16f;
+        public const float WordPt = HudType.Emphasis, NamePt = HudType.Emphasis, DetailPt = HudType.Body, LabelPt = HudType.Label, LeadPt = HudType.Value;
         /// <summary>Letter spacing: the big words wide, the reading lines close.</summary>
         public const float WordSpacing = 10f, LineSpacing = 2f;
 

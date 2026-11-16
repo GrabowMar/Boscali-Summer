@@ -1,5 +1,6 @@
 using System.Text;
 using BoscaliSummer.Core.Chatter;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Ui;
 using NOAvionics;
@@ -110,8 +111,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             string tag = Tag(line.Net), who = Plain(line.Speaker).ToUpperInvariant();
             string heading = tag + "  " + who + (string.IsNullOrEmpty(line.Role) ? "" : " / " + Plain(line.Role).ToUpperInvariant());
             sb.Clear();
-            sb.Append("<color=#").Append(Colour(line.Net)).Append("><size=80%>").Append(heading).Append("</size></color>\n");
-            sb.Append("<color=#").Append(emergency ? "FFE66B" : Words(line.Net)).Append('>');
+            sb.Append("<color=#").Append(Colour(line.Net)).Append("><size=75%>").Append(heading).Append("</size></color>\n");
+            sb.Append("<color=#").Append(emergency ? Hex(VanillaHudStyle.Caution) : Words(line.Net)).Append('>');
             if (enemy) sb.Append("<< ");
             sb.Append(Plain(line.Text));
             if (enemy) sb.Append(" >>");
@@ -144,11 +145,14 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             while (used > 1 && Height() > MaxHeight) DropOldest();      // the prompt row counts against the zone too: the oldest lines make room for it
             sb.Clear();
             if (open)
-                sb.Append("<color=#9EE6B8>YES</color> <color=#9AA7B0><size=80%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
-                  .Append("<color=#FFB86B>NO</color> <color=#9AA7B0><size=80%>[").Append(Plain(noKey)).Append("]</size></color>");
+            {
+                // The choice is INK-HI (YES) and INK (NO), the keys INK-DIM at LABEL: no colour of its own (HudStandard).
+                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkHi)).Append(">YES</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
+                  .Append("<color=#").Append(Hex(VanillaHudStyle.Ink)).Append(">NO</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>[").Append(Plain(noKey)).Append("]</size></color>");
+            }
             else
-                sb.Append("<color=#9AA7B0><size=80%>ANSWER</size></color>  <color=#")
-                  .Append(echo == "YES" ? "9EE6B8" : echo == "NO" ? "FFB86B" : "9AA7B0").Append('>').Append(echo).Append("</color>");
+                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>ANSWER</size></color>  <color=#")
+                  .Append(Hex(echo == "YES" ? VanillaHudStyle.InkHi : echo == "NO" ? VanillaHudStyle.Ink : VanillaHudStyle.InkDim)).Append('>').Append(echo).Append("</color>");
             prompt.text = sb.ToString();
         }
 
@@ -196,12 +200,12 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             // The game's own feed is up in our log's place (free camera hides the HUD canvas the log lives on): start under it.
             float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, host.ScaleFactor) + 16f : 0f);
             float y = canvasHeight - top;
-            Color frame = VanillaHudStyle.Colours.AllClear;
-            frame.a = 0.70f;
+            Color frame = VanillaHudStyle.Ink;
+            frame.a = HudInk.LineMid;
 
             ChatterNet live = rows[used - 1].Net;
             shelf.text = "COMMS";
-            shelf.color = frame;
+            shelf.color = VanillaHudStyle.InkDim;
             channel.text = "<color=#" + Colour(live) + ">" + Tag(live) + " " + Frequency(live) + "</color>";
             AvHudHost.Place(shelf.rectTransform, Left + Indent, y - 16f, 60f, 20f);
             AvHudHost.Place(channel.rectTransform, Left + Width - 160f, y - 16f, 148f, 20f);
@@ -220,7 +224,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 float now = Clock(row);
                 row.Text.maxVisibleCharacters = row.Head + (int)((now - row.Shown) * CharsPerSecond);
                 float alpha = now <= row.Until ? 1f : Mathf.Clamp01(1f - (now - row.Until) / FadeSeconds);
-                row.Text.alpha = alpha * (row.Scripted || i == used - 1 ? 1f : 0.92f);
+                row.Text.alpha = alpha;
             }
             if (promptOn)
             {
@@ -232,7 +236,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 Color track = frame;
                 track.a = promptFill > 0f ? 0.25f : 0f;
                 SetBar(promptTrack, Left + Indent, cursor + 2f, barWidth, 2f, track);
-                Color fill = Color.Lerp(new Color(1f, 0.72f, 0.42f), new Color(0.62f, 0.9f, 0.72f), promptFill);
+                Color fill = Color.Lerp(VanillaHudStyle.Caution, VanillaHudStyle.Ink, promptFill);
                 fill.a = promptFill > 0f ? 0.9f : 0f;
                 SetBar(promptBar, Left + Indent, cursor + 2f, barWidth * promptFill, 2f, fill);
                 cursor -= RowGap;
@@ -286,7 +290,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             float advance = shelf.GetPreferredValues("MMMMMMMM", 0f, 0f).x / 8f / 100f;
             float scale = 0.65f / Mathf.Max(0.1f, advance);
             shelf.fontSize = channel.fontSize = LeftHudStack.HeaderSize * scale;
-            prompt.fontSize = LeftHudStack.BodySize * scale * 1.1f;
+            prompt.fontSize = LeftHudStack.BodySize * scale;
             for (int i = 0; i < Rows; i++)
             {
                 TextMeshProUGUI text = rows[i].Text;
@@ -343,26 +347,20 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             }
         }
 
+        /// <summary>A speaker's tag and callsign: INK-HI for a friendly net (AWACS, tower, command, allies: the INFO role is the lifted ink), INK for the flight's own, WARNING for the enemy.</summary>
         private static string Colour(ChatterNet net)
         {
             switch (net)
             {
-                case ChatterNet.Awacs: return "8FD4FF";
-                case ChatterNet.Tower: return "FFCF70";
-                case ChatterNet.Command: return "E6EDF2";
-                case ChatterNet.Enemy: return "FF5A4E";
-                case ChatterNet.Allied: return "9EE6B8";
-                default: return ColorUtility.ToHtmlStringRGB(VanillaHudStyle.Colours.AllClear);
+                case ChatterNet.Enemy: return Hex(VanillaHudStyle.WarningRed);
+                case ChatterNet.Wing: return Hex(VanillaHudStyle.Ink);
+                default: return Hex(VanillaHudStyle.InkHi);
             }
         }
 
-        private static string Words(ChatterNet net)
-        {
-            switch (net)
-            {
-                case ChatterNet.Enemy: return "FFB4AC";
-                default: return ColorUtility.ToHtmlStringRGB(Color.Lerp(VanillaHudStyle.Colours.AllClear, Color.white, 0.3f));      // HUD ink, a touch lighter: near-white words vanished on bright cloud once the backdrop went (2026-11-15)
-            }
-        }
+        /// <summary>The spoken words: INK, and WARNING for the enemy net.</summary>
+        private static string Words(ChatterNet net) => Hex(net == ChatterNet.Enemy ? VanillaHudStyle.WarningRed : VanillaHudStyle.Ink);
+
+        private static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
     }
 }

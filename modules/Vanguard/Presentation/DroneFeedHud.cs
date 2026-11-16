@@ -70,12 +70,12 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             card.GetWorldCorners(corners);
             FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
             ColorTheme theme = ThemeManager.Active.ColorTheme;
-            feed.Ink = theme.AllClear;
+            feed.Ink = VanillaHudStyle.Ink;
             feed.Paint(link);
 
             DroneView v = link.Linked;
             bool flash = Time.unscaledTime < lostFlashUntil && ((int)(Time.unscaledTime * 6f) & 1) == 0;
-            Color ink = theme.AllClear;
+            Color ink = VanillaHudStyle.Ink;
             Color tone = lost || (v != null && v.Quality <= 0f) ? theme.Alert : v != null && v.Mode == DroneMode.Hand ? theme.Warning : ink;
             // The shelf's state word: callsign and order ("UAV-2 · HAND"), rebuilt only when either changed; its width sets where the shelf rule stops.
             string callsign = v != null ? v.Callsign : link.LostName ?? "", word = lost ? "LOST" : v == null ? "" : DroneLink.Word(v.Mode);

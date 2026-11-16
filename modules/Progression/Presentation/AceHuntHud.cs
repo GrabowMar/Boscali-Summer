@@ -243,7 +243,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             float sw = TopCentre.Width, from = -sw * 0.5f + 20f + stripTextW + 8f, to = sw * 0.5f - 2f - stripCountW - 8f;
             AvQuadBuffer b = stripLines.Buffer;
             b.Clear();
-            if (to > from) AvStrokes.Line(b, from, 0f, to, 0f, 1f, new Rgba(1f, 1f, 1f, 0.5f));
+            if (to > from) AvStrokes.Line(b, from, 0f, to, 0f, 1f, VanillaHudStyle.InkHi.ToRgba().WithAlpha(HudInk.LineLow));
             stripLines.Commit();
         }
 
@@ -349,7 +349,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 float r = AvFxDriver.ReducedMotion ? 16f : 16f * (1f + 0.1f * Mathf.Sin(Time.unscaledTime * 2f * Mathf.PI));      // a slow 1 Hz breath, not a blink
                 AvStrokes.Diamond(b, x, y, r, TopCentre.Stroke, white);
-                AvStrokes.Diamond(b, x, y, r + 6f, TopCentre.Stroke, white.WithAlpha(close ? 0.8f : 0.35f));
+                AvStrokes.Diamond(b, x, y, r + 6f, TopCentre.Stroke, white.WithAlpha(close ? HudInk.LineMid : HudInk.LineLow));
                 label.pivot = new Vector2(0f, 0.5f);
                 label.anchoredPosition = new Vector2(x + r + 14f, y);
                 Words(1, handle, TextAlignmentOptions.MidlineLeft);
@@ -449,7 +449,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             {
                 Tinted t = tinted[i];
                 if (t.Graphic == null) continue;
-                Color c = t.Tone == Tone.Caution ? palette.Warning : t.Tone == Tone.Bright ? Color.Lerp(palette.AllClear, Color.white, 0.6f) : palette.AllClear;
+                Color c = t.Tone == Tone.Caution ? palette.Warning : t.Tone == Tone.Bright ? VanillaHudStyle.InkHi : palette.AllClear;
                 c.a *= t.Alpha;
                 if (t.Graphic.color != c) t.Graphic.color = c;
             }

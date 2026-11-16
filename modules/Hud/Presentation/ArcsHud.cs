@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Hud.Domain;
 using BoscaliSummer.Modules.Hud.Runtime;
@@ -20,7 +21,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class ArcsHud
     {
         private const int Quads = 72;
-        private const float BingoPrefixPt = 12f, PercentPt = 12f, CaptionPt = 12f, TickPt = 12f, TickLength = 18f, LabelInset = 28f, EndGap = 16f, CaptionDrop = 22f;
+        private const float BingoPrefixPt = HudType.Label, PercentPt = HudType.Label, CaptionPt = HudType.Label, TickPt = HudType.Label, TickLength = 18f, LabelInset = 28f, EndGap = 16f, CaptionDrop = 22f;
         private static readonly char[] BingoWord = { 'B', 'I', 'N', 'G', 'O', ' ' };
 
         private sealed class Side
@@ -200,7 +201,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             t.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), x, y, PercentPt, OutsideAlign(axis), word, false);
             Caption(t, "FUEL", axis, radius, FlightArcs.At(0f, true), ink);
             if (!float.IsNaN(bingoAt)) TickLabel(t, "B", axis, radius, FlightArcs.At(bingoAt, true), amber);
-            if (!float.IsNaN(jokerAt)) TickLabel(t, "J", axis, radius, FlightArcs.At(jokerAt, true), Color.white);
+            if (!float.IsNaN(jokerAt)) TickLabel(t, "J", axis, radius, FlightArcs.At(jokerAt, true), VanillaHudStyle.InkHi);
             t.End();
         }
 
@@ -256,7 +257,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static float devPerRef = 1f;
 
         /// <summary>The words' ink: the HUD green lifted toward white, as the board's and the game's own small labels are. In the pure saturated green its halo (the glow material takes the word's own colour) fattens a 12 px word into a smear.</summary>
-        private static Color Lift(Color ink) => Color.Lerp(ink, Color.white, ScopePalette.HiLift * 0.75f);
+        private static Color Lift(Color ink) => VanillaHudStyle.InkHi;      // INK-HI, the one lift
 
         private static float Snap(float refPx) => Mathf.Round(refPx * devPerRef) / devPerRef;
 

@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Game;
 using NOAvionics;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Ui;
@@ -199,19 +200,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI captionText = null, captionRight = null;
             if (hasSub)
             {
-                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, 13f,
+                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, HudType.Body,
                     new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
                 captionText.characterSpacing = 6f;
                 captionText.text = caption;
-                captionRight = Label(rect, "CaptionRight", TextAlignmentOptions.TopRight, 13f,
+                captionRight = Label(rect, "CaptionRight", TextAlignmentOptions.TopRight, HudType.Body,
                     new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
             }
 
             // Caption owns the top 16 px; the value sits between it and the sub-line (mono faces run wide).
-            TextMeshProUGUI value = Label(rect, "Value", TextAlignmentOptions.Center, hasSub ? 22f : 21f,
+            TextMeshProUGUI value = Label(rect, "Value", TextAlignmentOptions.Center, HudType.Emphasis,
                 new Vector2(0f, hasSub ? 0.3f : 0f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, hasSub ? -17f : 0f));
 
-            TextMeshProUGUI sub = Label(rect, "SubLine", TextAlignmentOptions.Center, 13f,
+            TextMeshProUGUI sub = Label(rect, "SubLine", TextAlignmentOptions.Center, HudType.Body,
                 Vector2.zero, new Vector2(1f, 0.34f), new Vector2(0f, 3f), Vector2.zero);
             sub.gameObject.SetActive(hasSub);
 
@@ -237,7 +238,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bar.fillAmount = 0f;
 
                 // Live percentage under the track, wider than the bar itself.
-                barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, 12f,
+                barLabel = Label(track, "BarLabel", TextAlignmentOptions.Top, HudType.Label,
                     new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
                     new Vector2(-ThirdPersonHudLayout.BarLabelHalfWidth, -ThirdPersonHudLayout.BarLabelDrop), new Vector2(ThirdPersonHudLayout.BarLabelHalfWidth, -2f));
             }
@@ -271,13 +272,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             feed.raycastTarget = false;
 
             // On the picture: the target's name (top left), the missile's countdown (bottom left), SIGNAL LOST (bottom right).
-            TextMeshProUGUI picName = Label(feedRect, "PicName", TextAlignmentOptions.TopLeft, 12f,
+            TextMeshProUGUI picName = Label(feedRect, "PicName", TextAlignmentOptions.TopLeft, HudType.Label,
                 new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -19f), new Vector2(-8f, -5f));
             picName.fontStyle = FontStyles.Bold;
-            TextMeshProUGUI count = Label(feedRect, "Count", TextAlignmentOptions.BottomLeft, 22f,
+            TextMeshProUGUI count = Label(feedRect, "Count", TextAlignmentOptions.BottomLeft, HudType.Emphasis,
                 new Vector2(0f, 0f), new Vector2(0.6f, 0f), new Vector2(8f, 5f), new Vector2(0f, 32f));
             count.fontStyle = FontStyles.Bold;
-            TextMeshProUGUI note = Label(feedRect, "Note", TextAlignmentOptions.BottomRight, 12f,
+            TextMeshProUGUI note = Label(feedRect, "Note", TextAlignmentOptions.BottomRight, HudType.Label,
                 new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 5f), new Vector2(-8f, 21f));
 
             // The shelf: the name after the lead rule, the state word at the right end (the rules between them are FeedCorner.Frame's).
@@ -308,7 +309,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new TargetCardWidgets
             {
                 Root = rect, Name = title, State = state, PicName = picName, Count = count, Note = note, Cells = cells, CellKey = keys,
-                Feed = feed, Active = false, StripPt = 12f, LastCount = -2, LastPicW = -1f, LastPicH = -1f
+                Feed = feed, Active = false, StripPt = HudType.Label, LastCount = -2, LastPicW = -1f, LastPicH = -1f
             };
         }
 
@@ -355,7 +356,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             avoid = new RectF(Board.CenterX / scale, Board.CenterY / scale, Board.Width / scale, Board.Height / scale);
 
             ColorTheme theme = ThemeManager.Active.ColorTheme;
-            Color ink = theme.AllClear;
+            Color ink = VanillaHudStyle.Ink;
             Color caution = theme.Warning;
             Color alert = theme.Alert;
 
@@ -421,16 +422,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static void Style(Box box, Color ink, Color? lit)
         {
             box.Value.color = lit.HasValue ? lit.Value : ink;
-            if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.75f);
+            if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, HudInk.DimAlpha);
             if (box.CaptionRight != null) box.CaptionRight.color = lit.HasValue ? lit.Value : ink;
-            box.SubLine.color = lit.HasValue ? lit.Value : WithAlpha(ink, 0.9f);
+            box.SubLine.color = lit.HasValue ? lit.Value : ink;
         }
 
         private void Fill(ref Box box, float amount, Color color, string prefix)
         {
             if (box.Bar.fillAmount != amount) box.Bar.fillAmount = amount;
-            box.Bar.color = WithAlpha(color, 0.95f);
-            box.BarLabel.color = WithAlpha(color, 0.85f);
+            box.Bar.color = color;
+            box.BarLabel.color = color;
             // Percent plus which prefix is showing (BINGO vs FUEL), as one change key.
             float key = Mathf.Round(amount * 100f) + (prefix.Length * 1000f);
             if (box.LastBar == key) return;
@@ -464,7 +465,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
                 Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
                 Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
-                Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(0.8f));
+                Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(HudInk.LineMid));
                 Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
                 Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
                 BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
@@ -487,7 +488,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static void TargetArt(AvQuadBuffer b, RectF r, bool locked, Rgba ink, Rgba alert)
         {
             float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, h = pt - pb, cx = r.CenterX, cy = (pb + pt) * 0.5f;
-            Rgba tick = ink.WithAlpha(0.8f);
+            Rgba tick = ink.WithAlpha(HudInk.LineMid);
             AvStrokes.Line(b, cx, pt - 6f, cx, pt - 16f, 1.5f, tick);
             AvStrokes.Line(b, cx, pb + 6f, cx, pb + 16f, 1.5f, tick);
             float side = r.Width * 0.2f;
@@ -503,7 +504,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, rad = (pt - pb) * 0.34f, cx = r.CenterX, cy = (pb + pt) * 0.5f;
             AvStrokes.DashedRing(b, cx, cy, rad, 28, 0.55f, 2f, ink);
-            Rgba tick = ink.WithAlpha(0.9f);
+            Rgba tick = ink;
             AvStrokes.Line(b, cx, cy + rad - 10f, cx, cy + rad + 6f, 1.5f, tick);
             AvStrokes.Line(b, cx, cy - rad + 10f, cx, cy - rad - 6f, 1.5f, tick);
             AvStrokes.Line(b, cx - rad + 10f, cy, cx - rad - 6f, cy, 1.5f, tick);
@@ -561,7 +562,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A thin vertical scale: spine plus five ticks; the live fill is the bar image over it.</summary>
         private static void Scale(AvQuadBuffer b, RectF r, Rgba c)
         {
-            Rgba dim = c.WithAlpha(0.45f);
+            Rgba dim = c.WithAlpha(HudInk.LineLow);
             AvStrokes.Line(b, r.CenterX, r.Bottom, r.CenterX, r.Top, 1f, dim);
             for (int i = 0; i <= 4; i++)
             {
@@ -838,7 +839,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             FitPicture(ref c, rect, feed);
 
             if (c.NameW <= 0f) c.NameW = Measure(c.Name, c.Name.text);
-            c.Name.color = WithAlpha(ink, 0.95f);
+            c.Name.color = ink;
             state ??= "--";
             if (c.LastState != state)
             {

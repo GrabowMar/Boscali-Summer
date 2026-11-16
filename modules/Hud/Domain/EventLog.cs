@@ -180,12 +180,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class EventLogLayout
     {
         /// <summary>A character cell of the 12 unit mono face (0.65 em).</summary>
-        public const float Advance = 7.8f;
-        public const float Pitch = 16f, Margin = 16f, TopGap = 12f, MinWidth = 280f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
+        public const float Advance = 7.8f, LineAdvance = 9.1f;      // the stamp and class word are LABEL cells (12), the line BODY (14)
+        public const float Pitch = 20f, Margin = 16f, TopGap = 12f, MinWidth = 280f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
         public const int StampChars = 6, ClassChars = 5;
 
         /// <summary>The characters a line may have in a block <paramref name="maxWidth"/> wide (Full furniture: the narrowest line column): 55 at the 562 column.</summary>
-        public static int LineChars(float maxWidth) => Math.Max(8, (int)((maxWidth - (Indent + (StampChars + 1 + ClassChars + 2) * Advance) - RightPad) / Advance));
+        public static int LineChars(float maxWidth) => Math.Max(8, (int)((maxWidth - (Indent + (StampChars + 1 + ClassChars + 2) * Advance) - RightPad) / LineAdvance));
 
         /// <summary>The block is at most <paramref name="maxWidth"/> wide: the LOG zone's column on this screen (<c>HudZones.ColumnWidth</c>).</summary>
         public static EventLogPlan Plan(float boxLeft, float boxTop, int rows, int widestChars, BoardDeclutter level, float maxWidth)
@@ -196,7 +196,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             p.StampX = p.Left + Indent;
             p.ClassX = furniture ? p.StampX + (StampChars + 1) * Advance : p.Left + LeanIndent;
             p.LineX = p.ClassX + (ClassChars + 2) * Advance;
-            float need = p.LineX - p.Left + widestChars * Advance + RightPad;
+            float need = p.LineX - p.Left + widestChars * LineAdvance + RightPad;
             p.Width = Math.Min(maxWidth, Math.Max(MinWidth, MathF.Ceiling(need / WidthStep) * WidthStep));
             p.FirstRowY = p.Top + (furniture ? ShelfToRow : RowOffset);
             p.Height = p.FirstRowY - p.Top + Pitch * (p.Rows - 1) + RowOffset;

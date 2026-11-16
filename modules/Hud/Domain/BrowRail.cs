@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using System;
 using NOAvionics;
 
@@ -37,7 +38,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The caret triangle: half width, and the depth from the rail to its apex and its base; the label stands this far under the rail point.</summary>
         public const float CaretHalf = 5f, CaretTop = 7f, CaretBase = 16f, LabelDrop = 29f;
         /// <summary>A label character's advance at the 12 px design size (the HUD face's 0.65 em), plus its padding and the clear gap between two labels.</summary>
-        public const float CharW = 7.8f, LabelPad = 4f, LabelGap = 4f, LabelPt = 12f;
+        public const float CharW = 7.8f, LabelPad = 4f, LabelGap = 4f, LabelPt = HudType.Label;
         /// <summary>The boresight mark under the rail's middle: apex y, base y, half width.</summary>
         public const float BoreTop = 46f, BoreBase = 54f, BoreHalf = 5f;
 

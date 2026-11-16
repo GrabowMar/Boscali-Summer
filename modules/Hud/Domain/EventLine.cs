@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class EventParser
     {
         /// <summary>The room a row's line has, in character cells (the 560 unit block less its columns; the 12 unit mono face advances 7.8 a cell).</summary>
-        public const int MaxChars = 55;
+        public const int MaxChars = 47;
 
         /// <summary>The longest "Name:" the game's chat can write: "(ally)" and a 32 character name, and the colon.</summary>
         private const int SpeakerMax = 40;

@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class VisorRim
     {
         private const int Quads = 160;
-        private const float Stroke = 1.2f, Alpha = 0.45f, TextAlpha = 0.6f, TextPt = 10f, TextY = 1073f, TextInset = 34f;
+        private const float Stroke = HudStroke.Hairline, Alpha = HudInk.LineLow, TextAlpha = HudInk.DimAlpha, TextPt = HudType.Label, TextY = 1073f, TextInset = 34f;
         private const string Designation = "HMD-9 // BOSCALI AEROSPACE";
 
         private RectTransform canvasRoot, root;
@@ -135,8 +135,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // The double line at the top centre, above the brow caption.
                 AvStrokes.Line(b, -80f, Y(2.5f), 80f, Y(2.5f), Stroke, c);
                 AvStrokes.Line(b, -50f, Y(5.5f), 50f, Y(5.5f), Stroke, c);
-                AvStrokes.Line(b, -80f, Y(2.5f), -50f, Y(5.5f), Stroke, c.WithAlpha(c.A * 0.8f));
-                AvStrokes.Line(b, 80f, Y(2.5f), 50f, Y(5.5f), Stroke, c.WithAlpha(c.A * 0.8f));
+                AvStrokes.Line(b, -80f, Y(2.5f), -50f, Y(5.5f), Stroke, c);
+                AvStrokes.Line(b, 80f, Y(2.5f), 50f, Y(5.5f), Stroke, c);
             }
             if (p >= 0.65f)
             {

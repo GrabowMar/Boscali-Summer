@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         private const int RailQuads = 96, CurveSegments = 40;
         // Mockup weights: rail and major ticks about 1.5 px at full ink (clear against bright sky and cloud), minor ticks thinner and dimmer.
-        private const float CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f;
+        private const float CurveStroke = HudStroke.Standard, MajorStroke = HudStroke.Standard, MinorStroke = HudStroke.Hairline;
         private const float CaptionY = 11f, CaptionPt = BrowRail.LabelPt;
         private static readonly string[] MissileLabels = { "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9" };
 
@@ -259,7 +259,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (!whole && i / (float)(BrowRail.TickCount - 1) * CurveSegments > step) break;      // the ticks follow the line along as it draws
                 BrowRail.Tick(i, out float x, out float y, out float nx, out float ny, out bool major);
                 float len = major ? 10f : 5f;
-                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.7f));
+                AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? HudInk.LineFull : HudInk.LineMid));
             }
             // The boresight mark has its own mesh (it breathes by alpha), and the scan tick's is one short line that is only ever moved.
             AvQuadBuffer m = mark.Buffer;
@@ -268,7 +268,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             mark.Commit();
             AvQuadBuffer s = scan.Buffer;
             s.Clear();
-            AvStrokes.Line(s, 0f, 0f, 0f, 15f, 2f, Color.Lerp(ink, Color.white, 0.5f).ToRgba());
+            AvStrokes.Line(s, 0f, 0f, 0f, 15f, HudStroke.Heavy, VanillaHudStyle.InkHi.ToRgba());
             scan.Commit();
             for (int i = 0; whole && i < carets.Count; i++)
             {
@@ -295,8 +295,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     }
                     show = scrambled;
                 }
-                if (shown >= captionLen) text.Draw(new System.ReadOnlySpan<char>(show, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
-                else if (shown > 0) text.Draw(new System.ReadOnlySpan<char>(caption, 0, shown), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f, CaptionY - 540f, CaptionPt, ScopeAlign.Left, ink.WithAlpha(0.95f), false);
+                if (shown >= captionLen) text.Draw(new System.ReadOnlySpan<char>(show, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink, false);
+                else if (shown > 0) text.Draw(new System.ReadOnlySpan<char>(caption, 0, shown), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f, CaptionY - 540f, CaptionPt, ScopeAlign.Left, ink, false);
                 if (jamWord && shown >= captionLen)
                     text.Draw(System.MemoryExtensions.AsSpan(JamText), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f - 14f, CaptionY - 540f, CaptionPt, ScopeAlign.Right, palette.Warning, true);      // amber, bold, left of the caption (the board's header stands at its right): the one word that says what is wrong
             }
@@ -313,7 +313,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private static Color Of(BrowTone tone, VanillaHudStyle.Palette palette) =>
-            tone == BrowTone.Red ? palette.Alert : tone == BrowTone.Amber ? palette.Warning : tone == BrowTone.White ? Color.white : Color.Lerp(palette.AllClear, Color.white, ScopePalette.HiLift);
+            tone == BrowTone.Red ? palette.Alert : tone == BrowTone.Amber ? palette.Warning : tone == BrowTone.White ? VanillaHudStyle.InkHi : VanillaHudStyle.InkHi;
 
         /// <summary>A filled triangle (apex up on the screen) at rail units: the apex at (<paramref name="x"/>, <paramref name="topY"/>), its base <paramref name="depth"/> lower and <paramref name="half"/> either side.</summary>
         private static void Triangle(AvQuadBuffer b, float x, float topY, float half, float depth, Rgba c) =>

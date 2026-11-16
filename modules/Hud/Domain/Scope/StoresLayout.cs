@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float NumeralX = 1f, NumeralY = 39f, NumeralGap = 8f;
         /// <summary>"/500" beside the numeral: 14 regular, 4 right of it, its middle 9 under the numeral's.</summary>
         public const float MaxSize = 12f, MaxGap = 4f, MaxDy = 9f;
-        public const float ArmMarkerX = 156f, ArmMarkerSize = 6f, ArmWordX = 168f, ArmY = 23f, ArmSize = 22f;
+        public const float ArmMarkerX = 156f, ArmMarkerSize = 6f, ArmWordX = 168f, ArmY = 23f, ArmSize = HudType.Value;
         /// <summary>The tag column (LINK, TRT AUTO): from <see cref="ArmMarkerX"/>, the first row 41 down, rows 18 apart, tags 10 apart.</summary>
         public const float TagX = 156f, TagY = 41f, TagPitch = 18f, TagGap = 10f;
         public const float NameX = 0f, NameSize = 13f, WordGap = 10f, WordSize = 12f;

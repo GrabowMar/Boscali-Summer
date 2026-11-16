@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Game;
 using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using TMPro;
@@ -188,8 +189,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private static ColorTheme Theme => ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
-        private static Color Ink => Theme != null ? Theme.AllClear : AvTheme.Accent;
-        private static Color InkDim => Ink.WithAlpha(0.7f);
+        private static Color Ink => Theme != null ? VanillaHudStyle.Ink : AvTheme.Accent;
+        private static Color InkDim => Ink.WithAlpha(HudInk.DimAlpha);
         private static Color Caution => Theme != null ? Theme.Warning : AvTheme.Warning;
         private static Color Danger => Theme != null ? Theme.Alert : AvTheme.Alert;
 
@@ -385,7 +386,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvStrokes.Fill(b, to - 2f, cy - 2f, 4f, 4f, white);
                 AvStrokes.Line(b, to + 2f, cy + 2f, to + 8f, cy + 8f, 1f, white);
             }
-            chrome.color = ink.WithAlpha(0.8f);
+            chrome.color = ink.WithAlpha(HudInk.LineMid);
             chrome.Commit();
         }
 

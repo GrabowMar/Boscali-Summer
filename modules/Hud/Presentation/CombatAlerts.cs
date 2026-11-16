@@ -289,7 +289,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             word.color = tone.WithAlpha(calm || AlertText.Lit(kind, now - board.Since(kind), inputs.MissileTtiS) ? 1f : 0.15f);
             bannerIcon.color = word.color;
             Color call = kind == AlertKind.Missile ? palette.Warning : tone;
-            detail.color = call.WithAlpha(0.95f);
+            detail.color = call;
             callIcon.color = detail.color;
             lead.color = kind == AlertKind.Missile ? palette.Warning : tone;      // red over sky read faint: the left detail takes the call's amber, full
 
@@ -298,14 +298,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             AvQuadBuffer b = bannerLines.Buffer;
             b.Clear();
             Rgba ink = tone.ToRgba();
-            TopCentre.Stripes(b, x - reach, x + reach, top - StripeH, top, warning && !calm ? (int)(now * 6f) % 4 * 4f : 0f, ink.WithAlpha(warning ? 1f : 0.75f));
-            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, leftX + PipStep * (i + 0.5f), rowY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : 0.55f));
+            TopCentre.Stripes(b, x - reach, x + reach, top - StripeH, top, warning && !calm ? (int)(now * 6f) % 4 * 4f : 0f, ink.WithAlpha(warning ? 1f : HudInk.LineMid));
+            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, leftX + PipStep * (i + 0.5f), rowY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : HudInk.LineLow));
             // A timed alert burns a fuse along the banner's foot: full at 10 s to impact (or to the ground), gone at none.
             float share = AlertText.Countdown(kind, inputs);
             if (!float.IsNaN(share))
             {
                 float run = (half - RowInset) * 2f;
-                AvStrokes.Fill(b, x - run * 0.5f, bottom - 1.5f, run, 3f, ink.WithAlpha(0.2f));
+                AvStrokes.Fill(b, x - run * 0.5f, bottom - 1.5f, run, 3f, ink.WithAlpha(HudInk.LineLow));
                 AvStrokes.Fill(b, x - run * share * 0.5f, bottom - 1.5f, run * share, 3f, ink);
             }
             bannerLines.Commit();
@@ -464,7 +464,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 calloutSub.gameObject.SetActive(sub);
                 if (sub) calloutSub.text = c.Sub;
                 Color ink = palette.AllClear;
-                Color tone = c.Kind == CalloutKind.Destroyed ? Color.Lerp(ink, Color.white, 0.55f) : c.Kind == CalloutKind.Decoyed ? palette.Warning
+                Color tone = c.Kind == CalloutKind.Destroyed ? VanillaHudStyle.InkHi : c.Kind == CalloutKind.Decoyed ? palette.Warning
                     : c.Kind == CalloutKind.Missed ? ink.WithAlpha(0.65f) : ink;
                 calloutWord.color = tone;
                 calloutIcon.color = tone;

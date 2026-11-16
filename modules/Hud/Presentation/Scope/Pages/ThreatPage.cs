@@ -414,7 +414,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // a lock says so in words: the open visor style draws every plate as brackets, so red against amber would be the only difference (colour alone)
                 subLen = Copy(ScopeStr.Distance(lockOn ? "LOCK" : "", e.RangeM, units, lockOn ? 12 : 8), sub);
                 w = Math.Max(ScopeCanvas.TextW(top.Slice(0, topLen), 12f), ScopeCanvas.TextW(sub.Slice(0, subLen), 12f)) + 8f;
-                h = 31f;
+                h = 36f;
                 moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out _, out _);
             }
             if (keep.Count == own) return;      // the keep-out is full: no room to register the tag
@@ -459,8 +459,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
                 g.Fill(bx, by, w, h, Bg, l.Fade);
                 g.Box(bx, by, w, h, l.Tone, l.Fade, 1f, l.Tone, l.Lock ? 0.25f : 0.14f);
-                g.Text(top, bx + w / 2f, by + 9f, l.Tone, 12f, ScopeAlign.Center, true, l.Fade);
-                g.Text(sub, bx + w / 2f, by + 22f, l.Tone, 12f, ScopeAlign.Center, l.Lock, l.Fade * 0.95f);
+                g.Text(top, bx + w / 2f, by + 10f, l.Tone, 12f, ScopeAlign.Center, true, l.Fade);
+                g.Text(sub, bx + w / 2f, by + 26f, l.Tone, 12f, ScopeAlign.Center, l.Lock, l.Fade * 0.95f);
             }
             for (int i = 0; i < leaderCount; i++) drawLeader[i] = !leaders[i].Moved || !keep.LeaderCrosses(leaders[i].X0, leaders[i].Y0, leaders[i].X1, leaders[i].Y1, leaders[i].X0, leaders[i].Y0, leaders[i].Own);
             keep.DropCrossing(anchorXY, ownIdx, leaderCount, drawLeader);
