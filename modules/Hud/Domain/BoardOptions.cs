@@ -82,7 +82,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
             // Every slot names a real page that is not SYSTEMS (an old config may hold it), and no page twice: a hand-edited duplicate must not paint the same stateful page
             // twice in one frame, and a hidden slot must not turn into one when the count goes up.
             Page1 = Fix(Page1, d.Page1, 0);
-            Page2 = Fix(Page2, d.Page2, 1);
+            // A removed page (DOCK, CARGO, OBJECTIVE, MISSILECAM: they have their own homes) in slot 2 becomes WING, or SHOT when slot 1 already holds WING.
+            BoardPage second = Choosable(Page2) ? d.Page2 : Earlier(BoardPage.Wing, 1) ? BoardPage.Shot : BoardPage.Wing;
+            Page2 = Fix(Page2, second, 1);
             Page3 = Fix(Page3, d.Page3, 2);
             Page4 = Fix(Page4, d.Page4, 3);
         }
@@ -93,7 +95,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         private readonly BoardPage Fix(BoardPage page, BoardPage fallback, int slot)
         {
             if (Choosable(page) && !Earlier(page, slot)) return page;
-            if (!Earlier(fallback, slot)) return fallback;
+            if (Choosable(fallback) && !Earlier(fallback, slot)) return fallback;
             for (BoardPage candidate = BoardPage.Threat; candidate <= BoardPage.Cargo; candidate++)
                 if (Choosable(candidate) && !Earlier(candidate, slot)) return candidate;
             return fallback;
@@ -105,8 +107,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return false;
         }
 
-        /// <summary>A page a slot may hold: a registered page that is not SYSTEMS.</summary>
-        public static bool Choosable(BoardPage page) => (uint)page <= (uint)BoardPage.Cargo && page != BoardPage.Systems;
+        /// <summary>A page a slot may hold: THREAT, SHOT, APPROACH, WING or STRIKE. SYSTEMS is the board's own block; DOCK, CARGO and OBJECTIVE live in the left column's ROUTE slot, MISSILECAM in the TARGET CAM card.</summary>
+        public static bool Choosable(BoardPage page) =>
+            page == BoardPage.Threat || page == BoardPage.Shot || page == BoardPage.Approach || page == BoardPage.Wing || page == BoardPage.Strike;
 
         /// <summary>A persisted slot choice, independent of feed activity, declutter and retired page switches.</summary>
         public readonly ScopePage PageAt(int slot) => (ScopePage)SlotChoice(slot);
