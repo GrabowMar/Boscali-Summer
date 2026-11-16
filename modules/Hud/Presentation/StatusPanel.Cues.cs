@@ -41,6 +41,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly char[] cueChars = new char[96];
         private RectTransform cueRoot, cueSurface;
         private float cueBottom, cueLit;
+        /// <summary>Where the NOTICE line's ink ends as the last paint drew it (design units from the canvas's top; 0: the line is not drawn): the ROUTE slot stands under it.</summary>
+        private float noticeBottom;
         private CanvasGroup cueGroup;
         private AvVector cueVector;
         private ScopeText cueText;
@@ -111,6 +113,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Cues", e);
                 }
             }
+            RouteFrame(tick);      // under the NOTICE line, so after the cues have said where that ends
             // The game's boxes are hidden only while our stack is up in the HUD (a hidden HUD canvas takes it with it and gives them back).
             bool up = cueCharge != 0 && cueRoot != null && cueRoot.gameObject.activeInHierarchy;
             for (int s = 0; s < 4; s++) cueNatives.Hide((CueSource)s, up && (cueCharge >> s & 1) != 0);
@@ -119,7 +122,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void HideCueTree()
         {
             if (cueRoot != null) Show(cueRoot, false);
-            cueBottom = cueLit = 0f;
+            cueBottom = cueLit = noticeBottom = 0f;
             cueCount = 0;
         }
 
@@ -172,14 +175,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 inkBottom = Mathf.Max(inkBottom, y + CueLayout.Pitch - 3f);
                 lit = Mathf.Max(lit, alpha);
             }
+            float noticeEnd = 0f;
             if (noticeOn)
             {
                 ZoneRect zone = HudZones.Ref(HudZone.Notice, canvasW * k);
-                PaintNotice(g, zone.X, Mathf.Round(HudZones.NoticeTop(inkBottom)), zone.W, furniture);
+                float noticeTop = Mathf.Round(HudZones.NoticeTop(inkBottom));
+                PaintNotice(g, zone.X, noticeTop, zone.W, furniture);
+                noticeEnd = noticeTop + zone.H;
             }
             g.End();
             cueVector.Commit();
             cueCount = shown;
+            noticeBottom = noticeEnd;
             cueBottom = inkBottom;
             cueLit = lit;
         }
@@ -278,7 +285,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueLog.Clear();      // the scene is going: its messages are not the next one's
             if (cueRoot != null) UnityEngine.Object.Destroy(cueRoot.gameObject);
             cueRoot = cueSurface = null;
-            cueBottom = cueLit = 0f;
+            cueBottom = cueLit = noticeBottom = 0f;
             cueGroup = null;
             cueVector = null;
             cueText = null;

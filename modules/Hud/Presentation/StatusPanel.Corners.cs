@@ -98,6 +98,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (cornerFurniture != null) Show(cornerFurniture, false);
             StandDownLog();
             StandDownCues();
+            StandDownRoute();
             feedLive = seenFeedUp = seenMapUp = false;
         }
 
@@ -139,6 +140,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (logRoot != null) logRoot.offsetMin = logRoot.offsetMax = swayShift;
             if (cueRoot != null) cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
+            if (routeRoot != null) routeRoot.offsetMin = routeRoot.offsetMax = swayShift;
             if (cornerFurniture == null) return;
             cornerShade.offsetMin = cornerShade.offsetMax = swayShift;
             cornerFurniture.offsetMin = cornerFurniture.offsetMax = swayShift;
@@ -263,6 +265,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             DestroyLog();
             DestroyCues();
+            DestroyRoute();
             screenCorners.Dispose();
             LeftHudStack.NativeFeedBottomPx = 0f;
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);

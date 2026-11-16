@@ -85,10 +85,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root == null) return;
             noticeHas = frame.HasTicker;      // the NOTICE line is the left column's and shows with the board off too
             noticeLine = frame.Ticker;
+            routeUnits = frame.Units;
             // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it. The kill feed and the map
             // keep their own switch (LAYOUT.md 8: "corners stay"), so they are measured, kept fresh and laid out here as for a board that is up.
             if (!Options.Enabled)
             {
+                PollRoutePages(frame.Now);      // the ROUTE slot is the left column's and lives with the board off: its three pages stay polled
                 HideBoard();
                 MeasurePixel();
                 allow = Options.Effective();
@@ -120,6 +122,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
                 pageLive[i] = PollPage(pages[i], env);
             }
+            UpdateRoute();
             bool auto = Options.ScopeMode == BoardScopeMode.Auto;
             if (auto)
             {

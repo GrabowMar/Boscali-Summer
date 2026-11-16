@@ -21,7 +21,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float Cx = 132f, Cy = 150f, R = DockMath.BullseyeR, K = DockMath.PxPerM, X0 = 252f, W = 180f;
         /// <summary>"Long ago" for an animation clock (a finite value: an infinity would make the ripple maths NaN).</summary>
         private const float Never = -1000f;
-        private static readonly string[] Words = { "CUE", "CAPTURE", "ENGAGE", "TRANSFER", "SERVED" };
+        internal static readonly string[] Words = { "CUE", "CAPTURE", "ENGAGE", "TRANSFER", "SERVED" };
         // The glider seen from astern, half-span 1, y DOWN: the wing with its dihedral, the hexagonal fuselage, the twin fins (the left ones; the right are mirrors).
         private static readonly float[] WingL = { -1f, 0.1f, -0.2f, -0.02f, -0.2f, 0.1f, -0.96f, 0.2f };
         private static readonly float[] Fus = { 0f, -0.2f, 0.12f, -0.09f, 0.12f, 0.1f, 0f, 0.2f, -0.12f, 0.1f, -0.12f, -0.09f };
@@ -72,16 +72,35 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ poll
 
-        private bool TooFast => d.Phase < DockPhase.Transfer && DockMath.TooFast(d.ClosureMps, d.MaxClosingMps, d.RangeM) && d.RangeM <= DockMath.RibbonM;
+        private bool TooFast => TooFastOf(d);
 
-        private float Cone => d.ServiceZone ? d.CaptureM : DockMath.ConeM(d.RangeM);
+        private float Cone => ConeOf(d);
+
+        // The same rules and number formats serve the ROUTE slot's DOCK face (StatusPanel.Route.cs).
+        internal static bool TooFastOf(in DockScope s) => s.Phase < DockPhase.Transfer && DockMath.TooFast(s.ClosureMps, s.MaxClosingMps, s.RangeM) && s.RangeM <= DockMath.RibbonM;
+
+        internal static float ConeOf(in DockScope s) => s.ServiceZone ? s.CaptureM : DockMath.ConeM(s.RangeM);
+
+        internal static bool OutOfFunnel(in DockScope s)
+        {
+            bool near = s.RangeM <= DockMath.RibbonM;
+            return s.ServiceZone ? !s.ZoneReady && near : near && s.RangeM > 0f && !DockMath.Inside(DockMath.ErrM(s.RelX, s.RelY), ConeOf(s));
+        }
+
+        internal static float ClosureIn(float mps, AvUnits u) => u == AvUnits.Imperial ? mps * 1.94384f : mps;
+
+        internal static string ClosureUnitOf(AvUnits u) => u == AvUnits.Imperial ? " KT" : " M/S";
+
+        internal static int LengthIn(float m, AvUnits u) => (int)Math.Round(AvUnitTable.Altitude(m, u));
+
+        internal static string LengthUnitOf(AvUnits u) => u == AvUnits.Imperial ? " FT" : " M";
 
         private float Err => DockMath.ErrM(d.RelX, d.RelY);
 
         private bool Near => d.RangeM <= DockMath.RibbonM;
 
         /// <summary>Outside the funnel (a caution only once the tanker is close: at the cue range nobody is lined up yet).</summary>
-        private bool Bad => d.ServiceZone ? !d.ZoneReady && Near : Near && d.RangeM > 0f && !DockMath.Inside(Err, Cone);
+        private bool Bad => OutOfFunnel(d);
 
         private bool Edge => Near && DockMath.NearEdge(Err, Cone, d.RangeM);
 
@@ -140,13 +159,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (moved != movedKey) { movedKey = moved; movedText = "+" + Mass(d.MovedFuelKg) + "  +" + d.MovedRounds + " RND"; }
         }
 
-        private float Closure(float mps) => units == AvUnits.Imperial ? mps * 1.94384f : mps;
+        private float Closure(float mps) => ClosureIn(mps, units);
 
-        private string ClosureUnit() => units == AvUnits.Imperial ? " KT" : " M/S";
+        private string ClosureUnit() => ClosureUnitOf(units);
 
-        private int Len(float m) => (int)Math.Round(AvUnitTable.Altitude(m, units));
+        private int Len(float m) => LengthIn(m, units);
 
-        private string LenUnit() => units == AvUnits.Imperial ? " FT" : " M";
+        private string LenUnit() => LengthUnitOf(units);
 
         private void UpdateHeadline()
         {
