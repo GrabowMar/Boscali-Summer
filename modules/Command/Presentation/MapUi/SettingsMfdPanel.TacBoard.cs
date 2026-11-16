@@ -66,6 +66,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "How big the whole board is.", on, off);
             BoardRing(flow, look, page, "BACKGROUNDS", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
                 "The one soft backdrop behind every block of the HUD: the board, the left column, the map, the wing strip and the centre alerts. 0% draws none.", () => true, off);
+            var edge = flow.Add(new SetRingRow(flow.Content));
+            BoardRing(flow, edge, page, "TEXT EDGE", () => board.TextEdge, v => board.TextEdge = v, 0f, 0.25f, .01f, v => v < .005f ? "OFF" : v.ToString("0.00"),
+                "A hair-thin dark edge round every letter of the HUD so small words stay sharp on bright sky. OFF draws none.", () => true, off);
 
             flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", null);
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
@@ -84,6 +87,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
             ToggleCell(flow, page, "VISOR BROW", "The curved rail at the top centre with bearing marks, and the faint frame ticks down the screen's sides. Cockpit view. Stays on with the board off.",
                 () => board.Brow, v => board.Brow = v);
+            ToggleCell(flow, page, "FUEL AND THROTTLE ARCS", "Two segmented arcs hugging the reticle in place of the game's plain fuel and throttle arcs. Cockpit view. Stays on with the board off.",
+                () => board.Arcs, v => board.Arcs = v);
 
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", null);
             ToggleCell(flow, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",

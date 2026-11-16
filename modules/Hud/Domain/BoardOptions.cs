@@ -59,6 +59,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool CentreAlerts;
         /// <summary>The visor's brow rail and frame furniture (2026-11-16). Independent of <see cref="Enabled"/>.</summary>
         public bool Brow;
+        /// <summary>The two segmented fuel and throttle arcs round the reticle in place of the game's plain ones (2026-11-16). Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
+        public bool Arcs;
+        /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to <see cref="TextEdgeMax"/> (TMP outline units).</summary>
+        public float TextEdge;
+        public const float TextEdgeMax = 0.25f;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
@@ -68,7 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Approach, Page4 = BoardPage.Strike, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true, CentreAlerts = true, Brow = true,
+            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, TextEdge = 0.16f,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>
@@ -77,6 +82,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             BoardOptions d = Default;
             Scale = Fit(Scale, ScaleMin, ScaleMax, d.Scale);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
+            TextEdge = Fit(TextEdge, 0f, TextEdgeMax, d.TextEdge);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
             if ((uint)ScopeMode > (uint)BoardScopeMode.Auto) ScopeMode = d.ScopeMode;

@@ -189,6 +189,37 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         /// <summary>
+        /// The segmented fuel and throttle arcs as they stand (tests/ingame/hud-arcs.json): whether they are up, whether the game's own two gauges are hidden behind them, the lit segments, the measured circle
+        /// and the game's gauges' own alpha. <c>fuel</c> (0..1) first sets every tank to that share of its capacity and <c>throttle</c> (0..1) the player's throttle input, for a capture of a low tank or a full throttle.
+        /// </summary>
+        public static Dictionary<string, object> Arcs(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null) return Failure("HudAutomation", "Arcs", "no HUD aircraft");
+            if (Has(args, "fuel"))
+            {
+                float share = Mathf.Clamp01(Number(args, "fuel", 1f));
+                foreach (FuelTank tank in aircraft.GetFuelTanks())
+                {
+                    float want = tank.GetCapacity() * share, have = tank.GetLevel();
+                    if (have > want) tank.UseFuel(have - want); else tank.Refuel(want - have);
+                }
+            }
+            if (Has(args, "throttle") && aircraft.GetInputs() != null) aircraft.GetInputs().throttle = Mathf.Clamp01(Number(args, "throttle", 0f));
+            ArcsHud arcs = HudBoard.Instance != null ? HudBoard.Instance.Arcs : null;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "fuel", aircraft.GetFuelLevel() }, { "throttle", aircraft.GetInputs()?.throttle ?? -1f },
+                { "shown", arcs != null && arcs.Shown }, { "natives_hidden", arcs != null && arcs.NativesHidden }, { "fuel_lit", arcs?.FuelLit ?? -1 }, { "throttle_lit", arcs?.ThrottleLit ?? -1 },
+                { "radius", arcs?.FuelRadius ?? -1f }, { "axis", arcs?.FuelAxis ?? 0f }, { "throttle_word", arcs?.ThrottleWord ?? "" },
+            };
+            Debug.Log("[HudAutomation] Arcs: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
         /// The centre combat layer as it stands (tests/ingame/ace-alerts.json): whether it is up, the banner's word and detail, how many marks the THREAT RING draws, the shot callout and
         /// whether the game's own missile list is hidden behind it. <c>callout</c> (hit, destroyed, missed, decoyed) first pushes that call, <c>sub</c> its line, for a capture of the look.
         /// </summary>

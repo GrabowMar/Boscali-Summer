@@ -53,6 +53,10 @@ namespace BoscaliSummer.Core.Contracts
         bool CentreAlerts { get; set; }
         /// <summary>The visor's brow rail (bearing marks and status caption at the top centre) and the faint frame ticks on the screen's sides. Cockpit view only.</summary>
         bool Brow { get; set; }
+        /// <summary>The segmented fuel and throttle arcs round the reticle in place of the game's plain ones. Cockpit view only.</summary>
+        bool Arcs { get; set; }
+        /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to 0.25.</summary>
+        float TextEdge { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
         void ResetToDefaults();
     }

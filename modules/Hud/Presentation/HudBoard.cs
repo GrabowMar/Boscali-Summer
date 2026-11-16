@@ -64,6 +64,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Aircraft alertAircraft;
         // The visor's brow rail and frame furniture (cockpit view only).
         private BrowHud brow;
+        // The segmented fuel and throttle arcs (cockpit view only); arcsAt / arcsExternal say when and what the last complete Tick saw, so a Tick that stops running gives the game's gauges back (fail open).
+        private ArcsHud arcs;
+        private float arcsAt = float.NegativeInfinity;
+        private bool arcsExternal;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
@@ -96,6 +100,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The visor's brow rail (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
         internal BrowHud Brow => brow;
+
+        /// <summary>The segmented fuel and throttle arcs (the sim probe in <c>HudAutomation</c> reads it; null until first wanted).</summary>
+        internal ArcsHud Arcs => arcs;
 
         private void OnEnable()
         {
@@ -161,6 +168,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
             try { brow?.Frame(); }
             catch (Exception e) { brow?.Hide(); PatchGuard.Report("Hud.Brow.Frame", e); }
+            // The arcs, every frame and BEFORE anything below can fail: they hide the game's own two gauges only in the frame they are drawn, and give them back in the frame they are not wanted.
+            try { arcs?.Frame(ArcsWanted(out Aircraft arcsAircraft), arcsAircraft); }
+            catch (Exception e) { arcs?.Fail(); PatchGuard.Report("Hud.Arcs.Frame", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
             if (panel != null)
@@ -171,12 +181,26 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
+        /// <summary>
+        /// The arcs may draw this frame: the switch (read live, so the game's gauges are back the frame it goes off), a live HUD aircraft, the cockpit view (the external views and a missile ride have the
+        /// third-person cluster and its own hiding of these gauges), an overlay may show (no pause, map or cinematic, the native HUD up), and the last complete Tick is under half a second old.
+        /// </summary>
+        private bool ArcsWanted(out Aircraft aircraft)
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null || aircraft.disabled || arcsExternal || NativeTakeover.Stale(Time.unscaledTime, arcsAt)) return false;
+            if (!(settings != null ? settings.Arcs.Value : options.Arcs)) return false;
+            return BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+        }
+
         /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and every backdrop of the mod's HUD (<see cref="HudSprites.Backdrop"/>).</summary>
         private void TakeOptions()
         {
             settings?.Snapshot(ref options);
             if (panel != null) panel.Options = options;
             HudSprites.Backdrop = ScopeLayout.CloudAlpha * options.Shade;      // the one backdrop every HUD block of the mod stands on
+            BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(options.TextEdge);      // the thin dark edge on every glow material
         }
 
         private void Tick()
@@ -200,6 +224,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool thirdPerson = canShow && viewingOwnExternally;
             bool missileCam = canShow && viewingMissile;
             flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
+            arcsExternal = viewingOwnExternally || viewingMissile;      // any external view or missile ride: the arcs are not drawn, the game's gauges are the hider's
+            arcsAt = Time.unscaledTime;
 
             // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
@@ -296,6 +322,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
             }
             catch (Exception e) { PatchGuard.Report("Hud.Brow", e); }
+
+            // The arcs' data (fuel level, the BINGO need); the arcs themselves run every frame in LateUpdate.
+            try
+            {
+                arcs ??= new ArcsHud();
+                arcs.Read(hudAircraft, frame);
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Arcs", e); }
 
             // The card stands in the left column in the external views, and in the cockpit while a target is locked (the picture is the cockpit tac screen's own camera, so nothing native is touched).
             if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
@@ -451,6 +485,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alertAircraft = null;
             brow?.Destroy();
             brow = null;
+            arcs?.Destroy();
+            arcs = null;
             TopCentre.Lift = 0f;
             nextRead = 0;
             targetReadout.Release();
@@ -492,6 +528,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alerts?.Hide();
             alertAircraft = null;
             brow?.Hide();
+            arcs?.Down();
             TopCentre.Lift = 0f;
             externalHud.Release();
             wingview.Reset();

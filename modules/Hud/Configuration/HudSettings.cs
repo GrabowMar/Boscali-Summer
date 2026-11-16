@@ -32,6 +32,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> Corners { get; }
         public ConfigEntry<bool> CentreAlerts { get; }
         public ConfigEntry<bool> Brow { get; }
+        public ConfigEntry<bool> Arcs { get; }
+        public ConfigEntry<float> TextEdge { get; }
 
         public HudSettings(ConfigFile config)
         {
@@ -117,6 +119,14 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             Brow = config.Bind(section, "Brow", d.Brow,
                 "The visor's brow rail at the top centre (a curved scale with bearing marks for missiles inbound, radars on you, an ace on the hunt, the objective, the runway, the tanker and the landing zone, and a one-line status caption) and the faint frame ticks down the screen's sides. Cockpit view only." + live);
 
+            Arcs = config.Bind(section, "Arcs", d.Arcs,
+                "Two segmented arcs hugging the reticle, fuel on the left and throttle on the right, in place of the game's plain ones (the game's own come back the moment this is off, or the view is not the cockpit). Cockpit view only." + live);
+
+            TextEdge = config.Bind(section, "TextEdge", d.TextEdge,
+                new ConfigDescription("Width of the hair-thin dark edge round every letter of the mod's HUD text, so small words stay sharp on bright sky and cloud; 0 draws none." + live,
+                    new AcceptableValueRange<float>(0f, BoardOptions.TextEdgeMax)));
+            BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(TextEdge.Value);
+
             // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
             BoardOptions saved = d;
             Snapshot(ref saved);
@@ -150,6 +160,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Corners = Corners.Value;
             into.CentreAlerts = CentreAlerts.Value;
             into.Brow = Brow.Value;
+            into.Arcs = Arcs.Value;
+            into.TextEdge = TextEdge.Value;
             into.Sanitize();
         }
 
@@ -175,6 +187,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
         bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
         bool ITacBoardSettings.Brow { get => Brow.Value; set => Brow.Value = value; }
+        bool ITacBoardSettings.Arcs { get => Arcs.Value; set => Arcs.Value = value; }
+        float ITacBoardSettings.TextEdge { get => TextEdge.Value; set => TextEdge.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
         void ITacBoardSettings.ResetToDefaults()
@@ -183,7 +197,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             {
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
-                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, TextEdge,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;
