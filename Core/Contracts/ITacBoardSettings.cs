@@ -3,7 +3,7 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>Where the TAC BOARD sits: spread along the top edge, or the classic narrow column.</summary>
     internal enum BoardLayout { Wide, Stack }
 
-    /// <summary>How much the TAC BOARD shows: everything the switches allow, a leaner board, or only what a pilot in a fight needs.</summary>
+    /// <summary>Legacy config values. The HUD always uses Full; Lean and Minimal remain parseable for saved settings.</summary>
     internal enum BoardDeclutter { Full, Lean, Minimal }
 
     /// <summary>The board's panels (RWR, FIRES, WING) show themselves while they have something to say (Auto, the default), or there are none (Off). Manual is a retired value kept so an old config still parses: it reads as Auto.</summary>
@@ -27,6 +27,7 @@ namespace BoscaliSummer.Core.Contracts
         float Scale { get; set; }
         /// <summary>Strength of the one backdrop behind every HUD block of the mod (board, left column, TAC MAP, wing strip, centre alerts), 0 (none) to 1.</summary>
         float Shade { get; set; }
+        /// <summary>Retired setting; always Full.</summary>
         BoardDeclutter Declutter { get; set; }
         BoardScopeMode ScopeMode { get; set; }
         /// <summary>The stores, countermeasure and power section. Off restores the native panels.</summary>
@@ -44,9 +45,9 @@ namespace BoscaliSummer.Core.Contracts
         bool Corners { get; set; }
         /// <summary>The centre combat layer: WARNING banner, threat ring, shot callouts. Independent of <see cref="Enabled"/>.</summary>
         bool CentreAlerts { get; set; }
-        /// <summary>AR: the flight path predictor (a hard pull, or the ground ahead within 8 s).</summary>
+        /// <summary>Retired flight-path overlay; always off, including saved configurations.</summary>
         bool ArPath { get; set; }
-        /// <summary>AR: the engagement envelopes of known hostile SAMs near enough to matter.</summary>
+        /// <summary>Retired SAM envelope overlay; always off, including saved configurations.</summary>
         bool ArDomes { get; set; }
         /// <summary>AR: own missiles to their targets, inbound missiles boxed.</summary>
         bool ArMissiles { get; set; }

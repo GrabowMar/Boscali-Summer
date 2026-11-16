@@ -217,7 +217,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (tickerPending)
             {
                 var map = SceneSingleton<DynamicMap>.i;
-                if (settings.ExpandedMapUi.Value && DynamicMap.mapMaximized && map != null &&
+                if (DynamicMap.mapMaximized && map != null &&
                     MfdLayout.TryResolve(map.maximizedMapCanvas, out var columns))
                     MfdNewsTicker.Ensure(map.maximizedMapCanvas, columns, settings);
             }

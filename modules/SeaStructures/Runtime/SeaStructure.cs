@@ -129,6 +129,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         {
             look.Gone = true;
             SeaSection section = layout.Sections[look.Section];
+            if (section.Pad) SeaFacility.Disable(gameObject);
             look.Fallen = section.Pieces.Length;
             Shed(look, section, float.NegativeInfinity);
             look.Part.SpawnFragments();

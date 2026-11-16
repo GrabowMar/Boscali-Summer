@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Events
             network.Configure(manager);
             context.AddService<IActiveEventsView>(manager);
 
-            // Politics (Nation): the cabinet card on EVN DISPATCH and a cue over the map, never a popup.
+            // Politics (Nation): cabinet requests share the same illustrated map notice as world events.
             var cabinet = new CabinetDispatch();
             context.AddService<IPoliticalDispatch>(cabinet);
 
@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Events
 
             SuperEventAlert alert = context.AddSceneService<SuperEventAlert>(67);
             alert.Configure(context.Settings.Events, manager);
-            context.AddSceneService<CabinetCue>(68).Configure(cabinet);
+            alert.Cabinet = cabinet;
 
             context.AddClientSetting("MISSIONS", "EVENT PICTURES",
                 "Show event artwork. OFF uses a generic event symbol in event cards, archive dossiers and alerts. Applies now.",

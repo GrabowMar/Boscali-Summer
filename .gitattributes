@@ -9,3 +9,7 @@
 
 # The Blueprinter pack is over GitHub's 100 MB file limit, so it goes through Git LFS.
 /assets/BoscaliSummer.nobp filter=lfs diff=lfs merge=lfs -text
+
+# AgX LUT redistribution terms are unresolved; source archives keep only our effects shaders.
+/modules/Effects/Assets/agx.bundle export-ignore
+/modules/Effects/Assets/Source/agx-*.exr* export-ignore

@@ -1,5 +1,8 @@
 #if !PUBLIC_RELEASE
+using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Modules.Command.Presentation.MapUi;
 using NOAvionics;
 using TMPro;
@@ -9,7 +12,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     /// <summary>
     /// Hook for the unattended MIS check: <c>Open {page}</c> maximises the map, presses the MIS rail key (the click path) and
-    /// shows that page (0 JOBS, 1 BRIEF); <c>Pick {index}</c> clicks a job card, <c>Act {index}</c> its act button; <c>Read</c>
+    /// shows that page (0 JOBS, 1 BRIEF, 2 GAMEMODE); <c>Pick {index}</c> clicks a job card, <c>Act {index}</c> its act button; <c>Read</c>
     /// reports the page and its text. Dev tooling.
     /// </summary>
     public static class MisAutomation
@@ -58,6 +61,10 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (!string.IsNullOrEmpty(t.text)) text.Add(t.text);
             string joined = string.Join("|", text);
             result["text"] = joined.Length > 1500 ? joined.Substring(0, 1500) : joined;
+            MissionDashboardStatus report = default;
+            bool hasReport = console.CurrentPage == 2 && ModuleServices.TryGet<IMissionDashboardView>(out var view) && view.TryRead(out report);
+            result["hasGamemode"] = hasReport && !string.IsNullOrEmpty(report.Name) && joined.Contains(report.Name, StringComparison.Ordinal);
+            result["hasObjective"] = hasReport && !string.IsNullOrWhiteSpace(report.Objective) && joined.Contains(report.Objective, StringComparison.Ordinal);
             return result;
         }
     }

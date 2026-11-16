@@ -22,6 +22,7 @@ namespace NOAvionics
         private readonly GameObject host;
         private readonly Canvas canvas;
         private bool glassy = true;
+        private Color? surfaceFill, surfaceBorder;
         private readonly AvScrollView scrollView;
         private bool visible, blurHeld;
         private Vector2 fittedCanvas;
@@ -144,6 +145,14 @@ namespace NOAvionics
         public bool Opaque { get => opaque; set { if (opaque == value) return; opaque = value; SyncBlurLease(); UpdateBlur(); Restyle(); } }
         private bool opaque;
 
+        /// <summary>Optional window-specific glass tint and frame; other windows keep the shared theme.</summary>
+        public void SetSurface(Color fill, Color border)
+        {
+            surfaceFill = fill;
+            surfaceBorder = border;
+            Restyle();
+        }
+
         private void Refresh() { FitIntoCanvas(); UpdateBlur(); }
 
         // Some callers author their maps and columns directly under Root. Fit the entire authored window,
@@ -200,11 +209,13 @@ namespace NOAvionics
         {
             AvStyle w = AvStyleHost.FuiStyle("window");
             // Keep a little blurred-world transmission without letting bright skies wash out the reading surface.
-            frame.Paint(AvStyleHost.Resolve(w.Background, AvTheme.Ground).WithAlpha(opaque ? 1f : glassy ? 0.92f : 0.97f), AvStyleHost.Resolve(w.Border, AvTheme.Frame));
+            Color fill = surfaceFill ?? AvStyleHost.Resolve(w.Background, AvTheme.Ground);
+            float alpha = opaque ? 1f : glassy ? (surfaceFill.HasValue ? fill.a : .92f) : surfaceFill.HasValue ? Mathf.Max(fill.a, .97f) : .97f;
+            frame.Paint(fill.WithAlpha(alpha), surfaceBorder ?? AvStyleHost.Resolve(w.Border, AvTheme.Frame));
             scrollView?.Restyle();
             frame.BracketColor = AvStyleHost.FuiFill("card-bracket", AvTheme.Frame);
             AvStyle t = AvStyleHost.FuiStyle("window-title");
-            titleBack.color = AvStyleHost.Resolve(t.Background, AvTheme.SurfaceRaised).WithAlpha(1f);
+            titleBack.color = surfaceFill.HasValue ? fill.WithAlpha(Mathf.Max(.85f, fill.a)) : AvStyleHost.Resolve(t.Background, AvTheme.SurfaceRaised).WithAlpha(1f);
             titleText.color = AvStyleHost.Resolve(t.Color, AvTheme.TextPrimary);
         }
 

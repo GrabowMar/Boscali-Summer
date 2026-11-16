@@ -166,8 +166,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 x = PlaceDocked(fronts, x, scale);
                 x = PlaceDocked(operation, x, scale);
                 x = PlaceDocked(sorties, x, scale);
-                PlaceDocked(draw, x, scale);
-                AvLay.Place(plateLine.rectTransform, 0f, 34f, Mathf.Max(1f, width), 22f);
+                x = PlaceDocked(draw, x, scale);
+                AvLay.Place(plateLine.rectTransform, x + 4f, 0f, Mathf.Max(1f, width - x - 4f), 28f);
+                plateLine.overflowMode = TextOverflowModes.Ellipsis;
                 return;
             }
             plate.anchorMin = plate.anchorMax = plate.pivot = new Vector2(0f, 1f);

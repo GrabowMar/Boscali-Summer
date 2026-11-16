@@ -119,6 +119,11 @@ namespace BoscaliSummer.Core.Config
                 ConfigEntryBase entry = bound.Value;
                 if (entry == null) continue;
                 string section = bound.Key.Section;
+                if (section == "Command" && bound.Key.Key == "ExpandedMapUi")
+                {
+                    Tag(description, entry, new ConfigurationManagerAttributes { Browsable = false });
+                    continue;
+                }
 
 #if PUBLIC_RELEASE
                 // Public builds (-p:PublicRelease=true): cheats and dev tools in [Debug] are

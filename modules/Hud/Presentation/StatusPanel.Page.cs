@@ -129,9 +129,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { ReportOnce(sys, e); }
             g.Raise(0f);
             PaintHeader(g, sys, sys.Title, null, w, flashOn);
+            if (hasMission) PaintMissionStatus(g, w);
             g.Brackets(-3f, 14f, w + 6f, hS - 11f, 10f, Dim);
             g.End();
             statusVector.Commit();
+        }
+
+        private void PaintMissionStatus(ScopeCanvas g, float width)
+        {
+            MissionDashboardStatus m = missionStatus;
+            ScopeTone tone = m.Ready ? Ink : Amber;
+            float top = ScopeLayout.Compact + 7f;
+            g.Text(m.Name, 4f, top, tone, HudType.Label, bold: true);
+            g.FitText(m.Phase, width - 4f, top, width - 150f, tone, HudType.Label, HudType.Label, ScopeAlign.Right);
+            float room = width - 8f;
+            if (m.HasTimer)
+            {
+                int seconds = Mathf.Max(0, Mathf.CeilToInt(m.RemainingSeconds));
+                g.Text(ScopeStr.Cat(seconds < 600 ? "0" : "", seconds / 60, seconds % 60 < 10 ? ":0" : ":", seconds % 60, null),
+                    width - 4f, top + 16f, tone, HudType.Label, ScopeAlign.Right, true);
+                room -= 82f;
+            }
+            if (m.HasScores) g.FitText(ScopeStr.Cat("BDF ", m.Score0, " : ", m.Score1, " PALA"), 4f, top + 16f, room, tone, HudType.Label, HudType.Label);
+            else g.FitText(m.Detail, 4f, top + 16f, room, tone, HudType.Label, HudType.Label);
         }
     }
 }

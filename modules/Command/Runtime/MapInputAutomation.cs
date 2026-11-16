@@ -47,9 +47,9 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 case "disarm":
                     MapPicker.Disarm(TestOwner);
                     break;
-                // Compatibility action for map-input: tools now live in the drawer's PLOT page.
+                // Tools remain on the left-column MAP console.
                 case "tools":
-                    MfdMapControls.SelectTab(2);
+                    AvConsole.Open("MAP", "TOOLS");
                     break;
                 case "mark":
                     MfdMapInteractions.ArmMark(MfdMapInteractions.MarkTool.Range);
@@ -85,13 +85,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
                     MfdColumnFold.Toggle();
                     break;
                 case "controls-fold":
-                case "controls-selecttab":
-                case "controls-cancel":
-                case "controls-key":
-                case "controls-native-key":
                     return ControlsAction(map, args);
                 case "controls-press":
                     return PressDrawerControl(map, args);
+                case "panel-key":
+                    return PressPanelKey(map, args);
                 case "strcard":
                     if (!OpenStrCard()) return Failure("MapInputAutomation", "strcard", "no STR pin on the map");
                     break;
@@ -202,14 +200,15 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static Dictionary<string, object> State(DynamicMap map)
         {
-            // Read the actually shown drawer rather than the retired MAP console.
+            // Read the MAP console's shown page; the bottom drawer has no Tools/Layers pages.
+            AvConsole mapConsole = AvConsole.Find("MAP");
             var text = new System.Text.StringBuilder();
-            if (MfdMapControls.Shown && !MfdMapControls.Folded)
-                foreach (TMPro.TMP_Text t in MfdMapControls.Root.GetComponentsInChildren<TMPro.TMP_Text>(false))
+            if (mapConsole != null && mapConsole.Root.gameObject.activeInHierarchy && mapConsole.CurrentPage >= 0)
+                foreach (TMPro.TMP_Text t in mapConsole.Page(mapConsole.CurrentPage).Content.GetComponentsInChildren<TMPro.TMP_Text>(false))
                     text.Append(t.text).Append('|');
             string page = text.ToString();
             Dictionary<string, object> state = Read(map);
-            state["mapPage"] = MfdMapControls.Shown && !MfdMapControls.Folded ? new[] { "VIEW", "LAYERS", "PLOT" }[MfdMapControls.SelectedTab] : "";
+            state["mapPage"] = mapConsole != null && mapConsole.Root.gameObject.activeInHierarchy ? mapConsole.CurrentPageName : "";
             state["plotShown"] = page.Contains("MARKERS") ? 1f : 0f;
             state["markShown"] = page.Contains("LANDING ZONE") ? 1f : 0f;
             state["markArmed"] = MfdMapInteractions.ArmedMark != MfdMapInteractions.MarkTool.None ? 1f : 0f;
@@ -219,6 +218,8 @@ namespace BoscaliSummer.Modules.Command.Runtime
 
         private static Dictionary<string, object> Read(DynamicMap map) => new Dictionary<string, object>
         {
+            ["screenWidth"] = Screen.width,
+            ["screenHeight"] = Screen.height,
             ["open"] = DynamicMap.mapMaximized ? 1f : 0f,
             ["deck"] = MapSelectionDeck.Shown ? 1f : 0f,
             ["deckCount"] = MapSelectionDeck.CountText ?? "",

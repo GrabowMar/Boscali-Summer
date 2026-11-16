@@ -16,13 +16,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         /// The MIS bezel, home of every paid task. JOBS lists the pilot's own job (on the HUD, or an armed package) and then the open jobs of every
         /// <see cref="IJobSource"/> (contracts and staff sorties from DynamicOperations, strike packages from Support), nearest first, each with
         /// LOCATE and its source's own act; a contract or sortie opens in place into its order, plot and ABORT. BRIEF is the hero card (name,
-        /// clock, lead objective, briefing) over SCORE, the escalation ladder and the task checklist. Reads happen in <see cref="Gather"/> into one reusable <see cref="BoardModel"/>; <see cref="Render"/> only writes it to built parts.
+        /// clock, lead objective, briefing) over SCORE, the escalation ladder and the task checklist. GAMEMODE keeps the host's match report.
+        /// Reads happen in <see cref="Gather"/> into one reusable <see cref="BoardModel"/>; <see cref="Render"/> only writes it to built parts.
         /// </summary>
         private sealed class MissionPresenter : Presenter
         {
             private const int ObjectivePageSize = 10;
             private const int MaxObjectiveLines = 24;
-            private const int PageJobs = 0, PageBrief = 1, MaxHudCards = 2, MaxOpenCards = 12;
+            private const int PageJobs = 0, PageBrief = 1, PageMode = 2, MaxHudCards = 2, MaxOpenCards = 12;
 
             private struct ObjectiveLine
             {
@@ -34,7 +35,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public MissionPhase Phase;
             }
 
-            /// <summary>Everything the two pages show, read once per refresh.</summary>
+            /// <summary>Everything the pages show, read once per refresh.</summary>
             private sealed class BoardModel
             {
                 public string MissionName = "NO MISSION LOADED", Brief = "STANDING BY FOR MISSION CONTROLLER", Mode = "", Clock = "—";
@@ -49,6 +50,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 public readonly List<SecondaryObjectiveView> Contracts = new List<SecondaryObjectiveView>(8);
                 public readonly List<JobRow> Jobs = new List<JobRow>(16);
                 public bool Installed, Sources;
+                public bool HasModeReport;
+                public MissionDashboardStatus ModeReport;
             }
 
             private readonly BoardModel model = new BoardModel();
@@ -84,18 +87,25 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             private AvPagedStack<ChecklistRow> checklist;
             private AvRow objectivesEmpty;
 
+            // GAMEMODE page, supplied by the mission owner through the shared report.
+            private AvSection modeSection;
+            private AvRow modePhase, modeScore, modeTimer;
+            private AvNote modeObjective, modeRoute, modeDetail, modeEmpty;
+
             public MissionPresenter(MFDScreen screen) : base(screen, VanillaMfdPanelId.Mis) { }
 
             protected override (AvIcon Icon, string Label)[] TabItems { get; } = new[]
             {
                 (AvIcon.Star, "JOBS"),
                 (AvIcon.Flag, "BRIEF"),
+                (AvIcon.Target, "GAMEMODE"),
             };
 
             protected override string[] TabTips { get; } = new[]
             {
                 "Jobs: the one on your HUD, then every open job (contracts, staff sorties, strike packages), nearest first. LOCATE moves the map.",
                 "Brief: the briefing, the lead objective, the score, the escalation ladder and the task checklist with progress and distance.",
+                "Gamemode: current phase, team scores, time remaining, route and rules from the mission host.",
             };
 
             protected override void BuildContent()
@@ -105,8 +115,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 briefFlow = CreatePage();
                 BuildJobsPage(jobsFlow);
                 BuildBriefPage(briefFlow);
+                BuildModePage(CreatePage());
                 Console.Orders(0, "LOCATE moves the map to the job; click a contract to open its order and ABORT.");
                 Console.Orders(1, "Open tasks lead the list; the figure on the right is the distance to the task's nearest fix.");
+                Console.Orders(PageMode, "The HUD carries the current match status; this page keeps the full objective, route and rules.");
             }
 
             protected override void RefreshContent()
@@ -116,6 +128,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             protected override string AmbientStatus() =>
+                selectedPage == PageMode ? (model.HasModeReport ? model.ModeReport.Ready ? model.ModeReport.Phase : "WAITING FOR HOST" : "NO SPECIAL GAMEMODE") :
                 selectedPage == PageJobs ? (model.Sources ? openShown + " OPEN · " + hudShown + " ON HUD" : "NO JOB SOURCE RUNNING") :
                 model.ObjectivesActive == 0 ? "NO OPEN TASKS" :
                 model.ObjectivesActive + " OPEN TASKS";
@@ -386,10 +399,46 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             // ---------------------------------------------------------------- render
 
+            private void BuildModePage(AvFlow page)
+            {
+                modeSection = page.Section(AvIcon.Target, "GAMEMODE");
+                modePhase = page.Add(new AvRow(page.Content));
+                modeScore = page.Add(new AvRow(page.Content));
+                modeTimer = page.Add(new AvRow(page.Content));
+                modeObjective = page.Add(new AvNote(page.Content, AvTextRole.ProseSmall, emphasize: true));
+                modeRoute = page.Add(new AvNote(page.Content) { CollapseEmpty = true });
+                modeDetail = page.Add(new AvNote(page.Content) { CollapseEmpty = true });
+                modeEmpty = page.Add(new AvNote(page.Content, "This mission uses its standard briefing and task list. No special gamemode is running."));
+            }
+
+            private void RenderMode()
+            {
+                bool has = model.HasModeReport;
+                modeSection.SetShown(has);
+                modePhase.SetShown(has);
+                modeObjective.SetShown(has);
+                modeRoute.SetShown(has);
+                modeDetail.SetShown(has);
+                modeEmpty.SetShown(!has);
+                MissionDashboardStatus report = model.ModeReport;
+                modeScore.SetShown(has && report.Ready && report.HasScores);
+                modeTimer.SetShown(has && report.Ready && report.HasTimer);
+                if (!has) return;
+                AvState state = report.Ready ? AvState.Info : AvState.Caution;
+                modeSection.SetCaption(report.Name);
+                modePhase.Set(report.Name, report.Ready ? report.Phase : "WAITING FOR HOST", "", state);
+                modeScore.Set("BDF  /  PALA", "TEAM SCORE", AvNum.Fixed(report.Score0, 0) + " : " + AvNum.Fixed(report.Score1, 0), AvState.Info);
+                modeTimer.Set("TIME REMAINING", "", AvNum.Clock(report.RemainingSeconds), AvState.Info);
+                modeObjective.Set(report.Objective, state);
+                modeRoute.Set(report.Route);
+                modeDetail.Set(report.Detail);
+            }
+
             private void Render()
             {
                 if (selectedPage == PageJobs) RenderJobs();
-                else RenderBrief();
+                else if (selectedPage == PageBrief) RenderBrief();
+                else RenderMode();
             }
 
             // ---------------------------------------------------------------- gather
@@ -429,6 +478,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
 
                 if (selectedPage == PageBrief) GatherObjectives(mission, hq);
+                if (selectedPage == PageMode)
+                {
+                    model.ModeReport = default;
+                    model.HasModeReport = ModuleServices.TryGet(out IMissionDashboardView view) && view.TryRead(out model.ModeReport);
+                }
                 // Only while JOBS is up: reading the strike packages holds the SPACE feed open.
                 if (selectedPage == PageJobs) GatherJobs();
             }

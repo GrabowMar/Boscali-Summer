@@ -16,8 +16,8 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     internal static class MenuCatalog
     {
         public const int MaxLabel = 22, MaxState = 30;
-        /// <summary>The steps of the TAC BOARD cycle rows. BoardDeclutters is in the order of the <c>BoardDeclutter</c> contract enum; BoardScopes is the menu order (the enum is Manual, Off, Auto), mapped in the Runtime adapter (a press moves to the next, wrapping).</summary>
-        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardScopes = { "ON", "OFF" };
+        /// <summary>The SCOPE menu order (the enum is Manual, Off, Auto), mapped in the Runtime adapter.</summary>
+        public static readonly string[] BoardScopes = { "ON", "OFF" };
         /// <summary>Cycle rows over a 0..1 or size option: the names a press steps through and the value each one sets.</summary>
         public static readonly string[] BoardShades = { "OFF", "LOW", "MED", "HIGH" }, BoardSizes = { "SMALL", "NORMAL", "LARGE" }, Ghosts = { "OFF", "FAINT", "CLEAR" };
         public static readonly float[] ShadeSteps = { 0f, 0.35f, 0.7f, 1f }, SizeSteps = { 0.8f, 1f, 1.2f }, GhostSteps = { 0f, 0.35f, 0.8f };
@@ -34,8 +34,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public static readonly MenuSwitch[] ArParts =
         {
             new MenuSwitch("alerts", "COMBAT ALERTS", "WARNING BANNER, THREAT RING, HIT CALLOUTS"),
-            new MenuSwitch("path", "FLIGHT PATH", "WHERE YOU WILL BE IN 8 S; RED AT THE GROUND"),
-            new MenuSwitch("domes", "SAM ENVELOPES", "KNOWN SAM REACH AS A WIRE DOME NEARBY"),
             new MenuSwitch("missiles", "MISSILE LINES", "YOUR SHOTS TO TARGET, INBOUND BOXED"),
             new MenuSwitch("beacons", "BEACONS", "HOME ON LOW FUEL OR DAMAGE, CONTRACT ZONE"),
             new MenuSwitch("fx", "HUD REACTIONS", "LOCK SPIN-IN, GLITCH WHEN HIT", enable: true),
@@ -319,14 +317,13 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             if (!w.BoardOn) scope.Blocked = "TAC BOARD: OFF";
             c.Rows.Add(b.Reg(scope));
 
-            MenuRow declutter = MenuRow.Cycle("hud/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ", BoardDeclutters, Clamp(w.BoardDeclutter, BoardDeclutters), "HUD DECLUTTER: ");
             MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
             MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
             MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
-            var display = new List<MenuRow> { declutter, size, shade, sway };
+            var display = new List<MenuRow> { size, shade, sway };
             if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
-                "SIZE: " + BoardSizes[Clamp(w.BoardSize, BoardSizes)] + D + "SHADE: " + BoardShades[Clamp(w.BoardShade, BoardShades)], "DECLUTTER, SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
+                "SIZE: " + BoardSizes[Clamp(w.BoardSize, BoardSizes)] + D + "SHADE: " + BoardShades[Clamp(w.BoardShade, BoardShades)], "SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
             List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
                 partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));
@@ -335,7 +332,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Rows.Add(b.Reg(reset));
 
             if (!w.BoardOn) Badge(c, "OFF", show: true, alert: true);
-            else Badge(c, BoardDeclutters[Clamp(w.BoardDeclutter, BoardDeclutters)], show: w.BoardDeclutter > 0);
             return c;
         }
 

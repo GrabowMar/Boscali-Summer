@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.13-alpha"><img src="https://img.shields.io/badge/release-0.2.13_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.13 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.14-alpha"><img src="https://img.shields.io/badge/release-0.2.14_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.14 alpha"></a>
   <a href="#maintenance-mode"><img src="https://img.shields.io/badge/status-maintenance_mode-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Status: maintenance mode"></a>
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.3-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.3">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
@@ -120,7 +120,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 - **Layered skies** with volumetric cloud, in-cloud whiteout, rain on the canopy and thunder.
 - **Fronts, cells and storms** that drive the day's weather.
 - **MET OFFICE:** the host's weather console. Pin a sky, hold the weather, run a set-piece. Clients read along.
-- **AgX tonemapping:** gentler bright highlights, with BASE, PUNCHY and HUE looks. **SET > WORLD > COLOUR GRADE** also offers an optional **CINEMATIC** look inspired by BF4: cool shadows, light bloom, horizontal lens streaks and subtle grain. AgX starts on; CINEMATIC starts off. Both apply live and preserve automatic exposure and G-LOC.
+- **Cinematic colour grading:** **SET > WORLD > COLOUR GRADE** offers an optional **CINEMATIC** look inspired by BF4: cool shadows, light bloom, horizontal lens streaks and subtle grain. It starts off, applies live and preserves automatic exposure and G-LOC. The optional developer AgX LUTs are excluded from player builds pending redistribution permission.
 - **Image quality:** **SKY DITHER** reduces sky/fog colour banding. **EDGE SMOOTHING > SMAA** adds optional edge smoothing and works with RCAS sharpening; **GAME** restores native anti-aliasing. Missing shader or texture resources leave the game settings in place.
 
 </td>
@@ -233,7 +233,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.13.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.13-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.14.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.14-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
@@ -513,7 +513,7 @@ Boscali Summer's own code is released under the [MIT licence](LICENSE). Versions
 - **Tabler Icons** (MIT) and the **Barlow Condensed**, **JetBrains Mono** and **Rajdhani** fonts (SIL OFL), in `AvionicsUi/Assets/LICENSES`;
 - **[RainyGlassShader](https://github.com/toadstorm/RainyGlassShader)** by toadstorm (LGPL-2.1), the source of the canopy rain, in `modules/Weather/Assets/Source`;
 - the cloud noise by Anthony Ibrahim (MIT), in `modules/Weather/Visuals`;
-- **[AgX Tonemapping Unity](https://github.com/meenphie/AgX-Tonemapping-Unity)** LUTs by meenphie, based on Troy Sobotka and Blender's AgX; source commit and asset terms are recorded in [the provenance file](modules/Effects/Assets/PROVENANCE.txt). That upstream commit has no explicit redistribution licence; resolve the LUT terms before publishing a build containing them;
+- **Developer-only AgX:** [AgX Tonemapping Unity](https://github.com/meenphie/AgX-Tonemapping-Unity) LUTs by meenphie are excluded from player builds and release source archives pending explicit redistribution permission. [Provenance](modules/Effects/Assets/PROVENANCE.txt) records their source and terms;
 - sound effects and voice clips, listed in the `LICENSES.txt` files under `Core/Fx/Sfx`, `modules/Immersion/Assets/Voice` and `modules/Spooktober/Assets/Sfx`;
 - the creature model, from the [Free Creature Rig Project](https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project) on CGTrader.
 

@@ -113,18 +113,11 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         AvPart[] ICommsPlot.Build(AvFlow page) => BuildMapPage(page);
 
-        AvPart[] ICommsPlot.BuildDrawer(AvFlow tools, AvFlow markers, AvFlow text) => BuildMapTools(tools, markers, text);
-
-        void ICommsPlot.KeepAlive() => KeepPlotAlive();
-
         void ICommsPlot.Refresh()
         {
-            KeepPlotAlive();
+            plotWantedUntil = Time.unscaledTime + PlotWantedFor;
             if (comms != null) RefreshMap();
         }
-
-        /// <summary>The map drawer may fold or change tabs while its armed tool still owns map input.</summary>
-        private void KeepPlotAlive() => plotWantedUntil = Time.unscaledTime + PlotWantedFor;
 
         bool ICommsPlot.ShowOnMap
         {

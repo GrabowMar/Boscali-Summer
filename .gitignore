@@ -23,6 +23,7 @@ TestResults/
 /tools/tests/*
 !/tools/tests/Gamemodes.Tests/
 !/tools/tests/Gamemodes.MissionTests/
+!/tools/tests/Spooktober.Tests/
 
 # ---------------------------------------------------------------------------------------------
 # Documentation: Markdown is local-only (specs, plans, agent notes); only these are published
@@ -42,6 +43,9 @@ TestResults/
 # ---------------------------------------------------------------------------------------------
 /assets/**
 !/assets/BoscaliSummer.nobp
+!/assets/SkylarkVTOL/
+!/assets/SkylarkVTOL/Unity/
+!/assets/SkylarkVTOL/Unity/skylark.bundle
 *.blend
 *.blend1
 modules/Vanguard/Assets/Models/

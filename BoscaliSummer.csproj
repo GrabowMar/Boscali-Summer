@@ -3,7 +3,7 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <AssemblyName>BoscaliSummer</AssemblyName>
     <RootNamespace>BoscaliSummer</RootNamespace>
-    <Version>0.2.13</Version>
+    <Version>0.2.14</Version>
     <DebugType>portable</DebugType>
     <NoWarn>$(NoWarn);CS0436;MSB3277</NoWarn>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
@@ -23,6 +23,10 @@
     <DefineConstants>$(DefineConstants);PUBLIC_RELEASE</DefineConstants>
     <DebugType>none</DebugType>
   </PropertyGroup>
+
+  <ItemGroup Label="Third-party notices">
+    <EmbeddedResource Include="THIRD-PARTY-NOTICES.txt" LogicalName="BoscaliSummer.THIRD-PARTY-NOTICES.txt" />
+  </ItemGroup>
 
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
@@ -186,7 +190,9 @@
 
 
   <ItemGroup Label="AgX tonemapping">
-    <EmbeddedResource Include="modules\Effects\Assets\agx.bundle" LogicalName="BoscaliSummer.Effects.agx.bundle" />
+    <!-- Third-party LUT redistribution terms are unresolved. Player builds use only our streak shader. -->
+    <EmbeddedResource Include="modules\Effects\Assets\agx.bundle" LogicalName="BoscaliSummer.Effects.agx.bundle" Condition="'$(PublicRelease)' != 'true' And Exists('modules\Effects\Assets\agx.bundle')" />
+    <EmbeddedResource Include="modules\Effects\Assets\cinematic.bundle" LogicalName="BoscaliSummer.Effects.cinematic.bundle" />
     <EmbeddedResource Include="modules\Effects\Assets\PROVENANCE.txt" LogicalName="BoscaliSummer.Effects.AgxProvenance.txt" />
   </ItemGroup>
 

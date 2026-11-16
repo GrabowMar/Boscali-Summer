@@ -1,4 +1,3 @@
-using BoscaliSummer.Core.Ui;
 using NOAvionics;
 using TMPro;
 using UnityEngine;
@@ -7,26 +6,26 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
-    /// One map-work drawer between the viewport and native instruments. Its roots are parked on close,
-    /// so folding and switching tabs preserve tool state and scroll positions without rebuilding controls.
+    /// The former top-of-map selection, camera and theater controls, gathered below the viewport.
+    /// MAP's Tools and Layers remain in the left console. Folding this strip preserves its scroll position.
     /// </summary>
     internal static class MfdMapControls
     {
         internal const string Name = "NOAvionics.MapControls";
-        internal const float HeaderHeight = 36f;
-        private const float Pad = 8f, Gap = 8f, FooterHeight = 24f;
-        private static RectTransform root, body, view, layers, plot;
+        internal const float HeaderHeight = 28f;
+        internal const float RowHeight = 28f, RowPitch = 32f;
+        private const float Pad = 6f, Gap = 12f, ContentHeight = RowPitch * 2f + RowHeight, ScrollbarHeight = 8f;
+        private const float ExpandedHeight = HeaderHeight + Pad * 2f + ContentHeight + ScrollbarHeight;
+        private static RectTransform root, body, view;
         private static AvScrollView viewScroll;
         private static AvTicker ticker;
         private static AvFrame frame;
         private static Image header, rule;
         private static TMP_Text title, status;
-        private static AvControl collapse, cancel;
-        private static readonly AvControl[] tabs = new AvControl[3];
+        private static AvControl collapse;
         private static Vector2 laidSize;
-        private static bool toolsBuilt, laidFolded, lastBusy, layoutPending;
+        private static bool laidFolded, layoutPending;
         private static float nextRead;
-        private static float expandedHeight = 232f;
 
         internal static RectTransform Root => root;
         internal static RectTransform SelectionSlot { get; private set; }
@@ -34,16 +33,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static RectTransform TheaterSlot { get; private set; }
         internal static AvFooter Footer { get; private set; }
         internal static bool Folded { get; private set; }
-        internal static int SelectedTab { get; private set; }
         internal static bool Shown => root != null && root.gameObject.activeInHierarchy;
 
-        internal static float Height(float canvasHeight) => Folded ? HeaderHeight : canvasHeight < 900f ? 216f : 232f;
+        internal static float Height(float canvasHeight) => Folded ? HeaderHeight : ExpandedHeight;
 
         internal static void Ensure(Canvas canvas, MfdLayout.Columns columns)
         {
             if (canvas == null) return;
             if (root == null || root.parent != canvas.transform) Build(canvas);
-            expandedHeight = columns.Canvas.y < 900f ? 216f : 232f;
             root.anchorMin = root.anchorMax = new Vector2(.5f, .5f);
             root.pivot = new Vector2(0f, 1f);
             root.anchoredPosition = columns.Controls.position;
@@ -78,24 +75,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             status.raycastTarget = false;
             AvText.Fit(status, false);
             status.overflowMode = TextOverflowModes.Ellipsis;
-            string[] labels = { "VIEW", "LAYERS", "PLOT" };
-            AvIcon[] icons = { AvIcon.Focus2, AvIcon.LayersSubtract, AvIcon.Pencil };
-            for (int i = 0; i < tabs.Length; i++)
-            {
-                int page = i;
-                tabs[i] = AvControl.Make(root, new AvControl.Spec(labels[i], () => SelectTab(page), AvButtonStyle.Quiet, icons[i]));
-                tabs[i].Rect.name = labels[i];
-                tabs[i].Bracket = 0f;
-                tabs[i].SingleLine();
-                tabs[i].Help = i == 0 ? "Selection, map gestures, camera and theater controls."
-                    : i == 1 ? "Map layers, overlays, display settings and the symbol key."
-                    : "Private marks and shared plot tools. Arm here, then right-click the map.";
-            }
-            cancel = AvControl.Make(root, new AvControl.Spec("CANCEL", MapTool.RequestCancel, AvButtonStyle.Quiet, AvIcon.X));
-            cancel.Rect.name = "Cancel";
-            cancel.Bracket = 0f;
-            cancel.SingleLine();
-            cancel.Help = "Put down the armed map tool, like Escape. Existing marks stay on the map.";
             collapse = AvControl.Make(root, new AvControl.Spec("", () => SetFolded(!Folded), AvButtonStyle.Quiet, AvIcon.ChevronDown));
             collapse.Rect.name = "Collapse";
             collapse.Bracket = 0f;
@@ -106,12 +85,19 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             body = AvLay.Child(root, "Body");
             view = AvLay.Child(body, "View");
             viewScroll = new AvScrollView(view, true);
+            // Keep three readable rows even when the panel column leaves a narrow map.
+            viewScroll.Scroll.horizontal = true;
+            viewScroll.Scroll.vertical = false;
+            viewScroll.Scroll.verticalScrollbar = null;
+            viewScroll.Scroll.horizontalScrollbar = viewScroll.Bar;
+            viewScroll.Scroll.horizontalScrollbarVisibility = ScrollRect.ScrollbarVisibility.AutoHide;
+            viewScroll.Bar.direction = Scrollbar.Direction.LeftToRight;
+            AvLay.Fill((RectTransform)viewScroll.Bar.transform.Find("Track"));
+            AvLay.Fill((RectTransform)viewScroll.Bar.transform.Find("Area/Handle/Thumb"));
             SelectionSlot = AvLay.Child(viewScroll.Content, "SelectionSlot");
             ViewSlot = AvLay.Child(viewScroll.Content, "ViewSlot");
             TheaterSlot = AvLay.Child(viewScroll.Content, "TheaterSlot");
-            layers = AvLay.Child(body, "Layers");
-            plot = AvLay.Child(body, "Plot");
-            Footer = new AvFooter(root);
+            Footer = new AvFooter(viewScroll.Content);
             root.gameObject.AddComponent<AvHelpScope>().Footer = Footer;
             ticker.Register(Footer);
             ticker.Register(new AvRestyleHook(Restyle));
@@ -126,54 +112,37 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             laidFolded = Folded;
             float width = laidSize.x;
             AvLay.Place(header.rectTransform, 1f, 1f, width - 2f, HeaderHeight - 1f);
-            AvLay.Place(title.rectTransform, 12f, 4f, 122f, 28f);
-            for (int i = 0; i < tabs.Length; i++) AvLay.Place(tabs[i].Rect, 142f + i * 82f, 4f, 80f, 28f);
-            AvLay.Place(collapse.Rect, width - 38f, 4f, 30f, 28f);
-            AvLay.Place(cancel.Rect, width - 122f, 4f, 80f, 28f);
+            AvLay.Place(title.rectTransform, 10f, 0f, 122f, HeaderHeight);
+            AvLay.Place(collapse.Rect, width - 34f, 2f, 28f, HeaderHeight - 4f);
             AvLay.Place(rule.rectTransform, 8f, HeaderHeight - 1f, width - 16f, 1f);
             LayoutHeader();
             float inner = Mathf.Max(1f, width - Pad * 2f);
-            float height = Mathf.Max(0f, expandedHeight - HeaderHeight - FooterHeight - Pad * 2f);
+            float height = ContentHeight + ScrollbarHeight;
             AvLay.Place(body, Pad, HeaderHeight + Pad, inner, height);
             AvLay.Fill(view);
-            AvLay.Fill(layers);
-            AvLay.Fill(plot);
             viewScroll.Place(inner, height);
-            float selectionWidth = inner >= 1060f ? (inner - 16f) * .5f : inner;
-            float selectionHeight = MapSelectionDeck.HeightForWidth(selectionWidth);
-            float y;
-            if (inner >= 1060f)
-            {
-                AvLay.Place(SelectionSlot, 0f, 0f, selectionWidth, selectionHeight);
-                AvLay.Place(ViewSlot, selectionWidth + 16f, 0f, selectionWidth, 86f);
-                y = Mathf.Max(selectionHeight, 86f) + Gap;
-            }
-            else
-            {
-                AvLay.Place(SelectionSlot, 0f, 0f, inner, selectionHeight);
-                AvLay.Place(ViewSlot, 0f, selectionHeight + Gap, inner, 86f);
-                y = selectionHeight + Gap + 86f + Gap;
-            }
-            AvLay.Place(TheaterSlot, 0f, y, inner, 62f);
-            // Preserve the current scroll offset when the column resizes; clamp after the new extent.
-            float offset = viewScroll.Content.anchoredPosition.y;
-            AvLay.Place(viewScroll.Content, 0f, 0f, inner, y + 62f);
-            viewScroll.Content.anchoredPosition = new Vector2(0f, Mathf.Clamp(offset, 0f, Mathf.Max(0f, y + 62f - height)));
-            if (toolsBuilt) MfdMapTools.Layout(inner, height);
-            Footer.Place(new AvSlot(Pad, laidSize.y - FooterHeight - 2f, inner, FooterHeight));
+            AvLay.Place((RectTransform)viewScroll.Bar.transform, 0f, ContentHeight, inner, ScrollbarHeight);
+            AvLay.Place(viewScroll.Viewport, 0f, 0f, inner, ContentHeight);
+            float contentWidth = Mathf.Max(1040f, inner);
+            float selectionWidth = Mathf.Clamp((contentWidth - Gap) * .52f, 520f, 650f);
+            float viewX = selectionWidth + Gap;
+            AvLay.Place(SelectionSlot, 0f, 0f, selectionWidth, RowPitch + RowHeight);
+            AvLay.Place(ViewSlot, viewX, 0f, contentWidth - viewX, RowPitch + RowHeight);
+            AvLay.Place(TheaterSlot, 0f, RowPitch * 2f, selectionWidth, RowHeight);
+            Footer.Place(new AvSlot(viewX, RowPitch * 2f + 2f, contentWidth - viewX, RowHeight - 4f));
+            float offset = viewScroll.Content.anchoredPosition.x;
+            AvLay.Place(viewScroll.Content, 0f, 0f, contentWidth, ContentHeight);
+            viewScroll.Content.anchoredPosition = new Vector2(Mathf.Clamp(offset, Mathf.Min(0f, inner - contentWidth), 0f), 0f);
             collapse.SetIcon(Folded ? AvIcon.ChevronUp : AvIcon.ChevronDown);
         }
 
         private static void LayoutHeader()
         {
             if (root == null) return;
-            bool busy = MapPicker.IsBusy;
-            float x = Folded ? 148f : 398f;
-            float right = root.sizeDelta.x - (busy ? 130f : 46f);
-            AvLay.Place(status.rectTransform, x, 4f, Mathf.Max(0f, right - x), 28f);
-            cancel.Rect.gameObject.SetActive(busy);
+            float x = 148f;
+            float right = root.sizeDelta.x - 46f;
+            AvLay.Place(status.rectTransform, x, 0f, Mathf.Max(0f, right - x), HeaderHeight);
             status.enabled = right - x >= 70f;
-            lastBusy = busy;
         }
 
         private static void ShowPage()
@@ -181,21 +150,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             body.gameObject.SetActive(!Folded);
             Footer.Rect.gameObject.SetActive(!Folded);
             rule.gameObject.SetActive(!Folded);
-            view.gameObject.SetActive(SelectedTab == 0);
-            layers.gameObject.SetActive(SelectedTab == 1);
-            plot.gameObject.SetActive(SelectedTab == 2);
-            for (int i = 0; i < tabs.Length; i++)
-            {
-                tabs[i].Rect.gameObject.SetActive(!Folded);
-                tabs[i].Latched = i == SelectedTab;
-            }
-            if (!Folded && SelectedTab != 0 && !toolsBuilt)
-            {
-                MfdMapTools.Build(layers, plot, ticker, Footer);
-                toolsBuilt = true;
-                MfdMapTools.Layout(body.rect.width, body.rect.height);
-            }
-            if (toolsBuilt) MfdMapTools.Refresh(Folded ? -1 : SelectedTab);
         }
 
         private static void Tick()
@@ -203,29 +157,17 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!Shown || Time.unscaledTime < nextRead) return;
             nextRead = Time.unscaledTime + .15f;
             if (layoutPending) { layoutPending = false; Layout(); }
-            if (lastBusy != MapPicker.IsBusy) LayoutHeader();
             string prompt = MapPicker.Prompt;
             int count = SceneSingleton<DynamicMap>.i?.selectedIcons?.Count ?? 0;
             AvText.Set(status, !string.IsNullOrEmpty(prompt) ? prompt : count + (count == 1 ? " TRACK SELECTED" : " TRACKS SELECTED"));
             status.color = MapPicker.IsBusy ? AvInk.State(AvState.Caution) : AvInk.Dim;
-            string viewStatus = !Folded && SelectedTab == 0 ? MapSelectionDeck.StatusLine : null;
+            string viewStatus = !Folded ? MapSelectionDeck.StatusLine : null;
             if (!Folded)
                 Footer.Set(!string.IsNullOrEmpty(prompt) ? prompt : !string.IsNullOrEmpty(viewStatus) ? viewStatus : MfdMapInteractions.Feedback ??
-                    (SelectedTab == 0 ? "LEFT: SELECT / PAN   ·   WHEEL: ZOOM   ·   RIGHT: TOOL / ORDERS"
-                    : SelectedTab == 1 ? "LIT = VISIBLE   ·   LAYERS USE YOUR CURRENT FACTION'S INFORMATION"
-                    : "ARM A TOOL, THEN RIGHT-CLICK THE MAP   ·   ESC: CANCEL"), MapPicker.IsBusy ? AvState.Caution : AvState.Inert);
-            // Comms keeps its gesture authority alive while the drawer is folded or on another tab.
-            if (toolsBuilt) MfdMapTools.Refresh(Folded ? -1 : SelectedTab);
+                    "LEFT: SELECT / PAN   ·   WHEEL: ZOOM   ·   RIGHT: TOOL / ORDERS", MapPicker.IsBusy ? AvState.Caution : AvState.Inert);
         }
 
         internal static void RequestRefresh() { nextRead = 0f; layoutPending = true; }
-
-        internal static void SelectTab(int index)
-        {
-            SelectedTab = Mathf.Clamp(index, 0, 2);
-            SetFolded(false);
-            if (root != null) { ShowPage(); RequestRefresh(); }
-        }
 
         internal static void SetFolded(bool folded)
         {
@@ -243,16 +185,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (root == null && MfdRailPatch.IsApplied) MfdRailPatch.ReLayoutNow();
             RequestRefresh();
             MfdRail.Refresh();
-        }
-
-        internal static bool TryOpen(string key, string page)
-        {
-            if (!MfdRailPatch.IsApplied || !string.Equals(key, "MAP", System.StringComparison.OrdinalIgnoreCase)) return false;
-            Open();
-            if (!string.IsNullOrEmpty(page))
-                SelectTab(string.Equals(page, "LAYERS", System.StringComparison.OrdinalIgnoreCase) ? 1
-                    : string.Equals(page, "VIEW", System.StringComparison.OrdinalIgnoreCase) ? 0 : 2);
-            return true;
         }
 
         private static void Restyle()
@@ -276,7 +208,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         internal static void Reset()
         {
-            MfdMapTools.Reset();
             if (root != null)
             {
                 MapUiPointer.Unregister(root);
@@ -284,7 +215,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 root.name = Name + ".Retired";
                 Object.Destroy(root.gameObject);
             }
-            root = body = view = layers = plot = null;
+            root = body = view = null;
             SelectionSlot = ViewSlot = TheaterSlot = null;
             Footer = null;
             viewScroll = null;
@@ -292,8 +223,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             frame = null;
             header = rule = null;
             title = status = null;
-            collapse = cancel = null;
-            toolsBuilt = false;
+            collapse = null;
             laidSize = Vector2.zero;
         }
     }

@@ -11,7 +11,7 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Events.Presentation
 {
     /// <summary>
-    /// Client-local MFD battlefield dispatch. It sits below the news wire over the map;
+    /// Shared client-local MFD notice for battlefield events and cabinet requests. It sits below the news wire over the map;
     /// the separate plane HUD branch is reserved for the later HUD overhaul. The footer
     /// names only the next authored order, leaving the full script on EVN. Only dismiss
     /// takes map input. The dispatch folds into a shorter illustrated status strip.
@@ -37,6 +37,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private EventsSettings settings;
         private EventsManager events;
         private ActiveEventView activeView;
+        internal CabinetDispatch Cabinet;
+        private CabinetCard activeCabinet;
+        private int shownCabinetSerial = int.MinValue;
 
         private GameObject root;
         private CanvasGroup group;
@@ -60,7 +63,10 @@ namespace BoscaliSummer.Modules.Events.Presentation
         private TMP_Text compactTitle;
         private TMP_Text compactImpact;
         private TMP_Text compactClock;
+        private TMP_Text effectLabel, nextLabel;
         private AvHazardGraphic onAir;
+        private AvControl expandedAction;
+        private AvHit compactOpen;
 
         private int shownSerial;
         private int lastOrderSecond = -1;
@@ -88,13 +94,18 @@ namespace BoscaliSummer.Modules.Events.Presentation
             group = null;
             tone = null;
             activeView = null;
+            activeCabinet = null;
+            shownCabinetSerial = int.MinValue;
             expandedPanel = compactPanel = null;
             expandedGroup = compactGroup = null;
             expandedFx = null;
             plate = compactPlate = null;
             stamp = target = eyebrow = title = scope = impact = flavor = nextOrder = clock = null;
             compactTitle = compactImpact = compactClock = null;
+            effectLabel = nextLabel = null;
             onAir = null;
+            expandedAction = null;
+            compactOpen = null;
             shownSerial = 0;
             lastOrderSecond = -1;
             openedAt = closeAt = collapseAt = duration = targetAlpha = 0f;
@@ -108,27 +119,31 @@ namespace BoscaliSummer.Modules.Events.Presentation
         {
             bool live = settings != null && events != null &&
                         settings.Enabled.Value && settings.AlertsEnabled.Value;
-            if (!live)
-            {
+            bool super = live && events.Current != null && events.Current.IsSuper;
+            bool waiting = live && Cabinet != null && Cabinet.Waiting;
+            if ((activeCabinet != null && (!waiting || activeCabinet.Serial != shownCabinetSerial)) ||
+                (activeView != null && !super))
                 Dismiss();
-            }
-            else
+
+            bool presenting = (activeView != null || activeCabinet != null) && targetAlpha > 0f && Time.unscaledTime < closeAt;
+            if (DynamicMap.mapMaximized && !presenting)
             {
-                bool super = events.Current != null && events.Current.IsSuper;
-                if (super && events.SuperSerial != shownSerial && DynamicMap.mapMaximized)
+                // One shared notice surface: a new cabinet request leads, and a simultaneous super waits its turn.
+                if (waiting && Cabinet.Card.Serial != shownCabinetSerial)
+                {
+                    shownCabinetSerial = Cabinet.Card.Serial;
+                    ShowCabinet(Cabinet.Card);
+                }
+                else if (super && events.SuperSerial != shownSerial)
                 {
                     shownSerial = events.SuperSerial;
                     Show(events.Current);
-                }
-                else if (!super)
-                {
-                    Dismiss();
                 }
             }
 
             if (root != null && !DynamicMap.mapMaximized)
                 root.SetActive(false);
-            else if (root != null && !root.activeSelf && activeView != null &&
+            else if (root != null && !root.activeSelf && (activeView != null || activeCabinet != null) &&
                      targetAlpha > 0f && Time.unscaledTime < closeAt)
                 root.SetActive(true);
             if (root != null && root.activeSelf) Tick();
@@ -136,17 +151,14 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void Show(ActiveEventView view)
         {
-            if (failed || view == null) return;
-            if (root == null && !TryBuild()) return;
-
-            root.SetActive(true);
+            if (view == null || !BeginDispatch()) return;
             activeView = view;
-            openedAt = Time.unscaledTime;
-            duration = Mathf.Clamp(settings.AlertSeconds.Value, 8f, 60f);
-            closeAt = openedAt + duration;
-            collapseAt = openedAt + Mathf.Min(duration * 0.5f, ExpandSeconds);
-            targetAlpha = 1f;
-            lastOrderSecond = -1;
+            activeCabinet = null;
+            expandedAction.Label = "DISMISS";
+            expandedAction.SetIcon(AvIcon.X);
+            compactOpen.Interactable = false;
+            effectLabel.text = "BATTLEFIELD EFFECT";
+            nextLabel.text = "NEXT ORDER";
 
             AvState state = view.EffectSummary.StartsWith("-", StringComparison.Ordinal) ? AvState.Ready : AvState.Danger;
             Color ink = AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailDanger);
@@ -164,26 +176,70 @@ namespace BoscaliSummer.Modules.Events.Presentation
             compactImpact.color = ink;
 
             BindPictures();
+            UpdateNextOrder(MissionTime());
+            Plugin.Logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
+        }
 
+        private bool BeginDispatch()
+        {
+            if (failed || root == null && !TryBuild()) return false;
+            root.SetActive(true);
+            openedAt = Time.unscaledTime;
+            duration = Mathf.Clamp(settings?.AlertSeconds.Value ?? 20f, 8f, 60f);
+            closeAt = openedAt + duration;
+            collapseAt = openedAt + Mathf.Min(duration * 0.5f, ExpandSeconds);
+            targetAlpha = 1f;
+            lastOrderSecond = -1;
             expandedPanel.gameObject.SetActive(true);
             compactPanel.gameObject.SetActive(false);
             expandedGroup.alpha = 1f;
             compactGroup.alpha = 0f;
             expandedFx?.Play(AvFxKind.Dissolve, 0.8f, 6f);
-            UpdateNextOrder(MissionTime());
             tone?.Play();
-            Plugin.Logger?.LogInfo("[Events] Superevent dispatch shown: " + view.Title + ".");
+            return true;
+        }
+
+        private void ShowCabinet(CabinetCard card)
+        {
+            if (!BeginDispatch()) return;
+            activeView = null;
+            activeCabinet = card;
+            Color ink = AvTheme.RailCaution;
+            stamp.text = "CABINET DECISION";
+            target.text = card.Kicker;
+            eyebrow.text = "DECISION // PENDING";
+            title.text = compactTitle.text = card.Title.ToUpperInvariant();
+            scope.text = "ANY PILOT MAY ANSWER";
+            impact.text = compactImpact.text = "OPEN EVN > DISPATCH";
+            impact.color = compactImpact.color = ink;
+            flavor.text = card.Text;
+            expandedAction.Label = "OPEN EVN";
+            expandedAction.SetIcon(AvIcon.ChevronRight);
+            compactOpen.Interactable = true;
+            effectLabel.text = "YOUR RESPONSE";
+            nextLabel.text = "CABINET ACTION";
+            BindPictures();
+            UpdateNextOrder(MissionTime());
         }
 
         private void Dismiss()
         {
             targetAlpha = 0f;
-            if (root == null || !root.activeSelf) activeView = null;
+            if (root == null || !root.activeSelf) { activeView = null; activeCabinet = null; }
         }
 
         private void BindPictures()
         {
             pictures = EventArtCache.PicturesEnabled;
+            if (activeCabinet != null)
+            {
+                Sprite art = EventArtCache.Get(activeCabinet.ArtKey, "tier_medium");
+                plate.Bind(art, AvIcon.Flag, AvTheme.RailCaution);
+                compactPlate.Bind(art, AvIcon.Flag, AvTheme.RailCaution);
+                plate.Layout(plate.Root.rect.width, plate.Root.rect.height);
+                compactPlate.Layout(compactPlate.Root.rect.width, compactPlate.Root.rect.height);
+                return;
+            }
             if (activeView == null) return;
             AvState state = activeView.EffectSummary.StartsWith("-", StringComparison.Ordinal) ? AvState.Ready : AvState.Danger;
             Color ink = AvStyleHost.FuiColor(AvStates.Class(state), AvTheme.RailDanger);
@@ -206,13 +262,15 @@ namespace BoscaliSummer.Modules.Events.Presentation
             {
                 root.SetActive(false);
                 activeView = null;
+                activeCabinet = null;
                 return;
             }
 
             float remaining = Mathf.Max(0f, closeAt - now);
-            clock.text = "ON AIR " + AvNum.Clock(remaining);
+            float countdown = activeCabinet != null ? Mathf.Ceil(activeCabinet.SecondsLeft) : remaining;
+            clock.text = (activeCabinet != null ? "ANSWER " : "ON AIR ") + AvNum.Clock(countdown);
             if (onAir != null) onAir.Value = duration > 0f ? Mathf.Clamp01(remaining / duration) : 0f;
-            compactClock.text = AvNum.Clock(remaining);
+            compactClock.text = AvNum.Clock(countdown);
             UpdateNextOrder(MissionTime());
 
             float t = Mathf.SmoothStep(0f, 1f,
@@ -226,6 +284,11 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
         private void UpdateNextOrder(float missionTime)
         {
+            if (activeCabinet != null)
+            {
+                nextOrder.text = "OPEN EVN > DISPATCH  /  NO ANSWER: THE STAFF CHOOSES";
+                return;
+            }
             if (activeView == null || nextOrder == null) return;
             int elapsed = Mathf.Max(0, Mathf.FloorToInt(missionTime - activeView.StartedAtMissionTime));
             if (elapsed == lastOrderSecond) return;
@@ -343,7 +406,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             Image divider = AvLay.Solid(expandedPanel, "Divider", dim.WithAlpha(.25f));
             AvLay.Place(divider.rectTransform, effectX - 10f, 13f, 1f, 148f);
-            TMP_Text effectLabel = AvText.Make(expandedPanel, "EffectLabel", AvTextRole.Micro, "BATTLEFIELD EFFECT", TextAlignmentOptions.TopLeft);
+            effectLabel = AvText.Make(expandedPanel, "EffectLabel", AvTextRole.Micro, "BATTLEFIELD EFFECT", TextAlignmentOptions.TopLeft);
             effectLabel.color = dim;
             AvLay.Place(effectLabel.rectTransform, effectX, 13f, effectWidth, 17f);
             impact = AvText.Make(expandedPanel, "Impact", AvTextRole.Head, "", TextAlignmentOptions.TopLeft, true);
@@ -354,7 +417,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
 
             Image footer = AvLay.Solid(expandedPanel, "Footer", raised.WithAlpha(0.96f));
             AvLay.Place(footer.rectTransform, 0f, 174f, width, 40f);
-            TMP_Text nextLabel = AvText.Make(expandedPanel, "NextLabel", AvTextRole.Micro, "NEXT ORDER", TextAlignmentOptions.TopLeft);
+            nextLabel = AvText.Make(expandedPanel, "NextLabel", AvTextRole.Micro, "NEXT ORDER", TextAlignmentOptions.TopLeft);
             nextLabel.color = danger;
             AvLay.Place(nextLabel.rectTransform, 14f, 180f, 150f, 14f);
             nextOrder = AvText.Make(expandedPanel, "NextOrder", AvTextRole.Data, "", TextAlignmentOptions.TopLeft);
@@ -371,9 +434,13 @@ namespace BoscaliSummer.Modules.Events.Presentation
             onAir.FillColor = danger;
             onAir.FrameColor = dim.WithAlpha(.4f);
             AvLay.Place(onAir.rectTransform, 14f, 206f, width - 175f, 8f);
-            AvControl dismiss = AvControl.Make(expandedPanel, new AvControl.Spec("DISMISS", Dismiss, AvButtonStyle.Default, AvIcon.X));
-            dismiss.Help = "DISMISS: hide this dispatch. The event carries on; its countdown, price effect and full script stay on the EVN screen. The stripe bar is how long the dispatch stays on air.";
-            AvLay.Place(dismiss.Rect, width - 145f, 178f, 131f, 31f);
+            expandedAction = AvControl.Make(expandedPanel, new AvControl.Spec("DISMISS", () =>
+            {
+                if (activeCabinet != null) AvConsole.Open("EVN", "DISPATCH");
+                Dismiss();
+            }, AvButtonStyle.Default, AvIcon.X));
+            expandedAction.Help = "Open a cabinet request on EVN, or dismiss an event notice. Hiding a notice never answers a cabinet request or ends an event.";
+            AvLay.Place(expandedAction.Rect, width - 145f, 178f, 131f, 31f);
         }
 
         private void BuildCompact(RectTransform screen)
@@ -394,6 +461,9 @@ namespace BoscaliSummer.Modules.Events.Presentation
             frame.Paint(ground, danger.WithAlpha(0.65f));
 
             compactPlate = new EventsMfdPanel.EventPlateArt(compactPanel, 20f);
+            frame.raycastTarget = true;
+            compactOpen = AvHit.On(frame);
+            compactOpen.Click = e => { if (activeCabinet != null) { AvConsole.Open("EVN", "DISPATCH"); Dismiss(); } };
             AvLay.Place(compactPlate.Root, 0f, 0f, 90f, CompactHeight);
             compactPlate.Layout(90f, CompactHeight);
 
@@ -407,7 +477,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
             AvLay.Place(compactClock.rectTransform, width - 172f, 12f, 112f, 27f);
             AvControl compactDismiss = AvControl.Make(compactPanel,
                 new AvControl.Spec("", Dismiss, AvButtonStyle.Quiet, AvIcon.X));
-            compactDismiss.Help = "Dismiss this dispatch; its event and effects remain active on EVN.";
+            compactDismiss.Help = "Hide this notice. Events continue and cabinet requests remain available on EVN DISPATCH.";
             AvLay.Place(compactDismiss.Rect, width - 46f, 10f, 32f, 30f);
             compactPanel.gameObject.SetActive(false);
         }

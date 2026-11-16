@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             }
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
-                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. The panels and their titles remain at every level." + live);
+                "Retired. The HUD always shows all enabled detail; saved Lean and Minimal values read as Full.");
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
                 "Auto shows the board's panels while they have something to say: RWR (threats; one line while clear), FIRES (your weapons in flight, or a strike) and WING (your wingmen); Off hides them. Manual is retired and reads as Auto." + live);
@@ -106,9 +106,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
 
             const string ar = " AR helmet layer: drawn on the world, only while it matters; it stays when the board is switched off.";
             ArPath = config.Bind(section, "ArPath", d.ArPath,
-                "Flight path predictor: where the aircraft will be over the next 8 seconds, during a hard pull, and in red with TERRAIN and the seconds left when that path meets the ground." + ar + live);
+                "Retired. The AR flight-path line is disabled, including in existing saved configurations.");
             ArDomes = config.Bind(section, "ArDomes", d.ArDomes,
-                "SAM envelopes: the reach of every hostile SAM your side knows about, drawn as a wire envelope once you are near it, the ring at your own height bold; IN SAM ENVELOPE inside." + ar + live);
+                "Retired. SAM AR envelopes are disabled, including in existing saved configurations.");
             ArMissiles = config.Bind(section, "ArMissiles", d.ArMissiles,
                 "Missile lines: your missiles joined to their targets with the seconds to impact, and every missile coming at you boxed with its next two seconds." + ar + live);
             ArBeacons = config.Bind(section, "ArBeacons", d.ArBeacons,
@@ -175,7 +175,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         BoardLayout ITacBoardSettings.Layout { get => Layout.Value; set => Layout.Value = value; }
         float ITacBoardSettings.Scale { get => Scale.Value; set => Scale.Value = value; }
         float ITacBoardSettings.Shade { get => Shade.Value; set => Shade.Value = value; }
-        BoardDeclutter ITacBoardSettings.Declutter { get => Declutter.Value; set => Declutter.Value = value; }
+        BoardDeclutter ITacBoardSettings.Declutter { get => BoardDeclutter.Full; set => Declutter.Value = BoardDeclutter.Full; }
         BoardScopeMode ITacBoardSettings.ScopeMode { get => ScopeMode.Value; set => ScopeMode.Value = value; }
         bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
@@ -186,8 +186,8 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
         bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
-        bool ITacBoardSettings.ArPath { get => ArPath.Value; set => ArPath.Value = value; }
-        bool ITacBoardSettings.ArDomes { get => ArDomes.Value; set => ArDomes.Value = value; }
+        bool ITacBoardSettings.ArPath { get => false; set => ArPath.Value = false; }
+        bool ITacBoardSettings.ArDomes { get => false; set => ArDomes.Value = false; }
         bool ITacBoardSettings.ArMissiles { get => ArMissiles.Value; set => ArMissiles.Value = value; }
         bool ITacBoardSettings.ArBeacons { get => ArBeacons.Value; set => ArBeacons.Value = value; }
         bool ITacBoardSettings.HudFx { get => HudFx.Value; set => HudFx.Value = value; }

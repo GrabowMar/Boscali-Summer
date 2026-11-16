@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             settings.PanelOrders.SettingChanged += OnChanged;
             settings.PanelClock.SettingChanged += OnChanged;
             settings.PanelHoverHelp.SettingChanged += OnChanged;
+            settings.DeckOpacity.SettingChanged += OnChanged;
             AvFxDriver.GlitchSource = ReadGlitch;
             AvAmbient.Status = ReadStatus;
             Apply();
@@ -60,6 +61,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             AvConsoleLook.Orders = settings.PanelOrders.Value;
             AvConsoleLook.Clock = settings.PanelClock.Value;
             AvConsoleLook.HoverHelp = settings.PanelHoverHelp.Value;
+            AvConsoleLook.Opacity = settings.DeckOpacity.Value;
             AvConsoleLook.Changed();
         }
 
@@ -111,6 +113,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             settings.PanelOrders.SettingChanged -= OnChanged;
             settings.PanelClock.SettingChanged -= OnChanged;
             settings.PanelHoverHelp.SettingChanged -= OnChanged;
+            settings.DeckOpacity.SettingChanged -= OnChanged;
             if (AvFxDriver.GlitchSource == (Func<float>)ReadGlitch) AvFxDriver.GlitchSource = null;
         }
     }

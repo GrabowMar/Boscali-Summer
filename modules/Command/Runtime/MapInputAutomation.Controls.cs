@@ -19,27 +19,30 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 return Failure("MapInputAutomation", "controls-press", "drawer content is hidden");
             foreach (AvControl control in MfdMapControls.Root.GetComponentsInChildren<AvControl>())
             {
-                if (!control.isActiveAndEnabled || !control.Interactable || !string.Equals(control.Label, label, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!control.isActiveAndEnabled || !control.Interactable ||
+                    !(string.Equals(control.Label, label, StringComparison.OrdinalIgnoreCase) || string.Equals(control.name, "Control " + label, StringComparison.OrdinalIgnoreCase))) continue;
                 if (Bool(args, "reveal")) RevealControl(control.Rect);
                 Rect bounds = ScreenBounds(control.Rect);
                 if (!WithinScreen(bounds)) return Failure("MapInputAutomation", "controls-press", "control is outside the screen: " + label);
+                bool fullyVisible = true;
                 foreach (ScrollRect scroll in control.GetComponentsInParent<ScrollRect>())
+                {
                     if (scroll.viewport != null && !MapUiPointer.Contains(scroll.viewport, bounds.center))
                         return Failure("MapInputAutomation", "controls-press", "control is clipped; pass reveal=true: " + label);
+                    Rect viewport = ScreenBounds(scroll.viewport);
+                    fullyVisible &= bounds.xMin >= viewport.xMin - 1f && bounds.xMax <= viewport.xMax + 1f &&
+                        bounds.yMin >= viewport.yMin - 1f && bounds.yMax <= viewport.yMax + 1f;
+                }
                 AvHit hit = control.GetComponentInChildren<AvHit>();
                 if (hit == null) return Failure("MapInputAutomation", "controls-press", "control has no AvHit: " + label);
                 bool before = control.Latched;
-                MapOptions options = NativeMapOptions(map);
-                bool gridBefore = options != null && options.showGridLabels;
                 var data = WindowPointer.Data(); data.position = bounds.center;
                 hit.OnPointerDown(data); hit.OnPointerUp(data); hit.OnPointerClick(data);
                 Dictionary<string, object> state = State(map);
                 state["ok"] = true; state["label"] = label;
                 state["latchedBefore"] = before; state["latchedAfter"] = control.Latched;
                 state["latchedChanged"] = before != control.Latched;
-                state["nativeGridBefore"] = gridBefore;
-                state["nativeGridChanged"] = options != null && gridBefore != options.showGridLabels;
-                state["nativeGridMatchesLatch"] = options != null && control.Latched == options.showGridLabels;
+                state["controlFullyVisible"] = fullyVisible;
                 return state;
             }
             return Failure("MapInputAutomation", "controls-press", "no active enabled control " + label);
@@ -52,25 +55,43 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 if (scroll.content == null || scroll.viewport == null || !control.IsChildOf(scroll.content)) continue;
                 var corners = new Vector3[4]; control.GetWorldCorners(corners);
                 float low = float.PositiveInfinity, high = float.NegativeInfinity;
+                float left = float.PositiveInfinity, right = float.NegativeInfinity;
                 foreach (Vector3 corner in corners)
-                { float y = scroll.viewport.InverseTransformPoint(corner).y; low = Mathf.Min(low, y); high = Mathf.Max(high, y); }
+                {
+                    Vector3 point = scroll.viewport.InverseTransformPoint(corner);
+                    low = Mathf.Min(low, point.y); high = Mathf.Max(high, point.y);
+                    left = Mathf.Min(left, point.x); right = Mathf.Max(right, point.x);
+                }
                 Rect view = scroll.viewport.rect;
                 float delta = high > view.yMax ? view.yMax - high : low < view.yMin ? view.yMin - low : 0f;
                 scroll.StopMovement();
                 Vector2 position = scroll.content.anchoredPosition;
-                position.y = Mathf.Clamp(position.y + delta, 0f, Mathf.Max(0f, scroll.content.rect.height - view.height));
+                if (scroll.vertical) position.y = Mathf.Clamp(position.y + delta, 0f, Mathf.Max(0f, scroll.content.rect.height - view.height));
+                if (scroll.horizontal)
+                {
+                    float dx = right > view.xMax ? view.xMax - right : left < view.xMin ? view.xMin - left : 0f;
+                    position.x = Mathf.Clamp(position.x + dx, Mathf.Min(0f, view.width - scroll.content.rect.width), 0f);
+                }
                 scroll.content.anchoredPosition = position;
                 scroll.Rebuild(CanvasUpdate.PostLayout);
             }
         }
 
-        private static MapOptions NativeMapOptions(DynamicMap map)
+        private static Dictionary<string, object> PressPanelKey(DynamicMap map, Dictionary<string, object> args)
         {
-            VirtualMFD mfd = MapMfdLookup.Resolve(map.maximizedMapCanvas);
-            foreach (List<MFDScreen> screens in new[] { MapUiAccess.GetLeftScreens(mfd), MapUiAccess.GetRightScreens(mfd) })
-                if (screens != null) foreach (MFDScreen screen in screens)
-                    if (screen != null && screen.GetComponent<MapOptions>() is MapOptions options) return options;
-            return null;
+            string code = Text(args, "code") ?? "MAP";
+            foreach (MfdRailKey key in MfdRail.Keys)
+            {
+                if (key.Entry.Code != code || key.Source == null || !key.Source.interactable) continue;
+                if (Bool(args, "native")) key.Source.onClick.Invoke();
+                else key.Press();
+                Dictionary<string, object> state = State(map);
+                state["ok"] = true;
+                state["panelCode"] = code;
+                state["panelActive"] = key.Screen != null && key.Screen.isActive;
+                return state;
+            }
+            return Failure("MapInputAutomation", "panel-key", "no available rail key " + code);
         }
 
         // These hooks dispatch the rendered button handlers. They do not emulate physical
@@ -81,39 +102,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             string pose = (string)Read(map)["pose"];
             MFDScreen left = MfdSinglePanelPatch.ActiveScreen;
             bool columnFolded = MfdColumnFold.Folded;
-            if (action == "controls-key" || action == "controls-native-key")
-            {
-                bool found = false;
-                foreach (MfdRailKey key in MfdRail.Keys)
-                    if (key.Entry.Code == "MAP" && key.Source != null)
-                    {
-                        if (action == "controls-native-key")
-                        { key.Source.onClick.Invoke(); found = true; break; }
-                        AvHit railHit = key.Rect.GetComponentInChildren<AvHit>();
-                        if (railHit == null) break;
-                        var pointer = WindowPointer.Data();
-                        railHit.OnPointerDown(pointer); railHit.OnPointerUp(pointer); railHit.OnPointerClick(pointer);
-                        found = true; break;
-                    }
-                if (!found) return Failure("MapInputAutomation", action, "MAP rail key is unavailable");
-            }
-            else
-            {
-                int tab = Mathf.RoundToInt(Number(args, "tab", 0));
-                if (action == "controls-selecttab" && (tab < 0 || tab > 2))
-                    return Failure("MapInputAutomation", action, "tab must be 0 VIEW, 1 LAYERS or 2 PLOT");
-                string name = action == "controls-fold" ? "Collapse" : action == "controls-cancel" ? "CANCEL" : new[] { "VIEW", "LAYERS", "PLOT" }[tab];
-                AvControl control = null;
-                if (MfdMapControls.Root != null)
-                    foreach (AvControl item in MfdMapControls.Root.GetComponentsInChildren<AvControl>())
-                        if (item.isActiveAndEnabled && item.Interactable &&
-                            (item.name == name || string.Equals(item.Label, name, StringComparison.OrdinalIgnoreCase)))
-                        { control = item; break; }
-                AvHit hit = control != null ? control.GetComponentInChildren<AvHit>() : null;
-                if (hit == null) return Failure("MapInputAutomation", action, "no active AvHit control " + name);
-                var data = WindowPointer.Data();
-                hit.OnPointerDown(data); hit.OnPointerUp(data); hit.OnPointerClick(data);
-            }
+            AvControl control = MfdMapControls.Root != null ? MfdMapControls.Root.Find("Collapse")?.GetComponent<AvControl>() : null;
+            AvHit hit = control != null && control.isActiveAndEnabled && control.Interactable ? control.GetComponentInChildren<AvHit>() : null;
+            if (hit == null) return Failure("MapInputAutomation", action, "no active drawer fold control");
+            var data = WindowPointer.Data();
+            hit.OnPointerDown(data); hit.OnPointerUp(data); hit.OnPointerClick(data);
             Dictionary<string, object> state = State(map);
             state["ok"] = true;
             state["preservedSelection"] = selected == SelectionKey(map);
@@ -142,7 +135,38 @@ namespace BoscaliSummer.Modules.Command.Runtime
             bool shown = MfdMapControls.Shown;
             state["controlsShown"] = shown;
             state["controlsFolded"] = MfdMapControls.Folded;
-            state["controlsTab"] = MfdMapControls.SelectedTab;
+            var rows = new List<float>();
+            if (shown && !MfdMapControls.Folded)
+            {
+                RectTransform feedback = MfdMapControls.Footer.Rect;
+                rows.Add(root.InverseTransformPoint(feedback.TransformPoint(feedback.rect.center)).y);
+                foreach (AvControl control in root.GetComponentsInChildren<AvControl>())
+                {
+                    if (!control.isActiveAndEnabled || control.name == "Collapse") continue;
+                    float y = root.InverseTransformPoint(control.Rect.TransformPoint(control.Rect.rect.center)).y;
+                    bool found = false;
+                    foreach (float row in rows) if (Mathf.Abs(row - y) < 2f) { found = true; break; }
+                    if (!found) rows.Add(y);
+                }
+            }
+            state["controlsRows"] = rows.Count;
+            state["controlsHeight"] = root != null ? root.rect.height : 0f;
+            ScrollRect drawerScroll = root != null ? root.Find("Body/View")?.GetComponent<ScrollRect>() : null;
+            state["controlsHorizontalScroll"] = drawerScroll != null && drawerScroll.horizontal && !drawerScroll.vertical;
+            state["controlsScrollNeeded"] = drawerScroll != null && drawerScroll.content.rect.width > drawerScroll.viewport.rect.width + .5f;
+            state["controlsScrollX"] = drawerScroll != null ? drawerScroll.content.anchoredPosition.x : 0f;
+            if (drawerScroll != null)
+            {
+                float contentWidth = drawerScroll.content.rect.width, viewportWidth = drawerScroll.viewport.rect.width;
+                float x = drawerScroll.content.anchoredPosition.x;
+                state["controlsContentWidth"] = contentWidth;
+                state["controlsViewportWidth"] = viewportWidth;
+                state["controlsScrollGeometryCorrect"] = drawerScroll.horizontal && !drawerScroll.vertical &&
+                    x <= .5f && x >= Mathf.Min(0f, viewportWidth - contentWidth) - .5f &&
+                    (drawerScroll.horizontalScrollbar != null && drawerScroll.horizontalScrollbar.gameObject.activeInHierarchy) ==
+                    (shown && !MfdMapControls.Folded && contentWidth > viewportWidth + .5f);
+            }
+            state["cameraFly"] = ReliefNavigator.Flying;
             state["controlsSelectionActive"] = MfdMapControls.SelectionSlot != null && MfdMapControls.SelectionSlot.gameObject.activeInHierarchy;
             state["controlsViewActive"] = MfdMapControls.ViewSlot != null && MfdMapControls.ViewSlot.gameObject.activeInHierarchy;
             state["controlsTheaterActive"] = MfdMapControls.TheaterSlot != null && MfdMapControls.TheaterSlot.gameObject.activeInHierarchy;
@@ -153,12 +177,11 @@ namespace BoscaliSummer.Modules.Command.Runtime
             var prompt = root != null ? root.Find("Status")?.GetComponent<TMPro.TMP_Text>() : null;
             state["controlsPrompt"] = prompt != null ? prompt.text : "";
             state["controlsPromptVisible"] = shown && prompt != null && prompt.isActiveAndEnabled && !string.IsNullOrEmpty(MapPicker.Prompt) && prompt.text == MapPicker.Prompt;
-            state["controlsCancelActive"] = shown && root.Find("Cancel")?.gameObject.activeInHierarchy == true;
-            state["pickerBusy"] = MapPicker.IsBusy;
-            state["commsPlotArmed"] = MapPicker.IsOwner(Modules.Comms.Runtime.CommsManager.PickerOwner);
-            MapOptions nativeOptions = NativeMapOptions(map);
-            state["nativeGridAvailable"] = nativeOptions != null;
-            state["nativeGridShown"] = nativeOptions != null && nativeOptions.showGridLabels;
+            int extraControls = 0;
+            if (root != null) foreach (AvControl control in root.GetComponentsInChildren<AvControl>(true))
+                if (control.Label == "LAYERS" || control.Label == "PLOT" || control.Label == "VIEW" || control.Label == "CANCEL") extraControls++;
+            state["controlsExtraMenuCount"] = extraControls;
+            state["clickAdds"] = Plugin.Settings?.Command?.MapClickAdds?.Value == true;
             state["selectionIds"] = SelectionKey(map);
             state["selectionModes"] = SelectionModes();
             Rect controls = ScreenBounds(root);

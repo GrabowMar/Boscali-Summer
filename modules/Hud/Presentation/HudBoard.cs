@@ -28,6 +28,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly HudFeedStore store = new HudFeedStore(() => Time.unscaledTime);
         private readonly BoardFrame frame = new BoardFrame();
+        internal bool MissionNoticeShown => frame.HasTicker && frame.Ticker.Channel == "mission";
         private readonly ExternalHudEnabler externalHud = new ExternalHudEnabler();
         private readonly WingviewCameraState wingview = new WingviewCameraState();
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();

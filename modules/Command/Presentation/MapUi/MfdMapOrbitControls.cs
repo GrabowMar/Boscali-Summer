@@ -43,8 +43,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < navigation.Length; i++) navigation[i].Interactable = drawing;
             followButton.Interactable = flyButton.Interactable = drawing;
             int yaw = Mathf.RoundToInt(MfdTerrainRelief.Yaw);
-            readout.text = !drawing ? "CAMERA · ENABLE 3D RELIEF IN LAYERS"
-                : (embedded ? "CAMERA · " : "") + Heading(yaw) + "°  " + MfdChromeLay.TwoDigits(Mathf.RoundToInt(MfdTerrainRelief.Pitch)) + "°  ×" +
+            readout.text = !drawing ? "3D RELIEF OFF"
+                : Heading(yaw) + "°  " + MfdChromeLay.TwoDigits(Mathf.RoundToInt(MfdTerrainRelief.Pitch)) + "°  ×" +
                   AvNum.Fixed(MfdTerrainRelief.Zoom, 1);
             // The needle turns opposite to the view, so it keeps pointing at north on the screen.
             if (needle != null) needle.rectTransform.localEulerAngles = new Vector3(0f, 0f, yaw);
@@ -68,19 +68,23 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             root.SetParent(slot, false);
             AvLay.Fill(root);
             float x = Pad, width = MapSelectionDeck.Width;
-            AvControl compass = navigation[0] = Button(embedded ? "NORTH" : "", AvIcon.ArrowUp, ReliefNavigator.North,
+            AvControl compass = navigation[0] = Button("", AvIcon.ArrowUp, ReliefNavigator.North,
                 "Compass: the needle points to north. Press for north up at the default tilt.", ref x);
             needle = compass.Glyph;
-            navigation[1] = Button(embedded ? "TURN L" : "", AvIcon.ChevronLeft, () => ReliefNavigator.Turn(-15f),
+            navigation[1] = Button("", AvIcon.ChevronLeft, () => ReliefNavigator.Turn(-15f),
                 "Turn the view 15 degrees left. Ctrl + wheel does the same; hold the wheel or the right button and drag to orbit freely.", ref x);
-            navigation[2] = Button(embedded ? "TURN R" : "", AvIcon.ChevronRight, () => ReliefNavigator.Turn(15f),
+            navigation[2] = Button("", AvIcon.ChevronRight, () => ReliefNavigator.Turn(15f),
                 "Turn the view 15 degrees right. Ctrl + wheel does the same; hold the wheel or the right button and drag to orbit freely.", ref x);
             navigation[3] = Button(embedded ? "TILT UP" : "", AvIcon.ChevronUp, () => ReliefNavigator.Tilt(10f),
                 "Look more straight down (tilt +10 degrees). Shift + wheel tilts in smaller steps.", ref x);
             navigation[4] = Button(embedded ? "TILT DOWN" : "", AvIcon.ChevronDown, () => ReliefNavigator.Tilt(-10f),
                 "Look more toward the horizon (tilt -10 degrees). Shift + wheel tilts in smaller steps.", ref x);
-            navigation[5] = Button(embedded ? "FIT" : "", AvIcon.Maximize, ReliefNavigator.Fit,
+            navigation[5] = Button("", AvIcon.Maximize, ReliefNavigator.Fit,
                 "Fit the whole mission map. Double-click the ground to zoom in there.", ref x);
+            navigation[0].Rect.name = "Control NORTH";
+            navigation[1].Rect.name = "Control TURN L";
+            navigation[2].Rect.name = "Control TURN R";
+            navigation[5].Rect.name = "Control FIT";
 
             float right = width - Pad - WasdW;
             float end = right;
@@ -102,17 +106,21 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void LayoutEmbedded(float width)
         {
             layoutWidth = width;
-            float cell = Mathf.Max(1f, (width - 12f) / 4f);
-            MfdChromeLay.Place(readout.rectTransform, new Rect(0f, 0f, width, 18f));
+            float readoutWidth = Mathf.Min(176f, width * .35f);
+            float cell = Mathf.Max(1f, (width - readoutWidth - 12f) / 4f);
+            MfdChromeLay.Place(readout.rectTransform, new Rect(0f, 0f, readoutWidth - 4f, MfdMapControls.RowHeight));
             readout.alignment = TextAlignmentOptions.MidlineLeft;
-            MfdChromeLay.Place(navigation[0].Rect, new Rect(0f, -22f, cell, 28f));
-            MfdChromeLay.Place(navigation[1].Rect, new Rect(cell + 4f, -22f, cell, 28f));
-            MfdChromeLay.Place(navigation[2].Rect, new Rect((cell + 4f) * 2f, -22f, cell, 28f));
-            MfdChromeLay.Place(navigation[5].Rect, new Rect((cell + 4f) * 3f, -22f, cell, 28f));
-            MfdChromeLay.Place(navigation[3].Rect, new Rect(0f, -54f, cell, 28f));
-            MfdChromeLay.Place(navigation[4].Rect, new Rect(cell + 4f, -54f, cell, 28f));
-            MfdChromeLay.Place(followButton.Rect, new Rect((cell + 4f) * 2f, -54f, cell, 28f));
-            MfdChromeLay.Place(flyButton.Rect, new Rect((cell + 4f) * 3f, -54f, cell, 28f));
+            // Compass/turn/fit are glyph keys; their hover help retains the full action names.
+            MfdChromeLay.Place(navigation[0].Rect, new Rect(readoutWidth, 0f, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(navigation[1].Rect, new Rect(readoutWidth + cell + 4f, 0f, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(navigation[2].Rect, new Rect(readoutWidth + (cell + 4f) * 2f, 0f, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(navigation[5].Rect, new Rect(readoutWidth + (cell + 4f) * 3f, 0f, cell, MfdMapControls.RowHeight));
+            cell = Mathf.Max(1f, (width - 12f) / 4f);
+            float y = -MfdMapControls.RowPitch;
+            MfdChromeLay.Place(navigation[3].Rect, new Rect(0f, y, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(navigation[4].Rect, new Rect(cell + 4f, y, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(followButton.Rect, new Rect((cell + 4f) * 2f, y, cell, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(flyButton.Rect, new Rect((cell + 4f) * 3f, y, cell, MfdMapControls.RowHeight));
         }
 
         private static AvControl Button(string label, AvIcon icon, System.Action onClick, string help, ref float x, float width = Icon)

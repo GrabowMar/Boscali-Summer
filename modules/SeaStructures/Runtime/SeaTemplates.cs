@@ -193,7 +193,6 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         private static readonly FieldInfo Disintegrate = AccessTools.Field(typeof(UnitPart), "disintegrateObjects");
         private static readonly FieldInfo CriticalPart = AccessTools.Field(typeof(UnitPart), "criticalPart");
         private static readonly FieldInfo Structural = AccessTools.Field(typeof(UnitPart), "structuralThreshold");
-        private static readonly FieldInfo HangarAircraft =AccessTools.Field(typeof(Hangar), "availableAircraft");
         private static readonly FieldInfo TurretStations = AccessTools.Field(typeof(Turret), "weaponStations");
         private static readonly FieldInfo TurretParts = AccessTools.Field(typeof(Turret), "criticalParts");
         private static readonly FieldInfo LaunchPoints = AccessTools.Field(typeof(MissileLauncher), "launchTransforms");
@@ -212,15 +211,22 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
 
         public static string Donor(SeaKind kind) => DonorKeys[(int)kind];
 
+        internal static void EnsureDefinitions()
+        {
+            Ensure();
+            if (tried) SeaFacility.RegisterDefinitions(Templates);
+        }
+
         /// <summary>Register both prefabs with this peer's client (cheap to call often). <paramref name="force"/>
         /// re-registers after the game rebuilt its own prefab table.</summary>
         public static void EnsureRegistered(bool force = false)
         {
             NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
             ClientObjectManager objects = manager != null ? manager.ClientObjectManager : null;
-            if (objects == null || (objects == registeredWith && !force)) return;
-            Ensure();
+            if (objects == null) return;
+            EnsureDefinitions();
             if (!tried) return;
+            if (objects == registeredWith && !force) return;
             foreach (GameObject template in Templates)
                 if (template != null) objects.RegisterPrefab(template.GetComponent<NetworkIdentity>());
             registeredWith = objects;
@@ -260,7 +266,8 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 GameObject p = def != null ? def.unitPrefab : null;
                 if (p == null || p.GetComponent<Ship>() == null || p.GetComponent<ShipPart>() == null) continue;
                 int turrets = p.GetComponentsInChildren<Turret>(true).Length, parts = p.GetComponentsInChildren<ShipPart>(true).Length;
-                if (turrets == 0 || parts < minParts || p.GetComponentsInChildren<Hangar>(true).Length > 1) continue; // unarmed, a boat, a carrier
+                if (turrets == 0 || parts < minParts || p.GetComponent<Airbase>() == null ||
+                    p.GetComponentsInChildren<Hangar>(true).Length != 1 || def.shipType == SeaFacility.PlatformType) continue;
                 if (fort && def.jsonKey == "Frigate1") return def;
                 int score = (fort ? -turrets : turrets) * 100 - parts;
                 if (score < bestScore) { bestScore = score; best = def; }
@@ -484,16 +491,11 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 Structural?.SetValue(part, -1e9f);
             }
 
-            // Static: pinned for good; no aircraft spawn from it.
+            // Static, with one native vertical flight facility on the actual authored deck.
             Rigidbody body = go.GetComponent<Rigidbody>();
             if (body != null) body.constraints = RigidbodyConstraints.FreezeAll;
-            foreach (Hangar hangar in go.GetComponentsInChildren<Hangar>(true)) HangarAircraft?.SetValue(hangar, new AircraftDefinition[0]);
-            foreach (Airbase airbase in go.GetComponentsInChildren<Airbase>(true))
-            {
-                // The physical flight deck is player-usable, but the donor ship's AI approaches no longer describe it.
-                airbase.runways = Array.Empty<Airbase.Runway>();
-                airbase.verticalLandingPoints = Array.Empty<Airbase.VerticalLandingPoint>();
-            }
+            int padIndex = Array.FindIndex(layout.Sections, s => s.Pad);
+            SeaFacility.Configure(go, layout, donor, node[padIndex], assigned[padIndex] ?? node[padIndex].GetComponent<UnitPart>());
             go.AddComponent<SeaStructure>().Kind = (int)layout.Kind;
             go.GetComponent<NetworkIdentity>().PrefabHash = hash;
 

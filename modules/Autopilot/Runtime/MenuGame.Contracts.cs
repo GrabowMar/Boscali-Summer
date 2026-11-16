@@ -79,22 +79,18 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static readonly Dictionary<string, Flag<ITacBoardSettings>> ArFlags = new Dictionary<string, Flag<ITacBoardSettings>>
         {
             ["ar/alerts"] = new Flag<ITacBoardSettings>(b => b.CentreAlerts, (b, v) => b.CentreAlerts = v),
-            ["ar/path"] = new Flag<ITacBoardSettings>(b => b.ArPath, (b, v) => b.ArPath = v),
-            ["ar/domes"] = new Flag<ITacBoardSettings>(b => b.ArDomes, (b, v) => b.ArDomes = v),
             ["ar/missiles"] = new Flag<ITacBoardSettings>(b => b.ArMissiles, (b, v) => b.ArMissiles = v),
             ["ar/beacons"] = new Flag<ITacBoardSettings>(b => b.ArBeacons, (b, v) => b.ArBeacons = v),
             ["ar/fx"] = new Flag<ITacBoardSettings>(b => b.HudFx, (b, v) => b.HudFx = v),
         };
 
-        /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
-        /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c>; the scope index is the menu order (<c>BoardScopes</c>), not the enum's.</summary>
+        /// <summary>The HUD category's available controls; the scope index follows the menu order rather than the enum.</summary>
         private static void ReadBoard(MenuWorld w)
         {
             ITacBoardSettings board = Service<ITacBoardSettings>();
             if (board == null) return;
             w.BoardAvailable = true;
             w.BoardOn = board.Enabled;
-            w.BoardDeclutter = (int)board.Declutter;
             w.BoardShade = MenuCatalog.Nearest(MenuCatalog.ShadeSteps, board.Shade);
             w.BoardSize = MenuCatalog.Nearest(MenuCatalog.SizeSteps, board.Scale);
             w.BoardScope = MenuCatalog.ScopeIndex(board.ScopeMode);
@@ -213,7 +209,6 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "view/mslprev": return () => Service<IMissileView>()?.Prev();
                 case "view/mslexit": return () => Service<IMissileView>()?.Exit();
                 case "hud/board": return OnBoard(board => board.Enabled = !board.Enabled);
-                case "hud/declutter": return OnBoard(board => board.Declutter = (BoardDeclutter)(((int)board.Declutter + 1) % MenuCatalog.BoardDeclutters.Length));
                 case "hud/scope": return OnBoard(board => CycleScope(board));
                 case "hud/shade": return OnBoard(board => board.Shade = Next(MenuCatalog.ShadeSteps, board.Shade));
                 case "hud/size": return OnBoard(board => board.Scale = Next(MenuCatalog.SizeSteps, board.Scale));

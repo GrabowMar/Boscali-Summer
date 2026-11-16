@@ -73,6 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>What the layer shows now (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal bool Shown => root != null && root.gameObject.activeSelf;
+        internal bool TerrainAlert => on && board.IsUp(AlertKind.PullUp);
         /// <summary>A real warning is up right now (PULL UP, MISSILE, FIRE, ENGINE OUT, LOCKED): the visor's power-on is cut short for it. BINGO FUEL is a caution the self-test reports itself and does not count.</summary>
         internal bool WarningUp => on && (board.IsUp(AlertKind.PullUp) || board.IsUp(AlertKind.Missile) || board.IsUp(AlertKind.Fire) || board.IsUp(AlertKind.EngineOut) || board.IsUp(AlertKind.Locked));
         internal string LineWord => line != null && line.gameObject.activeSelf ? kindWord.text : "";

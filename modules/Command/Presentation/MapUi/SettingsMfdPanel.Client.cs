@@ -120,42 +120,27 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
         private void BuildMapPage(AvFlow flow, int page)
         {
-            Func<bool> expanded = () => settings.ExpandedMapUi.Value;
-            Func<string> needExpanded = () => "Turn on expanded layout first.";
-
             flow.Section(AvIcon.Map2, "MAP CONSOLE", null);
-            ToggleCell(flow, page, "EXPANDED LAYOUT", "Use the full map console. OFF restores the native layout.",
-                () => settings.ExpandedMapUi.Value, v => settings.ExpandedMapUi.Value = v);
             ToggleCell(flow, page, "TERRAIN IMAGE", "Show the satellite terrain beneath map symbols.",
-                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v, expanded, needExpanded);
+                () => settings.MapTerrainImage.Value, v => settings.MapTerrainImage.Value = v);
             ToggleCell(flow, page, "3D RELIEF",
                 "Render baked game terrain as a tilted tactical model. Symbols, front line and clicks follow the same surface.",
                 () => settings.MapRelief3D.Value, v => settings.MapRelief3D.Value = v,
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Turn on expanded layout and terrain image first.");
+                () => settings.MapTerrainImage.Value,
+                () => "Turn on terrain image first.");
             ToggleCell(flow, page, "NEWS TICKER", "Show theater dispatches above the map.",
-                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v, expanded, needExpanded);
+                () => settings.NewsTickerEnabled.Value, v => settings.NewsTickerEnabled.Value = v);
 
             var levels = flow.Add(new SetRingRow(flow.Content));
-            PercentRing(flow, levels, page, "TERRAIN STRENGTH", settings.MapTerrainOpacity, .1f, 1f, .1f,
-                "Opacity of the satellite terrain under the map symbols.",
-                () => settings.ExpandedMapUi.Value && settings.MapTerrainImage.Value,
-                () => "Enable expanded layout and terrain image first.");
-            PercentRing(flow, levels, page, "CONSOLE OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
-                "Opacity of the map console panels. Lower lets the map show through.", expanded, needExpanded);
-            PercentRing(flow, levels, page, "MAP DARKENING", settings.MapTrayOpacity, 0f, 1f, .05f,
-                "How far the map behind the console is darkened so symbols read clearly.", expanded, needExpanded);
-            EntryRing(flow, levels, page, "TICKER SPEED", settings.NewsTickerSpeed, 15f, 150f, 15f, v => AvNum.Fixed(v, 0) + " px/s",
-                "Lower speeds are easier to read. Disable NEWS TICKER to stop motion.",
-                () => settings.ExpandedMapUi.Value && settings.NewsTickerEnabled.Value,
-                () => "Enable expanded layout and news ticker first.");
+            PercentRing(flow, levels, page, "MFD OPACITY", settings.DeckOpacity, .1f, 1f, .05f,
+                "Opacity of MFD panels and their backdrop. Lower values make the panels more transparent.");
 
             // Ported from the config file: how contacts stand on the relief and how the mouse drives it.
-            Func<bool> relief = () => expanded() && settings.MapRelief3D.Value && settings.MapTerrainImage.Value;
+            Func<bool> relief = () => settings.MapRelief3D.Value && settings.MapTerrainImage.Value;
             Func<string> needRelief = () => "Turn on 3D RELIEF first.";
             flow.Section(AvIcon.Target, "CONTACTS & MOUSE", "SYMBOLS · 3D RELIEF CONTROLS");
             ToggleCell(flow, page, "MAP SYMBOLS", "Contacts as solid symbols, one silhouette per platform class, tinted by side. OFF: the game's icons.",
-                () => settings.MapSymbology.Value, v => settings.MapSymbology.Value = v, expanded, needExpanded);
+                () => settings.MapSymbology.Value, v => settings.MapSymbology.Value = v);
             ToggleCell(flow, page, "3D MINIATURES", "A small low-poly model stands on the relief for each contact instead of its flat symbol.",
                 () => settings.MapMinis3D.Value, v => settings.MapMinis3D.Value = v,
                 () => relief() && settings.MapSymbology.Value, () => relief() ? "Turn on MAP SYMBOLS first." : needRelief());

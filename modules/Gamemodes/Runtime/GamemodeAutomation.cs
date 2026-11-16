@@ -2,9 +2,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Game;
 using Newtonsoft.Json;
 using NuclearOption.Networking;
+using TMPro;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Gamemodes.Runtime
@@ -71,6 +73,17 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             if (FactionRegistry.airbaseLookup.TryGetValue("Maris Airport", out Airbase source))
                 foreach (Hangar hangar in source.hangars) if (hangar != null) hangars++;
             result["sourceHangars"] = hangars;
+            GameObject hud = GameObject.Find("BoscaliStatusPanel");
+            // Read generated glyphs: TMP's player-build .text getter consumes the dirty backing-string flag after SetCharArray,
+            // so reading the same unchanged pooled label twice otherwise returns an empty serialized m_text.
+            string hudWords = hud != null ? string.Join("|", hud.GetComponentsInChildren<TMP_Text>(false).Select(t => t.GetParsedText())) : "";
+            result["hudStatusText"] = hudWords;
+            MissionDashboardStatus report = default;
+            bool reportReady = GamemodeRuntime.Active != null && GamemodeRuntime.Active.TryRead(out report);
+            result["hudHasMode"] = reportReady && hudWords.Contains(report.Name);
+            result["hudHasScores"] = hudWords.Contains("BDF " + status.Score0 + " : " + status.Score1 + " PALA");
+            result["hudHasPhase"] = reportReady && hudWords.Contains(report.Phase);
+            result["standaloneBoards"] = Resources.FindObjectsOfTypeAll<Canvas>().Count(c => c.name == "Boscali / Gamemode status");
             return result;
         }
     }

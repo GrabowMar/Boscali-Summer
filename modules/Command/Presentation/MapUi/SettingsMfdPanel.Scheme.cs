@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return;
             }
             c.Orders(CPanels, "Pick a scheme, then a finish: every console repaints at once.");
-            c.Orders(CMap, "EXPANDED LAYOUT off returns the game's own map screen.");
+            c.Orders(CMap, "MFD OPACITY changes panel transparency. Terrain, contacts and mouse controls apply immediately.");
             c.Orders(CHud, "The TAC BOARD takes a change on its next tick, in flight.");
             c.Orders(CVisuals, "Every cue on this page is felt by this pilot only.");
             c.Orders(CPerf, "A preset is a starting point: tune single switches after it.");

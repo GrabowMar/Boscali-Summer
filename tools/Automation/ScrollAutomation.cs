@@ -174,7 +174,19 @@ namespace BoscaliSummer.Modules.Command.Runtime
                 ["tickerVisible"] = wire != null && Rendered(wire) && Within(ScreenBounds(wire), new Rect(0f, 0f, Screen.width, Screen.height)),
                 ["mapFrameVisible"] = mapFrame != null && Rendered(mapFrame.transform),
                 ["mapTrayVisible"] = mapTray != null && Rendered(mapTray.transform),
+                ["panelAlpha"] = c.Root.GetComponent<CanvasGroup>()?.alpha ?? 1f,
             };
+            if ((string)Field(c, "id") == "SET" && c.CurrentPageName == "MAP")
+            {
+                var words = new System.Text.StringBuilder();
+                foreach (TMPro.TMP_Text text in flow.Content.GetComponentsInChildren<TMPro.TMP_Text>(false)) words.Append(text.text).Append('|');
+                string pageText = words.ToString();
+                result["hasMfdOpacity"] = pageText.Contains("MFD OPACITY");
+                int retired = 0;
+                foreach (string label in new[] { "EXPANDED LAYOUT", "TERRAIN STRENGTH", "CONSOLE OPACITY", "MAP DARKENING", "TICKER SPEED" })
+                    if (pageText.Contains(label)) retired++;
+                result["retiredMapControls"] = retired;
+            }
             if ((string)Field(c, "id") == "PILOT" && ModuleServices.TryGet(out IWingSquad host))
             {
                 object squadron = Field(host, "squadron");

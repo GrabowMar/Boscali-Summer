@@ -48,6 +48,8 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         private static readonly Dictionary<FactionHQ, float> homing = new Dictionary<FactionHQ, float>(); // side -> last missile aim at the ace
         private static ConditionalWeakTable<Missile, object> veers = new ConditionalWeakTable<Missile, object>();
         private static readonly List<Rigidbody> bodies = new List<Rigidbody>();
+        private static readonly List<(Vector3 Position, Quaternion Rotation, Vector3 Velocity, Vector3 Spin)> bodyPoses =
+            new List<(Vector3, Quaternion, Vector3, Vector3)>();
         private static readonly List<Unit> leftovers = new List<Unit>();
         private static readonly FieldInfo ImpactPrev = AccessTools.Field(typeof(ImpactDetector), "velocityPrev");
         private static readonly FieldInfo FuelPrev = AccessTools.Field(typeof(FuelTank), "velocityPrev");
@@ -358,7 +360,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
         }
 
         /// <summary>Shared by the ace's blink and the Hell dimension: move every connected body without a false impact.</summary>
-        internal static void Relocate(Aircraft ace, Vector3 to, Quaternion turn)
+        internal static void Relocate(Aircraft ace, Vector3 to, Quaternion turn, Vector3? flightVelocity = null)
         {
             Transform root = ace.transform;
             Vector3 from = root.position;
@@ -367,17 +369,22 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             if (ace.partLookup != null)
                 foreach (UnitPart part in ace.partLookup)
                     if (part != null && !part.IsDetached() && part.rb != null && !bodies.Contains(part.rb)) bodies.Add(part.rb);
+            // Capture the assembly before moving its root: parent movement must not be applied twice to child bodies.
+            bodyPoses.Clear();
             foreach (Rigidbody rb in bodies)
-            {
-                Vector3 p = to + turn * (rb.position - from);
-                Quaternion r = turn * rb.rotation;
-                rb.position = p;
-                rb.rotation = r;
-                rb.velocity = turn * rb.velocity;
-                rb.angularVelocity = turn * rb.angularVelocity;
-                if (!rb.transform.IsChildOf(root)) rb.transform.SetPositionAndRotation(p, r);
-            }
+                bodyPoses.Add((to + turn * (rb.position - from), turn * rb.rotation,
+                    flightVelocity ?? turn * rb.velocity, flightVelocity.HasValue ? Vector3.zero : turn * rb.angularVelocity));
             root.SetPositionAndRotation(to, turn * root.rotation);
+            for (int i = 0; i < bodies.Count; i++)
+            {
+                Rigidbody rb = bodies[i];
+                var pose = bodyPoses[i];
+                rb.position = pose.Position;
+                rb.rotation = pose.Rotation;
+                rb.velocity = pose.Velocity;
+                rb.angularVelocity = pose.Spin;
+                rb.transform.SetPositionAndRotation(pose.Position, pose.Rotation);
+            }
             ace.velocityPrev = Vector3.zero;
             if (ace.pilots != null)
                 foreach (Pilot pilot in ace.pilots)
@@ -387,7 +394,8 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                 foreach (UnitPart part in ace.partLookup)
                     if (part != null && !part.transform.IsChildOf(root)) ResetPrev(part.gameObject);
             bodies.Clear();
-            if (GameManager.IsLocalAircraft(ace)) SceneSingleton<CameraStateManager>.i?.CheckOriginShift();
+            bodyPoses.Clear();
+            if (GameManager.IsLocalAircraft(ace)) FloatingOrigin.Instance?.OriginShift(ace.transform.position);
         }
 
         private static void ResetPrev(GameObject o)

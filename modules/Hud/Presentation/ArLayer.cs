@@ -15,10 +15,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// The AR helmet layer (2026-11-14, docs/superpowers/specs/2026-11-14-ar-helmet-layer-design.md): symbols locked to things outside the canopy, each drawn only
     /// while it answers a question the pilot has now (<see cref="ArRules"/>).
     /// <list type="bullet">
-    /// <item>PATH: where the aircraft will be over the next 8 s (constant-turn prediction); in the alert colour with an X, a ground ring and TERRAIN nS where it meets
-    /// the ground, faint during a hard pull.</item>
-    /// <item>DOMES: the engagement envelope of every known hostile SAM near enough to matter, in the game's own cone-then-cylinder shape, the ring at the aircraft's
-    /// own height bold; IN SAM ENVELOPE inside.</item>
+    /// <item>PATH: retired; no flight-path line or terrain impact geometry is drawn.</item>
+    /// <item>DOMES: retired; BoardOptions ignores the saved switch so the SAM wire cages remain off.</item>
     /// <item>MISSILES: own missiles to their targets (dashed line, IMPACT nS), inbound missiles boxed with their next two seconds.</item>
     /// <item>BEACONS: a pillar over the way home (JOKER, BINGO or damage) and over a live contract zone.</item>
     /// <item>LOCK SPIN-IN and HIT GLITCH: the HUD reacting to the fight.</item>
@@ -48,16 +46,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Matrix4x4 vp;
         private float halfW, halfH;
 
-        private bool on, showPath, showDomes, showMissiles, showBeacons, showFx;
+        private bool on, showDomes, showMissiles, showBeacons, showFx;
         private Aircraft aircraft;
         private AvUnits units = AvUnits.Metric;
-
-        // PATH
-        private readonly float[] path = new float[ArRules.PathSamples * 3];
-        private Vector3 lastVelocity;
-        private float lastVelocityAt = float.NaN, wx, wy, wz, collisionS = float.NaN;
-        private int pathReach;
-        private bool pathOn;
 
         // DOMES
         private struct Dome
@@ -113,11 +104,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal bool Glitching { get; private set; }
         internal int Quads => lines != null ? lines.Buffer.Count + fx.Buffer.Count : 0;
 
-        /// <summary>Test and showcase hook (dev sims): pretend the pull is this hard, so the path draws in level flight; NaN off.</summary>
+        /// <summary>Legacy automation hook retained for existing scenarios; the retired flight path stays off.</summary>
         internal float ForcePullG = float.NaN;
-        /// <summary>Test and showcase hook: predict as if the flight path turned right at this many degrees a second (a level turn); NaN off.</summary>
+        /// <summary>Legacy automation turn fixture; no geometry is drawn.</summary>
         internal float ForceTurnDegS = float.NaN;
-        /// <summary>Test and showcase hook: predict as if the flight path pointed this many degrees further nose-down (no G on the pilot); NaN off.</summary>
+        /// <summary>Legacy automation prediction fixture; no geometry is drawn.</summary>
         internal float ForcePitchDeg = float.NaN;
         /// <summary>Test and showcase hook: stand the home beacon whatever the fuel and damage.</summary>
         internal bool ForceHome;
@@ -156,7 +147,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// The board's 10 Hz read: the path prediction and its ground check, the SAM rings near enough (once a second), the beacons, new locks and new damage.
+        /// The board's 10 Hz read: the beacons, new locks and new damage. Retired overlay switches cannot re-enable their geometry.
         /// <paramref name="show"/> false (every switch off, a pause, the map, no aircraft) clears the layer.
         /// </summary>
         public void Read(bool show, in BoardOptions options, Aircraft own, BoardFrame frame, Airbase field, float now)
@@ -165,18 +156,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 on = false;
                 aircraft = null;
-                lastVelocityAt = float.NaN;
                 return;
             }
             on = true;
             aircraft = own;
             units = frame.Units;
-            showPath = options.ArPath;
             showDomes = options.ArDomes;
             showMissiles = options.ArMissiles;
             showBeacons = options.ArBeacons;
             showFx = options.HudFx;
-            ReadPath(own);
             if (!showDomes) domeCount = 0;
             else if (now >= nextDomes)
             {
@@ -186,52 +174,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ReadBeacons(own, frame, field);
             ReadLocks(now);
             ReadHits(own, frame, now);
-        }
-
-        private void ReadPath(Aircraft own)
-        {
-            pathOn = false;
-            if (!showPath || own.rb == null) { lastVelocityAt = float.NaN; return; }
-            Vector3 v = own.rb.velocity;
-            float t = Time.time;
-            if (!float.IsNaN(lastVelocityAt))
-            {
-                ArRules.TurnRate(lastVelocity.x, lastVelocity.y, lastVelocity.z, v.x, v.y, v.z, t - lastVelocityAt, out float mx, out float my, out float mz);
-                // Half-way toward the new reading: steady enough to read, quick enough to follow a reversal.
-                wx += (mx - wx) * 0.5f; wy += (my - wy) * 0.5f; wz += (mz - wz) * 0.5f;
-            }
-            lastVelocity = v;
-            lastVelocityAt = t;
-            if (!float.IsNaN(ForceTurnDegS)) { wx = 0f; wy = ForceTurnDegS * Mathf.Deg2Rad; wz = 0f; }
-            if (!float.IsNaN(ForcePitchDeg)) v = Quaternion.AngleAxis(ForcePitchDeg, own.transform.right) * v;      // the prediction only; the aircraft flies on
-            ArRules.Predict(v.x, v.y, v.z, wx, wy, wz, ArRules.PathStepS, ArRules.PathSamples, path);
-
-            // The first leg that meets the ground (or the sea) ends the path there.
-            collisionS = float.NaN;
-            pathReach = ArRules.PathSamples;
-            Vector3 origin = own.transform.position, from = origin;
-            float sea = Datum.LocalSeaY;
-            for (int i = 0; i < ArRules.PathSamples; i++)
-            {
-                Vector3 to = origin + new Vector3(path[i * 3], path[i * 3 + 1], path[i * 3 + 2]);
-                float share = float.NaN;
-                if (Physics.Linecast(from, to, out RaycastHit hit, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                    share = (hit.point - from).magnitude / Mathf.Max(0.01f, (to - from).magnitude);
-                else if (to.y < sea && from.y >= sea)
-                    share = (from.y - sea) / Mathf.Max(0.01f, from.y - to.y);
-                if (!float.IsNaN(share))
-                {
-                    collisionS = (i + Mathf.Clamp01(share)) * ArRules.PathStepS;
-                    Vector3 at = Vector3.Lerp(from, to, Mathf.Clamp01(share)) - origin;
-                    path[i * 3] = at.x; path[i * 3 + 1] = at.y; path[i * 3 + 2] = at.z;
-                    pathReach = i + 1;
-                    break;
-                }
-                from = to;
-            }
-            bool gearDown = own.gearState == LandingGear.GearState.LockedExtended;
-            float pull = float.IsNaN(ForcePullG) ? ArRules.PullG(v.magnitude, wx, wy, wz) : ForcePullG;
-            pathOn = own.radarAlt > 8f && ArRules.ShowPath(collisionS, gearDown, pull);
         }
 
         /// <summary>The faction's own known SAM rings, nearest <see cref="ArRules.DomeMax"/> within reach; the ground under each found once per read.</summary>
@@ -368,7 +310,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             labelsUsed = 0;
             Vector3 eye = cam.transform.position;
 
-            PaintPath(b, palette);
             PaintDomes(b, palette, eye, now, calm);
             PaintBeacons(b, palette, eye);
             PaintMissiles(b, palette, tracker, threats, now, calm);
@@ -380,43 +321,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             lines.Commit();
             fx.Commit();
             root.anchoredPosition = new Vector2(JitterX, 0f);
-        }
-
-        // ------------------------------------------------------------------ PATH
-
-        private void PaintPath(AvQuadBuffer b, VanillaHudStyle.Palette palette)
-        {
-            PathShown = PathAlert = false;
-            if (!pathOn || pathReach <= 0) return;
-            bool alert = !float.IsNaN(collisionS);
-            Rgba ink = (alert ? palette.Alert : palette.AllClear).ToRgba();
-            Vector3 origin = aircraft.transform.position, prev = origin;
-            float baseAlpha = alert ? 1f : 0.85f;
-            for (int i = 0; i < pathReach; i++)
-            {
-                Vector3 p = origin + new Vector3(path[i * 3], path[i * 3 + 1], path[i * 3 + 2]);
-                float fade = baseAlpha * (1f - 0.6f * i / ArRules.PathSamples);
-                if (i > 0) Seg(b, prev, p, 1.8f, ink.WithAlpha(fade * 0.85f));
-                if (Project(p, out float x, out float y))
-                {
-                    // A chevron each second pointing along the path, a bead between: the eye reads direction and pace at once.
-                    if ((i & 1) == 1 && Project(prev, out float px, out float py))
-                        AvStrokes.Chevron(b, x, y, 11f, Mathf.Atan2(y - py, x - px) * Mathf.Rad2Deg, 2.2f, ink.WithAlpha(fade));
-                    else AvStrokes.Diamond(b, x, y, 3.5f, 1.8f, ink.WithAlpha(fade));
-                }
-                prev = p;
-            }
-            PathShown = true;
-            if (!alert) return;
-            PathAlert = true;
-            // The impact: an X on the spot, a ring on the ground round it, and the seconds left.
-            Ring(b, prev, 60f, Bold, ink);
-            if (Project(prev, out float ix, out float iy))
-            {
-                AvStrokes.Cross(b, ix, iy, 14f, 3f, ink);
-                int seconds = Mathf.Max(0, Mathf.CeilToInt(collisionS));
-                Label(ix, iy + 20f, 1_000_000 + seconds, ink, "TERRAIN ", seconds, "S", TopCentre.NamePt);
-            }
         }
 
         // ------------------------------------------------------------------ DOMES

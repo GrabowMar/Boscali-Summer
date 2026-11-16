@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Spooktober.Domain
         public const float WardenRing = 360f;
         public const int Anchors = 3;
         public const float EntryHeight = 45f;
-        public const float DimensionRadius = 7000f;
+        public const float DimensionRadius = 14000f;
 
         private static readonly int[] BaseSize = { 6, 8, 6, 12 };
         private static readonly int[] BaseAir = { 0, 1, 2, 3 };

@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         }
         private static readonly Dictionary<MFDScreen, SurfaceState> surfaces = new Dictionary<MFDScreen, SurfaceState>();
         public static bool Expanded => MapUiAccess.MfdAvailable &&
-            Plugin.Settings != null && Plugin.Settings.Command.ExpandedMapUi.Value;
+            Plugin.Settings != null;
         public static void Capture(VirtualMFD mfd)
         {
             if (mfd == null) return;

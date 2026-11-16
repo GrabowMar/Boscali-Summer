@@ -54,12 +54,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             else Fold();
         }
 
-        private static void Fold()
+        internal static void Fold(MFDScreen screen = null)
         {
-            MFDScreen active = MfdSinglePanelPatch.ActiveScreen;
-            stowed = active != null && active.isActive ? active : null;
+            // A repeated bezel press has already closed its screen before reaching us.
+            stowed = screen != null ? screen : MfdSinglePanelPatch.ActiveScreen;
             Folded = true;
-            if (stowed != null) stowed.CloseScreen(Screen.width * Vector3.left);
+            if (stowed != null && stowed.isActive) stowed.CloseScreen(Screen.width * Vector3.left);
             // Forget the selection, or the single-panel reconcile would show the stowed screen again.
             MfdSinglePanelPatch.Reset();
             MfdRailPatch.ReLayoutNow();

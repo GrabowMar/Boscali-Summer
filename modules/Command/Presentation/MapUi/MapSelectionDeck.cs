@@ -43,24 +43,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         internal static string CountText => count != null ? count.text : null;
         internal static string StatusLine => Line();
 
-        /// <summary>The drawer asks before placement; the first build refines the conservative two-row estimate using the real font.</summary>
-        internal static float HeightForWidth(float width)
-        {
-            if (clickKey == null || dragKey == null || sideKey == null) return 118f;
-            float x = 0f;
-            int wraps = 0;
-            FitGroup(GroupWidth(clickKey, click), width, ref x, ref wraps);
-            FitGroup(GroupWidth(dragKey, drag), width, ref x, ref wraps);
-            FitGroup(GroupWidth(sideKey, side), width, ref x, ref wraps);
-            return 86f + wraps * 32f;
-        }
-
-        private static void FitGroup(float groupWidth, float width, ref float x, ref int wraps)
-        {
-            if (x > 0f && x + groupWidth > width) { x = 0f; wraps++; }
-            x += groupWidth + GroupGap;
-        }
-
         private const string ChromeName = "NOAvionics.MapChrome";
 
         /// <summary>
@@ -275,13 +257,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void LayoutEmbedded(float width)
         {
             contentWidth = width;
-            float usable = Mathf.Max(1f, width), third = Mathf.Max(1f, (usable - Gap * 2f) / 3f);
-            MfdChromeLay.Place(count.rectTransform, new Rect(0f, 0f, 108f, 18f));
-            MfdChromeLay.Place(split.rectTransform, new Rect(112f, 0f, Mathf.Max(1f, usable - 112f), 18f));
-            MfdChromeLay.Place(frameButton.Rect, new Rect(0f, -22f, third, 28f));
-            MfdChromeLay.Place(typeButton.Rect, new Rect(third + Gap, -22f, third, 28f));
-            MfdChromeLay.Place(clearButton.Rect, new Rect((third + Gap) * 2f, -22f, third, 28f));
-            float x = 0f, y = -54f;
+            float usable = Mathf.Max(1f, width), actionX = 94f;
+            float third = Mathf.Max(1f, (usable - actionX - Gap * 2f) / 3f);
+            MfdChromeLay.Place(count.rectTransform, new Rect(0f, 0f, actionX - Gap, MfdMapControls.RowHeight));
+            // The drawer header already carries selection status; actions share the count's row.
+            split.gameObject.SetActive(false);
+            MfdChromeLay.Place(frameButton.Rect, new Rect(actionX, 0f, third, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(typeButton.Rect, new Rect(actionX + third + Gap, 0f, third, MfdMapControls.RowHeight));
+            MfdChromeLay.Place(clearButton.Rect, new Rect(actionX + (third + Gap) * 2f, 0f, third, MfdMapControls.RowHeight));
+            float x = 0f, y = -MfdMapControls.RowPitch;
             PlaceGroup(clickKey, click, usable, ref x, ref y);
             PlaceGroup(dragKey, drag, usable, ref x, ref y);
             PlaceGroup(sideKey, side, usable, ref x, ref y);

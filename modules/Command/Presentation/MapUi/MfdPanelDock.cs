@@ -157,13 +157,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         public static void Dock(MFDScreen screen, bool left)
         {
             if (screen == null || dock == null) return;
-            // MAP is the independent drawer below the viewport in the expanded layout.
-            // Keep its native controller alive, but do not build a second set of tools in the left bay.
-            if (MfdPresentation.Expanded && screen.GetComponent<MapOptions>() != null)
-            {
-                if (screen.isActive) screen.CloseScreen(UnityEngine.Screen.width * Vector3.left);
-                return;
-            }
 
             var rt = screen.transform as RectTransform;
             if (rt == null) return;

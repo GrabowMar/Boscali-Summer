@@ -12,7 +12,7 @@ using static BoscaliSummer.Core.Diagnostics.AutomationArgs;
 namespace BoscaliSummer.SeaStructures
 {
     /// <summary>nomodkit single-player test hook (tests/ingame/sea-structures.json); inert outside a sim run.</summary>
-    public static class SeaStructureAutomation
+    public static partial class SeaStructureAutomation
     {
         private const string Source = "SeaStructureAutomation";
         private static readonly FieldInfo TurretDisabled = typeof(Turret).GetField("disabled", BindingFlags.Instance | BindingFlags.NonPublic);
@@ -31,6 +31,10 @@ namespace BoscaliSummer.SeaStructures
             SeaStructure target = index >= 0 && index < SeaStructure.All.Count ? SeaStructure.All[index] : null;
             switch (action)
             {
+                case "facility-menu":
+                case "facility-fly":
+                case "facility":
+                    return FacilityAction(action, target);
                 case "spawn":
                 {
                     // "kind": rig | fort, in open water near map point "x","z", owned by "faction".
@@ -153,6 +157,7 @@ namespace BoscaliSummer.SeaStructures
             result["weaponsInFlightDeck"] = flightDeckWeapons;
             Airbase airbase = target.GetComponent<Airbase>();
             result["inheritedAiRunways"] = airbase != null ? airbase.runways.Length : 0;
+            ReadFacility(target, result);
             if (target.Layout.Kind == SeaKind.SeaFort) CheckFlightDeck(target, result);
             CheckTextures(target, result);
             // What is drawn that is not ours: donor renderers left visible, with where they sit.

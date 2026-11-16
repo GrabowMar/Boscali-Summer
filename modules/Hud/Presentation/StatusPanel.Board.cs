@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
@@ -44,6 +45,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // One device pixel in the board's own units, and where the dock's origin falls inside a device pixel: what every edge is laid on (see ScopeCanvas.Begin).
         private float pixel = 1f, phaseX, phaseY;
         private AvUnits units;
+        private MissionDashboardStatus missionStatus;
+        private bool hasMission;
+        private const float MissionRowsHeight = 36f;
 
         private void BuildBoard()
         {
@@ -92,6 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             noticeHas = frame.HasTicker;      // the NOTICE line is the left column's and shows with the board off too
             noticeLine = frame.Ticker;
             routeUnits = frame.Units;
+            hasMission = ModuleServices.TryGet<IMissionDashboardView>(out var mission) && mission.TryRead(out missionStatus);
             // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it. The kill feed and the map
             // keep their own switch (LAYOUT.md 8: "corners stay"), so they are measured, kept fresh and laid out here as for a board that is up.
             if (!Options.Enabled)
@@ -153,7 +158,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rwrOpen = on && ScopePick.RwrOpen(liveMask, missile);
             bool fires = ScopePick.Fires(liveMask, out ScopePage host) && on;
             float rwrH = on ? ScopeLayout.RwrHeight(rwrOpen) : 0f, firesH = fires ? ScopeLayout.FiresHeight(host) : 0f;
-            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(rwrH, firesH);
+            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(rwrH, firesH, ScopeLayout.Compact + (hasMission ? MissionRowsHeight : 0f));
             SetSlot(ScopeLayout.SlotRwr, on ? pages[(int)ScopePage.Threat] : null, rwrH);
             SetSlot(ScopeLayout.SlotFires, fires ? pages[(int)host] : null, firesH);
             SetSlot(ScopeLayout.SlotWing, wing ? pages[(int)ScopePage.Wing] : null, ScopeLayout.WingH);
@@ -312,7 +317,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             var blocks = new BoardBlocks
             {
                 Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, RwrH = transitions[0].Height, FiresH = transitions[1].Height, WingH = transitions[2].Height,
-                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines,
+                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact + (hasMission ? MissionRowsHeight : 0f) : 0f, GaugeLines = gaugeLines,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipes are heading: the size, the anchor and the shade go by it, so panels coming in never pump the scale or move the box.

@@ -48,7 +48,6 @@ namespace BoscaliSummer.Modules.Command
             // Every console's header names it with its rail key's words; menus and automation open a key through the rail.
             AvConsole.KeyName = code => MfdRailCatalog.For(code).Name;
             AvConsole.PressKey = MfdRail.Open;
-            AvConsole.OpenSurface = MfdMapControls.TryOpen;
             context.AddSceneService<AvionicsSettingsBridge>(48).Configure(context.Settings.Command);
             TargetPresetRuntime.Configure(context.Settings.Command);
             context.AddSceneService<TargetPresetHotkeys>(49).Configure(context.Settings.Command);

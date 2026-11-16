@@ -22,13 +22,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             "ON: RWR, FIRES and WING panels appear while they have something to show.",
             "OFF: No panels; stores and systems only.",
         };
-        private static readonly string[] BoardDeclutterNames = { "FULL", "LEAN", "MIN" };
-        private static readonly string[] BoardDeclutterBriefs =
-        {
-            "FULL: everything the switches below allow.",
-            "LEAN: no gauge row, dark lamps or captions.",
-            "MIN: only lock, spike and missile lamps; the panels stay visible.",
-        };
         private void BuildTacBoardRows(AvFlow flow, int page)
         {
             ITacBoardSettings board = ModuleServices.TryGet(out ITacBoardSettings svc) ? svc : null;
@@ -49,8 +42,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             BoardStrip(flow, page, "SCOPE", BoardScopeNames, BoardScopeBriefs,
                 () => Array.IndexOf(ScopeModes, board.ScopeMode),
                 i => board.ScopeMode = ScopeModes[i], on, off);
-            BoardStrip(flow, page, "DECLUTTER", BoardDeclutterNames, BoardDeclutterBriefs,
-                () => (int)board.Declutter, i => board.Declutter = (BoardDeclutter)i, on, off);
 
             var look = flow.Add(new SetRingRow(flow.Content));
             BoardRing(flow, look, page, "SIZE", () => board.Scale, v => board.Scale = v, 0.6f, 1.4f, .05f, v => AvNum.Percent(v),
@@ -69,7 +60,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
 
-            ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
+            ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
             ToggleCell(flow, page, "NOTICES", "The NOTICE line in the left column. It needs MAP AND FEED on.",
@@ -90,10 +81,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Arcs, v => board.Arcs = v);
 
             flow.Section(AvIcon.Target, "AR HELMET LAYER", "DRAWN ON THE WORLD · ONLY WHILE IT MATTERS");
-            ToggleCell(flow, page, "FLIGHT PATH", "Where you will be over the next 8 s during a hard pull; red with TERRAIN and the seconds left where it meets the ground.",
-                () => board.ArPath, v => board.ArPath = v);
-            ToggleCell(flow, page, "SAM ENVELOPES", "The reach of every SAM your side knows, as a wire envelope once you are near; the ring at your height bold, IN SAM ENVELOPE inside.",
-                () => board.ArDomes, v => board.ArDomes = v);
             ToggleCell(flow, page, "MISSILE LINES", "Your missiles joined to their targets with the seconds to impact; every missile coming at you boxed with its next two seconds.",
                 () => board.ArMissiles, v => board.ArMissiles = v);
             ToggleCell(flow, page, "BEACONS", "A pillar over the nearest friendly field at JOKER, BINGO or with damage, and over a live contract zone.",

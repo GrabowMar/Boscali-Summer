@@ -10,7 +10,7 @@ using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
-    /// <summary>A temporary pocket arena above the battlefield, with native damageable anchors and a way home.
+    /// <summary>A temporary arena beyond the battlefield, with native damageable anchors and a way home.
     /// Uses the current physics scene so weapons, target locks and every connected aircraft part keep working.</summary>
     internal static class HellDimension
     {
@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
         internal static bool Inside { get; private set; }
         internal static bool Built => root != null;
+        internal static GlobalPosition Center => root != null ? root.transform.position.ToGlobalPosition() : default;
         internal static bool ContainsCamera(Camera camera)
         {
             if (!Inside || root == null || camera == null) return false;
@@ -84,14 +85,14 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             returnHeading = Quaternion.LookRotation(gate.Root.transform.forward, Vector3.up);
             try
             {
-                if (!Built) Build(gate);
+                if (!Built) Build();
                 SetSuspended(false); // restore the physical floor before relocating the pilot onto it
                 sky.SetActive(true);
                 SetVisible(true);
                 Inside = true;
                 HideNativeClouds();
                 haveExitHeight = false;
-                Move(host, root.transform.TransformPoint(new Vector3(0f, 650f, -3600f)), Quaternion.identity);
+                Move(host, root.transform.TransformPoint(new Vector3(0f, 650f, -HellRules.DimensionRadius * .55f)), Quaternion.identity);
                 FallenAce.Announce("HELL DIMENSION · BREAK THE THREE RIFT ANCHORS");
                 FallenAce.Announce("DIVE INTO THE REAR RIFT TO RETREAT");
                 SpookAudio.Play(SpookAudio.Gate, 1f);
@@ -165,12 +166,13 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             haveExitHeight = true;
         }
 
-        private static void Build(HellPortal gate)
+        private static void Build()
         {
             root = new GameObject("Hell Dimension");
             if (Datum.origin != null) root.transform.SetParent(Datum.origin, false);
-            GlobalPosition site = gate.Root.transform.position.ToGlobalPosition();
-            Vector3 position = new GlobalPosition(site.x, 6500f, site.z).ToLocalPosition();
+            // Leave the entire arena and its sky beyond the map, away from the invasion and ordinary aircraft.
+            float mapWidth = TheaterFrame.Resolve().x;
+            Vector3 position = new GlobalPosition(mapWidth * .5f + HellRules.DimensionRadius + 20000f, 6500f, 0f).ToLocalPosition();
             position.y = Datum.LocalSeaY + 6500f;
             root.transform.position = position;
             Broken = announcedBroken = 0;
@@ -179,7 +181,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             BuildGround();
             Physics.SyncTransforms();
             BuildSky();
-            Vector3 exitAt = Surface(root.transform.TransformPoint(new Vector3(0f, 0f, -3600f))) + Vector3.up * 3f;
+            Vector3 exitAt = Surface(root.transform.TransformPoint(new Vector3(0f, 0f, -HellRules.DimensionRadius * .55f))) + Vector3.up * 3f;
             exit = HellPortal.Spawn(exitAt, Quaternion.identity, 140f);
             exit.IsDimensionExit = true;
             exit.Shockwave();
@@ -190,7 +192,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             for (int i = 0; i < HellRules.Anchors; i++)
             {
                 float angle = (i * 120f + 30f) * Mathf.Deg2Rad;
-                Vector3 at = Surface(root.transform.position + new Vector3(Mathf.Cos(angle) * 2200f, 0f, Mathf.Sin(angle) * 2200f)) + Vector3.up;
+                Vector3 at = Surface(root.transform.position + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (HellRules.DimensionRadius * .32f)) + Vector3.up;
                 Unit anchor = spawner.SpawnVehicle(definition.unitPrefab, at.ToGlobalPosition(), Quaternion.Euler(0f, i * 120f, 0f),
                     Vector3.zero, HellSide.Side.HQ, "HELL:RIFT-ANCHOR:" + (i + 1), 1f, true, null);
                 if (anchor == null) throw new InvalidOperationException("Anchor " + i + " failed to spawn");
@@ -314,7 +316,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             sky.name = "Hell Dimension Firmament";
             sky.transform.SetParent(root.transform, false);
             sky.transform.localPosition = Vector3.up * 1000f;
-            sky.transform.localScale = Vector3.one * 22000f;
+            sky.transform.localScale = Vector3.one * (HellRules.DimensionRadius + 8000f) * 2f;
             MeshFilter filter = sky.GetComponent<MeshFilter>();
             skyMesh = Object.Instantiate(filter.sharedMesh);
             skyMesh.name = "Hell Inward Firmament";
@@ -351,7 +353,12 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
 
         private static void Move(Aircraft aircraft, Vector3 at, Quaternion heading)
         {
-            FallenAce.Relocate(aircraft, at, heading * Quaternion.Inverse(aircraft.transform.rotation));
+            // Complex physics can leave the aircraft root level while its actual cockpit is banked or diving.
+            Transform attitude = aircraft.cockpit?.xform != null ? aircraft.cockpit.xform : aircraft.transform;
+            AircraftParameters parameters = aircraft.GetAircraftParameters();
+            float maximum = parameters != null && parameters.maxSpeed > 0f ? Mathf.Clamp(parameters.maxSpeed * .8f, 60f, 300f) : 300f;
+            float speed = Mathf.Clamp(aircraft.rb != null ? aircraft.rb.velocity.magnitude : 0f, Mathf.Min(180f, maximum), maximum);
+            FallenAce.Relocate(aircraft, at, heading * Quaternion.Inverse(attitude.rotation), heading * Vector3.forward * speed);
             Physics.SyncTransforms();
         }
 

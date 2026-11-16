@@ -31,10 +31,13 @@ namespace BoscaliSummer.Modules.Effects.Runtime
 
         internal void Apply(bool on, AgxLook selected, Camera camera, ManualLogSource logger)
         {
+#if PUBLIC_RELEASE
+            on = false; // Third-party LUT redistribution terms are unresolved.
+#endif
             var current = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
             if (asset != null && asset != current) Restore();
             if (!on || camera == null || current == null || !current.supportsHDR ||
-                QualitySettings.activeColorSpace != ColorSpace.Linear || !Load(logger))
+                QualitySettings.activeColorSpace != ColorSpace.Linear || !Load(logger) || material == null)
             {
                 Restore();
                 return;
@@ -128,33 +131,44 @@ namespace BoscaliSummer.Modules.Effects.Runtime
 
         private bool Load(ManualLogSource logger)
         {
-            if (attempted) return material != null;
+            if (attempted) return shaders != null;
             attempted = true;
             try
             {
-                byte[] bytes = EmbeddedResources.ReadAll(typeof(AgxTonemapping).Assembly,
+                byte[] bytes = null;
+#if !PUBLIC_RELEASE
+                bytes = EmbeddedResources.ReadAll(typeof(AgxTonemapping).Assembly,
                     "BoscaliSummer.Effects.agx.bundle", 4 * 1024 * 1024);
-                if (bytes == null) throw new InvalidOperationException("embedded agx.bundle is missing");
+#endif
+                bytes ??= EmbeddedResources.ReadAll(typeof(AgxTonemapping).Assembly,
+                    "BoscaliSummer.Effects.cinematic.bundle", 4 * 1024 * 1024);
+                if (bytes == null) throw new InvalidOperationException("embedded effects shader bundle is missing");
                 bundle = AssetBundle.LoadFromMemory(bytes);
-                if (bundle == null) throw new InvalidOperationException("agx.bundle could not be loaded");
-                Shader shader = null;
+                if (bundle == null) throw new InvalidOperationException("effects shader bundle could not be loaded");
                 shaders = bundle.LoadAllAssets<Shader>();
+                if (shaders.Length == 0) throw new InvalidOperationException("effects shader bundle is empty");
+#if !PUBLIC_RELEASE
+                Shader shader = null;
                 foreach (Shader candidate in shaders)
                     if (candidate.name == "Hidden/Boscali/AgxLutComposite" && candidate.isSupported) shader = candidate;
-                if (shader == null) throw new InvalidOperationException("AgX shader is unsupported");
-                foreach (Texture3D texture in bundle.LoadAllAssets<Texture3D>())
-                    for (int i = 0; i < Looks.Length; i++)
-                        if (texture.name == Looks[i]) looks[i] = texture;
-                foreach (Texture3D texture in looks)
-                    if (texture == null) throw new InvalidOperationException("AgX look is missing");
-                material = new Material(shader) { name = "BoscaliSummer.AgX", hideFlags = HideFlags.HideAndDontSave };
+                if (shader != null)
+                {
+                    foreach (Texture3D texture in bundle.LoadAllAssets<Texture3D>())
+                        for (int i = 0; i < Looks.Length; i++)
+                            if (texture.name == Looks[i]) looks[i] = texture;
+                    foreach (Texture3D texture in looks)
+                        if (texture == null) throw new InvalidOperationException("AgX look is missing");
+                    material = new Material(shader) { name = "BoscaliSummer.AgX", hideFlags = HideFlags.HideAndDontSave };
+                }
+#endif
                 return true;
             }
             catch (Exception error)
             {
-                logger?.LogWarning("[Effects] AgX unavailable; keeping native tonemapping: " + error.Message);
+                logger?.LogWarning("[Effects] Shader bundle unavailable; keeping native effects: " + error.Message);
                 if (bundle != null) bundle.Unload(true);
                 bundle = null;
+                shaders = null;
                 return false;
             }
         }

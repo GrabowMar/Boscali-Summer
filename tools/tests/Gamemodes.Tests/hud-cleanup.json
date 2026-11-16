@@ -1,0 +1,334 @@
+{
+  "name": "gamemode-hud-cleanup",
+  "mission": "Fuzzball",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "description": "Seated Fuzzball HUD: integrated mode/score/phase, no standalone board, transient notices expire, retired AR path and SAM switches stay off for saved configs and attempted writes, Full detail enforced. Real low descent retains normal PULL UP while AR terrain geometry stays off. MIS GAMEMODE page captured. Single-player UI evidence only.",
+  "environment": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "config": {
+      "com.marci.boscalisummer": {
+        "TacBoard": {
+          "ArPath": true,
+          "ArDomes": true,
+          "Declutter": "Lean"
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        20000,
+        -50000
+      ],
+      "altitude": 2500,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Configure",
+      "args": {
+        "enabled": true,
+        "showSystems": true,
+        "arDomes": true,
+        "arPath": true,
+        "corners": true,
+        "showTicker": true,
+        "declutter": "Minimal"
+      },
+      "store": "settings"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Ar",
+      "args": {
+        "pull": 4
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodeAutomation.State",
+      "store": "hud"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Ar",
+      "store": "path"
+    },
+    {
+      "op": "capture",
+      "name": "gamemode-integrated-hud",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MisAutomation.Open",
+      "args": {
+        "page": 2
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MisAutomation.Read",
+      "store": "mis"
+    },
+    {
+      "op": "capture",
+      "name": "mis-gamemode-page",
+      "hide_ui": false
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MapInputAutomation.Step",
+      "args": {
+        "do": "close"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Alerts",
+      "store": "expired"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodeAutomation.State",
+      "store": "held"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Gamemodes.Runtime.GamemodeAutomation.State",
+      "store": "heldRepeat"
+    },
+    {
+      "op": "capture",
+      "name": "gamemode-notice-expired",
+      "hide_ui": false
+    },
+    {
+      "op": "seat",
+      "id": "low",
+      "faction": "Boscali",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        20000,
+        -50000
+      ],
+      "altitude": 180,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Ar",
+      "args": {
+        "dive": 20,
+        "pull": 4
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Alerts",
+      "store": "terrain"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Hud.Runtime.HudAutomation.Ar",
+      "store": "lowPath"
+    },
+    {
+      "op": "capture",
+      "name": "terrain-ar-disabled-warning-retained",
+      "hide_ui": false
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "hud.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "hud.hudHasMode",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "hud.hudHasScores",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "hud.hudHasPhase",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "hud.standaloneBoards",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "path.path",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "path.domes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "path.path_alert",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "mis.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "mis.page",
+      "value": 2
+    },
+    {
+      "check": "result_equals",
+      "path": "mis.hasGamemode",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "mis.hasObjective",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "expired.mission_notice",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "held.hudHasMode",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "held.hudHasScores",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "held.hudHasPhase",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "held.standaloneBoards",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "heldRepeat.hudHasMode",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "heldRepeat.hudHasScores",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "heldRepeat.hudHasPhase",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "terrain.terrain_would_warn",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "terrain.terrain_alert",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "lowPath.path_alert",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "lowPath.domes",
+      "value": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception.*(Gamemode|Hud)|(?:Gamemode|Hud).*Exception",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.arPath",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.arDomes",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.declutter",
+      "value": "Full"
+    },
+    {
+      "check": "result_equals",
+      "path": "lowPath.path",
+      "value": false
+    }
+  ]
+}

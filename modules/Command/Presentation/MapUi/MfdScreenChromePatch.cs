@@ -39,13 +39,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         [HarmonyPatch(typeof(MFDScreen), nameof(MFDScreen.ShowScreen))]
         public static void ShowScreenPostfix(MFDScreen __instance)
         {
-            if (MfdRailPatch.IsApplied && DynamicMap.mapMaximized && __instance != null &&
-                __instance.GetComponent<MapOptions>() != null)
-            {
-                __instance.CloseScreen(UnityEngine.Screen.width * UnityEngine.Vector3.left);
-                MfdMapControls.Open();
-                return;
-            }
             MfdPresentation.Apply(__instance);
             SetRootChrome(__instance, true);
             // Hidden screens dock a few per pass after the map opens; one shown sooner docks now.

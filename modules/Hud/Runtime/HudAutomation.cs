@@ -328,9 +328,14 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 BoscaliSummer.Modules.Hud.Patches.CueFeed.Callouts.Push(kind, Text(args, "sub"), Time.unscaledTime);
             }
             CombatAlerts alerts = HudBoard.Instance != null ? HudBoard.Instance.Alerts : null;
+            GameManager.GetLocalAircraft(out Aircraft own);
+            float climb = own != null && own.rb != null ? own.rb.velocity.y : 0f;
             var result = new Dictionary<string, object>
             {
                 { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.LineWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
+                { "terrain_alert", alerts != null && alerts.TerrainAlert },
+                { "terrain_would_warn", own != null && AlertBoard.PullUp(HudCues.Terrain(own.radarAlt, climb), climb, own.gearState == LandingGear.GearState.LockedExtended) },
+                { "mission_notice", HudBoard.Instance != null && HudBoard.Instance.MissionNoticeShown },
                 { "ring", alerts?.RingMarks ?? 0 }, { "callout", alerts?.CalloutText ?? "" }, { "native_list_hidden", alerts != null && alerts.NativeListHidden },
                 { "brow_shown", HudBoard.Instance?.Tape != null && HudBoard.Instance.Tape.Shown }, { "brow_carets", HudBoard.Instance?.Tape?.MarkCount ?? 0 }, { "brow_caption", "" }, { "tape", HudBoard.Instance?.Tape?.Describe() ?? "" }, { "call", alerts?.CallText ?? "" },
             };

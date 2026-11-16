@@ -197,7 +197,7 @@ namespace BoscaliSummer.Core.Contracts
         public float SecondsLeft, SecondsTotal;
     }
 
-    /// <summary>Client-local (Events): shows the open cabinet card on EVN DISPATCH and a small cue over the map, never over the cockpit.</summary>
+    /// <summary>Client-local (Events): shows the cabinet card on EVN DISPATCH and in the shared map event notice.</summary>
     internal interface IPoliticalDispatch
     {
         /// <summary>Shows or updates a card. <paramref name="pick"/> receives the option a local press chose; the host decides.</summary>

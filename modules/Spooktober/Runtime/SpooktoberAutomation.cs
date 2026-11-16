@@ -42,6 +42,7 @@ namespace BoscaliSummer.Spooktober
                     SpookStore.Init(SpookBosses.Settings);
                     SpookBosses.Dismiss(); // and nothing left on the field: the next scenario starts clean
                     infectionCityTarget = null;
+                    flightParts.Clear();
                     break;
                 case "spawn":
                 case "defeat":
@@ -84,6 +85,15 @@ namespace BoscaliSummer.Spooktober
                     return HellMap(action, "enlisted " + recruits.Count + " units");
                 case "hell_map":
                     return HellMap(action, null);
+                case "hell_map_focus":
+                    if (HellGate.Portal == null || !ModuleServices.TryGet(out IMapProjection focusMap))
+                        return Failure("SpooktoberAutomation", action, "no gate or map projection");
+                    GlobalPosition gateFix = HellGate.Portal.Root.transform.position.ToGlobalPosition();
+                    focusMap.Focus(gateFix.x + Number(args, "x", 0f), gateFix.z + Number(args, "z", 0f));
+                    return HellMap(action, "focused on breach");
+                case "hell_map_flat":
+                    Plugin.Settings.Command.MapRelief3D.Value = false;
+                    return HellMap(action, "flat map requested");
                 case "hell_map_open":
                     SceneSingleton<DynamicMap>.i?.Maximize();
                     return HellMap(action, "map opened");
@@ -108,6 +118,8 @@ namespace BoscaliSummer.Spooktober
                     FallenAce.Relocate(diver, HellGate.Portal.Root.transform.position + Vector3.up * (action == "hell_approach" ? 100f : 30f),
                         Quaternion.Inverse(diver.transform.rotation));
                     return HellStatus(action, "over the rift");
+                case "hell_flight_dive":
+                    return FlightDive(action);
                 case "hell_retreat":
                     HellDimension.Leave(true);
                     return HellStatus(action, "retreated");
@@ -156,6 +168,26 @@ namespace BoscaliSummer.Spooktober
         private static float matureRadius, matureCoverage;
         private static bool infectionMature;
         private static MapBuilding infectionCityTarget;
+        private static readonly Dictionary<UnitPart, float> flightParts = new Dictionary<UnitPart, float>();
+        private static readonly AccessTools.FieldRef<Pilot, float> PilotHitPoints = AccessTools.FieldRefAccess<Pilot, float>("hitPoints");
+
+        /// <summary>A banked, steep descent crossing the ordinary portal threshold under native complex physics.</summary>
+        private static Dictionary<string, object> FlightDive(string action)
+        {
+            if (HellGate.Portal == null || !GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft.disabled)
+                return Failure("SpooktoberAutomation", action, "no gate or live pilot");
+            Quaternion dive = Quaternion.Euler(75f, 20f, 35f);
+            Vector3 velocity = dive * Vector3.forward * 250f;
+            Vector3 at = HellGate.Portal.Root.transform.position + Vector3.up * 200f -
+                Vector3.ProjectOnPlane(velocity, Vector3.up) * .65f;
+            Transform attitude = aircraft.cockpit?.xform ?? aircraft.transform;
+            FallenAce.Relocate(aircraft, at, dive * Quaternion.Inverse(attitude.rotation), velocity);
+            flightParts.Clear();
+            foreach (UnitPart part in aircraft.partLookup)
+                if (part != null) flightParts.Add(part, part.hitPoints);
+            Physics.SyncTransforms();
+            return HellStatus(action, "native banked dive started above the portal");
+        }
 
         /// <summary>Position the pilot for the ordinary first 7 km site probe near an existing, live scene building.</summary>
         private static Dictionary<string, object> CityBreachPose(string action)
@@ -366,6 +398,10 @@ namespace BoscaliSummer.Spooktober
                 if (each != null && each.factionName == GhostSide.Key) ghosts++;
             Pilot pilot = AircraftReadout.PrimaryPilot(ace);
             int ammo = 0;
+            int detached = 0;
+            if (ace?.partLookup != null)
+                foreach (UnitPart part in ace.partLookup)
+                    if (part == null || part.IsDetached()) detached++;
             if (ace != null)
                 foreach (WeaponStation station in ace.weaponStations)
                     if (station?.WeaponInfo != null && station.WeaponInfo.gun) ammo += station.Ammo;
@@ -381,6 +417,7 @@ namespace BoscaliSummer.Spooktober
                 ["ace_on_ghost"] = ace != null && GhostSide.IsGhost(ace.NetworkHQ), ["disabled"] = ace != null && ace.disabled,
                 ["ghost_factions"] = ghosts, ["ghost_hq"] = GhostSide.Made, ["listed_hqs"] = FactionRegistry.HQLookup.Count,
                 ["state"] = pilot?.currentState?.GetType().Name, ["ammo"] = ammo,
+                ["detached_parts"] = detached, ["pilot_hp"] = pilot != null ? PilotHitPoints(pilot) : 0f,
                 ["target"] = UnitTag(FallenAce.Target), ["ai_target"] = UnitTag(GameAccess.GetAiCurrentTarget(pilot?.AICombatState)),
                 ["host_tracks_ace"] = ace != null && hostHq != null && hostHq.GetTrackingData(ace.persistentID) != null,
                 ["host_hits"] = hostHits, ["host_damage"] = hostDamage, ["other_hits"] = otherHits, ["other_damage"] = otherDamage,
@@ -492,8 +529,51 @@ namespace BoscaliSummer.Spooktober
             result["portals"] = HellPortal.Count;
             result["signs"] = signs;
             result["map_open"] = DynamicMap.mapMaximized;
+            ReadHellMapAlignment(map, result);
             Plugin.Logger.LogInfo("[Spooktober] hell " + Describe(result));
             return result;
+        }
+
+        private static void ReadHellMapAlignment(DynamicMap map, Dictionary<string, object> result)
+        {
+            bool projected = ModuleServices.TryGet(out IMapProjection projection) && projection.IsActive;
+            int checkedSigns = 0;
+            float worst = -1f, territoryWorst = -1f;
+            result["map_projected"] = projected;
+            result["map_revision"] = projected ? projection.Revision : -1;
+            Transform layer = map?.mapImage != null ? map.mapImage.transform.Find("Boscali Hellgate Map Layer") : null;
+            Canvas canvas = map?.maximizedMapCanvas;
+            Camera camera = canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay ? canvas.worldCamera : null;
+            if (layer != null)
+                foreach (HellPortal portal in HellPortal.All)
+                {
+                    if (!portal.Alive || portal.IsDimensionExit != HellDimension.Inside) continue;
+                    GlobalPosition fix = portal.Root.transform.position.ToGlobalPosition();
+                    float x = fix.x * map.mapDisplayFactor, y = fix.z * map.mapDisplayFactor;
+                    if (projected && !projection.TryProject(fix.x, fix.z, out x, out y)) continue;
+                    Transform sign = layer.Find("Hellgate " + checkedSigns);
+                    if (sign == null || !sign.gameObject.activeInHierarchy) continue;
+                    Vector2 expected = RectTransformUtility.WorldToScreenPoint(camera, map.mapImage.transform.TransformPoint(new Vector3(x, y)));
+                    Vector2 actual = RectTransformUtility.WorldToScreenPoint(camera, sign.position);
+                    worst = Mathf.Max(worst, Vector2.Distance(expected, actual));
+                    Transform fields = layer.Find("Corruption fields");
+                    if (fields != null)
+                    {
+                        Vector2 territoryAt = RectTransformUtility.WorldToScreenPoint(camera, fields.TransformPoint(new Vector3(x, y)));
+                        territoryWorst = Mathf.Max(territoryWorst, Vector2.Distance(expected, territoryAt));
+                    }
+                    if (checkedSigns == 0)
+                    {
+                        result["sign_x"] = actual.x;
+                        result["sign_y"] = actual.y;
+                        result["expected_x"] = expected.x;
+                        result["expected_y"] = expected.y;
+                    }
+                    checkedSigns++;
+                }
+            result["aligned_signs"] = checkedSigns;
+            result["sign_error_px"] = worst;
+            result["territory_error_px"] = territoryWorst;
         }
 
         /// <summary>The gate's evidence: open, waves, spawned, the army alive and on HELL, how many of it the host's side tracks and
@@ -552,6 +632,9 @@ namespace BoscaliSummer.Spooktober
             result["defeated"] = HellGate.WasDefeated;
             result["inside_hell"] = HellDimension.Inside;
             result["dimension_built"] = HellDimension.Built;
+            result["realm_radius"] = HellRules.DimensionRadius;
+            result["realm_map_clearance"] = HellDimension.Center.x - TheaterFrame.Resolve().x * .5f - HellRules.DimensionRadius;
+            ReadFlight(result);
             result["realm_suspended"] = HellDimension.Suspended;
             result["realm_weather_excluded"] = ModuleServices.TryGet(out IWeatherCameraExclusion weatherExclusion) &&
                 weatherExclusion.Contains(SceneSingleton<CameraStateManager>.i?.mainCamera);
@@ -602,6 +685,47 @@ namespace BoscaliSummer.Spooktober
             Plugin.Logger.LogInfo("[Spooktober] hell gate " + Describe(result));
             if (ids.Count > 0) result["ids"] = ids;
             return result;
+        }
+
+        private static void ReadFlight(Dictionary<string, object> result)
+        {
+            bool seated = GameManager.GetLocalAircraft(out Aircraft aircraft) && aircraft != null;
+            result["player_alive"] = seated && !aircraft.disabled;
+            result["player_complex_physics"] = seated && !aircraft.simplePhysics;
+            result["player_pitch_abs"] = 180f;
+            result["player_bank_abs"] = 180f;
+            result["player_vertical_speed_abs"] = 100000f;
+            result["player_speed"] = 0f;
+            result["player_detached_parts"] = -1;
+            result["player_part_hp_loss"] = 100f;
+            result["player_pilot_hp"] = 0f;
+            result["player_unparented_bodies"] = 0;
+            result["player_body_spread"] = 100000f;
+            if (!seated) return;
+            Transform attitude = aircraft.cockpit?.xform ?? aircraft.transform;
+            result["player_pitch_abs"] = Mathf.Abs(Mathf.Asin(Mathf.Clamp(attitude.forward.y, -1f, 1f)) * Mathf.Rad2Deg);
+            result["player_bank_abs"] = Mathf.Abs(Mathf.DeltaAngle(0f, attitude.eulerAngles.z));
+            result["player_vertical_speed_abs"] = Mathf.Abs(aircraft.rb.velocity.y);
+            result["player_speed"] = aircraft.rb.velocity.magnitude;
+            int detached = 0, unparented = 0;
+            float loss = 0f, spread = 0f, pilotHp = 100f;
+            var bodies = new HashSet<Rigidbody>();
+            foreach (KeyValuePair<UnitPart, float> pair in flightParts)
+                loss = Mathf.Max(loss, pair.Value - (pair.Key != null ? pair.Key.hitPoints : 0f));
+            foreach (UnitPart part in aircraft.partLookup)
+            {
+                if (part == null || part.IsDetached()) { detached++; continue; }
+                if (part.rb == null || !bodies.Add(part.rb)) continue;
+                if (!part.rb.transform.IsChildOf(aircraft.transform)) unparented++;
+                spread = Mathf.Max(spread, Vector3.Distance(part.rb.position, aircraft.transform.position));
+            }
+            foreach (Pilot pilot in aircraft.pilots)
+                pilotHp = Mathf.Min(pilotHp, pilot != null ? PilotHitPoints(pilot) : 0f);
+            result["player_detached_parts"] = detached;
+            result["player_part_hp_loss"] = loss;
+            result["player_pilot_hp"] = pilotHp;
+            result["player_unparented_bodies"] = unparented;
+            result["player_body_spread"] = spread;
         }
 
         /// <summary>A live Hell ground unit, else any live member (works with both authored hulls and the shader fallback).</summary>

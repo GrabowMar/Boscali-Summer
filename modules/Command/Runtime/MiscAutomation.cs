@@ -43,10 +43,16 @@ namespace BoscaliSummer.Modules.Command.Runtime
             result["railLast"] = at >= 0 && at == keys.Count - 1;
             MfdRailKey key = Key();
             result["screenActive"] = key != null && key.Screen != null && key.Screen.isActive;
+            result["available"] = key != null && key.Source != null && key.Source.enabled && key.Source.interactable;
             result["tabs"] = string.Join(",", panel.ShownTabsForAutomation());
             AvConsole console = panel.ConsoleForAutomation;
             if (console != null)
             {
+                bool cheating = false;
+                foreach (TMP_Text t in console.Root.GetComponentsInChildren<TMP_Text>(false))
+                    if (t.text.Contains("CHEATING")) cheating = true;
+                result["cheatingDisclaimer"] = cheating;
+                result["panelAlpha"] = console.Root.GetComponent<UnityEngine.CanvasGroup>()?.alpha ?? 1f;
                 result["page"] = console.CurrentPage;
                 var text = new List<string>();
                 foreach (TMP_Text t in console.Page(console.CurrentPage).Content.GetComponentsInChildren<TMP_Text>(false))

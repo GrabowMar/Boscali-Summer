@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             StoresLayout.HeroPlan p = StoresLayout.Hero(stack, r.W);
             float x = r.X, y = r.Y;
 
-            Shelf(g, x, y, p.ShelfW, "STORES MGMT", "", DclWord(declutter));      // "HMD SYM" is gone: at the type scale it met the caption
+            Shelf(g, x, y, p.ShelfW, "STORES MGMT", "", "");
 
             // The rounds: the numeral (smaller only when four digits would run into the arm column) and the full load beside it.
             string figure = ScopeStr.Int(total);
@@ -43,15 +43,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 if (d.Link) Tag(g, "LINK", x, y, p, ref used, ref row, rowRight);
                 if (d.TurretAuto) Tag(g, "TRT AUTO", x, y, p, ref used, ref row, rowRight);
-            }
-
-            // The declutter flag lives in the shelf; with no shelf it takes the arm row (WIDE), or the first tag row when the arm word would come within 10 units of it, or the top right (STACK).
-            if (!g.Furniture)
-            {
-                string flag = DclWord(declutter);
-                float fy = y + p.DclY;
-                if (!stack) fy = y + StoresLayout.ArmY + StoresLayout.DclRow(rowRight, p.DclX - ScopeCanvas.TextW(flag)) * StoresLayout.TagPitch;
-                g.Text(flag, x + p.DclX, fy, Ink, StoresLayout.WordSize, ScopeAlign.Right);
             }
 
             // The name row: the weapon, its class (GUN, or "STA 3 AGM") and, amber, the reload countdown or LOW.

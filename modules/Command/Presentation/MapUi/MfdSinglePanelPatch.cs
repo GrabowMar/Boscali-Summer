@@ -14,8 +14,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
     /// and a right screen open together would sit on top of each other — which the player
     /// sees as WMC and RAD fighting over one rectangle.</para>
     ///
-    /// <para>Ordinary screen presses reconcile after vanilla decides what to open. MAP alone redirects before
-    /// the native radio-button mutation, because its independent drawer must preserve the docked screen. Registered
+    /// <para>Screen presses reconcile after vanilla decides what to open, including the MAP console. Registered
     /// in <c>CommandModule.PatchTypes</c> — an unlisted patch class is skipped in
     /// total silence.</para>
     /// </summary>
@@ -76,29 +75,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
         }
 
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(VirtualMFD), nameof(VirtualMFD.PressLeftButton))]
-        public static bool PressLeftPrefix(VirtualMFD __instance, Button button) =>
-            BeforePress(__instance, button, left: true);
-
-        [HarmonyPrefix]
-        [HarmonyPatch(typeof(VirtualMFD), nameof(VirtualMFD.PressRightButton))]
-        public static bool PressRightPrefix(VirtualMFD __instance, Button button) =>
-            BeforePress(__instance, button, left: false);
-
-        private static bool BeforePress(VirtualMFD mfd, Button button, bool left)
-        {
-            if (mfd == null || button == null || !MfdRailPatch.IsApplied || !DynamicMap.mapMaximized) return true;
-            MFDScreen pressed = ScreenFor(mfd, button, left);
-            if (pressed == null || pressed.GetComponent<MapOptions>() == null) return true;
-            // Native Press hides the whole bezel column before ShowScreen. Route MAP before that mutation so the
-            // independent drawer neither closes the current left panel nor becomes the native remembered screen.
-            // The source is deliberately stowed, so its enabled/interactable flags carry availability, not its hierarchy.
-            bool hasAircraft = SceneSingleton<CombatHUD>.i != null && SceneSingleton<CombatHUD>.i.aircraft != null;
-            if (button.enabled && button.interactable && (!pressed.aircraftOnly || hasAircraft)) MfdMapControls.Open();
-            return false;
-        }
-
         [HarmonyPostfix]
         [HarmonyPatch(typeof(VirtualMFD), nameof(VirtualMFD.PressLeftButton))]
         public static void PressLeftPostfix(VirtualMFD __instance, Button button) =>
@@ -115,11 +91,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (!MfdPresentation.Expanded) return;
 
             MFDScreen pressed = ScreenFor(mfd, button, left);
-            if (pressed != null && pressed.GetComponent<MapOptions>() != null) return;
 
             // A press that closed its own screen leaves nothing to protect, and a button with
             // no screen behind it is a spare slot.
             if (pressed == null || !MfdPanelDock.IsDocked(pressed)) return;
+            if (!pressed.isActive)
+            {
+                MfdColumnFold.Fold(pressed);
+                return;
+            }
             lastOpened = pressed.isActive ? pressed : null;
             hasSelection = true;
             MfdPanelDock.CloseOthers(mfd, lastOpened);

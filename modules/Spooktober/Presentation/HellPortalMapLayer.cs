@@ -103,6 +103,8 @@ namespace BoscaliSummer.Modules.Spooktober.Presentation
         {
             var root = new GameObject("Boscali Hellgate Map Layer", typeof(RectTransform));
             rootRect = (RectTransform)root.transform;
+            // AvVector's bottom-left origin and the centred signs must share map-local zero.
+            rootRect.sizeDelta = Vector2.zero;
             rootRect.SetParent(transform, false);
             CanvasGroup group = root.AddComponent<CanvasGroup>();
             group.blocksRaycasts = false;

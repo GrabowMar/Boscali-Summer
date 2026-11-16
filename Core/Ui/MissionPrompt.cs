@@ -50,7 +50,7 @@ namespace BoscaliSummer.Core.Ui
             ("weather", "WEATHER", "Dynamic weather and clouds", "Living weather: fronts drift across the map with rain, storms, cloud layers and fog.", AvIcon.CloudRain),
             ("events", "EVENTS", "World events, modifiers", "World events that shake up the mission with temporary modifiers, such as a supply crisis.", AvIcon.Bolt),
             ("spooktober", "SPOOKTOBER", "Seasonal hauntings", "The seasonal event: a menu of haunted bosses on MISC, the mountain-sized kaiju among them.", AvIcon.Skull),
-            ("ares", "ARES", "Game master tools", "Host-only game master console: spawn units, call strikes, set weather and time. Developer access only.", AvIcon.Crown),
+            ("ares", "ARES", "Game master tools", "Host-only cheats on MISC: spawn units, call strikes, set weather and time. These actions alter the mission.", AvIcon.Crown),
             ("hud", "HUD", "TAC BOARD, helmet display", "The TAC BOARD and helmet display every other screen draws on.", AvIcon.Crosshair),
             ("session", "SESSION", "Multiplayer handshake", "The multiplayer handshake that keeps host and clients on the same settings.", AvIcon.Link),
             ("scenario", "SCENARIO", "Mission scripts, campaigns", "Mission scripts, dialogue and the Boscali Summer campaign.", AvIcon.Flag),
@@ -119,8 +119,8 @@ namespace BoscaliSummer.Core.Ui
 
             string title = string.IsNullOrEmpty(name) ? "UNTITLED" : name.ToUpperInvariant();
             window = AvWindow.Build(transform, "mission-dashboard", "BOSCALI SUMMER   /   MISSION CONTROL", Width, Height, 30010);
-            // It opens over the faction screen, whose text would read through glass.
-            window.Opaque = true;
+            // The native faction canvas is hidden while this window owns the screen.
+            window.SetSurface(new Color(.055f, .085f, .115f, .90f), new Color(.56f, .69f, .78f, .38f));
             window.CloseControl.Rect.gameObject.SetActive(false);
             BuildDashboard();
             systems = window.Body.Add(new Split(window.Body.Content, window.Ticker,

@@ -155,8 +155,6 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         /// <summary>The TAC BOARD options (<c>ITacBoardSettings</c>) are installed: the HUD category has its rows.</summary>
         public bool BoardAvailable;
         public bool BoardOn;
-        /// <summary>Index into <see cref="MenuCatalog.BoardDeclutters"/>: FULL, LEAN, MIN.</summary>
-        public int BoardDeclutter;
         /// <summary>Index into <see cref="MenuCatalog.BoardScopes"/>: ON, OFF.</summary>
         public int BoardScope;
         /// <summary>Indices into <see cref="MenuCatalog.BoardShades"/> and <see cref="MenuCatalog.BoardSizes"/>.</summary>

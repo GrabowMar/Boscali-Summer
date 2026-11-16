@@ -181,6 +181,8 @@ namespace BoscaliSummer.Core
             if (settings.Events.Enabled.Value) modules.Add(new EventsModule());
             if (settings.Comms.Enabled.Value) modules.Add(new CommsModule());
             if (settings.CombatAdjust.Enabled.Value) modules.Add(new BoscaliSummer.Modules.CombatAdjust.CombatAdjustModule());
+            // Definition and prefab registration must match peers even when the local platform spawner is disabled.
+            modules.Add(new BoscaliSummer.Modules.SeaStructures.SeaStructureContentModule());
             if (settings.SeaStructures.Enabled.Value) modules.Add(new BoscaliSummer.Modules.SeaStructures.SeaStructuresModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
             // Always installed for the cutscene camera mission scripts play; its private production tools keep their own switch.

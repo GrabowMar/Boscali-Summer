@@ -120,7 +120,9 @@ namespace BoscaliSummer.Modules.Command.Configuration
             PanelHoverHelp = config.Bind("Avionics", "PanelHoverHelp", true, "Show a control's help (TIP) in the console footer while the pointer is over it.");
 
             ExpandedMapUi = config.Bind("Command", "ExpandedMapUi", true,
-                "Use Boscali's full tactical display: left panel and log, central map, right button rail, and spawn footer.");
+                "Legacy setting retained for config compatibility. The expanded tactical display is always enabled.");
+            ExpandedMapUi.Value = true;
+            ExpandedMapUi.SettingChanged += (_, __) => { if (!ExpandedMapUi.Value) ExpandedMapUi.Value = true; };
             Enabled = config.Bind("Command", "Enabled", true,
                 "Enable the Tactical STR Panel and map tactical overlays.");
 
@@ -162,7 +164,7 @@ namespace BoscaliSummer.Modules.Command.Configuration
 
             DeckOpacity = config.Bind("Command", "DeckOpacity", 0.95f,
                 new ConfigDescription(
-                    "Opacity of the console backdrop (0.1 = see-through, 1.0 = solid). Map darkening is separate.",
+                    "Opacity of MFD panels and their backdrop (0.1 = see-through, 1.0 = solid).",
                     new AcceptableValueRange<float>(0.10f, 1.0f)));
 
             MapTerrainImage = config.Bind("Command", "MapTerrainImage", true,

@@ -264,7 +264,8 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     var ship = d as ShipDefinition;
                     if (ship != null)
                     {
-                        card.Code = ship.shipType.ToString();
+                        card.Code = Enum.IsDefined(typeof(ShipType), ship.shipType) ? ship.shipType.ToString()
+                            : string.IsNullOrWhiteSpace(d.bogeyName) ? d.code : d.bogeyName.ToUpperInvariant();
                         card.Order = (int)ship.shipType;
                     }
                     card.Figures = new[]

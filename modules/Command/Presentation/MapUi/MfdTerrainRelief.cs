@@ -57,6 +57,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const float StackPixels = 40f;
         private const float CameraRadius = 1122f;
         private const float SeaSurfaceLift = .012f;
+        // Just clear the depth surface; a whole model unit lifts contacts about 35 metres above it.
+        private const float SurfaceClearance = .035f;
         private const float SeaSurfaceAlpha = .30f;
         private const float LandFieldGain = 2f;
         private const float LandFieldAlpha = .40f;
@@ -104,6 +106,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static readonly AccessTools.FieldRef<MapIcon, Vector3> NativeIconPosition =
             AccessTools.Field(typeof(MapIcon), "globalPosition") == null ? null
                 : AccessTools.FieldRefAccess<MapIcon, Vector3>("globalPosition");
+        private static readonly AccessTools.FieldRef<UnitMapIcon, TrackingInfo> NativeTrackingInfo =
+            AccessTools.Field(typeof(UnitMapIcon), "trackingInfo") == null ? null
+                : AccessTools.FieldRefAccess<UnitMapIcon, TrackingInfo>("trackingInfo");
         // Per-frame GetComponent results, re-resolved only when the source object changes.
         private static GameObject mapImageSource;
         private static Image mapImageComponent;
@@ -1229,9 +1234,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float sz = Mathf.Clamp((worldZ / source.MapSize.y + .5f) * (Samples - 1), 0f, Samples - 1f);
             int x = Mathf.Min(Samples - 2, Mathf.FloorToInt(sx));
             int z = Mathf.Min(Samples - 2, Mathf.FloorToInt(sz));
-            float south = Mathf.Lerp(ModelHeight(x, z), ModelHeight(x + 1, z), sx - x);
-            float north = Mathf.Lerp(ModelHeight(x, z + 1), ModelHeight(x + 1, z + 1), sx - x);
-            return Mathf.Max(WaterModelHeight, Mathf.Lerp(south, north, sz - z));
+            float fx = sx - x, fz = sz - z;
+            float southWest = ModelHeight(x, z), southEast = ModelHeight(x + 1, z);
+            float northWest = ModelHeight(x, z + 1), northEast = ModelHeight(x + 1, z + 1);
+            // Match MakeTile's diagonal exactly: bilinear interpolation floats above/below its triangle planes.
+            float surface = fx + fz <= 1f
+                ? southWest + (southEast - southWest) * fx + (northWest - southWest) * fz
+                : northEast + (northWest - northEast) * (1f - fx) + (southEast - northEast) * (1f - fz);
+            return Mathf.Max(WaterModelHeight, surface);
         }
 
         internal static bool TryProject(float worldX, float worldZ, Rect rect, out Vector2 point)
@@ -1241,7 +1251,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 point = default;
                 return false;
             }
-            return ProjectAt(worldX, worldZ, GroundHeight(worldX, worldZ) + 1f, out point);
+            return ProjectAt(worldX, worldZ, GroundHeight(worldX, worldZ) + SurfaceClearance, out point);
         }
 
         private static bool TryProjectAtHeight(float worldX, float worldZ, float modelY,
@@ -1290,7 +1300,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             float fixX = native.x / mapDisplayFactor, fixZ = native.y / mapDisplayFactor;
             if (!iconFixes.TryGetValue(icon, out IconFix fix))
             {
-                fix = new IconFix();
+                fix = new IconFix { Airborne = true };
                 if (iconFixes.Count < MaximumClusteredIcons) iconFixes.Add(icon, fix);
                 minisMoved = true;
             }
@@ -1301,6 +1311,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             fix.Z = fixZ;
             fix.Depth = native.z;
             fix.NativeScale = symbol.localScale;
+            bool wasAirborne = fix.Airborne;
             fix.Airborne = false;
             if (icon is UnitMapIcon trackedIcon &&
                 (trackedIcon.unit is Aircraft || trackedIcon.unit is Missile) &&
@@ -1309,8 +1320,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 // The native map has already chosen the faction-visible track position.
                 // Its Y value is the observed altitude, not the unit's hidden true position.
                 fix.Altitude = NativeIconPosition(icon).y / mapDisplayFactor;
-                fix.Airborne = true;
+                // Like the native heading, landing state is refreshed only while this track is observed.
+                // Stale contacts retain their last known state instead of revealing a hidden landing/takeoff.
+                TrackingInfo tracking = NativeTrackingInfo == null ? null : NativeTrackingInfo(trackedIcon);
+                bool observed = NativeTrackingInfo != null && (tracking == null || tracking.Observed());
+                if (trackedIcon.unit is Missile) fix.Airborne = true;
+                else if (!observed) fix.Airborne = wasAirborne;
+                // Aircraft.CheckRadarAlt uses this same threshold for its native airborne state, including taxiing.
+                else fix.Airborne = ((Aircraft)trackedIcon.unit).radarAlt > .2f;
             }
+            if (wasAirborne != fix.Airborne) minisMoved = true;
             if (icon is UnitMapIcon unitIcon && unitIcon.unit?.definition?.mapOrient == true)
             {
                 // Rotate the native, faction-known heading through the same terrain view.
@@ -1463,7 +1482,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 }
                 float length = size * MiniLength * (selectedForClusters.Contains(icon) ? 1.16f : 1f);
                 var at = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
-                    ground + 1f + lift + length * .05f, fix.Z / source.MapSize.y * ModelSpanZ);
+                    ground + SurfaceClearance + lift, fix.Z / source.MapSize.y * ModelSpanZ);
                 // Fixed-wing types stand as their own icon's silhouette, one model per airframe.
                 Sprite own = glyph == MapGlyph.Aircraft && icon.unit != null && icon.unit.definition != null
                     ? icon.unit.definition.mapIcon : null;
@@ -1489,7 +1508,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 glyph = default;
                 if (unit == null) return false;
                 Sprite own = unit.definition != null ? unit.definition.mapIcon : null;
-                kind = unit is Ship ? (int)MapGlyph.Hull
+                bool fixedStructure = unit is Ship && unit.definition is ShipDefinition ship &&
+                    ship.shipInfo != null && ship.shipInfo.topSpeed <= 0f;
+                kind = fixedStructure ? (int)MapGlyph.Contact : unit is Ship ? (int)MapGlyph.Hull
                     : unit is Aircraft ? (int)(own != null && own.name.IndexOf("helo", StringComparison.OrdinalIgnoreCase) >= 0
                         ? MapGlyph.Helicopter : MapGlyph.Aircraft)
                     : unit is GroundVehicle ? (int)MapSymbology.GroundGlyph(unit.definition is VehicleDefinition vehicle
@@ -1532,7 +1553,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                     float lift = Mathf.Clamp((fix.Altitude - seaLevel) * VerticalScale * ModelWidth / 81920f -
                         ground, 0f, MaximumAirLift);
                     Vector3 model = new Vector3(fix.X / source.MapSize.x * ModelSpanX,
-                        ground + 1f + (lift > .5f ? lift : 0f), fix.Z / source.MapSize.y * ModelSpanZ);
+                        ground + SurfaceClearance + (lift > .5f ? lift : 0f), fix.Z / source.MapSize.y * ModelSpanZ);
                     aircraftTrails.Record(icon, model, icon.iconImage.color);
                     seen++;
                 }
@@ -1562,18 +1583,18 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             if (fast)
             {
                 Matrix4x4 toParent = ToParent(symbol.parent);
-                var model = new Vector3(fix.X / source.MapSize.x * ModelSpanX, groundHeight + 1f,
+                var model = new Vector3(fix.X / source.MapSize.x * ModelSpanX, groundHeight + SurfaceClearance,
                     fix.Z / source.MapSize.y * ModelSpanZ);
                 groundPoint = parentPoint = toParent.MultiplyPoint3x4(model);
                 if (lift > .5f) parentPoint = toParent.MultiplyPoint3x4(model + Vector3.up * lift);
             }
             else
             {
-                if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + 1f, out point)) return;
+                if (!TryProjectAtHeight(fix.X, fix.Z, groundHeight + SurfaceClearance, out point)) return;
                 Vector3 screenPoint = owner.mapImage.transform.TransformPoint(new Vector3(point.x, point.y, 0f));
                 groundPoint = parentPoint = symbol.parent.InverseTransformPoint(screenPoint);
                 if (lift > .5f && TryProjectAtHeight(fix.X, fix.Z,
-                        groundHeight + 1f + lift, out Vector2 iconPoint))
+                        groundHeight + SurfaceClearance + lift, out Vector2 iconPoint))
                 {
                     Vector3 raised = owner.mapImage.transform.TransformPoint(
                         new Vector3(iconPoint.x, iconPoint.y, 0f));
@@ -2003,7 +2024,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             {
                 MapIcon entry = owner.mapIcons[i];
                 if (entry == null || !(entry is UnitMapIcon icon) || !icon.gameObject.activeInHierarchy ||
-                    selectedForClusters.Contains(icon) || OpsAnchor(icon.unit) ||
+                    selectedForClusters.Contains(icon) || icon.unit is Aircraft || icon.unit is Missile || OpsAnchor(icon.unit) ||
                     !iconFixes.TryGetValue(icon, out IconFix fix) || fix.Airborne) continue;
                 Image image = icon.iconImage;
                 if (image == null || !image.raycastTarget ||

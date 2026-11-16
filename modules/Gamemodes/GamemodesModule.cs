@@ -42,9 +42,10 @@ namespace BoscaliSummer.Modules.Gamemodes
             GameModeKind kind = GamemodeRules.DetectMode(mission?.missionSettings?.description);
             if (kind == GameModeKind.None) return null;
             // WarBox uses the existing operation, nation and command directors, with native flight/economy.
-            if (kind == GameModeKind.WarBox) return ["spooktober", "ares", "combat"];
+            // MISC remains available as an explicit cheat console in every mode.
+            if (kind == GameModeKind.WarBox) return ["combat"];
             var off = new List<string>(MissionProfile.BattlefieldModules)
-                { "wing", "spooktober", "ares", "skylark" };
+                { "wing", "skylark" };
             return off.ToArray();
         }
     }

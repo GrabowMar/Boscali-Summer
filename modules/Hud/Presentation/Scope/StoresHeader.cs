@@ -24,7 +24,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float capLast, capLastAt, shotKj, shotAt = float.NegativeInfinity, shotFrom;
         // Set by Paint for the block painters.
         private bool stack;
-        private int declutter;
 
         /// <summary>The pictures the last <see cref="Paint"/> wants drawn: the weapon's (lit share, then the spent share of a magazine) and the jammer's. An unused slot has icon 0.</summary>
         public readonly ArtSlot[] Art = new ArtSlot[ArtSlots];
@@ -74,8 +73,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Paint the blocks that exist into their rectangles of <paramref name="geo"/> (board units; the surface's origin is the box's). <paramref name="stackLayout"/> is the classic column, <paramref name="declutterLevel"/> the
-        /// number the DCL flag shows (0 full, 1 lean, 2 minimal).
+        /// Paint the blocks that exist into their rectangles. The legacy declutter parameter is ignored; the full HUD is always used.
         /// </summary>
         public void Paint(ScopeCanvas g, in BoardGeometry geo, bool stackLayout, int declutterLevel, float clock, bool flashOn)
         {
@@ -85,7 +83,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!live) { Beat = false; return; }
             now = clock;
             stack = stackLayout;
-            declutter = declutterLevel;
             if (HasWeapon && geo.Hero.Present)
             {
                 PaintHero(g, geo.Hero);
@@ -131,8 +128,5 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return n;
         }
 
-        private static readonly string[] DclWords = { "DCL 0", "DCL 1", "DCL 2" };
-
-        private static string DclWord(int level) => DclWords[level < 0 ? 0 : level > 2 ? 2 : level];
     }
 }

@@ -1,0 +1,266 @@
+{
+  "name": "ui-settings-cleanup",
+  "mission": "Fuzzball",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 180,
+  "description": "MISC remains available with ARES/SPOOKTOBER pages and a persistent cheating notice in Fuzzball. Legacy ExpandedMapUi=false is normalized at startup and a runtime write cannot disable the layout. Existing DeckOpacity changes the actual visible console CanvasGroup alpha. SET MAP contains one MFD OPACITY row and no retired layout/terrain/console/darkening/ticker-speed rows. Navigation/config UI only; no cheat mutations or multiplayer claims.",
+  "environment": {
+    "resolution": [
+      1920,
+      1080
+    ],
+    "config": {
+      "com.marci.boscalisummer": {
+        "Mission": {
+          "AskAtStart": false
+        },
+        "Command": {
+          "ExpandedMapUi": false,
+          "DeckOpacity": 0.8
+        },
+        "Ares": {
+          "Enabled": true
+        },
+        "Spooktober": {
+          "Enabled": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 12
+    },
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        20000,
+        -50000
+      ],
+      "altitude": 2500,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Open",
+      "args": {
+        "tab": "CHEATS"
+      },
+      "store": "misc"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Read",
+      "args": {},
+      "store": "misc-visible"
+    },
+    {
+      "op": "capture",
+      "name": "misc-cheating-notice"
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Plugin.Settings.Command.ExpandedMapUi.Value",
+      "store": "layout-startup"
+    },
+    {
+      "op": "write",
+      "path": "BoscaliSummer.Plugin.Settings.Command.ExpandedMapUi.Value",
+      "value": false
+    },
+    {
+      "op": "wait",
+      "seconds": 0.5
+    },
+    {
+      "op": "read",
+      "path": "BoscaliSummer.Plugin.Settings.Command.ExpandedMapUi.Value",
+      "store": "layout-after-write"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MapInputAutomation.Step",
+      "args": {
+        "do": "none"
+      },
+      "store": "map-held"
+    },
+    {
+      "op": "write",
+      "path": "BoscaliSummer.Plugin.Settings.Command.DeckOpacity.Value",
+      "value": 0.55
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Read",
+      "args": {},
+      "store": "faded"
+    },
+    {
+      "op": "capture",
+      "name": "misc-opacity-55"
+    },
+    {
+      "op": "write",
+      "path": "BoscaliSummer.Plugin.Settings.Command.DeckOpacity.Value",
+      "value": 0.8
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.MiscAutomation.Read",
+      "args": {},
+      "store": "restored"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.ScrollAutomation.Open",
+      "args": {
+        "codes": "SET",
+        "page": 1
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Command.Runtime.ScrollAutomation.ReadView",
+      "args": {
+        "code": "SET"
+      },
+      "store": "settings"
+    },
+    {
+      "op": "capture",
+      "name": "settings-map-cleanup"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "misc-visible.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "misc-visible.available",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "misc-visible.screenActive",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "misc-visible.cheatingDisclaimer",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "misc-visible.tabs",
+      "value": "SPAWN,POWERS,CHEATS,SPOOKTOBER"
+    },
+    {
+      "check": "result_equals",
+      "path": "layout-startup",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "layout-after-write",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "map-held.open",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "map-held.controlsShown",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "faded.cheatingDisclaimer",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.rootVisible",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.hasMfdOpacity",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "settings.retiredMapControls",
+      "value": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "NullReferenceException|MissingMethodException|TypeLoadException",
+      "max": 0
+    },
+    {
+      "check": "result_above",
+      "path": "faded.panelAlpha",
+      "min": 0.54
+    },
+    {
+      "check": "result_below",
+      "path": "faded.panelAlpha",
+      "max": 0.56
+    },
+    {
+      "check": "result_above",
+      "path": "restored.panelAlpha",
+      "min": 0.79
+    },
+    {
+      "check": "result_below",
+      "path": "restored.panelAlpha",
+      "max": 0.81
+    }
+  ]
+}

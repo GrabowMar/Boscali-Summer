@@ -120,17 +120,18 @@ namespace BoscaliSummer.Core.Ui
                 new AvControl.Spec("01  /  DEPLOYMENT", () => SelectPage(false), AvButtonStyle.Tab, AvIcon.Runway),
                 new AvControl.Spec("02  /  BOSCALI SYSTEMS", () => SelectPage(true), AvButtonStyle.Tab, AvIcon.AdjustmentsHorizontal) });
             tabs.MinHeight = 44f;
-            tabs.Place(new AvSlot(8, 38, Width - 22, 44));
+            tabs.Place(new AvSlot(26, 44, 704, 44));
             window.Ticker.Register(tabs);
             // Navigation stays fixed while the feature catalogue scrolls beneath it.
             var scroll = window.Body.Content.GetComponentInParent<ScrollRect>(true);
-            float bodyHeight = Height - 90 - AvGridTokens.Footer;
-            AvLay.Place((RectTransform)scroll.transform, 0, 90, Width, bodyHeight);
+            float bodyHeight = Height - 106 - AvGridTokens.Footer;
+            AvLay.Place((RectTransform)scroll.transform, 0, 106, Width, bodyHeight);
             AvLay.Place(scroll.viewport, 0, 0, Width, bodyHeight);
             if (scroll.verticalScrollbar != null)
                 ((RectTransform)scroll.verticalScrollbar.transform).SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, bodyHeight - 4);
             deployTab = tabs.Controls[0]; systemsTab = tabs.Controls[1];
             SizeControl(deployTab); SizeControl(systemsTab);
+            deployTab.Accent = systemsTab.Accent = new Color(.72f, .85f, .93f);
             deployTab.Latched = true;
             deck = window.Body.Add(new DashboardDeck(this, window.Body.Content));
         }
@@ -214,20 +215,31 @@ namespace BoscaliSummer.Core.Ui
         private static void SizeControl(AvControl control)
         {
             var label = control.Rect.Find("Label").GetComponent<TMP_Text>();
+            AvType.Apply(label, AvTextRole.Title);
+            label.enableAutoSizing = true;
             label.fontSize = label.fontSizeMax = 20;
             label.fontSizeMin = 18;
+            label.rectTransform.offsetMin = new Vector2(control.Glyph != null ? 48 : 16, 0);
+            label.rectTransform.offsetMax = new Vector2(-16, 0);
+            if (control.Glyph != null)
+            {
+                control.Glyph.fontSize = 22;
+                control.Glyph.rectTransform.sizeDelta = new Vector2(24, 24);
+                control.Glyph.rectTransform.anchoredPosition = new Vector2(16, 0);
+            }
+            control.Bracket = 8;
         }
 
         /// <summary>A single measured page, built with the shared avionics font, controls and vector frames.</summary>
         private sealed class DashboardDeck : AvPart
         {
-            private const float DesignWidth = 1648f, DesignHeight = 742f;
-            private static readonly Color Mint = new Color(.38f, .94f, .78f);
-            private static readonly Color Amber = new Color(1f, .72f, .35f);
-            private static readonly Color Ink = new Color(.88f, .95f, .96f);
-            private static readonly Color Muted = new Color(.61f, .73f, .77f);
-            private static readonly Color Edge = new Color(.19f, .32f, .36f);
-            private static readonly Color Surface = new Color(.025f, .055f, .071f, .98f);
+            private const float DesignWidth = 1648f, DesignHeight = 756f;
+            private static readonly Color Mint = new Color(.48f, .83f, .73f);
+            private static readonly Color Amber = new Color(.91f, .66f, .44f);
+            private static readonly Color Ink = new Color(.91f, .95f, .98f);
+            private static readonly Color Muted = new Color(.66f, .76f, .83f);
+            private static readonly Color Edge = new Color(.48f, .62f, .72f, .32f);
+            private static readonly Color Surface = new Color(.09f, .13f, .17f, .58f);
             private readonly MissionPrompt owner;
             private readonly RectTransform layout;
             private readonly TMP_Text title, link, phase, clock, score, objective, detail, systemCount, systemNote;
@@ -241,33 +253,33 @@ namespace BoscaliSummer.Core.Ui
                 this.owner = owner;
                 Rect = AvLay.Child(parent, "Deployment");
                 layout = AvLay.Child(Rect, "InstrumentPanel");
-                Text(layout, "BS / MISSION CONTROL", 20, Mint, 4, 8, 800, 28);
-                title = Text(layout, owner.mission.ToUpperInvariant(), 56, Ink, 0, 40, 1180, 72);
-                link = Text(layout, "", 18, Muted, 1180, 24, 464, 64, TextAlignmentOptions.TopRight);
-                Line(layout, 0, 126, DesignWidth, Mint);
-                Text(layout, "01   SELECT YOUR SIDE", 18, Muted, 0, 144, 960, 28);
-                Text(layout, "02   LIVE MISSION BRIEF", 18, Amber, 1024, 144, 620, 28);
+                title = Text(layout, owner.mission.ToUpperInvariant(), 64, Ink, 16, 2, 1140, 80, role: AvTextRole.Headline);
+                Text(layout, "Select a faction. Configure your systems. Enter the battlespace.", 22, Muted, 20, 86, 1120, 34);
+                link = Text(layout, "", 15, Muted, 1160, 22, 468, 68, TextAlignmentOptions.TopRight, AvTextRole.DataSmall);
+                Line(layout, 20, 136, 1608, Edge);
+                Text(layout, "SELECT YOUR SIDE", 20, Ink, 20, 154, 960, 28, role: AvTextRole.Head);
+                Text(layout, "MISSION BRIEF", 20, Ink, 1048, 154, 576, 28, role: AvTextRole.Head);
                 factions[0] = new FactionCard(this, 0, 0, Mint);
-                factions[1] = new FactionCard(this, 1, 500, new Color(.97f, .51f, .35f));
-                var report = Panel(layout, "LiveBrief", 1024, 184, 624, 338, Amber);
-                phase = Text(report, "CONNECTING", 20, Amber, 24, 20, 376, 30);
-                clock = Text(report, "--:--", 44, Ink, 408, 10, 192, 54, TextAlignmentOptions.TopRight);
-                score = Text(report, "", 40, Ink, 24, 66, 576, 64);
+                factions[1] = new FactionCard(this, 1, 500, Amber);
+                var report = Panel(layout, "LiveBrief", 1024, 196, 624, 350, Muted);
+                phase = Text(report, "CONNECTING", 18, Muted, 24, 20, 376, 30, role: AvTextRole.Head);
+                clock = Text(report, "--:--", 26, Ink, 416, 20, 184, 34, TextAlignmentOptions.TopRight, AvTextRole.Data);
+                score = Text(report, "", 32, Ink, 24, 72, 576, 50, role: AvTextRole.Title);
                 Line(report, 24, 138, 576, Edge);
-                objective = Text(report, "", 21, Ink, 24, 158, 576, 88);
-                detail = Text(report, "", 18, Muted, 24, 254, 576, 66);
-                moreFactions = Button(layout, "NEXT FACTIONS", () => { factionOffset += 2; BindFactions(); }, 784, 143, 216, 30, AvIcon.ArrowRight, Mint);
-                Text(layout, "03   CONFIGURE YOUR EXPERIENCE", 18, Muted, 0, 542, 1648, 28);
-                var load = Panel(layout, "SystemsSummary", 0, 582, 484, 84, Mint);
-                systemCount = Text(load, "", 30, Mint, 20, 8, 440, 36);
-                systemNote = Text(load, "", 18, Muted, 20, 47, 440, 28);
-                var systems = Button(layout, "BOSCALI SYSTEMS", () => owner.SelectPage(true), 500, 582, 548, 84, AvIcon.AdjustmentsHorizontal, Mint);
+                objective = Text(report, "", 25, Ink, 24, 156, 576, 106);
+                detail = Text(report, "", 20, Muted, 24, 276, 576, 54);
+                moreFactions = Button(layout, "NEXT FACTIONS", () => { factionOffset += 2; BindFactions(); }, 784, 148, 216, 40, AvIcon.ArrowRight, Muted);
+                Text(layout, "MISSION CONFIGURATION", 20, Ink, 20, 566, 1648, 28, role: AvTextRole.Head);
+                var load = Panel(layout, "SystemsSummary", 0, 608, 484, 80, Muted);
+                systemCount = Text(load, "", 23, Ink, 24, 10, 436, 32, role: AvTextRole.Data);
+                systemNote = Text(load, "", 20, Muted, 24, 44, 436, 26);
+                var systems = Button(layout, "BOSCALI SYSTEMS", () => owner.SelectPage(true), 500, 608, 548, 80, AvIcon.AdjustmentsHorizontal, Muted);
                 systems.Help = "Avionics, wingmen, support, weather, Spooktober and every offered module.";
-                var controls = Button(layout, "FLIGHT SETTINGS", owner.OpenSettings, 1064, 582, 584, 84, AvIcon.Gauge, Amber);
+                var controls = Button(layout, "FLIGHT SETTINGS", owner.OpenSettings, 1064, 608, 584, 80, AvIcon.Gauge, Muted);
                 controls.Interactable = owner.nativeMenu != null;
-                Button(layout, owner.nativeMenu == null ? "RETURN TO MISSION" : "SPECTATE", owner.Spectate, 0, 690, 360, 48, AvIcon.Eye, Mint);
-                Text(layout, "BOSCALI SUMMER  /  " + Plugin.PluginVersion + "     •     READY WHEN YOU ARE", 17, Muted, 388, 700, 980, 30);
-                var quit = Button(layout, "QUIT MISSION", owner.QuitMission, 1400, 690, 248, 48, AvIcon.X, Amber, AvButtonStyle.Danger);
+                Button(layout, owner.nativeMenu == null ? "RETURN TO MISSION" : "SPECTATE", owner.Spectate, 0, 700, 280, 48, AvIcon.Eye, Muted);
+                Text(layout, "BOSCALI SUMMER  /  " + Plugin.PluginVersion + "    ·    READY WHEN YOU ARE", 17, Muted, 308, 708, 1000, 30, role: AvTextRole.DataSmall);
+                var quit = Button(layout, "QUIT MISSION", owner.QuitMission, 1400, 700, 248, 48, AvIcon.X, Muted, AvButtonStyle.Danger);
                 quit.Interactable = owner.nativeMenu != null;
                 BindFactions();
                 Refresh();
@@ -314,7 +326,7 @@ namespace BoscaliSummer.Core.Ui
                 int count = 0;
                 foreach (var module in owner.Offered) if (!owner.off.Contains(module.Id)) count++;
                 AvText.Set(systemCount, count + " / " + owner.Offered.Length + " SYSTEMS SELECTED");
-                AvText.Set(systemNote, "Apply here or deploy with this loadout.");
+                AvText.Set(systemNote, "Selection applies when you deploy.");
             }
 
             public override float Measure(float width) => DesignHeight * width / DesignWidth;
@@ -335,18 +347,19 @@ namespace BoscaliSummer.Core.Ui
                 public FactionCard(DashboardDeck deck, int index, float x, Color accent)
                 {
                     this.deck = deck;
-                    var panel = Panel(deck.layout, "Faction " + index, x, 184, 484, 338, accent);
+                    var panel = Panel(deck.layout, "Faction " + index, x, 196, 484, 350, accent);
                     var scope = AvLay.Child(panel, "Scope");
-                    AvLay.Place(scope, 132, 38, 220, 220);
+                    AvLay.Place(scope, 302, 56, 158, 158);
                     var graphic = scope.gameObject.AddComponent<DashboardScope>();
                     graphic.color = accent; graphic.raycastTarget = false;
                     logo = AvLay.Solid(panel, "FactionInsignia", Color.white);
                     logo.preserveAspect = true; logo.raycastTarget = false;
-                    AvLay.Place(logo.rectTransform, 176, 64, 132, 132);
-                    status = Text(panel, "", 16, accent, 20, 12, 444, 28);
-                    name = Text(panel, "", 23, Ink, 20, 204, 444, 38);
-                    stats = Text(panel, "", 18, Muted, 20, 248, 444, 28);
-                    join = Button(panel, "DEPLOY", () => { if (item != null) deck.owner.Join(item.HQ); }, 20, 286, 444, 38, AvIcon.Plane, accent, AvButtonStyle.Primary);
+                    AvLay.Place(logo.rectTransform, 324, 78, 114, 114);
+                    status = Text(panel, "", 15, accent, 24, 18, 436, 28, role: AvTextRole.DataSmall);
+                    name = Text(panel, "", 34, Ink, 24, 72, 280, 120, role: AvTextRole.Title);
+                    Line(panel, 24, 224, 436, Edge);
+                    stats = Text(panel, "", 18, Muted, 24, 242, 436, 28, role: AvTextRole.Data);
+                    join = Button(panel, "DEPLOY", () => { if (item != null) deck.owner.Join(item.HQ); }, 24, 286, 436, 48, AvIcon.Plane, accent, AvButtonStyle.Primary);
                 }
                 public void Bind(LeaderboardFactionItem source)
                 {
@@ -361,7 +374,7 @@ namespace BoscaliSummer.Core.Ui
                     bool available = item != null && item.HQ != null && !item.HQ.preventJoin;
                     join.Interactable = available;
                     join.Label = available ? "DEPLOY  /  " + item.HQ.faction.factionName.ToUpperInvariant() : "UNAVAILABLE";
-                    AvText.Set(status, available ? "•  ENLISTMENT OPEN" : "—  ENLISTMENT CLOSED");
+                    AvText.Set(status, available ? "ENLISTMENT OPEN" : "ENLISTMENT CLOSED");
                     AvText.Set(stats, item != null && item.HQ != null ? item.HQ.GetPlayers(false).Count + " PILOTS    /    " + item.HQ.factionScore.ToString("0") + " SCORE" : "No faction available in this slot.");
                 }
             }
@@ -369,9 +382,10 @@ namespace BoscaliSummer.Core.Ui
             private static RectTransform Panel(RectTransform parent, string name, float x, float y, float w, float h, Color accent)
             {
                 var root = AvLay.Child(parent, name); AvLay.Place(root, x, y, w, h);
-                var frame = AvFrame.Add(root, "InstrumentFrame", AvChamfer.Diagonal(14));
-                AvLay.Fill(frame.rectTransform); frame.Paint(Surface, Edge); frame.Bracket = 22; frame.BracketColor = accent;
-                Line(root, 20, 0, 58, accent);
+                var frame = AvFrame.Add(root, "InstrumentFrame", AvChamfer.Diagonal(6));
+                AvLay.Fill(frame.rectTransform); frame.Paint(Surface, Edge); frame.Bracket = 10; frame.BracketColor = Muted.WithAlpha(.5f);
+                AvSurfaceGradient.Apply(frame, Color.white, new Color(.76f, .84f, .91f, .9f));
+                Line(root, 24, 0, 36, accent.WithAlpha(.7f));
                 return root;
             }
             private static void Line(RectTransform parent, float x, float y, float w, Color color)
@@ -379,11 +393,11 @@ namespace BoscaliSummer.Core.Ui
                 var line = AvLay.Solid(parent, "Rule", color); line.raycastTarget = false;
                 AvLay.Place(line.rectTransform, x, y, w, 1.5f);
             }
-            private static TMP_Text Text(RectTransform parent, string value, float size, Color color, float x, float y, float w, float h, TextAlignmentOptions alignment = TextAlignmentOptions.MidlineLeft)
+            private static TMP_Text Text(RectTransform parent, string value, float size, Color color, float x, float y, float w, float h, TextAlignmentOptions alignment = TextAlignmentOptions.MidlineLeft, AvTextRole role = AvTextRole.Prose)
             {
-                var text = AvText.Make(parent, "Readout", AvTextRole.Data, value, alignment, true);
+                var text = AvText.Make(parent, "Readout", role, value, alignment, true);
                 text.fontSize = size; text.color = color; text.richText = false; text.raycastTarget = false;
-                text.enableAutoSizing = true; text.fontSizeMax = size; text.fontSizeMin = Mathf.Min(18, size);
+                text.enableAutoSizing = true; text.fontSizeMax = size; text.fontSizeMin = Mathf.Min(20, size);
                 text.overflowMode = TextOverflowModes.Ellipsis;
                 AvLay.Place(text.rectTransform, x, y, w, h);
                 return text;
@@ -398,37 +412,27 @@ namespace BoscaliSummer.Core.Ui
         }
     }
 
-    /// <summary>Decorative identification scope: no simulated contacts or fabricated sensor data.</summary>
+    /// <summary>Static insignia registration marks, with no simulated sensor data or update loop.</summary>
     internal sealed class DashboardScope : MaskableGraphic
     {
-        private float next;
-        private void Update()
-        {
-            if (AvReveal.Snap || AvFxDriver.Tier == AvFxTier.Off || Time.unscaledTime < next) return;
-            next = Time.unscaledTime + .05f; SetVerticesDirty();
-        }
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();
             Rect r = rectTransform.rect;
             Vector2 centre = r.center;
             float radius = Mathf.Min(r.width, r.height) * .46f;
-            Color line = color; line.a = .24f;
-            for (int ring = 1; ring <= 3; ring++)
-                for (int i = 0; i < 72; i++)
-                {
-                    float a = i * Mathf.PI / 36, b = (i + 1) * Mathf.PI / 36;
-                    Segment(vh, centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius * ring / 3,
-                        centre + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * radius * ring / 3, .7f, line);
-                }
-            Segment(vh, centre + Vector2.left * radius, centre + Vector2.right * radius, .7f, line);
-            Segment(vh, centre + Vector2.up * radius, centre + Vector2.down * radius, .7f, line);
-            float sweep = AvReveal.Snap || AvFxDriver.Tier == AvFxTier.Off ? .7f : Time.unscaledTime * .35f;
-            for (int i = 0; i < 18; i++)
+            Color line = color; line.a = .17f;
+            for (int i = 0; i < 72; i++)
             {
-                float angle = sweep - i * .018f;
-                Color c = color; c.a = .36f * (1 - i / 18f);
-                Segment(vh, centre, centre + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius, 1, c);
+                float a = i * Mathf.PI / 36, b = (i + 1) * Mathf.PI / 36;
+                Segment(vh, centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * radius,
+                    centre + new Vector2(Mathf.Cos(b), Mathf.Sin(b)) * radius, .7f, line);
+            }
+            for (int i = 0; i < 8; i++)
+            {
+                float angle = i * Mathf.PI / 4;
+                Vector2 axis = new Vector2(Mathf.Cos(angle), Mathf.Sin(angle));
+                Segment(vh, centre + axis * (radius - 4), centre + axis * (radius + 4), 1, line);
             }
         }
         private static void Segment(VertexHelper vh, Vector2 a, Vector2 b, float width, Color color)

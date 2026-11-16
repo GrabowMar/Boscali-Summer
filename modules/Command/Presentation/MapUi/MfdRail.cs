@@ -191,9 +191,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             for (int i = 0; i < keys.Count; i++)
             {
                 keys[i].RefreshAvailability();
-                keys[i].SetLatched(keys[i].Entry.Code == "MAP" && MfdPresentation.Expanded
-                    ? MfdMapControls.Shown && !MfdMapControls.Folded
-                    : keys[i].Screen != null && keys[i].Screen.isActive);
+                keys[i].SetLatched(keys[i].Screen != null && keys[i].Screen.isActive);
             }
         }
 
@@ -399,11 +397,6 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             RefreshAvailability();
             if (!available) return;
-            if (Entry.Code == "MAP" && MfdRailPatch.IsApplied)
-            {
-                MfdMapControls.Open();
-                return;
-            }
             Source.onClick.Invoke();
             MfdRail.Refresh();
         }

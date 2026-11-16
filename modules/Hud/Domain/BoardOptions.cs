@@ -74,7 +74,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            ArPath = true, ArDomes = true, ArMissiles = true, ArBeacons = true, HudFx = true,
+            ArPath = false, ArDomes = false, ArMissiles = true, ArBeacons = true, HudFx = true,
             Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, Reactive = true, VisorSound = 0.6f, TextEdge = 0.16f,
         };
 
@@ -82,12 +82,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public void Sanitize()
         {
             BoardOptions d = Default;
+            ArPath = false;       // Retired: the green prediction line must stay off for saved configs too.
+            ArDomes = false;      // Retired: saved configs must not bring the SAM wire cages back.
             Scale = Fit(Scale, ScaleMin, ScaleMax, d.Scale);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
             TextEdge = Fit(TextEdge, 0f, TextEdgeMax, d.TextEdge);
             VisorSound = Fit(VisorSound, 0f, 1f, d.VisorSound);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
-            if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
+            Declutter = BoardDeclutter.Full;
             // The panels show themselves (2026-11-16): a saved Manual, or a value that names nothing, reads as Auto.
             if (ScopeMode != BoardScopeMode.Off) ScopeMode = BoardScopeMode.Auto;
         }
@@ -101,19 +103,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// </summary>
         public readonly BoardEffective Effective()
         {
-            bool full = Declutter == BoardDeclutter.Full, minimal = Declutter == BoardDeclutter.Minimal;
             return new BoardEffective
             {
                 Voiced = (ushort)((1 << CuePriority.PageCount) - 1),
                 ShowStores = ShowStores,
                 ShowLamps = ShowLamps,
-                DarkLamps = full,
-                ThreatLampsOnly = minimal,
-                SystemsCriticalOnly = minimal,
-                ShowGauges = ShowGauges && full,
+                DarkLamps = true,
+                ThreatLampsOnly = false,
+                SystemsCriticalOnly = false,
+                ShowGauges = ShowGauges,
                 ShowTicker = ShowTicker,
                 ShowSystems = ShowSystems,
-                Furniture = full,
+                Furniture = true,
             };
         }
     }

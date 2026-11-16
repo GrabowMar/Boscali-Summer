@@ -12,6 +12,7 @@ namespace NOAvionics
     public static class AvConsoleLook
     {
         public static bool Grid = true, Orders = true, Clock = true, HoverHelp = true, Art = true;
+        public static float Opacity = 1f;
         public static int Revision { get; private set; }
         public static void Changed() => Revision++;
     }
@@ -30,6 +31,7 @@ namespace NOAvionics
         private readonly Image headerBack, idPlate, idRail;
         private readonly TMP_Text idText, titleText;
         private readonly RectTransform live, bodyRect, viewport;
+        private readonly CanvasGroup opacity;
         private readonly AvScrollView scrollView;
         private readonly RectTransform[] pageRects;
         private readonly Canvas[] pageCanvases;
@@ -74,6 +76,7 @@ namespace NOAvionics
             Root = AvLay.Child(host, "AvConsole " + id);
             AvLay.Place(Root, 0f, 0f, w, h);
             AvLay.Nest(Root, true);
+            opacity = Root.gameObject.AddComponent<CanvasGroup>();
             Ticker = Root.gameObject.AddComponent<AvTicker>();
             Ticker.Console = this;
 
@@ -186,9 +189,6 @@ namespace NOAvionics
         /// <summary>Opens the screen behind a rail key (no-op when it is already open); false when no such key is up.</summary>
         public static Func<string, bool> PressKey;
 
-        /// <summary>Optional route for a key/page hosted outside a console, such as the map drawer. True means handled.</summary>
-        public static Func<string, string, bool> OpenSurface;
-
         private static readonly System.Collections.Generic.Dictionary<string, AvConsole> byId =
             new System.Collections.Generic.Dictionary<string, AvConsole>(16);
 
@@ -203,7 +203,6 @@ namespace NOAvionics
         public static void Open(string key, string page = null)
         {
             if (string.IsNullOrEmpty(key)) return;
-            if (OpenSurface?.Invoke(key, page) == true) return;
             PressKey?.Invoke(key);
             if (string.IsNullOrEmpty(page)) return;
             AvConsole c = Find(key);
@@ -449,6 +448,7 @@ namespace NOAvionics
 
         private void Restyle()
         {
+            opacity.alpha = Mathf.Clamp(AvConsoleLook.Opacity, .1f, 1f);
             AvStyle c = AvStyleHost.FuiStyle("console");
             frame.Paint(AvStyleHost.Resolve(c.Background, AvTheme.Ground), AvStyleHost.Resolve(c.Border, AvTheme.Frame));
             AvStyle h = AvStyleHost.FuiStyle("header");

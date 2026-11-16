@@ -1,21 +1,34 @@
 # Changelog
 
-## Unreleased
+## 0.2.14 — Helltaker Update
 
-- **AR helmet layer** (C menu VIEW > AR OVERLAYS, SET > COCKPIT > AR HELMET LAYER): symbols locked to the world outside,
-  each only while it matters.
-  - **Flight path**: where you will be over the next 8 s during a hard pull; in red with TERRAIN and the seconds left,
-    an X and a ground ring, where that path meets the ground or the sea.
-  - **SAM envelopes**: near a SAM site your side knows, a wire cage of its real engagement shape and a fence at your
-    height with the distance to it (SAM EDGE). Inside, an EXIT gate shows the shortest way out (SAM EXIT).
-  - **Missile lines**: your missiles joined to their targets with IMPACT seconds; missiles coming at you boxed with their
-    next two seconds.
-  - **Beacons**: a pillar of light over the nearest friendly field at JOKER, BINGO or with damage, and over a live
-    contract zone.
-  - **HUD reactions**: brackets spin in on a new target; the HUD and the TAC BOARD glitch for a moment when a hit damages
-    the aircraft. REDUCED MOTION keeps everything still.
-- The COMBAT ALERTS switch moved into the C menu's AR OVERLAYS.
-- Wingmen called from a carrier deck (GitHub issue 37) now checked in game: they air-start astern of the ship and join.
+**Public alpha for players.** Hell's Army is single-player only. Multiplayer remains experimental;
+all players should use the same mod version.
+
+- **Hell's Army has a home.** Summon the invasion from **MISC > SPOOKTOBER**, fight its ground and air waves,
+  then dive through the ground rift into Hell. Destroy three guarded rift anchors to close the invasion.
+  Retreat and return without losing anchor progress.
+- **Corruption and occupation:** Hell can capture airbases and spread branching volcanic corruption.
+  Closing the rift restores occupied ownership and clears Hell's forces. Buildings destroyed by corruption stay destroyed.
+  The larger arena sits beyond the ordinary battlefield; entering and leaving levels the aircraft for flight.
+- **Spooktober dossiers:** classified case files introduce each encounter, with separate summon, banish and defeat records.
+- **Three new missions:** WarBox is a combined-arms sandbox, Fuzzball is airborne team combat, and Heavyweight pits cargo
+  delivery against interception. Find them in the **Boscali Summer Gamemodes** mission group.
+- **VS-4 Skylark:** a new VTOL scout and precision attacker, using native aircraft controls and damage systems.
+- **Consoles and command:** revised mission dashboard, map controls, relief maps and console navigation; national
+  production, policies and focus choices join the command desk.
+- **Visor and cockpit:** revised TAC BOARD layout, target-camera card, fuel/throttle arcs, boot sequence and damage
+  reactions. AR missile lines and landing/objective beacons remain available; retired flight-path and SAM-cage
+  overlays stay off. The COMBAT ALERTS switch lives in the C menu's AR OVERLAYS.
+- **World and fixes:** refined sky, clouds, water, terrain and night vision; carrier wingman, satellite launch,
+  airborne assault and UI fixes.
+- **Player packaging:** developer tools remain excluded. Cinematic colour grading, light streaks, sky dithering and
+  optional SMAA are included. Upstream AgX LUTs are excluded from player builds pending redistribution permission.
+  Third-party licence notices accompany the ZIP and are embedded in the standalone DLL.
+
+**Install:** extract `BoscaliSummer-0.2.14.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
+with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
+Back up saves and configuration before updating.
 
 ## 0.2.13 — update
 

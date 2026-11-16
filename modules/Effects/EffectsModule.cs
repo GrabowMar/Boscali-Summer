@@ -26,10 +26,12 @@ namespace BoscaliSummer.Modules.Effects
             context.AddClientChoice("COLOUR GRADE", "EDGE SMOOTHING",
                 "GAME: keep the game's anti-aliasing. SMAA: smoother aircraft and cockpit edges, with extra GPU work.",
                 fx.EdgeSmoothing, new[] { "GAME", "SMAA" });
+#if !PUBLIC_RELEASE
             ClientSettingToggle agx = context.AddClientSetting("COLOUR GRADE", "AGX TONEMAPPING",
                 "Softer bright highlights and steadier colours. Keeps automatic exposure; night vision and sensor feeds use their own look.", fx.AgxEnabled);
             context.AddClientChoice("COLOUR GRADE", "AGX LOOK", "BASE: neutral. PUNCHY: more contrast. HUE: richer colour.",
                 fx.AgxLook, new[] { "BASE", "PUNCHY", "HUE" }, agx);
+#endif
             ClientSettingToggle cinematic = context.AddClientSetting("COLOUR GRADE", "CINEMATIC",
                 "BF4-inspired cool shadows, brighter lights, horizontal lens streaks, subtle grain and vignette.", fx.Cinematic.Enabled);
             context.AddClientLevel("COLOUR GRADE", "CINEMA STRENGTH", "How strongly the cinematic look changes the picture.",

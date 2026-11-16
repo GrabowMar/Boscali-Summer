@@ -1,14 +1,19 @@
 param(
     [string]$Unity = 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe',
     [string]$ProjectDirectory,
+    [switch]$PublicOnly,
     [switch]$SkipRenderCheck
 )
 $ErrorActionPreference = 'Stop'
-. "$PSScriptRoot/../tests/UnityCheck.Common.ps1"
+. "$PSScriptRoot/UnityCheck.Common.ps1"
 if (-not $ProjectDirectory) { $ProjectDirectory = Join-Path $repo '.nomodkit/agx-assets' }
 $ProjectDirectory = [IO.Path]::GetFullPath($ProjectDirectory)
 New-UnityCheckProject $ProjectDirectory '{"dependencies":{"com.unity.modules.assetbundle":"1.0.0","com.unity.modules.imageconversion":"1.0.0"}}' -Folders 'Assets/Agx', 'Assets/Editor', 'BundleOutput'
-Copy-Item -Path "$repo/modules/Effects/Assets/Source/*" -Destination "$ProjectDirectory/Assets/Agx/" -Recurse -Force
+if ($PublicOnly) {
+    Copy-Item -Path "$repo/modules/Effects/Assets/Source/CinematicStreak.shader*" -Destination "$ProjectDirectory/Assets/Agx/" -Force
+} else {
+    Copy-Item -Path "$repo/modules/Effects/Assets/Source/*" -Destination "$ProjectDirectory/Assets/Agx/" -Recurse -Force
+}
 Copy-Item -Path "$repo/tools/AgxAssets/StreakParityCheck.cs", "$repo/tools/AgxAssets/StreakParity.shader" -Destination "$ProjectDirectory/Assets/Editor/" -Force
 Set-Content -LiteralPath "$ProjectDirectory/Assets/Editor/BuildAgxBundle.cs" -Value @'
 using System;
@@ -24,18 +29,20 @@ public static class BuildAgxBundle
         {
             PlayerSettings.colorSpace = ColorSpace.Linear;
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-            var names = new[] { "agx-base", "agx-punchy", "agx-hue" };
+            bool publicOnly = Array.IndexOf(Environment.GetCommandLineArgs(), "-publicEffectsOnly") >= 0;
+            var names = publicOnly ? new string[0] : new[] { "agx-base", "agx-punchy", "agx-hue" };
             var paths = new string[names.Length + 2];
             paths[0] = "Assets/Agx/AgxLutComposite.shader";
             paths[paths.Length - 1] = "Assets/Agx/CinematicStreak.shader";
-            Shader shader = AssetDatabase.LoadAssetAtPath<Shader>(paths[0]);
-            if (shader == null) throw new Exception("AgX shader was not imported");
-            if (ShaderUtil.ShaderHasError(shader))
+            if (publicOnly) paths = new[] { "Assets/Agx/CinematicStreak.shader" };
+            Shader shader = publicOnly ? null : AssetDatabase.LoadAssetAtPath<Shader>(paths[0]);
+            if (!publicOnly && shader == null) throw new Exception("AgX shader was not imported");
+            if (shader != null && ShaderUtil.ShaderHasError(shader))
             {
                 foreach (var message in ShaderUtil.GetShaderMessages(shader)) Debug.LogError(message.message);
                 throw new Exception("AgX shader compilation failed");
             }
-            var material = new Material(shader);
+            var material = shader != null ? new Material(shader) : null;
             string samples = "";
             for (int i = 0; i < names.Length; i++)
             {
@@ -83,17 +90,20 @@ public static class BuildAgxBundle
             var streakMaterial = new Material(streakShader);
             samples += CheckStreak(streakMaterial) + "\n";
             UnityEngine.Object.DestroyImmediate(streakMaterial);
-            var build = new AssetBundleBuild { assetBundleName = "agx.bundle", assetNames = paths };
+            string bundleName = publicOnly ? "cinematic.bundle" : "agx.bundle";
+            var build = new AssetBundleBuild { assetBundleName = bundleName, assetNames = paths };
             if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build }, BuildAssetBundleOptions.ChunkBasedCompression,
                 BuildTarget.StandaloneWindows64) == null) throw new Exception("AgX bundle build failed");
-            if (ShaderUtil.ShaderHasError(shader) || ShaderUtil.ShaderHasError(streakShader))
+            if ((shader != null && ShaderUtil.ShaderHasError(shader)) || ShaderUtil.ShaderHasError(streakShader))
                 throw new Exception("Effects shader compilation failed");
             // Exercise the player bundle: successful editor compilation alone does not
             // prove that the shipped shader retained executable passes after stripping.
-            var bundle = AssetBundle.LoadFromFile(Path.GetFullPath("BundleOutput/agx.bundle"));
+            var bundle = AssetBundle.LoadFromFile(Path.GetFullPath("BundleOutput/" + bundleName));
             if (bundle == null) throw new Exception("Built AgX bundle could not be loaded");
             try
             {
+                if (publicOnly && (bundle.GetAllAssetNames().Length != 1 || bundle.LoadAllAssets<Texture>().Length != 0))
+                    throw new Exception("Public effects bundle contains assets other than the original streak shader");
                 var builtShader = bundle.LoadAsset<Shader>("Assets/Agx/CinematicStreak.shader");
                 if (builtShader == null) throw new Exception("Built streak shader missing");
                 var builtMaterial = new Material(builtShader);
@@ -101,7 +111,9 @@ public static class BuildAgxBundle
                 finally { UnityEngine.Object.DestroyImmediate(builtMaterial); }
             }
             finally { bundle.Unload(true); }
-            File.WriteAllText("result.txt", "PASS: shaders compiled; three 32-cubed LUTs bundled; finite, monotonic HDR grey ramp; streak shader checks below.\n" + samples);
+            File.WriteAllText("result.txt", (publicOnly
+                ? "PASS: public cinematic bundle contains only the original streak shader; no third-party LUTs; streak shader checks below.\n"
+                : "PASS: shaders compiled; three 32-cubed LUTs bundled; finite, monotonic HDR grey ramp; streak shader checks below.\n") + samples);
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -214,9 +226,11 @@ public static class BuildAgxBundle
 }
 '@
 $arguments = @()
+if ($PublicOnly) { $arguments += '-publicEffectsOnly' }
 if ($SkipRenderCheck) { $arguments += '-skipAgxRenderCheck' }
 $process = Invoke-UnityCheck $Unity $ProjectDirectory 'BuildAgxBundle.Run' -ExtraArguments $arguments -TimeoutSeconds 240
 Show-UnityCheckResult $ProjectDirectory
 Assert-UnityResult $ProjectDirectory $process -ExitMessage "AgX build failed: $($process.ExitCode)"
-Copy-Item -LiteralPath "$ProjectDirectory/BundleOutput/agx.bundle" -Destination "$repo/modules/Effects/Assets/agx.bundle" -Force
-Write-Output "AgX bundle: $repo/modules/Effects/Assets/agx.bundle"
+$bundleName = if ($PublicOnly) { 'cinematic.bundle' } else { 'agx.bundle' }
+Copy-Item -LiteralPath "$ProjectDirectory/BundleOutput/$bundleName" -Destination "$repo/modules/Effects/Assets/$bundleName" -Force
+Write-Output "Effects bundle: $repo/modules/Effects/Assets/$bundleName"

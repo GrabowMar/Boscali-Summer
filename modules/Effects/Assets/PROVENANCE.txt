@@ -25,6 +25,16 @@ redistribution license. This provenance record does not grant one. Verify
 the asset redistribution terms with the upstream author before publishing
 these third-party LUT assets or the bundle containing them.
 
+Player releases omit those LUT assets. PublicRelease excludes agx.bundle,
+disables AgX tonemapping and its live controls, and embeds cinematic.bundle
+containing only the mod's original CinematicStreak.shader. Git source archives
+also exclude agx.bundle and the upstream EXRs/import metadata. Developer Git
+checkouts retain them for local work; this is not a redistribution grant.
+
+Public bundle: powershell -File tools/Build-AgxAssets.ps1 -PublicOnly
+This checks that the built bundle has exactly one asset, no textures, and
+retains the same streak render and bundled shader parity checks.
+
 Rebuild: powershell -File tools/Build-AgxAssets.ps1
 Requires Unity 2022.3.62f3. Output: modules/Effects/Assets/agx.bundle.
 The build also renders an HDR grey ramp for each imported look and checks

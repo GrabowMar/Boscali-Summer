@@ -26,6 +26,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 #endif
         private AvTabBar bar;
         private List<(AvIcon icon, string label)> tabs;
+        private IMiscTabs builtTabs;
+        private ISetExtras builtExtras;
 
         /// <summary>The live panel, for the dev automation hook.</summary>
         internal static MiscMfdPanel Active { get; private set; }
@@ -47,19 +49,29 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 #endif
             bar = null;
             tabs = null;
+            builtTabs = null;
+            builtExtras = null;
         }
 
         private void OnDestroy() => ResetForScene();
 
         private void Update()
         {
-            if (settings != null) installer.Tick();
+            if (settings == null) return;
+            ModuleServices.TryGet(out IMiscTabs added);
+            ModuleServices.TryGet(out ISetExtras extras);
+            if (installer.Screen != null && (added != builtTabs || extras != builtExtras)) ResetForScene();
+            if (!installer.Tick() || installer.Bezel == null) return;
+            // Navigation stays available; each owning service still checks authority for its actions.
+            installer.Bezel.enabled = installer.Bezel.interactable = true;
         }
 
         private RectTransform BuildScreen(RectTransform host, float height)
         {
             ModuleServices.TryGet(out ISetExtras extras);
             ModuleServices.TryGet(out IMiscTabs added);
+            builtTabs = added;
+            builtExtras = extras;
             tabs = new List<(AvIcon icon, string label)>();
             for (int i = 0; added != null && i < added.Count; i++) tabs.Add((added.Icon(i), added.Label(i)));
             int extra = -1;
@@ -70,6 +82,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             AvConsole c = AvConsole.Build(host, MfdSlots.Misc, "EXTRAS", Math.Max(1, tabs.Count), AvTokens.PanelWidth, height);
+            c.Chips(1)[0].Set("CHEATING · THESE ACTIONS ALTER THE MISSION", AvState.Caution);
 #if !PUBLIC_RELEASE
             console = c;
 #endif

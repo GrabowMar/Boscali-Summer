@@ -135,8 +135,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float FiresHeight(ScopePage host) => host == ScopePage.Strike ? Full : ShotH;
 
         /// <summary>WING is the first to go when lamps, SYSTEMS and the three panels would pass <see cref="SpineH"/> (a full RWR over a STRIKE): the Wing module's strip stands in for it (<c>IHudBoard.ShowsWing</c>).</summary>
-        public static bool WingFits(float rwrH, float firesH) =>
-            WingBodyY + Compact + PageGap + rwrH + PageGap + (firesH > 0f ? firesH + PageGap : 0f) + WingH <= SpineH;
+        public static bool WingFits(float rwrH, float firesH, float statusH = Compact) =>
+            WingBodyY + statusH + PageGap + rwrH + PageGap + (firesH > 0f ? firesH + PageGap : 0f) + WingH <= SpineH;
 
         /// <summary>
         /// The blocks of a board. Everything but the stores (WIDE) hangs in the SPINE, the right-hand 440 column under the box's top-right corner: lamp line, SYSTEMS, the pages,
