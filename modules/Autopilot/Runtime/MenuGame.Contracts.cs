@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardDeclutter = (int)board.Declutter;
             w.BoardShade = MenuCatalog.Nearest(MenuCatalog.ShadeSteps, board.Shade);
             w.BoardSize = MenuCatalog.Nearest(MenuCatalog.SizeSteps, board.Scale);
-            w.BoardScope = ScopeIndex(board.ScopeMode);
+            w.BoardScope = MenuCatalog.ScopeIndex(board.ScopeMode);
             w.BoardSway = board.Sway;
             w.CentreAlerts = board.CentreAlerts;
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
@@ -234,17 +234,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
         private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
 
-        /// <summary>The menu order of the SCOPE cycle (AUTO, MANUAL, OFF) against the contract enum (Manual, Off, Auto).</summary>
-        private static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Auto ? 0 : mode == BoardScopeMode.Manual ? 1 : 2;
-
         /// <summary>The next scope in menu order. MANUAL shows both page slots (SET holds the two choices), so entering it counts the second one in.</summary>
         private static void CycleScope(ITacBoardSettings board)
         {
-            board.ScopeMode = ScopeAt((ScopeIndex(board.ScopeMode) + 1) % MenuCatalog.BoardScopes.Length);
+            board.ScopeMode = MenuCatalog.ScopeAt((MenuCatalog.ScopeIndex(board.ScopeMode) + 1) % MenuCatalog.BoardScopes.Length);
             if (board.ScopeMode == BoardScopeMode.Manual) board.PageCount = 2;
         }
-
-        private static BoardScopeMode ScopeAt(int index) => index == 0 ? BoardScopeMode.Auto : index == 1 ? BoardScopeMode.Manual : BoardScopeMode.Off;
 
         /// <summary>Statement over the TAC BOARD options, looked up again when the row is pressed.</summary>
         private static Action OnBoard(Action<ITacBoardSettings> run) =>

@@ -31,6 +31,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
 
+        /// <summary>The menu order of the SCOPE cycle (AUTO, MANUAL, OFF) against the contract enum (Manual, Off, Auto). A value outside the enum reads as AUTO, as BoardOptions.Sanitize does.</summary>
+        public static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Manual ? 1 : mode == BoardScopeMode.Off ? 2 : 0;
+
+        public static BoardScopeMode ScopeAt(int index) => index == 1 ? BoardScopeMode.Manual : index == 2 ? BoardScopeMode.Off : BoardScopeMode.Auto;
+
         /// <summary>Index of the step nearest <paramref name="value"/>: where a cycle row over a float option stands.</summary>
         public static int Nearest(float[] steps, float value)
         {
