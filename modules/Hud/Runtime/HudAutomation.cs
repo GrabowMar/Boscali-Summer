@@ -189,6 +189,32 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         /// <summary>
+        /// The visor's power-on (tests/ingame/hud-boot.json). <c>mode</c> ("full" or "resync") starts it again now on the HUD's aircraft; <c>hold</c> freezes its clock at that many seconds (a negative number lets it run on), so each phase can be
+        /// captured still; <c>abort</c> true ends it at once. Reads back whether it runs, its age, the self-test lines, how far each zone has come alive, the arcs' lit segments and the rim's etched text.
+        /// </summary>
+        public static Dictionary<string, object> Boot(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            HudBoard board = HudBoard.Instance;
+            if (board == null) return Failure("HudAutomation", "Boot", "no HUD board");
+            bool started = false;
+            string mode = Text(args, "mode");
+            if (!string.IsNullOrEmpty(mode)) started = board.RestartBoot(string.Equals(mode, "resync", StringComparison.OrdinalIgnoreCase) ? BootMode.Resync : BootMode.Full);
+            if (Has(args, "hold")) board.BootHud.Hold(Number(args, "hold", 0f), Time.unscaledTime);
+            if (Bool(args, "abort")) board.BootHud.Abort();
+            VisorBootHud boot = board.BootHud;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "started", started }, { "active", boot.Active }, { "mode", boot.Mode.ToString() }, { "ended", board.BootEnd }, { "age", boot.Age }, { "lines", boot.LineCount }, { "boot_shown", boot.Shown },
+                { "brow", boot.Progress(BootGroup.Brow) }, { "rim", boot.Progress(BootGroup.Rim) }, { "left", boot.Progress(BootGroup.Left) }, { "board", boot.Progress(BootGroup.Board) }, { "arcs", boot.Progress(BootGroup.Arcs) },
+                { "arcs_shown", board.Arcs != null && board.Arcs.Shown }, { "natives_hidden", board.Arcs != null && board.Arcs.NativesHidden }, { "fuel_lit", board.Arcs?.FuelLit ?? -1 },
+                { "rim_shown", board.Rim != null && board.Rim.Shown }, { "etched", board.Rim?.EtchedText ?? "" }, { "brow_shown", board.Brow != null && board.Brow.Shown },
+            };
+            Debug.Log("[HudAutomation] Boot: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
         /// The segmented fuel and throttle arcs as they stand (tests/ingame/hud-arcs.json): whether they are up, whether the game's own two gauges are hidden behind them, the lit segments, the measured circle
         /// and the game's gauges' own alpha. <c>fuel</c> (0..1) first sets every tank to that share of its capacity and <c>throttle</c> (0..1) the player's throttle input, for a capture of a low tank or a full throttle.
         /// </summary>

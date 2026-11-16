@@ -10,31 +10,34 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// The visor's BROW RAIL and FRAME FURNITURE (2026-11-16, mockup <c>evolved-hud-mockup.html</c>): a curved rail at the top centre (reference px x 800..1116, y 12..104) with its tick scale, the
+    /// The visor's BROW RAIL (2026-11-16, mockup <c>evolved-hud-mockup.html</c>): a curved rail at the top centre (reference px x 800..1116, y 12..104) with its tick scale, the
     /// boresight mark, one status caption above it (real state only) and bearing carets hung under it for what matters now, relative to the aircraft's nose, most urgent first (<see cref="BrowCarets"/>):
     /// missiles inbound (red M1, M2), radars locking or painting us (amber LOCK, SPK), the ace on the hunt (red ACE), the objective (white OBJ), the runway or pad (RWY, PAD), the tanker (TKR) and the
-    /// landing zone (LZ). The faint side-edge tick ladders, the two side cross marks and the two bottom rules are the furniture: static, about 0.3 alpha, drawn clear of every zone.
+    /// landing zone (LZ). The visor's frame (rim, side ticks, etched line) is <see cref="VisorRim"/>'s. During the power-on the rail draws itself from left to right (<see cref="Boot"/>).
     /// Built like <see cref="CombatAlerts"/>: a holder under the native HUD canvas, scaled by canvas height / 1080, centre origin, its own mesh layers and pooled labels (<see cref="ScopeText"/>, so the
     /// glow material applies). Data at the board's 10 Hz (<see cref="Read"/>); a mesh is rebuilt only when what it draws changed, so a steady frame does no work but a compare. Fails open: nothing of
     /// the game's own HUD is touched.
     /// </summary>
     internal sealed class BrowHud
     {
-        private const int RailQuads = 96, FurnitureQuads = 48, CurveSegments = 40;
+        private const int RailQuads = 96, CurveSegments = 40;
         // Mockup weights: rail and major ticks about 1.5 px at full ink (clear against bright sky and cloud), minor ticks thinner and dimmer.
-        private const float Stroke = 1f, CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f, FurnitureAlpha = 0.4f;
+        private const float CurveStroke = 1.6f, MajorStroke = 1.6f, MinorStroke = 1.2f;
         private const float CaptionY = 11f, CaptionPt = BrowRail.LabelPt;
         private static readonly string[] MissileLabels = { "M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7", "M8", "M9" };
 
         private RectTransform canvasRoot, root, words;
-        private AvVector rail, furniture;
+        private AvVector rail;
         private ScopeText text;
         private readonly BrowCarets carets = new BrowCarets();
         private readonly char[] caption = new char[64], seen = new char[64], scratch = new char[16];
-        private int captionLen, seenLen = -1, drawnSig = int.MinValue;
+        private int captionLen, seenLen = -1, drawnSig = int.MinValue, drawnBoot = -1;
         private bool on, dirty;
-        private float lastK, drawnRefW, drawnLadder = -1f, ladderTop = 300f;
+        private float lastK, drawnRefW;
         private Color drawnInk;
+
+        /// <summary>How far the power-on has drawn the rail, 0..1 (1 in flight). Set by the board each frame; the rail repaints when the step (1/40) changes.</summary>
+        public float Boot = 1f;
 
         /// <summary>What the layer shows now (the sim probe reads it).</summary>
         internal bool Shown => root != null && root.gameObject.activeSelf;
@@ -49,7 +52,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
             root = CombatAlerts.Holder(canvasRoot, "BoscaliBrow");
-            furniture = AvVector.Create(root, "Furniture", FurnitureQuads);      // first: behind the rail
             rail = AvVector.Create(root, "Rail", RailQuads);
             words = CombatAlerts.Holder(root, "Words");
             text = new ScopeText(words, font, fontMaterial);
@@ -105,12 +107,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             CameraStateManager state = SceneSingleton<CameraStateManager>.i;
             Camera cam = state != null ? state.mainCamera : null;
             captionLen = BrowRail.Caption(caption, scopeMode, frame.Systems.NightVision, cam != null ? cam.fieldOfView : float.NaN);
-
-            // The right edge's ladder starts under the board when its box reaches that edge.
-            float bottom = 0f;
-            if (board != null && board.TryGetScreenBox(out float l, out float t, out float r, out float b) && r > l && Screen.height > 0 && r >= Screen.width - 40f)
-                bottom = b * 1080f / Screen.height;
-            ladderTop = BrowRail.LadderTop(bottom);
         }
 
         /// <summary>Every frame: show or hide, follow the screen's size and repaint when what is drawn changed; nothing else.</summary>
@@ -129,13 +125,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float refW = canvasRoot.rect.width / k;
             Color ink = VanillaHudStyle.Colours.AllClear;
             int sig = carets.Signature();
+            int step = Boot >= 1f ? CurveSegments + 1 : Mathf.Clamp((int)(Boot * CurveSegments), 0, CurveSegments);
             bool captionChanged = seenLen != captionLen || !SameCaption();
-            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && ladderTop == drawnLadder && ink == drawnInk) return;
-            Paint(refW, ink);
+            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && step == drawnBoot && ink == drawnInk) return;
+            Paint(refW, ink, step);
             dirty = false;
             drawnSig = sig;
             drawnRefW = refW;
-            drawnLadder = ladderTop;
+            drawnBoot = step;
             drawnInk = ink;
             System.Array.Copy(caption, seen, captionLen);
             seenLen = captionLen;
@@ -150,14 +147,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // Rail units (x from the centre line, y down from the top) to the holder's (y up from the centre).
         private static float Y(float railY) => 540f - railY;
 
-        private void Paint(float refW, Color ink)
+        /// <summary><paramref name="step"/>: how many of the rail's 40 segments the power-on has drawn so far (<c>CurveSegments + 1</c>: all of it, with its boresight mark, carets and caption).</summary>
+        private void Paint(float refW, Color ink, int step)
         {
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             Rgba c = ink.ToRgba();
+            bool whole = step > CurveSegments;
             AvQuadBuffer b = rail.Buffer;
             b.Clear();
             BrowRail.Point(0f, out float px, out float py);
-            for (int i = 1; i <= CurveSegments; i++)
+            for (int i = 1; i <= CurveSegments && i <= step; i++)
             {
                 BrowRail.Point(i / (float)CurveSegments, out float x, out float y);
                 AvStrokes.Line(b, px, Y(py), x, Y(y), CurveStroke, c);
@@ -165,12 +164,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             for (int i = 0; i < BrowRail.TickCount; i++)
             {
+                if (!whole && i / (float)(BrowRail.TickCount - 1) * CurveSegments > step) break;      // the ticks follow the line along as it draws
                 BrowRail.Tick(i, out float x, out float y, out float nx, out float ny, out bool major);
                 float len = major ? 10f : 5f;
                 AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.7f));
             }
-            Triangle(b, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
-            for (int i = 0; i < carets.Count; i++)
+            if (whole) Triangle(b, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
+            for (int i = 0; whole && i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
                 Triangle(b, k.X, k.Y + BrowRail.CaretTop, BrowRail.CaretHalf, BrowRail.CaretBase - BrowRail.CaretTop, Of(k.Tone, palette).ToRgba());
@@ -178,8 +178,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rail.Commit();
 
             text.Begin();
-            text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), true);
-            for (int i = 0; i < carets.Count; i++)
+            // Regular weight at the board's small-label size: bold with the glyph edge ran heavy and blobby.
+            if (whole) text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
+            for (int i = 0; whole && i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
                 string label = k.Label;
@@ -189,30 +190,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 text.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), k.LabelX, k.Y + BrowRail.LabelDrop - 540f, BrowRail.LabelPt, ScopeAlign.Center, Of(k.Tone, palette), true);
             }
             text.End();
-
-            PaintFurniture(refW, c.WithAlpha(FurnitureAlpha));
-        }
-
-        /// <summary>The glass: tick ladders down both sides (300..800 every 50, longer every 100), a small cross at the middle of each side, two short rules near the bottom. Everything on the left stays in the 12 px margin
-        /// left of the column zones, the right ladder starts under the board when it reaches that edge, so nothing crosses a zone.</summary>
-        private void PaintFurniture(float refW, Rgba c)
-        {
-            AvQuadBuffer b = furniture.Buffer;
-            b.Clear();
-            float left = -refW * 0.5f + 2f, right = refW * 0.5f - 2f;
-            for (int y = 300; y <= 800; y += 50)
-            {
-                float len = y % 100 == 0 ? 10f : 6f;
-                AvStrokes.Line(b, left, Y(y), left + len, Y(y), Stroke, c);
-                if (y >= ladderTop) AvStrokes.Line(b, right, Y(y), right - len, Y(y), Stroke, c);
-            }
-            AvStrokes.Line(b, left, Y(540f), left + 10f, Y(540f), Stroke, c);
-            AvStrokes.Line(b, left + 5f, Y(533f), left + 5f, Y(547f), Stroke, c);
-            AvStrokes.Line(b, right, Y(540f), right - 10f, Y(540f), Stroke, c);
-            AvStrokes.Line(b, right - 5f, Y(533f), right - 5f, Y(547f), Stroke, c);
-            AvStrokes.Line(b, -370f, Y(1070f), -310f, Y(1070f), Stroke, c.WithAlpha(c.A * 0.6f));
-            AvStrokes.Line(b, 310f, Y(1070f), 370f, Y(1070f), Stroke, c.WithAlpha(c.A * 0.6f));
-            furniture.Commit();
         }
 
         private static Color Of(BrowTone tone, VanillaHudStyle.Palette palette) =>

@@ -39,6 +39,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float lastK;
         private bool drawing;
 
+        /// <summary>How far the visor's power-on has filled the arcs, 0..1 (1 in flight): the lit segments are the real level times this, so they fill up from zero to their real values.</summary>
+        public float Boot = 1f;
+
         // The 10 Hz read: the HUD aircraft's fuel and the board's BINGO need.
         private float level = float.NaN, need;
         private bool hasNeed, bingo;
@@ -108,8 +111,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             Place(left, fuelArc, k);
             Place(right, throttleArc, k);
-            FuelLit = FlightArcs.Lit(level);
-            ThrottleLit = FlightArcs.Lit(throttle);
+            float fill = Mathf.Clamp01(Boot);
+            FuelLit = FlightArcs.Lit(level * fill);
+            ThrottleLit = FlightArcs.Lit(throttle * fill);
             int fuelPct = FlightArcs.Percent(level);
             float bingoAt = hasNeed ? need : float.NaN, jokerAt = hasNeed ? Mathf.Min(need + FuelEndurance.JokerMargin, 1f) : float.NaN;
             Color32 inkKey = ink, amberKey = amber;

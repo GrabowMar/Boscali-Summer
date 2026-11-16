@@ -85,8 +85,10 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Corners, v => board.Corners = v);
             ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
-            ToggleCell(flow, page, "VISOR BROW", "The curved rail at the top centre with bearing marks, and the faint frame ticks down the screen's sides. Cockpit view. Stays on with the board off.",
+            ToggleCell(flow, page, "VISOR FRAME", "The curved brow rail at the top centre with bearing marks, and the visor's rim: corner lines, side ticks and the etched line of identity along the bottom edge. Cockpit view. Stays on with the board off.",
                 () => board.Brow, v => board.Brow = v);
+            ToggleCell(flow, page, "VISOR POWER-ON", "The visor boots when you take the seat: a self-test of what the aircraft really reports, then the zones come alive one by one. A respawn only re-syncs. A real warning cuts it short. Cockpit view.",
+                () => board.Boot, v => board.Boot = v);
             ToggleCell(flow, page, "FUEL AND THROTTLE ARCS", "Two segmented arcs hugging the reticle in place of the game's plain fuel and throttle arcs. Cockpit view. Stays on with the board off.",
                 () => board.Arcs, v => board.Arcs = v);
 

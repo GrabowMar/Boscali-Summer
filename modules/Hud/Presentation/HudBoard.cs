@@ -68,6 +68,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ArcsHud arcs;
         private float arcsAt = float.NegativeInfinity;
         private bool arcsExternal;
+        // The visor's rim (corner lines, side ticks, the etched line) and its power-on (2026-11-16, "HELMET ON"): the boot runs once per aircraft the pilot takes the seat of (full the first time of the session, a re-sync after),
+        // is cut short at once by a real warning or by anything that is not the cockpit view, and while it runs sets how far the zones below have come alive (see StepBoot).
+        private VisorRim rim;
+        private readonly VisorBootHud boot = new VisorBootHud();
+        private Aircraft bootedFor, identityFor;
+        private bool everBooted, bootApplied, bootWarning;
+        private string identityCallsign = "", identityAirframe = "";
+        private float nextIdentity;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
@@ -103,6 +111,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The segmented fuel and throttle arcs (the sim probe in <c>HudAutomation</c> reads it; null until first wanted).</summary>
         internal ArcsHud Arcs => arcs;
+
+        /// <summary>The visor's rim and power-on (the sim probe in <c>HudAutomation</c> reads them).</summary>
+        internal VisorRim Rim => rim;
+        internal VisorBootHud BootHud => boot;
+        /// <summary>Why the last boot ended: "finished", "warning" or "not allowed" (the sim probe reads it).</summary>
+        internal string BootEnd { get; private set; } = "";
+
+        /// <summary>The sim's hook: start the power-on now in <paramref name="mode"/> on the HUD's aircraft, with the real state of this moment. False: no aircraft, or not the cockpit view.</summary>
+        internal bool RestartBoot(BootMode mode)
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null || aircraft.disabled || arcsExternal) return false;
+            StartBoot(aircraft, mode);
+            return true;
+        }
 
         private void OnEnable()
         {
@@ -166,8 +190,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The centre combat layer's blink, ring and pop, every frame (its data comes with the 10 Hz read).
             try { alerts?.Frame(alertAircraft, threats, this, Time.unscaledTime); }
             catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
+            // The power-on's clock first: how far each zone has come alive is set before they draw this frame. A throw ends the boot and snaps everything to flying state.
+            try { StepBoot(); }
+            catch (Exception e) { boot.Abort(); ReleaseBoot(); PatchGuard.Report("Hud.Boot", e); }
             try { brow?.Frame(); }
             catch (Exception e) { brow?.Hide(); PatchGuard.Report("Hud.Brow.Frame", e); }
+            try { rim?.Frame(); }
+            catch (Exception e) { rim?.Hide(); PatchGuard.Report("Hud.Rim.Frame", e); }
             // The arcs, every frame and BEFORE anything below can fail: they hide the game's own two gauges only in the frame they are drawn, and give them back in the frame they are not wanted.
             try { arcs?.Frame(ArcsWanted(out Aircraft arcsAircraft), arcsAircraft); }
             catch (Exception e) { arcs?.Fail(); PatchGuard.Report("Hud.Arcs.Frame", e); }
@@ -191,7 +220,79 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             aircraft = combat != null ? combat.aircraft : null;
             if (aircraft == null || aircraft.disabled || arcsExternal || NativeTakeover.Stale(Time.unscaledTime, arcsAt)) return false;
             if (!(settings != null ? settings.Arcs.Value : options.Arcs)) return false;
+            // The power-on hands the arcs over when they start to fill: until then the game's own gauges are the ones on the screen (never a frame with neither).
+            if (boot.Active && boot.Progress(BootGroup.Arcs) <= 0f) return false;
             return BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+        }
+
+        /// <summary>The power-on may run this frame: the option (read live), a live HUD aircraft, the cockpit view, an overlay may show (no pause, map or cinematic) and the pilot has not asked for reduced motion.</summary>
+        private bool BootAllowed(Aircraft aircraft, bool external) =>
+            (settings != null ? settings.Boot.Value : options.Boot) && aircraft != null && !aircraft.disabled && !external && !NOAvionics.AvFxDriver.ReducedMotion &&
+            BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+
+        /// <summary>Every frame: advance the boot, cut it when it is no longer allowed or a real warning is up, and hand each zone how far it has come alive; when it ends give every zone its flying state back, once.</summary>
+        private void StepBoot()
+        {
+            if (!boot.Active) { if (bootApplied) ReleaseBoot(); return; }
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            bool warning = bootWarning || (alerts != null && alerts.WarningUp);
+            bool allowed = BootAllowed(aircraft, arcsExternal) && aircraft == bootedFor;
+            if (!boot.Step(Time.unscaledTime, allowed, warning))
+            {
+                BootEnd = warning ? "warning" : !allowed ? "not allowed" : "finished";      // the sim probe reads why the last boot ended
+                ReleaseBoot();
+                return;
+            }
+            if (brow != null) brow.Boot = boot.Progress(BootGroup.Brow);
+            if (rim != null) rim.Boot = boot.Progress(BootGroup.Rim);
+            if (arcs != null) arcs.Boot = boot.Progress(BootGroup.Arcs);
+            float left = boot.Alpha(BootGroup.Left);
+            panel?.ApplyBoot(boot.Alpha(BootGroup.Board), left);
+            LeftHudStack.BootAlpha = left;      // the COMMS block (the Chatter module's) follows the left column
+            bootApplied = true;
+        }
+
+        /// <summary>The boot is over (done, cut or failed): every zone as in flight.</summary>
+        private void ReleaseBoot()
+        {
+            if (brow != null) brow.Boot = 1f;
+            if (rim != null) rim.Boot = 1f;
+            if (arcs != null) arcs.Boot = 1f;
+            panel?.ApplyBoot(1f, 1f);
+            LeftHudStack.BootAlpha = 1f;
+            bootApplied = false;
+        }
+
+        /// <summary>The power-on, with the real state of this moment: what each self-test line will say is read here, once.</summary>
+        private void StartBoot(Aircraft aircraft, BootMode mode)
+        {
+            var inputs = new BootInputs
+            {
+                Hmd = aircraft != null,
+                HasNet = GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer,
+                Online = GameManager.gameState == GameState.Multiplayer,
+                HasRadar = frame.Systems.RadarEmitting.HasValue, RadarOn = frame.Systems.RadarEmitting == true,
+                HasFuel = frame.Fuel.Valid, Fuel = frame.Fuel.Level, Bingo = frame.Fuel.Bingo,
+                Field = frame.Fuel.Field, FieldM = frame.Fuel.FieldM, Metric = frame.Units == NOAvionics.AvUnits.Metric,
+                Cm = frame.Cm, CmCount = frame.CmCount,
+            };
+            if (ScopeFeeds.TryRead(out StoresScope stores)) { inputs.Stations = stores.StationCount; inputs.HasSafety = stores.Selected >= 0; inputs.Safe = stores.Safe; }
+            RefreshIdentity(aircraft, true);
+            boot.Begin(mode, Time.unscaledTime, inputs, identityCallsign);
+            bootedFor = aircraft;
+            everBooted = true;
+        }
+
+        /// <summary>The pilot's callsign and the airframe's type for the rim and the closing line: read when the aircraft changes, and every couple of seconds while the callsign is still unknown.</summary>
+        private void RefreshIdentity(Aircraft aircraft, bool force)
+        {
+            float now = Time.unscaledTime;
+            if (!force && aircraft == identityFor && (identityCallsign != "PILOT" || now < nextIdentity)) return;
+            identityFor = aircraft;
+            identityCallsign = VisorIdentity.Callsign();
+            identityAirframe = VisorIdentity.Airframe(aircraft);
+            nextIdentity = now + 2f;
         }
 
         /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and every backdrop of the mod's HUD (<see cref="HudSprites.Backdrop"/>).</summary>
@@ -320,8 +421,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 int scope = options.ScopeMode == BoardScopeMode.Auto ? 0 : options.ScopeMode == BoardScopeMode.Manual ? 1 : 2;
                 brow.Read(showBrow && brow.Ensure(), hudAircraft, frame, scope, this);
                 TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
+                // The rim shares the brow's switch and its view: the frame of the same glass.
+                rim ??= new VisorRim();
+                RefreshIdentity(hudAircraft, false);
+                rim.Read(showBrow && rim.Ensure(), identityCallsign, identityAirframe, hudAircraft != null ? now - bootStart : -1f, this);
             }
             catch (Exception e) { PatchGuard.Report("Hud.Brow", e); }
+
+            // The visor's power-on: the first time the cockpit HUD is up for an aircraft (full the first time of the session, a re-sync after a respawn or an aircraft change). A real warning on the screen (a missile, a fire)
+            // is what cuts a running boot; it is seen here at 10 Hz and again by the combat layer's own board every frame (StepBoot).
+            try
+            {
+                bootWarning = frame.Threat.Missiles > 0 || (frame.Damage.Flags & DamageFlags.Fire) != 0;
+                if (hudAircraft == null) bootedFor = null;
+                else if (hudAircraft != bootedFor)
+                {
+                    if (boot.Active) { boot.Abort(); ReleaseBoot(); }
+                    if (BootAllowed(hudAircraft, thirdPerson || missileCam))
+                    {
+                        if (bootWarning || (alerts != null && alerts.WarningUp)) bootedFor = hudAircraft;      // a warning is up as the pilot sits down: no boot for this aircraft
+                        else StartBoot(hudAircraft, VisorBoot.ModeFor(everBooted));
+                    }
+                }
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.BootStart", e); }
 
             // The arcs' data (fuel level, the BINGO need); the arcs themselves run every frame in LateUpdate.
             try
@@ -487,6 +610,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             brow = null;
             arcs?.Destroy();
             arcs = null;
+            rim?.Destroy();
+            rim = null;
+            boot.Destroy();
+            bootedFor = identityFor = null;
+            everBooted = bootApplied = bootWarning = false;
+            identityCallsign = identityAirframe = "";
             TopCentre.Lift = 0f;
             nextRead = 0;
             targetReadout.Release();
@@ -528,6 +657,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alerts?.Hide();
             alertAircraft = null;
             brow?.Hide();
+            rim?.Hide();
+            boot.Abort();
+            ReleaseBoot();
             arcs?.Down();
             TopCentre.Lift = 0f;
             externalHud.Release();

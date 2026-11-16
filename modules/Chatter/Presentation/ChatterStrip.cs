@@ -179,6 +179,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             // The maximised map owns the screen (its left host slot sits where this column is): stand down under it; rows keep their clocks.
             bool visible = used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
             host.SetVisible(visible);
+            if (host.Group != null && host.Group.alpha != LeftHudStack.BootAlpha) host.Group.alpha = LeftHudStack.BootAlpha;      // the visor's power-on brings the column up with the rest
             if (!visible) { LeftHudStack.CommsBottom = 0f; return; }
             RefreshFace();
             float fit = Mathf.Max(0.1f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));

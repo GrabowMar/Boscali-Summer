@@ -55,6 +55,8 @@ namespace BoscaliSummer.Core.Contracts
         bool Brow { get; set; }
         /// <summary>The segmented fuel and throttle arcs round the reticle in place of the game's plain ones. Cockpit view only.</summary>
         bool Arcs { get; set; }
+        /// <summary>The visor's power-on sequence when the pilot takes the seat: a full boot the first time, a short re-sync after a respawn. Cockpit view only.</summary>
+        bool Boot { get; set; }
         /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to 0.25.</summary>
         float TextEdge { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>

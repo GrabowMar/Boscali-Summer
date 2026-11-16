@@ -100,9 +100,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (routeRoot != null) return true;
             if (canvasRect == null) return false;
             routeRoot = CornerRoot("BoscaliRoute");
-            var group = routeRoot.gameObject.AddComponent<CanvasGroup>();
-            group.ignoreParentGroups = true;
-            group.interactable = group.blocksRaycasts = false;
+            routeGroup = routeRoot.gameObject.AddComponent<CanvasGroup>();
+            routeGroup.ignoreParentGroups = true;
+            routeGroup.interactable = routeGroup.blocksRaycasts = false;
             routeSurface = Pinned(routeRoot, "Route", false);
             routeVector = AvVector.Create(routeSurface, "Strokes", RouteQuads);
             routeText = new ScopeText(Holder(routeSurface, "Words"), font, fontMaterial);

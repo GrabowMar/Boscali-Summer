@@ -33,6 +33,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> CentreAlerts { get; }
         public ConfigEntry<bool> Brow { get; }
         public ConfigEntry<bool> Arcs { get; }
+        public ConfigEntry<bool> Boot { get; }
         public ConfigEntry<float> TextEdge { get; }
 
         public HudSettings(ConfigFile config)
@@ -117,10 +118,13 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 "Combat alerts at the centre of the screen: a WARNING banner at the top centre (MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL), chevrons round the reticle pointing at every missile inbound, and HIT / DESTROYED / MISSED callouts under it. It stays when the board is switched off." + live);
 
             Brow = config.Bind(section, "Brow", d.Brow,
-                "The visor's brow rail at the top centre (a curved scale with bearing marks for missiles inbound, radars on you, an ace on the hunt, the objective, the runway, the tanker and the landing zone, and a one-line status caption) and the faint frame ticks down the screen's sides. Cockpit view only." + live);
+                "The visor's brow rail at the top centre (a curved scale with bearing marks for missiles inbound, radars on you, an ace on the hunt, the objective, the runway, the tanker and the landing zone, and a one-line status caption) and the visor frame: thin rim lines in the screen's corners, tick marks down its sides and a line of etched text along the bottom edge (helmet type, your callsign, aircraft and sortie time). Cockpit view only." + live);
 
             Arcs = config.Bind(section, "Arcs", d.Arcs,
                 "Two segmented arcs hugging the reticle, fuel on the left and throttle on the right, in place of the game's plain ones (the game's own come back the moment this is off, or the view is not the cockpit). Cockpit view only." + live);
+
+            Boot = config.Bind(section, "Boot", d.Boot,
+                "The visor powers on when you take the seat: a short self-test of what the aircraft really reports, the visor's zones coming alive one after another, then VISOR ONLINE. The first aircraft of a session boots in full (about 3 seconds), a respawn only re-syncs (1 second). A real warning cuts it short at once. Cockpit view only." + live);
 
             TextEdge = config.Bind(section, "TextEdge", d.TextEdge,
                 new ConfigDescription("Width of the hair-thin dark edge round every letter of the mod's HUD text, so small words stay sharp on bright sky and cloud; 0 draws none." + live,
@@ -161,6 +165,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.CentreAlerts = CentreAlerts.Value;
             into.Brow = Brow.Value;
             into.Arcs = Arcs.Value;
+            into.Boot = Boot.Value;
             into.TextEdge = TextEdge.Value;
             into.Sanitize();
         }
@@ -188,6 +193,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
         bool ITacBoardSettings.Brow { get => Brow.Value; set => Brow.Value = value; }
         bool ITacBoardSettings.Arcs { get => Arcs.Value; set => Arcs.Value = value; }
+        bool ITacBoardSettings.Boot { get => Boot.Value; set => Boot.Value = value; }
         float ITacBoardSettings.TextEdge { get => TextEdge.Value; set => TextEdge.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
@@ -197,7 +203,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             {
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
-                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, TextEdge,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, TextEdge,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

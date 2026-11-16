@@ -113,6 +113,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             mapShadow = ShadeChild<Image>(cornerShade, "MapBackdrop");
             HudSprites.Slice(mapShadow, HudSprites.Feather);
             cornerFurniture = CornerRoot("BoscaliCornerFurniture");
+            cornerGroup = cornerFurniture.gameObject.AddComponent<CanvasGroup>();
+            cornerGroup.ignoreParentGroups = true;
+            cornerGroup.interactable = cornerGroup.blocksRaycasts = false;
             cornerSurface = Pinned(cornerFurniture, "Corners", false);
             cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads);
             cornerText = new ScopeText(Holder(cornerSurface, "Words"), font, fontMaterial);
