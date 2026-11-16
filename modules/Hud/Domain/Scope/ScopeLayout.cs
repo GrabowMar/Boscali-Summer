@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Lamps;
         /// <summary>Each page slot's current height in board units, header included (animated up to <see cref="ScopeLayout.Full"/> by the wipe); 0: no pages.</summary>
         public float PageH;
-        /// <summary>The page slots, 1 to <see cref="ScopeLayout.MaxSlots"/> (0 reads as 1 while <see cref="PageH"/> is not 0), laid out as <see cref="ScopeLayout.Columns"/> says.</summary>
+        /// <summary>The page slots, 1 to <see cref="ScopeLayout.MaxSlots"/> (0 reads as 1 while <see cref="PageH"/> is not 0), stacked in one column.</summary>
         public int PageCount;
         /// <summary>The SYSTEMS block under the lamp line (the aircraft's compact SYSTEMS strip, always shown while there is an aircraft): <see cref="ScopeLayout.Compact"/> or 0.</summary>
         public float StatusH;
@@ -43,19 +43,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Width, Height;
         public BoardRect Hero, Pwr, Exp, Lamps, Gauges, Ticker, Status;
         /// <summary>The page slots in slot order (no size: no such slot), and <see cref="Page"/>, the box round all of them (no size: no pages).</summary>
-        public BoardRect Slot0, Slot1, Slot2, Slot3, Page;
+        public BoardRect Slot0, Slot1, Page;
 
         /// <summary>The blocks, in the order of <see cref="Block"/>: the shade's cloud field (<see cref="ShadeField"/>) is the strongest of their fall-offs.</summary>
-        public const int BlockCount = 11;
+        public const int BlockCount = 9;
 
-        public readonly BoardRect Slot(int i) => i == 0 ? Slot0 : i == 1 ? Slot1 : i == 2 ? Slot2 : i == 3 ? Slot3 : default;
+        public readonly BoardRect Slot(int i) => i == 0 ? Slot0 : i == 1 ? Slot1 : default;
 
         public void SetSlot(int i, BoardRect r)
         {
             if (i == 0) Slot0 = r;
             else if (i == 1) Slot1 = r;
-            else if (i == 2) Slot2 = r;
-            else if (i == 3) Slot3 = r;
         }
 
         public readonly BoardRect Block(int i)
@@ -71,8 +69,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 case 6: return Ticker;
                 case 7: return Status;
                 case 8: return Slot1;
-                case 9: return Slot2;
-                case 10: return Slot3;
                 default: return default;
             }
         }
@@ -104,14 +100,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>PWR BUS without its cost row is <see cref="CostRow"/> shorter; EXPENDABLES without its shelf row is <see cref="ExpShelfRow"/> shorter (LAYOUT.md 3).</summary>
         public const float CostRow = 18f, ExpShelfRow = 19f;
         public const float WingX = 476f, WingW = 440f;
-        public const float PageGapX = 12f;
         public const float LampH = 12f;
         /// <summary>The lamp line sits at the top of the caption row of the blocks beside it (y 6); the page starts under it (y 24) whether or not the lamp line is there.</summary>
         public const float LampToPage = 6f, WingBodyY = BlockTop + LampH + LampToPage;
         /// <summary>Between blocks that stand beside or above each other (HERO and SAT 12 in WIDE; PWR BUS and EXPENDABLES, HERO and SAT in STACK).</summary>
         public const float BlockGap = 10f;
         /// <summary>What hangs under the page: the gauge line 8 under it, the ticker 8 under it or 6 under the gauge line.</summary>
-        public const float PageGap = 8f, GaugeGap = 6f;
+        public const float PageGap = 16f, GaugeGap = 6f;
         /// <summary>The gauge line: one line of 12, or two with a row pitch of 18; the gauges are <see cref="GaugeSpace"/> apart. The ticker is one line of 12.</summary>
         public const float GaugeLine1 = 12f, GaugeLine2 = 30f, GaugePitch = 18f, GaugeSpace = 16f, TickerH = 12f;
 
@@ -125,27 +120,25 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float Head = 28f, HeadCompact = 22f, Strip = 26f, ShelfRow = 18f;
         public const float WipeSeconds = 0.18f;
 
-        /// <summary>The most page slots: two across and two down.</summary>
-        public const int MaxSlots = 4;
+        /// <summary>The most page slots: two, one above the other.</summary>
+        public const int MaxSlots = 2;
 
-        /// <summary>The page columns for <paramref name="pages"/> slots, never more than two across or two down: WIDE fills a row first (two pages side by side), STACK a column first (two one above the other).</summary>
-        public static int Columns(BoardLayout layout, int pages) => pages <= 1 || (layout == BoardLayout.Stack && pages == 2) ? 1 : 2;
+        /// <summary>The page columns: always one (the spine's), in WIDE and in STACK; kept as a function so callers say what they mean.</summary>
+        public static int Columns(BoardLayout layout, int pages) => 1;
 
         /// <summary>
-        /// The blocks of a board. Everything but the stores (WIDE) and the second page column hangs in the SPINE, the right-hand 440 column under the box's top-right corner: lamp line, SYSTEMS, the pages,
-        /// gauge line, ticker. The pages are a grid of at most 2 x 2 in slot order; a row that is not full sits against the right edge, under the spine. One column starts right under SYSTEMS; a row of two
-        /// starts under the stores too. SYSTEMS never moves with the pages, and the pages never move with what hangs under them.
+        /// The blocks of a board. Everything but the stores (WIDE) hangs in the SPINE, the right-hand 440 column under the box's top-right corner: lamp line, SYSTEMS, the pages,
+        /// gauge line, ticker. The pages are one column of at most two, in slot order, right under SYSTEMS. SYSTEMS never moves with the pages, and the pages never move with what hangs under them.
         /// </summary>
         public static BoardGeometry Compute(in BoardBlocks b)
         {
             bool stack = b.Layout == BoardLayout.Stack;
             bool hero = b.Hero && !b.StoresHidden, pwr = b.Pwr && !b.StoresHidden, exp = b.Exp && !b.StoresHidden;
             int count = b.PageH > 0f ? Math.Max(1, Math.Min(MaxSlots, b.PageCount)) : 0;
-            int cols = Columns(b.Layout, count), rows = (count + cols - 1) / cols;
-            float inset = stack ? StackX : 0f, pitch = WingW + PageGapX;
+            float inset = stack ? StackX : 0f;
             float headW = stack ? StackInnerW : b.StoresHidden ? WingW : WideW;
-            var g = new BoardGeometry { Width = inset * 2f + Math.Max(headW, cols * WingW + (cols - 1) * PageGapX) };
-            float spineX = g.Width - inset - WingW, storesX = spineX - WingX, storesBottom = 0f, y;
+            var g = new BoardGeometry { Width = inset * 2f + headW };
+            float spineX = g.Width - inset - WingW, storesX = spineX - WingX, y;
             if (stack)
             {
                 y = BlockTop;
@@ -163,21 +156,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 if (hero) g.Hero = new BoardRect(storesX + HeroX, BlockTop, HeroW, HeroH);
                 if (pwr) g.Pwr = new BoardRect(storesX + SatX, BlockTop, SatW, SatH - CostRow);
                 if (exp) g.Exp = new BoardRect(storesX + SatX, pwr ? g.Pwr.Bottom + BlockGap : BlockTop, SatW, b.NoShelves ? SatH - ExpShelfRow : SatH);
-                storesBottom = Math.Max(g.Hero.Bottom, Math.Max(g.Pwr.Bottom, g.Exp.Bottom));
                 if (b.Lamps) g.Lamps = new BoardRect(spineX, BlockTop, WingW, LampH);
                 y = WingBodyY;
             }
             if (b.StatusH > 0f) { g.Status = new BoardRect(spineX, y, WingW, b.StatusH); y = g.Status.Bottom + PageGap; }
             if (count > 0)
             {
-                float top = cols > 1 && storesBottom > 0f ? Math.Max(y, storesBottom + BlockGap) : y, left = spineX - (cols - 1) * pitch;
-                for (int i = 0; i < count; i++)
-                {
-                    int row = i / cols, inRow = Math.Min(cols, count - row * cols), col = cols - inRow + i % cols;
-                    g.SetSlot(i, new BoardRect(left + col * pitch, top + row * (b.PageH + PageGap), WingW, b.PageH));
-                }
-                float x0 = count > 1 ? left : spineX;
-                g.Page = new BoardRect(x0, top, spineX + WingW - x0, rows * b.PageH + (rows - 1) * PageGap);
+                for (int i = 0; i < count; i++) g.SetSlot(i, new BoardRect(spineX, y + i * (b.PageH + PageGap), WingW, b.PageH));
+                g.Page = new BoardRect(spineX, y, WingW, count * b.PageH + (count - 1) * PageGap);
                 y = g.Page.Bottom + PageGap;
             }
             if (b.GaugeLines > 0) { g.Gauges = new BoardRect(spineX, y, WingW, b.GaugeLines > 1 ? GaugeLine2 : GaugeLine1); y = g.Gauges.Bottom + GaugeGap; }

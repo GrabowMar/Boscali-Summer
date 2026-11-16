@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public static readonly string[] BoardShades = { "OFF", "LOW", "MED", "HIGH" }, BoardSizes = { "SMALL", "NORMAL", "LARGE" }, Ghosts = { "OFF", "FAINT", "CLEAR" };
         public static readonly float[] ShadeSteps = { 0f, 0.35f, 0.7f, 1f }, SizeSteps = { 0.8f, 1f, 1.2f }, GhostSteps = { 0f, 0.35f, 0.8f };
 
-        public static readonly string[] BoardPageCounts = { "1", "2", "3", "4" };
+        public static readonly string[] BoardPageCounts = { "1", "2" };
         /// <summary>The manual page choices in BoardPage order (SYSTEMS keeps its place but is never offered: the board always shows it), the board's major elements and the cabin effects.
         /// The Runtime adapter maps each part slug to its option; a world lists the parts that are on.</summary>
         public static readonly MenuSwitch[] BoardPages =

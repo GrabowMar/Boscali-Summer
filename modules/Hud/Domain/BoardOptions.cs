@@ -46,8 +46,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Scale, Shade;
         public BoardDeclutter Declutter;
         public BoardScopeMode ScopeMode;
-        /// <summary>Page slots: a 2 x 2 grid at most (<see cref="ScopeLayout.Columns"/>).</summary>
-        public const int MaxPages = 4;
+        /// <summary>Page slots: two at most, one column (Page3 and Page4 stay in old configs but are never shown).</summary>
+        public const int MaxPages = ScopeLayout.MaxSlots;
         public int PageCount;
         /// <summary>The slot choices. Never <see cref="BoardPage.Systems"/>: SYSTEMS is the board's own always-on block, not a page choice (<see cref="Sanitize"/>).</summary>
         public BoardPage Page1, Page2, Page3, Page4;
