@@ -43,7 +43,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     if (roots[r] == null) continue;
                     roots[r].GetComponentsInChildren(true, graphics);
-                    for (int i = 0; i < graphics.Count; i++) if (graphics[i] != null && graphics[i].material == ui) graphics[i].material = null;
+                    for (int i = 0; i < graphics.Count; i++) if (IsLineArt(graphics[i]) && graphics[i].material == ui) graphics[i].material = null;
                 }
                 graphics.Clear();
                 nextScan = 0f;
@@ -76,6 +76,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root != null && !roots.Contains(root)) roots.Add(root);
         }
 
+        // TMP owns its labels and fallback submeshes; their material getter may clone a null shared material.
+        private static bool IsLineArt(Graphic graphic) => graphic != null && !(graphic is TMP_Text) && !(graphic is TMP_SubMeshUI);
+
         /// <summary>
         /// Twice a second: every graphic under an attached holder that still has the stock UI material takes the glitch material (a graphic with a material of its own, and every label, is left alone).
         /// Holders that were destroyed drop out. No allocation: one reused list.
@@ -93,7 +96,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 for (int i = 0; i < graphics.Count; i++)
                 {
                     Graphic g = graphics[i];
-                    if (g == null || g is TMP_Text) continue;
+                    if (!IsLineArt(g)) continue;
                     if (g.material == stock) g.material = ui;
                 }
             }
