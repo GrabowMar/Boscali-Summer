@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             var blocks = new BoardBlocks
             {
                 Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
-                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = false,      // the notice is the left column's NOTICE line (StatusPanel.Cues.cs), not a board row
+                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipe is heading: the size, the anchor and the shade go by it, so pages coming in never pump the scale or move the box.

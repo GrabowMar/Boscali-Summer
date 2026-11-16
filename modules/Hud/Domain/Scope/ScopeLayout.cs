@@ -34,14 +34,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float StatusH;
         /// <summary>0: no gauge is live; else the lines the live gauges pack into, 1 or 2 (<see cref="GaugeRow.Lay"/>).</summary>
         public int GaugeLines;
-        public bool Ticker;
     }
 
     /// <summary>The box (its origin is its top-left corner, <see cref="Width"/> x <see cref="Height"/>) and the rectangle of every block in it; 0 high: no block.</summary>
     internal struct BoardGeometry
     {
         public float Width, Height;
-        public BoardRect Hero, Pwr, Exp, Lamps, Gauges, Ticker, Status;
+        public BoardRect Hero, Pwr, Exp, Lamps, Gauges, Status;
         /// <summary>The page slots in slot order (no size: no such slot), and <see cref="Page"/>, the box round all of them (no size: no pages).</summary>
         public BoardRect Slot0, Slot1, Page;
 
@@ -66,7 +65,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 case 3: return Lamps;
                 case 4: return Slot0;
                 case 5: return Gauges;
-                case 6: return Ticker;
                 case 7: return Status;
                 case 8: return Slot1;
                 default: return default;
@@ -105,10 +103,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float LampToPage = 6f, WingBodyY = BlockTop + LampH + LampToPage;
         /// <summary>Between blocks that stand beside or above each other (HERO and SAT 12 in WIDE; PWR BUS and EXPENDABLES, HERO and SAT in STACK).</summary>
         public const float BlockGap = 10f;
-        /// <summary>What hangs under the page: the gauge line 8 under it, the ticker 8 under it or 6 under the gauge line.</summary>
+        /// <summary>What hangs under the page: the gauge line 8 under it.</summary>
         public const float PageGap = 16f, GaugeGap = 6f;
-        /// <summary>The gauge line: one line of 12, or two with a row pitch of 18; the gauges are <see cref="GaugeSpace"/> apart. The ticker is one line of 12.</summary>
-        public const float GaugeLine1 = 12f, GaugeLine2 = 30f, GaugePitch = 18f, GaugeSpace = 16f, TickerH = 12f;
+        /// <summary>The gauge line: one line of 12, or two with a row pitch of 18; the gauges are <see cref="GaugeSpace"/> apart.</summary>
+        public const float GaugeLine1 = 12f, GaugeLine2 = 30f, GaugePitch = 18f, GaugeSpace = 16f;
 
         // ---- LAYOUT.md 4 (STACK): box 448, every block 440 wide at x 4 (HERO and the lamp line, page, gauges, ticker), the SAT blocks 216 wide in two halves.
         public const float StackX = 4f, StackInnerW = 440f;
@@ -167,7 +165,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 y = g.Page.Bottom + PageGap;
             }
             if (b.GaugeLines > 0) { g.Gauges = new BoardRect(spineX, y, WingW, b.GaugeLines > 1 ? GaugeLine2 : GaugeLine1); y = g.Gauges.Bottom + GaugeGap; }
-            if (b.Ticker) g.Ticker = new BoardRect(spineX, y, WingW, TickerH);
 
             for (int i = 0; i < BoardGeometry.BlockCount; i++)
             {

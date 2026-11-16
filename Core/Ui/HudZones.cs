@@ -33,7 +33,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Log: side = Side.Left; x = 12; y = 12; w = 562; h = 101; break;
                 case HudZone.Comms: side = Side.Left; x = 12; y = 129; w = 562; h = 154; break;
                 case HudZone.Cue: side = Side.Left; x = 12; y = 299; w = 281; h = 96; break;
-                case HudZone.Notice: side = Side.Left; x = 12; y = 411; w = 281; h = 16; break;
+                case HudZone.Notice: side = Side.Left; x = 12; y = 411; w = 562; h = 16; break;
                 case HudZone.Route: side = Side.Left; x = 12; y = 443; w = 281; h = 133; break;
                 case HudZone.TargetCam: side = Side.Left; x = 12; y = 592; w = 281; h = 200; break;
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
@@ -52,7 +52,7 @@ namespace BoscaliSummer.Core.Ui
             Base(zone, out Side side, out float x, out float y, out float w, out float h);
             if (side == Side.Right) x = refW - (FullWidth - x);
             else if (side == Side.Centre) x = refW * 0.5f + (x - 960f);
-            if (zone == HudZone.Log || zone == HudZone.Comms)
+            if (zone == HudZone.Log || zone == HudZone.Comms || zone == HudZone.Notice)
             {
                 float laneLeft = refW * 0.5f - TopCentre.Width * 0.5f;
                 w = System.Math.Max(NarrowMin, System.Math.Min(WideLog, laneLeft - Gutter - Margin));
