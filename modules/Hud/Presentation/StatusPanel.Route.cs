@@ -162,12 +162,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private const float RowMid = RouteLayout.RowH * 0.5f;
 
-        /// <summary>A row: the label DIM at the left, the value (14 bold) and its unit (DIM) at the right edge of <paramref name="r"/>. The value is a scratch span: it is drawn by this very call.</summary>
+        /// <summary>A row: the label in full ink at the left, the value (14 bold) and its unit (full ink) at the right edge of <paramref name="r"/>. The value is a scratch span: it is drawn by this very call.</summary>
         private static void RouteRow(ScopeCanvas g, in BoardRect r, string label, ReadOnlySpan<char> value, string unit, ScopeTone tone)
         {
             float y = r.Y + RowMid, x = r.Right;
-            if (!string.IsNullOrEmpty(unit)) x -= g.Text(unit, r.Right, y, Dim, 12f, ScopeAlign.Right);
-            g.Text(label, r.X, y, Dim);
+            if (!string.IsNullOrEmpty(unit)) x -= g.Text(unit, r.Right, y, Ink, 12f, ScopeAlign.Right);
+            g.Text(label, r.X, y, Ink);
             g.Text(value, x, y, tone, 14f, ScopeAlign.Right, true);
         }
 
@@ -281,7 +281,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (off <= 3) g.Text("ON THE NOSE", RouteLayout.W, ny, inside ? Hi : Ink, 14f, ScopeAlign.Right, true);
                 else g.Text(ScopeStr.Cat(d.BearingDeg > 0f ? "STEER R " : "STEER L ", off, "°"), RouteLayout.W, ny, off > 90 ? Amber : Ink, 14f, ScopeAlign.Right, true);
             }
-            else if (!d.UsesLandingZone || !d.ZoneAvailable) g.Text("NATIVE AIM", 0f, ny, Dim, 14f, ScopeAlign.Left, true);
+            else if (!d.UsesLandingZone || !d.ZoneAvailable) g.Text("NATIVE AIM", 0f, ny, Ink, 14f, ScopeAlign.Left, true);
             else g.Text("SET DROP ZONE", 0f, ny, Amber, 14f, ScopeAlign.Left, true);
 
             // Row 3: how far a release from here reaches.
@@ -347,7 +347,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float rx = DialX - 24f;
                 bool low = ObjectiveMath.DeadlineLow(d.Left);
                 float cw = g.Text(OpsScopeWords.Clock(d.Left), rx, ny, low ? Amber : Hi, 16f, ScopeAlign.Right, true);
-                g.Text("DUE", rx - cw - 6f, ny, Dim, 12f, ScopeAlign.Right);
+                g.Text("DUE", rx - cw - 6f, ny, Ink, 12f, ScopeAlign.Right);
             }
 
             // Row 3: the nearest ring and whether the pilot stands in its reach.
@@ -356,20 +356,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int ring = NearestRing(d);
             if (ring < 0)
             {
-                g.Text("AIR DEF", 0f, y3, Dim);
+                g.Text("AIR DEF", 0f, y3, Ink);
                 g.Text("NONE KNOWN", RouteLayout.W, y3, Ink, 12f, ScopeAlign.Right);
             }
             else
             {
                 SamExposure e = ObjectiveMath.Expose(d.Rings[ring], d.OwnX, d.OwnZ, d.OwnAgl);
-                g.Text(ObjectiveMath.Kind(d.Rings[ring].Kind), 0f, y3, Dim);
+                g.Text(ObjectiveMath.Kind(d.Rings[ring].Kind), 0f, y3, Ink);
                 g.Text(e.Inside ? "EXPOSED" : "MASKED", 72f, y3, e.Inside ? Amber : Ink, 12f, ScopeAlign.Left, e.Inside);
-                g.Text(ScopeStr.Distance("", e.DistanceM, u, 8), RouteLayout.W, y3, e.Inside ? Amber : Dim, 12f, ScopeAlign.Right);
+                g.Text(ScopeStr.Distance("", e.DistanceM, u, 8), RouteLayout.W, y3, e.Inside ? Amber : Ink, 12f, ScopeAlign.Right);
             }
 
             // Row 4: the zone's radius, and what keeps the hold from counting (or the phase's progress).
             float y4 = RouteLayout.Row(4).Y + RowMid;
-            float zw = g.Text(ScopeStr.Distance("ZONE R", d.Radius, u, 14), 0f, y4, Dim);
+            float zw = g.Text(ScopeStr.Distance("ZONE R", d.Radius, u, 14), 0f, y4, Ink);
             ObjectiveLine line = ObjectiveMath.Line(d);
             string word = ObjectiveMath.LineWord(line);
             if (word != null && line != ObjectiveLine.ContactLost) g.FitText(word, RouteLayout.W, y4, RouteLayout.W - zw - 12f, Amber, 12f, 12f, ScopeAlign.Right, true);

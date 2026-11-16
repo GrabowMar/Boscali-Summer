@@ -225,7 +225,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintNotice(ScopeCanvas g, float x, float y, float w, bool furniture)
         {
             TickerLine line = noticeLine;
-            ScopeTone tone = SystemsMath.ToneOf(line.Tone);
+            ScopeTone tone = SystemsMath.ToneOf(line.Tone), words = tone == Dim ? Ink : tone;      // info words in full ink: DIM vanishes on a bright sky
             bool dip = line.Tone == HudTone.Warning && !NoticeFlashOn();
             float cy = y + 6f, shelfW = furniture ? Mathf.Ceil(CueLayout.TextInset + ScopeCanvas.TextW("NOTICE") + 20f) : 0f;
             if (furniture) g.CaptionShelf(x, y, shelfW, "NOTICE");
@@ -233,10 +233,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.ToneTick(tx, y, tone, dip ? 0.55f : 1f);
             if (tickerCount != null)
             {
-                g.Text(tickerCount, x + w, cy, tone, 12f, ScopeAlign.Right, true);
+                g.Text(tickerCount, x + w, cy, words, 12f, ScopeAlign.Right, true);
                 room -= ScopeCanvas.TextW(tickerCount) + 10f;
             }
-            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
+            g.FitText(TickerWords(line), tx + 10f, cy, room, words, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
 
         /// <summary>
