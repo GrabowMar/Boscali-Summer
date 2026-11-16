@@ -398,10 +398,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 WriteAoa(overG ? float.NaN : f.AoaDeg);   // the 106 px caption row holds OVER-G or the AoA beside SPD, not both
                 WriteClimb(f.ClimbMps, units);
             }
-            // The feed column: the UAV card (VANGUARD's, FeedCorner) at the bottom, the target card on it, the missile card on top.
+            // The target card stands in the left column (TARGET CAM zone); the missile card in the bottom-right feed column, on the UAV card (VANGUARD's, FeedCorner) when one is up.
             RectF uav = UavCard(screenW, screenH);
-            RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true, uav);
-            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, cameraTexture != null, uav, avoid,
+            RectF targetRect = ThirdPersonHudLayout.TargetCard(screenW, screenH, true);
+            RectF missileRect = ThirdPersonHudLayout.MissileCard(screenW, screenH, uav, avoid,
                 active ? ThirdPersonHudLayout.AltitudeBlock(screenW, screenH, avoid) : default);
             PaintSymbols(screenW, screenH, ink, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
                 f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
