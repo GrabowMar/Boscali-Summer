@@ -17,6 +17,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public int Missiles;
         public string Seeker;
         public float MissileRangeM, MissileTtiS;
+        /// <summary>Where the nearest one is off the nose, degrees clockwise (NaN: not known): the banner's lead text.</summary>
+        public float MissileBearingDeg;
         /// <summary>The ground is closer than <see cref="HudCues.PullUpSeconds"/> at the sink rate; <see cref="GroundS"/> is how many seconds.</summary>
         public bool PullUp;
         public float GroundS;
@@ -185,6 +187,25 @@ namespace BoscaliSummer.Modules.Hud.Domain
                     if (!string.IsNullOrEmpty(a.Field) && Finite(a.FieldM)) n = Up(b, Sep(b, n), a.FieldM, units);
                     break;
             }
+            return n;
+        }
+
+        /// <summary>
+        /// The detail row's left text into <paramref name="b"/>; returns its length (0: none). Missile only: "BRG 020 · IR", where it is off the nose and what seeks us.
+        /// </summary>
+        public static int Lead(char[] b, AlertKind kind, in AlertInputs a)
+        {
+            if (kind != AlertKind.Missile) return 0;
+            int n = 0;
+            if (Finite(a.MissileBearingDeg))
+            {
+                int deg = (int)Math.Round((a.MissileBearingDeg % 360f + 360f) % 360f) % 360;
+                n = AvNumFormat.Append(b, n, "BRG ");
+                b[n++] = (char)('0' + deg / 100);
+                b[n++] = (char)('0' + deg / 10 % 10);
+                b[n++] = (char)('0' + deg % 10);
+            }
+            if (!string.IsNullOrEmpty(a.Seeker)) n = Up(b, Sep(b, n), a.Seeker);
             return n;
         }
 

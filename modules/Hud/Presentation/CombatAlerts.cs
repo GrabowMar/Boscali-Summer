@@ -40,7 +40,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private TMP_Text bannerIcon, calloutIcon, callIcon;
         /// <summary>The detail row's text width and whether its call icon shows (both set when the line is written, not per frame); a missile pip's spacing.</summary>
         private float detailTextW;
-        private bool callShown;
+        private bool callShown, bannerUp;
+        private int leadLen, popupMode = -1;
+        private TextMeshProUGUI lead;
+        private readonly char[] leadBuf = new char[48];
+        /// <summary>The detail row's centre line and where the countermeasure popup stands in it (set when the banner paints).</summary>
+        private float bannerRowY, popupX;
         private const float PipStep = 12f;
         private readonly TextMeshProUGUI[] ringLabels = new TextMeshProUGUI[RingMax];
         private readonly int[] ringKeys = new int[RingMax];
@@ -63,7 +68,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private TextMeshProUGUI cmPopup;
         private Aircraft cmAircraft;
         private string cmName;
-        private float cmAt = float.NegativeInfinity, bannerX;
+        private float cmAt = float.NegativeInfinity;
 
         private readonly Missile[] missiles = new Missile[RingMax];
         private readonly int[] numbers = new int[RingMax];
@@ -100,11 +105,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shade.raycastTarget = false;
             shade.rectTransform.anchorMin = shade.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
             bannerLines = AvVector.Create(banner, "Lines", 48);
-            word = Text(banner, "Word", TopCentre.WordPt, TopCentre.WordSpacing, bold: true);
-            bannerIcon = Icon(banner, TopCentre.WordPt);
-            detail = Text(banner, "Detail", TopCentre.DetailPt, TopCentre.LineSpacing);
+            word = Text(banner, "Word", TopCentre.BannerWordPt, TopCentre.WordSpacing * 0.6f, bold: true);
+            bannerIcon = Icon(banner, TopCentre.BannerWordPt);
+            detail = Text(banner, "Detail", TopCentre.DetailPt, TopCentre.LineSpacing, bold: true);
             detail.overflowMode = TextOverflowModes.Ellipsis;
             callIcon = Icon(banner, TopCentre.DetailPt + 4f);
+            lead = Text(banner, "Lead", TopCentre.LabelPt, TopCentre.LineSpacing, bold: true);
+            lead.alignment = TextAlignmentOptions.MidlineLeft;
+            lead.rectTransform.pivot = new Vector2(0f, 0.5f);
+            lead.rectTransform.sizeDelta = new Vector2(150f, TopCentre.LabelPt * 1.5f);
 
             callout = Holder(root, "Callout");
             calloutGroup = callout.gameObject.AddComponent<CanvasGroup>();
@@ -116,7 +125,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             calloutSub = Text(callout, "Sub", TopCentre.LabelPt, TopCentre.LineSpacing);
             calloutSub.rectTransform.anchoredPosition = new Vector2(0f, -TopCentre.NamePt * 0.7f - TopCentre.LabelPt);      // under the brackets, not in them
 
-            cmPopup = Text(root, "CmPopup", TopCentre.DetailPt, TopCentre.WordSpacing, bold: true);
+            cmPopup = Text(root, "CmPopup", TopCentre.DetailPt, TopCentre.LineSpacing * 2f, bold: true);
+            popupMode = -1;
             cmPopup.gameObject.SetActive(false);
 
             banner.gameObject.SetActive(false);
@@ -149,13 +159,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             units = frame.Units;
             inputs = default;
             inputs.Missiles = frame.Threat.Missiles;
-            inputs.MissileRangeM = inputs.MissileTtiS = float.NaN;
+            inputs.MissileRangeM = inputs.MissileTtiS = inputs.MissileBearingDeg = float.NaN;
             if (frame.ContactCount > 0 && frame.Contacts[0].Kind == ThreatKind.Missile)
             {
                 ThreatContact c = frame.Contacts[0];
                 inputs.Seeker = c.Seeker;
                 inputs.MissileRangeM = c.RangeM;
                 inputs.MissileTtiS = c.TtiS;
+                inputs.MissileBearingDeg = c.BearingDeg;
             }
             float radarAlt = aircraft.radarAlt, climb = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
             inputs.PullUp = AlertBoard.PullUp(HudCues.Terrain(radarAlt, climb), climb, aircraft.gearState == LandingGear.GearState.LockedExtended);
@@ -196,6 +207,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root.gameObject.activeSelf != show) root.gameObject.SetActive(show);
             if (!show)
             {
+                TopCentre.BannerUp = bannerUp = false;
                 NativeList(false);
                 return;
             }
@@ -216,86 +228,106 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             NativeList(true);      // only once the layer has painted: a paint that throws leaves the game's own list up (fail open)
         }
 
+        /// <summary>The hazard bar's height and the gap under it, then the detail row's inset from the banner's edge and its centre above the foot (the mockup's banner: stripes, the word, the detail row).</summary>
+        private const float StripeH = 6f, StripeGap = 8f, RowInset = 8f, RowRise = 12f;
+
+        private bool CmLive(float now) { float age = now - cmAt; return age >= 0f && age < CmShowS; }
+
         private void PaintBanner(float now, float h, IHudBoard boardBox, VanillaHudStyle.Palette palette)
         {
             bool up = board.Banner(now, out AlertKind kind);
             if (banner.gameObject.activeSelf != up) banner.gameObject.SetActive(up);
-            bannerX = 0f;
+            bannerUp = TopCentre.BannerUp = up;
             if (!up) return;
             if ((int)kind != wordKey)
             {
                 wordKey = (int)kind;
                 word.text = AlertText.Word(kind);
-                AvIcons.Set(bannerIcon, AlertText.Icon(kind), TopCentre.WordPt);
+                AvIcons.Set(bannerIcon, AlertText.Icon(kind), TopCentre.BannerWordPt);
                 wordWidth = word.GetPreferredValues(word.text).x;
-                wordHalf = (wordWidth + TopCentre.WordPt + IconGap) * 0.5f;      // the word block: icon, gap, word
+                wordHalf = (wordWidth + TopCentre.BannerWordPt + IconGap) * 0.5f;      // the word block: icon, gap, word
                 WriteDetail(kind);
             }
             bool warning = AlertBoard.IsWarning(kind);
             Color tone = warning ? palette.Alert : palette.Warning;
-            float top = h * 0.5f - TopCentre.BannerTop, bottom = top - TopCentre.BannerHeight;
-            float wordY = top - TopCentre.WordPt * 0.75f, detailY = bottom + TopCentre.DetailPt;
+            float top = h * 0.5f - TopCentre.BannerTop + TopCentre.Lift, bottom = top - TopCentre.BannerHeight;
+            float wordY = top - StripeH - StripeGap - TopCentre.BannerWordPt * 0.5f - 4f, rowY = bottom + RowRise;
             // The banner's width follows its word only (never the detail digits, which change ten times a second): at least the lane's, so it never slides sideways.
-            float half = Mathf.Max(TopCentre.HazardReach(wordHalf) + TopCentre.Arm * 2f, TopCentre.Width * 0.5f);
+            float half = Mathf.Max(wordHalf + TopCentre.Arm * 2f + RowInset, TopCentre.Width * 0.5f);
             // On the reticle's axis unless this banner's own width would reach the TAC BOARD.
             float x = boardBox != null && boardBox.TryGetScreenBox(out float l, out float t, out float r, out float bt)
-                ? TopCentre.LaneShift(Screen.width, Screen.height, half * 2f, TopCentre.BannerTop, TopCentre.BannerHeight, l, t, r, bt) : 0f;
-            bannerX = x;
+                ? TopCentre.LaneShift(Screen.width, Screen.height, half * 2f, TopCentre.BannerTop - TopCentre.Lift, TopCentre.BannerHeight, l, t, r, bt) : 0f;
             word.rectTransform.anchoredPosition = new Vector2(x + wordHalf - wordWidth * 0.5f, wordY);
-            bannerIcon.rectTransform.anchoredPosition = new Vector2(x - wordHalf + TopCentre.WordPt * 0.5f, wordY);
-            // The detail row, centred as one block: a pip per missile inbound (the nearest bright), the call's icon, the call word.
+            bannerIcon.rectTransform.anchoredPosition = new Vector2(x - wordHalf + TopCentre.BannerWordPt * 0.5f, wordY);
+
+            // The detail row. A missile: a pip per missile inbound (the nearest bright) and "BRG 020 · IR" at the left, the call (icon and word, big, amber) at the right; any other alert: its one line, centred.
             int pips = kind == AlertKind.Missile ? Mathf.Min(inputs.Missiles, AlertText.PipMax) : 0;
-            float pipW = pips * PipStep, iconW = callShown ? TopCentre.DetailPt + 4f + IconGap * 0.5f : 0f;
-            float gap = pips > 0 && (iconW > 0f || detailTextW > 0f) ? IconGap * 2f : 0f, left = x - (pipW + gap + iconW + detailTextW) * 0.5f;
+            float pipW = pips * PipStep, iconW = callShown ? TopCentre.DetailPt + 4f + IconGap * 0.5f : 0f, callW = iconW + detailTextW;
+            bool split = pips > 0 || leadLen > 0;
+            float leftX = x - half + RowInset, leadX = leftX + pipW + (pips > 0 ? IconGap : 0f);
+            float blockLeft = split ? x + half - RowInset - callW : x - callW * 0.5f;
+            bool cm = CmLive(now);
+            popupX = split ? leadX : leftX;
+            bool leadUp = leadLen > 0 && !cm;
+            if (lead.gameObject.activeSelf != leadUp) lead.gameObject.SetActive(leadUp);
+            lead.rectTransform.anchoredPosition = new Vector2(leadX, rowY);
             if (callIcon.gameObject.activeSelf != callShown) callIcon.gameObject.SetActive(callShown);
-            callIcon.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + (TopCentre.DetailPt + 4f) * 0.5f, detailY);
-            detail.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + iconW + detailTextW * 0.5f, detailY);
-            float detailWidth = (half - TopCentre.Arm * 2f) * 2f;      // the detail stays between the brackets (an ellipsis past them)
-            if (detail.rectTransform.sizeDelta.x != detailWidth) detail.rectTransform.sizeDelta = new Vector2(detailWidth, TopCentre.DetailPt * 1.5f);
+            callIcon.rectTransform.anchoredPosition = new Vector2(blockLeft + (TopCentre.DetailPt + 4f) * 0.5f, rowY);
+            detail.rectTransform.anchoredPosition = new Vector2(blockLeft + iconW + detailTextW * 0.5f, rowY);
+            float detailWidth = (half - TopCentre.Arm * 2f) * 2f;      // the detail stays inside the banner (an ellipsis past it)
+            if (detail.rectTransform.sizeDelta.x != detailWidth) detail.rectTransform.sizeDelta = new Vector2(detailWidth, TopCentre.NamePt * 1.5f);
+            bannerRowY = rowY;
             shade.rectTransform.anchoredPosition = new Vector2(x, (top + bottom) * 0.5f);
             shade.rectTransform.sizeDelta = new Vector2((half + TopCentre.ShadeMargin) * 2f, TopCentre.BannerHeight + TopCentre.ShadeMargin * 2f);
             shade.color = HudSprites.BackdropColor;
             bool calm = AvFxDriver.ReducedMotion;      // the kit's REDUCED MOTION: nothing blinks, marches, pops or types on
             word.color = tone.WithAlpha(calm || AlertText.Lit(kind, now - board.Since(kind), inputs.MissileTtiS) ? 1f : 0.15f);
             bannerIcon.color = word.color;
-            detail.color = tone.WithAlpha(0.9f);
+            Color call = kind == AlertKind.Missile ? palette.Warning : tone;
+            detail.color = call.WithAlpha(0.95f);
             callIcon.color = detail.color;
+            lead.color = tone;
 
-            // The brackets close in from wide when the alert comes up (the lane's enter time); a warning's chevrons run in from the outside, a caution's stand still.
-            float open = calm ? 1f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - board.Since(kind)) / TopCentre.EnterS)), wide = half + (1f - open) * 40f;
+            // The hazard bar draws out from the middle when the alert comes up (the lane's enter time); a warning's stripes march (6 steps a second), a caution's stand still.
+            float open = calm ? 1f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - board.Since(kind)) / TopCentre.EnterS)), reach = half * open;
             AvQuadBuffer b = bannerLines.Buffer;
             b.Clear();
             Rgba ink = tone.ToRgba();
-            AvStrokes.Bracket(b, x - wide, bottom, wide * 2f, top - bottom, TopCentre.Arm, TopCentre.Stroke, ink);
-            TopCentre.Hazard(b, x, wordY, wordHalf, ink, warning && !calm ? (int)(now * 6f) % 3 : -1);
-            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, left + PipStep * (i + 0.5f), detailY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : 0.55f));
-            // A timed alert burns a fuse along the banner's foot, between the brackets' arms: full at 10 s to impact (or to the ground), gone at none.
+            TopCentre.Stripes(b, x - reach, x + reach, top - StripeH, top, warning && !calm ? (int)(now * 6f) % 4 * 4f : 0f, ink.WithAlpha(warning ? 1f : 0.75f));
+            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, leftX + PipStep * (i + 0.5f), rowY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : 0.55f));
+            // A timed alert burns a fuse along the banner's foot: full at 10 s to impact (or to the ground), gone at none.
             float share = AlertText.Countdown(kind, inputs);
             if (!float.IsNaN(share))
             {
-                float run = (wide - TopCentre.Arm - 6f) * 2f;
+                float run = (half - RowInset) * 2f;
                 AvStrokes.Fill(b, x - run * 0.5f, bottom - 1.5f, run, 3f, ink.WithAlpha(0.2f));
                 AvStrokes.Fill(b, x - run * share * 0.5f, bottom - 1.5f, run * share, 3f, ink);
             }
             bannerLines.Commit();
         }
 
-        /// <summary>The detail line: a second warning up at the same time leads it ("+FIRE · ..."), so no warning is ever off the centre; written only when it changed.</summary>
+        /// <summary>The detail row's two texts: a second warning up at the same time leads the call ("+FIRE · ..."), so no warning is ever off the centre; written only when they changed.</summary>
         private void WriteDetail(AlertKind kind)
         {
             int also = -1;
             for (int k = 0; k < AlertBoard.Count && also < 0; k++)
                 if (k != (int)kind && AlertBoard.IsWarning((AlertKind)k) && board.IsUp((AlertKind)k)) also = k;
-            int n = AlertText.Detail(buf, kind, inputs, units), key = (int)kind * 7919 + n * 131 + also;
+            int n = AlertText.Detail(buf, kind, inputs, units), ln = AlertText.Lead(leadBuf, kind, inputs), key = (int)kind * 7919 + n * 131 + also + ln * 17;
             for (int i = 0; i < n; i++) key = key * 31 + buf[i];
+            for (int i = 0; i < ln; i++) key = key * 31 + leadBuf[i];
             if (key == detailKey) return;
             detailKey = key;
             string line = new string(buf, 0, n);
+            bool call = kind == AlertKind.Missile && also < 0;
+            float size = call ? TopCentre.NamePt : TopCentre.DetailPt;
+            if (detail.fontSize != size) detail.fontSize = size;
             detail.text = also < 0 ? line : "+" + AlertText.Word((AlertKind)also) + (n > 0 ? " · " + line : "");
             detailTextW = detail.text.Length > 0 ? detail.GetPreferredValues(detail.text).x : 0f;
-            AvIcon call = kind == AlertKind.Missile && also < 0 ? AlertText.CallIcon(AlertText.MissileCall(inputs.Seeker, inputs.MissileTtiS)) : AvIcon.None;
-            callShown = call != AvIcon.None;
-            if (callShown) AvIcons.Set(callIcon, call, TopCentre.DetailPt + 4f);
+            leadLen = ln;
+            lead.text = ln > 0 ? new string(leadBuf, 0, ln) : "";
+            AvIcon icon = call ? AlertText.CallIcon(AlertText.MissileCall(inputs.Seeker, inputs.MissileTtiS)) : AvIcon.None;
+            callShown = icon != AvIcon.None;
+            if (callShown) AvIcons.Set(callIcon, icon, TopCentre.DetailPt + 4f);
         }
 
         private void PaintRing(Aircraft aircraft, ThreatWatch threats, float now, float w, float h, VanillaHudStyle.Palette palette)
@@ -452,15 +484,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             calloutGroup.alpha = ShotCallouts.Alpha(age);
         }
 
-        /// <summary>The countermeasure popup just under the banner's slot (under the banner itself while it is up), fading out over its last 0.4 s.</summary>
+        /// <summary>
+        /// The countermeasure popup (the newly selected dispenser's name for <see cref="CmShowS"/>, fading over its last 0.4 s): in the banner's detail row, at the left where the lead text stands, while a banner is up
+        /// (that is when the pilot switches); otherwise at the foot of the lane's slot, clear of the ace strip (208) and the heading tape (232). While the ace card holds the slot it stays out of the way.
+        /// </summary>
         private void PaintCmPopup(float now, float h, VanillaHudStyle.Palette palette)
         {
             float age = now - cmAt;
-            bool live = age >= 0f && age < CmShowS;
+            bool live = CmLive(now) && (bannerUp || !TopCentre.CardUp);
             if (cmPopup.gameObject.activeSelf != live) cmPopup.gameObject.SetActive(live);
             if (!live) return;
-            float y = h * 0.5f - TopCentre.BannerTop - TopCentre.BannerHeight - TopCentre.DetailPt * 1.2f;
-            cmPopup.rectTransform.anchoredPosition = new Vector2(bannerX, y);
+            int mode = bannerUp ? 1 : 0;
+            if (mode != popupMode)
+            {
+                popupMode = mode;
+                cmPopup.alignment = bannerUp ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center;
+                cmPopup.rectTransform.pivot = new Vector2(bannerUp ? 0f : 0.5f, 0.5f);
+            }
+            cmPopup.rectTransform.anchoredPosition = bannerUp ? new Vector2(popupX, bannerRowY)
+                : new Vector2(0f, h * 0.5f - (TopCentre.BannerTop + TopCentre.BannerHeight - RowRise) + TopCentre.Lift);
             cmPopup.color = palette.AllClear.WithAlpha(Mathf.Clamp01((CmShowS - age) / 0.4f));
         }
 
@@ -496,7 +538,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (nativeList.alpha != alpha) nativeList.alpha = alpha;
         }
 
-        private static RectTransform Holder(RectTransform parent, string name)
+        internal static RectTransform Holder(RectTransform parent, string name)
         {
             var rect = (RectTransform)new GameObject(name, typeof(RectTransform)).transform;
             rect.SetParent(parent, false);
@@ -531,6 +573,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Hide()
         {
             on = false;
+            TopCentre.BannerUp = bannerUp = false;
             board.Reset();
             NativeList(false);
             if (root != null) root.gameObject.SetActive(false);
