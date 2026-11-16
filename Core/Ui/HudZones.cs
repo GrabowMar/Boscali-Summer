@@ -75,5 +75,8 @@ namespace BoscaliSummer.Core.Ui
 
         /// <summary>Where CUE starts: its own slot, or 16 under a COMMS that grew past it.</summary>
         public static float CueTop(float commsBottom) => System.Math.Max(299f, commsBottom + Gutter);
+
+        /// <summary>Where NOTICE starts: its own slot, or 16 under a CUE stack whose ink reaches past it (<paramref name="cueBottom"/> 0: no cue drawn).</summary>
+        public static float NoticeTop(float cueBottom) => System.Math.Max(411f, cueBottom + Gutter);
     }
 }

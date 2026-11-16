@@ -211,7 +211,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (cueCount > 0 && cueLit > 0f)
             {
-                top = Mathf.Min(top, LeftHudStack.CueTop(canvasRect.rect.height / baseUnit));
+                top = Mathf.Min(top, LeftHudStack.CueTop);
                 bottom = Mathf.Max(bottom, cueBottom); lit = Mathf.Max(lit, cueLit);
             }
             float alpha = HudSprites.Backdrop * lit;      // the one backdrop (HudSprites.Backdrop), as behind the board, the map and the centre alerts

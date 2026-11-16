@@ -305,7 +305,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
             Array.Clear(pageSurfaces, 0, pageSurfaces.Length);
             nativeSafety = null;
-            board = null;
             StoreIcons.Clear();      // the baked pictures are this scene's
             DestroyShade();
             DestroyBoard();

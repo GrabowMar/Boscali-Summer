@@ -22,7 +22,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopePage autoShown = ScopePage.Threat;
         private float autoShownAt = float.NegativeInfinity;
         private readonly System.Collections.Generic.HashSet<int> failed = new System.Collections.Generic.HashSet<int>();
-        private BoardFrame board;
         private int lastPhase = -1;
         /// <summary>What the pilot's options and declutter level allow, as of the last <see cref="Present"/> (see <see cref="BoardOptions.Effective"/>).</summary>
         private BoardEffective allow;
@@ -84,6 +83,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Present(BoardFrame frame)
         {
             if (root == null) return;
+            noticeHas = frame.HasTicker;      // the NOTICE line is the left column's and shows with the board off too
+            noticeLine = frame.Ticker;
             // Switched off: hide the board and, through the same fail-open path as any other reason to stand down, give the native boxes back (TickNatives). Present again restores it. The kill feed and the map
             // keep their own switch (LAYOUT.md 8: "corners stay"), so they are measured, kept fresh and laid out here as for a board that is up.
             if (!Options.Enabled)
@@ -98,7 +99,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 return;
             }
             // The pilot's opacity is the root group's alpha (nothing else in the board animates it); the shade is outside it (StatusPanel.Shade.cs).
-            board = frame;
             now = frame.Now;
             units = frame.Units;
 
@@ -269,7 +269,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             var blocks = new BoardBlocks
             {
                 Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
-                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = allow.ShowTicker && board.HasTicker,
+                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines, Ticker = false,      // the notice is the left column's NOTICE line (StatusPanel.Cues.cs), not a board row
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipe is heading: the size, the anchor and the shade go by it, so pages coming in never pump the scale or move the box.

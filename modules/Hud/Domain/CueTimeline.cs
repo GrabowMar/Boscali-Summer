@@ -149,8 +149,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>Where the stack goes, pure (design units, y down from the top-left of the screen).</summary>
     internal static class CueLayout
     {
-        /// <summary>The stack's left edge, 16 in; its minimum top at 30 % of the screen's height; 40 between cues.</summary>
-        public const float Left = 16f, Pitch = 40f;
+        /// <summary>The stack's left edge, 12 in, and its width, 281 (the CUE zone, <c>HudZones</c>); 40 between cues. Its top is the zone's (<c>HudZones.CueTop</c>).</summary>
+        public const float Left = 12f, Width = 281f, Pitch = 40f;
         /// <summary>The words start this far in from the left edge (the shelf's caption inset), the bracket halves hug the words this far outside them, an arm is 5 long.</summary>
         public const float TextInset = 12f, HugGap = 8f, Arm = 5f;
         /// <summary>Rows inside a cue's slot: the shelf's line, the message's middle, the underline, the brackets' top and bottom (with the shelf; the bare cue of Lean and Minimal sits <see cref="BareLift"/> higher). The next slot's shelf is 40 on.</summary>

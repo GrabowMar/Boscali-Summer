@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
     internal sealed class ChatterStrip
     {
         private const int Rows = 5;
-        private const float Left = LeftHudStack.Left, Width = LeftHudStack.Width, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = 264f;
+        private const float Left = LeftHudStack.Left, Width = LeftHudStack.Width, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = 154f;      // the COMMS zone's height (HudZones)
         private const float LingerSeconds = 4f, FadeSeconds = 0.7f, CharsPerSecond = 55f;
 
         private struct Row
@@ -139,6 +139,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             promptOn = open || !string.IsNullOrEmpty(echo);
             if (!promptOn) { prompt.text = ""; return; }
             promptFill = open && window > 0f ? Mathf.Clamp01(left / window) : 0f;
+            while (used > 1 && Height() > MaxHeight) DropOldest();      // the prompt row counts against the zone too: the oldest lines make room for it
             sb.Clear();
             if (open)
                 sb.Append("<color=#9EE6B8>YES</color> <color=#9AA7B0><size=80%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
