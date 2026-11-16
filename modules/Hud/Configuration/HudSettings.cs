@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
                 "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
-                "Show the notice line at the foot of the board." + live);
+                "Show the NOTICE line in the left column (under the cue stack). It needs MAP + FEED (Corners) on." + live);
             ShowSystems = config.Bind(section, "ShowSystems", d.ShowSystems,
                 "Show the SYSTEMS block (fire, engine and fuel strip) under the lamp line. Its warnings still reach the ticker and lamps when hidden." + live);
 

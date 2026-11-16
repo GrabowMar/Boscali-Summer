@@ -27,7 +27,7 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         {
             new MenuSwitch("stores", "STORES + POWER", "WEAPON, POWER AND COUNTERMEASURE PANELS"),
             new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS SHOWS"),
-            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
+            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE IN THE LEFT COLUMN; NEEDS MAP + FEED ON"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
 

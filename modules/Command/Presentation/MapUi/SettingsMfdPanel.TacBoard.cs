@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
-            ToggleCell(flow, page, "NOTICES", "The notice line at the foot of the board.",
+            ToggleCell(flow, page, "NOTICES", "The NOTICE line in the left column. It needs MAP AND FEED on.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
             ToggleCell(flow, page, "SYSTEMS BLOCK", "The fire, engine and fuel strip under the lamps. Its warnings still post when hidden.",
                 () => board.ShowSystems, v => board.ShowSystems = v, on, off);
