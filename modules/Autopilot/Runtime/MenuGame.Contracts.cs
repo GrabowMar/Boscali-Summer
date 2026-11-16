@@ -71,13 +71,12 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private static readonly Dictionary<string, Flag<ITacBoardSettings>> BoardFlags = new Dictionary<string, Flag<ITacBoardSettings>>
         {
             ["parts/stores"] = new Flag<ITacBoardSettings>(b => b.ShowStores, (b, v) => b.ShowStores = v),
-            ["parts/pages"] = new Flag<ITacBoardSettings>(b => b.ScopeMode != BoardScopeMode.Off, (b, v) => b.ScopeMode = v ? BoardScopeMode.Auto : BoardScopeMode.Off),
             ["parts/status"] = new Flag<ITacBoardSettings>(b => b.ShowLamps || b.ShowGauges, (b, v) => b.ShowLamps = b.ShowGauges = v),
             ["parts/notices"] = new Flag<ITacBoardSettings>(b => b.ShowTicker, (b, v) => b.ShowTicker = v),
             ["parts/corners"] = new Flag<ITacBoardSettings>(b => b.Corners, (b, v) => b.Corners = v),
         };
 
-        /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c> and <c>BoardLayouts</c>.</summary>
+        /// <summary>The HUD category: the TAC BOARD's options. The cycle indices are the contract enums' values, in the order of <c>MenuCatalog.BoardDeclutters</c>; the scope index is the menu order (<c>BoardScopes</c>), not the enum's.</summary>
         private static void ReadBoard(MenuWorld w)
         {
             ITacBoardSettings board = Service<ITacBoardSettings>();
@@ -85,12 +84,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             w.BoardAvailable = true;
             w.BoardOn = board.Enabled;
             w.BoardDeclutter = (int)board.Declutter;
-            w.BoardLayout = (int)board.Layout;
             w.BoardShade = MenuCatalog.Nearest(MenuCatalog.ShadeSteps, board.Shade);
             w.BoardSize = MenuCatalog.Nearest(MenuCatalog.SizeSteps, board.Scale);
-            w.BoardPageCount = board.PageCount;
-            w.BoardPage1 = board.Page1; w.BoardPage2 = board.Page2; w.BoardPage3 = board.Page3; w.BoardPage4 = board.Page4;
-            w.BoardPagesOn = board.ScopeMode != BoardScopeMode.Off;
+            w.BoardScope = ScopeIndex(board.ScopeMode);
             w.BoardSway = board.Sway;
             w.CentreAlerts = board.CentreAlerts;
             foreach (KeyValuePair<string, Flag<ITacBoardSettings>> flag in BoardFlags) if (flag.Value.Get(board)) w.BoardSwitches.Add(flag.Key);
@@ -208,7 +204,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "view/mslexit": return () => Service<IMissileView>()?.Exit();
                 case "hud/board": return OnBoard(board => board.Enabled = !board.Enabled);
                 case "hud/declutter": return OnBoard(board => board.Declutter = (BoardDeclutter)(((int)board.Declutter + 1) % MenuCatalog.BoardDeclutters.Length));
-                case "hud/layout": return OnBoard(board => board.Layout = (BoardLayout)(((int)board.Layout + 1) % MenuCatalog.BoardLayouts.Length));
+                case "hud/scope": return OnBoard(board => CycleScope(board));
                 case "hud/shade": return OnBoard(board => board.Shade = Next(MenuCatalog.ShadeSteps, board.Shade));
                 case "hud/size": return OnBoard(board => board.Scale = Next(MenuCatalog.SizeSteps, board.Scale));
                 case "hud/sway": return OnBoard(board => board.Sway = !board.Sway);
@@ -224,10 +220,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             if (row.Id.StartsWith("comms/c", StringComparison.Ordinal)) return () => Service<IQuickCalls>()?.Call(index);
             if (row.Id.StartsWith("weapons/drones/pick/", StringComparison.Ordinal)) return () => Service<IDroneCommand>()?.Link(index);
             if (row.Id.StartsWith("support/pit/station/", StringComparison.Ordinal)) return () => Service<ISkywellControl>()?.PrioritiseStation(index);
-            const string Page1 = "hud/page1/", Page2 = "hud/page2/", Page3 = "hud/page3/", Page4 = "hud/page4/", Parts = "hud/parts/";
-            int slot = row.Id.StartsWith(Page1, StringComparison.Ordinal) ? 1 : row.Id.StartsWith(Page2, StringComparison.Ordinal) ? 2 :
-                row.Id.StartsWith(Page3, StringComparison.Ordinal) ? 3 : row.Id.StartsWith(Page4, StringComparison.Ordinal) ? 4 : 0;
-            if (slot != 0) return OnBoard(board => SelectBoardPage(board, slot, index));
+            const string Parts = "hud/parts/";
             if (row.Id.StartsWith(Parts, StringComparison.Ordinal) && BoardFlags.TryGetValue(row.Id.Substring(4), out Flag<ITacBoardSettings> part))
                 return OnBoard(board => part.Set(board, !part.Get(board)));
             const string Perks = "support/perks/", Filters = "targets/filters/", Shapes = "wing/shape/";
@@ -241,23 +234,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         /// <summary>The value of the step after the one nearest <paramref name="value"/>, wrapping: what a press of a cycle row over a float option sets.</summary>
         private static float Next(float[] steps, float value) => steps[(MenuCatalog.Nearest(steps, value) + 1) % steps.Length];
 
-        /// <summary>
-        /// A page pick sets itself up: board on, pages on, the slot counted in. <paramref name="index"/> -1 is OFF: the board keeps
-        /// the slots before it. Saved slots stay distinct, hidden ones too, so a later pick that reveals them shows no twin.
-        /// </summary>
-        private static void SelectBoardPage(ITacBoardSettings board, int slot, int index)
+        /// <summary>The menu order of the SCOPE cycle (AUTO, MANUAL, OFF) against the contract enum (Manual, Off, Auto).</summary>
+        private static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Auto ? 0 : mode == BoardScopeMode.Manual ? 1 : 2;
+
+        /// <summary>The next scope in menu order. MANUAL shows both page slots (SET holds the two choices), so entering it counts the second one in.</summary>
+        private static void CycleScope(ITacBoardSettings board)
         {
-            if (index < 0) { board.PageCount = Math.Max(1, Math.Min(board.PageCount, slot - 1)); return; }
-            var page = (BoardPage)index;
-            board.Enabled = true;
-            board.ScopeMode = BoardScopeMode.Manual;      // a hand pick means the pilot is choosing: Auto and Off both give way
-            if (slot > board.PageCount) board.PageCount = slot;
-            BoardPage[] pages = { board.Page1, board.Page2, board.Page3, board.Page4 };
-            for (int i = 0; i < pages.Length; i++)
-                if (i != slot - 1 && pages[i] == page) { pages[i] = pages[slot - 1]; break; }
-            pages[slot - 1] = page;
-            board.Page1 = pages[0]; board.Page2 = pages[1]; board.Page3 = pages[2]; board.Page4 = pages[3];
+            board.ScopeMode = ScopeAt((ScopeIndex(board.ScopeMode) + 1) % MenuCatalog.BoardScopes.Length);
+            if (board.ScopeMode == BoardScopeMode.Manual) board.PageCount = 2;
         }
+
+        private static BoardScopeMode ScopeAt(int index) => index == 0 ? BoardScopeMode.Auto : index == 1 ? BoardScopeMode.Manual : BoardScopeMode.Off;
 
         /// <summary>Statement over the TAC BOARD options, looked up again when the row is pressed.</summary>
         private static Action OnBoard(Action<ITacBoardSettings> run) =>
