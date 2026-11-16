@@ -115,7 +115,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// How a cue's words fit the stack, pure. The words have <see cref="MaxWidth"/> (261) design units of the 281 wide CUE zone; the mono face advances 0.65 em a character, so 16 units holds 25 characters and 14 holds 28. A message too long for 16 drops to 14; one too
+    /// How a cue's words fit the stack, pure. The words have <see cref="MaxWidth"/> (253 = 281 - 12 - 2 x 8) design units of the 281 wide CUE zone; the mono face advances 0.65 em a character, so 16 units holds 24 characters and 14 holds 27. A message too long for 16 drops to 14; one too
     /// long for 14 loses whole words from its end (never dots, never half a word unless it is one word). A message that is cut ends on a word, not on a dash or a comma.
     /// </summary>
     internal static class CueFit
