@@ -200,8 +200,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile, Time.unscaledTime);
             if (!thirdPerson)
             {
-                // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).
-                if (missileFeed.Texture == null) cluster?.Hide();
+                // The feed and target cards stay in the cockpit; the flight boxes around them go the same frame third person ends (the read below runs now).
+                if (missileFeed.Texture == null && !(cluster != null && cluster.TargetCardShown)) cluster?.Hide();      // the cockpit target card (a lock) keeps the root up; the next read retires it with the lock
                 else if (cluster != null && cluster.FlightShown) nextRead = 0f;
             }
 
@@ -279,23 +279,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             catch (Exception e) { PatchGuard.Report("Hud.Alerts", e); }
 
-            // The cockpit already has its own native tac screen for this feed; the card only
-            // earns its space in the external views this module can force the HUD into.
+            // The card stands in the left column in the external views, and in the cockpit while a target is locked (the picture is the cockpit tac screen's own camera, so nothing native is touched).
             if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
             Texture cameraTexture = null;
             string cameraCode = null;
             float range = float.NaN, closure = float.NaN;
-            if (viewingOwnExternally && ownAircraft != null && ownAircraft.targetCam != null &&
-                BoscaliSummer.Core.Game.NativeCamera.ReadMode(ownAircraft.targetCam) != TargetCam.CamMode.landingMode &&
-                BoscaliSummer.Core.Game.NativeCamera.TryGet(ownAircraft, out Camera camera, out string mode) &&
+            Aircraft camOwner = viewingOwnExternally ? ownAircraft : hudAircraft;
+            if (camOwner != null && camOwner.targetCam != null &&
+                BoscaliSummer.Core.Game.NativeCamera.ReadMode(camOwner.targetCam) != TargetCam.CamMode.landingMode &&
+                BoscaliSummer.Core.Game.NativeCamera.TryGet(camOwner, out Camera camera, out string mode) &&
                 camera.targetTexture != null && camera.targetTexture.IsCreated())
             {
-                cameraTexture = camera.targetTexture;
-                // The card's header names what the pod looks at (the camera mode only with no target).
-                cameraCode = targetReadout.Read(ownAircraft, out Unit seen, out range, out closure) && seen != null ? targetReadout.NameOf(seen) : mode;
+                bool seenOne = targetReadout.Read(camOwner, out Unit seen, out range, out closure) && seen != null;
+                // External: the card is up whenever the pod has a picture (its header names the camera mode with no target). Cockpit: only while a target is locked.
+                if (viewingOwnExternally || seenOne)
+                {
+                    cameraTexture = camera.targetTexture;
+                    cameraCode = seenOne ? targetReadout.NameOf(seen) : mode;
+                }
             }
             // hudAircraft, not ownAircraft: the latter is null in the cockpit, which left the overlay off after any trip outside.
-            if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null);
+            if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null || !viewingOwnExternally);      // the cockpit's own tac screen keeps its text even while the card shows
 
             // The feed column holds the bottom-right corner in every view (NAV DATA is gone, 2026-10-21).
             cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost);
@@ -328,7 +332,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else
             {
-                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, null, null, float.NaN, float.NaN, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
+                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, cameraTexture, cameraCode, range, closure, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));      // the cockpit: the target card only (a lock), no flight boxes
             }
         }
 

@@ -102,6 +102,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The flight boxes are on screen (the board asks so that it can take them down the frame third person ends while the missile card stays).</summary>
         public bool FlightShown => builtActive && flightShown;
 
+        /// <summary>The target card is on screen (the board asks so that it does not take the root down between two reads while the cockpit card is up).</summary>
+        public bool TargetCardShown => builtActive && card.Active;
+
         /// <summary>The missile feed card for the next <see cref="Present"/>: null <paramref name="feed"/> is no card.</summary>
         public void SetMissileFeed(Texture feed, string name, float rangeM, bool lost)
         {
@@ -324,8 +327,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Texture cameraTexture, string cameraCode, float rangeM, float closureMps, float scale)
         {
             if (root == null) return;
-            // The missile card shows without the flight cluster too (the cockpit): the root is up for either, the boxes and their bars only for the cluster.
-            bool shown = active || missileFeed != null;
+            // The missile card and the target card show without the flight cluster too (the cockpit): the root is up for any of them, the boxes and their bars only for the cluster.
+            bool shown = active || missileFeed != null || cameraTexture != null;
             if (shown != builtActive)
             {
                 root.gameObject.SetActive(shown);
@@ -341,7 +344,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 spd.Track.gameObject.SetActive(active);
                 alt.Track.gameObject.SetActive(active);
             }
-            if (!active) cameraTexture = null;
 
             // Reference frame is the HUD canvas's own local rect, not raw Screen.width/height:
             // anchoredPosition under this canvas is in the canvas's own (possibly scaled) units.
