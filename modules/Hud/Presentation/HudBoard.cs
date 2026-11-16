@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
         private readonly VisorSwayDriver visorSway = new VisorSwayDriver();
+        // The reactive visor (2026-11-16, round 2): what happens to the pilot and the jet as a per-frame look of the mod's own symbology (see StepVisor); the load factor is read at 10 Hz.
+        private readonly VisorFx fx = new VisorFx();
+        private float visorG = 1f, visorGLimit = 9f;
         private readonly ThreatWatch threats = new ThreatWatch();
         private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
         private readonly FuelWatch fuelWatch = new FuelWatch();
@@ -117,6 +120,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal VisorBootHud BootHud => boot;
         /// <summary>Why the last boot ended: "finished", "warning" or "not allowed" (the sim probe reads it).</summary>
         internal string BootEnd { get; private set; } = "";
+        /// <summary>The reactive visor's state machine (the sim probe pins and reads it).</summary>
+        internal VisorFx Fx => fx;
 
         /// <summary>The sim's hook: start the power-on now in <paramref name="mode"/> on the HUD's aircraft, with the real state of this moment. False: no aircraft, or not the cockpit view.</summary>
         internal bool RestartBoot(BootMode mode)
@@ -202,12 +207,57 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             catch (Exception e) { arcs?.Fail(); PatchGuard.Report("Hud.Arcs.Frame", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
+            // The visor's reactions (G, hits, EMP, warning onset, idle life): after the layers above exist for this frame, before the board takes its place.
+            try { StepVisor(); }
+            catch (Exception e) { fx.Reset(); PatchGuard.Report("Hud.Visor", e); }
             if (panel != null)
             {
                 // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
                 visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
-                panel.ApplySway(visorSway.X, visorSway.Y);
+                panel.ApplySway(visorSway.X + fx.ShiftX, visorSway.Y + fx.ShiftY, fx.TearBoard, fx.TearLeft);
             }
+        }
+
+        /// <summary>
+        /// The reactive visor, every frame: the real inputs (the load factor at 10 Hz, the hit count Immersion's patch counts, the EMP routine's clock, a warning's rising edge, the power-on's closing line) go into <see cref="VisorFx"/>, and what
+        /// it answers is applied to the mod's own roots and nothing else: group alpha and a position on the brow, the rim (alpha only: it is the glass), the arcs, and the board and left column's blocks (<see cref="BoardLook"/>); the rim and brow
+        /// repaint at most four times for a flash. Rests at once when not allowed (the option, reduced motion, a pause, the map, a cinematic, an external view). An EMP's end starts the re-sync boot.
+        /// </summary>
+        private void StepVisor()
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            bool allowed = (settings != null ? settings.Reactive.Value : options.Reactive) && aircraft != null && !aircraft.disabled && !arcsExternal &&
+                !NOAvionics.AvFxDriver.ReducedMotion && BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+            fx.Step(new VisorFxInput
+            {
+                Dt = Time.unscaledDeltaTime, Allowed = allowed, G = visorG, GLimit = visorGLimit,
+                HitSerial = BoscaliSummer.Core.Game.VisorEvents.HitSerial, HitWeight = BoscaliSummer.Core.Game.VisorEvents.HitWeight,
+                Emp = Time.time < BoscaliSummer.Core.Game.VisorEvents.EmpUntil,
+                WarnUp = alerts != null && alerts.WarningUp,
+                OnlineBeat = boot.TakeOnlineBeat(),
+            });
+            if (fx.ResyncDue && aircraft != null && !boot.Active && BootAllowed(aircraft, arcsExternal)) StartBoot(aircraft, BootMode.Resync);
+
+            bool booting = boot.Active;
+            float a = fx.Alpha;
+            brow?.ApplyFx(a, fx.ShiftX, fx.ShiftY, fx.Flash, fx.FlashTone, booting ? 1f : fx.BreathMark, booting ? -1f : fx.ScanAt, fx.ScanAlpha);
+            rim?.ApplyFx(a * (booting ? 1f : fx.BreathRim), fx.Flash, fx.FlashTone);
+            arcs?.ApplyFx(a, fx.ShiftX, fx.ShiftY);
+            var look = BoardLook.Rest;
+            look.All = a;
+            if (booting)
+            {
+                look.Stores = boot.Alpha(BootGroup.Board);
+                look.Shell = boot.Alpha(BootGroup.BoardShell);
+                look.Page = boot.Alpha(BootGroup.BoardPage);
+                look.Wing = boot.Alpha(BootGroup.BoardWing);
+                look.Log = boot.Alpha(BootGroup.Left);
+                look.Cue = boot.Alpha(BootGroup.LeftCue);
+                look.Comms = boot.Alpha(BootGroup.LeftComms);
+            }
+            panel?.ApplyLook(look);
+            LeftHudStack.BootAlpha = look.Comms * a;      // the COMMS block (the Chatter module's) follows the left column
         }
 
         /// <summary>
@@ -244,23 +294,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReleaseBoot();
                 return;
             }
-            if (brow != null) brow.Boot = boot.Progress(BootGroup.Brow);
+            if (brow != null) { brow.Boot = boot.Progress(BootGroup.Brow); brow.CaptionBoot = boot.Progress(BootGroup.BrowCaption); }
             if (rim != null) rim.Boot = boot.Progress(BootGroup.Rim);
             if (arcs != null) arcs.Boot = boot.Progress(BootGroup.Arcs);
-            float left = boot.Alpha(BootGroup.Left);
-            panel?.ApplyBoot(boot.Alpha(BootGroup.Board), left);
-            LeftHudStack.BootAlpha = left;      // the COMMS block (the Chatter module's) follows the left column
-            bootApplied = true;
+            bootApplied = true;      // the blocks' own visibility is StepVisor's, each frame
         }
 
         /// <summary>The boot is over (done, cut or failed): every zone as in flight.</summary>
         private void ReleaseBoot()
         {
-            if (brow != null) brow.Boot = 1f;
+            if (brow != null) { brow.Boot = 1f; brow.CaptionBoot = 1f; }
             if (rim != null) rim.Boot = 1f;
             if (arcs != null) arcs.Boot = 1f;
-            panel?.ApplyBoot(1f, 1f);
-            LeftHudStack.BootAlpha = 1f;
             bootApplied = false;
         }
 
@@ -363,6 +408,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ShotFeed.Ledger.Clear();
                 shotBook.Clear();
             }
+            visorG = hudAircraft != null ? BoscaliSummer.Core.Game.AircraftReadout.LoadFactor(hudAircraft) : 1f;      // the reactive visor's G, 10 Hz (the symbology's shake is eased between reads)
+            visorGLimit = hudAircraft != null ? BoscaliSummer.Core.Game.AircraftReadout.GLimit(hudAircraft) : 9f;
             frame.Now = now;
             frame.Units = AvUnitsOf((int)PlayerSettings.unitSystem);
             frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
@@ -599,6 +646,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracks.Clear();
             store.Reset();
             visorSway.Reset();
+            fx.Reset();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();
@@ -660,6 +708,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rim?.Hide();
             boot.Abort();
             ReleaseBoot();
+            fx.Reset();
+            panel?.ApplyLook(BoardLook.Rest);
+            LeftHudStack.BootAlpha = 1f;
+            brow?.ApplyFx(1f, 0f, 0f, 0f, FlashKind.None, 1f, -1f, 0f);
+            rim?.ApplyFx(1f, 0f, FlashKind.None);
+            arcs?.ApplyFx(1f, 0f, 0f);
             arcs?.Down();
             TopCentre.Lift = 0f;
             externalHud.Release();

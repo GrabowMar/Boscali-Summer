@@ -35,6 +35,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>How far the power-on has drawn the rim in, 0..1 (1 in flight). Set by the board each frame; the rim repaints when its step (1/30) changes.</summary>
         public float Boot = 1f;
 
+        private CanvasGroup group;
+        private int flashStep, drawnFlash;
+        private FlashKind flashKind;
+
+        /// <summary>The reactive visor's look (<see cref="VisorFx"/>): the layer's brightness (the G dim, a glitch's flicker, an EMP's stutter, the idle breathing) and one flash beat. The rim itself does not move: it is the glass, the symbols move behind it.</summary>
+        public void ApplyFx(float alpha, float flash, FlashKind kind)
+        {
+            if (group != null && group.alpha != alpha) group.alpha = alpha;
+            flashStep = VisorTone.Step(flash);
+            flashKind = kind;
+        }
+
         /// <summary>What the layer shows now (the sim probe reads it).</summary>
         internal bool Shown => root != null && root.gameObject.activeSelf;
         internal string EtchedText => etchedLen > 0 ? new string(etched, 0, etchedLen) : "";
@@ -47,6 +59,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
             root = CombatAlerts.Holder(canvasRoot, "BoscaliRim");
+            group = root.gameObject.AddComponent<CanvasGroup>();
+            group.interactable = group.blocksRaycasts = false;
             mesh = AvVector.Create(root, "Rim", Quads);
             text = new ScopeText(CombatAlerts.Holder(root, "Words"), font, fontMaterial);
             root.gameObject.SetActive(false);
@@ -81,10 +95,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!(k > 0.01f)) return;
             if (k != lastK) { root.localScale = new Vector3(k, k, 1f); lastK = k; }
             float refW = canvasRoot.rect.width / k;
-            Color ink = VanillaHudStyle.Colours.AllClear;
+            Color ink = VisorTone.Ink(VanillaHudStyle.Colours.AllClear, flashKind, flashStep);
             int step = Boot >= 1f ? 31 : Mathf.Clamp((int)(Boot * 30f), 0, 30);
             int sig = step * 31 + sortieSeconds * 7 + callsign.GetHashCode() * 13 + airframe.GetHashCode() * 17;
-            if (sig == drawnSig && refW == drawnRefW && ladderTop == drawnLadder && ink == drawnInk) return;
+            if (sig == drawnSig && refW == drawnRefW && ladderTop == drawnLadder && ink == drawnInk && flashStep == drawnFlash) return;
+            drawnFlash = flashStep;
             Paint(refW, ink, step);
             drawnSig = sig;
             drawnRefW = refW;
@@ -101,7 +116,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             float p = step > 30 ? 1f : step / 30f, e = VisorBoot.Ease(p);
             float cx = refW * 0.5f;
-            Rgba c = ink.ToRgba().WithAlpha(Alpha);
+            Rgba c = ink.ToRgba().WithAlpha(VisorTone.Alpha(Alpha, flashStep));
             AvQuadBuffer b = mesh.Buffer;
             b.Clear();
             if (p > 0.04f)
@@ -125,7 +140,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 // The glass's ladders: ticks every 50 from 300 to 800 down both sides, longer every 100, a small cross at the middle of each side. The left ones stay in the 12 px margin left of the column zones.
                 float left = -cx + 2f, right = cx - 2f;
-                Rgba t = ink.ToRgba().WithAlpha(0.4f);
+                Rgba t = ink.ToRgba().WithAlpha(VisorTone.Alpha(0.4f, flashStep));
                 for (int y = 300; y <= 800; y += 50)
                 {
                     float len = y % 100 == 0 ? 10f : 6f;
@@ -143,7 +158,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (p >= 0.55f)
             {
                 float shown = Mathf.Clamp01((p - 0.55f) / 0.45f);      // the etched line types on at the end of the rim's draw-in
-                Color tc = ink.WithAlpha(TextAlpha);
+                Color tc = ink.WithAlpha(VisorTone.Alpha(TextAlpha, flashStep));
                 DrawEtched(Designation, -cx + TextInset, ScopeAlign.Left, shown, tc);
                 etchedLen = Compose(etched);
                 int n = Mathf.Min(etchedLen, Mathf.CeilToInt(etchedLen * shown));
@@ -226,6 +241,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root != null) Object.Destroy(root.gameObject);
             root = null;
             canvasRoot = null;
+            group = null;
             on = false;
         }
     }

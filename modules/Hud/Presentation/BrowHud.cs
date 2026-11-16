@@ -39,6 +39,46 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>How far the power-on has drawn the rail, 0..1 (1 in flight). Set by the board each frame; the rail repaints when the step (1/40) changes.</summary>
         public float Boot = 1f;
 
+        /// <summary>How much of the caption the power-on has typed, 0..1 (1 in flight): the caption types on, character by character, after the rail is drawn.</summary>
+        public float CaptionBoot = 1f;
+
+        private CanvasGroup group;
+        private AvVector mark, scan;
+        private int flashStep, drawnFlash, drawnTyped = -1;
+        private FlashKind flashKind;
+        private float shiftX, shiftY, shiftK, scanAt = -1f;
+
+        /// <summary>
+        /// The reactive visor's look (<see cref="VisorFx"/>): the layer's brightness and place (the G jitter and a glitch's jump shift the whole root by whole pixels), one flash beat toning the rail, and the idle life: the boresight mark breathes
+        /// (its own mesh, alpha only) and a faint tick travels along the rail (a tiny mesh moved as a transform, never rebuilt). No mesh is rebuilt for any of it but the flash's four steps.
+        /// </summary>
+        public void ApplyFx(float alpha, float x, float y, float flash, FlashKind kind, float breath, float scanPos, float scanAlpha)
+        {
+            if (root == null) return;
+            if (group != null && group.alpha != alpha) group.alpha = alpha;
+            if (shiftX != x || shiftY != y || shiftK != lastK)
+            {
+                shiftX = x; shiftY = y; shiftK = lastK;
+                root.anchoredPosition = new Vector2(x, y) * (lastK > 0.01f ? lastK : 1f);      // reference pixels to the canvas's units (the holder is scaled by lastK)
+            }
+            flashStep = VisorTone.Step(flash);
+            flashKind = kind;
+            if (mark != null && mark.canvasRenderer.GetAlpha() != breath) mark.canvasRenderer.SetAlpha(breath);
+            if (scan == null) return;
+            if (scanPos < 0f || scanAlpha <= 0.01f)
+            {
+                if (scanAt >= 0f) { scanAt = -1f; scan.canvasRenderer.SetAlpha(0f); }
+                return;
+            }
+            if (scanAt != scanPos)
+            {
+                scanAt = scanPos;
+                BrowRail.Point(scanPos, out float px, out float py);
+                scan.rectTransform.anchoredPosition = new Vector2(px, Y(py));
+            }
+            scan.canvasRenderer.SetAlpha(scanAlpha);
+        }
+
         /// <summary>What the layer shows now (the sim probe reads it).</summary>
         internal bool Shown => root != null && root.gameObject.activeSelf;
         internal int CaretCount => carets.Count;
@@ -52,7 +92,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
             root = CombatAlerts.Holder(canvasRoot, "BoscaliBrow");
+            group = root.gameObject.AddComponent<CanvasGroup>();
+            group.interactable = group.blocksRaycasts = false;
             rail = AvVector.Create(root, "Rail", RailQuads);
+            mark = AvVector.Create(root, "Boresight", 2);
+            scan = AvVector.Create(root, "Scan", 3);
+            scan.canvasRenderer.SetAlpha(0f);
+            scanAt = -1f;
             words = CombatAlerts.Holder(root, "Words");
             text = new ScopeText(words, font, fontMaterial);
             root.gameObject.SetActive(false);
@@ -123,12 +169,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 lastK = k;
             }
             float refW = canvasRoot.rect.width / k;
-            Color ink = VanillaHudStyle.Colours.AllClear;
+            Color ink = VisorTone.Ink(VanillaHudStyle.Colours.AllClear, flashKind, flashStep);
             int sig = carets.Signature();
             int step = Boot >= 1f ? CurveSegments + 1 : Mathf.Clamp((int)(Boot * CurveSegments), 0, CurveSegments);
+            int typed = CaptionBoot >= 1f ? int.MaxValue : Mathf.CeilToInt(captionLen * Mathf.Clamp01(CaptionBoot));
             bool captionChanged = seenLen != captionLen || !SameCaption();
-            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && step == drawnBoot && ink == drawnInk) return;
-            Paint(refW, ink, step);
+            if (!dirty && !captionChanged && sig == drawnSig && refW == drawnRefW && step == drawnBoot && ink == drawnInk && flashStep == drawnFlash && typed == drawnTyped) return;
+            drawnFlash = flashStep;
+            drawnTyped = typed;
+            Paint(refW, ink, step, typed);
             dirty = false;
             drawnSig = sig;
             drawnRefW = refW;
@@ -148,7 +197,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static float Y(float railY) => 540f - railY;
 
         /// <summary><paramref name="step"/>: how many of the rail's 40 segments the power-on has drawn so far (<c>CurveSegments + 1</c>: all of it, with its boresight mark, carets and caption).</summary>
-        private void Paint(float refW, Color ink, int step)
+        private void Paint(float refW, Color ink, int step, int typed)
         {
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             Rgba c = ink.ToRgba();
@@ -169,7 +218,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 float len = major ? 10f : 5f;
                 AvStrokes.Line(b, x, Y(y), x + nx * len, Y(y + ny * len), major ? MajorStroke : MinorStroke, c.WithAlpha(major ? 1f : 0.7f));
             }
-            if (whole) Triangle(b, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
+            // The boresight mark has its own mesh (it breathes by alpha), and the scan tick's is one short line that is only ever moved.
+            AvQuadBuffer m = mark.Buffer;
+            m.Clear();
+            if (whole) Triangle(m, 0f, BrowRail.BoreTop, BrowRail.BoreHalf, BrowRail.BoreBase - BrowRail.BoreTop, c);
+            mark.Commit();
+            AvQuadBuffer s = scan.Buffer;
+            s.Clear();
+            AvStrokes.Line(s, 0f, 0f, 0f, 15f, 2f, Color.Lerp(ink, Color.white, 0.5f).ToRgba());
+            scan.Commit();
             for (int i = 0; whole && i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
@@ -179,7 +236,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             text.Begin();
             // Regular weight at the board's small-label size: bold with the glyph edge ran heavy and blobby.
-            if (whole) text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
+            // The caption types on after the rail (power-on): left-aligned at its final left edge so the letters appear in place, not shifting as it grows.
+            if (whole && captionLen > 0)
+            {
+                int shown = System.Math.Min(captionLen, typed);
+                if (shown >= captionLen) text.Draw(new System.ReadOnlySpan<char>(caption, 0, captionLen), 0f, CaptionY - 540f, CaptionPt, ScopeAlign.Center, ink.WithAlpha(0.95f), false);
+                else if (shown > 0) text.Draw(new System.ReadOnlySpan<char>(caption, 0, shown), -captionLen * CaptionPt * ScopeText.DesignAdvance * 0.5f, CaptionY - 540f, CaptionPt, ScopeAlign.Left, ink.WithAlpha(0.95f), false);
+            }
             for (int i = 0; whole && i < carets.Count; i++)
             {
                 BrowCaret k = carets[i];
@@ -210,6 +273,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root != null) Object.Destroy(root.gameObject);
             root = null;
             canvasRoot = null;
+            group = null;
+            mark = scan = null;
             on = false;
         }
     }

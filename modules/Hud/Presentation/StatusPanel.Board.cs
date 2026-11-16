@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool beat => shellBeat || scopeBeat || header.Beat;
         private float now;
         /// <summary>Where the visor's lag has put the symbology (<see cref="ApplySway"/>): whole device pixels in dock units, y up; zero while the head is still or the option is off. <see cref="rootBase"/> is the root's place without it.</summary>
-        private Vector2 swayShift, rootBase;
+        private Vector2 swayShift, rootBase, boardShift, boardTearShift;
         /// <summary>The box's distance from the screen's right edge as the last repaint placed it (dock units).</summary>
         private float boxFromRight;
         /// <summary>The board's box on the screen as the third-person cluster lays out (centre-origin, y up, dock units = canvas units; no size while the board is not drawn): what the cluster and the other modules' banners keep clear of.</summary>
@@ -185,14 +185,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// Every frame: put the symbology where the visor's lag puts it (<see cref="VisorSway"/>, in board units, y up): the board's root and the corners' roots move together, in whole device pixels, and only when the pixel
         /// offset changes (a position write and nothing else). The sun band stays hung from the top of the screen.
         /// </summary>
-        public void ApplySway(float x, float y)
+        public void ApplySway(float x, float y, float tearBoardX = 0f, float tearLeftX = 0f)
         {
             if (root == null || !(pixel > 0f)) return;
             float perUnit = baseUnit / pixel;
             var shift = new Vector2(VisorSway.Pixels(x, perUnit) * pixel, VisorSway.Pixels(y, perUnit) * pixel);
-            if (shift == swayShift) return;
-            swayShift = shift;
-            root.anchoredPosition = rootBase + shift;
+            // The hit glitch's torn band (the reactive visor): the board draws aside and the left column the other way for a few frames.
+            var boardTear = new Vector2(VisorSway.Pixels(tearBoardX, perUnit) * pixel, 0f);
+            var leftShift = shift + new Vector2(VisorSway.Pixels(tearLeftX, perUnit) * pixel, 0f);
+            if (leftShift == swayShift && boardTear == boardTearShift) return;
+            swayShift = leftShift;
+            boardTearShift = boardTear;
+            boardShift = shift + boardTear;
+            root.anchoredPosition = rootBase + boardShift;
             if (shadeBand != null) shadeBand.rectTransform.anchoredPosition = shadeBandBase - new Vector2(0f, shift.y);
             PlaceCornerRoots();
         }
@@ -310,7 +315,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The box's top-right corner on the device pixel grid, so every edge drawn inside it can be too.
             PlaceBoard(end, end.Height, out float fromTop);
             rootBase = new Vector2(OnGrid(cornerX - dock.rect.xMin, phaseX), OnGrid(cornerY - dock.rect.yMin, phaseY));
-            Vector2 rootPosition = rootBase + swayShift;
+            Vector2 rootPosition = rootBase + boardShift;
             if (root.anchoredPosition != rootPosition) root.anchoredPosition = rootPosition;
             Vector2 rootSize = new Vector2(Whole(geo.Width * unit), Whole(geo.Height * unit));
             if (root.sizeDelta != rootSize) root.sizeDelta = rootSize;

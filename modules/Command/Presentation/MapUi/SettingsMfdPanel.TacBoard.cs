@@ -89,6 +89,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Brow, v => board.Brow = v);
             ToggleCell(flow, page, "VISOR POWER-ON", "The visor boots when you take the seat: a self-test of what the aircraft really reports, then the zones come alive one by one. A respawn only re-syncs. A real warning cuts it short. Cockpit view.",
                 () => board.Boot, v => board.Boot = v);
+            ToggleCell(flow, page, "VISOR REACTIONS", "The visor reacts like a helmet display: symbols shake and dim under heavy G, glitch when you are hit, stutter out under an EMP, flash once for a new warning, breathe faintly when calm. Never with reduced motion. Cockpit view.",
+                () => board.Reactive, v => board.Reactive = v);
             ToggleCell(flow, page, "FUEL AND THROTTLE ARCS", "Two segmented arcs hugging the reticle in place of the game's plain fuel and throttle arcs. Cockpit view. Stays on with the board off.",
                 () => board.Arcs, v => board.Arcs = v);
 

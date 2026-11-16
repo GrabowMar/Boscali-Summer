@@ -215,6 +215,40 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         /// <summary>
+        /// The reactive visor (tests/ingame/hud-react.json): pin each reaction so a still can be taken of a moment that lasts a third of a second. <c>g</c> a load factor to use instead of the real one (a value under -50 gives the real one back);
+        /// <c>hit</c> "round" or "blast" sends a hit through the same counter Immersion's patch writes (<see cref="VisorEvents"/>), <c>glitch</c> (weight 0..1) starts a glitch directly and <c>glitchHold</c> freezes it at that many seconds (negative: runs on);
+        /// <c>emp</c> "on" / "off" / "real" forces the EMP flag and <c>empHold</c> freezes its clock; <c>flash</c> "warning" or "bright" starts a beat and <c>flashHold</c> freezes it. Reads back what the visor is doing.
+        /// </summary>
+        public static Dictionary<string, object> Visor(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            HudBoard board = HudBoard.Instance;
+            if (board == null) return Failure("HudAutomation", "Visor", "no HUD board");
+            VisorFx fx = board.Fx;
+            if (Has(args, "g")) { float g = Number(args, "g", 1f); fx.GForce = g < -50f ? float.NaN : g; }
+            if (Has(args, "seek")) fx.Seek(Number(args, "seek", 0f));
+            string hit = Text(args, "hit");
+            if (!string.IsNullOrEmpty(hit)) VisorEvents.Hit(string.Equals(hit, "blast", StringComparison.OrdinalIgnoreCase) ? 0f : 1f, string.Equals(hit, "blast", StringComparison.OrdinalIgnoreCase) ? 1f : 0f);
+            if (Has(args, "glitch")) fx.StartGlitch(Number(args, "glitch", 0.5f));
+            if (Has(args, "glitchHold")) { float h = Number(args, "glitchHold", -1f); fx.HoldGlitch = h < 0f ? float.NaN : h; }
+            string emp = Text(args, "emp");
+            if (!string.IsNullOrEmpty(emp)) fx.EmpForce = string.Equals(emp, "on", StringComparison.OrdinalIgnoreCase) ? 1 : string.Equals(emp, "off", StringComparison.OrdinalIgnoreCase) ? 0 : -1;
+            if (Has(args, "empHold")) { float h = Number(args, "empHold", -1f); fx.HoldEmp = h < 0f ? float.NaN : h; }
+            string flash = Text(args, "flash");
+            if (!string.IsNullOrEmpty(flash)) fx.StartFlash(string.Equals(flash, "bright", StringComparison.OrdinalIgnoreCase) ? FlashKind.Bright : FlashKind.Warning);
+            if (Has(args, "flashHold")) { float h = Number(args, "flashHold", -1f); fx.HoldFlash = h < 0f ? float.NaN : h; }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "alpha", fx.Alpha }, { "shift_x", fx.ShiftX }, { "shift_y", fx.ShiftY }, { "tear_board", fx.TearBoard }, { "tear_left", fx.TearLeft },
+                { "flash", fx.Flash }, { "flash_tone", fx.FlashTone.ToString() }, { "g_load", fx.GLoad }, { "glitch", fx.GlitchRunning }, { "emp", fx.EmpRunning }, { "reacting", fx.Reacting },
+                { "breath_mark", fx.BreathMark }, { "scan_at", fx.ScanAt }, { "hit_serial", VisorEvents.HitSerial }, { "booting", board.BootHud.Active },
+                { "scan_shown", board.Brow != null && board.Brow.Shown }, { "live", fx.Live }, { "warn_up", fx.WarnLevel },
+            };
+            Debug.Log("[HudAutomation] Visor: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
         /// The segmented fuel and throttle arcs as they stand (tests/ingame/hud-arcs.json): whether they are up, whether the game's own two gauges are hidden behind them, the lit segments, the measured circle
         /// and the game's gauges' own alpha. <c>fuel</c> (0..1) first sets every tank to that share of its capacity and <c>throttle</c> (0..1) the player's throttle input, for a capture of a low tank or a full throttle.
         /// </summary>
@@ -239,7 +273,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 { "ok", true }, { "fuel", aircraft.GetFuelLevel() }, { "throttle", aircraft.GetInputs()?.throttle ?? -1f },
                 { "shown", arcs != null && arcs.Shown }, { "natives_hidden", arcs != null && arcs.NativesHidden }, { "fuel_lit", arcs?.FuelLit ?? -1 }, { "throttle_lit", arcs?.ThrottleLit ?? -1 },
-                { "radius", arcs?.FuelRadius ?? -1f }, { "axis", arcs?.FuelAxis ?? 0f }, { "throttle_word", arcs?.ThrottleWord ?? "" },
+                { "native_texts", arcs?.NativeTexts ?? "" }, { "radius", arcs?.FuelRadius ?? -1f }, { "axis", arcs?.FuelAxis ?? 0f }, { "throttle_word", arcs?.ThrottleWord ?? "" },
             };
             Debug.Log("[HudAutomation] Arcs: " + Describe(result));
             return result;

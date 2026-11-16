@@ -63,6 +63,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Arcs;
         /// <summary>The visor's power-on sequence when the pilot takes the seat (2026-11-16, "HELMET ON"): a full boot the first time, a short re-sync after a respawn. Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
         public bool Boot;
+        /// <summary>The visor reacts to what happens to the pilot and the jet (2026-11-16): G load, hits, EMP, warning onset, and a faint idle life. Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
+        public bool Reactive;
         /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to <see cref="TextEdgeMax"/> (TMP outline units).</summary>
         public float TextEdge;
         public const float TextEdgeMax = 0.25f;
@@ -75,7 +77,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Approach, Page4 = BoardPage.Strike, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, TextEdge = 0.16f,
+            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, Reactive = true, TextEdge = 0.16f,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>
