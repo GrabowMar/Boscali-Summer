@@ -233,8 +233,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.ToneTick(tx, y, tone, dip ? 0.55f : 1f);
             if (tickerCount != null)
             {
-                g.Text(tickerCount, x + w, cy, tone, 12f, ScopeAlign.Right, true);
-                room -= ScopeCanvas.TextW(tickerCount) + 10f;
+                // The count stands one gap after the words, not at the zone's edge (a short line would leave it adrift).
+                string words = TickerWords(line);
+                float countW = ScopeCanvas.TextW(tickerCount), wordsRoom = room - countW - 10f, wordsW = Mathf.Min(ScopeCanvas.TextW(words), wordsRoom);
+                g.Text(tickerCount, tx + 10f + wordsW + 10f, cy, tone, 12f, ScopeAlign.Left, true);
+                room = wordsRoom;
             }
             g.FitText(TickerWords(line), tx + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
