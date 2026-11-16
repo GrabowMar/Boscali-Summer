@@ -82,6 +82,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Corners, v => board.Corners = v);
             ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
+            ToggleCell(flow, page, "VISOR BROW", "The curved rail at the top centre with bearing marks, and the faint frame ticks down the screen's sides. Cockpit view. Stays on with the board off.",
+                () => board.Brow, v => board.Brow = v);
 
             flow.Section(AvIcon.Settings, "TAC BOARD EXTRAS", null);
             ToggleCell(flow, page, "VISOR SWAY", "The symbols lag a little behind head movement, as if hung just off the glass.",

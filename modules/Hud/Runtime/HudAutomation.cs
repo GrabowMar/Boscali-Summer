@@ -206,6 +206,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.BannerWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
                 { "ring", alerts?.RingMarks ?? 0 }, { "callout", alerts?.CalloutText ?? "" }, { "native_list_hidden", alerts != null && alerts.NativeListHidden },
+                { "brow_shown", HudBoard.Instance?.Brow != null && HudBoard.Instance.Brow.Shown }, { "brow_carets", HudBoard.Instance?.Brow?.CaretCount ?? 0 }, { "brow_caption", HudBoard.Instance?.Brow?.CaptionText ?? "" },
             };
             Debug.Log("[HudAutomation] Alerts: " + Describe(result));
             return result;

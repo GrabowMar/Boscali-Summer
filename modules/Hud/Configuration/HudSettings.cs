@@ -31,6 +31,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> Sway { get; }
         public ConfigEntry<bool> Corners { get; }
         public ConfigEntry<bool> CentreAlerts { get; }
+        public ConfigEntry<bool> Brow { get; }
 
         public HudSettings(ConfigFile config)
         {
@@ -113,6 +114,9 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             CentreAlerts = config.Bind(section, "CentreAlerts", d.CentreAlerts,
                 "Combat alerts at the centre of the screen: a WARNING banner at the top centre (MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL), chevrons round the reticle pointing at every missile inbound, and HIT / DESTROYED / MISSED callouts under it. It stays when the board is switched off." + live);
 
+            Brow = config.Bind(section, "Brow", d.Brow,
+                "The visor's brow rail at the top centre (a curved scale with bearing marks for missiles inbound, radars on you, an ace on the hunt, the objective, the runway, the tanker and the landing zone, and a one-line status caption) and the faint frame ticks down the screen's sides. Cockpit view only." + live);
+
             // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
             BoardOptions saved = d;
             Snapshot(ref saved);
@@ -145,6 +149,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Sway = Sway.Value;
             into.Corners = Corners.Value;
             into.CentreAlerts = CentreAlerts.Value;
+            into.Brow = Brow.Value;
             into.Sanitize();
         }
 
@@ -169,6 +174,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.Sway { get => Sway.Value; set => Sway.Value = value; }
         bool ITacBoardSettings.Corners { get => Corners.Value; set => Corners.Value = value; }
         bool ITacBoardSettings.CentreAlerts { get => CentreAlerts.Value; set => CentreAlerts.Value = value; }
+        bool ITacBoardSettings.Brow { get => Brow.Value; set => Brow.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
         void ITacBoardSettings.ResetToDefaults()
@@ -177,7 +183,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             {
                 Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
                 PageMissileCam,
-                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

@@ -57,6 +57,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Sway, Corners;
         /// <summary>The centre combat layer (2026-10-28): the WARNING banner, the THREAT RING round the reticle and the shot callouts. Independent of <see cref="Enabled"/>.</summary>
         public bool CentreAlerts;
+        /// <summary>The visor's brow rail and frame furniture (2026-11-16). Independent of <see cref="Enabled"/>.</summary>
+        public bool Brow;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
@@ -66,7 +68,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Approach, Page4 = BoardPage.Strike, ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true, CentreAlerts = true,
+            Sway = true, Corners = true, CentreAlerts = true, Brow = true,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>

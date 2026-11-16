@@ -51,6 +51,8 @@ namespace BoscaliSummer.Core.Contracts
         bool Corners { get; set; }
         /// <summary>The centre combat layer: WARNING banner, threat ring, shot callouts. Independent of <see cref="Enabled"/>.</summary>
         bool CentreAlerts { get; set; }
+        /// <summary>The visor's brow rail (bearing marks and status caption at the top centre) and the faint frame ticks on the screen's sides. Cockpit view only.</summary>
+        bool Brow { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
         void ResetToDefaults();
     }

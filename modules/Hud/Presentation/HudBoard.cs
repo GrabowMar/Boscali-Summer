@@ -62,6 +62,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // The centre combat layer (WARNING banner, THREAT RING, shot callouts) and the aircraft it is up for (null: down).
         private CombatAlerts alerts;
         private Aircraft alertAircraft;
+        // The visor's brow rail and frame furniture (cockpit view only).
+        private BrowHud brow;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
@@ -91,6 +93,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The centre combat layer (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
         internal CombatAlerts Alerts => alerts;
+
+        /// <summary>The visor's brow rail (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
+        internal BrowHud Brow => brow;
 
         private void OnEnable()
         {
@@ -154,6 +159,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The centre combat layer's blink, ring and pop, every frame (its data comes with the 10 Hz read).
             try { alerts?.Frame(alertAircraft, threats, this, Time.unscaledTime); }
             catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
+            try { brow?.Frame(); }
+            catch (Exception e) { brow?.Hide(); PatchGuard.Report("Hud.Brow.Frame", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
             if (panel != null)
@@ -278,6 +285,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 alertAircraft = showAlerts ? hudAircraft : null;
             }
             catch (Exception e) { PatchGuard.Report("Hud.Alerts", e); }
+
+            // The visor's brow rail and furniture: cockpit view only (the external views have the third-person boxes, a missile ride has no nose to take bearings from). The lane under it rises where it is not drawn.
+            try
+            {
+                bool showBrow = options.Brow && hudAircraft != null && !hudAircraft.disabled && !thirdPerson && !missileCam && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                brow ??= new BrowHud();
+                int scope = options.ScopeMode == BoardScopeMode.Auto ? 0 : options.ScopeMode == BoardScopeMode.Manual ? 1 : 2;
+                brow.Read(showBrow && brow.Ensure(), hudAircraft, frame, scope, this);
+                TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Brow", e); }
 
             // The card stands in the left column in the external views, and in the cockpit while a target is locked (the picture is the cockpit tac screen's own camera, so nothing native is touched).
             if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
@@ -427,6 +445,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alerts?.Destroy();
             alerts = null;
             alertAircraft = null;
+            brow?.Destroy();
+            brow = null;
+            TopCentre.Lift = 0f;
             nextRead = 0;
             targetReadout.Release();
             bootAircraft = null;
@@ -466,6 +487,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cluster?.Hide();
             alerts?.Hide();
             alertAircraft = null;
+            brow?.Hide();
+            TopCentre.Lift = 0f;
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Tick(false, null);

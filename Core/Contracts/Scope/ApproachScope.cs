@@ -56,5 +56,8 @@ namespace BoscaliSummer.Core.Contracts
         public float PadX, PadY;
         /// <summary>Flat distance to the threshold (or the pad).</summary>
         public float DistanceM;
+        /// <summary>Where the threshold (or the pad) lies off the nose, degrees, + right, -180..180 (the visor's brow rail); <see cref="HasBearing"/> false: not known.</summary>
+        public bool HasBearing;
+        public float BearingDeg;
     }
 }
