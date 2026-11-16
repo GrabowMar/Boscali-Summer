@@ -21,7 +21,9 @@ namespace BoscaliSummer.Core.Ui
     internal static class HudZones
     {
         public const float Margin = 12f, Gutter = 16f, RefHeight = 1080f, FullWidth = 1920f;
-        private const float NarrowMin = 281f, WideLog = 562f;
+        private const float NarrowMin = 281f;
+        /// <summary>The wide LOG / COMMS / NOTICE column's width.</summary>
+        public const float WideLog = 562f;
 
         private enum Side { Left, Centre, Right }
 
@@ -37,7 +39,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Route: side = Side.Left; x = 12; y = 443; w = 281; h = 133; break;
                 case HudZone.TargetCam: side = Side.Left; x = 12; y = 592; w = 281; h = 200; break;
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
-                case HudZone.Lane: side = Side.Centre; x = 804; y = TopCentre.StripTop; w = TopCentre.Width; h = TopCentre.BannerTop + TopCentre.BannerHeight - TopCentre.StripTop; break;
+                case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.StripTop; w = TopCentre.Width; h = TopCentre.BannerTop + TopCentre.BannerHeight - TopCentre.StripTop; break;
                 case HudZone.Callout: side = Side.Centre; x = 888; y = 594; w = 140; h = 38; break;
                 case HudZone.BoardTop: side = Side.Right; x = 1132; y = 6; w = 383; h = 134; break;
                 case HudZone.BoardSpine: side = Side.Right; x = 1531; y = 6; w = 381; h = 624; break;
@@ -63,6 +65,7 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>Canvas pixels: <see cref="Ref"/> at the canvas's reference width, scaled by canvasH / 1080.</summary>
         public static ZoneRect Of(HudZone zone, float canvasW, float canvasH)
         {
+            if (canvasH <= 0f) return default;
             float k = canvasH / RefHeight;
             ZoneRect r = Ref(zone, canvasW / k);
             return new ZoneRect(r.X * k, r.Y * k, r.W * k, r.H * k);

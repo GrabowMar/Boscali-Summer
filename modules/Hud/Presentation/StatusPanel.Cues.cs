@@ -177,7 +177,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (noticeOn)
             {
                 ZoneRect zone = HudZones.Ref(HudZone.Notice, canvasW * k);
-                float noticeTop = Mathf.Round(HudZones.NoticeTop(inkBottom));
+                float noticeTop = Mathf.Round(HudZones.NoticeTop(Mathf.Max(inkBottom, LeftHudStack.CommsBottom)));      // under the cue stack and under a COMMS block that grew past its zone (both 1080p units; CommsBottom is 0 when hidden)
                 if (HudZones.NoticeFits(noticeTop, routeLive)) PaintNotice(g, zone.X, noticeTop, zone.W, furniture);      // else the ROUTE slot has the room: it comes back by itself when there is some
             }
             g.End();
@@ -225,7 +225,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PaintNotice(ScopeCanvas g, float x, float y, float w, bool furniture)
         {
             TickerLine line = noticeLine;
-            ScopeTone tone = SystemsMath.ToneOf(line.Tone), words = tone == Dim ? Ink : tone;      // info words in full ink: DIM vanishes on a bright sky
+            ScopeTone tone = SystemsMath.ToneOf(line.Tone);      // info is already full INK
             bool dip = line.Tone == HudTone.Warning && !NoticeFlashOn();
             float cy = y + 6f, shelfW = furniture ? Mathf.Ceil(CueLayout.TextInset + ScopeCanvas.TextW("NOTICE") + 20f) : 0f;
             if (furniture) g.CaptionShelf(x, y, shelfW, "NOTICE");
@@ -233,10 +233,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.ToneTick(tx, y, tone, dip ? 0.55f : 1f);
             if (tickerCount != null)
             {
-                g.Text(tickerCount, x + w, cy, words, 12f, ScopeAlign.Right, true);
+                g.Text(tickerCount, x + w, cy, tone, 12f, ScopeAlign.Right, true);
                 room -= ScopeCanvas.TextW(tickerCount) + 10f;
             }
-            g.FitText(TickerWords(line), tx + 10f, cy, room, words, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
+            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
 
         /// <summary>

@@ -92,6 +92,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             HideRoute();
             routeSig = 0;
+            routeLive = false;
         }
 
         private bool EnsureRouteTree()
