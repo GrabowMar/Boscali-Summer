@@ -11,12 +11,13 @@ namespace BoscaliSummer.Modules.Wing.Presentation
     /// <summary>TACTICAL › ORDERS (spec 2026-10-04 §4.2; mockup board/orders.html #p1) on kit v2: the cue line while a map order is armed
     /// (HERE and CANCEL), the command card — 24 keys with the wing-key letter, a group rail, an input mark and an LED
     /// for what each element flies — then REACT and the queue lane. A point or area
-    /// order latches its key and arms the map; a shift-click (or the QUEUE toggle) adds it to the scope's element lane instead. The
+    /// order latches its key and arms the map; a shift-click adds it to the scope's element lane instead. The
     /// console body scrolls.</summary>
     internal sealed partial class WmcTactical
     {
         private AvRow cueRow;
         private AvControl here, cancel;
+        private WmcScopeBar scopeBar;
         private WmcCommandCard card;
         private WmcQueueLane queue;
         private readonly AvControl[] grid = new AvControl[OrderGrid.Rows * OrderGrid.Columns];
@@ -35,6 +36,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private void BuildOrders(AvFlow f)
         {
+            // Who the orders go to, said once and pickable here (the same bar BEHAVIOUR shows as APPLY TO); table clicks still set it.
+            scopeBar = f.Add(new WmcScopeBar(f.Content, "ORDERS TO"));
+
             // The cue line: the armed order (HERE last-but-one, CANCEL at the right edge); hidden while nothing is armed.
             cueRow = f.Add(new AvRow(f.Content));
             here = cueRow.AddTrailing(new AvControl.Spec("HERE", Here));
@@ -44,7 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             cueRow.Rect.gameObject.SetActive(false);
 
             // The order keys come straight under the table and say who they go to; the profile slots live on BEHAVIOUR.
-            ordersSection = f.Section(AvIcon.Flag, "ORDERS", "");
+            f.Section(AvIcon.Flag, "ORDERS", "WING KEY + LETTER");
             BuildGrid(f);
         }
 
@@ -65,8 +69,10 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 react[i] = reactRow.Controls[i];
                 react[i].Help = OrderGrid.React[i].Tip;
             }
-            queue = f.Add(new WmcQueueLane(f.Content, ToggleQueue, RunQueue, ClearQueue));
-            queue.Toggle.Help = "Add the next map orders to the scope's element lane instead of replacing its task (holding shift does the same).";
+            // The queue lane shows only while a step is queued (shift + a map order adds one).
+            queue = f.Add(new WmcQueueLane(f.Content, RunQueue, ClearQueue));
+            queue.SetHint("SHIFT + MAP ORDER ADDS");
+            queue.Rect.gameObject.SetActive(false);
             queue.Run.Help = "Run the plan steps queued in this lane, element by element.";
             queue.Clear.Help = "Empty the queued plan (a running one stops first: press twice).";
         }
@@ -190,25 +196,19 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return true;
         }
 
-        private AvSection ordersSection;
-        private string ordersNoteShown;
-
         private void RefreshOrders(WmcContext c)
         {
-            string to = c.CanOrder && c.Count == 0 ? "NO AIRCRAFT IN THE WING" : "TO " + c.ScopeLabel + " · WING KEY + LETTER"; // one shared reason when no key can act
-            if (to != ordersNoteShown)
-            {
-                ordersNoteShown = to;
-                ordersSection.SetCaption(to);
-            }
+            scopeBar.Refresh(c);
             RefreshCue(c);
-            HelosInScope(c, out bool anyHelo, out bool allHelo);
+            HelosInScope(c, out bool anyHelo, out bool allHelo, out bool heloInWing);
             SetGrid(allHelo);
             bool scoped = c.Scope.Kind != ScopeKind.Wing;
             ComputeLeds(c);
             for (int k = 0; k < grid.Length; k++)
             {
                 GridCell cell = shownCells[k];
+                // LAND and CARGO are helicopter orders: a wing without one leaves their places empty instead of two dead keys.
+                card.SetShown(k, heloInWing || allHelo || (cell.Order != GridOrder.Land && cell.Order != GridOrder.Cargo));
                 string why = OrderGrid.Why(cell, c.CanOrder, c.Count, scoped, anyHelo);
                 bool on = why == null;
                 string tip = why ?? cell.Tip;
@@ -218,7 +218,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                     shownTips[k] = tip;
                     grid[k].Interactable = on;
                     grid[k].Help = tip;
-                    card.SetWhy(k, on ? "" : WhyCode(cell, c));
                 }
                 grid[k].Latched = cell.Map != MapMode.Off ? c.Map.Mode == cell.Map
                     : cell.Order == GridOrder.Ecm ? JammingInScope(c)
@@ -227,16 +226,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             RefreshReact(c);
             RefreshQueue(c);
-        }
-
-        /// <summary>A word of why a key is off, in the width of its corner. None while the whole card is off for one reason (a client):
-        /// the footer's hint says it once instead of on every key.</summary>
-        private static string WhyCode(in GridCell cell, WmcContext c)
-        {
-            if (!cell.Built) return "SOON";
-            if (!c.CanOrder) return "";
-            if (c.Count == 0 && cell.Order != GridOrder.Call) return ""; // the section caption says it once
-            return cell.Order == GridOrder.Detach ? "SELECT" : "NO HELO";
         }
 
         static WmcTactical()
@@ -328,11 +317,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             WingPlan plan = plans?.Plan;
             int steps = 0;
             if (plan != null) for (int l = 0; l < WingPlan.Lanes; l++) steps += plan.Steps[l].Count;
-            queue.Toggle.Latched = c.Queue;
-            queue.Toggle.Interactable = c.CanOrder;
-            queue.Run.Interactable = plans != null && steps > 0 && !plans.Running;
-            queue.Clear.Interactable = plans != null && steps > 0;
-            int key = steps * 131 + (c.Queue ? 1 : 0) + (c.CanOrder ? 2 : 0) + (plans != null && plans.Running ? 4 : 0) + (plans != null && plans.Completed ? 8 : 0)
+            bool show = plans != null && (steps > 0 || plans.Running);
+            if (queue.Rect.gameObject.activeSelf != show)
+            {
+                queue.Rect.gameObject.SetActive(show);
+                relayout = true;
+            }
+            if (!show) return;
+            queue.Run.Interactable = steps > 0 && !plans.Running;
+            queue.Clear.Interactable = steps > 0;
+            int key = steps * 131 + (c.CanOrder ? 2 : 0) + (plans != null && plans.Running ? 4 : 0) + (plans != null && plans.Completed ? 8 : 0)
                       + c.ScopeElement * 8191;
             // An aborted plan keeps its runner, but its states are not shown (RUN flies every step again).
             PlanRunner runner = plans != null && (plans.Running || plans.Completed) ? plans.Runner : null;
@@ -350,8 +344,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (key == queueKey) return;
             queueKey = key;
-            queue.SetHint(!c.CanOrder ? (c.Client ? "THE HOST QUEUES ORDERS" : "NOT READY")
-                : c.Queue ? "MAP ORDERS ADD TO " + ElementRoster.Letter(c.ScopeElement) : "SHIFT + MAP ORDER ADDS");
             int line = 0;
             for (int e = 0; e < ElementRoster.MaxElements; e++)
             {
@@ -395,14 +387,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             : e == 1 ? AvStyleHost.FuiColor("caution", AvTheme.RailCaution) : e == 2 ? AvStyleHost.FuiColor("ready", AvTheme.RailReady)
             : AvStyleHost.FuiColor("info", AvTheme.RailInfo);
 
-        private void ToggleQueue()
-        {
-            if (last == null) return;
-            last.Queue = !last.Queue;
-            queueKey = int.MinValue;
-            if (last.Queue) WingToast.Show("Queue on: map orders add to element " + ElementRoster.Letter(last.ScopeElement));
-        }
-
         private void RunQueue()
         {
             WingPlans plans = WingPlans.Instance;
@@ -440,19 +424,22 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             return false;
         }
 
-        /// <summary>Whether any scoped member is a helicopter or tiltwing, and whether every one is (host; a client's rows carry no airframe
-        /// class). Only an all-helicopter scope swaps SUPPORT for the helo keys: a mixed one keeps RTB and REFIT.</summary>
-        private static void HelosInScope(WmcContext c, out bool any, out bool all)
+        /// <summary>Whether any scoped member is a helicopter or tiltwing, whether every one is, and whether the wing has one at all
+        /// (host; a client's rows carry no airframe class). Only an all-helicopter scope swaps SUPPORT for the helo keys: a mixed one
+        /// keeps RTB and REFIT; LAND and CARGO show while the wing has a helicopter.</summary>
+        private static void HelosInScope(WmcContext c, out bool any, out bool all, out bool inWing)
         {
-            any = all = false;
+            any = all = inWing = false;
             if (c.Wing == null || c.Client) return;
             bool jets = false;
             foreach (WingMember m in c.Wing.Members)
             {
                 if (m.Released || (object)m.Aircraft == null) continue;
+                bool helo = m.Profile != null && m.Profile.Class != AirframeClass.FixedWing;
+                if (helo) inWing = true;
                 int i = WingRows.IndexOf(c.Rows, c.Count, m.Aircraft.persistentID.Id);
                 if (i < 0 || !c.InScope(c.Rows[i])) continue;
-                if (m.Profile != null && m.Profile.Class != AirframeClass.FixedWing) any = true;
+                if (helo) any = true;
                 else jets = true;
             }
             all = any && !jets;

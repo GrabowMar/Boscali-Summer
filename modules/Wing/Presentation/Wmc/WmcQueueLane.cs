@@ -7,8 +7,8 @@ using BoscaliSummer.Modules.Wing.Domain;
 namespace BoscaliSummer.Modules.Wing.Presentation
 {
     /// <summary>ORDERS' queue lane (mockup board/orders.html .queue): what each element is flying now and the plan steps queued behind it,
-    /// one line per element in use, with the QUEUE toggle (the same as holding shift on a map order: it adds the order to the scope's
-    /// lane instead of replacing its task), RUN and CLEAR for the queued plan. Kit gap: no lane part, so it is a card of kit text and
+    /// one line per element in use, with RUN and CLEAR for the queued plan. Shift + a map order adds a step; ORDERS shows the lane only
+    /// while one is queued or the plan runs (the ADD toggle was cut 2026-11-15). Kit gap: no lane part, so it is a card of kit text and
     /// buttons.</summary>
     internal sealed class WmcQueueLane : AvPart
     {
@@ -17,19 +17,18 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private readonly AvFrame frame;
         private readonly TMP_Text title, hint;
         private readonly TMP_Text[] lines = new TMP_Text[Lines];
-        public readonly AvControl Toggle, Run, Clear;
+        public readonly AvControl Run, Clear;
         private int shownLines;
 
-        public WmcQueueLane(RectTransform parent, Action toggle, Action run, Action clear)
+        public WmcQueueLane(RectTransform parent, Action run, Action clear)
         {
             Rect = AvLay.Child(parent, "QueueLane");
             frame = WmcDraw.FillFrame(Rect, AvChamfer.Diagonal(6f));
             title = WmcSheet.Text(Rect, "Title", AvTextRole.Micro, TextAlignmentOptions.MidlineLeft, "QUEUE");
             hint = WmcSheet.Text(Rect, "Hint", AvTextRole.ProseSmall, TextAlignmentOptions.MidlineLeft);
-            Toggle = AvControl.Make(Rect, new AvControl.Spec("ADD", toggle, AvButtonStyle.Quiet));
             Run = AvControl.Make(Rect, new AvControl.Spec("RUN", run, AvButtonStyle.Quiet));
             Clear = AvControl.Make(Rect, new AvControl.Spec("CLEAR", clear, AvButtonStyle.Quiet));
-            foreach (AvControl b in new[] { Toggle, Run, Clear }) b.SingleLine();
+            foreach (AvControl b in new[] { Run, Clear }) b.SingleLine();
             for (int i = 0; i < Lines; i++)
             {
                 lines[i] = AvText.Make(Rect, "Lane" + i, AvTextRole.ProseSmall, "", TextAlignmentOptions.MidlineLeft);
@@ -49,8 +48,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             AvLay.Place(title.rectTransform, Pad + 2f, y, 52f, HeadH);
             AvLay.Place(Clear.Rect, s.W - Pad - 56f, y + 2f, 56f, HeadH - 4f);
             AvLay.Place(Run.Rect, s.W - Pad - 56f - 3f - bw, y + 2f, bw, HeadH - 4f);
-            AvLay.Place(Toggle.Rect, s.W - Pad - 56f - 3f - bw - 3f - bw, y + 2f, bw, HeadH - 4f);
-            AvLay.Place(hint.rectTransform, Pad + 58f, y, s.W - Pad - 56f - 3f - 2f * (bw + 3f) - Pad - 58f, HeadH);
+            AvLay.Place(hint.rectTransform, Pad + 58f, y, s.W - Pad - 56f - 3f - (bw + 3f) - Pad - 58f, HeadH);
             y += HeadH;
             for (int i = 0; i < Lines; i++)
             {
@@ -83,7 +81,6 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             title.color = AvStyleHost.FuiColor("info", AvTheme.RailInfo);
             hint.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
             foreach (TMP_Text t in lines) t.color = AvStyleHost.FuiInk("row-name", AvTheme.TextPrimary);
-            Toggle.Restyle();
             Run.Restyle();
             Clear.Restyle();
         }

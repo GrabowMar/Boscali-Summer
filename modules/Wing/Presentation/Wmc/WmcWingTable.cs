@@ -391,10 +391,9 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             for (int i = 0; i < n; i++)
                 if (kind[i] == KindHead) FillHead(heads[which[i]], which[i], c);
             for (int i = 0; i < n; i++) shapeKey = shapeKey * 31 + kind[i] * 8 + which[i];
-            bool empty = c.Count == 0;
-            int open = c.Client ? 0 : Mathf.Max(0, WingService.MaxMembers - c.Count - Pending(c));
-            bool wantSeats = empty || open > 0;
-            SeatsRow(c, empty, open, wantSeats);
+            // The seat row is the empty wing's call to action only: with wingmen, SUPPLY and the live count say there is room.
+            bool wantSeats = c.Count == 0;
+            SeatsRow(c, wantSeats);
             // Show exactly the cells named; hide the rest.
             int hn = 0, rn = 0;
             Span<bool> headOn = stackalloc bool[MaxElements];
@@ -424,18 +423,16 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private int seatsKey = int.MinValue;
 
-        private static int Pending(WmcContext c) => !c.Client && SpawnService.Instance != null ? SpawnService.Instance.PendingTotal : 0;
-
-        private void SeatsRow(WmcContext c, bool empty, int open, bool on)
+        private void SeatsRow(WmcContext c, bool on)
         {
             if (seats.Rect.gameObject.activeSelf != on) seats.Rect.gameObject.SetActive(on);
             seatsOn = on;
             if (!on) return;
-            int key = (empty ? 1 : 0) + open * 2 + (c.Client ? 1000 : 0) + (c.Stale ? 2000 : 0);
+            int key = (c.Client ? 1 : 0) + (c.Stale ? 2 : 0);
             if (key == seatsKey) return;
             seatsKey = key;
-            string name = empty ? (c.Client && c.Stale ? "WAITING FOR THE HOST'S WING" : "NO WINGMEN") : AvNum.Fixed(open, 0) + " OPEN";
-            seats.Set(name, empty ? "CALL one on the WING row, or requisition on SUPPLY." : "Empty seats: requisition wingmen on SUPPLY.", "", AvState.Inert);
+            seats.Set(c.Client && c.Stale ? "WAITING FOR THE HOST'S WING" : "NO WINGMEN", "CALL one on the WING row, or requisition on SUPPLY.", "",
+                AvState.Inert);
             SupplyButton.gameObject.SetActive(!c.Client);
         }
 

@@ -35,7 +35,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             ? "No wingmen yet: CALL one on the WING row, requisition on SUPPLY, or use the radial menu."
             : sub == SubFormation ? form.Hint : sub == SubRoute ? route.Hint
             : last != null && last.Client ? "Orders are host only for now."
-            : "Click the table to choose who orders go to.";
+            : "ORDERS TO picks who: ALL, an element, or a table row (shift adds). A profile sets how they fight.";
 
         public string Alert => alertText;
 
