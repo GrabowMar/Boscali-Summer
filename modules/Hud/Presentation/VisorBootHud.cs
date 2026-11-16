@@ -16,8 +16,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// </summary>
     internal sealed class VisorBootHud
     {
-        private const int Quads = 64;
-        private const float Pt = 12f, OnlinePt = 14f, Row = 16f, TitleY = 462f, FirstY = 484f, Advance = 7.8f, BlockMinX = 296f, BlockFromCentre = 690f;
+        private const int Quads = 96;
+        // The self-test is the star of its 1.5 s: 1.4x the board's small-label size, centred just under the flight symbology and over the dashboard (reference px from the top of a 1080 screen).
+        private const float Pt = 16.8f, TitlePt = 14f, OnlinePt = 19f, Row = 21f, TitleY = 600f, FirstY = 632f, Advance = Pt * ScopeText.DesignAdvance;
+        private const string Title = "VISOR SELF-TEST · HMD-9";
 
         private readonly VisorBootClock clock = new VisorBootClock();
         private readonly BootLine[] lines = new BootLine[VisorBoot.MaxLines];
@@ -28,7 +30,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private ScopeText text;
         private int lineCount, onlineLen, resolvedHeard;
         private float lastK, t;
-        private bool collapsedHeard;
+        private bool collapsedHeard, onlineBeat;
 
         /// <summary>The boot is running (the zones below are in their boot state).</summary>
         public bool Active => clock.Active;
@@ -44,6 +46,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The zone's visibility now: its reveal with the power-up stutter; 1 when no boot runs.</summary>
         public float Alpha(BootGroup group) => clock.Active ? VisorBoot.Flicker(VisorBoot.Reveal(clock.Mode, group, t), t) : 1f;
 
+        /// <summary>The closing line came up since the last call (once per boot): the owner flashes the rim and brow for the end beat.</summary>
+        public bool TakeOnlineBeat() { bool b = onlineBeat; onlineBeat = false; return b; }
+
         /// <summary>Start a boot with the real state it will report. <paramref name="callsign"/> goes on the closing line. One allocation here, none per frame.</summary>
         public void Begin(BootMode mode, float time, in BootInputs inputs, string callsign)
         {
@@ -53,7 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             onlineLen = System.Math.Min(closing.Length, online.Length);
             closing.CopyTo(0, online, 0, onlineLen);
             resolvedHeard = 0;
-            collapsedHeard = false;
+            collapsedHeard = onlineBeat = false;
             clock.Start(mode, time);
             t = 0f;
             PlaySound(AvUiCue.Open);
@@ -134,17 +139,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     }
             }
 
-            float left = System.Math.Max(BlockMinX, refW * 0.5f - BlockFromCentre) - refW * 0.5f;      // text x: from the centre line
+            float left = -VisorBoot.Cols * Advance * 0.5f;      // text x: from the centre line, the block centred on the reticle's axis
             text.Begin();
             if (VisorBoot.ListShown(mode, t)) PaintList(b, left, ink, bright, palette);
             float onlineAlpha = VisorBoot.OnlineAlpha(mode, t);
             if (onlineAlpha > 0f)
             {
-                if (!collapsedHeard && mode == BootMode.Full) { collapsedHeard = true; PlaySound(AvUiCue.Confirm); }
-                // The closing line is the one thing left on the screen: a size up and full ink so it reads on bright sky.
-                text.Draw(new System.ReadOnlySpan<char>(online, 0, onlineLen), left, FirstY - 540f, OnlinePt, ScopeAlign.Left, ink.WithAlpha(onlineAlpha), false);
+                if (!collapsedHeard)
+                {
+                    collapsedHeard = true;
+                    onlineBeat = true;      // the end beat (rim and brow flash), once
+                    if (mode == BootMode.Full) PlaySound(AvUiCue.Confirm);
+                }
+                // The closing line is the one thing left on the screen: centred where the list was, a size up and full ink so it reads on bright sky.
+                text.Draw(new System.ReadOnlySpan<char>(online, 0, onlineLen), 0f, FirstY - 540f, OnlinePt, ScopeAlign.Center, ink.WithAlpha(onlineAlpha), false);
                 float w = onlineLen * OnlinePt * ScopeText.DesignAdvance;
-                AvStrokes.Line(b, left, Y(FirstY + 11f), left + w, Y(FirstY + 11f), 1.2f, ink.ToRgba().WithAlpha(onlineAlpha * 0.8f));
+                AvStrokes.Line(b, -w * 0.5f, Y(FirstY + 13f), w * 0.5f, Y(FirstY + 13f), 1.2f, ink.ToRgba().WithAlpha(onlineAlpha * 0.8f));
             }
             if (alignAlpha > 0f)
                 text.Draw("ALIGN", 0f, -(box + 12f), 10f, ScopeAlign.Center, bright.WithAlpha(alignAlpha), false);
@@ -154,20 +164,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void PaintList(AvQuadBuffer b, float left, Color ink, Color bright, VanillaHudStyle.Palette palette)
         {
-            float width = VisorBoot.Cols * Advance, rows = lineCount * Row;
-            // The block's frame: the title, a rule under it, and corner ticks, so it reads as a window of the visor and not loose text.
+            float width = VisorBoot.Cols * Advance;
+            // The block's frame: the header, a thin progress rule under it that fills as the lines resolve, and corner ticks (no plate), so it reads as a window of the visor and not loose text.
             float typedTitle = Mathf.Clamp01((t - VisorBoot.ListStartS + 0.1f) / 0.2f);
             if (typedTitle > 0f)
             {
-                const string title = "VISOR SELF-TEST";
-                int n = Mathf.Min(title.Length, Mathf.CeilToInt(title.Length * typedTitle));
-                text.Draw(System.MemoryExtensions.AsSpan(title, 0, n), left, TitleY - 540f, Pt, ScopeAlign.Left, bright, false);
+                int n = Mathf.Min(Title.Length, Mathf.CeilToInt(Title.Length * typedTitle));
+                text.Draw(System.MemoryExtensions.AsSpan(Title, 0, n), left, TitleY - 540f, TitlePt, ScopeAlign.Left, bright, false);
                 Rgba rule = ink.ToRgba().WithAlpha(0.6f);
-                AvStrokes.Line(b, left, Y(TitleY + 9f), left + width, Y(TitleY + 9f), 1f, rule);
-                float bottom = FirstY + rows - 8f;
-                AvStrokes.Line(b, left - 6f, Y(FirstY - 12f), left - 6f, Y(FirstY - 4f), 1f, rule);
-                AvStrokes.Line(b, left - 6f, Y(bottom), left - 6f, Y(bottom + 8f), 1f, rule);
-                AvStrokes.Line(b, left - 6f, Y(bottom + 8f), left + 2f, Y(bottom + 8f), 1f, rule);
+                float ruleY = Y(TitleY + 13f), fill = VisorBoot.Progress(lines, lineCount, t) * width;
+                AvStrokes.Line(b, left, ruleY, left + width, ruleY, 1f, ink.ToRgba().WithAlpha(0.3f));
+                if (fill > 0f) AvStrokes.Line(b, left, ruleY, left + fill, ruleY, 2f, bright.ToRgba());
+                // Corner ticks round the whole block: above the header and under the last row.
+                float x0 = left - 9f, x1 = left + width + 9f, top = TitleY - 14f, bottom = FirstY + (lineCount - 1) * Row + 13f;
+                const float arm = 9f;
+                AvStrokes.Line(b, x0, Y(top), x0 + arm, Y(top), 1f, rule); AvStrokes.Line(b, x0, Y(top), x0, Y(top + arm), 1f, rule);
+                AvStrokes.Line(b, x1, Y(top), x1 - arm, Y(top), 1f, rule); AvStrokes.Line(b, x1, Y(top), x1, Y(top + arm), 1f, rule);
+                AvStrokes.Line(b, x0, Y(bottom), x0 + arm, Y(bottom), 1f, rule); AvStrokes.Line(b, x0, Y(bottom), x0, Y(bottom - arm), 1f, rule);
+                AvStrokes.Line(b, x1, Y(bottom), x1 - arm, Y(bottom), 1f, rule); AvStrokes.Line(b, x1, Y(bottom), x1, Y(bottom - arm), 1f, rule);
             }
             int resolved = 0;
             for (int i = 0; i < lineCount; i++)
@@ -180,7 +194,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (VisorBoot.Resolved(line, t))
                 {
                     resolved++;
-                    text.Draw(line.Result, left + (VisorBoot.Cols - line.Result.Length) * Advance, y, Pt, ScopeAlign.Left, ToneColour(line.Tone, ink, bright, palette), line.Tone != BootTone.Ok);
+                    // The state word snaps in bright (white-lifted, bold) and settles to its tone.
+                    bool snap = t - line.ResolveS < VisorBoot.SnapS;
+                    Color word = snap ? Color.Lerp(bright, Color.white, 0.6f) : ToneColour(line.Tone, ink, bright, palette);
+                    text.Draw(line.Result, left + (VisorBoot.Cols - line.Result.Length) * Advance, y, Pt, ScopeAlign.Left, word, snap || line.Tone != BootTone.Ok);
                 }
                 else if (VisorBoot.Typed(line, t))
                 {

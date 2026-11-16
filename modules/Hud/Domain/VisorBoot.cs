@@ -6,7 +6,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal enum BootMode : byte { None, Full, Resync }
 
     /// <summary>The visor's zones in the order they come alive.</summary>
-    internal enum BootGroup : byte { Rim, Brow, Left, Board, Arcs }
+    internal enum BootGroup : byte
+    {
+        Rim, Brow, Left, Board, Arcs,
+        /// <summary>The sub-blocks (round 2): the board's blocks in reading order after <see cref="Board"/> (the stores header), the left column's after <see cref="Left"/> (the event log), and the brow's caption typing on after the rail.</summary>
+        BoardShell, BoardPage, BoardWing, LeftCue, LeftComms, BrowCaption,
+    }
 
     /// <summary>The ink of a self-test result: the HUD's green, the lifted green, amber (abnormal) and red (failed).</summary>
     internal enum BootTone : byte { Ok, Info, Warn, Bad }
@@ -57,7 +62,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float ListStartS = 0.3f, ListEndS = 1.8f, TypeS = 0.15f, ResolveAfterS = 0.45f, MaxStepS = 0.2f;
         /// <summary>When the list gives way to VISOR ONLINE and when that is gone.</summary>
         public const float CollapseS = 2.6f, OnlineFadeS = 0.3f;
-        public const int MaxLines = 7, Cols = 32, TagWidth = 6, NameMax = 16;
+        public const int MaxLines = 7, Cols = 30, TagWidth = 6, NameMax = 14;
+        /// <summary>A result word snaps in bright and settles to its tone after this long.</summary>
+        public const float SnapS = 0.18f;
+
+        /// <summary>How many of the self-test's lines have resolved, as a share of the list (the progress rule under it): 0 with no line; 1 when the last has resolved.</summary>
+        public static float Progress(BootLine[] lines, int count, float t)
+        {
+            if (count <= 0) return 1f;
+            float done = 0f;
+            for (int k = 0; k < count; k++) done += Clamp01((t - lines[k].StartS) / (lines[k].ResolveS - lines[k].StartS));
+            return done / count;
+        }
 
         public static float Duration(BootMode mode) => mode == BootMode.Full ? FullS : mode == BootMode.Resync ? ResyncS : 0f;
 
@@ -73,18 +89,31 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 switch (group)
                 {
                     case BootGroup.Rim: start = 0f; length = 0.35f; return;
-                    case BootGroup.Brow: start = 0.15f; length = 0.3f; return;
-                    case BootGroup.Left: start = 0.23f; length = 0.3f; return;
-                    case BootGroup.Board: start = 0.31f; length = 0.3f; return;
+                    case BootGroup.Brow: start = 0.15f; length = 0.2f; return;
+                    case BootGroup.BrowCaption: start = 0.33f; length = 0.25f; return;
+                    case BootGroup.Left: start = 0.23f; length = 0.2f; return;
+                    case BootGroup.LeftCue: start = 0.27f; length = 0.2f; return;
+                    case BootGroup.LeftComms: start = 0.31f; length = 0.2f; return;
+                    case BootGroup.Board: start = 0.31f; length = 0.2f; return;
+                    case BootGroup.BoardShell: start = 0.35f; length = 0.2f; return;
+                    case BootGroup.BoardPage: start = 0.39f; length = 0.2f; return;
+                    case BootGroup.BoardWing: start = 0.43f; length = 0.2f; return;
                     default: start = 0.4f; length = 0.45f; return;
                 }
             }
+            // The board comes alive block by block in reading order, about 100 ms apart, each stuttering on (Flicker): stores header, lamps and systems, the scope page, the wing page. The left column the same: event log, cues and route, comms.
             switch (group)
             {
                 case BootGroup.Rim: start = 0.05f; length = 0.6f; return;
                 case BootGroup.Brow: start = 1.2f; length = 0.5f; return;
-                case BootGroup.Left: start = 1.3f; length = 0.5f; return;      // 100 ms behind the brow, the board 120 behind that, the arcs 130 after
-                case BootGroup.Board: start = 1.42f; length = 0.5f; return;
+                case BootGroup.BrowCaption: start = 1.7f; length = 0.5f; return;      // the caption types on after the rail is drawn
+                case BootGroup.Left: start = 1.3f; length = 0.4f; return;      // 100 ms behind the brow, the board 120 behind that, the arcs 130 after
+                case BootGroup.LeftCue: start = 1.4f; length = 0.4f; return;
+                case BootGroup.LeftComms: start = 1.5f; length = 0.4f; return;
+                case BootGroup.Board: start = 1.42f; length = 0.4f; return;
+                case BootGroup.BoardShell: start = 1.52f; length = 0.4f; return;
+                case BootGroup.BoardPage: start = 1.62f; length = 0.4f; return;
+                case BootGroup.BoardWing: start = 1.72f; length = 0.4f; return;
                 default: start = 1.55f; length = 0.7f; return;
             }
         }
