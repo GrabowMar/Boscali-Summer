@@ -18,7 +18,10 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
     internal sealed class ChatterStrip
     {
         private const int Rows = 5;
-        private const float Left = LeftHudStack.Left, Width = LeftHudStack.Width, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = 154f;      // the COMMS zone's height (HudZones)
+        /// <summary>The column's width on this screen (HudZones.ColumnWidth): 562 at 16:9, less on a narrower one; the lines wrap to it.</summary>
+        private float width = HudZones.WideLog;
+        private float Width => width;
+        private const float Left = LeftHudStack.Left, Indent = LeftHudStack.Inset, ShelfHeight = 24f, RowGap = 8f, MaxHeight = 154f;      // the COMMS zone's height (HudZones)
         private const float LingerSeconds = 4f, FadeSeconds = 0.7f, CharsPerSecond = 55f;
 
         private struct Row
@@ -180,6 +183,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             RefreshFace();
             float fit = Mathf.Max(0.1f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
             host.Refresh(Mathf.Max(0.85f, Screen.height / 1080f) / fit);
+            float column = HudZones.ColumnWidth(Screen.width / Mathf.Max(0.1f, host.ScaleFactor));
+            if (column != width) { width = column; Rewrap(); }
             float canvasHeight = Screen.height / Mathf.Max(0.1f, host.ScaleFactor);
             Paint(canvasHeight);
         }
@@ -238,6 +243,12 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             SetBar(bracket, Left + 1f, cursor + RowGap, 1f, bodyTop - cursor - RowGap, frame);
             LeftHudStack.CommsBottom = top + Height();
             paintedTop = top;
+        }
+
+        /// <summary>The rows' heights at the current width (the column changed: a narrower screen wraps more).</summary>
+        private void Rewrap()
+        {
+            for (int i = 0; i < used; i++) rows[i].Height = Mathf.Max(36f, rows[i].Text.GetPreferredValues(rows[i].Text.text, Width - Indent - 8f, 0f).y + 2f);
         }
 
         private float paintedTop = LeftHudStack.CommsTop;

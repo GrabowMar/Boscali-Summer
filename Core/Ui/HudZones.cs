@@ -71,6 +71,9 @@ namespace BoscaliSummer.Core.Ui
             return new ZoneRect(r.X * k, r.Y * k, r.W * k, r.H * k);
         }
 
+        /// <summary>The LOG / COMMS / NOTICE column's width on a screen <paramref name="refW"/> wide in 1080-high design units: the one place painters take it from.</summary>
+        public static float ColumnWidth(float refW) => Ref(HudZone.Comms, refW).W;
+
         public static bool Narrow(float refW) => refW < FullWidth;
 
         /// <summary>Where COMMS starts: its own slot, or 16 under a LOG that grew past it.</summary>

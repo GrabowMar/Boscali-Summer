@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Hud.Domain;
 using NOAvionics;
 using NuclearOption.UIStyleSystem;
@@ -262,6 +263,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ layout and paint
 
+        /// <summary>The layout the board is drawn in: STACK on a screen narrower than 16:9 whatever the stored option, else the option.</summary>
+        private bool boardStack;
+
         private void Repaint(bool shellToo)
         {
             wingPainted = false;
@@ -275,11 +279,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             float target = scopeOn ? ScopeLayout.Full : 0f;
             transition.Update(signature, target, now);
+            // A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.
+            boardStack = HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
             // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read and its switch is on, whatever the slots or the declutter level.
             ScopePageBase systems = pages[(int)ScopePage.Systems];
             var blocks = new BoardBlocks
             {
-                Layout = Options.Layout, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
+                Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, PageH = transition.Height, PageCount = selectedCount,
                 StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact : 0f, GaugeLines = gaugeLines,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);

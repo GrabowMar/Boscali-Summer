@@ -79,6 +79,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!EnsureLogTree()) return false;
             float clock = LogClock();
             BoardDeclutter level = Options.Declutter;
+            float columnWidth = HudZones.ColumnWidth(canvasRect.rect.width / baseUnit);      // design units: the LOG zone narrows with the screen
+            int lineChars = EventLogLayout.LineChars(columnWidth);
+            if (lineChars != EventFeed.LineChars) { EventFeed.LineChars = lineChars; eventLog.Refit(lineChars, EventFeed.OwnPlayer(), EventFeed.OwnAircraft()); }
             logCount = eventLog.Select(clock, level, logRows);
             int widest = 0;
             logLit = 0f;
@@ -87,7 +90,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 widest = Math.Max(widest, logRows[i].Line.Chars + (logRows[i].Line.Truncated ? 2 : 0));
                 logLit = Math.Max(logLit, logRows[i].Alpha(clock));
             }
-            logPlan = EventLogLayout.Plan(boxLeft, boxTop, logCount, widest, level);
+            logPlan = EventLogLayout.Plan(boxLeft, boxTop, logCount, widest, level, columnWidth);
             LeftHudStack.LogBottom = logPlan.Present ? logPlan.Top + logPlan.Height : 0f;
             Show(logRoot, true);
             PlaceOnGrid(logSurface, 0f, 0f, Whole(canvasRect.rect.width), Whole(canvasRect.rect.height));

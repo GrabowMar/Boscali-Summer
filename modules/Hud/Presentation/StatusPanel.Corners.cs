@@ -225,7 +225,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!EnsureCornerTree()) return;
             const float feather = 12f;
             PlaceBoxAt(leftShadow.rectTransform, new BoardRect(LeftHudStack.Left - feather, top - feather,
-                LeftHudStack.Width + feather * 2f, bottom - top + feather * 2f), baseUnit);
+                HudZones.ColumnWidth(canvasRect.rect.width / baseUnit) + feather * 2f, bottom - top + feather * 2f), baseUnit);
             leftShadow.color = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, alpha);
             Show(leftShadow, true);
             Show(cornerShade, true);

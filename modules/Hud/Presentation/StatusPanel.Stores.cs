@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Begin(pal, unit, height, pixel);
             try
             {
-                header.Paint(g, geo, Options.Layout == BoardLayout.Stack, (int)Options.Declutter, now, flashOn);
+                header.Paint(g, geo, boardStack, (int)Options.Declutter, now, flashOn);
                 headerFault = false;
             }
             catch (Exception e)
