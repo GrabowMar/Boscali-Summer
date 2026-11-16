@@ -163,24 +163,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!ready) return;
             now = p.Now;
-            PaintAirframe(g, p.Now, 26f, 63f, 24f);
+            PaintAirframe(g, p.Now, 24f, 63f, 22f);
 
             // The strip's three columns share one 16 unit row grid (LAYOUT.md 3.5, 12.1): R0..R4 = 31, 47, 63, 79, 95. Condition tags, most severe first (open tags 18 apart); the nominal words are data too (INK) and sit on
             // R1..R3 when nothing is wrong. No column dividers: the gaps between the three columns (conditions, fuel and base, weather) are the separators.
             if (rowCount > 0)
                 for (int i = 0; i < rowCount; i++)
-                    g.PlateTag(rows[i].Legend, 52f, 33f + i * 18f, SystemsMath.ToneOf(rows[i].State));
+                    g.PlateTag(rows[i].Legend, 48f, 33f + i * 18f, SystemsMath.ToneOf(rows[i].State));
             else
             {
-                if (d.Damage.Engines > 0) g.Text(ScopeStr.Cat("ENG ", d.Damage.Engines - d.Damage.EnginesOut, "/", d.Damage.Engines, null), 54f, 47f, Ink);
-                g.Text("TANKS OK", 54f, 63f, Ink);
-                g.Text(ScopeStr.Cat("STR ", 100 - SystemsMath.Percent(d.Damage.DetachedRatio), "%"), 54f, 79f, Ink);
+                if (d.Damage.Engines > 0) g.Text(ScopeStr.Cat("ENG ", d.Damage.Engines - d.Damage.EnginesOut, "/", d.Damage.Engines, null), 50f, 47f, Ink);
+                g.Text("TANKS OK", 50f, 63f, Ink);
+                g.Text(ScopeStr.Cat("STR ", 100 - SystemsMath.Percent(d.Damage.DetachedRatio), "%"), 50f, 79f, Ink);
             }
 
-            FuelBlock(g, 142f, 31f, 156f);
-            if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 142f, 79f, 156f, p.Units);
-            WeatherBlock(g, 310f, 35f);
-            HeatBlock(g, 310f, 95f, 126f, p.Now);
+            // The column budget at the board's type boost (a LABEL letter is 9.2 units): airframe 2..46, conditions 50..124 (a damage tag to 134), fuel and base 138..298, wind and HEAT 306..434.
+            FuelBlock(g, 138f, 31f, 160f);
+            if (d.Fuel.Field != null && !float.IsNaN(d.Fuel.FieldM)) BaseBlock(g, 138f, 79f, 160f, p.Units);
+            WeatherBlock(g, 306f, 35f);
+            HeatBlock(g, 306f, 95f, 126f, p.Now);
         }
 
         /// <summary>
@@ -194,7 +195,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int pct = SystemsMath.Percent(d.Heat);
             ScopeTone tone = pct >= 75 ? Amber : Ink;
             g.Text("HEAT", x, y, Dim);
-            g.Bar(x + 34f, y - 3f, w - 72f, 6f, d.Heat, tone);
+            g.Bar(x + 44f, y - 3f, w - 90f, 6f, d.Heat, tone);
             g.Text(ScopeStr.Pct(pct), x + w, y, tone, align: ScopeAlign.Right, bold: tone != Ink);
         }
 
@@ -325,12 +326,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             FuelState f = d.Fuel;
             ScopeTone tone = SystemsMath.ToneOf(f.Tone);
-            g.Text("FUEL", x, y, Dim);
-            g.Text(ScopeStr.Pct(SystemsMath.Percent(f.Level)), x + 36f, y, tone == Ink ? Hi : tone, 16f, bold: true);
+            float fw = g.Text("FUEL", x, y, Dim);
+            g.Text(ScopeStr.Pct(SystemsMath.Percent(f.Level)), x + fw + 6f, y, tone == Ink ? Hi : tone, 16f, bold: true);
             if (SystemsMath.EnduranceMinutes(f.EnduranceS, out int min))
             {
                 ScopeTone et = SystemsMath.EndTone(f.EnduranceS);
-                ReadOnlySpan<char> words = min < 1 ? "END <1 MIN" : min < 100 ? ScopeStr.Cat("END ", min, " MIN") : ScopeStr.Cat("END ", min / 60, (min % 60) < 10 ? "H0" : "H", min % 60, null);
+                ReadOnlySpan<char> words = min < 1 ? "<1 MIN" : min < 100 ? ScopeStr.Cat("", min, " MIN") : ScopeStr.Cat("", min / 60, (min % 60) < 10 ? "H0" : "H", min % 60, null);
                 g.Text(words, x + w, y, et, align: ScopeAlign.Right, bold: et != Dim);
             }
             float by = y + 11f, bh = 10f;      // the bar is centred on R1 (y + 16)
@@ -344,7 +345,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if ((d.Damage.Flags & DamageFlags.FuelLeak) != 0 && burn > 0f)
                 g.Text(ScopeStr.Cat("LEAK -", burn, 1, "%/M"), x + w, by + bh + 11f, Amber, align: ScopeAlign.Right, bold: true);
             else if (f.HasNeed)
-                g.Text(ScopeStr.Cat("BINGO ", SystemsMath.Percent(f.Need), "%  JOKER ", SystemsMath.Percent(f.Need + FuelEndurance.JokerMargin), "%"), x, by + bh + 11f, Dim);
+            {
+                // two words at the block's two ends (both are shares of the tanks, like the level above them: the "%" twice more did not fit the column)
+                g.Text(ScopeStr.Cat("BINGO ", SystemsMath.Percent(f.Need)), x, by + bh + 11f, Dim);
+                g.Text(ScopeStr.Cat("JOKER ", SystemsMath.Percent(f.Need + FuelEndurance.JokerMargin)), x + w, by + bh + 11f, Dim, align: ScopeAlign.Right);
+            }
         }
 
         private void BaseBlock(ScopeCanvas g, float x, float y, float w, NOAvionics.AvUnits units)
@@ -357,9 +362,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeTone mt = SystemsMath.MarginTone(margin);
             // Two rows 16 apart (LAYOUT.md 3.5, 12.1): the name over the distance and the margin figure at the right edge, so a long name never meets the margin. The margin is shortened, then dropped, before
             // a blank is lost between it and the distance; the name has the first row to itself (the bearing arrow reaches 13, the words start at 22).
-            int room = (int)((w - 22f) / (ScopeText.DesignAdvance * 12f)), form = 2;
+            int room = (int)((w - 22f) / (ScopeText.DesignAdvance * 12f * ScopeCanvas.TextBoost)), form = 2;
             if (f.HasNeed) form = ScopeStr.FitMargin(null, f.FieldM, units, room, SystemsMath.MarginWords(margin, false).Length, SystemsMath.MarginWords(margin, true).Length, out _);
-            g.Text(ScopeStr.Name(f.Field, room), x + 22f, y, Ink);
+            g.Text(ScopeStr.Name(f.Field, room - 1), x + 22f, y, Ink);      // less one: the ellipsis of a cut name draws wider than its cell
             g.Text(ScopeStr.Distance(null, f.FieldM, units, room), x + 22f, y + 16f, Ink);
             if (form < 2) g.Text(SystemsMath.MarginWords(margin, form == 1), x + w, y + 16f, mt, align: ScopeAlign.Right, bold: mt != Ink);
         }
@@ -380,8 +385,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeCanvas.Polar(a + 180f, 13f, out float tx, out float ty);
                 g.Arrow(cx + tx, cy + ty, cx + hx, cy + hy, Ink, 1f, 1f, 5f);
                 int dir = SystemsMath.WindFromDegrees(d.WindFromDeg);
-                g.Text("WIND", x + 44f, y - 4f, Dim);
-                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), ScopeStr.SpeedUnitSp(d.Units)), x + 44f, row, Ink);
+                // the unit rides the label row ("WIND KM/H" over "180/12"): on the value row it ran off the board's edge
+                g.Text(ScopeStr.SpeedUnitSp(d.Units), x + 44f + g.Text("WIND", x + 44f, y - 4f, Dim), y - 4f, Dim);
+                g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, d.Units)), null), x + 44f, row, Ink);
                 row += 16f;
             }
             if (d.HasCloud && d.InCloud) { g.Text("IN CLOUD", x + 44f, row, Hi, bold: true); row += 16f; }
@@ -391,8 +397,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 int s = (int)d.ClockS;
                 if (s != clockShown) { clockShown = s; clockWords = (s / 3600) + ":" + (s / 60 % 60).ToString("00") + ":" + (s % 60).ToString("00"); }
                 // "T+" and the time: as wide as the wind line above it ("CLOCK 0:00:14" ran off the board's edge in game).
-                g.Text("T+", x + 44f, row, Dim);
-                g.Text(clockWords, x + 44f + 16f, row, Ink);
+                g.Text(clockWords, x + 44f + g.Text("T+", x + 44f, row, Dim), row, Ink);
             }
         }
 

@@ -189,6 +189,132 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         }
 
         /// <summary>
+        /// The visor's power-on (tests/ingame/hud-boot.json). <c>mode</c> ("full" or "resync") starts it again now on the HUD's aircraft; <c>hold</c> freezes its clock at that many seconds (a negative number lets it run on), so each phase can be
+        /// captured still; <c>abort</c> true ends it at once. Reads back whether it runs, its age, the self-test lines, how far each zone has come alive, the arcs' lit segments and the rim's etched text.
+        /// </summary>
+        public static Dictionary<string, object> Boot(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            HudBoard board = HudBoard.Instance;
+            if (board == null) return Failure("HudAutomation", "Boot", "no HUD board");
+            bool started = false;
+            string mode = Text(args, "mode");
+            if (!string.IsNullOrEmpty(mode)) started = board.RestartBoot(string.Equals(mode, "resync", StringComparison.OrdinalIgnoreCase) ? BootMode.Resync : BootMode.Full);
+            if (Has(args, "hold")) board.BootHud.Hold(Number(args, "hold", 0f), Time.unscaledTime);
+            if (Bool(args, "abort")) board.BootHud.Abort();
+            VisorBootHud boot = board.BootHud;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "started", started }, { "active", boot.Active }, { "mode", boot.Mode.ToString() }, { "ended", board.BootEnd }, { "age", boot.Age }, { "lines", boot.LineCount }, { "boot_shown", boot.Shown },
+                { "brow", boot.Progress(BootGroup.Brow) }, { "rim", boot.Progress(BootGroup.Rim) }, { "left", boot.Progress(BootGroup.Left) }, { "board", boot.Progress(BootGroup.Board) }, { "arcs", boot.Progress(BootGroup.Arcs) },
+                { "arcs_shown", board.Arcs != null && board.Arcs.Shown }, { "natives_hidden", board.Arcs != null && board.Arcs.NativesHidden }, { "fuel_lit", board.Arcs?.FuelLit ?? -1 },
+                { "rim_shown", board.Rim != null && board.Rim.Shown }, { "etched", board.Rim?.EtchedText ?? "" }, { "brow_shown", board.Tape != null && board.Tape.Shown },
+            };
+            Debug.Log("[HudAutomation] Boot: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// The reactive visor (tests/ingame/hud-react.json): pin each reaction so a still can be taken of a moment that lasts a third of a second. <c>g</c> a load factor to use instead of the real one (a value under -50 gives the real one back);
+        /// <c>hit</c> "round" or "blast" sends a hit through the same counter Immersion's patch writes (<see cref="VisorEvents"/>), <c>glitch</c> (weight 0..1) starts a glitch directly and <c>glitchHold</c> freezes it at that many seconds (negative: runs on);
+        /// <c>emp</c> "on" / "off" / "real" forces the EMP flag and <c>empHold</c> freezes its clock; <c>flash</c> "warning" or "bright" starts a beat and <c>flashHold</c> freezes it. Reads back what the visor is doing.
+        /// </summary>
+        public static Dictionary<string, object> Visor(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            HudBoard board = HudBoard.Instance;
+            if (board == null) return Failure("HudAutomation", "Visor", "no HUD board");
+            VisorFx fx = board.Fx;
+            if (Has(args, "g")) { float g = Number(args, "g", 1f); fx.GForce = g < -50f ? float.NaN : g; }
+            if (Has(args, "seek")) fx.Seek(Number(args, "seek", 0f));
+            string hit = Text(args, "hit");
+            if (!string.IsNullOrEmpty(hit)) VisorEvents.Hit(string.Equals(hit, "blast", StringComparison.OrdinalIgnoreCase) ? 0f : 1f, string.Equals(hit, "blast", StringComparison.OrdinalIgnoreCase) ? 1f : 0f);
+            if (Has(args, "glitch")) fx.StartGlitch(Number(args, "glitch", 0.5f));
+            if (Has(args, "glitchHold")) { float h = Number(args, "glitchHold", -1f); fx.HoldGlitch = h < 0f ? float.NaN : h; }
+            string emp = Text(args, "emp");
+            if (!string.IsNullOrEmpty(emp)) fx.EmpForce = string.Equals(emp, "on", StringComparison.OrdinalIgnoreCase) ? 1 : string.Equals(emp, "off", StringComparison.OrdinalIgnoreCase) ? 0 : -1;
+            if (Has(args, "empHold")) { float h = Number(args, "empHold", -1f); fx.HoldEmp = h < 0f ? float.NaN : h; }
+            string flash = Text(args, "flash");
+            if (!string.IsNullOrEmpty(flash)) fx.StartFlash(string.Equals(flash, "bright", StringComparison.OrdinalIgnoreCase) ? FlashKind.Bright : FlashKind.Warning);
+            if (Has(args, "flashHold")) { float h = Number(args, "flashHold", -1f); fx.HoldFlash = h < 0f ? float.NaN : h; }
+            // BROKEN HELMET: pin the damage level (degrade 0..1, under 0 the real one) and hold a damage burst at that many seconds in (burstHold, negative: the scheduler runs); jam 0..1 pins the jam level (negative: the game's real one).
+            if (Has(args, "degrade")) { float d = Number(args, "degrade", -1f); fx.DegradeForce = d < 0f ? float.NaN : d; }
+            if (Has(args, "burstHold")) { float h = Number(args, "burstHold", -1f); fx.BurstHold = h < 0f ? float.NaN : h; }
+            if (Has(args, "jam")) { float j = Number(args, "jam", -1f); fx.JamForce = j < 0f ? float.NaN : j; }
+            if (Bool(args, "empOn")) fx.EmpForce = 1;
+            string shader = Text(args, "shader");      // "off": the stock UI and text shaders everywhere (the healthy-look comparison), "on": the glitch ones again
+            if (!string.IsNullOrEmpty(shader)) BoscaliSummer.Modules.Hud.Presentation.VisorGlitch.SetDisabled(string.Equals(shader, "off", StringComparison.OrdinalIgnoreCase));
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "alpha", fx.Alpha }, { "shift_x", fx.ShiftX }, { "shift_y", fx.ShiftY }, { "tear_board", fx.TearBoard }, { "tear_left", fx.TearLeft },
+                { "flash", fx.Flash }, { "flash_tone", fx.FlashTone.ToString() }, { "g_load", fx.GLoad }, { "glitch", fx.GlitchRunning }, { "emp", fx.EmpRunning }, { "reacting", fx.Reacting },
+                { "breath_mark", fx.BreathMark }, { "scan_at", fx.ScanAt }, { "hit_serial", VisorEvents.HitSerial }, { "booting", board.BootHud.Active },
+                { "scan_shown", board.Tape != null && board.Tape.Shown }, { "live", fx.Live }, { "warn_up", fx.WarnLevel },
+                { "shader_ready", BoscaliSummer.Modules.Hud.Presentation.VisorGlitch.Ready }, { "glitching", fx.Glitching }, { "degrade", fx.DegradeLevel }, { "burst", fx.BurstRunning }, { "jam", fx.JamLevel },
+                { "split", fx.Split }, { "drop", fx.DropDensity }, { "flick", fx.Flick }, { "bars", fx.BarStrength }, { "scramble", fx.Scramble }, { "tear0", fx.Tear[2] }, { "tear1", fx.Tear[6] }, { "tear2", fx.Tear[10] },
+                { "caption", "" },
+            };
+            Debug.Log("[HudAutomation] Visor: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// The visor's sound journal (tests/ingame/hud-boot.json, hud-react.json): every visor clip asked for with its time, variation, gain and what became of it (played, ducked, limited), as the facade logged it.
+        /// <c>clear</c> true empties it first; <c>play</c> a clip name (Tick, Wipe, Glitch...) asks for it <c>times</c> (default 1) times in this very frame, which shows the rate limit and the duck.
+        /// Returns the lines joined with " | ", the count, whether a real alarm or voice would duck now, and the level.
+        /// </summary>
+        public static Dictionary<string, object> Sound(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (Bool(args, "clear")) BoscaliSummer.Core.Fx.VisorSound.Journal.Clear();
+            string play = Text(args, "play");
+            if (!string.IsNullOrEmpty(play))
+            {
+                if (!Enum.TryParse(play, true, out BoscaliSummer.Core.Fx.VisorClip clip)) return Failure("HudAutomation", "Sound", "no visor clip called '" + play + "'");
+                int times = (int)Number(args, "times", 1f);
+                for (int i = 0; i < times; i++) BoscaliSummer.Core.Fx.VisorSound.Play(clip);
+            }
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "count", BoscaliSummer.Core.Fx.VisorSound.Journal.Count }, { "busy", BoscaliSummer.Core.Fx.VisorSound.Busy() },
+                { "banner", BoscaliSummer.Core.Fx.VisorSound.Banner }, { "level", BoscaliSummer.Core.Fx.VisorSound.Level }, { "journal", string.Join(" | ", BoscaliSummer.Core.Fx.VisorSound.Journal) },
+            };
+            Debug.Log("[HudAutomation] Sound: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// The segmented fuel and throttle arcs as they stand (tests/ingame/hud-arcs.json): whether they are up, whether the game's own two gauges are hidden behind them, the lit segments, the measured circle
+        /// and the game's gauges' own alpha. <c>fuel</c> (0..1) first sets every tank to that share of its capacity and <c>throttle</c> (0..1) the player's throttle input, for a capture of a low tank or a full throttle.
+        /// </summary>
+        public static Dictionary<string, object> Arcs(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null) return Failure("HudAutomation", "Arcs", "no HUD aircraft");
+            if (Has(args, "fuel"))
+            {
+                float share = Mathf.Clamp01(Number(args, "fuel", 1f));
+                foreach (FuelTank tank in aircraft.GetFuelTanks())
+                {
+                    float want = tank.GetCapacity() * share, have = tank.GetLevel();
+                    if (have > want) tank.UseFuel(have - want); else tank.Refuel(want - have);
+                }
+            }
+            if (Has(args, "throttle") && aircraft.GetInputs() != null) aircraft.GetInputs().throttle = Mathf.Clamp01(Number(args, "throttle", 0f));
+            ArcsHud arcs = HudBoard.Instance != null ? HudBoard.Instance.Arcs : null;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "fuel", aircraft.GetFuelLevel() }, { "throttle", aircraft.GetInputs()?.throttle ?? -1f },
+                { "shown", arcs != null && arcs.Shown }, { "natives_hidden", arcs != null && arcs.NativesHidden }, { "fuel_lit", arcs?.FuelLit ?? -1 }, { "throttle_lit", arcs?.ThrottleLit ?? -1 },
+                { "native_texts", arcs?.NativeTexts ?? "" }, { "radius", arcs?.FuelRadius ?? -1f }, { "axis", arcs?.FuelAxis ?? 0f }, { "throttle_word", arcs?.ThrottleWord ?? "" },
+            };
+            Debug.Log("[HudAutomation] Arcs: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
         /// The centre combat layer as it stands (tests/ingame/ace-alerts.json): whether it is up, the banner's word and detail, how many marks the THREAT RING draws, the shot callout and
         /// whether the game's own missile list is hidden behind it. <c>callout</c> (hit, destroyed, missed, decoyed) first pushes that call, <c>sub</c> its line, for a capture of the look.
         /// </summary>
@@ -204,8 +330,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             CombatAlerts alerts = HudBoard.Instance != null ? HudBoard.Instance.Alerts : null;
             var result = new Dictionary<string, object>
             {
-                { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.BannerWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
+                { "ok", true }, { "shown", alerts != null && alerts.Shown }, { "banner", alerts?.LineWord ?? "" }, { "detail", alerts?.DetailText ?? "" },
                 { "ring", alerts?.RingMarks ?? 0 }, { "callout", alerts?.CalloutText ?? "" }, { "native_list_hidden", alerts != null && alerts.NativeListHidden },
+                { "brow_shown", HudBoard.Instance?.Tape != null && HudBoard.Instance.Tape.Shown }, { "brow_carets", HudBoard.Instance?.Tape?.MarkCount ?? 0 }, { "brow_caption", "" }, { "tape", HudBoard.Instance?.Tape?.Describe() ?? "" }, { "call", alerts?.CallText ?? "" },
             };
             Debug.Log("[HudAutomation] Alerts: " + Describe(result));
             return result;
@@ -306,6 +433,12 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 }
             if (gun == null)
                 return Failure("HudAutomation", "Gun", "no loaded fixed gun");
+            if (Bool(args, "release"))      // drop the designation (the cockpit TARGET CAM scenario)
+            {
+                CombatHUD held = SceneSingleton<CombatHUD>.i;
+                if (held != null) held.DeselectAll(false);
+                return new Dictionary<string, object> { { "ok", true }, { "released", true } };
+            }
             Unit target = NearestEnemy(a, Number(args, "range", 3000f));
             if (target == null)
                 return Failure("HudAutomation", "Gun", "no enemy aircraft in range");

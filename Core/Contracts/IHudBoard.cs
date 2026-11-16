@@ -44,5 +44,8 @@ namespace BoscaliSummer.Core.Contracts
         /// aside (the ace-hunt panel does).
         /// </summary>
         bool TryGetScreenBox(out float left, out float top, out float right, out float bottom);
+
+        /// <summary>True only while the board is drawn this tick and its WING page holds one of the laid-out slots; the wing's own HUD strip then leaves the roster to it.</summary>
+        bool ShowsWing { get; }
     }
 }

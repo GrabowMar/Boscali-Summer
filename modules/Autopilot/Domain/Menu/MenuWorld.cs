@@ -157,13 +157,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool BoardOn;
         /// <summary>Index into <see cref="MenuCatalog.BoardDeclutters"/>: FULL, LEAN, MIN.</summary>
         public int BoardDeclutter;
-        /// <summary>Index into <see cref="MenuCatalog.BoardLayouts"/>: WIDE, STACK.</summary>
-        public int BoardLayout;
+        /// <summary>Index into <see cref="MenuCatalog.BoardScopes"/>: ON, OFF.</summary>
+        public int BoardScope;
         /// <summary>Indices into <see cref="MenuCatalog.BoardShades"/> and <see cref="MenuCatalog.BoardSizes"/>.</summary>
         public int BoardShade, BoardSize = 1;
-        public int BoardPageCount = 1;
-        public BoardPage BoardPage1 = BoardPage.Threat, BoardPage2 = BoardPage.Shot, BoardPage3 = BoardPage.Wing, BoardPage4 = BoardPage.Objective;
-        public bool BoardPagesOn = true, BoardSway = true;
+        public bool BoardSway = true, CentreAlerts = true;
         /// <summary>The major board elements that are on, as "parts/slug" (<see cref="MenuCatalog.BoardParts"/>).</summary>
         public HashSet<string> BoardSwitches = new HashSet<string>();
         /// <summary>The AR overlays that are on, as "ar/slug" (<see cref="MenuCatalog.ArParts"/>).</summary>

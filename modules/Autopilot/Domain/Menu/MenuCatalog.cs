@@ -16,34 +16,18 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
     internal static class MenuCatalog
     {
         public const int MaxLabel = 22, MaxState = 30;
-        /// <summary>The steps of the two TAC BOARD cycle rows, in the order of the <c>BoardDeclutter</c> and <c>BoardLayout</c> contract enums (a press moves to the next, wrapping).</summary>
-        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardLayouts = { "WIDE", "STACK" };
+        /// <summary>The steps of the TAC BOARD cycle rows. BoardDeclutters is in the order of the <c>BoardDeclutter</c> contract enum; BoardScopes is the menu order (the enum is Manual, Off, Auto), mapped in the Runtime adapter (a press moves to the next, wrapping).</summary>
+        public static readonly string[] BoardDeclutters = { "FULL", "LEAN", "MIN" }, BoardScopes = { "ON", "OFF" };
         /// <summary>Cycle rows over a 0..1 or size option: the names a press steps through and the value each one sets.</summary>
         public static readonly string[] BoardShades = { "OFF", "LOW", "MED", "HIGH" }, BoardSizes = { "SMALL", "NORMAL", "LARGE" }, Ghosts = { "OFF", "FAINT", "CLEAR" };
         public static readonly float[] ShadeSteps = { 0f, 0.35f, 0.7f, 1f }, SizeSteps = { 0.8f, 1f, 1.2f }, GhostSteps = { 0f, 0.35f, 0.8f };
 
-        public static readonly string[] BoardPageCounts = { "1", "2", "3", "4" };
-        /// <summary>The manual page choices in BoardPage order (SYSTEMS keeps its place but is never offered: the board always shows it), the board's major elements and the cabin effects.
-        /// The Runtime adapter maps each part slug to its option; a world lists the parts that are on.</summary>
-        public static readonly MenuSwitch[] BoardPages =
-        {
-            new MenuSwitch("threat", "THREAT", "LOCKS, RADAR PAINTS AND LAUNCHES AT YOU"),
-            new MenuSwitch("shot", "SHOT", "YOUR MISSILES AND BOMBS, LAUNCH TO RESULT"),
-            new MenuSwitch("missile-cam", "MISSILE CAM", "THE CAMERA VIEW OF ONE OF YOUR MISSILES"),
-            new MenuSwitch("approach", "APPROACH", "THE RUNWAY FUNNEL FOR ILS AND AUTOLAND"),
-            new MenuSwitch("wing", "WING", "WINGMEN: FORMATION, FUEL, AMMO AND ORDERS"),
-            new MenuSwitch("strike", "STRIKE", "YOUR STRIKES, RECON WINDOWS AND INTRUSIONS"),
-            new MenuSwitch("dock", "DOCK", "GUIDANCE TO CONNECT WITH A SKYWELL TANKER"),
-            new MenuSwitch("objective", "OBJECTIVE", "YOUR CONTRACT: ZONE, DEADLINE, AIR DEFENCES"),
-            new MenuSwitch("systems", "SYSTEMS", "CRUISE STRIP AND FIRE, ENGINE, FUEL WARNINGS"),
-            new MenuSwitch("cargo", "CARGO", "YOUR LOADS, DROP ZONE AND RELEASE RANGE"),
-        };
+        /// <summary>The board's major elements and the cabin effects. The Runtime adapter maps each part slug to its option; a world lists the parts that are on.</summary>
         public static readonly MenuSwitch[] BoardParts =
         {
             new MenuSwitch("stores", "STORES + POWER", "WEAPON, POWER AND COUNTERMEASURE PANELS"),
-            new MenuSwitch("pages", "TACTICAL PAGES", "THE MANUALLY SELECTED PAGE PANELS"),
             new MenuSwitch("status", "LAMPS + GAUGES", "STATUS LAMPS AND GAUGE ROW; SYSTEMS ALWAYS SHOWS"),
-            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE AT THE FOOT OF THE BOARD"),
+            new MenuSwitch("notices", "NOTICES", "THE NOTICE LINE IN THE LEFT COLUMN; NEEDS MAP + FEED ON"),
             new MenuSwitch("corners", "MAP + FEED", "MAP FRAME AND KILL FEED, ALSO WITH BOARD OFF"),
         };
         /// <summary>VIEW > AR OVERLAYS (2026-11-14): what the helmet draws on the world and how the HUD reacts; each stays with the board off.</summary>
@@ -56,6 +40,11 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             new MenuSwitch("beacons", "BEACONS", "HOME ON LOW FUEL OR DAMAGE, CONTRACT ZONE"),
             new MenuSwitch("fx", "HUD REACTIONS", "LOCK SPIN-IN, GLITCH WHEN HIT", enable: true),
         };
+
+        /// <summary>The menu order of the SCOPE cycle (ON, OFF) against the contract enum: ON is Auto, and so is the retired Manual or a value outside the enum, as BoardOptions.Sanitize reads them.</summary>
+        public static int ScopeIndex(BoardScopeMode mode) => mode == BoardScopeMode.Off ? 1 : 0;
+
+        public static BoardScopeMode ScopeAt(int index) => index == 1 ? BoardScopeMode.Off : BoardScopeMode.Auto;
 
         /// <summary>Index of the step nearest <paramref name="value"/>: where a cycle row over a float option stands.</summary>
         public static int Nearest(float[] steps, float value)
@@ -325,47 +314,19 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             c.Rows.Add(b.Reg(MenuRow.Toggle("hud/board", "hud", w.BoardOn,
                 F("SHOW TAC BOARD", "CURRENT: OFF", "RESTORE THE TAC BOARD", "TAC BOARD ON"),
                 F("HIDE TAC BOARD", "CURRENT: ON", "GO BACK TO STOCK PANELS", "TAC BOARD OFF"), checkbox: false)));
-            // Slots stay in place when their count changes, so a live rebuild never moves an action under the pointer.
-            // A pick sets itself up (2026-10-28): it turns the board, the pages and the slot on; OFF in slot n leaves n - 1 pages.
-            for (int slot = 1; slot <= BoardPageCounts.Length; slot++)
-            {
-                int selected = (int)(slot == 1 ? w.BoardPage1 : slot == 2 ? w.BoardPage2 : slot == 3 ? w.BoardPage3 : w.BoardPage4);
-                if (selected < 0 || selected >= BoardPages.Length || selected == (int)BoardPage.Systems) selected = (int)BoardPage.Threat;
-                bool shown = w.BoardOn && w.BoardPagesOn && slot <= w.BoardPageCount;
-                string prefix = "hud/page" + slot;
-                var choices = new List<MenuRow>(BoardPages.Length + 1);
-                for (int i = 0; i < BoardPages.Length; i++)
-                {
-                    if (i == (int)BoardPage.Systems) continue;
-                    MenuSwitch page = BoardPages[i];
-                    MenuRow choice = MenuRow.Pick(prefix + "/" + page.Slug, null, page.Name,
-                        "PAGE " + slot + ": AVAILABLE", "PAGE " + slot + ": SHOWN", shown && i == selected, page.Desc,
-                        "PAGE " + slot + ": " + page.Name);
-                    choice.Index = i;
-                    choice.Verb = "SHOW";
-                    choices.Add(choice);
-                }
-                if (slot > 1)
-                {
-                    MenuRow off = MenuRow.Pick(prefix + "/off", null, "OFF", "PAGE " + slot + ": SHOWN", "PAGE " + slot + ": OFF", !shown,
-                        "BOARD KEEPS " + MenuText.Plural(slot - 1, "PAGE", "PAGES"), "PAGE " + slot + ": OFF", MenuTone.Dim);
-                    off.Index = -1;
-                    choices.Add(off);
-                }
-                c.Rows.Add(b.Reg(MenuRow.Submenu(prefix, "station-select", "SELECT PAGE " + slot,
-                    "PAGE " + slot + ": " + (shown ? BoardPages[selected].Name : "OFF"), "PICK A PANEL; THE BOARD AND SLOT TURN ON",
-                    "PAGE " + slot, "PAGE", choices, iconless: true)));
-            }
+            // One SCOPE row (2026-11-16): ON shows the board's panels (RWR, FIRES, WING) while each has something to say, OFF shows none. There is nothing to pick.
+            MenuRow scope = MenuRow.Cycle("hud/scope", "station-select", "SET SCOPE", "SCOPE: ", BoardScopes, Clamp(w.BoardScope, BoardScopes), "SCOPE: ");
+            if (!w.BoardOn) scope.Blocked = "TAC BOARD: OFF";
+            c.Rows.Add(b.Reg(scope));
 
             MenuRow declutter = MenuRow.Cycle("hud/declutter", "target-filter", "SET HUD DECLUTTER", "HUD DECLUTTER: ", BoardDeclutters, Clamp(w.BoardDeclutter, BoardDeclutters), "HUD DECLUTTER: ");
-            MenuRow layout = MenuRow.Cycle("hud/layout", "shape", "SET BOARD LAYOUT", "BOARD LAYOUT: ", BoardLayouts, Clamp(w.BoardLayout, BoardLayouts), "BOARD LAYOUT: ");
             MenuRow shade = MenuRow.Cycle("hud/shade", "lights", "SET SHADE", "SHADE: ", BoardShades, Clamp(w.BoardShade, BoardShades), "SHADE: ");
             MenuRow size = MenuRow.Cycle("hud/size", "resize", "SET BOARD SIZE", "BOARD SIZE: ", BoardSizes, Clamp(w.BoardSize, BoardSizes), "BOARD SIZE: ");
             MenuRow sway = Switch("hud/", new MenuSwitch("sway", "VISOR SWAY", "SYMBOLS HANG IN THE AIR OFF THE GLASS", enable: true), w.BoardSway);
-            var display = new List<MenuRow> { layout, declutter, size, shade, sway };
+            var display = new List<MenuRow> { declutter, size, shade, sway };
             if (!w.BoardOn) foreach (MenuRow row in display) row.Blocked = "TAC BOARD: OFF";
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/display", "shape", "DISPLAY OPTIONS",
-                "LAYOUT: " + BoardLayouts[Clamp(w.BoardLayout, BoardLayouts)] + D + BoardSizes[Clamp(w.BoardSize, BoardSizes)], "LAYOUT, DECLUTTER, SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
+                "SIZE: " + BoardSizes[Clamp(w.BoardSize, BoardSizes)] + D + "SHADE: " + BoardShades[Clamp(w.BoardShade, BoardShades)], "DECLUTTER, SIZE, SHADE, SWAY", "DISPLAY", "OPTIONS", display)));
             List<MenuRow> parts = Switches("hud/parts/", "parts/", BoardParts, w.BoardSwitches, out int partsOn);
             c.Rows.Add(b.Reg(MenuRow.Submenu("hud/parts", "hardpoint", "BOARD PARTS",
                 partsOn + " OF " + BoardParts.Length + " ON", "SHOW OR HIDE WHOLE ELEMENTS OF THE VISOR", "VISOR", "PARTS", parts, iconless: true)));

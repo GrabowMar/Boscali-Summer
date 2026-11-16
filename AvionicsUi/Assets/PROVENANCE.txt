@@ -37,3 +37,11 @@ atmospheric streamlines (env), modulation envelopes (rad), tessellated planes (m
 Runtime packing: py -3 tools/Build-ConsoleArt.py (Pillow). Resize to 640x428 greyscale, remove near-black export noise,
 keep the upper fifth empty and soften the boundaries. Stored as luminance; AvBundle.ConsoleArt turns it into alpha and
 AvConsole tints it per scheme at 0.28 opacity. Passive background in unused page space; no external source artwork or fonts.
+
+BROKEN HELMET visor glitch shaders (2026-11-16), built into avionics-fx.bundle by tools/Compile-AvionicsFxAssets.ps1 (Unity 2022.3.62f3):
+Source/NOA_UI_VisorGlitch.shader, NOA_UI_VisorGlitchCore.cginc, NOA_VisorGlitch.cginc: original code written for this project (the UI shader follows the stock UI/Default
+  contract: sprite * vertex colour, rect clip, alpha clip, stencil). No third-party source.
+Source/NOA_TMP_VisorGlitchSDF.shader and NOA_TMP_VisorGlitchSDFCore.cginc: MODIFIED COPY of the vertex and pixel stages of "TextMeshPro/Distance Field" (TMP_SDF.shader,
+  com.unity.textmeshpro 3.0.6, Assets/TextMesh Pro/Shaders/ of its "TMP Essential Resources" package; Unity Companion License, see LICENSES/UnityCompanion-TextMeshPro.txt).
+  Changes: bevel, glow and inner-underlay variants dropped; the glitch terms of NOA_VisorGlitch.cginc added; three passes (two ghosts, the picture).
+Source/TMPro.cginc and Source/TMPro_Properties.cginc: UNMODIFIED copies of the same package's includes of the same names (same licence).

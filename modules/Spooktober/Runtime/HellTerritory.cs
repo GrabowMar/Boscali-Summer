@@ -344,7 +344,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
             {
                 int seed = unchecked(Mathf.RoundToInt(zone.Center.x * .05f) * 73856093 ^ Mathf.RoundToInt(zone.Center.z * .05f) * 19349663);
                 Vector3 centerLocal = Datum.origin.InverseTransformPoint(zone.Center.ToLocalPosition());
-                zone.Growth = HellGrowth.Create(Datum.origin, seed, centerLocal, zone.Radius, 1f, 1f, zone.Infection, zone.InfectionBorn);
+                zone.Growth = HellGrowth.Create(Datum.origin, seed, centerLocal, zone.Radius, 1f, 1f);
             }
             const int side = HellInfection.Side * 2 - 1;
             var vertices = new Vector3[side * side];

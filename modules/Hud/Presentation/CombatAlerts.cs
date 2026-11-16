@@ -15,38 +15,41 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <summary>
     /// The centre combat layer (2026-10-28, docs/superpowers/specs/2026-10-28-ace-alerts-design.md): what a pilot in a fight needs where they are looking.
     /// <list type="bullet">
-    /// <item>WARNING banner in the top-centre lane's slot C (<see cref="TopCentre"/>): the most urgent alert (<see cref="AlertBoard"/>), its word between the lane's hazard
-    /// chevrons in corner brackets, and one detail line. Warnings in the theme's alert colour, cautions in its caution colour, always with the word.</item>
+    /// <item>WARNING LINE in the top-centre lane (<see cref="TopCentre"/>), above the game's heading tape: the most urgent alert (<see cref="AlertBoard"/>) as ONE row inside four small corner ticks: its word (EMPHASIS,
+    /// bold), the detail (VALUE) and the order or countermeasure call at the right (EMPHASIS, bold, CAUTION), with the fuse (time left) as a 2 px line under the row. Warnings in the theme's alert colour, cautions in its
+    /// caution colour, always with the word. The jammed visor's EW JAM stands at the slot's left end and the newly selected countermeasure's name at its right end while no alert is up.</item>
     /// <item>THREAT RING round the screen centre (<see cref="ThreatRing"/>): a double chevron toward every live inbound missile labelled "M1 6S", an amber diamond toward a radar locking us.</item>
     /// <item>SHOT CALLOUT under the reticle (<see cref="ShotCallouts"/>): HIT / DESTROYED / MISSED / DECOYED; only DESTROYED names its target.</item>
     /// </list>
     /// Our own objects under the native HUDCanvas (vanilla owns visibility), in the native HUD face, laid out on a 1080-high reference screen and scaled to the real one, with the
     /// lane's one set of strokes, brackets, sizes and motion. While it is up it hides the game's own missile list ("Missile [ARH] 4.9km" above the map), which the banner and the
-    /// ring now say better, through a group it owns (alpha back to 1 whenever the layer is down). Data at the board's 10 Hz (<see cref="Read"/>); blink, ring and pop every frame.
+    /// ring now say better, through a group it owns (alpha back to 1 whenever the layer is down). Data at the board's 10 Hz (<see cref="Read"/>); blink, ring and pop every frame. The bearings of the threats
+    /// hang on the heading tape itself (<see cref="TapeHud"/>).
     /// </summary>
     internal sealed class CombatAlerts
     {
         private const int RingMax = 6;
         /// <summary>The callout's centre under the screen centre, reference pixels.</summary>
         private const float CalloutDown = 120f;
-        /// <summary>Between an icon and its word; how far the screen-edge glow reaches in.</summary>
-        private const float IconGap = 8f, EdgeDepth = 90f;
+        /// <summary>Between an icon and its word; how far the screen-edge glow reaches in. Tracking of the callout's words (the ring labels and the callout's sub line track like LABEL).</summary>
+        private const float IconGap = 8f, EdgeDepth = 90f, WordSpacing = 10f, LineSpacing = 2f;
         private static readonly AccessTools.FieldRef<CombatHUD, ThreatList> ThreatListRef = NativeRefs.Field<CombatHUD, ThreatList>("threatList");
 
-        private RectTransform canvasRoot, root, banner, callout;
+        private RectTransform canvasRoot, root, line, callout;
+        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        internal Transform Root => root;
         private TMP_FontAsset font;
         private Material fontMaterial;
-        private TextMeshProUGUI word, detail, calloutWord, calloutSub;
-        private TMP_Text bannerIcon, calloutIcon, callIcon;
-        /// <summary>The detail row's text width and whether its call icon shows (both set when the line is written, not per frame); a missile pip's spacing.</summary>
-        private float detailTextW;
-        private bool callShown;
-        private const float PipStep = 12f;
+        private TextMeshProUGUI kindWord, middle, call, calloutWord, calloutSub;
+        private TMP_Text calloutIcon;
+        /// <summary>The line's words as last written and their widths (set when the text changes, not per frame), the widest the content has been while this alert stayed up (the box never shrinks and shifts back).</summary>
+        private float kindW, middleW, callW, stickyContent;
+        private string middleShown = "";
+        private bool lineUp;
         private readonly TextMeshProUGUI[] ringLabels = new TextMeshProUGUI[RingMax];
         private readonly int[] ringKeys = new int[RingMax];
-        private Image shade;
         private CanvasGroup calloutGroup, nativeList;
-        private AvVector edgeLines, bannerLines, ringLines, calloutLines;
+        private AvVector edgeLines, lineLines, ringLines, calloutLines;
         private float lastK;
 
         private readonly AlertBoard board = new AlertBoard();
@@ -54,24 +57,31 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvUnits units = AvUnits.Metric;
         private readonly char[] buf = new char[96];
         private bool on;
-        private float wordHalf, wordWidth;
-        private int wordKey = -1, detailKey, calloutVersion = -1, ledgerVersion = -1;
+        private int kindKey = -1, detailKey, calloutVersion = -1, ledgerVersion = -1;
         private float lastCalled = float.PositiveInfinity;
 
-        // Countermeasure popup: the newly selected dispenser's name under the banner for CmShowS after the pilot switches.
+        // Countermeasure popup: the newly selected dispenser's name for CmShowS after the pilot switches, at the slot's right end (in the alert's middle word while a line is up).
         private const float CmShowS = 2f;
-        private TextMeshProUGUI cmPopup;
+        private TextMeshProUGUI cmPopup, jamWord;
+        private bool jam;
         private Aircraft cmAircraft;
         private string cmName;
-        private float cmAt = float.NegativeInfinity, bannerX;
+        private float cmAt = float.NegativeInfinity;
 
         private readonly Missile[] missiles = new Missile[RingMax];
         private readonly int[] numbers = new int[RingMax];
 
         /// <summary>What the layer shows now (the sim probe in <c>HudAutomation</c> reads it).</summary>
         internal bool Shown => root != null && root.gameObject.activeSelf;
-        internal string BannerWord => banner != null && banner.gameObject.activeSelf ? word.text : "";
-        internal string DetailText => banner != null && banner.gameObject.activeSelf ? detail.text : "";
+        /// <summary>A real warning is up right now (PULL UP, MISSILE, FIRE, ENGINE OUT, LOCKED): the visor's power-on is cut short for it. BINGO FUEL is a caution the self-test reports itself and does not count.</summary>
+        internal bool WarningUp => on && (board.IsUp(AlertKind.PullUp) || board.IsUp(AlertKind.Missile) || board.IsUp(AlertKind.Fire) || board.IsUp(AlertKind.EngineOut) || board.IsUp(AlertKind.Locked));
+        internal string LineWord => line != null && line.gameObject.activeSelf ? kindWord.text : "";
+        internal string DetailText => line != null && line.gameObject.activeSelf ? middle.text : "";
+        internal string CallText => line != null && line.gameObject.activeSelf ? call.text : "";
+        internal bool JamShown => jamWord != null && jamWord.gameObject.activeSelf;
+
+        /// <summary>The jammed visor's word (<see cref="VisorFx.JamUp"/>): EW JAM at the slot's left end while no alert is up.</summary>
+        public void SetJam(bool up) => jam = up;
         internal int RingMarks { get; private set; }
         internal string CalloutText => callout != null && callout.gameObject.activeSelf ? calloutWord.text : "";
         internal bool NativeListHidden => nativeList != null && nativeList.alpha == 0f;
@@ -89,42 +99,43 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ringLines = AvVector.Create(root, "Ring", 160);
             for (int i = 0; i < RingMax; i++)
             {
-                ringLabels[i] = Text(root, "RingLabel", TopCentre.LabelPt, TopCentre.LineSpacing, bold: true);
+                ringLabels[i] = Text(root, "RingLabel", TopCentre.LabelPt, LineSpacing, bold: true);
                 ringLabels[i].rectTransform.sizeDelta = new Vector2(96f, TopCentre.LabelPt * 1.5f);
                 ringLabels[i].gameObject.SetActive(false);
                 ringKeys[i] = int.MinValue;
             }
 
-            banner = Holder(root, "Banner");
-            shade = HudSprites.Child(banner, "Shade", HudSprites.Feather, sliced: true);
-            shade.raycastTarget = false;
-            shade.rectTransform.anchorMin = shade.rectTransform.anchorMax = new Vector2(0.5f, 0.5f);
-            bannerLines = AvVector.Create(banner, "Lines", 48);
-            word = Text(banner, "Word", TopCentre.WordPt, TopCentre.WordSpacing, bold: true);
-            bannerIcon = Icon(banner, TopCentre.WordPt);
-            detail = Text(banner, "Detail", TopCentre.DetailPt, TopCentre.LineSpacing);
-            detail.overflowMode = TextOverflowModes.Ellipsis;
-            callIcon = Icon(banner, TopCentre.DetailPt + 4f);
+            // The warning line: the ticks and the fuse in one mesh, then the three words (kind at the left, detail after it, the call at the right).
+            line = Holder(root, "Line");
+            lineLines = AvVector.Create(line, "Lines", 16);
+            kindWord = Word(line, "Kind", TopCentre.NamePt, HudStep.Emphasis, 0f);
+            middle = Word(line, "Detail", TopCentre.ValuePt, HudStep.Value, 0f);
+            middle.overflowMode = TextOverflowModes.Ellipsis;
+            call = Word(line, "Call", TopCentre.NamePt, HudStep.Emphasis, 1f);
 
             callout = Holder(root, "Callout");
             calloutGroup = callout.gameObject.AddComponent<CanvasGroup>();
             calloutGroup.blocksRaycasts = false;
             calloutGroup.interactable = false;
             calloutLines = AvVector.Create(callout, "Lines", 16);
-            calloutWord = Text(callout, "Word", TopCentre.NamePt, TopCentre.WordSpacing, bold: true);
+            calloutWord = Text(callout, "Word", TopCentre.NamePt, WordSpacing, bold: true);
             calloutIcon = Icon(callout, TopCentre.NamePt);
-            calloutSub = Text(callout, "Sub", TopCentre.LabelPt, TopCentre.LineSpacing);
+            calloutSub = Text(callout, "Sub", TopCentre.LabelPt, LineSpacing);
             calloutSub.rectTransform.anchoredPosition = new Vector2(0f, -TopCentre.NamePt * 0.7f - TopCentre.LabelPt);      // under the brackets, not in them
 
-            cmPopup = Text(root, "CmPopup", TopCentre.DetailPt, TopCentre.WordSpacing, bold: true);
+            cmPopup = Word(root, "CmPopup", TopCentre.NamePt, HudStep.Emphasis, 1f);
             cmPopup.gameObject.SetActive(false);
+            jamWord = Word(root, "Jam", TopCentre.LabelPt, HudStep.Label, 0f);
+            jamWord.text = JamText;
+            jamWord.gameObject.SetActive(false);
 
-            banner.gameObject.SetActive(false);
+            line.gameObject.SetActive(false);
             callout.gameObject.SetActive(false);
             root.gameObject.SetActive(false);
             lastK = 0f;
-            wordKey = calloutVersion = -1;
-            detailKey = 0;      // a rebuilt layer writes its detail line again
+            kindKey = calloutVersion = -1;
+            detailKey = 0;      // a rebuilt layer writes its words again
+            middleShown = "";
             return true;
         }
 
@@ -148,14 +159,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             units = frame.Units;
             inputs = default;
+            inputs.OwnHeadingDeg = aircraft.transform.eulerAngles.y;
             inputs.Missiles = frame.Threat.Missiles;
-            inputs.MissileRangeM = inputs.MissileTtiS = float.NaN;
+            inputs.MissileRangeM = inputs.MissileTtiS = inputs.MissileBearingDeg = float.NaN;
             if (frame.ContactCount > 0 && frame.Contacts[0].Kind == ThreatKind.Missile)
             {
                 ThreatContact c = frame.Contacts[0];
                 inputs.Seeker = c.Seeker;
                 inputs.MissileRangeM = c.RangeM;
                 inputs.MissileTtiS = c.TtiS;
+                inputs.MissileBearingDeg = c.BearingDeg;
             }
             float radarAlt = aircraft.radarAlt, climb = aircraft.rb != null ? aircraft.rb.velocity.y : 0f;
             inputs.PullUp = AlertBoard.PullUp(HudCues.Terrain(radarAlt, climb), climb, aircraft.gearState == LandingGear.GearState.LockedExtended);
@@ -196,6 +209,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (root.gameObject.activeSelf != show) root.gameObject.SetActive(show);
             if (!show)
             {
+                TopCentre.LineUp = lineUp = false;
                 NativeList(false);
                 return;
             }
@@ -209,94 +223,134 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             float w = canvasRoot.rect.width / k, h = 1080f;
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
-            PaintBanner(now, h, boardBox, palette);
+            PaintLine(now, h, boardBox, palette);
             PaintRing(aircraft, threats, now, w, h, palette);
             PaintCallout(now, palette);
-            PaintCmPopup(now, h, palette);
             NativeList(true);      // only once the layer has painted: a paint that throws leaves the game's own list up (fail open)
         }
+        private const string JamText = "EW JAM";
 
-        private void PaintBanner(float now, float h, IHudBoard boardBox, VanillaHudStyle.Palette palette)
+        private bool CmLive(float now) { float age = now - cmAt; return age >= 0f && age < CmShowS; }
+
+        /// <summary>How far the slot's piece <paramref name="width"/> wide steps sideways to keep clear of the TAC BOARD's box (0 on the reticle's axis).</summary>
+        private static float Shift(IHudBoard boardBox, float width, float height) =>
+            boardBox != null && boardBox.TryGetScreenBox(out float l, out float t, out float r, out float bt)
+                ? TopCentre.LaneShift(Screen.width, Screen.height, width, TopCentre.LineTop - TopCentre.Lift, height, l, t, r, bt) : 0f;
+
+        /// <summary>
+        /// The slot, every frame. An alert up: ONE row inside four corner ticks, centred on the reticle's axis unless its own width would reach the TAC BOARD (then it steps aside, never up or down): the kind word at the left, the detail after
+        /// it, the call at the right, the fuse under the row. The box never shrinks while the alert stays up, so the call word does not jump when a number loses a digit. No alert: EW JAM at the slot's left end, the newly selected
+        /// countermeasure's name at its right end (both yield to the ace card).
+        /// </summary>
+        private void PaintLine(float now, float h, IHudBoard boardBox, VanillaHudStyle.Palette palette)
         {
             bool up = board.Banner(now, out AlertKind kind);
-            if (banner.gameObject.activeSelf != up) banner.gameObject.SetActive(up);
-            bannerX = 0f;
-            if (!up) return;
-            if ((int)kind != wordKey)
+            if (line.gameObject.activeSelf != up) line.gameObject.SetActive(up);
+            TopCentre.LineUp = lineUp = up;
+            float top = h * 0.5f - TopCentre.LineTop + TopCentre.Lift, rowY = top - TopCentre.RowTop - TopCentre.RowHeight * 0.5f;
+            bool cm = CmLive(now), ends = !up && !TopCentre.CardUp;
+            bool popupShown = ends && cm, jamShown = ends && jam;
+            if (cmPopup.gameObject.activeSelf != popupShown) cmPopup.gameObject.SetActive(popupShown);
+            if (jamWord.gameObject.activeSelf != jamShown) jamWord.gameObject.SetActive(jamShown);
+            if (popupShown || jamShown)
             {
-                wordKey = (int)kind;
-                word.text = AlertText.Word(kind);
-                AvIcons.Set(bannerIcon, AlertText.Icon(kind), TopCentre.WordPt);
-                wordWidth = word.GetPreferredValues(word.text).x;
-                wordHalf = (wordWidth + TopCentre.WordPt + IconGap) * 0.5f;      // the word block: icon, gap, word
+                float sx = Shift(boardBox, TopCentre.Width, TopCentre.CardHeight);
+                cmPopup.rectTransform.anchoredPosition = new Vector2(sx + TopCentre.Width * 0.5f, rowY);
+                jamWord.rectTransform.anchoredPosition = new Vector2(sx - TopCentre.Width * 0.5f, rowY);
+                Ink(cmPopup, palette.AllClear);
+                cmPopup.alpha = Mathf.Clamp01((CmShowS - (now - cmAt)) / 0.4f);
+                Ink(jamWord, palette.Warning);
+            }
+            if (!up) { kindKey = -1; return; }
+
+            if ((int)kind != kindKey)
+            {
+                kindKey = (int)kind;
+                kindWord.text = AlertText.Word(kind);
+                kindW = kindWord.GetPreferredValues(kindWord.text).x;
+                stickyContent = 0f;
+                detailKey = 0;
                 WriteDetail(kind);
             }
             bool warning = AlertBoard.IsWarning(kind);
             Color tone = warning ? palette.Alert : palette.Warning;
-            float top = h * 0.5f - TopCentre.BannerTop, bottom = top - TopCentre.BannerHeight;
-            float wordY = top - TopCentre.WordPt * 0.75f, detailY = bottom + TopCentre.DetailPt;
-            // The banner's width follows its word only (never the detail digits, which change ten times a second): at least the lane's, so it never slides sideways.
-            float half = Mathf.Max(TopCentre.HazardReach(wordHalf) + TopCentre.Arm * 2f, TopCentre.Width * 0.5f);
-            // On the reticle's axis unless this banner's own width would reach the TAC BOARD.
-            float x = boardBox != null && boardBox.TryGetScreenBox(out float l, out float t, out float r, out float bt)
-                ? TopCentre.LaneShift(Screen.width, Screen.height, half * 2f, TopCentre.BannerTop, TopCentre.BannerHeight, l, t, r, bt) : 0f;
-            bannerX = x;
-            word.rectTransform.anchoredPosition = new Vector2(x + wordHalf - wordWidth * 0.5f, wordY);
-            bannerIcon.rectTransform.anchoredPosition = new Vector2(x - wordHalf + TopCentre.WordPt * 0.5f, wordY);
-            // The detail row, centred as one block: a pip per missile inbound (the nearest bright), the call's icon, the call word.
-            int pips = kind == AlertKind.Missile ? Mathf.Min(inputs.Missiles, AlertText.PipMax) : 0;
-            float pipW = pips * PipStep, iconW = callShown ? TopCentre.DetailPt + 4f + IconGap * 0.5f : 0f;
-            float gap = pips > 0 && (iconW > 0f || detailTextW > 0f) ? IconGap * 2f : 0f, left = x - (pipW + gap + iconW + detailTextW) * 0.5f;
-            if (callIcon.gameObject.activeSelf != callShown) callIcon.gameObject.SetActive(callShown);
-            callIcon.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + (TopCentre.DetailPt + 4f) * 0.5f, detailY);
-            detail.rectTransform.anchoredPosition = new Vector2(left + pipW + gap + iconW + detailTextW * 0.5f, detailY);
-            float detailWidth = (half - TopCentre.Arm * 2f) * 2f;      // the detail stays between the brackets (an ellipsis past them)
-            if (detail.rectTransform.sizeDelta.x != detailWidth) detail.rectTransform.sizeDelta = new Vector2(detailWidth, TopCentre.DetailPt * 1.5f);
-            shade.rectTransform.anchoredPosition = new Vector2(x, (top + bottom) * 0.5f);
-            shade.rectTransform.sizeDelta = new Vector2((half + TopCentre.ShadeMargin) * 2f, TopCentre.BannerHeight + TopCentre.ShadeMargin * 2f);
-            shade.color = HudSprites.BackdropColor;
-            bool calm = AvFxDriver.ReducedMotion;      // the kit's REDUCED MOTION: nothing blinks, marches, pops or types on
-            word.color = tone.WithAlpha(calm || AlertText.Lit(kind, now - board.Since(kind), inputs.MissileTtiS) ? 1f : 0.15f);
-            bannerIcon.color = word.color;
-            detail.color = tone.WithAlpha(0.9f);
-            callIcon.color = detail.color;
+            // The middle word: the detail, or for the countermeasure's first two seconds the name just selected.
+            string wanted = cm && !string.IsNullOrEmpty(cmPopup.text) ? cmPopup.text : detailText;
+            if (middleShown != wanted)
+            {
+                middleShown = wanted;
+                middle.text = wanted;
+                middleW = wanted.Length > 0 ? middle.GetPreferredValues(wanted).x : 0f;
+            }
+            float content = kindW + (middleW > 0f ? TopCentre.WordGap + middleW : 0f) + (callW > 0f ? TopCentre.CallGap + callW : 0f);
+            if (content > stickyContent) stickyContent = content;
+            float boxW = TopCentre.BoxWidth(stickyContent), x = Shift(boardBox, boxW, TopCentre.LineHeight);
+            float left = x - boxW * 0.5f, right = x + boxW * 0.5f, bottom = top - TopCentre.LineHeight, room = Mathf.Max(0f, TopCentre.MiddleRoom(boxW, kindW, callW));
+            Place(kindWord.rectTransform, left + TopCentre.Pad, rowY, kindW + 8f, TopCentre.NamePt * 1.5f);
+            Place(middle.rectTransform, left + TopCentre.Pad + kindW + TopCentre.WordGap, rowY, Mathf.Min(middleW + 8f, room), TopCentre.ValuePt * 1.5f);
+            Place(call.rectTransform, right - TopCentre.Pad, rowY, callW + 8f, TopCentre.NamePt * 1.5f);
+            bool calm = AvFxDriver.ReducedMotion;      // the kit's REDUCED MOTION: nothing blinks
+            Ink(kindWord, tone);
+            kindWord.alpha = calm || AlertText.Lit(kind, now - board.Since(kind), inputs.MissileTtiS) ? 1f : 0.15f;
+            Ink(middle, cm ? palette.AllClear : tone);
+            Ink(call, palette.Warning);
 
-            // The brackets close in from wide when the alert comes up (the lane's enter time); a warning's chevrons run in from the outside, a caution's stand still.
-            float open = calm ? 1f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - board.Since(kind)) / TopCentre.EnterS)), wide = half + (1f - open) * 40f;
-            AvQuadBuffer b = bannerLines.Buffer;
+            AvQuadBuffer b = lineLines.Buffer;
             b.Clear();
             Rgba ink = tone.ToRgba();
-            AvStrokes.Bracket(b, x - wide, bottom, wide * 2f, top - bottom, TopCentre.Arm, TopCentre.Stroke, ink);
-            TopCentre.Hazard(b, x, wordY, wordHalf, ink, warning && !calm ? (int)(now * 6f) % 3 : -1);
-            for (int i = 0; i < pips; i++) AvStrokes.Diamond(b, left + PipStep * (i + 0.5f), detailY, 5f, 5f, ink.WithAlpha(i == 0 ? 1f : 0.55f));
-            // A timed alert burns a fuse along the banner's foot, between the brackets' arms: full at 10 s to impact (or to the ground), gone at none.
+            AvStrokes.Bracket(b, left, bottom, boxW, TopCentre.LineHeight, TopCentre.Arm, TopCentre.Stroke, ink.WithAlpha(HudInk.LineMid));
+            // A timed alert burns a fuse under the row: full at 10 s to impact (or to the ground), gone at none.
             float share = AlertText.Countdown(kind, inputs);
             if (!float.IsNaN(share))
             {
-                float run = (wide - TopCentre.Arm - 6f) * 2f;
-                AvStrokes.Fill(b, x - run * 0.5f, bottom - 1.5f, run, 3f, ink.WithAlpha(0.2f));
-                AvStrokes.Fill(b, x - run * share * 0.5f, bottom - 1.5f, run * share, 3f, ink);
+                float run = boxW - TopCentre.Pad * 2f, fuseY = top - TopCentre.RowTop - TopCentre.RowHeight - 4f;
+                AvStrokes.Fill(b, left + TopCentre.Pad, fuseY - 1f, run, 2f, ink.WithAlpha(HudInk.LineLow));
+                AvStrokes.Fill(b, left + TopCentre.Pad, fuseY - 1f, run * share, 2f, ink);
             }
-            bannerLines.Commit();
+            lineLines.Commit();
         }
 
-        /// <summary>The detail line: a second warning up at the same time leads it ("+FIRE · ..."), so no warning is ever off the centre; written only when it changed.</summary>
+        private static void Place(RectTransform rect, float x, float y, float w, float h)
+        {
+            var p = new Vector2(x, y);
+            if (rect.anchoredPosition != p) rect.anchoredPosition = p;
+            var s = new Vector2(w, h);
+            if (rect.sizeDelta != s) rect.sizeDelta = s;
+        }
+
+        /// <summary>A word's colour through the shared glow material (the halo is the word's own colour: one cached material per tone); written only when it changed.</summary>
+        private void Ink(TextMeshProUGUI text, Color c)
+        {
+            Color opaque = new Color(c.r, c.g, c.b, 1f);
+            if (text.color == opaque) return;
+            text.color = opaque;
+            Material glow = VanillaHudStyle.Glow(fontMaterial, opaque);
+            if (glow != null && text.fontSharedMaterial != glow) text.fontSharedMaterial = glow;
+        }
+
+        private string detailText = "";
+
+        /// <summary>The line's middle and right words: a second warning up at the same time leads the middle ("+FIRE · ..."), so no warning is ever off the centre; written only when they changed.</summary>
         private void WriteDetail(AlertKind kind)
         {
             int also = -1;
             for (int k = 0; k < AlertBoard.Count && also < 0; k++)
                 if (k != (int)kind && AlertBoard.IsWarning((AlertKind)k) && board.IsUp((AlertKind)k)) also = k;
-            int n = AlertText.Detail(buf, kind, inputs, units), key = (int)kind * 7919 + n * 131 + also;
+            int n = AlertText.Detail(buf, kind, inputs, units);
+            string order = kind == AlertKind.Missile ? AlertText.CallWord(AlertText.MissileCall(inputs.Seeker, inputs.MissileTtiS)) : "";
+            int key = (int)kind * 7919 + n * 131 + also + order.Length * 17;
             for (int i = 0; i < n; i++) key = key * 31 + buf[i];
             if (key == detailKey) return;
             detailKey = key;
-            string line = new string(buf, 0, n);
-            detail.text = also < 0 ? line : "+" + AlertText.Word((AlertKind)also) + (n > 0 ? " · " + line : "");
-            detailTextW = detail.text.Length > 0 ? detail.GetPreferredValues(detail.text).x : 0f;
-            AvIcon call = kind == AlertKind.Missile && also < 0 ? AlertText.CallIcon(AlertText.MissileCall(inputs.Seeker, inputs.MissileTtiS)) : AvIcon.None;
-            callShown = call != AvIcon.None;
-            if (callShown) AvIcons.Set(callIcon, call, TopCentre.DetailPt + 4f);
+            string text = new string(buf, 0, n);
+            detailText = also < 0 ? text : "+" + AlertText.Word((AlertKind)also) + (n > 0 ? " · " + text : "");
+            if (call.text != order)
+            {
+                call.text = order;
+                callW = order.Length > 0 ? call.GetPreferredValues(order).x : 0f;
+            }
         }
+
 
         private void PaintRing(Aircraft aircraft, ThreatWatch threats, float now, float w, float h, VanillaHudStyle.Palette palette)
         {
@@ -427,7 +481,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 calloutSub.gameObject.SetActive(sub);
                 if (sub) calloutSub.text = c.Sub;
                 Color ink = palette.AllClear;
-                Color tone = c.Kind == CalloutKind.Destroyed ? Color.Lerp(ink, Color.white, 0.55f) : c.Kind == CalloutKind.Decoyed ? palette.Warning
+                Color tone = c.Kind == CalloutKind.Destroyed ? VanillaHudStyle.InkHi : c.Kind == CalloutKind.Decoyed ? palette.Warning
                     : c.Kind == CalloutKind.Missed ? ink.WithAlpha(0.65f) : ink;
                 calloutWord.color = tone;
                 calloutIcon.color = tone;
@@ -450,18 +504,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             callout.anchoredPosition = new Vector2(0f, -CalloutDown);
             callout.localScale = new Vector3(s, s, 1f);
             calloutGroup.alpha = ShotCallouts.Alpha(age);
-        }
-
-        /// <summary>The countermeasure popup just under the banner's slot (under the banner itself while it is up), fading out over its last 0.4 s.</summary>
-        private void PaintCmPopup(float now, float h, VanillaHudStyle.Palette palette)
-        {
-            float age = now - cmAt;
-            bool live = age >= 0f && age < CmShowS;
-            if (cmPopup.gameObject.activeSelf != live) cmPopup.gameObject.SetActive(live);
-            if (!live) return;
-            float y = h * 0.5f - TopCentre.BannerTop - TopCentre.BannerHeight - TopCentre.DetailPt * 1.2f;
-            cmPopup.rectTransform.anchoredPosition = new Vector2(bannerX, y);
-            cmPopup.color = palette.AllClear.WithAlpha(Mathf.Clamp01((CmShowS - age) / 0.4f));
         }
 
         /// <summary>New results in the shot tracker's ledger since the last call (by their resolution time), handed to the callout; a heavier call keeps the stage (<see cref="ShotCallouts.Push"/>).</summary>
@@ -496,7 +538,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (nativeList.alpha != alpha) nativeList.alpha = alpha;
         }
 
-        private static RectTransform Holder(RectTransform parent, string name)
+        internal static RectTransform Holder(RectTransform parent, string name)
         {
             var rect = (RectTransform)new GameObject(name, typeof(RectTransform)).transform;
             rect.SetParent(parent, false);
@@ -528,9 +570,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return text;
         }
 
+        /// <summary>A word of the warning slot: its type step's size and tracking, bold from VALUE up, anchored at its left (<paramref name="pivotX"/> 0) or right (1) edge; the caller places it.</summary>
+        private TextMeshProUGUI Word(RectTransform parent, string name, float size, HudStep step, float pivotX)
+        {
+            TextMeshProUGUI text = Text(parent, name, size, HudType.Tracking(step), HudType.Bold(step, warning: name == "Jam"));
+            text.alignment = pivotX > 0.5f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft;
+            text.rectTransform.pivot = new Vector2(pivotX, 0.5f);
+            text.rectTransform.sizeDelta = new Vector2(size * 12f, size * 1.5f);
+            return text;
+        }
+
         public void Hide()
         {
             on = false;
+            TopCentre.LineUp = lineUp = false;
             board.Reset();
             NativeList(false);
             if (root != null) root.gameObject.SetActive(false);

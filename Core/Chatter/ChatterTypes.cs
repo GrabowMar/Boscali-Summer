@@ -6,6 +6,12 @@ namespace BoscaliSummer.Core.Chatter
     /// <summary>How badly a line needs the channel. A Tactical line cuts an Ambient or Status line that is on air; an Emergency cuts anything but another Emergency.</summary>
     internal enum ChatterPriority : byte { Ambient, Status, Tactical, Emergency }
 
+    /// <summary>How the COMMS strip sheds rows to fit its box: the lowest rank goes first (routine traffic by priority, oldest first among equals); a scripted row outranks all of it.</summary>
+    internal static class ChatterShed
+    {
+        public static int Rank(bool scripted, ChatterPriority priority) => scripted ? 100 : (int)priority;
+    }
+
     /// <summary>The pilot's radio setting: Essential drops Ambient lines and exchanges.</summary>
     internal enum ChatterLevel : byte { Off, Essential, Full }
 

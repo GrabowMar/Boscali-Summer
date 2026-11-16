@@ -18,7 +18,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// </summary>
     internal sealed class ShotPage : ScopePageBase
     {
-        private const float OX = 220f, OY = 258f;
+        private const float OX = 220f;
+        /// <summary>The aircraft's y on the plan: 16 above the body's foot (258 on a full page; the FIRES panel is shorter).</summary>
+        private float OY = 258f;
         private const int Cap = 8, Chips = 7;
 
         private ShotScope d;
@@ -173,6 +175,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             units = p.Units;
             lead = ShotMath.Lead(d.Missiles, d.MissileCount);
             scale.Update(d.NeedKm, now);
+            OY = p.H - 16f;
             float k = (OY - 36f) / scale.Km;
             keep.Clear();
             Grid(g, k);
@@ -241,7 +244,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!t.Hot)
             {
                 float w = Mathf.Round(ScopeCanvas.TextW(t.Name, 12f)) + 4f;
-                keep.Place(LabelSpots.Shot, x, y, w, 17f, default, 2f, 438f, 32f, 270f, out float lx, out float ly);
+                keep.Place(LabelSpots.Shot, x, y, w, 17f, default, 2f, 438f, 32f, OY + 12f, out float lx, out float ly);
                 g.Text(t.Name, lx + 2f, ly + 9f, Dim, 12f);
             }
         }

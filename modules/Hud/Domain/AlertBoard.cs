@@ -17,6 +17,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public int Missiles;
         public string Seeker;
         public float MissileRangeM, MissileTtiS;
+        /// <summary>Where the nearest one is off the nose, degrees clockwise (NaN: not known), and our heading: the line says its compass bearing, the number the heading tape shows under the mark.</summary>
+        public float MissileBearingDeg, OwnHeadingDeg;
         /// <summary>The ground is closer than <see cref="HudCues.PullUpSeconds"/> at the sink rate; <see cref="GroundS"/> is how many seconds.</summary>
         public bool PullUp;
         public float GroundS;
@@ -103,12 +105,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class AlertText
     {
         private static readonly string[] Words = { "PULL UP", "MISSILE", "FIRE", "ENGINE OUT", "LOCKED", "BINGO FUEL" };
-        private static readonly AvIcon[] Icons = { AvIcon.ArrowUp, AvIcon.Rocket, AvIcon.Flame, AvIcon.Gauge, AvIcon.Lock, AvIcon.Runway };
 
         public static string Word(AlertKind kind) => Words[(int)kind];
-
-        /// <summary>The word's picture, from the kit's icon font (the C-menu's family): an alert reads by its word, its colour AND its icon, never by colour alone.</summary>
-        public static AvIcon Icon(AlertKind kind) => Icons[(int)kind];
 
         /// <summary>A timed alert's countdown runs over this many seconds: the fuse under the banner is full at this time to impact (or to the ground) and gone at none.</summary>
         public const float CountdownS = 10f;
@@ -128,9 +126,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return TopCentre.Lit(age, ttiS < 3f ? TopCentre.UrgentHz : TopCentre.BlinkHz);
         }
 
-        /// <summary>Most missile pips the banner draws, one per missile inbound.</summary>
-        public const int PipMax = 6;
-
         /// <summary>The missile banner's one call, the THREAT page's words: IR is FLARE; radar is BEAM, then CHAFF inside <see cref="ThreatMath.ChaffNowS"/>; anything else gets none (Inbound).</summary>
         public static ThreatCue MissileCall(string seeker, float ttiS)
         {
@@ -142,12 +137,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static string CallWord(ThreatCue c) => c == ThreatCue.Flare ? "FLARE" : c == ThreatCue.Chaff ? "CHAFF" : c == ThreatCue.Beam ? "BEAM" : "";
 
-        /// <summary>The call's picture: a flare's flame, chaff's cloud, the beam's sideways flight path; None for no call.</summary>
-        public static AvIcon CallIcon(ThreatCue c) => c == ThreatCue.Flare ? AvIcon.Flame : c == ThreatCue.Chaff ? AvIcon.Cloud : c == ThreatCue.Beam ? AvIcon.FlightPath : AvIcon.None;
-
         /// <summary>
-        /// The detail line under the word into <paramref name="b"/>; returns its length. Missile: the call word alone ("BEAM", "CHAFF", "FLARE"),
-        /// "TERRAIN · 3S", "HLT RADAR · 35KM", "RTB · K92 HIGHWAY STRIP · 22KM".
+        /// The middle word of the warning line into <paramref name="b"/>; returns its length. Missile: "ARH · 095° · 6S" (the seeker, the compass bearing the tape shows under its mark, the seconds to impact),
+        /// "TERRAIN · 3S", "HLT RADAR · 35KM", "RTB · K92 HIGHWAY STRIP · 22KM". The order (BEAM, CHAFF, FLARE) is the line's right word, <see cref="CallWord"/>.
         /// </summary>
         public static int Detail(char[] b, AlertKind kind, in AlertInputs a, AvUnits units)
         {
@@ -155,8 +147,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
             switch (kind)
             {
                 case AlertKind.Missile:
-                    // One call word only (2026-11-15, user: "too verbose"): the count is pips, the time the fuse, the direction the ring.
-                    n = AvNumFormat.Append(b, n, CallWord(MissileCall(a.Seeker, a.MissileTtiS)));
+                    if (!string.IsNullOrEmpty(a.Seeker)) n = Up(b, n, a.Seeker);
+                    if (Finite(a.MissileBearingDeg))
+                    {
+                        int deg = (int)Math.Round(((a.MissileBearingDeg + (Finite(a.OwnHeadingDeg) ? a.OwnHeadingDeg : 0f)) % 360f + 360f) % 360f) % 360;
+                        n = Sep(b, n);
+                        b[n++] = (char)('0' + deg / 100);
+                        b[n++] = (char)('0' + deg / 10 % 10);
+                        b[n++] = (char)('0' + deg % 10);
+                        b[n++] = '°';
+                    }
+                    if (Finite(a.MissileTtiS)) { n = AvNumFormat.Write(b, Sep(b, n), Math.Max(0f, Math.Min(99f, (float)Math.Round(a.MissileTtiS))), 0); n = AvNumFormat.Append(b, n, "S"); }
                     break;
                 case AlertKind.PullUp:
                     n = AvNumFormat.Append(b, n, "TERRAIN");

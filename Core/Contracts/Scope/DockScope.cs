@@ -38,5 +38,7 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>The tanker kit's remaining fuel in kilograms (<see cref="HasStock"/> false: not known).</summary>
         public bool HasStock;
         public float StockFuelKg, StockFuelMaxKg;
+        /// <summary>Where the tanker lies off the receiver's nose, degrees, + right, -180..180 (the visor's brow rail).</summary>
+        public float TankerBearingDeg;
     }
 }

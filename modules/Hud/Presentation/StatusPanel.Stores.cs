@@ -66,10 +66,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             PlaceOnGrid(storesRect, 0f, 0f, Whole(geo.Width * unit), height);
             ScopeCanvas g = storesCanvas;
             g.Furniture = allow.Furniture;
-            g.Begin(pal, unit, height, pixel);
+            g.Begin(pal, unit, height, pixel, HudType.BoardBoost);
             try
             {
-                header.Paint(g, geo, Options.Layout == BoardLayout.Stack, (int)Options.Declutter, now, flashOn);
+                header.Paint(g, geo, boardStack, (int)Options.Declutter, now, flashOn);
                 headerFault = false;
             }
             catch (Exception e)

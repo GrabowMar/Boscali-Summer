@@ -73,7 +73,11 @@ namespace BoscaliSummer.Modules.Immersion.Patches
         private static void Postfix(Aircraft __instance, DamageInfo __1)
         {
             if (ImmersionManager.IsCockpitActive && ReferenceEquals(__instance, ImmersionManager.FollowingUnit))
-                ImmersionManager.Live?.OnPlayerHit(__1.pierceDamage.Decompress(), __1.blastDamage.Decompress());
+            {
+                float pierce = __1.pierceDamage.Decompress(), blast = __1.blastDamage.Decompress();
+                BoscaliSummer.Core.Game.VisorEvents.Hit(pierce, blast);      // the HUD's visor glitches on the same truthful event (Hud/Domain/VisorFx)
+                ImmersionManager.Live?.OnPlayerHit(pierce, blast);
+            }
         }
     }
 }

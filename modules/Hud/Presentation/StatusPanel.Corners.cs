@@ -98,6 +98,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (cornerFurniture != null) Show(cornerFurniture, false);
             StandDownLog();
             StandDownCues();
+            StandDownRoute();
             feedLive = seenFeedUp = seenMapUp = false;
         }
 
@@ -112,6 +113,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             mapShadow = ShadeChild<Image>(cornerShade, "MapBackdrop");
             HudSprites.Slice(mapShadow, HudSprites.Feather);
             cornerFurniture = CornerRoot("BoscaliCornerFurniture");
+            cornerGroup = cornerFurniture.gameObject.AddComponent<CanvasGroup>();
+            cornerGroup.ignoreParentGroups = true;
+            cornerGroup.interactable = cornerGroup.blocksRaycasts = false;
             cornerSurface = Pinned(cornerFurniture, "Corners", false);
             cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads);
             cornerText = new ScopeText(Holder(cornerSurface, "Words"), font, fontMaterial);
@@ -139,6 +143,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (logRoot != null) logRoot.offsetMin = logRoot.offsetMax = swayShift;
             if (cueRoot != null) cueRoot.offsetMin = cueRoot.offsetMax = swayShift;
+            if (routeRoot != null) routeRoot.offsetMin = routeRoot.offsetMax = swayShift;
             if (cornerFurniture == null) return;
             cornerShade.offsetMin = cornerShade.offsetMax = swayShift;
             cornerFurniture.offsetMin = cornerFurniture.offsetMax = swayShift;
@@ -211,7 +216,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (cueCount > 0 && cueLit > 0f)
             {
-                top = Mathf.Min(top, LeftHudStack.CueTop(canvasRect.rect.height / baseUnit));
+                top = Mathf.Min(top, LeftHudStack.CueTop);
                 bottom = Mathf.Max(bottom, cueBottom); lit = Mathf.Max(lit, cueLit);
             }
             float alpha = HudSprites.Backdrop * lit;      // the one backdrop (HudSprites.Backdrop), as behind the board, the map and the centre alerts
@@ -223,7 +228,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!EnsureCornerTree()) return;
             const float feather = 12f;
             PlaceBoxAt(leftShadow.rectTransform, new BoardRect(LeftHudStack.Left - feather, top - feather,
-                LeftHudStack.Width + feather * 2f, bottom - top + feather * 2f), baseUnit);
+                HudZones.ColumnWidth(canvasRect.rect.width / baseUnit) + feather * 2f, bottom - top + feather * 2f), baseUnit);
             leftShadow.color = new Color(ShadeColor.r, ShadeColor.g, ShadeColor.b, alpha);
             Show(leftShadow, true);
             Show(cornerShade, true);
@@ -263,6 +268,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             DestroyLog();
             DestroyCues();
+            DestroyRoute();
             screenCorners.Dispose();
             LeftHudStack.NativeFeedBottomPx = 0f;
             if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);

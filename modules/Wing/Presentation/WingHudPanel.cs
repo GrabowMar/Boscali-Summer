@@ -1,9 +1,12 @@
+using BoscaliSummer.Core.Game;
 using NOAvionics;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Wing.Domain;
 using BoscaliSummer.Modules.Wing.Domain.Pure;
@@ -64,6 +67,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int ladderVersion = -1;
         private bool ladderShown;
         private int shownMembers;
+        private bool boardShowsWing, shownBoardWing;
 
         public void Activate() => Reset();
 
@@ -78,8 +82,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             WingService wing = WingService.Instance;
             PlayerAutopilot ap = PlayerAutopilot.Instance;
-            bool any = (wing != null && wing.Members.Count > 0) || (ap != null && ap.Session.Engaged) || WingChordInput.Held;
-            if (hud == null || !hud.isActiveAndEnabled || !any)
+            // The TAC BOARD's WING page already lists the roster: the strip keeps only the autopilot line and the Call Ladder then (Hud module off: no board, no page).
+            boardShowsWing = ModuleServices.TryGet(out IHudBoard board) && board.ShowsWing;
+            bool show = hud != null && WingHudShow.ShouldShow(hud.isActiveAndEnabled, wing != null ? wing.Members.Count : 0, boardShowsWing,
+                ap != null && ap.Session.Engaged, WingChordInput.Held);
+            if (!show)
             {
                 if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
                 return;
@@ -94,10 +101,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
             if (root.anchoredPosition != Anchor) root.anchoredPosition = Anchor;
-            if (Time.unscaledTime < nextRefresh && ladderVersion == WingCallLadder.Version && ladderShown == WingChordInput.Held) return;
+            if (Time.unscaledTime < nextRefresh && ladderVersion == WingCallLadder.Version && ladderShown == WingChordInput.Held && shownBoardWing == boardShowsWing) return;
             nextRefresh = Time.unscaledTime + 0.2f;
             ladderVersion = WingCallLadder.Version;
             ladderShown = WingChordInput.Held;
+            shownBoardWing = boardShowsWing;
             if (ladderShown) RefreshLadder();
             else Refresh(wing, ap);
         }
@@ -181,8 +189,8 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         }
 
         private static ColorTheme Theme => ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
-        private static Color Ink => Theme != null ? Theme.AllClear : AvTheme.Accent;
-        private static Color InkDim => Ink.WithAlpha(0.7f);
+        private static Color Ink => Theme != null ? VanillaHudStyle.Ink : AvTheme.Accent;
+        private static Color InkDim => Ink.WithAlpha(HudInk.DimAlpha);
         private static Color Caution => Theme != null ? Theme.Warning : AvTheme.Warning;
         private static Color Danger => Theme != null ? Theme.Alert : AvTheme.Alert;
 
@@ -207,7 +215,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             if (background != null && background.color != HudSprites.BackdropColor) background.color = HudSprites.BackdropColor;
             SetLadder(false);
             bool changed = !stripSized;
-            int n = wing != null ? Mathf.Min(wing.Members.Count, rows.Length) : 0;
+            int n = wing != null && !boardShowsWing ? Mathf.Min(wing.Members.Count, rows.Length) : 0;
             shownMembers = n;
             int worst = 0, inSlot = 0;
             for (int i = 0; i < rows.Length; i++)
@@ -378,7 +386,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
                 AvStrokes.Fill(b, to - 2f, cy - 2f, 4f, 4f, white);
                 AvStrokes.Line(b, to + 2f, cy + 2f, to + 8f, cy + 8f, 1f, white);
             }
-            chrome.color = ink.WithAlpha(0.8f);
+            chrome.color = ink.WithAlpha(HudInk.LineMid);
             chrome.Commit();
         }
 

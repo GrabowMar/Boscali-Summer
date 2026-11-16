@@ -5,9 +5,9 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The wing side of the board, minus the page (StatusPanel.Page.cs): the lamp line, the gauge line and the notice ticker (LAYOUT.md 3.4, 3.6, 3.7), each in its ScopeLayout rectangle on the shell surface (box
-    // coordinates). Their data is read here too (PresentLamps, PresentGauges, TickerWords). Nothing here touches the stores side. Ordinary ink only: a marker square and a word per lamp, a glyph, a label and a value
-    // per gauge, a tone tick and bold words for the notice.
+    // The wing side of the board, minus the page (StatusPanel.Page.cs): the lamp line and the gauge line (LAYOUT.md 3.4, 3.6), each in its ScopeLayout rectangle on the shell surface (box
+    // coordinates). Their data is read here too (PresentLamps, PresentGauges). Nothing here touches the stores side. Ordinary ink only: a marker square and a word per lamp, a glyph, a label and a value
+    // per gauge. The notice left the board for the NOTICE line of the left column (StatusPanel.Cues.cs).
     internal sealed partial class StatusPanel
     {
         private readonly LampChange lampChange = new LampChange();
@@ -28,9 +28,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private int threatMask;
         private bool booting, shellBeat;
         private float bootAge;
-        private string tickerWords, tickerCount, tickerSourceText;
-        private int tickerSourceCount, tickerSourcePhase;
-        private HudTone tickerSourceTone;
 
         // ------------------------------------------------------------------------------------------------ update
 
@@ -93,11 +90,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             // The gauge row's own switch (or the declutter level) is off: nothing is read for it and it takes no room.
             if (!allow.ShowGauges) { gaugeCount = gaugeLines = 0; return; }
-            // The pages' own gauges first: every page on the board in slot order, then SYSTEMS (always on the board), up to the row's slots.
-            int own = 0, reg = 0, sources = Options.ScopeMode == BoardScopeMode.Off ? 0 : selectedCount;
+            // The pages' own gauges first: every panel that draws its page, in slot order, then SYSTEMS (always on the board), up to the row's slots.
+            int own = 0, reg = 0, sources = slotPages.Length;
             for (int s = 0; s <= sources && own < GaugeRow.Slots; s++)
             {
-                ScopePageBase p = s < sources ? selectedPages[s] : pages[(int)ScopePage.Systems];
+                if (s < sources && !SlotBody(s)) continue;
+                ScopePageBase p = s < sources ? slotPages[s] : pages[(int)ScopePage.Systems];
                 int n = 0;
                 try { n = Math.Min(p.Gauges(pageScratch), GaugeRow.Slots); }
                 catch (Exception e) { ReportOnce(p, e); }
@@ -116,36 +114,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             GaugeRow.Pack(new ReadOnlySpan<float>(gaugeWidth, 0, gaugeCount), gaugeX, gaugeRow);
         }
 
-        /// <summary>The ticker's words and its repeat count, rebuilt only when the notice, its count, its phase or its tone changed.</summary>
-        private string TickerWords(in TickerLine line)
-        {
-            int phase = NoticeTicker.Phase(line);
-            if (tickerWords == null || !ReferenceEquals(tickerSourceText, line.Text) || tickerSourceCount != line.Count ||
-                tickerSourcePhase != phase || tickerSourceTone != line.Tone)
-            {
-                tickerSourceText = line.Text;
-                tickerSourceCount = line.Count;
-                tickerSourcePhase = phase;
-                tickerSourceTone = line.Tone;
-                // A warning says so in words, not only in red.
-                tickerWords = (line.Tone == HudTone.Warning ? "WARNING · " : "") + NoticeTicker.Words(line).ToUpperInvariant();
-                tickerCount = NoticeTicker.CountWord(line);
-            }
-            return tickerWords;
-        }
-
         // ------------------------------------------------------------------------------------------------ paint
 
-        /// <summary>The wing's shell surface: the lamp line, the gauge line and the ticker, in board coordinates (the surface is the whole box).</summary>
+        /// <summary>The wing's shell surface: the lamp line and the gauge line, in board coordinates (the surface is the whole box).</summary>
         private void PaintWing(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
         {
             ScopeCanvas g = shellCanvas;
             shellBeat = false;
             g.Furniture = allow.Furniture;
-            g.Begin(pal, unit, Whole(geo.Height * unit), pixel);
+            g.Begin(pal, unit, Whole(geo.Height * unit), pixel, HudType.BoardBoost);
             if (geo.Lamps.Present) PaintLamps(g, geo.Lamps, flashOn);
             if (geo.Gauges.Present) PaintGauges(g, geo.Gauges, flashOn);
-            if (geo.Ticker.Present) PaintTicker(g, geo.Ticker, flashOn);
             g.End();
             shellVector.Commit();
         }
@@ -224,26 +203,5 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        // ---- the ticker
-
-        /// <summary>The notice: a tone tick, then its words in bold in the same tone, and the repeat count in bold at the right end. A sticky warning pulses.</summary>
-        private void PaintTicker(ScopeCanvas g, in BoardRect r, bool flashOn)
-        {
-            TickerLine line = board.Ticker;
-            ScopeTone tone = SystemsMath.ToneOf(line.Tone);
-            bool sticky = line.Tone == HudTone.Warning;
-            if (sticky || NoticeTicker.IsFresh(line)) shellBeat = true;
-            bool dip = sticky && !flashOn;
-            float cy = r.Y + r.H / 2f;
-            string words = TickerWords(line);
-            float room = r.W - 10f;
-            g.ToneTick(r.X, r.Y, tone, dip ? 0.55f : 1f);
-            if (tickerCount != null)
-            {
-                g.Text(tickerCount, r.Right, cy, tone, 12f, ScopeAlign.Right, true);
-                room -= ScopeCanvas.TextW(tickerCount) + 10f;
-            }
-            g.FitText(words, r.X + 10f, cy, room, tone, 12f, 12f, ScopeAlign.Left, true, dip ? 0.8f : 1f);
-        }
     }
 }

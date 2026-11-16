@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             StoresLayout.HeroPlan p = StoresLayout.Hero(stack, r.W);
             float x = r.X, y = r.Y;
 
-            Shelf(g, x, y, p.ShelfW, "STORES MGMT", "HMD SYM  ", DclWord(declutter));
+            Shelf(g, x, y, p.ShelfW, "STORES MGMT", "", DclWord(declutter));      // "HMD SYM" is gone: at the type scale it met the caption
 
             // The rounds: the numeral (smaller only when four digits would run into the arm column) and the full load beside it.
             string figure = ScopeStr.Int(total);

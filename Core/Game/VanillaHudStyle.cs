@@ -1,6 +1,7 @@
 using System;
 using System.Reflection;
 using HarmonyLib;
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.UIStyleSystem;
 using TMPro;
 using UnityEngine;
@@ -66,6 +67,17 @@ namespace BoscaliSummer.Core.Game
             return font != null;
         }
 
+        /// <summary>The visor glitch's text shader in the fx bundle (see AvionicsUi/Assets/Source/NOA_TMP_VisorGlitchSDF.shader).</summary>
+        internal const string GlitchTextShader = "NOA/TMP/VisorGlitchSDF";
+
+        /// <summary>The sim's pin: every glow material made so far runs on the stock TMP shader (true) or the visor glitch one (false), for a pixel comparison of the two.</summary>
+        internal static void UseStockText(bool stock)
+        {
+            Shader shader = stock ? Shader.Find("TextMeshPro/Distance Field") : NOAvionics.AvBundle.Shader(GlitchTextShader);
+            if (shader == null) return;
+            foreach (Material m in glows.Values) if (m != null) m.shader = shader;
+        }
+
         private static readonly System.Collections.Generic.Dictionary<long, Material> glows = new System.Collections.Generic.Dictionary<long, Material>();
         /// <summary>Each copy's native material, so a copy handed in again is re-tinted from its source.</summary>
         private static readonly System.Collections.Generic.Dictionary<Material, Material> sourceOf = new System.Collections.Generic.Dictionary<Material, Material>();
@@ -73,8 +85,36 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The halo's alpha and spread, and the face's dilate (the native face is thin, -0.19, and frayed on bright cloud once there was no backdrop behind it).</summary>
         internal const float HaloAlpha = 0.3f, HaloDilate = 0.05f, HaloSoftness = 0.3f, FaceDilate = -0.06f;
 
+        /// <summary>
+        /// The hair-thin dark edge round every glyph (2026-11-16, the approved mockup's 1 px dark-green rim: small text reads on bright sky and cloud). TMP's own outline, centred on the glyph edge: it
+        /// would eat half its width off the face, so the face dilate is raised by <c>width * EdgeFaceBack</c> and the letters keep today's weight. The colour is the mockup's <c>--edge</c> (2,16,10 at 0.82).
+        /// Width 0 turns it off; <see cref="SetEdge"/> re-applies it to every material already made.
+        /// </summary>
+        internal const float EdgeDefault = 0.16f, EdgeMax = 0.25f, EdgeFaceBack = 1.1f;
+        private static readonly Color EdgeColour = new Color(HudInk.TextEdge.R, HudInk.TextEdge.G, HudInk.TextEdge.B, HudInk.TextEdge.A);
+        internal static float Edge { get; private set; } = EdgeDefault;
+
+        /// <summary>The pilot's <c>TacBoard.TextEdge</c> (0 off, to <see cref="EdgeMax"/>): live, on every glow material made so far and on those made later.</summary>
+        internal static void SetEdge(float width)
+        {
+            width = float.IsNaN(width) ? EdgeDefault : Mathf.Clamp(width, 0f, EdgeMax);
+            if (width == Edge) return;
+            Edge = width;
+            foreach (Material m in glows.Values) if (m != null) ApplyEdge(m);
+        }
+
+        private static void ApplyEdge(Material m)
+        {
+            bool on = Edge > 0.001f;
+            if (on) m.EnableKeyword(ShaderUtilities.Keyword_Outline); else m.DisableKeyword(ShaderUtilities.Keyword_Outline);
+            m.SetColor(ShaderUtilities.ID_OutlineColor, EdgeColour);
+            m.SetFloat(ShaderUtilities.ID_OutlineWidth, on ? Edge : 0f);
+            m.SetFloat(ShaderUtilities.ID_FaceDilate, FaceDilate + (on ? Edge * EdgeFaceBack : 0f));
+            ShaderUtilities.UpdateShaderRatios(m);
+        }
+
         /// <summary>A word in the HUD ink (<see cref="Glow(Material, Color)"/> in <see cref="Colours"/>.AllClear): what a label gets that does not follow its own colour.</summary>
-        internal static Material Glow(Material native) => Glow(native, Colours.AllClear);
+        internal static Material Glow(Material native) => Glow(native, Ink);
 
         /// <summary>
         /// The mod's HUD words as light on the visor (2026-11-15, user: no dark shadows, "brighter and very slight glow to imitate augmented reality"): a copy of the native label
@@ -89,24 +129,26 @@ namespace BoscaliSummer.Core.Game
             Color32 c = tint;
             long key = ((long)native.GetInstanceID() << 16) ^ ((c.r >> 4) << 8 | (c.g >> 4) << 4 | (c.b >> 4));
             if (glows.TryGetValue(key, out Material m) && m != null) return m;
-            if (glows.Count >= 64 && tint != Colours.AllClear) return Glow(native);
+            if (glows.Count >= 64 && tint != Ink) return Glow(native);
             m = new Material(native) { name = native.name + " (Boscali AR glow)", hideFlags = HideFlags.HideAndDontSave };
-            Shader sdf = Shader.Find("TextMeshPro/Distance Field");
+            // BROKEN HELMET (2026-11-16): the mod's own copy of TMP's SDF shader when the fx bundle has it (the visor glitch tears, splits and drops out the words with it;
+            // identical to the stock shader while no glitch runs), else the stock one.
+            Shader sdf = NOAvionics.AvBundle.Shader(GlitchTextShader);
+            if (sdf == null) sdf = Shader.Find("TextMeshPro/Distance Field");
             if (sdf != null) m.shader = sdf;
-            m.SetFloat(ShaderUtilities.ID_FaceDilate, FaceDilate);
             m.EnableKeyword(ShaderUtilities.Keyword_Underlay);
             m.SetColor(ShaderUtilities.ID_UnderlayColor, new Color(c.r / 255f, c.g / 255f, c.b / 255f, HaloAlpha));
             m.SetFloat(ShaderUtilities.ID_UnderlayOffsetX, 0f);
             m.SetFloat(ShaderUtilities.ID_UnderlayOffsetY, 0f);
             m.SetFloat(ShaderUtilities.ID_UnderlayDilate, HaloDilate);
             m.SetFloat(ShaderUtilities.ID_UnderlaySoftness, HaloSoftness);
-            ShaderUtilities.UpdateShaderRatios(m);
+            ApplyEdge(m);      // face dilate, outline and the shader ratios
             glows[key] = m;
             sourceOf[m] = native;
             return m;
         }
 
-        /// <summary>Vanilla HUD colours, live so a custom theme carries over.</summary>
+        /// <summary>Vanilla HUD colours, live so a custom theme carries over. AllClear is INK (the theme colour as it looks on sky, HudInk.Ink); Warning is CAUTION and Alert WARNING.</summary>
         internal static Palette Colours
         {
             get
@@ -118,7 +160,7 @@ namespace BoscaliSummer.Core.Game
                     if (theme != null)
                         return new Palette
                         {
-                            AllClear = theme.AllClear,
+                            AllClear = Washed(theme.AllClear),
                             Warning = theme.Warning,
                             Alert = theme.Alert
                         };
@@ -129,12 +171,28 @@ namespace BoscaliSummer.Core.Game
 
                 return new Palette
                 {
-                    AllClear = VanillaGreen,
+                    AllClear = Washed(VanillaGreen),
                     Warning = VanillaYellow,
                     Alert = VanillaRed
                 };
             }
         }
+
+        /// <summary>
+        /// The visor's colour roles (HudStandard): INK is the game's HUD colour as it looks on sky, INK-HI that lifted toward white, INK-DIM the ink at one alpha, CAUTION the theme's amber, WARNING its red. All live (a custom theme
+        /// recolours the whole display). INFO (allied, radio, navigation) is INK-HI: the HUD theme has no cool tone.
+        /// </summary>
+        internal static Color Ink => Colours.AllClear;
+        internal static Color InkHi => ToColor(HudInk.Hi(ToRgba(Colours.AllClear)));
+        internal static Color InkDim => ToColor(HudInk.Dim(ToRgba(Colours.AllClear)));
+        internal static Color Caution => Colours.Warning;
+        internal static Color WarningRed => Colours.Alert;
+
+        /// <summary>The theme's all-clear colour as INK (<see cref="HudInk.Ink"/>: the game's additive wash on sky added).</summary>
+        private static Color Washed(Color theme) => ToColor(HudInk.Ink(ToRgba(theme)));
+
+        private static NOAvionics.Rgba ToRgba(Color c) => new NOAvionics.Rgba(c.r, c.g, c.b, 1f);
+        private static Color ToColor(NOAvionics.Rgba c) => new Color(c.R, c.G, c.B, c.A);
 
         public static void Initialise()
         {

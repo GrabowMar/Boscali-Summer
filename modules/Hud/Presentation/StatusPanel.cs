@@ -33,6 +33,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private Canvas rootCanvas;
         private RectTransform canvasRect;
         private RectTransform root;
+        /// <summary>The panel's holder and its scope page's rect (the visor glitch shader's material goes onto the graphics under the holder; the page is eased to a mild glitch).</summary>
+        internal Transform Root => root;
+        internal RectTransform PageRect => pageRect;
         private CanvasGroup rootGroup;
         private RectTransform scopeRect, pageRect, overlayRect, frameRect, storesRect, statusRect;
         private AvVector shellVector, pageVector, overlayVector, frameVector, storesVector, statusVector;
@@ -41,6 +44,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private sealed class PageSurface
         {
             public RectTransform Scope, Body, Overlay, Frame;
+            public CanvasGroup Group;      // the slot's visibility during the power-on (slots past the first: the wing page's block)
             public AvVector BodyVector, OverlayVector, FrameVector;
             public ScopeCanvas BodyCanvas, OverlayCanvas, FrameCanvas;
         }
@@ -127,11 +131,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             BuildShade();      // first: behind everything
             shellVector = AvVector.Create(root, "Shell", ShellQuads);
-            shellText = new ScopeText(Holder(root, "ShellWords"), font, fontMaterial);
+            RectTransform shellWords = Holder(root, "ShellWords");
+            shellText = new ScopeText(shellWords, font, fontMaterial);
             shellCanvas = new ScopeCanvas(shellVector.Buffer, shellText, "scope.shell");
+            shellGroup = Quiet(shellWords.gameObject);
 
             // The stores header: one surface over the top of the board (board coordinates), above the shell, away from the scope.
             storesRect = Pinned(root, "Stores", false);
+            storesGroup = Quiet(storesRect.gameObject);
             storesVector = AvVector.Create(storesRect, "Strokes", StoresQuads);
             storesText = new ScopeText(Holder(storesRect, "Words"), font, fontMaterial);
             storesCanvas = new ScopeCanvas(storesVector.Buffer, storesText, "scope.stores");
@@ -139,6 +146,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The scope: a mask of its own (the page's strokes and words are clipped to it), the page body inside a second mask, then the header
             // and strip overlay, then the frame and the wipe edge on top of everything.
             scopeRect = Pinned(root, "Scope", true);
+            scopeGroup = Quiet(scopeRect.gameObject);
             pageRect = Pinned(scopeRect, "Page", true);
             pageVector = AvVector.Create(pageRect, "Strokes", PageQuads);
             pageText = new ScopeText(Holder(pageRect, "Words"), font, fontMaterial);
@@ -160,6 +168,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // STATUS: the aircraft's compact SYSTEMS strip under a warning page, so the RWR never takes the aircraft's state off the board. One masked surface: body, shelf and brackets.
             statusRect = Pinned(root, "Status", true);
+            statusGroup = Quiet(statusRect.gameObject);
             statusVector = AvVector.Create(statusRect, "Strokes", PageQuads);
             statusText = new ScopeText(Holder(statusRect, "Words"), font, fontMaterial);
             statusCanvas = new ScopeCanvas(statusVector.Buffer, statusText, "scope.status");
@@ -171,6 +180,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             var s = new PageSurface();
             s.Scope = Pinned(root, "Scope" + (slot + 1), true);
+            s.Group = Quiet(s.Scope.gameObject);
             s.Body = Pinned(s.Scope, "Page", true);
             s.BodyVector = AvVector.Create(s.Body, "Strokes", PageQuads);
             s.BodyCanvas = new ScopeCanvas(s.BodyVector.Buffer, new ScopeText(Holder(s.Body, "Words"), font, fontMaterial), "scope.page" + slot);
@@ -277,6 +287,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             corner?.Release();
             BoardBox = default;
+            wingPainted = false;
             ClearHeader();
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
         }
@@ -291,11 +302,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             corner = null;
             DestroyCorners();
             BoardBox = default;
-            swayShift = rootBase = default;
+            swayShift = rootBase = boardShift = boardTearShift = default;
             header.Clear();
             if (root != null) UnityEngine.Object.Destroy(root.gameObject);
             root = null;
-            rootGroup = null;
+            rootGroup = storesGroup = shellGroup = scopeGroup = statusGroup = null;
             dock = null;
             rootCanvas = null;
             canvasRect = null;
@@ -305,7 +316,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
             Array.Clear(pageSurfaces, 0, pageSurfaces.Length);
             nativeSafety = null;
-            board = null;
             StoreIcons.Clear();      // the baked pictures are this scene's
             DestroyShade();
             DestroyBoard();

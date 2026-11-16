@@ -14,7 +14,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // The CUE stack (HUD holo pass E, 2026-10-13): the game's short messages on grey boxes (the action report: weapon safety, flight assist, radar, gear, damage failures; the reserve notice; the funds line; the score line), drawn by the mod
     // at the LEFT edge in the visor's language, in place of the game's boxes. The messages are captured as the game shows them (Patches/CueFeedPatch.cs: text, the game's time for it, whether its colour marks a failure, into CueFeed.Log, the
-    // newest four) and painted here: a stack 16 units in from the left, below COMMS and at least 30 % down the screen, newest on top, at most three, 40 apart. One cue is a DIM class word on a short
+    // newest four) and painted here: a stack 12 units in from the left and 281 wide (the CUE zone, HudZones: 299 down, lower when COMMS grew past its zone), newest on top, at most two, 40 apart.
+    // The NOTICE line (2026-11-16) shares this tree: the board's notice ticker, one line under the stack (the NOTICE zone, or 16 under the last cue), drawn whether the board is on or not; the Corners option and the gate govern it as they do the cues. One cue is a DIM class word on a short
     // captioned shelf (SYS, WPN, DMG, FUNDS, RSV) and under it the message in regular capitals, BRIGHT at 16 (AMBER for a caution, RED for an alert; 14, then whole words, when it is long), with a soft shade behind it. A cue SHOWS for 0.32 s
     // (two bracket halves snap in from 46 units outside, the message decodes left to right, an underline draws, the whole cue is a tone brighter for 0.12 s), HOLDS for as long as the game keeps its own line (at least 1.2 s) and FADES for
     // the last 0.35 s (the underline retracts, the brackets spread out, the words flicker 1, 0.55, 0.85, 0.3, 0); the others slide down a slot over 0.12 s when a new one comes (Domain/CueTimeline.cs: everything is a function of the cue's age).
@@ -53,6 +54,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool cueFinding = true;
         private float cueFindAt;
 
+        // The NOTICE line: the ticker's current notice (copied from the board's frame at every present, so it is current with the board off), whether the last paint drew it and where, and the words' cache.
+        private TickerLine noticeLine;
+        private bool noticeHas, noticeOn;
+        private string tickerWords, tickerCount, tickerSourceText;
+        private int tickerSourceCount, tickerSourcePhase;
+        private HudTone tickerSourceTone;
+
         private float CueClock() => float.IsNaN(cueClockOverride) ? Time.timeSinceLevelLoad : cueClockOverride;
 
         /// <summary>How many cues the stack drew at its last paint, and which boxes' cues are in charge (bit <see cref="CueSource"/>): what the sim hook reports.</summary>
@@ -84,15 +92,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int shown = charge == 0 ? 0 : cueLog.Select(clock, level, charge, cueShown);
             int signature = CueLog.Signature(clock, level, charge, cueShown, shown) * 31 + (int)(Mathf.Clamp01(Options.Shade) * 100f);
             Vector2 canvasSize = canvasRect.rect.size;
-            signature = signature * 31 + Mathf.RoundToInt(LeftHudStack.CueTop(canvasSize.y / baseUnit));
-            if (charge != cueCharge || signature != cueSig || canvasSize != seenCueCanvas || (tick && shown > 0))
+            signature = signature * 31 + Mathf.RoundToInt(LeftHudStack.CueTop);
+            noticeOn = noticeHas && Options.ShowTicker;
+            signature = signature * 31 + NoticeSignature();
+            signature = signature * 31 + (routeLive ? 1 : 0);      // the NOTICE line yields to a ROUTE face (decided at this present, before this paint)
+            if (charge != cueCharge || signature != cueSig || canvasSize != seenCueCanvas || (tick && (shown > 0 || noticeOn)))
             {
                 cueCharge = charge;
                 cueSig = signature;
                 seenCueCanvas = canvasSize;
                 try
                 {
-                    if (charge == 0) HideCueTree();
+                    if (charge == 0 && !noticeOn) HideCueTree();
                     else PaintCues(clock, shown);
                 }
                 catch (Exception e)
@@ -101,6 +112,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Hud.Cues", e);
                 }
             }
+            RouteFrame(tick);      // under the NOTICE line, so after the cues have said where that ends
             // The game's boxes are hidden only while our stack is up in the HUD (a hidden HUD canvas takes it with it and gives them back).
             bool up = cueCharge != 0 && cueRoot != null && cueRoot.gameObject.activeInHierarchy;
             for (int s = 0; s < 4; s++) cueNatives.Hide((CueSource)s, up && (cueCharge >> s & 1) != 0);
@@ -144,7 +156,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (!EnsureCueTree()) return;
             float k = 1f / baseUnit, canvasW = canvasRect.rect.width, canvasH = canvasRect.rect.height;
-            float top = LeftHudStack.CueTop(canvasH * k);
+            float top = LeftHudStack.CueTop;
             bool furniture = Options.Declutter == BoardDeclutter.Full;
             Show(cueRoot, true);
             PlaceOnGrid(cueSurface, 0f, 0f, Whole(canvasW), Whole(canvasH));
@@ -152,6 +164,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = furniture;
             g.Begin(Palette(), baseUnit, Whole(canvasH), pixel);
             float inkBottom = 0f, lit = 0f;
+            // ONE shelf for the stack (the newest cue's kind, HudStandard); the rows under it carry no shelf of their own.
+            if (shown > 0 && furniture) g.CaptionShelf(CueLayout.Left, top, CueLayout.Width, CueWords.Of(cueShown[0].Class));
+            top += CueLayout.ShelfBlock;
             for (int i = 0; i < CueLog.MaxShown; i++)
             {
                 cueSpots[i] = default;
@@ -162,11 +177,72 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 inkBottom = Mathf.Max(inkBottom, y + CueLayout.Pitch - 3f);
                 lit = Mathf.Max(lit, alpha);
             }
+            if (noticeOn)
+            {
+                ZoneRect zone = HudZones.Ref(HudZone.Notice, canvasW * k);
+                float noticeTop = Mathf.Round(HudZones.NoticeTop(Mathf.Max(inkBottom, LeftHudStack.CommsBottom)));      // under the cue stack and under a COMMS block that grew past its zone (both 1080p units; CommsBottom is 0 when hidden)
+                if (HudZones.NoticeFits(noticeTop, routeLive)) PaintNotice(g, zone.X, noticeTop, zone.W, furniture);      // else the ROUTE slot has the room: it comes back by itself when there is some
+            }
             g.End();
             cueVector.Commit();
             cueCount = shown;
             cueBottom = inkBottom;
             cueLit = lit;
+        }
+
+        /// <summary>The ticker's words and its repeat count, rebuilt only when the notice, its count, its phase or its tone changed.</summary>
+        private string TickerWords(in TickerLine line)
+        {
+            int phase = NoticeTicker.Phase(line);
+            if (tickerWords == null || !ReferenceEquals(tickerSourceText, line.Text) || tickerSourceCount != line.Count ||
+                tickerSourcePhase != phase || tickerSourceTone != line.Tone)
+            {
+                tickerSourceText = line.Text;
+                tickerSourceCount = line.Count;
+                tickerSourcePhase = phase;
+                tickerSourceTone = line.Tone;
+                // A warning says so in words, not only in red.
+                tickerWords = (line.Tone == HudTone.Warning ? "WARNING · " : "") + NoticeTicker.Words(line).ToUpperInvariant();
+                tickerCount = NoticeTicker.CountWord(line);
+            }
+            return tickerWords;
+        }
+
+        /// <summary>A beat of a pulsing notice (a sticky warning, a fresh one): the board's flash phase, on for half of each cycle.</summary>
+        private static bool NoticeFlashOn() => ((int)(Time.unscaledTime * FlashHz * 2f) & 1) == 0;
+
+        /// <summary>What the NOTICE line looks like now, as one number (0: not drawn): its words, count and tone, and the beat while it pulses. A change of it is a reason to paint.</summary>
+        private int NoticeSignature()
+        {
+            if (!noticeOn) return 0;
+            TickerLine line = noticeLine;
+            string words = TickerWords(line);
+            bool pulse = line.Tone == HudTone.Warning || NoticeTicker.IsFresh(line);
+            return unchecked(((words.GetHashCode() * 31 + (tickerCount?.GetHashCode() ?? 0)) * 31 + (int)line.Tone) * 31 + (pulse ? (NoticeFlashOn() ? 2 : 1) : 0));
+        }
+
+        /// <summary>
+        /// The notice as one caption-shelf line at (<paramref name="x"/>, <paramref name="y"/>), <paramref name="w"/> wide: the shelf with NOTICE, then a tone tick, the words in bold in the same tone and the repeat count in bold at the
+        /// right end (the board's old ticker row, moved). A sticky warning pulses. Lean and Minimal have no shelf: the tick and the words start at the left edge.
+        /// </summary>
+        private void PaintNotice(ScopeCanvas g, float x, float y, float w, bool furniture)
+        {
+            TickerLine line = noticeLine;
+            ScopeTone tone = SystemsMath.ToneOf(line.Tone);      // info is already full INK
+            bool dip = line.Tone == HudTone.Warning && !NoticeFlashOn();
+            float cy = y + 6f, shelfW = furniture ? Mathf.Ceil(CueLayout.TextInset + ScopeCanvas.TextW("NOTICE") + 20f) : 0f;
+            if (furniture) g.CaptionShelf(x, y, shelfW, "NOTICE");
+            float tx = furniture ? x + shelfW + 12f : x, room = x + w - tx - 10f;
+            g.ToneTick(tx, y, tone, dip ? 0.55f : 1f);
+            if (tickerCount != null)
+            {
+                // The count stands one gap after the words, not at the zone's edge (a short line would leave it adrift).
+                string words = TickerWords(line);
+                float countW = ScopeCanvas.TextW(tickerCount), wordsRoom = room - countW - 10f, wordsW = Mathf.Min(ScopeCanvas.TextW(words), wordsRoom);
+                g.Text(tickerCount, tx + 10f + wordsW + 10f, cy, tone, HudType.Body, ScopeAlign.Left, true);
+                room = wordsRoom;
+            }
+            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, HudType.Body, HudType.Label, ScopeAlign.Left, true, dip ? 0.8f : 1f);
         }
 
         /// <summary>
@@ -189,7 +265,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             string word = CueWords.Of(cue.Class);
             float shelfW = CueLayout.ShelfWidth(word.Length);
 
-            if (furniture) g.FadingShelf(x, y + CueLayout.ShelfRow - 6f, shelfW, word, shelf, alpha);      // CaptionShelf puts its line 6 under the y it is given
             // Two bracket halves: a bar with an arm at each end, pointing at the words.
             g.Line(lBar, barTop, lBar, barBottom, line, alpha);
             g.Line(lBar, barTop, lBar + CueLayout.Arm, barTop, line, alpha);
@@ -198,7 +273,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(rBar, barTop, rBar - CueLayout.Arm, barTop, line, alpha);
             g.Line(rBar, barBottom, rBar - CueLayout.Arm, barBottom, line, alpha);
             CueTimeline.Underline(age, life, out float ulFrom, out float ulTo);
-            if (ulTo - ulFrom > 0.001f) g.Line(hugL + (hugR - hugL) * ulFrom, under, hugL + (hugR - hugL) * ulTo, under, line, line == Dim ? alpha : alpha * 0.55f);
             g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, cue.Size, ScopeAlign.Left, false, alpha);
             cueSpots[place] = new CueSpot { Cue = cue, Y = y, TextX = tx, TextW = textW, LeftBar = lBar, RightBar = rBar, Alpha = alpha, Locked = CueTimeline.Locked(age, cue.Text.Length) };
             return Math.Max(hugR, furniture ? x + shelfW + 8f : 0f);
@@ -217,6 +291,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueText = null;
             cueCanvas = null;
             cueCount = cueCharge = cueSig = 0;
+            noticeHas = noticeOn = false;
             seenCueCanvas = default;
             Array.Clear(cueSpots, 0, cueSpots.Length);
         }

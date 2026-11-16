@@ -9,9 +9,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// </summary>
     internal struct BoardEffective
     {
-        /// <summary>The pages that may appear, one <see cref="CuePriority.Bit"/> each: empty with the scope off.</summary>
-        public ushort Pages;
-        /// <summary>All registered pages may post notices or call for a dispenser, independently of the visible slots.</summary>
+        /// <summary>All registered pages may post notices or call for a dispenser, independently of the visible panels.</summary>
         public ushort Voiced;
         public bool ShowStores;
         public bool ShowLamps;
@@ -46,11 +44,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Scale, Shade;
         public BoardDeclutter Declutter;
         public BoardScopeMode ScopeMode;
-        /// <summary>Page slots: a 2 x 2 grid at most (<see cref="ScopeLayout.Columns"/>).</summary>
-        public const int MaxPages = 4;
-        public int PageCount;
-        /// <summary>The slot choices. Never <see cref="BoardPage.Systems"/>: SYSTEMS is the board's own always-on block, not a page choice (<see cref="Sanitize"/>).</summary>
-        public BoardPage Page1, Page2, Page3, Page4;
         public bool ShowStores;
         public bool PageMissileCam;
         public bool ShowLamps, ShowGauges, ShowTicker, ShowSystems;
@@ -59,17 +52,30 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool CentreAlerts;
         /// <summary>The AR helmet layer (2026-11-14, <c>ArLayer</c>): flight path predictor, SAM envelopes, missile lines, home/objective beacons, and the HUD's reactions (lock spin-in, hit glitch). Independent of <see cref="Enabled"/>.</summary>
         public bool ArPath, ArDomes, ArMissiles, ArBeacons, HudFx;
+        /// <summary>The visor's brow rail and frame furniture (2026-11-16). Independent of <see cref="Enabled"/>.</summary>
+        public bool Brow;
+        /// <summary>The two segmented fuel and throttle arcs round the reticle in place of the game's plain ones (2026-11-16). Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
+        public bool Arcs;
+        /// <summary>The visor's power-on sequence when the pilot takes the seat (2026-11-16, "HELMET ON"): a full boot the first time, a short re-sync after a respawn. Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
+        public bool Boot;
+        /// <summary>The visor reacts to what happens to the pilot and the jet (2026-11-16): G load, hits, EMP, warning onset, and a faint idle life. Cockpit view only. Independent of <see cref="Enabled"/>.</summary>
+        public bool Reactive;
+        /// <summary>Level of the visor's own sounds (the HMD-9 family: power-up, self-test, glitch, EMP, page wipe, brow, radial menu), 0 (off) to 1.</summary>
+        public float VisorSound;
+        /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to <see cref="TextEdgeMax"/> (TMP outline units).</summary>
+        public float TextEdge;
+        public const float TextEdgeMax = 0.25f;
 
         /// <summary>What a pilot gets who has touched nothing. (A zeroed struct is NOT this: it has the board off.)</summary>
         public static BoardOptions Default => new BoardOptions
         {
             Enabled = true, Layout = BoardLayout.Wide, Scale = 0.85f, Shade = 0f,
-            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Manual,
-            PageCount = 1, Page1 = BoardPage.Threat, Page2 = BoardPage.Shot, Page3 = BoardPage.Wing, Page4 = BoardPage.Objective, ShowStores = true,
+            Declutter = BoardDeclutter.Full, ScopeMode = BoardScopeMode.Auto,
+            ShowStores = true,
             PageMissileCam = true,
             ShowLamps = true, ShowGauges = true, ShowTicker = true, ShowSystems = true,
-            Sway = true, Corners = true, CentreAlerts = true,
             ArPath = true, ArDomes = true, ArMissiles = true, ArBeacons = true, HudFx = true,
+            Sway = true, Corners = true, CentreAlerts = true, Brow = true, Arcs = true, Boot = true, Reactive = true, VisorSound = 0.6f, TextEdge = 0.16f,
         };
 
         /// <summary>Clamp every range and replace NaN (and an enum that names nothing) with the default.</summary>
@@ -78,62 +84,26 @@ namespace BoscaliSummer.Modules.Hud.Domain
             BoardOptions d = Default;
             Scale = Fit(Scale, ScaleMin, ScaleMax, d.Scale);
             Shade = Fit(Shade, 0f, 1f, d.Shade);
+            TextEdge = Fit(TextEdge, 0f, TextEdgeMax, d.TextEdge);
+            VisorSound = Fit(VisorSound, 0f, 1f, d.VisorSound);
             if ((uint)Layout > (uint)BoardLayout.Stack) Layout = d.Layout;
             if ((uint)Declutter > (uint)BoardDeclutter.Minimal) Declutter = d.Declutter;
-            if ((uint)ScopeMode > (uint)BoardScopeMode.Off) ScopeMode = d.ScopeMode;
-            PageCount = System.Math.Clamp(PageCount, 1, MaxPages);
-            // Every slot names a real page that is not SYSTEMS (an old config may hold it), and no page twice: a hand-edited duplicate must not paint the same stateful page
-            // twice in one frame, and a hidden slot must not turn into one when the count goes up.
-            Page1 = Fix(Page1, d.Page1, 0);
-            Page2 = Fix(Page2, d.Page2, 1);
-            Page3 = Fix(Page3, d.Page3, 2);
-            Page4 = Fix(Page4, d.Page4, 3);
-        }
-
-        private readonly BoardPage SlotChoice(int slot) => slot == 0 ? Page1 : slot == 1 ? Page2 : slot == 2 ? Page3 : Page4;
-
-        /// <summary>Slot <paramref name="slot"/>'s page kept if it is valid and not in an earlier slot, else <paramref name="fallback"/> if that is free, else the first free page.</summary>
-        private readonly BoardPage Fix(BoardPage page, BoardPage fallback, int slot)
-        {
-            if (Choosable(page) && !Earlier(page, slot)) return page;
-            if (!Earlier(fallback, slot)) return fallback;
-            for (BoardPage candidate = BoardPage.Threat; candidate <= BoardPage.Cargo; candidate++)
-                if (Choosable(candidate) && !Earlier(candidate, slot)) return candidate;
-            return fallback;
-        }
-
-        private readonly bool Earlier(BoardPage page, int slot)
-        {
-            for (int i = 0; i < slot; i++) if (SlotChoice(i) == page) return true;
-            return false;
-        }
-
-        /// <summary>A page a slot may hold: a registered page that is not SYSTEMS.</summary>
-        public static bool Choosable(BoardPage page) => (uint)page <= (uint)BoardPage.Cargo && page != BoardPage.Systems;
-
-        /// <summary>A persisted slot choice, independent of feed activity, declutter and retired page switches.</summary>
-        public readonly ScopePage PageAt(int slot) => (ScopePage)SlotChoice(slot);
-
-        public readonly ushort SelectedPages()
-        {
-            ushort mask = 0;
-            for (int i = 0; i < PageCount; i++) mask |= CuePriority.Bit(PageAt(i));
-            return mask;
+            // The panels show themselves (2026-11-16): a saved Manual, or a value that names nothing, reads as Auto.
+            if (ScopeMode != BoardScopeMode.Off) ScopeMode = BoardScopeMode.Auto;
         }
 
         private static float Fit(float value, float min, float max, float fallback) =>
             float.IsNaN(value) ? fallback : value < min ? min : value > max ? max : value;
 
         /// <summary>
-        /// The major sections with declutter applied to their detail. Manual page choices are always respected;
-        /// Off hides the tactical pages while every feed keeps reporting alerts.
+        /// The major sections with declutter applied to their detail. A scope that is Off hides the panels (the painter reads
+        /// <see cref="ScopeMode"/>) while every feed keeps reporting alerts.
         /// </summary>
         public readonly BoardEffective Effective()
         {
             bool full = Declutter == BoardDeclutter.Full, minimal = Declutter == BoardDeclutter.Minimal;
             return new BoardEffective
             {
-                Pages = ScopeMode == BoardScopeMode.Off ? (ushort)0 : SelectedPages(),
                 Voiced = (ushort)((1 << CuePriority.PageCount) - 1),
                 ShowStores = ShowStores,
                 ShowLamps = ShowLamps,

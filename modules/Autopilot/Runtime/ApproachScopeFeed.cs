@@ -149,6 +149,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             Equipment(a, ref d);
             d.Occupied = rw.occupied;
             d.DistanceM = flat;
+            d.HasBearing = true;
+            d.BearingDeg = Vector3.SignedAngle(new Vector3(a.transform.forward.x, 0f, a.transform.forward.z), new Vector3(-fromStart.x, 0f, -fromStart.z), Vector3.up);
             return true;
         }
 
@@ -179,6 +181,8 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             Equipment(a, ref d);
             d.PadX = Vector3.Dot(rel, right);
             d.PadY = Vector3.Dot(rel, fwd);
+            d.HasBearing = true;
+            d.BearingDeg = Mathf.Atan2(d.PadX, d.PadY) * Mathf.Rad2Deg;
             d.DistanceM = Mathf.Sqrt(rel.x * rel.x + rel.z * rel.z);
             return true;
         }

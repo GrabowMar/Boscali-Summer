@@ -6,12 +6,11 @@ namespace BoscaliSummer.Core.Contracts
     /// <summary>How much the TAC BOARD shows: everything the switches allow, a leaner board, or only what a pilot in a fight needs.</summary>
     internal enum BoardDeclutter { Full, Lean, Minimal }
 
-    /// <summary>Manual page display, or no tactical pages. Auto is a legacy config spelling for Manual.</summary>
-    internal enum BoardScopeMode { Manual = 0, Off = 1, Auto = Manual }
+    /// <summary>The board's panels (RWR, FIRES, WING) show themselves while they have something to say (Auto, the default), or there are none (Off). Manual is a retired value kept so an old config still parses: it reads as Auto.</summary>
+    internal enum BoardScopeMode : byte { Manual = 0, Off = 1, Auto = 2 }
 
     /// <summary>
-    /// The information page selected for a TAC BOARD slot. Values match the HUD's page registry. <see cref="Systems"/> is not a slot choice (the board always shows SYSTEMS in a
-    /// block of its own); it stays in the list so the values, and saved configs, keep their meaning.
+    /// The TAC BOARD's pages; the values match the HUD's page registry (<c>ScopePage</c>). No option names one any more: the board's panels pick their own.
     /// </summary>
     internal enum BoardPage { Threat, Shot, MissileCam, Approach, Wing, Strike, Dock, Objective, Systems, Cargo }
 
@@ -30,12 +29,6 @@ namespace BoscaliSummer.Core.Contracts
         float Shade { get; set; }
         BoardDeclutter Declutter { get; set; }
         BoardScopeMode ScopeMode { get; set; }
-        /// <summary>Full information pages shown, 1 to 4, at most two across and two down.</summary>
-        int PageCount { get; set; }
-        BoardPage Page1 { get; set; }
-        BoardPage Page2 { get; set; }
-        BoardPage Page3 { get; set; }
-        BoardPage Page4 { get; set; }
         /// <summary>The stores, countermeasure and power section. Off restores the native panels.</summary>
         bool ShowStores { get; set; }
         /// <summary>The MISSILE CAM feed picture (the missile card); the page slots do not consult it.</summary>
@@ -61,6 +54,18 @@ namespace BoscaliSummer.Core.Contracts
         bool ArBeacons { get; set; }
         /// <summary>The HUD's reactions: the lock spin-in and the hit glitch.</summary>
         bool HudFx { get; set; }
+        /// <summary>The visor's brow rail (bearing marks and status caption at the top centre) and the faint frame ticks on the screen's sides. Cockpit view only.</summary>
+        bool Brow { get; set; }
+        /// <summary>The segmented fuel and throttle arcs round the reticle in place of the game's plain ones. Cockpit view only.</summary>
+        bool Arcs { get; set; }
+        /// <summary>The visor's power-on sequence when the pilot takes the seat: a full boot the first time, a short re-sync after a respawn. Cockpit view only.</summary>
+        bool Boot { get; set; }
+        /// <summary>The visor reacts like a helmet display to G load, hits, EMP and warnings, and breathes faintly when calm. Never with reduced motion. Cockpit view only.</summary>
+        bool Reactive { get; set; }
+        /// <summary>The visor's own sounds (HMD-9: power-up, self-test, glitch, EMP, board, brow and radial menu), 0 (off) to 1.</summary>
+        float VisorSound { get; set; }
+        /// <summary>Width of the thin dark edge round every glyph of the mod's HUD text, 0 (off) to 0.25.</summary>
+        float TextEdge { get; set; }
         /// <summary>Put every option back to its default, the board's own values, so a settings surface keeps no copy of them.</summary>
         void ResetToDefaults();
     }

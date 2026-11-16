@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using NOAvionics;
 using UnityEngine;
 
@@ -12,32 +13,49 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The UAV card's screen rectangle (pixels, origin bottom left) while it is up; zero size when it is not. Written every frame by its owner.</summary>
         public static Rect Uav;
 
-        /// <summary>Every card in the column is this wide (canvas units at 1080p) with a header this tall over a 16:9 picture.</summary>
-        public const float Width = 264f, Header = 18f;
+        /// <summary>Every card in the column is this wide (canvas units at 1080p). From the top: a caption shelf <see cref="Header"/> tall, the picture, a one-line data strip <see cref="Strip"/> tall.</summary>
+        public const float Width = 264f, Header = 18f, Strip = 16f;
+
+        /// <summary>The shelf's lead rule, the gap round the name, and where the state word's right edge stands (all from the card's left or right edge).</summary>
+        public const float ShelfLead = 10f, ShelfGap = 4f, ShelfText = ShelfLead + ShelfGap, StateInset = 8f;
+
+        /// <summary>Where a card's picture ends and its data strip starts, y up, for a card whose foot is at <paramref name="bottom"/>.</summary>
+        public static float PictureBottom(float bottom) => bottom + Strip;
 
         /// <summary>
-        /// The column's one chrome, in the HUD's own ink, y up (2026-10-20 rework, user: "still fugly"): a header rule like the TAC BOARD's
-        /// section titles (hairline under the words, end ticks rising at both ends), a faint frame round the picture, sharp corner ticks on it.
-        /// No plate: the cards sit on the HUD like its other line art.
+        /// The cards' one chrome (2026-11-16 visor look), in the HUD's own ink, y up: a caption shelf in the board's grammar (a short lead rule, the name, a long rule, the state word at the right, an end tick),
+        /// the picture in a faint frame with sharp corner ticks, and room for the data strip under it. No plate: the cards sit on the HUD like its other line art.
         /// </summary>
-        public static void Frame(AvQuadBuffer b, float left, float bottom, float right, float top, Rgba ink)
+        /// <param name="nameW">Width of the name word on the shelf (the caller measures its text; the rule starts after it).</param>
+        /// <param name="stateW">Width of the state word at the right (0 = none: the rule runs to the end tick).</param>
+        public static void Frame(AvQuadBuffer b, float left, float bottom, float right, float top, Rgba ink, float nameW, float stateW)
         {
-            float rule = top - Header, tick = Header * 0.4f, arm = 8f;
-            AvStrokes.Line(b, left, rule, right, rule, 1f, ink.WithAlpha(0.7f));
-            AvStrokes.Line(b, left, rule, left, rule + tick, 1.5f, ink);
-            AvStrokes.Line(b, right, rule, right, rule + tick, 1.5f, ink);
-            Rgba faint = ink.WithAlpha(0.3f);
-            AvStrokes.Line(b, left, bottom, right, bottom, 1f, faint);
-            AvStrokes.Line(b, left, bottom, left, rule, 1f, faint);
-            AvStrokes.Line(b, right, bottom, right, rule, 1f, faint);
-            AvStrokes.Line(b, left, rule, left + arm, rule, 1.5f, ink);
-            AvStrokes.Line(b, left, rule, left, rule - arm, 1.5f, ink);
-            AvStrokes.Line(b, right, rule, right - arm, rule, 1.5f, ink);
-            AvStrokes.Line(b, right, rule, right, rule - arm, 1.5f, ink);
-            AvStrokes.Line(b, left, bottom, left + arm, bottom, 1.5f, ink);
-            AvStrokes.Line(b, left, bottom, left, bottom + arm, 1.5f, ink);
-            AvStrokes.Line(b, right, bottom, right - arm, bottom, 1.5f, ink);
-            AvStrokes.Line(b, right, bottom, right, bottom + arm, 1.5f, ink);
+            float y = top - Header * 0.5f + 1.5f, picTop = top - Header, picBottom = PictureBottom(bottom), arm = 8f;
+            Rgba rule = ink.WithAlpha(0.85f);
+            AvStrokes.Line(b, left, y, left + ShelfLead, y, 1f, rule);
+            float from = left + ShelfText + nameW + ShelfGap, to = stateW > 0f ? right - StateInset - stateW - ShelfGap : right;
+            if (to > from) AvStrokes.Line(b, from, y, to, y, 1f, rule);
+            AvStrokes.Line(b, right, y - 4f, right, y + 4f, 1.5f, ink);
+
+            Rgba faint = ink.WithAlpha(0.4f);
+            AvStrokes.Line(b, left, picBottom, right, picBottom, 1f, faint);
+            AvStrokes.Line(b, left, picTop, right, picTop, 1f, faint);
+            AvStrokes.Line(b, left, picBottom, left, picTop, 1f, faint);
+            AvStrokes.Line(b, right, picBottom, right, picTop, 1f, faint);
+            AvStrokes.Line(b, left, picTop, left + arm, picTop, 1.5f, ink);
+            AvStrokes.Line(b, left, picTop, left, picTop - arm, 1.5f, ink);
+            AvStrokes.Line(b, right, picTop, right - arm, picTop, 1.5f, ink);
+            AvStrokes.Line(b, right, picTop, right, picTop - arm, 1.5f, ink);
+            AvStrokes.Line(b, left, picBottom, left + arm, picBottom, 1.5f, ink);
+            AvStrokes.Line(b, left, picBottom, left, picBottom + arm, 1.5f, ink);
+            AvStrokes.Line(b, right, picBottom, right - arm, picBottom, 1.5f, ink);
+            AvStrokes.Line(b, right, picBottom, right, picBottom + arm, 1.5f, ink);
         }
+
+        /// <summary>The data strip's text size for a card <paramref name="width"/> wide: 12 pt at the full 264, smaller on a narrower card so three cells still fit.</summary>
+        public static float StripPt(float width) => HudType.Label;
+
+        /// <summary>The rich-text lead of a strip cell: the label dimmed ("RNG "), the value after it full. Pair with <see cref="CellTail"/>.</summary>
+        public const string CellHead = "<alpha=#E0>", CellTail = "<alpha=#FF> ";
     }
 }

@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         /// <summary>A fresh hit reads DAMAGED on its row this long.</summary>
         private const float HoldSeconds = 8f;
-        private const float RowX = 244f, RowW = 192f, AckY = 234f, InSlotFilledM = 40f;
+        private const float RowX = 244f, RowW = 192f, InSlotFilledM = 40f;
         private const int Cap = 8, TrailLen = 6, LabelCap = 24, LabelChars = 28;
 
         private WingBoardScope d;
@@ -421,7 +421,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // You.
             g.Jet(Px, Py, 0f, 9f, Ink, true);
             g.Ring(Px, Py, 14f, Ink, 0.35f);
-            Label(ScopeStr.Cat("RNG ", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), 8f, 289f, Dim, false, ScopeAlign.Left);
+            Label(ScopeStr.Cat("RNG ", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), 8f, Py + R - 4f, Dim, false, ScopeAlign.Left);
         }
 
         /// <summary>A plot distance in the player's units, rounded to 50 (700 m is 700, 2300 ft).</summary>
@@ -451,17 +451,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
             g.Text(engage ? "ENGAGE" : "FORM", 44f, 40f, Hi, 12f, ScopeAlign.Left, true);
-            if (d.Shape != null) g.FitText(d.Shape, 44f, 56f, 120f, Dim);
+            if (d.Shape != null) g.FitText(d.Shape, 44f, 56f, 84f, Dim);
         }
 
         // ---------------------------------------------------------------- roster and acknowledgements
 
         private void Roster(ScopeCanvas g, float t, int n)
         {
-            WingBoardMath.Rows(n, out int shown, out float rowH, out float step, out bool task, out bool acks);
+            WingBoardMath.Rows(n, out int shown, out float rowH, out float step, out bool task);
             for (int i = 0; i < shown; i++) Row(g, d.Members[i], i, RowX, WingBoardMath.RowsTop + i * step, rowH, task, t);
-            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " MORE"), RowX + RowW - 4f, 294f, Dim, 12f, ScopeAlign.Right);
-            if (acks) AckLog(g, RowX, AckY, t);
+            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " MORE"), RowX + RowW - 4f, WingBoardMath.RowsTop + WingBoardMath.RowsRoom + 12f, Dim, 12f, ScopeAlign.Right);
         }
 
         private void Row(ScopeCanvas g, in WingBoardMember m, int index, float x, float y, float h, bool taskLine, float t)
@@ -549,21 +548,5 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private int Round5(float metres) => (int)(Math.Round(AvUnitTable.Altitude(metres, units) / 5f) * 5f);
-
-        private void AckLog(ScopeCanvas g, float x, float y, float t)
-        {
-            g.Box(x, y, RowW, 60f, Faint, 0.9f);
-            if (d.AckCount <= 0) { g.Text("RADIO QUIET", x + 8f, y + 30f, Dim); return; }
-            for (int k = 0; k < d.AckCount && k < 3; k++)
-            {
-                WingBoardAck a = d.Acks[k];
-                float yy = y + 12f + k * 17f, al = k == 0 ? 1f : k == 1 ? 0.75f : 0.5f;
-                bool fresh = k == 0 && a.AgeS < 1.4f, bad = !a.Accepted;
-                if (fresh) g.Fill(x + 2f, yy - 8f, 188f, 16f, bad ? Amber : Ink, 0.2f + 0.1f * (float)Math.Sin(a.AgeS * 12f));
-                g.Text(a.Who ?? "", x + 8f, yy, bad ? Amber : Hi, 12f, ScopeAlign.Left, true, al);
-                g.FitText(a.Text ?? "", x + 34f, yy, 130f, bad ? Amber : Ink, 12f, 12f, ScopeAlign.Left, bad, al);
-                g.Text(ScopeStr.Cat("", Math.Max(0, (int)Math.Round(a.AgeS)), "S"), x + 184f, yy, Dim, 12f, ScopeAlign.Right, false, al);
-            }
-        }
     }
 }

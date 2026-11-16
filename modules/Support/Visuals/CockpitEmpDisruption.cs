@@ -62,6 +62,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             currentSeverity = severity;
             disruptionDuration = Mathf.Clamp(severity * 5.5f, 4f, 10f);
             endTime = Time.time + disruptionDuration;
+            BoscaliSummer.Core.Game.VisorEvents.EmpUntil = endTime;      // the HUD's visor stutters out for as long as this runs, then re-syncs
             virtualMfd = GetComponentInChildren<VirtualMFD>();
 
             EnsureAudio();

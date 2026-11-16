@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Ui;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -115,42 +116,43 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>A feed card's height: the header over a 16:9 picture.</summary>
         public const float CardHeight = TargetCardHeaderHeight + TargetCardWidth / TargetCardAspect;
 
-        // The bottom-right feed column (2026-10-20, user: "uav on bottom, missile and target on top"): the VANGUARD UAV card (another module's,
-        // passed in as `uav`, no size = none) holds the bottom, the target card stands on it and the missile card on the target card.
+        // The bottom-right feed column (2026-10-20): the VANGUARD UAV card (another module's, passed in as `uav`, no size = none) holds the bottom and the missile card stands on it.
+        // The target card left it (2026-11-16 zones): it stands in the TARGET CAM zone of the left column.
 
-        /// <summary>Where the column's next card stands: on the UAV card, else on the safe margin.</summary>
+        /// <summary>Where the missile card stands: on the UAV card, else on the safe margin.</summary>
         private static float Floor(float height, RectF uav) =>
             uav.Height > 0f ? Math.Max(uav.Top + CardGap, -height * 0.5f + SafeMargin) : -height * 0.5f + SafeMargin;
 
-        /// <summary>Bottom-right target-camera card, on the UAV card (<paramref name="uav"/>) or the safe margin, width-capped and
-        /// aspect-fit; collapses (zero height) when there is nothing to show.</summary>
-        public static RectF TargetCard(float width, float height, bool visible, RectF uav = default)
+        /// <summary>The smallest scale the target card's size follows (position keeps the true scale).</summary>
+        public const float TargetCardMinScale = 0.5f;
+
+        /// <summary>The left-column target-camera card in the TARGET CAM zone (<see cref="HudZones"/>): position and total height scale with <paramref name="height"/> / 1080 (size floored at half scale); the header stays
+        /// <see cref="TargetCardHeaderHeight"/> and the 16:9 picture takes the rest; collapses (zero height) when there is nothing to show.</summary>
+        public static RectF TargetCard(float width, float height, bool visible)
         {
-            float h = visible ? CardHeight : 0f;
-            return new RectF(width * 0.5f - SafeMargin - TargetCardWidth * 0.5f, Floor(height, uav) + h * 0.5f, TargetCardWidth, h);
+            ZoneRect z = HudZones.Ref(HudZone.TargetCam, width * HudZones.RefHeight / height);
+            float k = height / HudZones.RefHeight;
+            float full = CardHeight * Math.Max(TargetCardMinScale, k);
+            float w = (full - TargetCardHeaderHeight) * TargetCardAspect, h = visible ? full : 0f;
+            return new RectF(-width * 0.5f + z.X * k + w * 0.5f, height * 0.5f - z.Y * k - h * 0.5f, w, h);
         }
 
         /// <summary>
-        /// The missile feed card, top of the column: on the target card (<paramref name="overTarget"/>), else on the UAV card, else in the target card's
-        /// place. A card that would run into <paramref name="board"/>
-        /// (the TAC BOARD's box; no size = none) goes left of the card it would have stood on instead, and drops below <paramref name="keepOff"/>
+        /// The missile feed card, bottom right: on the UAV card, else on the safe margin. A card that would run into <paramref name="board"/>
+        /// (the TAC BOARD's box; no size = none) goes left of the UAV card instead (no UAV card: stays), and drops below <paramref name="keepOff"/>
         /// (<see cref="AltitudeBlock"/>) if it would cover it there.
         /// </summary>
-        public static RectF MissileCard(float width, float height, bool overTarget, RectF uav = default, RectF board = default, RectF keepOff = default)
+        public static RectF MissileCard(float width, float height, RectF uav = default, RectF board = default, RectF keepOff = default)
         {
-            RectF target = TargetCard(width, height, true, uav);
-            bool onUav = !overTarget && uav.Height > 0f;
-            float bottom = overTarget ? target.Top + CardGap : target.Bottom;
-            RectF card = new RectF(target.CenterX, bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
-            RectF under = overTarget ? target : onUav ? uav : default;
-            if (under.Height <= 0f || board.Width <= 0f || board.Height <= 0f ||
+            RectF card = new RectF(width * 0.5f - SafeMargin - TargetCardWidth * 0.5f, Floor(height, uav) + CardHeight * 0.5f, TargetCardWidth, CardHeight);
+            if (uav.Height <= 0f || board.Width <= 0f || board.Height <= 0f ||
                 !Overlaps(card, new RectF(board.CenterX, board.CenterY, board.Width + 2f * GuardMargin, board.Height + 2f * GuardMargin))) return card;
-            card = new RectF(under.Left - CardGap - TargetCardWidth * 0.5f, under.Bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
+            card = new RectF(uav.Left - CardGap - TargetCardWidth * 0.5f, uav.Bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);
             if (keepOff.Height > 0f && Overlaps(card, keepOff)) card = card.WithCenter(card.CenterX, keepOff.Bottom - GuardMargin - CardHeight * 0.5f);
             return card;
         }
 
-        public static bool Overlaps(RectF a, RectF b) =>
+        internal static bool Overlaps(RectF a, RectF b) =>
             a.Left < b.Right && a.Right > b.Left && a.Bottom < b.Top && a.Top > b.Bottom;
 
         /// <summary>

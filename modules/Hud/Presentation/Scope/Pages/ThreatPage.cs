@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed class ThreatPage : ScopePageBase
     {
         // The plot is centred; the call box takes the top-right corner (COL..), the time bars the bottom-right; tags may reach RB.
-        private const float CX = 220f, CY = 164f, R = 130f, COL = 332f, CW = 90f, RB = 436f;      // COL: LAYOUT.md 12.2 moved the call column 14 left, off the page's corner bracket
+        private const float CX = 220f, CY = 164f, R = 130f, COL = 324f, CW = 108f, RB = 436f;      // the call column holds 11 LABEL letters at the board's type boost ("NO EMITTERS", "M2 SARH" and its seconds) and ends 8 short of the page's corner bracket
         private const float DefeatBannerS = 2.4f;
         private const int Numbers = 32;
 
@@ -275,9 +275,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             keep.Add(CX - 13f, CY - 13f, 26f, 26f);
             keep.Add(COL - 4f, 30f, CW + 8f, 54f);          // the call box
             keep.Add(COL - 4f, 230f, CW + 8f, 66f);         // the time bars
-            keep.Add(3f, 34f, 76f, 30f);                    // TTI RINGS and HDG UP: the radars' tags dodge the page's own words too
+            keep.Add(3f, 34f, 90f, 30f);                    // TTI RINGS and HDG UP: the radars' tags dodge the page's own words too
             bool sam = d.HasSam && d.SamRings > 0;
-            if (sam) keep.Add(3f, 281f, 90f, 14f);          // SAM ENV xN
+            if (sam) keep.Add(3f, 281f, 100f, 14f);          // SAM ENV xN
             for (int i = 0; i < d.MissileCount; i++)
             {
                 At(d.Missiles[i].BearingDeg, Rr(d.Missiles[i].TtiS), out float mx, out float my);
@@ -414,7 +414,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 // a lock says so in words: the open visor style draws every plate as brackets, so red against amber would be the only difference (colour alone)
                 subLen = Copy(ScopeStr.Distance(lockOn ? "LOCK" : "", e.RangeM, units, lockOn ? 12 : 8), sub);
                 w = Math.Max(ScopeCanvas.TextW(top.Slice(0, topLen), 12f), ScopeCanvas.TextW(sub.Slice(0, subLen), 12f)) + 8f;
-                h = 31f;
+                h = 36f;
                 moved = keep.PlaceRadar(CX, CY, R, b, w, h, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), 2f, RB, 30f, 296f, out _, out _);
             }
             if (keep.Count == own) return;      // the keep-out is full: no room to register the tag
@@ -442,7 +442,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 anchorXY[2 * i] = leaders[i].X0; anchorXY[2 * i + 1] = leaders[i].Y0; ownIdx[i] = leaders[i].Own;
                 keep.Get(leaders[i].Own, out leaders[i].X1, out leaders[i].Y1, out _, out _);      // where it was placed, to tell a traded tag below
             }
-            keep.Untangle(anchorXY, ownIdx, leaderCount, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), CX, CY, R);
+            keep.Untangle(anchorXY, ownIdx, leaderCount, new ReadOnlySpan<float>(spokeSegs, 0, spokeSegCount), CX, CY, R, 2f, RB);
             for (int i = 0; i < leaderCount; i++)
             {
                 ref Leader l = ref leaders[i];
@@ -453,16 +453,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ReadOnlySpan<char> top = new ReadOnlySpan<char>(tagText, i * 2 * TagStride, l.TopLen), sub = new ReadOnlySpan<char>(tagText, (i * 2 + 1) * TagStride, l.SubLen);
                 if (!l.Full)
                 {
+                    if (keep.Overprints(l.Own)) { l.Alpha = 0f; continue; }      // no free spot left: a lesser radar keeps its spoke and loses its words (and its leader)
                     g.Fill(bx, by, w, h, Bg, 0.85f * l.Fade);
                     g.Text(top, bx + w / 2f, by + h / 2f + 1f, l.Tone, 12f, ScopeAlign.Center, false, 0.9f * l.Fade);
                     continue;
                 }
                 g.Fill(bx, by, w, h, Bg, l.Fade);
                 g.Box(bx, by, w, h, l.Tone, l.Fade, 1f, l.Tone, l.Lock ? 0.25f : 0.14f);
-                g.Text(top, bx + w / 2f, by + 9f, l.Tone, 12f, ScopeAlign.Center, true, l.Fade);
-                g.Text(sub, bx + w / 2f, by + 22f, l.Tone, 12f, ScopeAlign.Center, l.Lock, l.Fade * 0.95f);
+                g.Text(top, bx + w / 2f, by + 10f, l.Tone, 12f, ScopeAlign.Center, true, l.Fade);
+                g.Text(sub, bx + w / 2f, by + 26f, l.Tone, 12f, ScopeAlign.Center, l.Lock, l.Fade * 0.95f);
             }
-            for (int i = 0; i < leaderCount; i++) drawLeader[i] = !leaders[i].Moved || !keep.LeaderCrosses(leaders[i].X0, leaders[i].Y0, leaders[i].X1, leaders[i].Y1, leaders[i].X0, leaders[i].Y0, leaders[i].Own);
+            for (int i = 0; i < leaderCount; i++) drawLeader[i] = leaders[i].Alpha > 0f && (!leaders[i].Moved || !keep.LeaderCrosses(leaders[i].X0, leaders[i].Y0, leaders[i].X1, leaders[i].Y1, leaders[i].X0, leaders[i].Y0, leaders[i].Own));
             keep.DropCrossing(anchorXY, ownIdx, leaderCount, drawLeader);
             for (int i = 0; i < leaderCount; i++)
             {
@@ -545,6 +546,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float tw = (float)Math.Round(ScopeCanvas.TextW(label, 12f) + 8f), th = 17f;
             keep.Add(px - 10f, py - 10f, 20f, 20f);
             keep.Place(LabelSpots.Threat, px, py, tw, th, new ReadOnlySpan<float>(segs, 0, segCount), 2f, RB, 32f, 292f, out float x, out float y);
+            if (!nearest && keep.Overprints(keep.Count - 1)) return;      // its seconds are in the time bars too
             // a tag that had to move away from its missile is tied to it by a short leader that never runs through another label (LAYOUT.md 12.2)
             float nx = Mathf.Clamp(px, x, x + tw), ny = Mathf.Clamp(py, y, y + th), dd = Mathf.Sqrt((px - nx) * (px - nx) + (py - ny) * (py - ny));
             if (dd > 18f)
@@ -658,7 +660,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         int e = BestEmitter();
                         // The characters the box holds (10 in 84 units): the name gives way to the range, never the other way (12 overran the box in game and FitText cut "HYPERI... 3.."), and it gives way by whole words,
                         // not an ellipsis (the game's font draws one two and a half cells wide: "HYPE... 37KM" ran to the box's brackets, and a cut after a space read "MSV ... 19KM").
-                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, (int)(w / (ScopeText.DesignAdvance * 12f)), true), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
+                        if (e >= 0) g.FitText(ScopeStr.Distance(Name(d.Emitters[e]), d.Emitters[e].RangeM, units, (int)((w - 8f) / (ScopeText.DesignAdvance * 12f * ScopeCanvas.TextBoost)), true), x, y, w, tone, 12f, 12f, ScopeAlign.Center);
                         break;
                     }
                 case ThreatCue.Inbound:

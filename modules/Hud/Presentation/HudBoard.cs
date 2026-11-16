@@ -33,6 +33,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
         private readonly VisorSwayDriver visorSway = new VisorSwayDriver();
+        // The reactive visor (2026-11-16, round 2): what happens to the pilot and the jet as a per-frame look of the mod's own symbology (see StepVisor); the load factor is read at 10 Hz.
+        private readonly VisorFx fx = new VisorFx();
+        private float visorG = 1f, visorGLimit = 9f;
+        private bool glitchHeard, warnFlashHeard;      // the visor sounds follow the reactions' own edges (HMD-9, Core/Fx/VisorSound)
+        private float nextEmpSound, empSoundSince;
         private readonly ThreatWatch threats = new ThreatWatch();
         private readonly CountermeasureWatch countermeasures = new CountermeasureWatch();
         private readonly FuelWatch fuelWatch = new FuelWatch();
@@ -63,6 +68,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private CombatAlerts alerts;
         private ArLayer ar;
         private Aircraft alertAircraft;
+        // The visor's brow rail and frame furniture (cockpit view only).
+        private TapeHud tape;
+        // The segmented fuel and throttle arcs (cockpit view only); arcsAt / arcsExternal say when and what the last complete Tick saw, so a Tick that stops running gives the game's gauges back (fail open).
+        private ArcsHud arcs;
+        private float arcsAt = float.NegativeInfinity;
+        private bool arcsExternal;
+        // The visor's rim (corner lines, side ticks, the etched line) and its power-on (2026-11-16, "HELMET ON"): the boot runs once per aircraft the pilot takes the seat of (full the first time of the session, a re-sync after),
+        // is cut short at once by a real warning or by anything that is not the cockpit view, and while it runs sets how far the zones below have come alive (see StepBoot).
+        private VisorRim rim;
+        private readonly VisorBootHud boot = new VisorBootHud();
+        private Aircraft bootedFor, identityFor;
+        private bool everBooted, bootApplied, bootWarning;
+        private string identityCallsign = "", identityAirframe = "";
+        private float nextIdentity;
         private float nextRead;
         private System.Func<int, bool> missileFlying;
         private HudSettings settings;
@@ -93,6 +112,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The centre combat layer (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
         internal CombatAlerts Alerts => alerts;
         internal ArLayer Ar => ar;
+
+        /// <summary>The visor's brow rail (the sim probe in <c>HudAutomation</c> reads it; null until first shown).</summary>
+        internal TapeHud Tape => tape;
+
+        /// <summary>The segmented fuel and throttle arcs (the sim probe in <c>HudAutomation</c> reads it; null until first wanted).</summary>
+        internal ArcsHud Arcs => arcs;
+
+        /// <summary>The visor's rim and power-on (the sim probe in <c>HudAutomation</c> reads them).</summary>
+        internal VisorRim Rim => rim;
+        internal VisorBootHud BootHud => boot;
+        /// <summary>Why the last boot ended: "finished", "warning" or "not allowed" (the sim probe reads it).</summary>
+        internal string BootEnd { get; private set; } = "";
+        /// <summary>The reactive visor's state machine (the sim probe pins and reads it).</summary>
+        internal VisorFx Fx => fx;
+
+        /// <summary>The sim's hook: start the power-on now in <paramref name="mode"/> on the HUD's aircraft, with the real state of this moment. False: no aircraft, or not the cockpit view.</summary>
+        internal bool RestartBoot(BootMode mode)
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null || aircraft.disabled || arcsExternal) return false;
+            StartBoot(aircraft, mode);
+            return true;
+        }
 
         private void OnEnable()
         {
@@ -139,6 +182,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return panel != null && panel.TryGetScreenBox(out left, out top, out right, out bottom);
         }
 
+        public bool ShowsWing => panel != null && panel.ShowsWing;
+
         /// <summary>The board's 10 Hz readers, in order (the stores and threat feeds read the frame the watchers before them filled): the sites a reader that throws is reported under.</summary>
         private static readonly string[] ReadSites =
         {
@@ -157,14 +202,203 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The AR helmet layer: world-locked symbols are projected every frame (the data comes with the 10 Hz read).
             try { ar?.Frame(missileTracker, threats, Time.unscaledTime); }
             catch (Exception e) { ar?.Hide(); PatchGuard.Report("Hud.Ar.Frame", e); }
+            // The power-on's clock first: how far each zone has come alive is set before they draw this frame. A throw ends the boot and snaps everything to flying state.
+            try { StepBoot(); }
+            catch (Exception e) { boot.Abort(); ReleaseBoot(); PatchGuard.Report("Hud.Boot", e); }
+            try { tape?.Frame(); }
+            catch (Exception e) { tape?.Hide(); PatchGuard.Report("Hud.Tape.Frame", e); }
+            try { rim?.Frame(); }
+            catch (Exception e) { rim?.Hide(); PatchGuard.Report("Hud.Rim.Frame", e); }
+            // The arcs, every frame and BEFORE anything below can fail: they hide the game's own two gauges only in the frame they are drawn, and give them back in the frame they are not wanted.
+            try { arcs?.Frame(ArcsWanted(out Aircraft arcsAircraft), arcsAircraft); }
+            catch (Exception e) { arcs?.Fail(); PatchGuard.Report("Hud.Arcs.Frame", e); }
             // Every frame, whatever happened above (fail open): a board that is not up and fresh gives the native boxes it replaces back.
             panel?.TickNatives();
+            // The visor's reactions (G, hits, EMP, warning onset, idle life): after the layers above exist for this frame, before the board takes its place.
+            try { StepVisor(); }
+            catch (Exception e) { fx.Reset(); PatchGuard.Report("Hud.Visor", e); }
             if (panel != null)
             {
                 // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
                 visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
-                panel.ApplySway(visorSway.X + (ar != null ? ar.JitterX : 0f), visorSway.Y);      // a hit glitch shakes the board with the AR layer
+                panel.ApplySway(visorSway.X + fx.ShiftX + (ar != null ? ar.JitterX : 0f), visorSway.Y + fx.ShiftY, fx.TearBoard, fx.TearLeft);
             }
+        }
+
+        /// <summary>
+        /// The reactive visor, every frame: the real inputs (the load factor at 10 Hz, the hit count Immersion's patch counts, the EMP routine's clock, a warning's rising edge, the power-on's closing line) go into <see cref="VisorFx"/>, and what
+        /// it answers is applied to the mod's own roots and nothing else: group alpha and a position on the brow, the rim (alpha only: it is the glass), the arcs, and the board and left column's blocks (<see cref="BoardLook"/>); the rim and brow
+        /// repaint at most four times for a flash. Rests at once when not allowed (the option, reduced motion, a pause, the map, a cinematic, an external view). An EMP's end starts the re-sync boot.
+        /// </summary>
+        private void StepVisor()
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            bool allowed = (settings != null ? settings.Reactive.Value : options.Reactive) && aircraft != null && !aircraft.disabled && !arcsExternal &&
+                BoscaliSummer.Core.Game.CockpitOverlayGate.Open();   // own switch (Reactive); the kit's panel-animation setting does not govern the visor
+            fx.Step(new VisorFxInput
+            {
+                Dt = Time.unscaledDeltaTime, Allowed = allowed, G = visorG, GLimit = visorGLimit,
+                HitSerial = BoscaliSummer.Core.Game.VisorEvents.HitSerial, HitWeight = BoscaliSummer.Core.Game.VisorEvents.HitWeight,
+                Emp = Time.time < BoscaliSummer.Core.Game.VisorEvents.EmpUntil,
+                WarnUp = alerts != null && alerts.WarningUp,
+                OnlineBeat = boot.TakeOnlineBeat(),
+                Degrade = VisorDamage.Level(frame.Damage),
+                Jam = aircraft != null && combat != null ? Mathf.Clamp01(NativeRefs.Get(JamRef, combat)) : 0f,      // the game's own "an enemy jammer is working on my jet" level (CombatHUD.jamAccumulation, 0..1)
+                ShaderOn = VisorGlitch.Ready,
+                ReducedFlashes = ReducedFlashes != null && ReducedFlashes(),
+            });
+            HearVisor();
+            DriveGlitch();
+            if (fx.ResyncDue && aircraft != null && !boot.Active && BootAllowed(aircraft, arcsExternal)) StartBoot(aircraft, BootMode.Resync);
+
+            bool booting = boot.Active;
+            float a = fx.Alpha;
+            tape?.ApplyFx(a);
+            rim?.ApplyFx(a * (booting ? 1f : fx.BreathRim), fx.Flash, fx.FlashTone);
+            arcs?.ApplyFx(a, fx.ShiftX, fx.ShiftY);
+            var look = BoardLook.Rest;
+            look.All = a;
+            if (booting)
+            {
+                look.Stores = boot.Alpha(BootGroup.Board);
+                look.Shell = boot.Alpha(BootGroup.BoardShell);
+                look.Page = boot.Alpha(BootGroup.BoardPage);
+                look.Wing = boot.Alpha(BootGroup.BoardWing);
+                look.Log = boot.Alpha(BootGroup.Left);
+                look.Cue = boot.Alpha(BootGroup.LeftCue);
+                look.Comms = boot.Alpha(BootGroup.LeftComms);
+            }
+            panel?.ApplyLook(look);
+            LeftHudStack.BootAlpha = look.Comms * a;      // the COMMS block (the Chatter module's) follows the left column
+        }
+
+        private static readonly HarmonyLib.AccessTools.FieldRef<CombatHUD, float> JamRef = NativeRefs.Field<CombatHUD, float>("jamAccumulation");
+
+        /// <summary>The pilot's reduced-flashes switch (the mod's one photosensitivity option: Weather.ReducedFlashes), handed over by the module.</summary>
+        internal Func<bool> ReducedFlashes;
+
+        /// <summary>
+        /// BROKEN HELMET: the shader's terms for this frame (<see cref="VisorGlitch"/>), the glitch material onto the mod's own HUD holders, the eased centre and scope page, and the brow's jam word, corrupted caption and carets' jitter.
+        /// Skipped, and the globals at rest, while the visor is not allowed (the same gate as every reaction).
+        /// </summary>
+        private void DriveGlitch()
+        {
+            alerts?.SetJam(fx.JamUp);
+            if (!VisorGlitch.Ready) { tape?.ApplyGlitch(0f); return; }
+            VisorGlitch.Attach(panel?.Root);
+            VisorGlitch.Attach(tape?.Root);
+            VisorGlitch.Attach(rim?.Root);
+            VisorGlitch.Attach(arcs?.Root);
+            VisorGlitch.Attach(alerts?.Root);
+            VisorGlitch.Scan(Time.unscaledTime);
+            VisorGlitch.SetCalm(panel?.PageRect);
+            VisorGlitch.Drive(fx);
+            VisorGlitch.ShowStatic(fx.Glitching && fx.BarStrength > 0.02f);
+            tape?.ApplyGlitch(fx.JamJitterDeg);
+        }
+
+        /// <summary>
+        /// The visor's sounds for what <see cref="fx"/> just did (HMD-9, <see cref="BoscaliSummer.Core.Fx.VisorSound"/>), on the same frame and edge as the look: the hit's glitch burst when the glitch starts, the EMP crackle bed while the stutter runs
+        /// (every 0.3 s early on, when the dark slots are most likely, then every 0.9 s), the sharp blip with the warning flash. The real alarm plays by itself; the blip sits under it (never ducked) and the banner ducks the rest.
+        /// </summary>
+        private void HearVisor()
+        {
+            BoscaliSummer.Core.Fx.VisorSound.Banner = alerts != null && alerts.WarningUp;
+            bool glitching = fx.GlitchRunning || fx.BurstRunning;      // a hit's glitch and each damage burst play the same clip, once at their start (the facade rate-limits)
+            if (glitching && !glitchHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Glitch);
+            glitchHeard = glitching;
+            bool warnFlash = fx.Flash > 0f && fx.FlashTone == FlashKind.Warning;
+            if (warnFlash && !warnFlashHeard) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Warn);
+            warnFlashHeard = warnFlash;
+            float now = Time.unscaledTime;
+            if (!fx.EmpRunning) nextEmpSound = 0f;
+            else if (now >= nextEmpSound)
+            {
+                if (nextEmpSound == 0f) empSoundSince = now;
+                BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Emp);
+                nextEmpSound = now + (now - empSoundSince < VisorFx.EmpOnsetS ? 0.3f : 0.9f);
+            }
+        }
+
+        /// <summary>
+        /// The arcs may draw this frame: the switch (read live, so the game's gauges are back the frame it goes off), a live HUD aircraft, the cockpit view (the external views and a missile ride have the
+        /// third-person cluster and its own hiding of these gauges), an overlay may show (no pause, map or cinematic, the native HUD up), and the last complete Tick is under half a second old.
+        /// </summary>
+        private bool ArcsWanted(out Aircraft aircraft)
+        {
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            aircraft = combat != null ? combat.aircraft : null;
+            if (aircraft == null || aircraft.disabled || arcsExternal || NativeTakeover.Stale(Time.unscaledTime, arcsAt)) return false;
+            if (!(settings != null ? settings.Arcs.Value : options.Arcs)) return false;
+            // The power-on hands the arcs over when they start to fill: until then the game's own gauges are the ones on the screen (never a frame with neither).
+            if (boot.Active && boot.Progress(BootGroup.Arcs) <= 0f) return false;
+            return BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+        }
+
+        /// <summary>The power-on may run this frame: the option (read live), a live HUD aircraft, the cockpit view, an overlay may show (no pause, map or cinematic) and the pilot has not asked for reduced motion.</summary>
+        private bool BootAllowed(Aircraft aircraft, bool external) =>
+            (settings != null ? settings.Boot.Value : options.Boot) && aircraft != null && !aircraft.disabled && !external &&
+            BoscaliSummer.Core.Game.CockpitOverlayGate.Open();
+
+        /// <summary>Every frame: advance the boot, cut it when it is no longer allowed or a real warning is up, and hand each zone how far it has come alive; when it ends give every zone its flying state back, once.</summary>
+        private void StepBoot()
+        {
+            if (!boot.Active) { if (bootApplied) ReleaseBoot(); return; }
+            CombatHUD combat = SceneSingleton<CombatHUD>.i;
+            Aircraft aircraft = combat != null ? combat.aircraft : null;
+            bool warning = bootWarning || (alerts != null && alerts.WarningUp);
+            bool allowed = BootAllowed(aircraft, arcsExternal) && aircraft == bootedFor;
+            if (!boot.Step(Time.unscaledTime, allowed, warning))
+            {
+                BootEnd = warning ? "warning" : !allowed ? "not allowed" : "finished";      // the sim probe reads why the last boot ended
+                ReleaseBoot();
+                return;
+            }
+            if (tape != null) tape.Boot = boot.Progress(BootGroup.Brow);
+            if (rim != null) rim.Boot = boot.Progress(BootGroup.Rim);
+            if (arcs != null) arcs.Boot = boot.Progress(BootGroup.Arcs);
+            bootApplied = true;      // the blocks' own visibility is StepVisor's, each frame
+        }
+
+        /// <summary>The boot is over (done, cut or failed): every zone as in flight.</summary>
+        private void ReleaseBoot()
+        {
+            if (tape != null) tape.Boot = 1f;
+            if (rim != null) rim.Boot = 1f;
+            if (arcs != null) arcs.Boot = 1f;
+            bootApplied = false;
+        }
+
+        /// <summary>The power-on, with the real state of this moment: what each self-test line will say is read here, once.</summary>
+        private void StartBoot(Aircraft aircraft, BootMode mode)
+        {
+            var inputs = new BootInputs
+            {
+                Hmd = aircraft != null,
+                HasNet = GameManager.gameState == GameState.SinglePlayer || GameManager.gameState == GameState.Multiplayer,
+                Online = GameManager.gameState == GameState.Multiplayer,
+                HasRadar = frame.Systems.RadarEmitting.HasValue, RadarOn = frame.Systems.RadarEmitting == true,
+                HasFuel = frame.Fuel.Valid, Fuel = frame.Fuel.Level, Bingo = frame.Fuel.Bingo,
+                Field = frame.Fuel.Field, FieldM = frame.Fuel.FieldM, Metric = frame.Units == NOAvionics.AvUnits.Metric,
+                Cm = frame.Cm, CmCount = frame.CmCount,
+            };
+            if (ScopeFeeds.TryRead(out StoresScope stores)) { inputs.Stations = stores.StationCount; inputs.HasSafety = stores.Selected >= 0; inputs.Safe = stores.Safe; }
+            RefreshIdentity(aircraft, true);
+            boot.Begin(mode, Time.unscaledTime, inputs, identityCallsign);
+            bootedFor = aircraft;
+            everBooted = true;
+        }
+
+        /// <summary>The pilot's callsign and the airframe's type for the rim and the closing line: read when the aircraft changes, and every couple of seconds while the callsign is still unknown.</summary>
+        private void RefreshIdentity(Aircraft aircraft, bool force)
+        {
+            float now = Time.unscaledTime;
+            if (!force && aircraft == identityFor && (identityCallsign != "PILOT" || now < nextIdentity)) return;
+            identityFor = aircraft;
+            identityCallsign = VisorIdentity.Callsign();
+            identityAirframe = VisorIdentity.Airframe(aircraft);
+            nextIdentity = now + 2f;
         }
 
         /// <summary>The pilot's options as of this tick, handed to everything that reads them: the board, and every backdrop of the mod's HUD (<see cref="HudSprites.Backdrop"/>).</summary>
@@ -172,7 +406,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             settings?.Snapshot(ref options);
             if (panel != null) panel.Options = options;
+            BoscaliSummer.Core.Fx.VisorSound.Level = options.VisorSound;
             HudSprites.Backdrop = ScopeLayout.CloudAlpha * options.Shade;      // the one backdrop every HUD block of the mod stands on
+            BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(options.TextEdge);      // the thin dark edge on every glow material
         }
 
         private void Tick()
@@ -196,6 +432,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool thirdPerson = canShow && viewingOwnExternally;
             bool missileCam = canShow && viewingMissile;
             flightNumberHider.Tick(thirdPerson || missileCam, thirdPerson ? ownAircraft : missileOwner);
+            arcsExternal = viewingOwnExternally || viewingMissile;      // any external view or missile ride: the arcs are not drawn, the game's gauges are the hider's
+            arcsAt = Time.unscaledTime;
 
             // The missile feed: a camera on the last own weapon in the air, every frame (its pose must follow the weapon), wherever the HUD is up; riding a missile the screen is the feed already.
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
@@ -203,8 +441,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileFeed.Tick(missileTracker.Missiles, (settings?.PageMissileCam.Value ?? options.PageMissileCam) && hudUp && !viewingMissile, Time.unscaledTime);
             if (!thirdPerson)
             {
-                // The feed's card stays in the cockpit; the flight boxes around it go the same frame third person ends (the read below runs now).
-                if (missileFeed.Texture == null) cluster?.Hide();
+                // The feed and target cards stay in the cockpit; the flight boxes around them go the same frame third person ends (the read below runs now).
+                if (missileFeed.Texture == null && !(cluster != null && cluster.TargetCardShown)) cluster?.Hide();      // the cockpit target card (a lock) keeps the root up; the next read retires it with the lock
                 else if (cluster != null && cluster.FlightShown) nextRead = 0f;
             }
 
@@ -232,6 +470,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ShotFeed.Ledger.Clear();
                 shotBook.Clear();
             }
+            visorG = hudAircraft != null ? BoscaliSummer.Core.Game.AircraftReadout.LoadFactor(hudAircraft) : 1f;      // the reactive visor's G, 10 Hz (the symbology's shake is eased between reads)
+            visorGLimit = hudAircraft != null ? BoscaliSummer.Core.Game.AircraftReadout.GLimit(hudAircraft) : 9f;
             frame.Now = now;
             frame.Units = AvUnitsOf((int)PlayerSettings.unitSystem);
             frame.BootAge = hudAircraft != null ? now - bootStart : -1f;
@@ -294,24 +534,75 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The cockpit already has its own native tac screen for this feed; the card only
             // earns its space in the external views this module can force the HUD into.
+            // The visor's brow rail and furniture: cockpit view only (the external views have the third-person boxes, a missile ride has no nose to take bearings from). The lane under it rises where it is not drawn.
+            try
+            {
+                bool showBrow = options.Brow && hudAircraft != null && !hudAircraft.disabled && !thirdPerson && !missileCam && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed();
+                tape ??= new TapeHud();
+                tape.Read(showBrow && tape.Ensure(), hudAircraft);
+                TopCentre.Lift = thirdPerson || missileCam ? TopCentre.ExternalLift : 0f;
+                // The rim shares the brow's switch and its view: the frame of the same glass.
+                rim ??= new VisorRim();
+                RefreshIdentity(hudAircraft, false);
+                rim.Read(showBrow && rim.Ensure(), identityCallsign, identityAirframe, hudAircraft != null ? now - bootStart : -1f, this);
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Brow", e); }
+
+            // The visor's power-on: the first time the cockpit HUD is up for an aircraft (full the first time of the session, a re-sync after a respawn or an aircraft change). A real warning on the screen (a missile, a fire)
+            // is what cuts a running boot; it is seen here at 10 Hz and again by the combat layer's own board every frame (StepBoot).
+            try
+            {
+                bootWarning = frame.Threat.Missiles > 0 || (frame.Damage.Flags & DamageFlags.Fire) != 0;
+                if (hudAircraft == null) bootedFor = null;
+                else if (hudAircraft != bootedFor)
+                {
+                    if (boot.Active) { boot.Abort(); ReleaseBoot(); }
+                    if (BootAllowed(hudAircraft, thirdPerson || missileCam))
+                    {
+                        if (bootWarning || (alerts != null && alerts.WarningUp)) bootedFor = hudAircraft;      // a warning is up as the pilot sits down: no boot for this aircraft
+                        else StartBoot(hudAircraft, VisorBoot.ModeFor(everBooted));
+                    }
+                }
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.BootStart", e); }
+
+            // The arcs' data (fuel level, the BINGO need); the arcs themselves run every frame in LateUpdate.
+            try
+            {
+                arcs ??= new ArcsHud();
+                arcs.Read(hudAircraft, frame);
+            }
+            catch (Exception e) { PatchGuard.Report("Hud.Arcs", e); }
+
+            // The card stands in the left column in the external views, and in the cockpit while a target is locked (the picture is the cockpit tac screen's own camera, so nothing native is touched).
             if (hudAircraft != null) TargetCamLook.Apply(hudAircraft.targetCam);      // the cockpit tac screen and the card share vanilla's camera
             Texture cameraTexture = null;
             string cameraCode = null;
-            float range = float.NaN, closure = float.NaN;
-            if (viewingOwnExternally && ownAircraft != null && ownAircraft.targetCam != null &&
-                BoscaliSummer.Core.Game.NativeCamera.ReadMode(ownAircraft.targetCam) != TargetCam.CamMode.landingMode &&
-                BoscaliSummer.Core.Game.NativeCamera.TryGet(ownAircraft, out Camera camera, out string mode) &&
+            float range = float.NaN, closure = float.NaN, aspect = float.NaN;
+            Aircraft camOwner = viewingOwnExternally ? ownAircraft : hudAircraft;
+            if (camOwner != null && camOwner.targetCam != null &&
+                BoscaliSummer.Core.Game.NativeCamera.ReadMode(camOwner.targetCam) != TargetCam.CamMode.landingMode &&
+                BoscaliSummer.Core.Game.NativeCamera.TryGet(camOwner, out Camera camera, out string mode) &&
                 camera.targetTexture != null && camera.targetTexture.IsCreated())
             {
-                cameraTexture = camera.targetTexture;
-                // The card's header names what the pod looks at (the camera mode only with no target).
-                cameraCode = targetReadout.Read(ownAircraft, out Unit seen, out range, out closure) && seen != null ? targetReadout.NameOf(seen) : mode;
+                bool seenOne = targetReadout.Read(camOwner, out Unit seen, out range, out closure) && seen != null;
+                // External: the card is up whenever the pod has a picture (its header names the camera mode with no target). Cockpit: only while a target is locked.
+                // The cockpit card has no canvas gate of its own: off while paused, on the big map, in cinematic mode and on a missile ride.
+                if (viewingOwnExternally || (seenOne && !viewingMissile && BoscaliSummer.Core.Game.CockpitOverlayGate.Open()))
+                {
+                    cameraTexture = camera.targetTexture;
+                    cameraCode = seenOne ? targetReadout.NameOf(seen) : mode;
+                    if (seenOne) aspect = TargetReadout.Aspect(camOwner, seen);
+                }
             }
             // hudAircraft, not ownAircraft: the latter is null in the cockpit, which left the overlay off after any trip outside.
-            if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null);
+            if (hudAircraft != null) TargetCamLook.SetOverlay(hudAircraft.targetCam, cameraTexture == null || !viewingOwnExternally);      // the cockpit's own tac screen keeps its text even while the card shows
 
             // The feed column holds the bottom-right corner in every view (NAV DATA is gone, 2026-10-21).
-            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, missileFeed.RangeM, missileFeed.Lost);
+            missileFeed.Guidance(out float feedRange, out float feedClosure, out float feedTti);
+            cluster.SetMissileFeed(missileFeed.Texture, missileFeed.Name, feedRange, missileFeed.Lost, feedClosure, feedTti);
+            cluster.CardNativeText = !viewingOwnExternally;      // the cockpit's tac screen prints its own text on the picture
+            cluster.CardAspectDeg = aspect;
             if (thirdPerson && ownAircraft != null)
             {
                 Rigidbody rb = ownAircraft.rb;
@@ -341,7 +632,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else
             {
-                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, null, null, float.NaN, float.NaN, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));
+                cluster.Present(false, AvUnitsOf((int)PlayerSettings.unitSystem), default, cameraTexture, cameraCode, range, closure, ThirdPersonHudLayout.TextScale(PlayerSettings.hudTextSize));      // the cockpit: the target card only (a lock), no flight boxes
             }
         }
 
@@ -376,7 +667,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void OnOwnLaunch(Missile missile)
         {
             WeaponInfo info = missile != null ? missile.GetWeaponInfo() : null;
-            if (info == null || !ShotRules.IsDelivery(info.blastDamage, info.jammer)) return;
+            if (info == null || !ShotRules.IsDelivery(Mathf.Max(info.blastDamage, missile.GetYield()), info.jammer)) return;      // WeaponInfo.blastDamage reads 0 for every missile on the 0.34.6 build: the warhead's own yield is the number
             float now = Time.unscaledTime;
             ShotFeed.Ledger.Launch(missile.GetInstanceID(), info.bomb, ShotBook.Short(info), now);
             shotBook.Launched(missile, info, now);
@@ -428,6 +719,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             missileTracks.Clear();
             store.Reset();
             visorSway.Reset();
+            fx.Reset();
+            VisorGlitch.Off();
             panel?.Destroy();
             panel = null;
             cluster?.Destroy();
@@ -437,6 +730,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ar?.Destroy();
             ar = null;
             alertAircraft = null;
+            tape?.Destroy();
+            tape = null;
+            arcs?.Destroy();
+            arcs = null;
+            rim?.Destroy();
+            rim = null;
+            boot.Destroy();
+            bootedFor = identityFor = null;
+            everBooted = bootApplied = bootWarning = false;
+            identityCallsign = identityAirframe = "";
+            TopCentre.Lift = 0f;
             nextRead = 0;
             targetReadout.Release();
             bootAircraft = null;
@@ -477,6 +781,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alerts?.Hide();
             ar?.Hide();
             alertAircraft = null;
+            tape?.Hide();
+            rim?.Hide();
+            boot.Abort();
+            ReleaseBoot();
+            fx.Reset();
+            VisorGlitch.Off();
+            tape?.ApplyGlitch(0f);
+            panel?.ApplyLook(BoardLook.Rest);
+            LeftHudStack.BootAlpha = 1f;
+            tape?.ApplyFx(1f);
+            rim?.ApplyFx(1f, 0f, FlashKind.None);
+            arcs?.ApplyFx(1f, 0f, 0f);
+            arcs?.Down();
+            TopCentre.Lift = 0f;
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Tick(false, null);

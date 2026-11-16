@@ -143,7 +143,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
                 rect.pivot = new Vector2(0.5f, 0f);
                 rect.sizeDelta = new Vector2(220f, TopCentre.LabelPt * 1.5f);
-                t.characterSpacing = TopCentre.LineSpacing;
+                t.characterSpacing = 2f;
                 t.richText = false;
                 t.fontStyle |= FontStyles.Bold;
                 t.gameObject.SetActive(false);

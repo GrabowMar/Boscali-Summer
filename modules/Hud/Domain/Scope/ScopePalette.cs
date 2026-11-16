@@ -14,10 +14,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static readonly Rgba PlateColor = new Rgba(0.043f, 0.110f, 0.157f), BgColor = new Rgba(0.020f, 0.051f, 0.078f);
 
         /// <summary>LAYOUT.md 1: DIM is the ink at 0.80 over whatever is behind (there is no plate; 0.70 until 2026-11-15, when the backdrop went and dim words faded on bright sky); DIM text never drops under 0.89 of it.</summary>
-        public const float DimAlpha = 0.80f, DimTextFloor = 0.89f;
+        public const float DimAlpha = HudInk.DimAlpha;
 
         /// <summary>How far toward white BRIGHT is lifted from the ink (LAYOUT.md 1: INK 127, 223, 154 is BRIGHT 215, 255, 228, about 0.7 of the way): a lit word reads a clear step above data.</summary>
-        public const float HiLift = 0.70f;
+        public const float HiLift = HudInk.HiLift;
 
         private readonly Rgba ink, hi, dim, amber, red;
 
@@ -26,8 +26,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             this.ink = ink.WithAlpha(1f);
             this.amber = amber.WithAlpha(1f);
             this.red = red.WithAlpha(1f);
-            hi = Mix(this.ink, new Rgba(1f, 1f, 1f), HiLift);
-            dim = this.ink.WithAlpha(DimAlpha);
+            hi = HudInk.Hi(this.ink);
+            dim = HudInk.Dim(this.ink);
         }
 
         /// <summary>The token's colour at <paramref name="alpha"/> (a token that has an alpha of its own, dim, is multiplied by it).</summary>
@@ -49,6 +49,5 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return alpha >= 1f ? c : c.WithAlpha(c.A * (alpha < 0f ? 0f : alpha));
         }
 
-        private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
     }
 }

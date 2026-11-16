@@ -31,6 +31,22 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return true;
         }
 
+        /// <summary>
+        /// The target's aspect angle as the radar calls it: how far round from its tail we stand, 0 directly behind it, 180 head-on; positive when we are on its right side, negative on its left.
+        /// NaN for anything but an aircraft (a building or a ship has no meaningful nose for this). No allocation.
+        /// </summary>
+        public static float Aspect(Aircraft own, Unit unit)
+        {
+            if (own == null || !(unit is Aircraft target)) return float.NaN;
+            Vector3 toUs = own.transform.position - target.transform.position;
+            toUs.y = 0f;
+            Vector3 tail = -target.transform.forward;
+            tail.y = 0f;
+            if (toUs.sqrMagnitude < 1f || tail.sqrMagnitude < 1e-4f) return float.NaN;
+            float angle = Vector3.Angle(tail, toUs);
+            return Vector3.Cross(tail, toUs).y > 0f ? -angle : angle;      // Unity's y is up: a positive cross puts us to the left of the tail line
+        }
+
         /// <summary>The target's name in capitals ("TGT" when the game gives it none): built when the target changes, the same string until then.</summary>
         public string NameOf(Unit unit)
         {

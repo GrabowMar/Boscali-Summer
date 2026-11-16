@@ -128,6 +128,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             d.FuelTarget = Mathf.Clamp01(Mathf.Max(me.fuelLevel, d.Fuel));
             d.FuelNeedKg = SkywellService.FuelNeedKg(me);
             d.Ammo = rounds; d.AmmoFull = full;
+            Vector3 toTanker = SkywellBoard.Anchor(tanker) - me.transform.position;
+            d.TankerBearingDeg = Vector3.SignedAngle(new Vector3(me.transform.forward.x, 0f, me.transform.forward.z), new Vector3(toTanker.x, 0f, toTanker.z), Vector3.up);
             d.JobName = jobName;
             if (d.Phase == DockPhase.Transfer)
                 d.TransferT = Mathf.Clamp01((Time.timeSinceLevelLoad - jobStart) / Mathf.Max(view.JobTenths / 10f, 0.1f));

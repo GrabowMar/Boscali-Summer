@@ -13,10 +13,13 @@ namespace BoscaliSummer.Modules.Hud.Patches
     {
         public static readonly EventLog Log = new EventLog();
 
+        /// <summary>The characters a line may have in the LOG column on this screen; the painter sets it (EventLogLayout.LineChars) and every new line is cut to it.</summary>
+        public static int LineChars = EventParser.MaxChars;
+
         /// <summary>Keep one line: parse it (the pilot's own name and aircraft marked) and add it. A line with nothing to show (tags only) is not kept.</summary>
         public static void Capture(string rich, float arrival, float removeAt, string stamp, string ownPlayer, string ownAircraft)
         {
-            EventLine line = EventParser.Parse(rich, ownPlayer, ownAircraft);
+            EventLine line = EventParser.Parse(rich, ownPlayer, ownAircraft, LineChars);
             if (line.Spans.Length > 0) Log.Add(line, rich, stamp, arrival, removeAt);
         }
 

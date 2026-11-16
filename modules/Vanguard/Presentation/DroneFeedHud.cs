@@ -26,7 +26,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private GameObject root;
         private RectTransform card;
         private AvVector chrome;
-        private TMP_Text tagWord, head, mode;
+        private TMP_Text nameText, stateText;
+        private readonly TMP_Text[] cells = new TMP_Text[3];
+        private readonly int[] cellKeys = { int.MinValue, int.MinValue, int.MinValue };
+        private string lastCallsign, lastWord, state;
+        private float nameW, stateW, drawnNameW, drawnStateW;
         private DroneFeedView feed;
         private float lostFlashUntil, cardH;
         private bool wasLost;
@@ -66,26 +70,48 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             card.GetWorldCorners(corners);
             FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
             ColorTheme theme = ThemeManager.Active.ColorTheme;
-            feed.Ink = theme.AllClear;
+            feed.Ink = VanillaHudStyle.Ink;
             feed.Paint(link);
 
             DroneView v = link.Linked;
             bool flash = Time.unscaledTime < lostFlashUntil && ((int)(Time.unscaledTime * 6f) & 1) == 0;
-            Color ink = theme.AllClear;
+            Color ink = VanillaHudStyle.Ink;
             Color tone = lost || (v != null && v.Quality <= 0f) ? theme.Alert : v != null && v.Mode == DroneMode.Hand ? theme.Warning : ink;
-            AvText.Set(head, v != null ? v.Callsign : link.LostName);
-            AvText.Set(mode, lost ? "LOST" : v == null ? "" : DroneLink.Word(v.Mode));
-            tagWord.color = head.color = ink;
-            mode.color = tone;
+            // The shelf's state word: callsign and order ("UAV-2 · HAND"), rebuilt only when either changed; its width sets where the shelf rule stops.
+            string callsign = v != null ? v.Callsign : link.LostName ?? "", word = lost ? "LOST" : v == null ? "" : DroneLink.Word(v.Mode);
+            if (state == null || callsign != lastCallsign || word != lastWord)
+            {
+                lastCallsign = callsign;
+                lastWord = word;
+                state = word.Length > 0 ? callsign + " · " + word : callsign;
+                AvText.Set(stateText, state);
+                stateW = state.Length > 0 ? stateText.GetPreferredValues(state).x : 0f;
+            }
+            if (nameW <= 0f) nameW = nameText.GetPreferredValues(nameText.text).x;
+            nameText.color = ink;
+            stateText.color = tone;
+            Strip(v, ink);
             Color frameInk = flash ? theme.Alert : ink;
-            if (frameInk != lastInk)
+            if (frameInk != lastInk || nameW != drawnNameW || stateW != drawnStateW)
             {
                 lastInk = frameInk;
+                drawnNameW = nameW;
+                drawnStateW = stateW;
                 AvQuadBuffer b = chrome.Buffer;
                 b.Clear();
-                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba());
+                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba(), nameW, stateW);
                 chrome.Commit();
             }
+        }
+
+        /// <summary>The data strip under the picture: ALT, SPD, HDG of the linked drone (its own link readings, the same the picture's tapes show); blank with no drone. A cell's text is rebuilt only when its rounded value moved.</summary>
+        private void Strip(DroneView v, Color ink)
+        {
+            for (int i = 0; i < cells.Length; i++) cells[i].color = ink;
+            int alt = v != null ? Mathf.RoundToInt(v.AltM / 10f) : int.MinValue, spd = v != null ? Mathf.RoundToInt(v.SpeedMs * 1.944f / 5f) : int.MinValue, hdg = v != null ? Mathf.RoundToInt(Mathf.Repeat(v.HeadingDeg, 360f)) % 360 : int.MinValue;
+            if (cellKeys[0] != alt) { cellKeys[0] = alt; AvText.Set(cells[0], v != null ? FeedCorner.CellHead + "ALT" + FeedCorner.CellTail + AvNum.Fixed(alt * 10f, 0) + "M" : ""); }
+            if (cellKeys[1] != spd) { cellKeys[1] = spd; AvText.Set(cells[1], v != null ? FeedCorner.CellHead + "SPD" + FeedCorner.CellTail + AvNum.Fixed(spd * 5f, 0) + "KT" : ""); }
+            if (cellKeys[2] != hdg) { cellKeys[2] = hdg; AvText.Set(cells[2], v != null ? FeedCorner.CellHead + "HDG" + FeedCorner.CellTail + hdg.ToString("000") : ""); }
         }
 
         private void Build()
@@ -107,18 +133,27 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             card.anchoredPosition = new Vector2(-Margin, Margin);
             card.sizeDelta = new Vector2(w, cardH);
             feed = new DroneFeedView(card, "Feed", 10f);
-            feed.Place(new AvSlot(0f, FeedCorner.Header, w, feedH));
+            // The picture takes what the shelf above and the data strip below leave (the card keeps its total height: the missile card stands on it).
+            feed.Place(new AvSlot(0f, FeedCorner.Header, w, cardH - FeedCorner.Header - FeedCorner.Strip));
             chrome = AvVector.Create(card, "Chrome", 64);
             lastInk = Color.clear;
-            tagWord = Word("Tag", 6f, 30f, TextAlignmentOptions.MidlineLeft);
-            tagWord.text = "UAV";
-            tagWord.fontStyle = FontStyles.Bold;
-            head = Word("Head", 38f, w - 38f - 64f, TextAlignmentOptions.MidlineLeft);
-            mode = Word("Mode", w - 62f, 60f, TextAlignmentOptions.MidlineRight);
+            state = null;
+            nameW = 0f;
+            nameText = Word("Name", FeedCorner.ShelfText, 150f, TextAlignmentOptions.MidlineLeft);
+            nameText.text = "UAV FEED";
+            nameText.fontStyle = FontStyles.Bold;
+            stateText = Word("State", w - FeedCorner.StateInset - 170f, 170f, TextAlignmentOptions.MidlineRight);
+            stateText.fontStyle = FontStyles.Bold;
+            float pt = FeedCorner.StripPt(w);
+            for (int i = 0; i < cells.Length; i++)
+            {
+                cells[i] = Word("Cell" + i, 3f, w - 6f, i == 0 ? TextAlignmentOptions.MidlineLeft : i == 1 ? TextAlignmentOptions.Midline : TextAlignmentOptions.MidlineRight, cardH - FeedCorner.Strip, FeedCorner.Strip, pt);
+                cellKeys[i] = int.MinValue;
+            }
         }
 
         // The HUD's own weapon font when the cockpit style is known, the avionics data face otherwise.
-        private TMP_Text Word(string name, float x, float width, TextAlignmentOptions align)
+        private TMP_Text Word(string name, float x, float width, TextAlignmentOptions align, float y = 0f, float height = -1f, float size = 12f)
         {
             TMP_Text t = AvText.Make(card, name, AvTextRole.DataSmall, "", align);
             if (VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style) && style.Font != null)
@@ -126,9 +161,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 t.font = style.Font;
                 if (style.FontMaterial != null) t.fontSharedMaterial = style.FontMaterial;
             }
-            AvText.Size(t, 12f);
+            AvText.Size(t, size);
             t.raycastTarget = false;
-            AvLay.Place(t, x, 0f, width, FeedCorner.Header - 3f);
+            AvLay.Place(t, x, y, width, height < 0f ? FeedCorner.Header - 3f : height);
             return t;
         }
     }

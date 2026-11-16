@@ -1,43 +1,50 @@
-using NOAvionics;
+using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Core.Ui
 {
     /// <summary>
-    /// The top-centre lane (2026-10-28 review), shared by the ace-hunt HUD (Progression) and the centre WARNING banner (Hud), both drawn under the native HUD canvas: three
-    /// FIXED slots one above the other on the reticle's axis, one width, one look. Fixed, not negotiated: nothing in the lane ever moves out of another's way, so nothing can land on
-    /// the heading tape (it starts about 232 down in the cockpit, the third-person HDG box about 198). Every length is in reference pixels of a 1080-high screen; the owners scale
-    /// their root by screen height / 1080. Pure: the test project links it.
-    /// <list type="bullet">
-    /// <item>A, the strip (8..40): the ace hunt while it is on.</item>
-    /// <item>B, the card (48..120): the ace's dossier for a few seconds when the hunt starts.</item>
-    /// <item>C, the banner (128..188): MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL.</item>
-    /// </list>
+    /// The top-centre lane (2026-11-16, concept A): ONE slot in the gap above the game's heading tape, shared by the slim WARNING line (Hud: MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL) and the ace's
+    /// two-row card (Progression, for a few seconds when a hunt starts, only while no warning line is up). A single row inside four small corner ticks: no box, no plate. Both are drawn under the native HUD canvas
+    /// on the reticle's axis in reference pixels of a 1080-high screen (the owners scale their root by screen height / 1080), and both step sideways, never up or down, to keep clear of the TAC BOARD's box
+    /// (<see cref="LaneShift"/>). The threat bearings are not here: they hang on the tape itself. Pure: the test project links it.
     /// </summary>
     internal static class TopCentre
     {
-        /// <summary>
-        /// The lane's width: at 16:9 with the TAC BOARD at its default size it fits between the board and the screen's centre line with <see cref="Gap"/> to spare, so the lane stays
-        /// on the reticle's axis (in game a 520 lane had to step 100 left of it). A board drawn bigger or moved pushes it aside (<see cref="LaneShift"/>).
-        /// </summary>
-        public const float Width = 312f, Gap = 12f;
-        public const float StripTop = 8f, StripHeight = 32f, CardTop = 48f, CardHeight = 72f, BannerTop = 128f, BannerHeight = 60f;
+        /// <summary>The lane's width: at 16:9 with the TAC BOARD at its default size it fits between the board and the screen's centre line with <see cref="Gap"/> to spare. A line with long text grows to <see cref="MaxWidth"/> and steps aside.</summary>
+        public const float Width = 312f, MaxWidth = 400f, Gap = 12f;
+        /// <summary>The slot: the ticks' top (reference y, down from the screen's top), the warning line's box height and the ace card's. The heading tape's numbers start about 232 down in the cockpit.</summary>
+        public const float LineTop = 144f, LineHeight = 48f, CardHeight = 66f;
+        /// <summary>The row inside the ticks: its inset from the box edge, the row's height (an EMPHASIS line) and the gap between words.</summary>
+        public const float Pad = 10f, RowTop = 8f, RowHeight = 28f, WordGap = 12f, CallGap = 16f;
+        /// <summary>How far the lane rises in the external views (the third-person HDG box stands about 200 down).</summary>
+        public const float ExternalLift = 100f;
+        /// <summary>The lane's lift now (0 in the cockpit, <see cref="ExternalLift"/> outside): set by the HUD board every tick, read by both owners. Main thread only.</summary>
+        public static float Lift;
+        /// <summary>The ace card is up in the slot (set by its owner): the countermeasure popup then stays out of the way.</summary>
+        public static bool CardUp;
+        /// <summary>The WARNING line is up in the slot (set by its owner): the ace card then stays down, the line wins.</summary>
+        public static bool LineUp;
 
-        // The look, one set for every piece in the lane and the centre layer: strokes, corner brackets, the hazard chevrons, shade, type sizes.
-        public const float Stroke = 1.5f, Arm = 8f, ChevronSize = 12f, ChevronStroke = 2f, ChevronStep = 12f, ShadeMargin = 16f;
-        public const float WordPt = 28f, NamePt = 22f, DetailPt = 14f, LabelPt = 12f;
-        /// <summary>Letter spacing: the big words wide, the reading lines close.</summary>
-        public const float WordSpacing = 10f, LineSpacing = 2f;
+        // The look: strokes and tick arms, then the sizes the standard names.
+        public const float Stroke = HudStroke.Standard, Arm = 6f, ChevronStroke = HudStroke.Heavy;
+        public const float NamePt = HudType.Emphasis, DetailPt = HudType.Body, LabelPt = HudType.Label, ValuePt = HudType.Value;
 
-        // Motion, one set: in faster than a glance, out faster than in; the onset blink is three blinks at 3 Hz and nothing in the layer flashes faster.
+        // Motion: the onset blink is three blinks at 3 Hz and nothing in the layer flashes faster.
         public const float EnterS = 0.18f, ExitS = 0.12f, TypeS = 0.03f, OnsetS = 1f, BlinkHz = 2f, UrgentHz = 3f;
 
         /// <summary>Lit for the first 62 % of each cycle at <paramref name="hz"/>: a word blinking at this reads longer than it hides.</summary>
         public static bool Lit(float t, float hz) => t < 0f || t * hz % 1f < 0.62f;
 
+        /// <summary>The ticks' box width for a row whose words are <paramref name="contentW"/> wide: the content and its insets, never past <see cref="MaxWidth"/>.</summary>
+        public static float BoxWidth(float contentW) => System.Math.Min(MaxWidth, contentW + Pad * 2f);
+
+        /// <summary>The room a middle word has between the kind word and the call word of a row <paramref name="boxW"/> wide (0 or less: none).</summary>
+        public static float MiddleRoom(float boxW, float kindW, float callW) =>
+            boxW - Pad * 2f - kindW - WordGap - (callW > 0f ? CallGap + callW : 0f);
+
         /// <summary>
         /// How far (reference pixels, + right) a piece of the lane <paramref name="width"/> wide, standing from <paramref name="top"/> down <paramref name="height"/>, moves sideways to keep
-        /// <see cref="Gap"/> clear of the TAC BOARD's box (screen pixels, y down from the top), from the screen's size in pixels. The strip and the card ask with the lane's width over
-        /// both their slots (<see cref="AceShift"/>), so they always share one centre line; the banner asks with its own width, so a short word never leaves the axis.
+        /// <see cref="Gap"/> clear of the TAC BOARD's box (screen pixels, y down from the top), from the screen's size in pixels. A short line never leaves the axis.
         /// </summary>
         public static float LaneShift(float screenW, float screenH, float width, float top, float height, float boardLeft, float boardTop, float boardRight, float boardBottom)
         {
@@ -45,10 +52,6 @@ namespace BoscaliSummer.Core.Ui
             float k = 1080f / screenH;
             return Shift(screenW * k, width, top, height, boardLeft * k, boardTop * k, boardRight * k, boardBottom * k);
         }
-
-        /// <summary>The strip's and the card's one shift (<see cref="LaneShift"/> over slots A and B).</summary>
-        public static float AceShift(float screenW, float screenH, float boardLeft, float boardTop, float boardRight, float boardBottom) =>
-            LaneShift(screenW, screenH, Width, StripTop, CardTop + CardHeight - StripTop, boardLeft, boardTop, boardRight, boardBottom);
 
         /// <summary>
         /// How far (to the right, negative to the left) a panel <paramref name="width"/> wide, centred on a screen <paramref name="screenW"/> wide and standing from <paramref name="top"/> down
@@ -67,22 +70,5 @@ namespace BoscaliSummer.Core.Ui
             if (rightFits) return toRight;
             return System.Math.Max(toLeft, -left);
         }
-
-        /// <summary>
-        /// The lane's warning chrome round a word centred at (<paramref name="x"/>, <paramref name="y"/>) and <paramref name="halfWord"/> half-wide (y up): three chevrons each side pointing
-        /// in. <paramref name="step"/> 0..2 is the bright one of a light marching in from the outside (a warning); -1 holds them all at one level (a caution).
-        /// </summary>
-        public static void Hazard(AvQuadBuffer b, float x, float y, float halfWord, Rgba ink, int step, float size = ChevronSize)
-        {
-            for (int i = 0; i < 3; i++)
-            {
-                float d = halfWord + size * 1.5f + i * ChevronStep, a = step < 0 ? 0.75f : i == 2 - step ? 1f : 0.3f;
-                AvStrokes.Chevron(b, x - d, y, size, 0f, ChevronStroke, ink.WithAlpha(ink.A * a));
-                AvStrokes.Chevron(b, x + d, y, size, 180f, ChevronStroke, ink.WithAlpha(ink.A * a));
-            }
-        }
-
-        /// <summary>How far out the hazard chevrons reach from the word's centre (<see cref="Hazard"/>), for a bracket round both.</summary>
-        public static float HazardReach(float halfWord, float size = ChevronSize) => halfWord + size * 1.5f + 2f * ChevronStep + size * 0.5f;
     }
 }

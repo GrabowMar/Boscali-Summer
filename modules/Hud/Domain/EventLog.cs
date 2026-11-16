@@ -39,6 +39,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal sealed class EventLog
     {
         public const int Capacity = 6;
+        /// <summary>The LOG zone holds four rows (<c>HudZones</c>): <see cref="Select"/> hands back the newest four; the ring keeps six so the capture's health reads the same.</summary>
+        public const int ShownRows = 4;
         public const float WipeSeconds = 0.18f, BrightSeconds = 1.5f, FadeSeconds = 1f, FallbackSeconds = 12f;
         /// <summary>The wipe and the fade are written in this many steps, so a row is drawn again only when a step changed.</summary>
         public const int WipeSteps = 12, FadeSteps = 10;
@@ -74,6 +76,16 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return row;
         }
 
+        /// <summary>The column changed width: every kept row is read again from its raw text for the new room (<paramref name="maxChars"/>). Rare (a resize), so it may allocate.</summary>
+        public void Refit(int maxChars, string ownPlayer, string ownAircraft)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                EventLine line = EventParser.Parse(ring[i].Raw, ownPlayer, ownAircraft, maxChars);
+                if (line.Spans.Length > 0) ring[i].Line = line;
+            }
+        }
+
         /// <summary>The scene started again (the clock ran back): nothing of the old one is left.</summary>
         public void Tick(float now)
         {
@@ -92,12 +104,14 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static bool Shows(BoardDeclutter level, EventRow row) =>
             level != BoardDeclutter.Minimal || row.Line.Class == EventClass.Comm || (row.Line.Class == EventClass.Kill && row.Line.Own);
 
-        /// <summary>The live rows <paramref name="level"/> shows, oldest first, into <paramref name="into"/>; how many.</summary>
+        /// <summary>The newest <see cref="ShownRows"/> live rows <paramref name="level"/> shows, oldest first, into <paramref name="into"/>; how many.</summary>
         public int Select(float now, BoardDeclutter level, EventRow[] into)
         {
-            int n = 0;
+            int total = 0;
+            for (int i = 0; i < count; i++) if (ring[i].Alive(now) && Shows(level, ring[i])) total++;
+            int skip = Math.Max(0, total - Math.Min(into.Length, ShownRows)), seen = 0, n = 0;
             for (int i = 0; i < count && n < into.Length; i++)
-                if (ring[i].Alive(now) && Shows(level, ring[i])) into[n++] = ring[i];
+                if (ring[i].Alive(now) && Shows(level, ring[i]) && seen++ >= skip) into[n++] = ring[i];
             return n;
         }
 
@@ -166,20 +180,24 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class EventLogLayout
     {
         /// <summary>A character cell of the 12 unit mono face (0.65 em).</summary>
-        public const float Advance = 7.8f;
-        public const float Pitch = 16f, Margin = 16f, TopGap = 12f, MinWidth = 280f, MaxWidth = 560f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
+        public const float Advance = 7.8f, LineAdvance = 9.1f;      // the stamp and class word are LABEL cells (12), the line BODY (14)
+        public const float Pitch = 20f, Margin = 16f, TopGap = 12f, MinWidth = 280f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
         public const int StampChars = 6, ClassChars = 5;
 
-        public static EventLogPlan Plan(float boxLeft, float boxTop, int rows, int widestChars, BoardDeclutter level)
+        /// <summary>The characters a line may have in a block <paramref name="maxWidth"/> wide (Full furniture: the narrowest line column): 55 at the 562 column.</summary>
+        public static int LineChars(float maxWidth) => Math.Max(8, (int)((maxWidth - (Indent + (StampChars + 1 + ClassChars + 2) * Advance) - RightPad) / LineAdvance));
+
+        /// <summary>The block is at most <paramref name="maxWidth"/> wide: the LOG zone's column on this screen (<c>HudZones.ColumnWidth</c>).</summary>
+        public static EventLogPlan Plan(float boxLeft, float boxTop, int rows, int widestChars, BoardDeclutter level, float maxWidth)
         {
             if (rows <= 0) return default;
             bool furniture = level == BoardDeclutter.Full;
-            var p = new EventLogPlan { Left = boxLeft + Margin, Top = boxTop + TopGap, Rows = Math.Min(rows, EventLog.Capacity), Furniture = furniture };
+            var p = new EventLogPlan { Left = boxLeft + Margin, Top = boxTop + TopGap, Rows = Math.Min(rows, EventLog.ShownRows), Furniture = furniture };
             p.StampX = p.Left + Indent;
             p.ClassX = furniture ? p.StampX + (StampChars + 1) * Advance : p.Left + LeanIndent;
             p.LineX = p.ClassX + (ClassChars + 2) * Advance;
-            float need = p.LineX - p.Left + widestChars * Advance + RightPad;
-            p.Width = Math.Min(MaxWidth, Math.Max(MinWidth, MathF.Ceiling(need / WidthStep) * WidthStep));
+            float need = p.LineX - p.Left + widestChars * LineAdvance + RightPad;
+            p.Width = Math.Min(maxWidth, Math.Max(MinWidth, MathF.Ceiling(need / WidthStep) * WidthStep));
             p.FirstRowY = p.Top + (furniture ? ShelfToRow : RowOffset);
             p.Height = p.FirstRowY - p.Top + Pitch * (p.Rows - 1) + RowOffset;
             return p;

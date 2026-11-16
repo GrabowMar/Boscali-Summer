@@ -17,11 +17,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<float> Shade { get; }
         public ConfigEntry<BoardDeclutter> Declutter { get; }
         public ConfigEntry<BoardScopeMode> ScopeMode { get; }
-        public ConfigEntry<int> PageCount { get; }
-        public ConfigEntry<BoardPage> Page1 { get; }
-        public ConfigEntry<BoardPage> Page2 { get; }
-        public ConfigEntry<BoardPage> Page3 { get; }
-        public ConfigEntry<BoardPage> Page4 { get; }
         public ConfigEntry<bool> ShowStores { get; }
         public ConfigEntry<bool> PageMissileCam { get; }
         public ConfigEntry<bool> ShowLamps { get; }
@@ -36,6 +31,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         public ConfigEntry<bool> ArMissiles { get; }
         public ConfigEntry<bool> ArBeacons { get; }
         public ConfigEntry<bool> HudFx { get; }
+        public ConfigEntry<bool> Brow { get; }
+        public ConfigEntry<bool> Arcs { get; }
+        public ConfigEntry<bool> Boot { get; }
+        public ConfigEntry<bool> Reactive { get; }
+        public ConfigEntry<float> VisorSound { get; }
+        public ConfigEntry<float> TextEdge { get; }
 
         public HudSettings(ConfigFile config)
         {
@@ -74,18 +75,11 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             }
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
-                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. Manual pages and their titles remain available at every level." + live);
+                "Full shows all enabled detail; Lean drops gauges, dark lamps and decoration; Minimal keeps threat lamps and critical supplementary status. The panels and their titles remain at every level." + live);
 
             ScopeMode = config.Bind(section, "ScopeMode", d.ScopeMode,
-                "Manual keeps the pages chosen for each slot; Off hides the tactical pages. Legacy Auto also means Manual." + live);
-            PageCount = config.Bind(section, "PageCount", d.PageCount,
-                new ConfigDescription("Full information pages shown, at most two across and two down (Wide puts two side by side, Stack one above the other). Each slot is selected manually; SYSTEMS always shows on its own." + live,
-                    new AcceptableValueRange<int>(1, BoardOptions.MaxPages)));
-            const string slot = " SYSTEMS is not a choice: it always shows in its own block.";
-            Page1 = config.Bind(section, "Page1", d.Page1, "Information page in the first slot; events never replace it." + slot + live);
-            Page2 = config.Bind(section, "Page2", d.Page2, "Information page in the second slot (PageCount at least 2)." + slot + live);
-            Page3 = config.Bind(section, "Page3", d.Page3, "Information page in the third slot (PageCount at least 3)." + slot + live);
-            Page4 = config.Bind(section, "Page4", d.Page4, "Information page in the fourth slot (PageCount 4)." + slot + live);
+                "Auto shows the board's panels while they have something to say: RWR (threats; one line while clear), FIRES (your weapons in flight, or a strike) and WING (your wingmen); Off hides them. Manual is retired and reads as Auto." + live);
+            if (ScopeMode.Value != BoardScopeMode.Off) ScopeMode.Value = BoardScopeMode.Auto;
             ShowStores = config.Bind(section, "ShowStores", d.ShowStores,
                 "Show stores, countermeasures and power. Off gives back the game's native panels." + live);
 
@@ -97,7 +91,7 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             ShowGauges = config.Bind(section, "ShowGauges", d.ShowGauges,
                 "Show the gauge row under the board's page area." + live);
             ShowTicker = config.Bind(section, "ShowTicker", d.ShowTicker,
-                "Show the notice line at the foot of the board." + live);
+                "Show the NOTICE line in the left column (under the cue stack). It needs MAP + FEED (Corners) on." + live);
             ShowSystems = config.Bind(section, "ShowSystems", d.ShowSystems,
                 "Show the SYSTEMS block (fire, engine and fuel strip) under the lamp line. Its warnings still reach the ticker and lamps when hidden." + live);
 
@@ -122,13 +116,26 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             HudFx = config.Bind(section, "HudFx", d.HudFx,
                 "HUD reactions: brackets spin in on a new target, and the HUD glitches for a moment when a hit damages the aircraft (a still band under REDUCED MOTION)." + live);
 
-            // Keep settings surfaces and the renderer in agreement after an invalid hand-edited page configuration.
-            BoardOptions saved = d;
-            Snapshot(ref saved);
-            Page1.Value = saved.Page1;
-            Page2.Value = saved.Page2;
-            Page3.Value = saved.Page3;
-            Page4.Value = saved.Page4;
+            Brow = config.Bind(section, "Brow", d.Brow,
+                "The visor's brow rail at the top centre (a curved scale with bearing marks for missiles inbound, radars on you, an ace on the hunt, the objective, the runway, the tanker and the landing zone, and a one-line status caption) and the visor frame: thin rim lines in the screen's corners, tick marks down its sides and a line of etched text along the bottom edge (helmet type, your callsign, aircraft and sortie time). Cockpit view only." + live);
+
+            Arcs = config.Bind(section, "Arcs", d.Arcs,
+                "Two segmented arcs hugging the reticle, fuel on the left and throttle on the right, in place of the game's plain ones (the game's own come back the moment this is off, or the view is not the cockpit). Cockpit view only." + live);
+
+            Boot = config.Bind(section, "Boot", d.Boot,
+                "The visor powers on when you take the seat: a short self-test of what the aircraft really reports, the visor's zones coming alive one after another, then VISOR ONLINE. The first aircraft of a session boots in full (about 3 seconds), a respawn only re-syncs (1 second). A real warning cuts it short at once. Cockpit view only." + live);
+
+            Reactive = config.Bind(section, "Reactive", d.Reactive,
+                "The visor reacts like a helmet display: the symbols shake and dim a little under heavy G, glitch for a moment when the aircraft is hit, stutter out under an EMP and re-sync after it, flash once when a warning comes up, and breathe faintly when all is calm. Off for a still HUD. Never runs with reduced motion on. Cockpit view only." + live);
+
+            VisorSound = config.Bind(section, "VisorSound", d.VisorSound,
+                new ConfigDescription("Level of the helmet visor's own sounds: the power-up whine and self-test ticks, the glitch crackle on a hit, the EMP stutter, a sharp blip when a warning comes up, the page wipe, the brow's new-contact tick, the radial menu and the radio YES/NO. They keep quiet under a real alarm or voice. 0 is silent; the interface volume still applies." + live,
+                    new AcceptableValueRange<float>(0f, 1f)));
+
+            TextEdge = config.Bind(section, "TextEdge", d.TextEdge,
+                new ConfigDescription("Width of the hair-thin dark edge round every letter of the mod's HUD text, so small words stay sharp on bright sky and cloud; 0 draws none." + live,
+                    new AcceptableValueRange<float>(0f, BoardOptions.TextEdgeMax)));
+            BoscaliSummer.Core.Game.VanillaHudStyle.SetEdge(TextEdge.Value);
         }
 
         /// <summary>Fill <paramref name="into"/> from the config entries, kept inside their ranges. Reads fields only: it allocates nothing.</summary>
@@ -140,11 +147,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.Shade = Shade.Value;
             into.Declutter = Declutter.Value;
             into.ScopeMode = ScopeMode.Value;
-            into.PageCount = PageCount.Value;
-            into.Page1 = Page1.Value;
-            into.Page2 = Page2.Value;
-            into.Page3 = Page3.Value;
-            into.Page4 = Page4.Value;
             into.ShowStores = ShowStores.Value;
             into.PageMissileCam = PageMissileCam.Value;
             into.ShowLamps = ShowLamps.Value;
@@ -159,6 +161,12 @@ namespace BoscaliSummer.Modules.Hud.Configuration
             into.ArMissiles = ArMissiles.Value;
             into.ArBeacons = ArBeacons.Value;
             into.HudFx = HudFx.Value;
+            into.Brow = Brow.Value;
+            into.Arcs = Arcs.Value;
+            into.Boot = Boot.Value;
+            into.Reactive = Reactive.Value;
+            into.VisorSound = VisorSound.Value;
+            into.TextEdge = TextEdge.Value;
             into.Sanitize();
         }
 
@@ -169,11 +177,6 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         float ITacBoardSettings.Shade { get => Shade.Value; set => Shade.Value = value; }
         BoardDeclutter ITacBoardSettings.Declutter { get => Declutter.Value; set => Declutter.Value = value; }
         BoardScopeMode ITacBoardSettings.ScopeMode { get => ScopeMode.Value; set => ScopeMode.Value = value; }
-        int ITacBoardSettings.PageCount { get => PageCount.Value; set => PageCount.Value = value; }
-        BoardPage ITacBoardSettings.Page1 { get => Page1.Value; set => Page1.Value = value; }
-        BoardPage ITacBoardSettings.Page2 { get => Page2.Value; set => Page2.Value = value; }
-        BoardPage ITacBoardSettings.Page3 { get => Page3.Value; set => Page3.Value = value; }
-        BoardPage ITacBoardSettings.Page4 { get => Page4.Value; set => Page4.Value = value; }
         bool ITacBoardSettings.ShowStores { get => ShowStores.Value; set => ShowStores.Value = value; }
         bool ITacBoardSettings.PageMissileCam { get => PageMissileCam.Value; set => PageMissileCam.Value = value; }
         bool ITacBoardSettings.ShowLamps { get => ShowLamps.Value; set => ShowLamps.Value = value; }
@@ -188,16 +191,23 @@ namespace BoscaliSummer.Modules.Hud.Configuration
         bool ITacBoardSettings.ArMissiles { get => ArMissiles.Value; set => ArMissiles.Value = value; }
         bool ITacBoardSettings.ArBeacons { get => ArBeacons.Value; set => ArBeacons.Value = value; }
         bool ITacBoardSettings.HudFx { get => HudFx.Value; set => HudFx.Value = value; }
+        bool ITacBoardSettings.Brow { get => Brow.Value; set => Brow.Value = value; }
+        bool ITacBoardSettings.Arcs { get => Arcs.Value; set => Arcs.Value = value; }
+        bool ITacBoardSettings.Boot { get => Boot.Value; set => Boot.Value = value; }
+        bool ITacBoardSettings.Reactive { get => Reactive.Value; set => Reactive.Value = value; }
+        float ITacBoardSettings.VisorSound { get => VisorSound.Value; set => VisorSound.Value = value; }
+        float ITacBoardSettings.TextEdge { get => TextEdge.Value; set => TextEdge.Value = value; }
 
         /// <summary>Every entry back to the default it was bound with (the <see cref="BoardOptions.Default"/> values). The file is saved once, not once per entry.</summary>
         void ITacBoardSettings.ResetToDefaults()
         {
             ConfigEntryBase[] all =
             {
-                Enabled, Layout, Scale, Shade, Declutter, ScopeMode, PageCount, Page1, Page2, Page3, Page4, ShowStores,
+                Enabled, Layout, Scale, Shade, Declutter, ScopeMode, ShowStores,
                 PageMissileCam,
                 ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts,
                 ArPath, ArDomes, ArMissiles, ArBeacons, HudFx,
+                ShowLamps, ShowGauges, ShowTicker, ShowSystems, Sway, Corners, CentreAlerts, Brow, Arcs, Boot, Reactive, VisorSound, TextEdge,
             };
             ConfigFile file = Enabled.ConfigFile;
             bool save = file.SaveOnConfigSet;

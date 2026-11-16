@@ -8,24 +8,26 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 {
     /// <summary>
     /// The TAC BOARD's options on the HUD tab, written only through <see cref="ITacBoardSettings"/> (the Hud module owns the board and its config; this console never
-    /// imports it). Three groups: the board itself, its major parts and the extras. Its manual page slots are the C-menu's (PAGES rows in MenuCatalog), not this console's. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
+    /// imports it). Three groups: the board itself, its major parts and the extras. SCOPE (ON, OFF) is also the C-menu's HUD row. Client-local: the board takes a change on its next 10 Hz tick, so a pilot sees it
     /// in flight and there is no preview here. Every control but RESET and the kill feed and map restyle (which stay when the board is off) waits on the board's own switch, as the immersion page waits on its master.
     /// </summary>
     internal sealed partial class SettingsMfdPanel
     {
         // Index = the enum's value, so the controls write a choice's index straight to the contract.
-        private static readonly string[] BoardLayoutNames = { "WIDE", "STACK" };
-        private static readonly string[] BoardLayoutBriefs =
+        // SCOPE is listed ON, OFF (the contract enum is Manual, Off, Auto; Manual is retired and reads as Auto): ScopeModes maps a segment back to the enum.
+        private static readonly string[] BoardScopeNames = { "ON", "OFF" };
+        private static readonly BoardScopeMode[] ScopeModes = { BoardScopeMode.Auto, BoardScopeMode.Off };
+        private static readonly string[] BoardScopeBriefs =
         {
-            "WIDE: spreads the board along the top edge of the screen.",
-            "STACK: the classic narrow column.",
+            "ON: RWR, FIRES and WING panels appear while they have something to show.",
+            "OFF: No panels; stores and systems only.",
         };
         private static readonly string[] BoardDeclutterNames = { "FULL", "LEAN", "MIN" };
         private static readonly string[] BoardDeclutterBriefs =
         {
             "FULL: everything the switches below allow.",
             "LEAN: no gauge row, dark lamps or captions.",
-            "MIN: only lock, spike and missile lamps; your selected pages stay visible.",
+            "MIN: only lock, spike and missile lamps; the panels stay visible.",
         };
         private void BuildTacBoardRows(AvFlow flow, int page)
         {
@@ -44,8 +46,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             ToggleCell(flow, page, "TAC BOARD",
                 "Off hides the board and gives back the game's own weapon, countermeasure and power panels.",
                 () => board.Enabled, v => board.Enabled = v);
-            BoardStrip(flow, page, "LAYOUT", BoardLayoutNames, BoardLayoutBriefs,
-                () => (int)board.Layout, i => board.Layout = (BoardLayout)i, on, off);
+            BoardStrip(flow, page, "SCOPE", BoardScopeNames, BoardScopeBriefs,
+                () => Array.IndexOf(ScopeModes, board.ScopeMode),
+                i => board.ScopeMode = ScopeModes[i], on, off);
             BoardStrip(flow, page, "DECLUTTER", BoardDeclutterNames, BoardDeclutterBriefs,
                 () => (int)board.Declutter, i => board.Declutter = (BoardDeclutter)i, on, off);
 
@@ -54,16 +57,22 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 "How big the whole board is.", on, off);
             BoardRing(flow, look, page, "BACKGROUNDS", () => board.Shade, v => board.Shade = v, 0f, 1f, .05f, v => AvNum.Percent(v),
                 "The one soft backdrop behind every block of the HUD: the board, the left column, the map, the wing strip and the centre alerts. 0% draws none.", () => true, off);
+            var edge = flow.Add(new SetRingRow(flow.Content));
+            BoardRing(flow, edge, page, "TEXT EDGE", () => board.TextEdge, v => board.TextEdge = v, 0f, 0.25f, .01f, v => v < .005f ? "OFF" : v.ToString("0.00"),
+                "A hair-thin dark edge round every letter of the HUD so small words stay sharp on bright sky. OFF draws none.", () => true, off);
+
+            var snd = flow.Add(new SetRingRow(flow.Content));
+            BoardRing(flow, snd, page, "VISOR SOUND", () => board.VisorSound, v => board.VisorSound = v, 0f, 1f, .05f, v => v < .025f ? "OFF" : AvNum.Percent(v),
+                "The helmet's own sounds: power-up, self-test, glitch on a hit, EMP stutter, warning blip, page wipe, brow ticks, radial menu and radio YES/NO. Quiet under a real alarm or voice. OFF is silent.", () => true, off);
 
             flow.Section(AvIcon.ListDetails, "TAC BOARD PARTS", null);
             ToggleCell(flow, page, "STORES AND POWER", "The weapon, countermeasure and power readouts.",
                 () => board.ShowStores, v => board.ShowStores = v, on, off);
-            ToggleCell(flow, page, "TACTICAL PAGES", "Your manually selected full pages. Events never change the selection.",
-                () => board.ScopeMode != BoardScopeMode.Off, v => board.ScopeMode = v ? BoardScopeMode.Manual : BoardScopeMode.Off, on, off);
+
             ToggleCell(flow, page, "LAMPS AND GAUGES", "The lamp line and the gauge row. DECLUTTER still sets their detail.",
                 () => board.ShowLamps || board.ShowGauges,
                 v => { board.ShowLamps = v; board.ShowGauges = v; }, on, off);
-            ToggleCell(flow, page, "NOTICES", "The notice line at the foot of the board.",
+            ToggleCell(flow, page, "NOTICES", "The NOTICE line in the left column. It needs MAP AND FEED on.",
                 () => board.ShowTicker, v => board.ShowTicker = v, on, off);
             ToggleCell(flow, page, "SYSTEMS BLOCK", "The fire, engine and fuel strip under the lamps. Its warnings still post when hidden.",
                 () => board.ShowSystems, v => board.ShowSystems = v, on, off);
@@ -71,6 +80,14 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 () => board.Corners, v => board.Corners = v);
             ToggleCell(flow, page, "CENTRE ALERTS", "MISSILE / PULL UP / LOCKED banner at the top centre, missile arrows round the reticle, HIT and DESTROYED calls. Stays on with the board off.",
                 () => board.CentreAlerts, v => board.CentreAlerts = v);
+            ToggleCell(flow, page, "VISOR FRAME", "The curved brow rail at the top centre with bearing marks, and the visor's rim: corner lines, side ticks and the etched line of identity along the bottom edge. Cockpit view. Stays on with the board off.",
+                () => board.Brow, v => board.Brow = v);
+            ToggleCell(flow, page, "VISOR POWER-ON", "The visor boots when you take the seat: a self-test of what the aircraft really reports, then the zones come alive one by one. A respawn only re-syncs. A real warning cuts it short. Cockpit view.",
+                () => board.Boot, v => board.Boot = v);
+            ToggleCell(flow, page, "VISOR REACTIONS", "The visor reacts like a helmet display: symbols shake and dim under heavy G, glitch when you are hit, stutter out under an EMP, flash once for a new warning, breathe faintly when calm. Never with reduced motion. Cockpit view.",
+                () => board.Reactive, v => board.Reactive = v);
+            ToggleCell(flow, page, "FUEL AND THROTTLE ARCS", "Two segmented arcs hugging the reticle in place of the game's plain fuel and throttle arcs. Cockpit view. Stays on with the board off.",
+                () => board.Arcs, v => board.Arcs = v);
 
             flow.Section(AvIcon.Target, "AR HELMET LAYER", "DRAWN ON THE WORLD · ONLY WHILE IT MATTERS");
             ToggleCell(flow, page, "FLIGHT PATH", "Where you will be over the next 8 s during a hard pull; red with TERRAIN and the seconds left where it meets the ground.",
@@ -97,7 +114,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             reset.Help = "Put every TAC BOARD option back to its default. Nothing else changes.";
         }
 
-        /// <summary>A labelled choice strip (LAYOUT, DECLUTTER): one segment per name, the latched one read from <paramref name="get"/>.</summary>
+        /// <summary>A labelled choice strip (SCOPE, DECLUTTER): one segment per name, the latched one read from <paramref name="get"/>.</summary>
         private AvSegmented BoardStrip(AvFlow flow, int page, string label, string[] names, string[] briefs, Func<int> get, Action<int> set,
             Func<bool> enabled, Func<string> reason)
         {

@@ -31,10 +31,15 @@ namespace BoscaliSummer.Modules.Immersion.Audio
         {
             tone = Make(host);
             voice = Make(host);
+            BoscaliSummer.Core.Fx.VisorSound.AddVoiceProbe(Sounding);
         }
+
+        /// <summary>A warning voice or tone is sounding: the visor's chatter keeps quiet under it (Core/Fx/VisorSound).</summary>
+        private bool Sounding() => (voice != null && voice.isPlaying) || (tone != null && tone.isPlaying);
 
         internal void Release()
         {
+            BoscaliSummer.Core.Fx.VisorSound.RemoveVoiceProbe(Sounding);
             if (tone != null) Object.Destroy(tone);
             if (voice != null) Object.Destroy(voice);
             tone = voice = null;

@@ -67,7 +67,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class ShotRules
     {
         /// <summary>
-        /// <c>WeaponInfo.blastDamage</c> below this is a decoy or a utility munition, not a delivery: MALD-X/J (1), ALE-X (2),
+        /// The blast (the missile's own <c>GetYield()</c>; <c>WeaponInfo.blastDamage</c> reads 0 for every missile on the 0.34.6 build) below this is a decoy or a utility munition, not a delivery: MALD-X/J (1), ALE-X (2),
         /// AEGIS darts (0.2) and GLAIVE gun pods (0) never earn a pip.
         /// ponytail: a damage threshold stands in for a flag the game does not have; upgrade to an explicit per-weapon flag.
         /// </summary>

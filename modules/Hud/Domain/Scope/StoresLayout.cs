@@ -1,4 +1,5 @@
 using System;
+using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -23,10 +24,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static float ExpShelf(float w) => w - ShelfShort;
 
         // ---- HERO (LAYOUT.md 3.1)
-        public const float NumeralX = 1f, NumeralY = 39f, NumeralSizeMax = 52f, NumeralSizeMin = 24f, NumeralGap = 8f;
+        public const float NumeralX = 1f, NumeralY = 39f, NumeralGap = 8f;
         /// <summary>"/500" beside the numeral: 14 regular, 4 right of it, its middle 9 under the numeral's.</summary>
-        public const float MaxSize = 14f, MaxGap = 4f, MaxDy = 9f;
-        public const float ArmMarkerX = 156f, ArmMarkerSize = 6f, ArmWordX = 168f, ArmY = 23f, ArmSize = 14f;
+        public const float MaxSize = 12f, MaxGap = 4f, MaxDy = 9f;
+        public const float ArmMarkerX = 156f, ArmMarkerSize = 6f, ArmWordX = 168f, ArmY = 23f, ArmSize = HudType.Value;
         /// <summary>The tag column (LINK, TRT AUTO): from <see cref="ArmMarkerX"/>, the first row 41 down, rows 18 apart, tags 10 apart.</summary>
         public const float TagX = 156f, TagY = 41f, TagPitch = 18f, TagGap = 10f;
         public const float NameX = 0f, NameSize = 13f, WordGap = 10f, WordSize = 12f;
@@ -51,11 +52,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
             ? new HeroPlan(76f, 76f, 240f, 18f, 200f, 56f, 100f, w - 2f, w - 12f, 6f, w - ShelfShort)
             : new HeroPlan(68f, 116f, 0f, 76f, w, 56f, 144f, w - 2f, w - 6f, ArmY, w - ShelfShort);
 
-        /// <summary>The rounds numeral's size: 52, made smaller (never under 24) when the numeral and its "/max" would not end <see cref="NumeralGap"/> short of the arm column.</summary>
+        /// <summary>The rounds numeral: HERO (44) when it and its "/max" (LABEL) end <see cref="NumeralGap"/> short of the arm column, else EMPHASIS (22). The sizes are steps of the type scale; the board draws them at the boost.</summary>
         public static float NumeralSize(int digits, int maxDigits)
         {
-            float slash = maxDigits > 0 ? MaxGap + (1 + maxDigits) * Advance * MaxSize : 0f, room = ArmMarkerX - NumeralX - NumeralGap - slash;
-            return Math.Max(NumeralSizeMin, Math.Min(NumeralSizeMax, (float)Math.Floor(room / (Math.Max(1, digits) * Advance))));
+            float slash = maxDigits > 0 ? MaxGap + (1 + maxDigits) * Advance * HudType.Label * HudType.BoardBoost : 0f, room = ArmMarkerX - NumeralX - NumeralGap - slash;
+            return Math.Max(1, digits) * Advance * HudType.Hero * HudType.BoardBoost <= room ? HudType.Hero : HudType.Emphasis;
         }
 
         /// <summary>The x of the next tag in a column <paramref name="column"/> wide, <paramref name="used"/> of its current row taken (0: the row is empty): packed after the last, or at the start of the next row when it would not fit (<paramref name="wrap"/>).</summary>
