@@ -60,6 +60,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             pages = null;
             Array.Clear(selectedPages, 0, selectedPages.Length);
+            wingPainted = false;
             hasBoard = false;
             headerFault = false;
             tickerWords = tickerSourceText = null;
@@ -161,16 +162,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public RectF KeepClearBox => root != null && root.gameObject.activeInHierarchy ? BoardBox : default;
 
         /// <summary>The board is drawn (its root is up: switched off, stale and torn down all take it down) and the WING page holds one of the laid-out slots. <c>IHudBoard.ShowsWing</c>.</summary>
-        public bool ShowsWing
-        {
-            get
-            {
-                if (root == null || !root.gameObject.activeInHierarchy) return false;
-                for (int i = 0; i < selectedCount; i++)
-                    if (selectedPages[i] != null && selectedPages[i].Id == ScopePage.Wing) return true;
-                return false;
-            }
-        }
+        public bool ShowsWing => wingPainted && root != null && root.gameObject.activeInHierarchy;
+
+        /// <summary>The last <see cref="Repaint"/> painted the WING page in a visible slot (cleared by every repaint and by hiding or destroying the board; an Animate that skips the repaint leaves the last paint, and this, standing).</summary>
+        private bool wingPainted;
 
         /// <summary>The board's box in device pixels from the screen's top-left corner (y down): false while the board is not drawn. <c>IHudBoard.TryGetScreenBox</c>.</summary>
         public bool TryGetScreenBox(out float left, out float top, out float right, out float bottom)
@@ -269,6 +264,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Repaint(bool shellToo)
         {
+            wingPainted = false;
             bool scopeOn = Options.ScopeMode != BoardScopeMode.Off;
             // A change of the slots (or their count) wipes the pages in; they are all full pages, so the height only moves when the pages come or go.
             int signature = 0;

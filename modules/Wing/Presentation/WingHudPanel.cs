@@ -66,7 +66,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
         private int ladderVersion = -1;
         private bool ladderShown;
         private int shownMembers;
-        private bool boardShowsWing;
+        private bool boardShowsWing, shownBoardWing;
 
         public void Activate() => Reset();
 
@@ -100,10 +100,11 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             }
             if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
             if (root.anchoredPosition != Anchor) root.anchoredPosition = Anchor;
-            if (Time.unscaledTime < nextRefresh && ladderVersion == WingCallLadder.Version && ladderShown == WingChordInput.Held) return;
+            if (Time.unscaledTime < nextRefresh && ladderVersion == WingCallLadder.Version && ladderShown == WingChordInput.Held && shownBoardWing == boardShowsWing) return;
             nextRefresh = Time.unscaledTime + 0.2f;
             ladderVersion = WingCallLadder.Version;
             ladderShown = WingChordInput.Held;
+            shownBoardWing = boardShowsWing;
             if (ladderShown) RefreshLadder();
             else Refresh(wing, ap);
         }

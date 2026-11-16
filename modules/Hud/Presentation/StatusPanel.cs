@@ -277,6 +277,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             corner?.Release();
             BoardBox = default;
+            wingPainted = false;
             ClearHeader();
             if (root != null && root.gameObject.activeSelf) root.gameObject.SetActive(false);
         }

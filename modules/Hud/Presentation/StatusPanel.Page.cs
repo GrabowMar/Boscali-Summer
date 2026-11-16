@@ -29,6 +29,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopePageBase current = selectedPages[i];
                 bool content = pageLive[(int)current.Id];
                 PaintPage(pal, r, pageSurfaces[i], current, content, content && current.HasStrip, flashOn);
+                if (current.Id == ScopePage.Wing) wingPainted = true;
             }
         }
 
