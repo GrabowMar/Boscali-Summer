@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// to VISOR ONLINE and the callsign, and the ALIGN bracket that converges on the boresight and blinks off. The other zones (rim, brow, left column, board, arcs) ask it how far they have come alive
     /// (<see cref="Progress"/>, <see cref="Alpha"/>); it draws none of them. Purely visual: it takes no input and hides nothing of the game's. The owner cuts it short (<see cref="Step"/>) when it is not allowed or a real warning is up.
     /// Built like <see cref="BrowHud"/>: a holder under the native HUD canvas scaled by canvas height / 1080, one quad mesh and pooled <see cref="ScopeText"/> labels; once the boot is over the holder is hidden and costs nothing.
-    /// The self-test block stands LEFT of the screen centre (x 330..580, y 470..590), clear of the reticle, the arcs and the cockpit's dashboard; only the sweep line and the ALIGN bracket cross the middle, for a moment.
+    /// The self-test block is centred just under the flight symbology (x about 796..1124, y 586..770 of a 1080 screen): under the reticle and the speed and altitude numbers, between the arcs' captions, over the cockpit's coaming; it is transient (1.5 s, then VISOR ONLINE in its place) and only the sweep line and the ALIGN bracket cross the middle.
     /// </summary>
     internal sealed class VisorBootHud
     {
