@@ -36,7 +36,7 @@ namespace BoscaliSummer.Core.Ui
 
         // The look, one set for every piece in the lane and the centre layer: strokes, corner brackets, the hazard chevrons, shade, type sizes.
         public const float Stroke = 1.5f, Arm = 8f, ChevronSize = 12f, ChevronStroke = 2f, ChevronStep = 12f, ShadeMargin = 16f;
-        public const float WordPt = 28f, NamePt = 22f, DetailPt = 14f, LabelPt = 12f;
+        public const float WordPt = 28f, NamePt = 22f, DetailPt = 14f, LabelPt = 12f, LeadPt = 16f;
         /// <summary>Letter spacing: the big words wide, the reading lines close.</summary>
         public const float WordSpacing = 10f, LineSpacing = 2f;
 

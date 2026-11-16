@@ -110,10 +110,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             detail = Text(banner, "Detail", TopCentre.DetailPt, TopCentre.LineSpacing, bold: true);
             detail.overflowMode = TextOverflowModes.Ellipsis;
             callIcon = Icon(banner, TopCentre.DetailPt + 4f);
-            lead = Text(banner, "Lead", TopCentre.LabelPt, TopCentre.LineSpacing, bold: true);
+            // The left detail ("BRG 095 · ARH") reads at the board's small-value size (16 pt) in full tone: 13 characters stay inside the 312 lane next to the pips and the call.
+            lead = Text(banner, "Lead", TopCentre.LeadPt, TopCentre.LineSpacing, bold: true);
             lead.alignment = TextAlignmentOptions.MidlineLeft;
             lead.rectTransform.pivot = new Vector2(0f, 0.5f);
-            lead.rectTransform.sizeDelta = new Vector2(150f, TopCentre.LabelPt * 1.5f);
+            lead.rectTransform.sizeDelta = new Vector2(190f, TopCentre.LeadPt * 1.5f);
 
             callout = Holder(root, "Callout");
             calloutGroup = callout.gameObject.AddComponent<CanvasGroup>();
@@ -286,7 +287,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Color call = kind == AlertKind.Missile ? palette.Warning : tone;
             detail.color = call.WithAlpha(0.95f);
             callIcon.color = detail.color;
-            lead.color = tone;
+            lead.color = kind == AlertKind.Missile ? palette.Warning : tone;      // red over sky read faint: the left detail takes the call's amber, full
 
             // The hazard bar draws out from the middle when the alert comes up (the lane's enter time); a warning's stripes march (6 steps a second), a caution's stand still.
             float open = calm ? 1f : Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((now - board.Since(kind)) / TopCentre.EnterS)), reach = half * open;
