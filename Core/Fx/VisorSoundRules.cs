@@ -2,7 +2,7 @@ using System;
 
 namespace BoscaliSummer.Core.Fx
 {
-    /// <summary>The HMD-9 visor's sounds (clips Core/Fx/Sfx/visor-*.wav, made by tools/Build-VisorSounds.py).</summary>
+    /// <summary>The HMD-9 visor's stable cue IDs; recorded catalogue clips keep these names across asset revisions.</summary>
     internal enum VisorClip : byte
     {
         PowerUp, Resync, Tick, Ok, Fault, Align, Online, Glitch, Emp, Warn, Wipe, Caret,

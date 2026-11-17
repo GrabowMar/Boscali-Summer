@@ -238,6 +238,13 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             inputSettled = !ManualInput();
             failureReported = false;
             Report(padLanding ? "Autopilot: landing at " + airbase.name : "Autopilot: " + runwayUsage.GetName());
+            HoldSkylarkFans(true);
+        }
+
+        // A Skylark's own fan modes stand aside while the landing flies its fans and auto-hover.
+        private static void HoldSkylarkFans(bool held)
+        {
+            if (BoscaliSummer.Core.Services.ModuleServices.TryGet(out ISkylarkControl skylark)) skylark.AutopilotOwnsFans = held;
         }
 
         private void Fail(string reason)
@@ -686,6 +693,7 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             pad = null;
             runwayUsage = default;
             phase = Phase.None;
+            HoldSkylarkFans(false);
             adjustedLandingSpeed = 0f;
             hudTarget = 0f;
             alignedTime = 0f;

@@ -37,6 +37,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private static readonly int OffsetId = Shader.PropertyToID("_CloudWorldOffset");
         private static readonly int ForwardId = Shader.PropertyToID("_CloudCameraForward");
         private static readonly int CameraPosId = Shader.PropertyToID("_CloudCameraPos");
+        private static readonly int CameraGlobalId = Shader.PropertyToID("_CloudCameraGlobal");
         private static readonly int FogBankId = Shader.PropertyToID("_FogBank");
         private static readonly int EyeId = Shader.PropertyToID("_CloudEye");
         private static readonly int HeroAId = Shader.PropertyToID("_HeroA");
@@ -303,6 +304,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             Vector3 renderedGlobalPosition = origin + worldOffset;
             Shader.SetGlobalMatrix(FrustumId, m);
             Shader.SetGlobalVector(CameraPosId, origin);
+            Shader.SetGlobalVector(CameraGlobalId, renderedGlobalPosition);
             if (material != null)
             {
                 material.SetVector(OffsetId, worldOffset);

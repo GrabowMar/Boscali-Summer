@@ -249,6 +249,24 @@ Shader "Boscali/FlightCloudComposite"
             float4 _CloudChecker;
             float _CloudHistoryValid;
             float _CloudFlashChange;
+            float _CloudBlastChange;
+            float _CloudBlastCount;
+            float3 _CloudCameraGlobal;
+            float4 _CloudBlastA[4], _CloudBlastB[4];
+
+            float BlastRayChange(float3 ray, float sceneDistance)
+            {
+                if (_CloudBlastChange < 0.5) return 0.0;
+                [loop] for (int index = 0; index < min(4, (int)_CloudBlastCount); index++)
+                {
+                    float3 delta = _CloudBlastA[index].xyz - _CloudCameraGlobal;
+                    float along = clamp(dot(delta, ray), 0.0, sceneDistance);
+                    float3 closest = delta - ray * along;
+                    float reach = _CloudBlastA[index].w + _CloudBlastB[index].y;
+                    if (dot(closest, closest) < reach * reach) return 1.0;
+                }
+                return 0.0;
+            }
 
             struct rv2f { float4 pos : SV_POSITION; };
             struct ResolveOut
@@ -318,6 +336,7 @@ Shader "Boscali/FlightCloudComposite"
                 float sceneDepth = LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(uv, 0, 0)).r);
                 float3 view = ViewRay(uv);
                 float viewLength = length(view);
+                float blastMotion = BlastRayChange(view / viewLength, sceneDepth * viewLength);
 
                 bool fresh = all(texel - block * 2.0 == _CloudChecker.xy);
                 float4 freshVal = tex2Dlod(_CloudQuarterColour, float4(quv, 0, 0));
@@ -367,7 +386,7 @@ Shader "Boscali/FlightCloudComposite"
                     0.7 * smoothstep(15000.0, 45000.0, freshData.g));
                 bool historyUsable = _CloudHistoryValid > 0.5 && _CloudChecker.w > 0.5;
                 // Frozen sky: the march is deterministic per texel, so with the camera at rest every texel is final once marched.
-                if (historyUsable && _CloudCamDelta.w < 0.001 && dot(_CloudCamDelta.xyz, _CloudCamDelta.xyz) < 1e-4)
+                if (historyUsable && blastMotion < 0.5 && _CloudCamDelta.w < 0.001 && dot(_CloudCamDelta.xyz, _CloudCamDelta.xyz) < 1e-4)
                 {
                     if (fresh) return Resolved(stableFresh, sceneDepth, freshData.g / viewLength);
                     ResolveOut parked;
@@ -427,6 +446,7 @@ Shader "Boscali/FlightCloudComposite"
                 motion = max(motion, 0.2 * saturate(length((previous - uv) * _CloudLowResSize.xy)));
                 // Fresh neighbours expose a local flash promptly without clearing sky history.
                 motion = max(motion, saturate(_CloudFlashChange * 12.0));
+                motion = max(motion, blastMotion);
                 if (occludedHistory) motion = max(motion, 0.5);
                 // The clamp box comes from the nine quarter-size texels marched this frame, one of every four half-size texels. A cloud thinner than that (a far layer seen edge-on) is
                 // inside the box only on the frames whose marched row happens to cross it: clamped hard, it blinked on and off along the horizon. A sky that barely moves on screen

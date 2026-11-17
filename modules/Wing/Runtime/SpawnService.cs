@@ -164,8 +164,22 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             }
         }
 
+        /// <summary>A VTOL leader's default escort: the first fixed-wing type in the catalogue.</summary>
+        private static AircraftDefinition DefaultEscort()
+        {
+            Encyclopedia encyclopedia = Encyclopedia.i;
+            if (encyclopedia == null) return null;
+            foreach (AircraftDefinition d in encyclopedia.aircraft)
+            {
+                Aircraft a = d != null && d.unitPrefab != null && d.jsonKey != "UFO" ? d.unitPrefab.GetComponent<Aircraft>() : null;
+                Pilot pilot = a != null && a.pilots != null && a.pilots.Length > 0 ? a.pilots[0] : null;
+                if (pilot != null && pilot.pilotType != Pilot.PilotType.VTOL && pilot.pilotType != Pilot.PilotType.Helo) return d;
+            }
+            return null;
+        }
+
         /// <summary>Air-start up to <paramref name="n"/> wingmen of <paramref name="definition"/> (null: the player's
-        /// type, or the leader's when there is no player aircraft). Returns how many were spawned.</summary>
+        /// type, or the leader's when there is no player aircraft; a VTOL's default escort). Returns how many were spawned.</summary>
         public int Call(int n, AircraftDefinition definition)
         {
             WingService wing = WingService.Instance;
@@ -186,10 +200,20 @@ namespace BoscaliSummer.Modules.Wing.Runtime
                 WingToast.Show("Only the host can call wingmen");
                 return 0;
             }
-            if (caller.radarAlt < MinLeaderAgl)
+            // A leader that can hover (a VTOL, or any vectored-thrust lander such as the VT-7 or the Skylark) calls from a hover, so it only has to clear the ground.
+            bool hovers = ProfileReader.IsVtol(caller) || caller.GetComponent<DuctedThrustSystem>() != null;
+            float minAgl = hovers ? 30f : MinLeaderAgl;
+            if (caller.radarAlt < minAgl)
             {
-                WingToast.Show($"Climb above {MinLeaderAgl:0} m first");
+                WingToast.Show($"Climb above {minAgl:0} m first");
                 return 0;
+            }
+            if (definition == null && hovers)
+            {
+                // A hovering leader's own type cannot fly formation (no AI state for a VTOL; AI-flown vectored-thrust air-starts beside a
+                // hover fell out of the sky in sims): its default escort is the first fixed-wing type in the catalogue.
+                definition = DefaultEscort();
+                if (definition != null) WingToast.Show("Escort: " + definition.unitName);
             }
             definition = definition ?? caller.definition;
             GameObject prefab = definition != null ? definition.unitPrefab : null;

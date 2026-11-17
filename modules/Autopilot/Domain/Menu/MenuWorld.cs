@@ -180,6 +180,10 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
         public bool PerksAvailable;
         public List<WorldPerk> Perks = new List<WorldPerk>();
         public bool SkywellCarried, SkywellDeployed;
+        /// <summary>The VS-4 Skylark's own page: drive 0 AUTO/1 EV/2 HYBRID, vector 0 AUTO/1 DRONE/2 PLANE/3 MANUAL, C2 mast out.</summary>
+        public bool SkylarkActive, SkylarkMast;
+        public int SkylarkDrive, SkylarkVector;
+        public string SkylarkBattery = "";
         public string SkywellStock = "";
         public bool PitAvailable;
         public byte PitMode;

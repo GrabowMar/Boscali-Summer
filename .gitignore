@@ -24,6 +24,7 @@ TestResults/
 !/tools/tests/Gamemodes.Tests/
 !/tools/tests/Gamemodes.MissionTests/
 !/tools/tests/Spooktober.Tests/
+!/tools/tests/Vanguard.Tests/
 
 # ---------------------------------------------------------------------------------------------
 # Documentation: Markdown is local-only (specs, plans, agent notes); only these are published

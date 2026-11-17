@@ -16,11 +16,13 @@ namespace BoscaliSummer.Modules.Skylark
     internal static class SkylarkTemplate
     {
         internal const string Key = "BS_Skylark";
-        internal const string GunKey = "BS_Skylark_20mm";
         internal const int PrefabHash = 0x42534B31;
-        internal const float EmptyMass = 2600f, FuelCapacity = 850f, MaxThrust = 46000f;
+        internal const float EmptyMass = 3100f, FuelCapacity = 1000f, MaxThrust = 62000f;
+        // Fan arm length (Duct_FL to Duct_RL) of the first art generation: every authored size below scales with measured/reference.
+        private const float ReferenceArm = 5.7611f;
+        /// <summary>How much larger the loaded art is than the first generation (1 for the old bundle).</summary>
+        internal static float Scale { get; private set; } = 1f;
         internal static AircraftDefinition Definition { get; private set; }
-        private static WeaponMount gunMount;
         internal static string LastError { get; private set; }
         private static GameObject holder;
         private static AssetBundle bundle;
@@ -34,6 +36,12 @@ namespace BoscaliSummer.Modules.Skylark
             FieldInfo f = AccessTools.Field(o.GetType(), field);
             f.SetValue(o, Array.CreateInstance(f.FieldType.GetElementType(), 0));
         }
+
+        private static readonly string[] Optional =
+        {
+            "GunTurret_Yaw", "GunTurret_Pitch", "GunBarrel", "GunMuzzle", "GunGlow", "GunCoil0", "GunCoil1", "GunCoil2", "GunCoil3", "GunCoil4", "GunCoil5", "Hardpoint_L3", "Hardpoint_R3", "Hardpoint_C", "Intake_Door_L", "Intake_Door_R",
+            "Exhaust_Shutter_L", "Exhaust_Shutter_R", "C2_Mast", "Strobe_Top", "Strobe_Bottom"
+        };
 
         internal static void Ensure(Encyclopedia encyclopedia)
         {
@@ -49,12 +57,13 @@ namespace BoscaliSummer.Modules.Skylark
                 encyclopedia.IndexLookup.Add(Definition);
                 Encyclopedia.Lookup.Add(Key, Definition);
                 Set(encyclopedia, "aircraftAndVehiclesCache", null);
-                if (!encyclopedia.weaponMounts.Contains(gunMount)) encyclopedia.weaponMounts.Add(gunMount);
-                ((INetworkDefinition)gunMount).LookupIndex = encyclopedia.IndexLookup.Count;
-                encyclopedia.IndexLookup.Add(gunMount);
-                Encyclopedia.WeaponLookup.Add(GunKey, gunMount);
+                WeaponMount turret = SkylarkWeapons.TurretMount;
+                if (!encyclopedia.weaponMounts.Contains(turret)) encyclopedia.weaponMounts.Add(turret);
+                ((INetworkDefinition)turret).LookupIndex = encyclopedia.IndexLookup.Count;
+                encyclopedia.IndexLookup.Add(turret);
+                Encyclopedia.WeaponLookup.Add(SkylarkWeapons.TurretKey, turret);
                 Definition.mass = Definition.unitPrefab.GetComponentsInChildren<UnitPart>(true).Sum(p => p.mass);
-                Debug.Log("[Skylark] Registered " + Key + " native four-fan VTOL, empty mass " + Definition.mass + " kg");
+                Debug.Log("[Skylark] Registered " + Key + " native four-fan VTOL, empty mass " + Definition.mass + " kg, art scale " + Scale.ToString("0.000") + ", ground offset " + Definition.spawnOffset.y.ToString("0.000") + " m, " + Definition.unitPrefab.GetComponent<Aircraft>().weaponManager.hardpointSets.Length + " stations");
             }
             catch (Exception e)
             {
@@ -92,13 +101,12 @@ namespace BoscaliSummer.Modules.Skylark
             definition.value = 26f;
             definition.radarSize = 0.03f;   // faceted, canted, shrouded fans, coated canopy: the low-observable pick
             definition.manpower = 1;
-            definition.width = 7.3f;
-            definition.height = 2.55f;
-            definition.length = 10.116f;
-            definition.spawnOffset = new Vector3(0, 1.03f, 0);
+            definition.spawnOffset = new Vector3(0, 1.03f, 0); // replaced by the measured wheel height once the gear is fitted
             definition.restRotation = Vector3.zero;
             definition.unitPrefab = go;
-            definition.aircraftInfo = new AircraftInfo { emptyWeight = EmptyMass, maxWeight = 4100f, maxSpeed = 650f, stallSpeed = 150f, maneuverability = 8f };
+            // Encyclopedia figures (km/h): 753 = the measured 209 m/s level plateau; max weight = what the turbine alone lifts vertically
+            // (BOOST lifts about 15 % more); maneuverability is the fly-by-wire g limit.
+            definition.aircraftInfo = new AircraftInfo { emptyWeight = EmptyMass, maxWeight = 6300f, maxSpeed = 753f, stallSpeed = 150f, maneuverability = 7.5f };
             definition.aircraftParameters = Object.Instantiate(donor.aircraftParameters);
             AircraftParameters p = definition.aircraftParameters;
             // Airfoil.id is nonserialized and indexes native prebuilt aerodynamic charts.
@@ -114,7 +122,7 @@ namespace BoscaliSummer.Modules.Skylark
             p.aircraftName = definition.unitName;
             p.rankRequired = 2;
             p.aircraftGLimit = 8f;
-            p.maxSpeed = 190f;
+            p.maxSpeed = 205f;
             p.PIDReferenceAirspeed = 100f;
             p.takeoffSpeed = 30f;
             p.takeoffDistance = 35f;
@@ -134,19 +142,31 @@ namespace BoscaliSummer.Modules.Skylark
             model.localRotation = Quaternion.identity;
             model.localScale = Vector3.one;
             Dictionary<string, Transform> nodes = model.GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
+#if !PUBLIC_RELEASE
+            SkylarkAutomation.AddTestAnchors(nodes, model);
+#endif
+            Scale = (Vector3.Distance(nodes["Duct_FL"].position, nodes["Duct_RL"].position) + Vector3.Distance(nodes["Duct_FR"].position, nodes["Duct_RR"].position)) * .5f / ReferenceArm;
+            definition.width = 7.3f * Scale;
+            definition.height = 2.55f * Scale;
+            definition.length = 10.116f * Scale;
             RefitAirframe(aircraft, model, nodes);
             SkylarkStatusDisplay.Refit(aircraft, p, nodes);
             SkylarkMaterials.Refit(aircraft, nodes);
             RefitControls(aircraft, nodes);
             SkylarkAerodynamics.Configure(aircraft, nodes);
             RefitPropulsion(aircraft, nodes);
-            RefitGear(aircraft, nodes);
+            definition.spawnOffset = new Vector3(0, RefitGear(aircraft, nodes) + .03f, 0);
             SkylarkLights.Refit(aircraft, nodes);
             SkylarkCockpit.Refit(aircraft, nodes);
             RefitSensors(aircraft, nodes);
-            RefitWeapons(aircraft, p, nodes);
+            SkylarkWeapons.Refit(aircraft, p, nodes, holder.transform);
             go.AddComponent<SkylarkAnimation>().Configure(nodes);
-            go.AddComponent<SkylarkDrive>();
+            go.AddComponent<SkylarkDrive>().Configure(nodes);
+            go.AddComponent<SkylarkFlightMode>();
+            go.AddComponent<SkylarkMast>().Configure(nodes);
+            if (nodes.ContainsKey("GunTurret_Yaw") && nodes.ContainsKey("GunTurret_Pitch")) go.AddComponent<SkylarkTurret>().Configure(nodes);
+            string[] absent = Optional.Where(n => !nodes.ContainsKey(n)).ToArray();
+            if (absent.Length > 0) Debug.Log("[Skylark] art without optional nodes (those features stay off): " + string.Join(", ", absent));
             return definition;
         }
 
@@ -183,8 +203,8 @@ namespace BoscaliSummer.Modules.Skylark
             foreach (AeroPart part in parts)
             {
                 if (mapping.TryGetValue(part.name, out string name)) nodes[name].SetParent(part.transform, true);
-                part.SetWingArea(part.WingArea * 0.32f);
-                part.dragArea *= 0.55f;
+                part.SetWingArea(part.WingArea * 0.32f * Scale * Scale);
+                part.dragArea *= 0.55f * Scale * Scale;
                 // New convex skins supply the new rigidbody mass centroids. Donor +/-1m control-surface offsets
                 // would count the relocated hinge's lever arm twice.
                 Set(part, "centerOfLift", Vector3.zero);
@@ -192,7 +212,9 @@ namespace BoscaliSummer.Modules.Skylark
                 if (part.name == "elevator_R" || part.name == "nozzle_main") part.SetWingArea(0);
                 if (part.Joints != null)
                     foreach (PartJoint joint in part.Joints)
+                    {
                         if (joint.anchor != null) joint.anchor.position = part.transform.position;
+                    }
             }
             float scale = EmptyMass / parts.Sum(part => part.mass);
             foreach (AeroPart part in parts) part.mass *= scale;
@@ -262,17 +284,17 @@ namespace BoscaliSummer.Modules.Skylark
                     if (Vector3.Cross(forward, axis).y < 0f) axis = -axis;
                     motion.rotation = Quaternion.LookRotation(forward, Vector3.Cross(forward, axis));
                     visual.SetParent(motion, true);
-                    Set(surface, "pitchRange", -24f);
-                    Set(surface, "yawRange", mesh.EndsWith("L") ? 22f : -22f);
+                    Set(surface, "pitchRange", -29f);
+                    Set(surface, "yawRange", mesh.EndsWith("L") ? 26f : -26f);
                     Set(surface, "rollRange", 0f);
-                    part.SetWingArea(.35f);
+                    part.SetWingArea(.35f * Scale * Scale);
                 }
                 else
                 {
                     motion = visual;
                     // Authored elevon X points inboard/-X. Native FBW positive roll demands -Z angular velocity.
-                    Set(surface, "rollRange", mesh.EndsWith("L") ? 22f : -22f);
-                    Set(surface, "pitchRange", 12f);
+                    Set(surface, "rollRange", mesh.EndsWith("L") ? 26f : -26f);
+                    Set(surface, "pitchRange", 14.5f);
                 }
                 Transform lift = Empty(mesh + "_Lift", motion, visual.position);
                 lift.rotation = tail ? motion.rotation : Quaternion.identity;
@@ -288,14 +310,16 @@ namespace BoscaliSummer.Modules.Skylark
                 Transform lift = Empty("Fin_" + side + "_Lift", fin.transform, nodes["Fin_" + side].position);
                 lift.rotation = Quaternion.LookRotation(aircraft.transform.forward, normal);
                 Set(fin, "liftNormal", lift);
-                fin.SetWingArea(.8f);
+                fin.SetWingArea(.8f * Scale * Scale);
             }
             ControlsFilter filter = aircraft.GetComponentInChildren<ControlsFilter>(true);
             object fbw = Get<object>(filter, "flyByWire");
-            Set(fbw, "gLimitPositive", 6f);
-            Set(fbw, "cornerSpeed", 110f);
+            Set(fbw, "gLimitPositive", 7.5f);
+            Set(fbw, "cornerSpeed", 95f);
             Set(fbw, "maxRollSpeed", 210f);
-            Set(fbw, "maxRollAngularVel", 4f);
+            Set(fbw, "maxRollAngularVel", 5.5f);
+            Set(fbw, "maxPitchAngularVel", 1.4f);
+            Set(fbw, "yawTightness", 1.3f);
             object hover = Get<object>(filter, "autoHover");
             Set(hover, "hoverBaseThrottle", .5f); // Pilot neutral/climb input, not equilibrium engine throttle.
             Set(hover, "customAxis1Position", 0f); // 90-degree system: zero axis is vertical.
@@ -351,7 +375,7 @@ namespace BoscaliSummer.Modules.Skylark
             Set(system, "swivelTransforms", swivels);
             Set(system, "swivelLimit", 90f);
             Set(system, "minSpeedForForward", 45f);
-            Set(system, "thrustAtAirspeed", new AnimationCurve(new Keyframe(0, MaxThrust), new Keyframe(90, MaxThrust), new Keyframe(180, 29000f), new Keyframe(230, 12000f)));
+            Set(system, "thrustAtAirspeed", new AnimationCurve(new Keyframe(0, MaxThrust), new Keyframe(90, MaxThrust), new Keyframe(180, .63f * MaxThrust), new Keyframe(230, .26f * MaxThrust)));
             EmptyArray(system, "intakeDoors");
             foreach (Turbofan engine in aircraft.GetComponentsInChildren<Turbofan>(true))
             {
@@ -362,7 +386,7 @@ namespace BoscaliSummer.Modules.Skylark
             }
         }
 
-        private static Transform Empty(string name, Transform parent, Vector3 position)
+        internal static Transform Empty(string name, Transform parent, Vector3 position)
         {
             Transform t = new GameObject(name).transform;
             t.SetParent(parent, false);
@@ -371,8 +395,10 @@ namespace BoscaliSummer.Modules.Skylark
             return t;
         }
 
-        private static void RefitGear(Aircraft aircraft, Dictionary<string, Transform> nodes)
+        /// <summary>Fits the gear and returns how far the lowest wheel's tread hangs below the root.</summary>
+        private static float RefitGear(Aircraft aircraft, Dictionary<string, Transform> nodes)
         {
+            float lowest = 0f;
             LandingGear[] gears = aircraft.GetComponentsInChildren<LandingGear>(true);
             foreach (LandingGear gear in gears)
             {
@@ -385,7 +411,8 @@ namespace BoscaliSummer.Modules.Skylark
                 visual.SetParent(hinge, true);
                 gear.transform.SetParent(hinge, true);
                 gear.transform.localRotation = Quaternion.identity;
-                float radius = front ? .18f : .23f, travel = .38f;
+                float radius = WheelRadius(aircraft.transform, wheel, (front ? .18f : .23f) * Scale), travel = .5f;
+                lowest = Mathf.Min(lowest, aircraft.transform.InverseTransformPoint(wheel.position).y - radius);
                 Transform stop = Empty("SkylarkBumpStop_" + side, hinge, wheel.position + Vector3.up * (travel - radius));
                 Transform unsprung = Empty("SkylarkUnsprung_" + side, hinge, wheel.position);
                 Transform axle = Empty("SkylarkAxle_" + side, unsprung, wheel.position);
@@ -404,9 +431,9 @@ namespace BoscaliSummer.Modules.Skylark
                 Set(gear, "wheels", new[] { spin });
                 Set(gear, "wheelRadius", radius);
                 Set(gear, "suspensionTravel", travel);
-                Set(gear, "springRate", front ? 100000f : 180000f);
-                Set(gear, "dampingRate", front ? 7000f : 11000f);
-                Set(gear, "maxCompression", .30f);
+                Set(gear, "springRate", front ? 150000f : 270000f);
+                Set(gear, "dampingRate", front ? 10000f : 16000f);
+                Set(gear, "maxCompression", travel * .78f);
                 Set(gear, "gearCollider", collision);
                 Set(gear, "foldDegrees", -90f);
                 Set(gear, "foldSpeed", 45f);
@@ -428,61 +455,16 @@ namespace BoscaliSummer.Modules.Skylark
                 Set(gear, "gearDoors", doors);
                 Get<ParticleSystem>(gear, "dust").transform.position = wheel.position;
             }
+            return -lowest;
         }
 
-        private static void RefitWeapons(Aircraft aircraft, AircraftParameters parameters, Dictionary<string, Transform> nodes)
+        private static float WheelRadius(Transform root, Transform wheel, float fallback)
         {
-            WeaponManager wm = aircraft.weaponManager;
-            WeaponMount Find(string name) => Encyclopedia.i.weaponMounts.First(m => m.name == name || m.jsonKey == name);
-            WeaponMount gun = Object.Instantiate(Find("gun_20mm_VTOLTrainer1_pod"));
-            gun.name = GunKey;
-            gun.jsonKey = GunKey;
-            gun.prefab = Object.Instantiate(gun.prefab, holder.transform);
-            gun.prefab.name = GunKey;
-            gun.prefab.transform.localPosition = Vector3.zero;
-            gun.prefab.transform.localRotation = Quaternion.identity;
-            foreach (MeshRenderer renderer in gun.prefab.GetComponentsInChildren<MeshRenderer>(true)) renderer.enabled = false;
-            Gun cannon = gun.prefab.GetComponentInChildren<Gun>(true);
-            Transform muzzle = Empty("SkylarkMuzzle", gun.prefab.transform, Vector3.zero);
-            Set(cannon, "muzzles", new[] { muzzle });
-            Set(cannon, "magazineCapacity", 180);
-            Set(cannon, "magazines", 0);
-            foreach (ParticleSystem particles in Get<ParticleSystem[]>(cannon, "muzzleParticles")) particles.transform.position = muzzle.position;
-            gun.emptyMass = 75f;
-            gun.emptyDrag = .005f;
-            gun.Initialize();
-            gun.mass = gun.emptyMass + gun.ammo * gun.info.massPerRound;
-            gun.drag = gun.emptyDrag;
-            gunMount = gun;
-            WeaponMount agm = Find("AGM1_single");
-            WeaponMount aam = Find("AAM1_single");
-            // Fixed ordering is part of the mission/network loadout contract: gun, L1, R1, L2, R2.
-            HardpointSet[] sets = new HardpointSet[5];
-            string[] anchors = { "GunPosition", "Hardpoint_L1", "Hardpoint_R1", "Hardpoint_L2", "Hardpoint_R2" };
-            for (int i = 0; i < sets.Length; i++)
-            {
-                Transform anchor = nodes[anchors[i]];
-                anchor.rotation = Quaternion.identity;
-                var hp = new Hardpoint { transform = anchor, part = anchor.GetComponentInParent<UnitPart>(true), bayDoors = Array.Empty<BayDoor>(), BuiltInWeapons = Array.Empty<Weapon>(), BuiltInTurrets = Array.Empty<Turret>() };
-                EmptyArray(hp, "pylonOptions");
-                sets[i] = new HardpointSet
-                {
-                    name = i == 0 ? "20 mm gun" : (i % 2 == 1 ? "Left " : "Right ") + (i < 3 ? "inner station" : "tip station"),
-                    precludingHardpointSets = new List<byte>(), SymmetryWithPrev = i == 2 || i == 4,
-                    SymmetryName = i < 3 ? "Inner stations" : "Tip stations",
-                    hardpoints = new List<Hardpoint> { hp },
-                    weaponOptions = i == 0 ? new List<WeaponMount> { gun } : i < 3 ? new List<WeaponMount> { null, agm } : new List<WeaponMount> { null, aam }
-                };
-            }
-            wm.hardpointSets = sets;
-            var strike = new Loadout { weapons = new List<WeaponMount> { gun, agm, agm, aam, aam } };
-            var scout = new Loadout { weapons = new List<WeaponMount> { gun, null, null, aam, aam } };
-            parameters.loadouts = new List<Loadout> { strike, scout };
-            parameters.StandardLoadouts = new[]
-            {
-                new StandardLoadout { Name = "Precision scout", loadout = strike, FuelRatio = .7f },
-                new StandardLoadout { Name = "Reconnaissance", loadout = scout, FuelRatio = 1f }
-            };
+            Renderer[] tyres = wheel.GetComponentsInChildren<Renderer>(true);
+            if (tyres.Length == 0) return fallback;
+            Vector3 extents = LocalBounds(root, tyres).extents; // the axle is X: the other two extents are the tyre radius
+            float radius = (extents.y + extents.z) * .5f;
+            return radius > .1f && radius < .6f ? radius : fallback;
         }
 
         private static void RefitSensors(Aircraft aircraft, Dictionary<string, Transform> nodes)

@@ -192,8 +192,8 @@ namespace NOAvionics
                     textH = statusH;
                     AvLay.Place(order.rectTransform, Indent, oy, colW, oroom);
                     float gy = Mathf.Max(oy + 1f, Top + 20f);   // under the badge even when there is no status line
-                    AvLay.Place(sop.rectTransform, AvGridTokens.Pad, gy, TagW, 13f);
-                    art.SetPips(orders.Length, orderIndex, AvGridTokens.Pad, Mathf.Min(gy + 14f, readingHeight - 3f), TagW);
+                    AvLay.Place(sop.rectTransform, AvGridTokens.Pad, gy, TagW, 16f);
+                    art.SetPips(orders.Length, orderIndex, AvGridTokens.Pad, Mathf.Min(gy + 17f, readingHeight - 3f), TagW);
                 }
             }
             order.enabled = showOrder;

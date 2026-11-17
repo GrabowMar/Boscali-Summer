@@ -27,6 +27,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             ["WI_VG_Remora"] = new Label("XQ-58V Remora", "XQ-58V", "Remora"),
             ["WI_VG_RemoraGun"] = new Label("20mm Drone Cannon", "GUN 20MM", null),
             ["WI_VG_Manta"] = new Label("XQ-90 Manta", "XQ-90", "Manta"),
+            ["WI_VG_Sa74N"] = new Label("SA-74N Flashback", "SA-74N", "Sa74N"),
             ["WI_VG_HawcX"] = new Label("HGV-20 Hawc", "HGV-20", "HawcX"),
             ["WI_VG_AegisDart"] = new Label("AIM-14 Aegis", "AIM-14", "AegisPod"),
             ["WI_VG_Lance"] = new Label("RG-12 Lance Railgun", "RG-12", "Lance"),

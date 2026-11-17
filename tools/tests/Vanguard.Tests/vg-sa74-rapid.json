@@ -1,0 +1,429 @@
+{
+  "timeout_s": 240,
+  "name": "vg-sa74-rapid",
+  "description": "Rapid visual polish test: one land burst, frozen presentation ages .03-600s, twelve fresh-frame captures including close pressure wall, dust wake and native soot, cleanup. Age jumps do not test native weapon flight, audio arrival or blast propagation.",
+  "ops": [
+    {
+      "heading": 0,
+      "altitude": 3000,
+      "id": "observer",
+      "op": "spawn",
+      "speed": 80,
+      "type": "VL-49 Tarantula",
+      "at": {
+        "map": [
+          -24500,
+          -17400
+        ]
+      },
+      "faction": "Boscali"
+    },
+    {
+      "op": "observe",
+      "follow": "observer"
+    },
+    {
+      "seconds": 1,
+      "op": "wait"
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "blast",
+      "args": {
+        "land": true,
+        "action": "detonate"
+      }
+    },
+    { "op": "wait", "seconds": 1.2 },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "01-prompt-flash-setup",
+      "args": {
+        "aimHeight": 1800,
+        "action": "sample",
+        "fov": 70,
+        "distance": 28000,
+        "side": -4000,
+        "seconds": 0.03,
+        "height": 1200
+      }
+    },
+    {
+      "name": "01-prompt-flash",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "01-prompt-flash",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "02-thermal-dip-setup",
+      "args": {
+        "aimHeight": 1800,
+        "action": "sample",
+        "fov": 70,
+        "distance": 28000,
+        "side": -4000,
+        "seconds": 0.18,
+        "height": 1200
+      }
+    },
+    {
+      "name": "02-thermal-dip",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "02-thermal-dip",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "03-second-thermal-pulse-setup",
+      "args": {
+        "aimHeight": 2500,
+        "action": "sample",
+        "fov": 70,
+        "distance": 28000,
+        "side": -4000,
+        "seconds": 1.1,
+        "height": 1200
+      }
+    },
+    {
+      "name": "03-second-thermal-pulse",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "03-second-thermal-pulse",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "04-brilliant-fireball-setup",
+      "args": {
+        "aimHeight": 3500,
+        "action": "sample",
+        "fov": 75,
+        "distance": 20000,
+        "side": -4000,
+        "seconds": 4,
+        "height": 1800
+      }
+    },
+    {
+      "name": "04-brilliant-fireball",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "04-brilliant-fireball",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "05-buoyant-fireball-setup",
+      "args": {
+        "aimHeight": 6500,
+        "action": "sample",
+        "fov": 80,
+        "distance": 24000,
+        "side": -4000,
+        "seconds": 12,
+        "height": 2200
+      }
+    },
+    {
+      "name": "05-buoyant-fireball",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "05-buoyant-fireball",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "06-pressure-front-setup",
+      "args": {
+        "aimHeight": 11000,
+        "action": "sample",
+        "fov": 85,
+        "distance": 28000,
+        "side": -4000,
+        "seconds": 30,
+        "height": 4500
+      }
+    },
+    {
+      "name": "06-pressure-front",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "06-pressure-front",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": { "action": "sample", "seconds": 45, "distance": 18500, "height": 450, "side": -1000, "aimHeight": 1800, "fov": 90 }
+    },
+    { "op": "capture", "name": "06b-close-pressure-wall", "hide_ui": true },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": { "action": "status" },
+      "store": "pressureWall"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": { "action": "sample", "seconds": 70, "distance": 16000, "height": 300, "side": -1000, "aimHeight": 1600, "fov": 95 }
+    },
+    { "op": "capture", "name": "06c-dense-dust-wake", "hide_ui": true },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": { "action": "status" },
+      "store": "dustWake"
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "07-rolling-mushroom-setup",
+      "args": {
+        "aimHeight": 18000,
+        "action": "sample",
+        "fov": 90,
+        "distance": 40000,
+        "side": -4000,
+        "seconds": 70,
+        "height": 3500
+      }
+    },
+    {
+      "name": "07-rolling-mushroom",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "07-rolling-mushroom",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "08-cooled-mushroom-setup",
+      "args": {
+        "aimHeight": 27000,
+        "action": "sample",
+        "fov": 75,
+        "distance": 80000,
+        "side": -4000,
+        "seconds": 150,
+        "height": 14000
+      }
+    },
+    {
+      "name": "08-cooled-mushroom",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "08-cooled-mushroom",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "09-intimidating-overhead-setup",
+      "args": {
+        "aimHeight": 17000,
+        "action": "sample",
+        "fov": 100,
+        "distance": 22000,
+        "side": -4000,
+        "seconds": 230,
+        "height": 500
+      }
+    },
+    {
+      "name": "09-intimidating-overhead",
+      "op": "capture",
+      "hide_ui": true
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "09-intimidating-overhead",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": { "action": "sample", "seconds": 600, "distance": 5500, "height": 3000, "side": -1500, "aimHeight": 0, "fov": 100 }
+    },
+    { "op": "capture", "name": "10-vanilla-ground-soot", "hide_ui": true },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "reset",
+      "args": {
+        "action": "reset"
+      }
+    },
+    {
+      "seconds": 0.1,
+      "op": "wait"
+    },
+    {
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "op": "call",
+      "store": "clean",
+      "args": {
+        "action": "status"
+      }
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    { "check": "result_above", "path": "04-brilliant-fireball.nativeSootCount", "min": 1 },
+    { "check": "result_above", "path": "04-brilliant-fireball.nativeSootDiameter", "min": 35000 },
+    { "check": "result_equals", "path": "04-brilliant-fireball.nativeGroundSourceKt", "value": 250 },
+    {
+      "check": "status_ok"
+    },
+    {
+      "path": "blast.events",
+      "check": "result_equals",
+      "value": 1
+    },
+    {
+      "min": 0.4,
+      "path": "01-prompt-flash.thermalPulse",
+      "check": "result_above"
+    },
+    {
+      "max": 0.1,
+      "path": "02-thermal-dip.thermalPulse",
+      "check": "result_below"
+    },
+    {
+      "min": 0.7,
+      "path": "03-second-thermal-pulse.thermalPulse",
+      "check": "result_above"
+    },
+    {
+      "min": 5,
+      "path": "01-prompt-flash.flashExposure",
+      "check": "result_above"
+    },
+    {
+      "min": 4,
+      "path": "03-second-thermal-pulse.flashExposure",
+      "check": "result_above"
+    },
+    {
+      "path": "04-brilliant-fireball.mushroomReady",
+      "check": "result_equals",
+      "value": true
+    },
+    {
+      "min": 1,
+      "path": "04-brilliant-fireball.mushroomFrame",
+      "check": "result_above"
+    },
+    {
+      "max": 0.002,
+      "path": "08-cooled-mushroom.thermalPulse",
+      "check": "result_below"
+    },
+    {
+      "min": 0.99,
+      "path": "08-cooled-mushroom.winterBlend",
+      "check": "result_above"
+    },
+    {
+      "path": "08-cooled-mushroom.ejectaParticles",
+      "check": "result_equals",
+      "value": 0
+    },
+    {
+      "path": "08-cooled-mushroom.condensationParticles",
+      "check": "result_equals",
+      "value": 0
+    },
+    {
+      "min": 1,
+      "path": "08-cooled-mushroom.dustParticles",
+      "check": "result_above"
+    },
+    { "check": "result_above", "path": "pressureWall.pressureParticles", "min": 400 },
+    { "check": "result_above", "path": "dustWake.dustParticles", "min": 1100 },
+    {
+      "path": "clean.active",
+      "check": "result_equals",
+      "value": false
+    },
+    {
+      "path": "clean.particleSystems",
+      "check": "result_equals",
+      "value": 0
+    },
+    {
+      "path": "clean.cloudClearanceCount",
+      "check": "result_equals",
+      "value": 0
+    }
+  ],
+  "mods": [
+    "boscalisummer"
+  ]
+}

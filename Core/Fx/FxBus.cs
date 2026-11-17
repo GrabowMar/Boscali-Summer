@@ -102,6 +102,7 @@ namespace BoscaliSummer.Core.Fx
             state["fxRegistrationRefused"] = refusedRegistrations;
             FxRtPool.Describe(state);
             FxVoiceBus.Describe(state);
+            SfxClips.Describe(state);
             effects.Describe(state);
             foreach (KeyValuePair<string, float> pair in lastMs)
                 state["fxMs." + pair.Key] = pair.Value;
@@ -117,6 +118,9 @@ namespace BoscaliSummer.Core.Fx
             qualityLevelCount = 0;
             FxRtPool.ReleaseAll();
             FxVoiceBus.Clear();
+            VisorSound.Shutdown();
+            NOAvionics.AvUiSound.Reset();
+            SfxClips.Clear();
             return failures;
         }
 

@@ -1,14 +1,14 @@
 namespace BoscaliSummer.Core.Util
 {
     /// <summary>
-    /// Reads a mono 16-bit PCM WAV into floats. That is the only shape tools/Build-SoundClips.py writes;
-    /// any other channel count, depth or rate, or a damaged file, decodes to null and the caller keeps its fallback.
+    /// Reads a mono 16-bit PCM WAV into floats. That is the offline audio catalogue's runtime shape;
+    /// any other channel count, depth or rate, or a damaged file, decodes to null.
     /// </summary>
     internal static class PcmWav
     {
         public static float[] Decode(byte[] wav, int rate)
         {
-            if (wav == null || wav.Length < 12 || !Tag(wav, 0, "RIFF") || !Tag(wav, 8, "WAVE")) return null;
+            if (rate <= 0 || wav == null || wav.Length < 12 || !Tag(wav, 0, "RIFF") || !Tag(wav, 8, "WAVE") || U32(wav, 4) + 8 != wav.Length) return null;
             bool format = false;
             for (long at = 12; at + 8 <= wav.Length;)
             {
@@ -16,10 +16,10 @@ namespace BoscaliSummer.Core.Util
                 if (body + size > wav.Length) return null;
                 if (Tag(wav, at, "fmt "))
                     format = size >= 16 && U16(wav, body) == 1 && U16(wav, body + 2) == 1 && U32(wav, body + 4) == rate &&
-                        U16(wav, body + 14) == 16;
+                        U32(wav, body + 8) == rate * 2L && U16(wav, body + 12) == 2 && U16(wav, body + 14) == 16;
                 else if (Tag(wav, at, "data"))
                 {
-                    if (!format) return null;
+                    if (!format || size == 0 || (size & 1) != 0) return null;
                     var samples = new float[size / 2];
                     for (int i = 0; i < samples.Length; i++) samples[i] = (short)U16(wav, body + i * 2L) / 32768f;
                     return samples;

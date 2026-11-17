@@ -45,6 +45,7 @@ namespace BoscaliSummer.Modules.Command
         {
             AvUiSound.Volume = context.Settings.Command.UiSoundVolume.Value;
             AvUiSound.Recorded = name => BoscaliSummer.Core.Fx.SfxClips.Get(name);
+            AvUiSound.Route = source => { if (SoundManager.i != null) source.outputAudioMixerGroup = SoundManager.i.InterfaceMixer; };
             // Every console's header names it with its rail key's words; menus and automation open a key through the rail.
             AvConsole.KeyName = code => MfdRailCatalog.For(code).Name;
             AvConsole.PressKey = MfdRail.Open;

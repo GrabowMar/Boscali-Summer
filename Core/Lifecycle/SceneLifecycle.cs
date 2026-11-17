@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -41,7 +42,12 @@ namespace BoscaliSummer.Core.Lifecycle
             ResetAll();
         }
 
-        internal void ResetAll() => Reset(null);
+        internal void ResetAll()
+        {
+            Reset(null);
+            // Every scene-owned voice has stopped; its old clip-length reservation must not mute the next mission.
+            FxVoiceBus.Clear();
+        }
 
         /// <summary>Initialize newly installed modules without clearing services in the running mission.</summary>
         internal void ResetModules(ISet<string> moduleIds)

@@ -34,26 +34,56 @@ namespace BoscaliSummer.Modules.Events.Networking
         private EventsManager manager;
         private HandlerSlot clientSlot;
         private HandlerSlot ClientHandlers => clientSlot ??= HandlerSlot.Of<ActiveEventChanged>(ReceiveChanged);
+        private NetworkClient client;
         private float nextRegistration;
 
         public void Configure(EventsManager owner)
         {
             manager = owner;
             InstallSerializers();
+            RefreshClient();
         }
 
-        /// <summary>Nothing is scoped to a scene, but a reset still drops a stale transport.</summary>
+        /// <summary>The event mirror resets with the scene; an unchanged transport keeps its handler.</summary>
         public void ResetScene()
         {
-            ClientHandlers.Release();
+            RefreshClient();
             nextRegistration = 0f;
         }
+
+        private void OnEnable() { if (manager != null) RefreshClient(); }
+        private void OnDisable() => ReleaseClient();
 
         private void Update()
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            ClientHandlers.Swap(GameAccess.NetworkManagerOrNull?.Client?.MessageHandler);
+            RefreshClient();
+        }
+
+        private void RefreshClient()
+        {
+            NetworkClient next = this != null && isActiveAndEnabled ? GameAccess.NetworkManagerOrNull?.Client : null;
+            if (!ReferenceEquals(next, client))
+            {
+                client?.Started.RemoveListener(BindClient);
+                ClientHandlers.Release();
+                client = next;
+                // Started runs after Mirage creates MessageHandler, including on a reconnect of this client.
+                // Its late-listener replay also covers a module enabled on an existing connection.
+                client?.Started.AddListener(BindClient);
+            }
+            BindClient();
+        }
+
+        private void BindClient() =>
+            ClientHandlers.Swap(this != null && isActiveAndEnabled ? client?.MessageHandler : null);
+
+        private void ReleaseClient()
+        {
+            client?.Started.RemoveListener(BindClient);
+            client = null;
+            ClientHandlers.Release();
         }
 
         public void Broadcast(sbyte catalogIndex, int targetFactionHash, float start, float end,
@@ -80,7 +110,7 @@ namespace BoscaliSummer.Modules.Events.Networking
                 message.StartedAtMissionTime, message.EndsAtMissionTime, message.EffectStrength);
         }
 
-        private void OnDestroy() => ClientHandlers.Release();
+        private void OnDestroy() => ReleaseClient();
 
         private static readonly MirageSerializers Seams = new MirageSerializers(
             "[Events]", " is missing; world events cannot replicate on this game build.");

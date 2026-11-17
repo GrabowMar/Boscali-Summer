@@ -8,7 +8,6 @@ namespace BoscaliSummer.Modules.Skylark
     // Native jobs copy force offsets and collision extents once, at AeroPart_OnInitialize.
     internal sealed class SkylarkAerodynamics : MonoBehaviour
     {
-        [SerializeField] private Aircraft aircraft;
         [SerializeField] private AeroPart[] parts;
         [SerializeField] private Collider[] skins;
         [SerializeField] private AeroPart[] skinOwners;
@@ -16,7 +15,6 @@ namespace BoscaliSummer.Modules.Skylark
         internal static void Configure(Aircraft aircraft, Dictionary<string, Transform> nodes)
         {
             var component = aircraft.gameObject.AddComponent<SkylarkAerodynamics>();
-            component.aircraft = aircraft;
             component.parts = aircraft.GetComponentsInChildren<AeroPart>(true);
             component.skins = aircraft.GetComponentsInChildren<SkylarkHitbox>(true).Select(h => h.GetComponent<Collider>()).ToArray();
             component.skinOwners = component.skins.Select(c => c.GetComponent<SkylarkHitbox>().Owner).ToArray();
@@ -42,8 +40,8 @@ namespace BoscaliSummer.Modules.Skylark
             void Surface(string name, float area, Vector3 center)
             {
                 AeroPart part = nodes[name].GetComponentInParent<AeroPart>(true);
-                part.SetWingArea(area);
-                part.LiftNormal.position = aircraft.transform.TransformPoint(center);
+                part.SetWingArea(area * SkylarkTemplate.Scale * SkylarkTemplate.Scale);
+                part.LiftNormal.position = aircraft.transform.TransformPoint(center * SkylarkTemplate.Scale);
             }
         }
 

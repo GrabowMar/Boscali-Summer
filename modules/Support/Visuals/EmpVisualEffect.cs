@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Support.Runtime;
 using UnityEngine;
@@ -96,14 +97,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 flickers[i] = l;
             }
             // What a listener under the pulse hears is their own electronics: one crack of static, then the hum of the grid dying (no delay, no boom).
-            if (crack == null) crack = CineFx.Clip("EmpCrack", 0.9f, t => CineFx.Noise() * (Mathf.Exp(-t * 40f) + 0.3f * Mathf.Exp(-t * 5f) * (Random.value > 0.93f ? 1f : 0.12f)) * 0.95f);
-            if (hum == null)
-                hum = CineFx.Clip("EmpGridDie", 4.5f, t =>
-                {
-                    float phase = 6.2832f * (18f * t + 38.4f * (1f - Mathf.Exp(-t / 1.2f)));
-                    float buzz = Mathf.Sin(phase) + 0.5f * Mathf.Sin(3f * phase) + 0.3f * Mathf.Sin(5f * phase);
-                    return (buzz * 0.4f + CineFx.Noise() * 0.06f) * Mathf.Clamp01(t * 20f) * Mathf.Exp(-t * 0.9f);
-                });
+            if (crack == null) crack = SfxClips.Get("emp-crack");
+            if (hum == null) hum = SfxClips.Get("emp-grid-die");
             crackSource = Voice(crack);
             humSource = Voice(hum);
             skyObject = new GameObject("BoscaliSummer.EMP sky");
@@ -223,8 +218,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
             if (heard > 0.02f)
             {
-                crackSource.volume = 0.9f * heard; crackSource.Play();
-                humSource.volume = 0.6f * heard; humSource.PlayDelayed(0.15f);
+                crackSource.volume = 0.9f * heard; CineFx.Play(crackSource);
+                humSource.volume = 0.6f * heard; CineFx.Play(humSource, 0.15f);
             }
         }
 

@@ -7,11 +7,8 @@ using BoscaliSummer.Core.Util;
 namespace BoscaliSummer.Modules.Radio.Runtime
 {
     /// <summary>
-    /// The voiced station talk between songs: stings, idents, host links, adverts and news, made with
-    /// ElevenLabs and embedded with their scripts in <c>Assets/Broadcast/broadcast.tsv</c>. Each
-    /// built-in station has one set; Base Broadcast picks its set by the local player's faction, so
-    /// a BDF pilot hears forces radio, a PALA pilot the army network, a contractor the PMC net.
-    /// Clips are unpacked to the BepInEx cache once and then played like any local track.
+    /// The three stations air music, adverts and news. Base Broadcast always uses the mercenary set.
+    /// Generated audio is unpacked into the local cache once and decoded on demand.
     /// </summary>
     internal static class RadioBroadcastSegments
     {
@@ -25,14 +22,11 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         }
 
         private static Dictionary<string, Dictionary<string, List<Segment>>> sets;
+        private static readonly Dictionary<string, string> unpacked = new Dictionary<string, string>(StringComparer.Ordinal);
 
         /// <summary>The break that follows song number <paramref name="breakIndex"/>, in play order; empty when the station has no talk.</summary>
         public static List<RadioStationTrack> Break(string stationId, string playerFaction, int breakIndex) =>
             Build(stationId, playerFaction, BreakPlan.Kinds(breakIndex));
-
-        /// <summary>What a listener hears on tuning in: the station's sting, then a spoken ident.</summary>
-        public static List<RadioStationTrack> Opener(string stationId, string playerFaction, int openerIndex) =>
-            Build(stationId, playerFaction, new[] { ("sting", 0), ("id", openerIndex) });
 
         /// <summary>The station's own song number <paramref name="pick"/> (ElevenLabs music, walked in order); null when it has none.</summary>
         public static RadioStationTrack Song(string stationId, string playerFaction, int pick)
@@ -50,7 +44,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             foreach ((string kind, int pick) in plan)
             {
                 if (!kinds.TryGetValue(kind, out List<Segment> pool) || pool.Count == 0) continue;
-                Segment segment = pool[pick % pool.Count];
+                Segment segment = pool[Math.Max(0, pick) % pool.Count];
                 string path = Unpack(segment.File);
                 if (path != null)
                     result.Add(RadioStationTrack.Local(new RadioTrack(segment.Title, path, ".mp3")));
@@ -58,33 +52,14 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             return result;
         }
 
-        /// <summary>br / ps for the civil stations; bb-bdf, bb-pala or bb-pmc for Base Broadcast by the listener's side.</summary>
+        /// <summary>br / ps for civil stations; bb-pmc for Base Broadcast for every listener.</summary>
         internal static string SetFor(string stationId, string playerFaction)
         {
             switch (stationId)
             {
                 case BuiltInStationRules.AgrapolId: return "br";
                 case BuiltInStationRules.MarisId: return "ps";
-                case BuiltInStationRules.BaseId:
-                    string faction = playerFaction ?? string.Empty;
-                    if (faction.IndexOf("Boscali", StringComparison.OrdinalIgnoreCase) >= 0) return "bb-bdf";
-                    if (faction.IndexOf("Primeva", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        faction.IndexOf("PALA", StringComparison.OrdinalIgnoreCase) >= 0) return "bb-pala";
-                    return faction.Length == 0 ? "bb-bdf" : "bb-pmc";
-                default: return null;
-            }
-        }
-
-        /// <summary>The on-air name of the station's host, for the RECEIVER card; null for a local archive.</summary>
-        public static string Host(string stationId, string playerFaction)
-        {
-            switch (SetFor(stationId, playerFaction))
-            {
-                case "br": return "Kit Vale";
-                case "ps": return "Announcer Dren";
-                case "bb-bdf": return "Sgt. Jerry Banks";
-                case "bb-pala": return "Commissar Strand";
-                case "bb-pmc": return "Dana Quill";
+                case BuiltInStationRules.BaseId: return "bb-pmc";
                 default: return null;
             }
         }
@@ -119,15 +94,17 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         /// <summary>The clip as a file Unity can decode (unpacked into the cache once), or null when it is not embedded.</summary>
         private static string Unpack(string file)
         {
+            if (unpacked.TryGetValue(file, out string known) && File.Exists(known)) return known;
             try
             {
                 string folder = Path.Combine(BepInEx.Paths.CachePath, "BoscaliSummer", "Radio");
                 string cached = Path.Combine(folder, file);
                 byte[] bytes = EmbeddedResources.ReadAll(typeof(RadioBroadcastSegments).Assembly, Prefix + file, MaxClipBytes);
                 if (bytes == null) return null;
-                if (File.Exists(cached) && new FileInfo(cached).Length == bytes.Length) return cached;
+                if (File.Exists(cached) && new FileInfo(cached).Length == bytes.Length) { unpacked[file] = cached; return cached; }
                 Directory.CreateDirectory(folder);
                 File.WriteAllBytes(cached, bytes);
+                unpacked[file] = cached;
                 return cached;
             }
             catch (IOException) { return null; }
@@ -136,27 +113,17 @@ namespace BoscaliSummer.Modules.Radio.Runtime
     }
 
     /// <summary>
-    /// Which kinds of talk fill the break after each song. Every break opens on the station's sting;
-    /// every third adds a spoken ident; the main item rotates host, ad, host, news, ad, host so a
-    /// station never runs two adverts back to back. The pick is a running count per kind, so each
-    /// pool is walked in order before anything repeats.
+    /// A single advert or news item after each song. Each pool advances before repeating.
     /// </summary>
     internal static class BreakPlan
     {
-        private static readonly string[] Rotation = { "host", "ad", "host", "news", "ad", "host" };
+        private static readonly string[] Rotation = { "ad", "news", "ad", "ad", "news" };
 
-        public static string Word(string kind) => kind == "sting" ? "STING" : kind == "id" ? "STATION ID"
-            : kind == "host" ? "HOST" : kind == "ad" ? "ADVERT" : kind == "news" ? "NEWS" : kind.ToUpperInvariant();
-
-        /// <summary>Talk kinds plus <c>song</c>, the station's own music, which plays as a programme item rather than in a break.</summary>
-        public static bool IsKind(string value) =>
-            value == "sting" || value == "id" || value == "host" || value == "ad" || value == "news" || value == "song";
+        public static bool IsKind(string value) => value == "ad" || value == "news" || value == "song";
 
         public static IEnumerable<(string Kind, int Pick)> Kinds(int breakIndex)
         {
             int n = Math.Max(0, breakIndex);
-            yield return ("sting", n); // rotates the station's stings (sound logo, sung jingle)
-            if (n % 3 == 0) yield return ("id", n / 3);
             string main = Rotation[n % Rotation.Length];
             int perCycle = 0, before = 0;
             for (int i = 0; i < Rotation.Length; i++)

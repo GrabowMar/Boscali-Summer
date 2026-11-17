@@ -69,7 +69,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             {
                 if (SupportTargeting.TryOrigin(context.Player, out Vector3 origin))
                 {
-                    if (Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
+                    if (Vector3.Distance(origin, ground) > SupportTargeting.MaxRange(context))
                         return SupportResult.OutOfRange;
                 }
             }

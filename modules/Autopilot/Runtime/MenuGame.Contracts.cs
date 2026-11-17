@@ -18,6 +18,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
         private const int MaxCalls = 12, MaxFilters = 8;
         private const string FilterOn = " [ON]";
 
+        private static void ReadSkylark(MenuWorld w)
+        {
+            ISkylarkControl skylark = Service<ISkylarkControl>();
+            if (skylark == null || !skylark.Active) return;
+            w.SkylarkActive = true;
+            w.SkylarkDrive = skylark.Drive;
+            w.SkylarkVector = skylark.Vector;
+            w.SkylarkMast = skylark.MastDeployed;
+            w.SkylarkBattery = skylark.Battery ?? "";
+        }
+
         private static void ReadSupport(MenuWorld w)
         {
             ICameraTargetService camera = Service<ICameraTargetService>();
@@ -198,6 +209,9 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
                 case "support/mark": return () => Service<ICameraTargetService>()?.Capture();
                 case "support/callmark": return () => Service<ICameraTargetService>()?.CallAtMark();
                 case "support/clearmark": return () => Service<ICameraTargetService>()?.Clear();
+                case "flight/sk/drive": return () => { ISkylarkControl s = Service<ISkylarkControl>(); if (s != null) s.SetDrive((s.Drive + 1) % MenuCatalog.SkylarkDrives.Length); };
+                case "flight/sk/vector": return () => { ISkylarkControl s = Service<ISkylarkControl>(); if (s != null) s.SetVector((s.Vector + 1) % MenuCatalog.SkylarkVectors.Length); };
+                case "flight/sk/mast": return () => Service<ISkylarkControl>()?.ToggleMast();
                 case "support/skywell": return () => Service<ISkywellControl>()?.Toggle();
                 case "support/pit/both": return () => Service<ISkywellControl>()?.SetPitMode(0);
                 case "support/pit/fuel": return () => Service<ISkywellControl>()?.SetPitMode(1);

@@ -1,6 +1,4 @@
-using System.Threading;
 using BoscaliSummer.Core.Fx;
-using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Immersion.Domain;
 using UnityEngine;
 using UnityEngine.Audio;
@@ -10,55 +8,43 @@ namespace BoscaliSummer.Modules.Immersion.Audio
     /// <summary>
     /// Oxygen-mask breathing, anti-G straining grunts, G-suit hiss and heartbeat, paced by
     /// <see cref="PilotPhysiology"/> cues. Three pooled 2D voices on the effects mixer, so vanilla's
-    /// G-LOC master low-pass muffles them for free. Clips are baked once off the main thread;
-    /// the per-frame path only reads cue flags. Grunts, gasps, the wake-up breath and the heartbeat are
-    /// embedded recordings (Assets/Voice); mask breathing and the G-suit are synthesized.
+    /// G-LOC master low-pass muffles them for free. Shared recordings are loaded once;
+    /// the per-frame path only reads cue flags and follows the existing breath clock.
     /// </summary>
     internal sealed class PilotBreathingAudio : MonoBehaviour
     {
-        private const int SampleRate = 22050;
         private const int SoundCount = (int)BreathSound.Heart + 1;
         private readonly AudioClip[] clips = new AudioClip[SoundCount];
         private readonly System.Random rng = new System.Random(4041);
         private AudioSource breath, effort, body;
-        private float[][] baked;
-        private volatile int bakeState; // 0 pending, 1 ready, 2 failed
-        private volatile bool released;
+        private static readonly string[] ClipIds =
+        {
+            "pilot-inhale-0", "pilot-inhale-1", "pilot-inhale-2",
+            "pilot-exhale-0", "pilot-exhale-1", "pilot-exhale-2",
+            "pilot-pressure-inhale", "pilot-suit-inflate", "pilot-suit-vent",
+            "pilot-keh-0", "pilot-keh-1", "pilot-keh-2", "pilot-keh-3", "pilot-keh-4",
+            "pilot-gasp-0", "pilot-gasp-1", "pilot-recovery", "pilot-heart"
+        };
         private bool ready, routed, silent = true;
 
         internal int Played { get; private set; }
-        /// <summary>How many sounds came from embedded recordings rather than the synth (set when the bake finishes).</summary>
+        /// <summary>How many shared recordings are available (automation readout).</summary>
         internal int RecordedVoices { get; private set; }
+        internal string LastClipId { get; private set; } = "";
+        internal bool EffectsRouted => breath != null && SoundManager.i != null && SoundManager.i.EffectsMixer != null &&
+            breath.outputAudioMixerGroup == SoundManager.i.EffectsMixer &&
+            effort.outputAudioMixerGroup == SoundManager.i.EffectsMixer && body.outputAudioMixerGroup == SoundManager.i.EffectsMixer;
         internal bool IsPlaying => (breath != null && breath.isPlaying) || (effort != null && effort.isPlaying) || (body != null && body.isPlaying);
 
         public void Initialize()
         {
             breath = Voice(); effort = Voice(); body = Voice();
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                try
-                {
-                    var data = new float[SoundCount][];
-                    int recorded = 0;
-                    for (int i = 0; i < data.Length && !released; i++)
-                    {
-                        data[i] = Recorded((BreathSound)i);
-                        if (data[i] != null) recorded++;
-                        else data[i] = BreathSynth.Build((BreathSound)i, SampleRate);
-                    }
-                    if (released) return;
-                    RecordedVoices = recorded;
-                    baked = data;
-                    bakeState = 1;
-                }
-                catch (System.Exception) { bakeState = 2; }
-            });
         }
 
         public void Tick(PilotCue cues, PilotPhysiology p, bool enabled)
         {
             if (!enabled || p == null) { Silence(); return; }
-            if (!ready && !TryCreateClips()) return;
+            if (!ready) LoadClips();
             if (!routed || cues == PilotCue.None) return;
             if ((cues & PilotCue.LostConsciousness) != 0) { breath.Stop(); effort.Stop(); }
             float e = p.Exertion01;
@@ -97,15 +83,13 @@ namespace BoscaliSummer.Modules.Immersion.Audio
 
         public void Release()
         {
-            released = true;
             silent = false;
             Silence(true);
             if (breath != null) Destroy(breath);
             if (effort != null) Destroy(effort);
             if (body != null) Destroy(body);
             breath = effort = body = null;
-            for (int i = 0; i < clips.Length; i++) { if (clips[i] != null) Destroy(clips[i]); clips[i] = null; }
-            baked = null;
+            for (int i = 0; i < clips.Length; i++) clips[i] = null; // Shared clips remain cached.
             ready = false;
         }
 
@@ -119,16 +103,12 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             if (!FxVoiceBus.TryOneShot(clip.length / fitted)) return;
             source.pitch = fitted;
             source.PlayOneShot(clip, volume);
+            LastClipId = ClipIds[(int)sound];
             silent = false;
             Played++;
         }
 
         private BreathSound Pick(BreathSound first, int count) => (BreathSound)((int)first + rng.Next(count));
-
-        // A recording named after its sound replaces the synthesized stand-in; a missing or odd file keeps the synth.
-        private static float[] Recorded(BreathSound sound) => PcmWav.Decode(EmbeddedResources.ReadAll(
-            typeof(PilotBreathingAudio).Assembly, "BoscaliSummer.Immersion.Voice." + sound.ToString().ToLowerInvariant() + ".wav", 512 * 1024),
-            SampleRate);
 
         private AudioSource Voice()
         {
@@ -140,19 +120,15 @@ namespace BoscaliSummer.Modules.Immersion.Audio
             return source;
         }
 
-        private bool TryCreateClips()
+        private void LoadClips()
         {
-            if (bakeState != 1 || baked == null) return false;
+            RecordedVoices = 0;
             for (int i = 0; i < SoundCount; i++)
             {
-                float[] data = baked[i];
-                if (data == null || data.Length == 0) continue;
-                clips[i] = AudioClip.Create("BoscaliBreath." + (BreathSound)i, data.Length, 1, SampleRate, false);
-                clips[i].SetData(data, 0);
+                clips[i] = SfxClips.Get(ClipIds[i]);
+                if (clips[i] != null) RecordedVoices++;
             }
-            baked = null;
             ready = true;
-            return true;
         }
 
         private void OnDestroy() => Release();

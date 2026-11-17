@@ -1,1 +1,3 @@
+# battlefield-2026-11-17 | Admiral Action
 net: command
+character: command

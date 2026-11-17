@@ -1,0 +1,2168 @@
+{
+  "version": "audio-effects-2026-11-17",
+  "flow_id": "wvyupmnzsVQKk5CjAk5U",
+  "sources": [
+    {
+      "id": "weather-rain-canopy-r3",
+      "category": "weather",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 10,
+        "prompt_influence": 0.85,
+        "loop": true
+      },
+      "prompt": "Continuous dense rain heard inside a closed fighter cockpit: thousands of overlapping tiny impacts drumming on thick curved glass over a steady fine water hiss. Fill all ten seconds with consistent rain texture and gentle dynamics. No isolated loud drops, quiet sections, silence, thunder, engine, speech or music. Warm muted glass patter. Seamless ambience loop."
+    },
+    {
+      "id": "emp-cockpit-static-r3",
+      "category": "cockpit",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 8,
+        "prompt_influence": 0.85,
+        "loop": true
+      },
+      "prompt": "Continuous steady analog radio interference in a military cockpit after an EMP. Dense warm band-limited receiver hiss with subtle flutter and fine electrical crackle throughout all eight seconds. Uniform sustained texture, smooth dynamics. No isolated loud pops, large peaks, breaks, silence, voices, alarms, music or explosions. Seamless static ambience loop."
+    },
+    {
+      "id": "visor-ok-r2",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.6,
+        "prompt_influence": 0.85,
+        "loop": false
+      },
+      "prompt": "A clear small electronic acknowledgment sound for a military aircraft helmet display: two soft warm pitched sine-like tones stepping gently upward, together lasting 0.18 seconds. Sustained tonal body rather than a sharp click, rounded attacks and short decays. Starts immediately, clean isolated avionics cue, no static, no glitch, no mechanical knock, no voices, no music track or ambience. Original production audio."
+    },
+    {
+      "id": "visor-align-r2",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1,
+        "prompt_influence": 0.85,
+        "loop": false
+      },
+      "prompt": "An isolated military aircraft helmet sight alignment sound effect. A clearly audible smooth rising electronic tone lasts half a second and settles into a short clean held lock tone. Warm restrained analog avionics, precise pitched sweep with a soft attack, no clicks masking the pitched sound, no long silence. The entire cue lasts around 0.65 seconds. No speech, no background ambience, no music track, no reverb. Original production audio."
+    },
+    {
+      "id": "weather-rain-canopy-r2",
+      "category": "weather",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 10,
+        "prompt_influence": 0.85,
+        "loop": true
+      },
+      "prompt": "A continuous dense realistic rain-on-aircraft-canopy loop heard from inside a closed fighter cockpit. Thousands of overlapping small rain impacts drum gently on thick curved glass, with a constant fine water hiss underneath. The full ten seconds stay filled with steady rain texture at a consistent level. Smooth natural dynamics without huge isolated drops, no quiet sections, no silence, no thunder, no engine, no speech or music. Close warm muted glass patter, seamless ambience loop. Original production audio."
+    },
+    {
+      "id": "emp-cockpit-static-r2",
+      "category": "cockpit",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 8,
+        "prompt_influence": 0.85,
+        "loop": true
+      },
+      "prompt": "Continuous steady analog radio interference inside a military cockpit after an electromagnetic pulse. A dense warm band-limited receiver hiss with subtle flutter and fine crackling present throughout the full eight seconds. Uniform sustained texture, gentle electrical warbling embedded in the hiss, no isolated loud pops or big peaks, no long breaks, no silence, no words, no alarms, no music, no explosions. Smooth seamless static ambience loop. Original production audio."
+    },
+    {
+      "id": "visor-align",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5750000000000001,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A soft military helmet sight alignment cue: tiny relay contact and a smooth short rising lock tone, precise and restrained, warm analog electronics. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-caret",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One extremely brief dry tiny text cursor contact tick from a physical avionics terminal. Barely tonal, soft, immediate and intimate, no ringing tail. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-emp",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One short helmet avionics brownout: muffled electrical sputter, soft relay dropout and a brief falling analog chirp. No explosion or loud buzz. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-fault",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A brief two-part descending fault cue from military helmet electronics. Low soft analog notes with a tiny relay click, unmistakable but not piercing. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-glitch",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One very short restrained helmet electronics glitch: uneven filtered data crackle and a tiny broken contact chirp, dry and tactile, no loud distortion. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-menu-back",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short avionics menu back cue: warm low descending blip and a gentle spring release click, economical and physical. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-menu-deny",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single short low refusal pulse from a military visor switch, dry muted contact with a dull analog note, not an aggressive buzzer. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-menu-move",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One extremely short soft selector detent click in a helmet menu, dry mechanical contact, tiny low resonance, no bright bell or ringing. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-menu-open",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A compact military helmet menu opening cue: soft relay latch and a very short warm display wake bloom, immediate onset. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-menu-select",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A crisp but soft military visor selection confirmation: muted latch click followed by a tiny warm upward acknowledgement, no sparkle. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-no",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single compact negative acknowledgement cue, warm low falling analog pitch with a tactile relay, polite restrained military avionics. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-ok",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A very quiet short steady acknowledgement from military helmet electronics, rounded low-mid pulse with a delicate contact click. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-online",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.9249433106575965,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A helmet display coming online: gentle relay contact and two clear warm rising tones settling confidently, small analog machine, no cinematic flourish. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-powerup",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.4500000000000002,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short military helmet display powering up: tactile relay, a smooth restrained CRT energizing swell and two warm rising tones locking into place. Not a spaceship or computer boot song. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-resync",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5750000000000001,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short military helmet resynchronization cue: soft contact, gentle filtered scan and a clear warm lock pulse, controlled and reassuring. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-tick",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One extremely brief soft tracker tick from a physical military helmet terminal. Dry low metallic contact, very subtle, no long pitched tone. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-warn",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One compact low amber warning tick, slightly firmer than a normal terminal contact, warm and soft with instant onset, no sustained alarm. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-wipe",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A very short gentle servo brush and filtered air wipe in a helmet display, intimate dry mechanism, no long whoosh. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "visor-yes",
+      "category": "visor",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short affirmative avionics acknowledgement, a small warm upward tone and clean relay latch, restrained and immediate. A single isolated cue beginning immediately, then silence. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "building-collapse",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 4,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "Masonry and reinforced concrete collapsing: heavy structure gives way, gritty chunks fall, a rolling low debris rumble and settling dust. Believable heavy destruction, no added bomb blast. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "canopy-close",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "Close cockpit canopy pulled shut, padded mechanical seal closes with a solid restrained latch and brief pressure hiss. Interior fighter cockpit perspective. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "gear-lever",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.6,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One close tactile aircraft landing gear selector moved through a mechanical detent, solid small lever clunk and spring click, no motor or gear extension sound. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "harness-creak",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One brief strained nylon harness and leather seat creak under load, close personal cockpit foley, real webbing stretching and restrained metal buckle contact. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "hit-ping",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single brief small projectile ricochet against aircraft structure, muted metallic ping and tiny gritty rattle heard from inside a lined cockpit, no rifle report. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "hull-thud",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single solid muffled impact through an aircraft hull, deep structural thud and short restrained panel shudder, interior perspective, no large explosion. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "near-crack",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.8,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One fast supersonic projectile passing close: sharp compact air crack and tiny tearing air snap, no gunshot muzzle report, brief and realistic. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "page-flip",
+      "category": "foley",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One close kneeboard paper page turned in a cockpit, dry paper flick and folder contact, small natural cloth and paper rustle, no glossy digital whoosh. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "rod-impact",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 10,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "An extremely high velocity heavy metal penetrator hitting earth: immediate immense pressure crack, deep heavy ground impact, rolling low thunder and gritty debris settling. Realistic powerful kinetic strike, no musical bass drop. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-beam",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 4,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "An enormous reptilian leviathan discharging a coherent biological energy beam: forceful dense pressure rush, fierce electrical plasma rasp and a deep organic chest resonance, heavy and physical. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-bellow",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 4,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "An immense ancient marine reptile bellowing, cavernous chest resonance and coarse wet throat harmonics, breath and mass, frightening natural animal quality, not a human voice. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-charge",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 3.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "An enormous reptilian creature charging a biological energy weapon in its throat: swelling low organic rumble and constrained electrical resonance building in tension, no release blast. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-roar",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 4,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A colossal battle scarred reptilian leviathan roaring: deep layered organic throat, heavy breath, coarse gravel and immense chest pressure. Natural animal weight rather than a simple pitched human scream. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-shriek",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A gigantic reptilian predator's short fierce shriek, rough organic throat and threatening air pressure, intense but no shrill piercing whistle, no human scream. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-spike",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A massive bone or stone spike erupting through rock: low pressure thump, sharp stone fracture, gravel and earth falling. Huge organic physical attack, not a gun or bomb. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-step",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 3,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A colossal heavy creature planting a foot on solid ground: dense low impact, compressed earth, cracking rock and a brief dusty debris rumble. One enormous footfall. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "kaiju-swipe",
+      "category": "creatures",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 2.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "An enormous heavy claw sweeping quickly through air and striking solid material: weighted low air shear, hard scrape, short rough impact and debris. One powerful physical swipe. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "weather-rain-exterior",
+      "category": "weather",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 10,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "A steady natural heavy rain rush outside an aircraft canopy, broad smooth droplets and wet air, no thunder, wind gusts or engine. Even sustained rain bed with no obvious events or rhythmic pattern. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "weather-rain-canopy",
+      "category": "weather",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 8,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "Rain pattering on a curved aircraft canopy seen from inside: small irregular sharp droplet taps against thick acrylic, underlying soft rain hiss. Natural dense patter, no thunder or voices. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "weather-thunder",
+      "category": "weather",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 9,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A realistic thunderclap followed by a wide rolling storm rumble and soft distant tail, weighty natural pressure without artificial explosion or music. One isolated storm event. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "cockpit-wind",
+      "category": "cockpit",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 10,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "Steady turbulent airflow heard through a sealed fighter cockpit canopy, low broad wind pressure and subtle aerodynamic buffeting, restrained enclosed perspective. No engine whine or rattles, no dramatic gusts. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "airframe-creak",
+      "category": "cockpit",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One short stressed aircraft structure creak: restrained metallic flex, seat frame and panel tension under G load, realistic low mechanical strain, no cartoon squeak. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-inhale",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single natural quiet adult pilot inhalation through a snug oxygen mask, intimate dry breath, soft valve flutter and slight mask resonance. No words or theatrical gasp. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-exhale",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.6,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single natural controlled adult pilot exhalation through a snug oxygen mask, soft warm breath and very subtle regulator valve texture. No words or dramatic sigh. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-pressure-inhale",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.8,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One quick restrained pressured inhalation through a military pilot oxygen mask, forceful intake against resistance, slight mask valve rasp. No speech. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-suit-inflate",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short close pneumatic anti G flight suit inflation, muted pressurized air flowing into fabric bladders with a subtle hose and webbing response. Not a big compressor. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-suit-vent",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.8,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A short close anti G flight suit pressure release, controlled soft pneumatic valve hiss tapering off, intimate aircraft equipment, not a steam locomotive. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-keh",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.9,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One brief adult pilot anti G straining exhalation through an oxygen mask, closed throat breath pressure and a short natural unvoiced keh grunt. Athletic controlled exertion, not injured or dying, no words. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-keh-alt",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 0.9,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One brief adult pilot resisting heavy G through an oxygen mask, tight breath hold followed by a rough short forceful unvoiced straining grunt. Controlled athletic effort, no speech and no pain scream. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-gasp",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One sudden breath catching pilot gasp through an oxygen mask, alarmed but physically believable involuntary intake, close dry mask resonance, no words. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-recovery",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.4,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One exhausted adult pilot catching a recovery breath through an oxygen mask after strain, an uneven intake settling into a gentle exhale. Intimate, natural and restrained, no words. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "pilot-heart",
+      "category": "pilot",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single close muffled human heartbeat, one natural lub dub pair with warm low body resonance, isolated physiological sound, no stethoscope crackle or music. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "emp-crack",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 1.2,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "One compact electromagnetic discharge crack, dry high voltage contact snap and brief rough RF sputter. Powerful electronics event, no fireball or conventional blast. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "emp-grid-die",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "Electrical power distribution shutting down after a pulse: short relay cascade, a weighted machinery power sag and descending bus whine dying into silence. No explosive blast or spoken alarms. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "emp-cockpit-static",
+      "category": "cockpit",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 6,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "Intermittent close avionics interference inside a fighter cockpit: restrained crackling contacts, thin low electrical noise and unstable radio texture. No speech, no loud squeal or continuous piercing tone. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "flare-burst-pop",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 3.5,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A single hollow pyrotechnic countermeasure burst: compact sharp mortar like pop followed by a brief magnesium fizz and airy falling sparks. Not a cannon blast or cinematic explosion. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "rod-descent",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 5,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "A heavy metal kinetic penetrator descending at immense speed: dense rushing turbulent air, a restrained low metallic aerodynamic whistle and plasma like hiss. Continuous smooth descent loop, no impact. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "lance-charge",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 5,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "A restrained high voltage weapon capacitor energizing: smooth electromagnetic coil resonance, low transformer body and a tense focused electrical whine. Stable charge texture for pitch control, no discharge blast. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "sa74-geiger",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 9,
+        "prompt_influence": 0.7,
+        "loop": true
+      },
+      "prompt": "A real dry Geiger counter texture: irregular sparse separated detector ticks and a little natural electrical discharge crackle, no tonal alarm, no voice. Uneven believable radiation instrument clicks, loop cleanly. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    },
+    {
+      "id": "sa74-blast",
+      "category": "weapons",
+      "model_id": "eleven_text_to_sound_v2",
+      "parameters": {
+        "duration_seconds": 30,
+        "prompt_influence": 0.7,
+        "loop": false
+      },
+      "prompt": "A vast nuclear shock front arriving at an observer: immense immediate pressure arrival, immense rolling turbulent roar, deep long low thunder and sustained rough dust wind decaying naturally into a bleak tail. Grounded physical scale, no music, no synthetic bass drop or voices. No intelligible speech, no music, no borrowed movie or game sounds. Isolated production audio."
+    }
+  ],
+  "files": [
+    {
+      "source_id": "weather-rain-canopy-r3",
+      "take": 1,
+      "generation_id": "Mi6KQPtDijkKFpCnGYAd",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6baa1f0900cab81823e9aec29d55b4cfabf2bbb5c58a759d5c47d3fbb7e4f4dd"
+    },
+    {
+      "source_id": "weather-rain-canopy-r3",
+      "take": 2,
+      "generation_id": "wDrc8i9KAHpfdgyzGpzJ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b754e77949c4af8cbb2ad46b616afb890044c53c17df07d47cd8698a87270875"
+    },
+    {
+      "source_id": "weather-rain-canopy-r3",
+      "take": 3,
+      "generation_id": "RGqT6weMW7LOnD1aghlQ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4b18e0f0c3d82e99ec497ed1d8b821cffa2bc1597fd2023ebe9b3bc6e314c22f"
+    },
+    {
+      "source_id": "weather-rain-canopy-r3",
+      "take": 4,
+      "generation_id": "wNU2VCJhD19w006qtNKt",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d28a4467a7ac594c6d241ac6d7e9571ab8937ec41d4127ff9cb94eec219ae675"
+    },
+    {
+      "source_id": "emp-cockpit-static-r3",
+      "take": 1,
+      "generation_id": "YUcMiTVpvkQmdgqHDPQb",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3bae0eb872501449e500f66e7188872aaf1501b9358a36f695b1b7be20ffd3be"
+    },
+    {
+      "source_id": "emp-cockpit-static-r3",
+      "take": 2,
+      "generation_id": "vRFZ9CnrzmtyIB349Nxd",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "09c82e35d62cce31b2dc413909781faf22594250394f78849e53ecd7c1596221"
+    },
+    {
+      "source_id": "emp-cockpit-static-r3",
+      "take": 3,
+      "generation_id": "GnbedIn1eeKIoijcuA1j",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "99d81d3f9e46bc9afd9e7591e3388b23824772794f2a56d49c03ebc84d4e210b"
+    },
+    {
+      "source_id": "emp-cockpit-static-r3",
+      "take": 4,
+      "generation_id": "VtCMtCS6dNALuze90qyt",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4833d03146d9f08d12e1a3a64e43dc692ddc2c94e0467e7e4f21b462192d3bf2"
+    },
+    {
+      "source_id": "visor-align-r2",
+      "take": 1,
+      "generation_id": "sdkOGnVc6RGimvZwvZim",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1e0dd30c8cb7f5bce1ff1d0ce3817866f10c6c0536866fd68802a457ddd65174"
+    },
+    {
+      "source_id": "visor-align-r2",
+      "take": 2,
+      "generation_id": "rQ2HpyFyCcChz5CZYsM6",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b28ad07e82813798eca50150adcf27b87cb21433a141085412fbb4cd0e143258"
+    },
+    {
+      "source_id": "visor-align-r2",
+      "take": 3,
+      "generation_id": "uKUpnOn4nAowxF0NZ4uN",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0495b3f375275bc6adaf822bbb989dd23f9b0e69ed8fc9dafcbead75ee35ca54"
+    },
+    {
+      "source_id": "visor-align-r2",
+      "take": 4,
+      "generation_id": "moNC9a8eH5spJ1H2TtuO",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "869eb0de82db2fa5d83cf15125d4c7324c17418097751b58160dcede09327cba"
+    },
+    {
+      "source_id": "visor-ok-r2",
+      "take": 1,
+      "generation_id": "DpHIADArl0mmPVdlx3u8",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "bcd61de5400169513440349adee26e2f354d2bc53e0395051a171f2342c7cc8c"
+    },
+    {
+      "source_id": "visor-ok-r2",
+      "take": 2,
+      "generation_id": "gvxEGNEBLS9lMhjNZGCe",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "911039ffcc171d29fb2f5cb89244158986ad7f286205e0e39d2c481831716970"
+    },
+    {
+      "source_id": "visor-ok-r2",
+      "take": 3,
+      "generation_id": "ciGFEdaODQJgL62yLrsy",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7029c9e8463fb879ca5932e6ab446486aa6728f2405e887de60eb4cb900512b4"
+    },
+    {
+      "source_id": "visor-ok-r2",
+      "take": 4,
+      "generation_id": "nrRbTrHxRuSLzckeOU26",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7812edd900c193de5e7c0fe7ccd45c3f6f4578b715eb14de6f41b7d9e895e13f"
+    },
+    {
+      "source_id": "visor-align",
+      "take": 1,
+      "generation_id": "2Qr6Mb971ECNIU6bdTbw",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4f1102232054dc526af2497839477d62bb8e02ba8dd79a4855da11fdef0fa4dd"
+    },
+    {
+      "source_id": "visor-align",
+      "take": 2,
+      "generation_id": "kfxXInwLkKBkGAlNOZBr",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "51645f67bc9ad8daf011917a89e9395aaf59aa0aa6bfa170435e5fe4d2c704ea"
+    },
+    {
+      "source_id": "visor-align",
+      "take": 3,
+      "generation_id": "C9dEZ7thrQvE7SxvSRsF",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e3f727f6e99780b2bb635fa252c579ea53e559b589b3b29f513267686d8a335c"
+    },
+    {
+      "source_id": "visor-align",
+      "take": 4,
+      "generation_id": "to9gVtKW9YquPGNcC6Ga",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e8596b69839e9b482b41e420d024691f87075841073d5c3662e9b442c129e33a"
+    },
+    {
+      "source_id": "visor-caret",
+      "take": 1,
+      "generation_id": "2twq3GYwe784oE2MiWSv",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6b785d006939e59d816606f4dab9702cfe3d57c80f24ad28a0134493d478443a"
+    },
+    {
+      "source_id": "visor-caret",
+      "take": 2,
+      "generation_id": "7OvgTqUOxtc1eFEJ9GFx",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5c3aa14874d9f7bf6744c6fdce00124ebd9afd89743c8597e7313bb2b7c3d0cc"
+    },
+    {
+      "source_id": "visor-caret",
+      "take": 3,
+      "generation_id": "15JHaAoK4EEdqOhZaOTv",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0a9cdc7d44b77a48a4fb728164565476a7e8c9897c18cd7c0efe977dbfa127e5"
+    },
+    {
+      "source_id": "visor-caret",
+      "take": 4,
+      "generation_id": "qt4cZCbDonXDfAQHKyg6",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f4713cea4bf10a7cde6f392bef254c1cffa08dfafbf8fabde99bcac63c7bb9ed"
+    },
+    {
+      "source_id": "visor-emp",
+      "take": 1,
+      "generation_id": "HX8QMu1tLT9L7IdbFZaC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e566639cfb3845fb7f6b60b9e518d12e0c34a669ea81d52177187fbdc2c7f8da"
+    },
+    {
+      "source_id": "visor-emp",
+      "take": 2,
+      "generation_id": "qFL1GVyrA8aRXpJL3mXx",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5f287873be86963aaa4ea7b540ea940da0193a4e394c3fcb043aa6f52ad32b86"
+    },
+    {
+      "source_id": "visor-emp",
+      "take": 3,
+      "generation_id": "9ml0cid6oFFU3vIvGiDg",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "aa6852e1a2181ea5e4f3747e06448a243f8aee1f5bc02e0631195ad4322062ea"
+    },
+    {
+      "source_id": "visor-emp",
+      "take": 4,
+      "generation_id": "oDoaYtfQlUC5Ap09hYY1",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "bf052e0ae88f4ff947b410ca568cf26780944fa97debaf9acf9e0d0d52b4f9ac"
+    },
+    {
+      "source_id": "visor-fault",
+      "take": 1,
+      "generation_id": "fGKqLOz5Jqc082pDJiSa",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "063b72396da911366947064010dc17a4247d7aed5bec5d5e7c78c0ccba199351"
+    },
+    {
+      "source_id": "visor-fault",
+      "take": 2,
+      "generation_id": "MWCSdi1g7fsZGUK43yM0",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6cebfa4f6d2684b51c874fdd9450f73352e3caf205da297c08eb71e3a7ed66b5"
+    },
+    {
+      "source_id": "visor-fault",
+      "take": 3,
+      "generation_id": "onl6T9OCAevZ4byBELvC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "2fa9c4babe1f040d0ede2e2b54649b5b5b35d105fdab12a483fac3c0e2285cad"
+    },
+    {
+      "source_id": "visor-fault",
+      "take": 4,
+      "generation_id": "4jjnTqFN3zEDip5ryRHt",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "2a76a8b80ed43384961bde697e08e98d4247317e547f08fcd94f591405a4fbf1"
+    },
+    {
+      "source_id": "visor-glitch",
+      "take": 1,
+      "generation_id": "wiAp73eWHqZevMH8fTgX",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "12d3ddb303cc9062e6180916ecd44abc045445c2dc04859eea42cc6b8235e680"
+    },
+    {
+      "source_id": "visor-glitch",
+      "take": 2,
+      "generation_id": "vR9t3yowBXQWwlBOwiJg",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "59311a754e5a8df5a5473c13659b626be62df79fd3aa42a2e47b8f902f50e311"
+    },
+    {
+      "source_id": "visor-glitch",
+      "take": 3,
+      "generation_id": "X4MXgFYtzGMMBdnbNdGT",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8e0b7f8638bb7150ef1a1868684333244a8a22cf672114f09f7f60577db7fd97"
+    },
+    {
+      "source_id": "visor-glitch",
+      "take": 4,
+      "generation_id": "wh6J7IRTJxguaYo79duJ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a6de98b0642fc9dea5f16ac692b3f515634ec973cc0aced1d2ee6dbc49af5a41"
+    },
+    {
+      "source_id": "visor-menu-back",
+      "take": 1,
+      "generation_id": "p0CD9HtALamUnmWLjETC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a5399ac6933f96734f63f72e53f935b9a48f0501f0a209fd48ca211f019e32ef"
+    },
+    {
+      "source_id": "visor-menu-back",
+      "take": 2,
+      "generation_id": "JuLEpCUmWRiu9rZ8Mw8y",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "2854c8481e8d800bf4fd591dc87122ca7aaf3b7b1471206107f338c4140c007a"
+    },
+    {
+      "source_id": "visor-menu-back",
+      "take": 3,
+      "generation_id": "RGDIFzXj2UgW4FdbVogh",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8c39a196d0e393cab923f88e9bd6ebcceee93ea2de73d46028d4c42ea3866a72"
+    },
+    {
+      "source_id": "visor-menu-back",
+      "take": 4,
+      "generation_id": "Ww6VzqpFIDbSEoikaMfL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4f757e2c2f18a1f605e54e46cdf9564410fd86854b5ebd2204d6f0fed16719cc"
+    },
+    {
+      "source_id": "visor-menu-deny",
+      "take": 1,
+      "generation_id": "zdM15L2yp1GUfzcDA7zU",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "78c4a28f1c0fc71a540295caefec082645b30ccf2bfb3c3590c2b63c29a72fd4"
+    },
+    {
+      "source_id": "visor-menu-deny",
+      "take": 2,
+      "generation_id": "I6l8DkwPKURzNk3Cb4PA",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "81c9c454327edb8cf3333c02c54f011c8eb219af2dc02a2ea2ad182170ed0736"
+    },
+    {
+      "source_id": "visor-menu-deny",
+      "take": 3,
+      "generation_id": "fIg1Ee0zDCmAyY9zqQSC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6985a7ed19ba1472c97628faea324fbd32159b2c570aac65420ef96ce7f0c3b6"
+    },
+    {
+      "source_id": "visor-menu-deny",
+      "take": 4,
+      "generation_id": "PZFC9OoPhINadFKxQdEF",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "24e4290a8e462e0e40f2412c54bdf9e65a80851b2f375941875d64c47e9e29c8"
+    },
+    {
+      "source_id": "visor-menu-move",
+      "take": 1,
+      "generation_id": "iCSKVRO11vQKoxZS7NhK",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3d4df5b631ca4d61d6981369a901d7881eb5f7b1f9b20f585ce2bfbb901f0a7e"
+    },
+    {
+      "source_id": "visor-menu-move",
+      "take": 2,
+      "generation_id": "zHksTDwsNkj14pDCjHEp",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "dd0ad76503301bd5f2c02440a58764f9dbcd6828b7ea2891f06cea504baf83a5"
+    },
+    {
+      "source_id": "visor-menu-move",
+      "take": 3,
+      "generation_id": "XQbnffy3fFpZ2LkIKGzQ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "96888253449dd683c1d84ff78889bda2ba63f9ea9aa04b9ff494d8ecbceecfa5"
+    },
+    {
+      "source_id": "visor-menu-move",
+      "take": 4,
+      "generation_id": "ELrl53sOnpY26bmrwjb4",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6dbcd2bc9908b2a555cea544fa374e5b5e15ed225954bdf48987e3d153c0d6a1"
+    },
+    {
+      "source_id": "visor-menu-open",
+      "take": 1,
+      "generation_id": "vX6LWdO6zBh1TaMVPIBD",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "62fd833f603288293d39a15cb81977eaa6f1abb5c37faa7fda43b9f2d95d3e22"
+    },
+    {
+      "source_id": "visor-menu-open",
+      "take": 2,
+      "generation_id": "DlJnswJaW1cCaxba6Vv3",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ae2c1b31e416a4782fef261d0c792a187ff1b81ee04088fa563117bb58b2ab88"
+    },
+    {
+      "source_id": "visor-menu-open",
+      "take": 3,
+      "generation_id": "ZSkXvbnsWSkXTsyvIRz1",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "32d2736743c8b5a3f98bc8d7eccd81eebce79e7966803ac2c0c02e36d1671d59"
+    },
+    {
+      "source_id": "visor-menu-open",
+      "take": 4,
+      "generation_id": "8SdN2vewonaUtg68MSKC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a9b41fde7451beac315fce692883d81843af91e8c5571f20a6b8b73ebba5ea59"
+    },
+    {
+      "source_id": "visor-menu-select",
+      "take": 1,
+      "generation_id": "GJQlcGyKgcDIH2YcPbQK",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "26c5644213fd9598b4ec1f033a7232b4b9ee1ae7175c64555ef43fc9f46c6202"
+    },
+    {
+      "source_id": "visor-menu-select",
+      "take": 2,
+      "generation_id": "8sTSiNADDdoImUDnJFJ5",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "2b32f58c9d4958aeb85df52ac1ed9662eb29cda51aaf06f290831e0900e92957"
+    },
+    {
+      "source_id": "visor-menu-select",
+      "take": 3,
+      "generation_id": "2HNWXHwFvKBZi9KPohQS",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5e7b67f4765beb35265539a9a28b1034645de090d5ff4e8aa05acf1013140f77"
+    },
+    {
+      "source_id": "visor-menu-select",
+      "take": 4,
+      "generation_id": "BRzZypVNeR6Ux0CaBSxf",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e491a548a980601e329796d5de6dc0020badb8f81afe36862510caae0e3cda1e"
+    },
+    {
+      "source_id": "visor-no",
+      "take": 1,
+      "generation_id": "IC9quk6mPerOtNVEtWuE",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4fae0a67375712a60e3d3f0acad1449b46e2dd6729b68880f25d26d66f6206c0"
+    },
+    {
+      "source_id": "visor-no",
+      "take": 2,
+      "generation_id": "9kA7mRF9Aru31KSEeAZj",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "4f5a0b063b027bec504675b5ac59ed5a071c191049cafe1d1429466e47920a04"
+    },
+    {
+      "source_id": "visor-no",
+      "take": 3,
+      "generation_id": "1svElzC48UKbj8pQZyQ8",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3422d8357ab2fe7a60e7d7ffd8fcad693a862b515c5f18ced29db9e14a237144"
+    },
+    {
+      "source_id": "visor-no",
+      "take": 4,
+      "generation_id": "78u4UFahuCbf2Iru25ng",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "60464c5f6d89c5f1cdef7c3f4287609b10781b17e6c3990a93723de670fe3dbc"
+    },
+    {
+      "source_id": "visor-ok",
+      "take": 1,
+      "generation_id": "5oqfn5Qxa7pAg8gYbU25",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e048774001a85718dd693bfe8457e422cb5f3b12a18e5a7e1971a77aec651e08"
+    },
+    {
+      "source_id": "visor-ok",
+      "take": 2,
+      "generation_id": "nRlyOYFRo9IOo0X9BBQQ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "99f716615727c55454058972580ef3c0181063c5100d8d1a66f1786b95db9525"
+    },
+    {
+      "source_id": "visor-ok",
+      "take": 3,
+      "generation_id": "KzIRP5XhR3Bmc01xZKvN",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0897b5ee8ee035a5bbd59b85bb0d2354eea2b46fea1f31737732acd2e859335a"
+    },
+    {
+      "source_id": "visor-ok",
+      "take": 4,
+      "generation_id": "eRNUX1uBXpYpmqYf3ATd",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "77505c0780a2bdfe860bc181cb8648aea80a5da534cee7ab98a222ec92f0ea7f"
+    },
+    {
+      "source_id": "visor-online",
+      "take": 1,
+      "generation_id": "m2X1Kgj04P3ZGIVMPXo2",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "717a74b3506bbbd62ea8898036aa2dcf572b112dec2f9e2e388239752b6e1f07"
+    },
+    {
+      "source_id": "visor-online",
+      "take": 2,
+      "generation_id": "MoA03PPAMdLaTivafUqd",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "08adf5e40dcd8f2737bb382702555c686ee4cc2350f95bfc365354478553f891"
+    },
+    {
+      "source_id": "visor-online",
+      "take": 3,
+      "generation_id": "0nVzw2hcryrsRnMdTh7h",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8017219c571af3ffdbd248b3fd7fb3bf539acb83f9f4295ad261ef43acf48171"
+    },
+    {
+      "source_id": "visor-online",
+      "take": 4,
+      "generation_id": "Dqo2WnP8nH8V4yY45a5P",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6809be0f307a5b443b0dc37b246dd6a8810f1ed031781c4c6417e277b6797fb2"
+    },
+    {
+      "source_id": "visor-powerup",
+      "take": 1,
+      "generation_id": "dhLhfVp9oARL5ANl5CoV",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7d74c095b950b62a803e1a33f1072ab64ffe128552a75fb94e80d9a6f8ded6ec"
+    },
+    {
+      "source_id": "visor-powerup",
+      "take": 2,
+      "generation_id": "wIHeHRWv9u20qQDysCPG",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d80474697a093701a2dc3b69e73bbe11e6669b6d82777c72efe7e1aad598582e"
+    },
+    {
+      "source_id": "visor-powerup",
+      "take": 3,
+      "generation_id": "4lijd7CSLrOA9Hkvw7FL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ffdace864bddd204648b23a99090d8b499bd7f4f611eb667af851c178eef90ae"
+    },
+    {
+      "source_id": "visor-powerup",
+      "take": 4,
+      "generation_id": "A1aZ2ZRVmVZys5hJRfMs",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "9d1ec7bd3ed094f785ab8f27ef2550d2865308a16a55c20eb306aae5b812e8f9"
+    },
+    {
+      "source_id": "visor-resync",
+      "take": 1,
+      "generation_id": "A1uiED1sDs9dFuaPnGVe",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a90d70c812f85b37ea9d317a51047260ab3d325d251288a71dbdefb3ec8efcfa"
+    },
+    {
+      "source_id": "visor-resync",
+      "take": 2,
+      "generation_id": "D4w8U6J92zEjsqSRpmQl",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1605851bd3515ac9017aae7dd5621f400714f3c8df4e35ccbc23080c85774b96"
+    },
+    {
+      "source_id": "visor-resync",
+      "take": 3,
+      "generation_id": "skDcxfNLIcXu8SAR3mK5",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "be205612a5f9bb486ea8a85904e5218a9f0002a17cbfe04232aeb14d5971e4a0"
+    },
+    {
+      "source_id": "visor-resync",
+      "take": 4,
+      "generation_id": "wxpbdZPOQXaTHrUGJdLw",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e077b6f1148d7e2d56faf5dd42732ef7c2d7c3069aca56e63ab4ca55d8290409"
+    },
+    {
+      "source_id": "visor-tick",
+      "take": 1,
+      "generation_id": "KXOGXHKUd6mKWmswBdN9",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "c2aa441b06d16f2952a62a6a4a8fdbb46ec9c2f65061755fa739b75e13f83977"
+    },
+    {
+      "source_id": "visor-tick",
+      "take": 2,
+      "generation_id": "I8luZ5OaoRKgXY2qAvAe",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5cb2f670d70a9f6adb70b26026f149db90cb91af9f5a27a3ab48f6565440e3aa"
+    },
+    {
+      "source_id": "visor-tick",
+      "take": 3,
+      "generation_id": "rYrbjxzxieW0IxrlRGFo",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "bea309f74ff749648d316f1dc130f0c1603f1b0ffa5aab1461b8568f6dd383b8"
+    },
+    {
+      "source_id": "visor-tick",
+      "take": 4,
+      "generation_id": "WYQ5zFBhtgRBQ06IPowr",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8f59b3f0f32b54db0c5281e246cfafb6146774471fc98fad33c02a22cae792df"
+    },
+    {
+      "source_id": "visor-warn",
+      "take": 1,
+      "generation_id": "RENjM593CgaCKDsHfXzp",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "cd59cb6afaeb452e9e3aee9e1ef171f7bfa158ffe85e3d4eb99bd2063825f006"
+    },
+    {
+      "source_id": "visor-wipe",
+      "take": 1,
+      "generation_id": "w9QtueEkfI0MLfozYyE7",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e4f1c7ea9f5bf688afe1f88eea17dd71b8b97664c0e10cf749b56c6017c1cea2"
+    },
+    {
+      "source_id": "visor-yes",
+      "take": 1,
+      "generation_id": "WQ2tD3LAgg8BthjpiaNy",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3390a0f81d2693e21ecd215ea129309b972046a3358b3e7051c595d6aada32ea"
+    },
+    {
+      "source_id": "building-collapse",
+      "take": 1,
+      "generation_id": "p5OAYQIawm3WhHRckP1q",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0fbe981db35e313d3a82e92537f627597ea9129d9c99d69519288906b6d1552b"
+    },
+    {
+      "source_id": "canopy-close",
+      "take": 1,
+      "generation_id": "F4nrK4DJCu8AzX0gc6YI",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "20c7357b70f4f8bee620e60e649ba48931adf1a31d499903a59c1cb1ce5df6ec"
+    },
+    {
+      "source_id": "gear-lever",
+      "take": 1,
+      "generation_id": "CCZCJXT90NEbo6rbcXYH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "cca42eb032bccf396c52e816ab0c119a09d35642eff776a997dd6069855729b0"
+    },
+    {
+      "source_id": "harness-creak",
+      "take": 1,
+      "generation_id": "lIMtcgY8evhhlhzUJ9h0",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1e8df753cbdc9eb0e04d37804222a1fd098b9571617a8104fb3610cbcb89736e"
+    },
+    {
+      "source_id": "hit-ping",
+      "take": 1,
+      "generation_id": "XQvzg7aeRwqXENqdQ0Km",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "997d6f40e069d38119d5c2544b149983b3c2b9a6d54e2459d15c59b4a7f56f6b"
+    },
+    {
+      "source_id": "hull-thud",
+      "take": 1,
+      "generation_id": "2az2zGP3JGTH0Y9vgkXy",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3bc5ec8735116851db8d34757c9f01f5fe73e04a2ad472c2b90a185e15f47558"
+    },
+    {
+      "source_id": "near-crack",
+      "take": 1,
+      "generation_id": "2Mz25fwfKF0iU24EvL30",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f9ec2fe1ffb3962f4f8c9ba24522be5ad73a5e3902a4f552c60ac553b7e0098b"
+    },
+    {
+      "source_id": "page-flip",
+      "take": 1,
+      "generation_id": "zDQyOafawUYTWAwFEsin",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "99050fd9a4c6ad1d4f3606129a3864b897967e7e73b3d63c554c3a97d7261b95"
+    },
+    {
+      "source_id": "rod-impact",
+      "take": 1,
+      "generation_id": "l5jPI2Jfk7lGNcNGARcH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "c840bca412f973b24d8e7e59f56d2a834a108749351bb0160e919191370936bf"
+    },
+    {
+      "source_id": "kaiju-beam",
+      "take": 1,
+      "generation_id": "DcScBm8wRXDTkQUqN4zy",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1a0f1fffae04af66c7cb4193b98da1890bb3b59197f2c069f18b678b652b1c88"
+    },
+    {
+      "source_id": "kaiju-bellow",
+      "take": 1,
+      "generation_id": "Q7RV3nn00OpGVE6iyrer",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5cae9bce574809ca969304fcb1aa6d108eda862a402e632df2a76dd0083c4b06"
+    },
+    {
+      "source_id": "kaiju-charge",
+      "take": 1,
+      "generation_id": "aspN5MWWgRFRWC2iCtMm",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6656d383d9742bca80c2344cf14cfd8bd3240fcb0c00dd9ee35ccc7420b2186a"
+    },
+    {
+      "source_id": "kaiju-roar",
+      "take": 1,
+      "generation_id": "y6mijhyaKcdfRC1pHsZC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "9bce1acc24eab8c1b07c3ce11b5c06025f243eaeb9688678b2c57c5c69baff3a"
+    },
+    {
+      "source_id": "kaiju-shriek",
+      "take": 1,
+      "generation_id": "QSweh7djTHKiZoOZAgIz",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0f5ae981df678c4f3db5e9fd18a29f5a057a8c34c8e6333f5e09876a9b7dbe47"
+    },
+    {
+      "source_id": "kaiju-shriek",
+      "take": 2,
+      "generation_id": "v3OAZDF9wAadnWEzZW0d",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8c6d222a47d8f7790c59d7cfd19b014454279f79aff48373b18dba23b4d3756b"
+    },
+    {
+      "source_id": "kaiju-spike",
+      "take": 1,
+      "generation_id": "2FZ0wsxMZxdDqGOwJJma",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3e8410591a70e475bd5540b703ddb9e17eb067f87dbc4af62e2a50079ddbda8e"
+    },
+    {
+      "source_id": "kaiju-spike",
+      "take": 2,
+      "generation_id": "HcWXzXwdSh95318aEX8o",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3ff2debfe0d204c179d1938455e94ec069a8fe623bb04367008e8009f6196027"
+    },
+    {
+      "source_id": "kaiju-step",
+      "take": 1,
+      "generation_id": "8ZFIcImw5G0EBEo4lLWD",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "3f8e38c2ec188971954cb51bacf8879de9e8f5c67c2965364a30e78ab874ef19"
+    },
+    {
+      "source_id": "kaiju-step",
+      "take": 2,
+      "generation_id": "YNVJMKx3JPKO25iF2Hvl",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6e5660037fdb90e83743db2b2445bc93c4b5332a8d8f500e7edafa59ee1c9487"
+    },
+    {
+      "source_id": "kaiju-swipe",
+      "take": 1,
+      "generation_id": "kAyrG6J1kBSMfSPEUAHm",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "16bf8c208b8b0b1a9c7b887d8fa0708e1736d0ad2782ab59a53f2e5722ae8527"
+    },
+    {
+      "source_id": "kaiju-swipe",
+      "take": 2,
+      "generation_id": "gxISBzHeODWpPro9DeWv",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ca18a28a27fa93a6088e00a0eac6f27ed3991463f2108c9f127112d3ca387c4d"
+    },
+    {
+      "source_id": "weather-rain-exterior",
+      "take": 1,
+      "generation_id": "nmjaQEAhezbyRB2dLE76",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "70d4e0403485790705d2a96bbab9532f94a3e275f8f15aefe3472d93d1011dbd"
+    },
+    {
+      "source_id": "weather-rain-exterior",
+      "take": 2,
+      "generation_id": "XFgKn9kGGdMhnX5ZpGS2",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0f89e1917e8b29118338038c10487b74d1417887069ce124133e30a4b14de934"
+    },
+    {
+      "source_id": "weather-rain-canopy",
+      "take": 1,
+      "generation_id": "4EeoZXkCa0LDZErfgqBo",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "59b020d3e5d2d59b288d65cf045812050afafa1b837e8b7c9e6fd506cb3994d8"
+    },
+    {
+      "source_id": "weather-rain-canopy",
+      "take": 2,
+      "generation_id": "iOyjhGIP2ks8louryeS9",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d69c5a3c1ada813dae95488d555f22e2774ec185a3c17f068429a622a1d4680d"
+    },
+    {
+      "source_id": "weather-thunder",
+      "take": 1,
+      "generation_id": "1I7sXojuyq6elrkPAJba",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a80f4a543d17d0fcdf04d8de0846ba7f70bb340e6eea182775d6b8d991629d47"
+    },
+    {
+      "source_id": "weather-thunder",
+      "take": 2,
+      "generation_id": "39FmTbz06hqkAhaoK8I8",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "44abce277db452e8bd9b0bcbdaa80a8eb6aeb3bd439153782cd3f25961e90fec"
+    },
+    {
+      "source_id": "cockpit-wind",
+      "take": 1,
+      "generation_id": "RUEUl7SlcL9GWMjv35vh",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "bc5e634b8b89f6cd4ed7598be347e067653ef10104eb8bec1939b79e897539ec"
+    },
+    {
+      "source_id": "cockpit-wind",
+      "take": 2,
+      "generation_id": "1YWA1uGiPVtCjm5LKgad",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "094450987c25621cea2ef4164b87f94b49f17a5e88e8f5cc9d3535e59c61ec5d"
+    },
+    {
+      "source_id": "pilot-gasp",
+      "take": 1,
+      "generation_id": "zPoYmqYb2a1Kd9GYzNRH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "28eb7a6d372a537d66737b6bf47b837741f4dc0e6e902c38140de6f911dfa35c"
+    },
+    {
+      "source_id": "pilot-recovery",
+      "take": 1,
+      "generation_id": "2Un8t8KGTxCP46EopxDZ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d5eef50ca5dea42663427cce111216eca9dcac03b62a2c9a880a1fe86b12dc58"
+    },
+    {
+      "source_id": "pilot-recovery",
+      "take": 2,
+      "generation_id": "BIa2eUSUFKRonRocPAxw",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "c0810a99500e8fc251668affab98f640d0508f59e1ed11efb6e9b3b5ecdbbdb6"
+    },
+    {
+      "source_id": "pilot-recovery",
+      "take": 3,
+      "generation_id": "9s58tJAZw2s7JO5YAeej",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a03d56447998f58cc9f64a40f5f182b166837e392e9799dd6ca0485b1b26930d"
+    },
+    {
+      "source_id": "pilot-heart",
+      "take": 1,
+      "generation_id": "CXEjAEBkdJ7mpkVlpCoI",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "24bfec380a20ef0c4a8c0574d33cb18911f4f73d4014f8524ffe33fca03913dc"
+    },
+    {
+      "source_id": "pilot-heart",
+      "take": 2,
+      "generation_id": "cPerFdmf95T0ONnbuAcc",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "596c64fc853b4fa2dfe34fcd47e914a3beb0451761bb1fc91003608dc44e7eaf"
+    },
+    {
+      "source_id": "pilot-heart",
+      "take": 3,
+      "generation_id": "8Dq4JXf9lQWVVbbJhAuH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "2cfe7e5d9ebd86ae0b4a1efe76b2c084407ce5ff70613c0648f7894b6e07e621"
+    },
+    {
+      "source_id": "emp-crack",
+      "take": 1,
+      "generation_id": "0TzDkjGCs8cQikbC39nv",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "efb068c53243d52745a6fd9de4749052b2b5ac927c286093ce22c0da4e5ba007"
+    },
+    {
+      "source_id": "emp-crack",
+      "take": 2,
+      "generation_id": "QTJ87IRzsSILLdPWSke5",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f16459541979325f32f403630f110749ef1c22de98b68dbbf01d14ce3f6e0b67"
+    },
+    {
+      "source_id": "emp-crack",
+      "take": 3,
+      "generation_id": "ao1PALJIRnOIPVCBziiH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "81f1512518b00f1858f0e2568334f709c5b5b81a348b4c314c544bda240bc36b"
+    },
+    {
+      "source_id": "emp-grid-die",
+      "take": 1,
+      "generation_id": "PplENhlpA7ydvPOZ7Uyx",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d95a7531a67531aac5efe800cf3f33b7fd59fe719efc067b170c03bf9882abe8"
+    },
+    {
+      "source_id": "emp-grid-die",
+      "take": 2,
+      "generation_id": "o1z69HgWgsLpFhjoqg0c",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "c4a870d82e3b0902d2508f381be7dc24cdc29bd40ec99c28e411bde6de5d4f36"
+    },
+    {
+      "source_id": "emp-cockpit-static",
+      "take": 1,
+      "generation_id": "h9vOvSxokgiBKqOT1f4V",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ffeff7dcc587d79d34635dd7ce8dbb209e98c4f43037d2c4dfb7dc9d009769bf"
+    },
+    {
+      "source_id": "emp-cockpit-static",
+      "take": 2,
+      "generation_id": "SXcygIT8LHgyS28LJMwS",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "89fc9fb087cb9b097b021f4eacbf0886e5e8a541e282d7b01511cf725dc560cb"
+    },
+    {
+      "source_id": "emp-cockpit-static",
+      "take": 3,
+      "generation_id": "AEHBIIgiK0kX4xu6C9H1",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b49805aed6e9de94b5d908ebc5ec0425511c2d0e0545638fd74ca08edaf9fc3a"
+    },
+    {
+      "source_id": "flare-burst-pop",
+      "take": 1,
+      "generation_id": "Vudx691IvcHa0nSoRXVX",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5ceb9a559f4e6a4bd3f0c41f15eca94d9f1b793bff88c8311412d44931867143"
+    },
+    {
+      "source_id": "flare-burst-pop",
+      "take": 2,
+      "generation_id": "NovF0O2wc1hNuYZUEF8D",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ef0c9aaf669f197a8e20d7347eb0a496999cb0a96b5f8a95839d1946ed0e4af3"
+    },
+    {
+      "source_id": "flare-burst-pop",
+      "take": 3,
+      "generation_id": "7f3ivsoMWe3O2LZzftRh",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "cc154433b63e5af7ae956388c4db90ca062163d0717c8f34bc2f6d667d4d8f54"
+    },
+    {
+      "source_id": "rod-descent",
+      "take": 1,
+      "generation_id": "SOAtA4BdOlogQIRmxxv2",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8ba6e5ec158c5c37e75dcd73f5447d25455959609e37746537a09e3c27e60721"
+    },
+    {
+      "source_id": "rod-descent",
+      "take": 2,
+      "generation_id": "R8wLwdWGcclJLVr3EdAE",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "bcd3d65e5d30a638c721a6e36a3253d41d29072dc8dbf3124b299f08ff7bcf9e"
+    },
+    {
+      "source_id": "rod-descent",
+      "take": 3,
+      "generation_id": "QpvllH2D4onSB5iNFjmG",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5e83c3329269d57255e72be816fb84e29556ee0f00859146ad1e752eef94b957"
+    },
+    {
+      "source_id": "visor-wipe",
+      "take": 2,
+      "generation_id": "rsl8H3P0tQnwp8CBDCbJ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1ef856ca67b680829a6e32fa788f5bd541caa8345e28eb66a8df66d27f6f936b"
+    },
+    {
+      "source_id": "visor-wipe",
+      "take": 3,
+      "generation_id": "0WuSA5QgT9Hiw3JdcFA9",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b61c162be5557f2136e5ddd24d187dc6bb802068eab8699e1c6e8b8fd9c56549"
+    },
+    {
+      "source_id": "visor-wipe",
+      "take": 4,
+      "generation_id": "IisXXLxqG7FSi2HPxajU",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "33f39407d96840cd75ed030e63f85db1cde5457e1615242ffc533f1bf45f8eb9"
+    },
+    {
+      "source_id": "visor-wipe",
+      "take": 5,
+      "generation_id": "brt3MGM23xDjLmL367J4",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "45d9caa2cd8ee63481d13bd6044a052a8dedcafbe9722d19f4d53a58b83ecdf9"
+    },
+    {
+      "source_id": "harness-creak",
+      "take": 2,
+      "generation_id": "Sb1iWb3ObdT7mHkmwcgS",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a49a962e7f51d00ff4af4b35e72c03f8056edbd79b9284410803da77d596d947"
+    },
+    {
+      "source_id": "harness-creak",
+      "take": 3,
+      "generation_id": "T9o7PibN4tF65VYSk397",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b102bd3ec612accb0b924c9f278f1ac29efb8b6280cf4f07f03470f8547eb588"
+    },
+    {
+      "source_id": "harness-creak",
+      "take": 4,
+      "generation_id": "lHPWTBLA0euXSC0YqOpL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "cce7fa718baaaf1a7ffaad3639eca24624ba2400594fd6d343b9a1de4c3e2897"
+    },
+    {
+      "source_id": "harness-creak",
+      "take": 5,
+      "generation_id": "YCqK3WR3F9Pi2zY8Q6P1",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "fb1229aa77fb3f0f904dad75a421d9b9ba3e43fc07be219ba354d74dafc5e9c9"
+    },
+    {
+      "source_id": "hit-ping",
+      "take": 2,
+      "generation_id": "8LL5lFLymufR2EU9A1mI",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "338d0dafaf84776f9fe35679df21d4f78f7b20cc76442383ed85f09d0360bd71"
+    },
+    {
+      "source_id": "hit-ping",
+      "take": 3,
+      "generation_id": "DnLrWEWBDFYMSaxlqBTx",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5b8315ff8d521bdae364332107b40433adb65dd32360b60ca20dc64977ddf631"
+    },
+    {
+      "source_id": "hit-ping",
+      "take": 4,
+      "generation_id": "aUSvQZQhZOOzoziQ3fkZ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a483767ced69a5f33f81ee445361ed9652a0305ec572f47afbafb4533dcb837f"
+    },
+    {
+      "source_id": "hit-ping",
+      "take": 5,
+      "generation_id": "JtfGDOIbLKm5BSFkuz4a",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "cd5d390cd121e7130a1fdfbab2f49913dc56cb48482e4671e2f03b8af418e72b"
+    },
+    {
+      "source_id": "near-crack",
+      "take": 2,
+      "generation_id": "KEPF1hI3nb8qO6NAHwnq",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "40fe6510202a815cfcb55c8b1a94c8a40d9c39faa047419b4a69519a08b55c38"
+    },
+    {
+      "source_id": "near-crack",
+      "take": 3,
+      "generation_id": "8MdabJ1rr9sHyDrsAHUe",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f43d0f54c43b7c6547f11ac658bd498f9db975d7b6c423d1777796c7cb67f36e"
+    },
+    {
+      "source_id": "near-crack",
+      "take": 4,
+      "generation_id": "SFbFsIUuHM8CcWn2MJOB",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d13045cf9259d567bf81821b59ff7a7e3e415fb879edd7f03bcfa7f5eaab30ae"
+    },
+    {
+      "source_id": "near-crack",
+      "take": 5,
+      "generation_id": "xC9CSrSUwa4jTZUt1yyG",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7c8805022121ab76f6b6b5495fe160f857c217d89e5f44bb9e763fbd551ad573"
+    },
+    {
+      "source_id": "airframe-creak",
+      "take": 1,
+      "generation_id": "Naupahrs0881ib9mZHl4",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a068fa24a24ee9327b52f26c05e848012068addae1f214a464bc6593970c4a35"
+    },
+    {
+      "source_id": "airframe-creak",
+      "take": 2,
+      "generation_id": "E2wNJeTk4yRsB5qMYr4z",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0b84e92a8e7fffc4834b7420ab4951646e6bbf1b56975652001a164531595018"
+    },
+    {
+      "source_id": "airframe-creak",
+      "take": 3,
+      "generation_id": "8bLwRho9Jap3WYZEnqEY",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a43359bae35ab53f092f77fe4843bce8fe3526fadf5e039933980f2f812ab2e7"
+    },
+    {
+      "source_id": "airframe-creak",
+      "take": 4,
+      "generation_id": "dt8Zy91MloA8U9xwLgE3",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f62b0f12e680307f66c28959d58ce31f0f32f1c010e6d22295ca1337178e5a3e"
+    },
+    {
+      "source_id": "pilot-inhale",
+      "take": 1,
+      "generation_id": "LtRMBolMgAArBnZdWtlP",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6821aa6248655dfb60e8039e79839de3a023c5e017f42ef6137b90f845700e64"
+    },
+    {
+      "source_id": "pilot-inhale",
+      "take": 2,
+      "generation_id": "h5v36EM3HmgsaDefddhb",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0ad33bde03d8539e300e9e45b37f698e0600c5f4e2a26365b15f671d5c27c9a1"
+    },
+    {
+      "source_id": "pilot-inhale",
+      "take": 3,
+      "generation_id": "vGF1SFzDLFtmkVg8VaSR",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "18393a93940d17e54e7727d95f0879985619e82a2cb8fc4967141c3309788272"
+    },
+    {
+      "source_id": "pilot-inhale",
+      "take": 4,
+      "generation_id": "2tRFOst0DR8tnqMyhaxC",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7d5217bd6cd515940c1ff1b2cadd28b7ad03f97178df2b3594645d9db18e1c43"
+    },
+    {
+      "source_id": "pilot-exhale",
+      "take": 1,
+      "generation_id": "3sb8ZxyObsPX8xOYAcRW",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "dc0d99ef250f65dc1b878ad4ad9c243de39a47044c7d810c9d0850f457055821"
+    },
+    {
+      "source_id": "pilot-exhale",
+      "take": 2,
+      "generation_id": "dCvTF18zxs1ysSuYX3He",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0cd958eb03700d2f407c70357f3dd513575f2160dd8cc6e1d12de596d502f2bb"
+    },
+    {
+      "source_id": "pilot-exhale",
+      "take": 3,
+      "generation_id": "hZYGEoFPgFaSzXDdHPut",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "6c3f7fe2050b67be7b969bb90b45ce50fcf5a582f558e9ec5678836478d5bbae"
+    },
+    {
+      "source_id": "pilot-exhale",
+      "take": 4,
+      "generation_id": "KUbPvJvJ5c8sNXhSaMvM",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "c99d6deef5f1d28b62e06742b55bb725a5cbc45c49ba51c5bc207a7584d421e8"
+    },
+    {
+      "source_id": "pilot-pressure-inhale",
+      "take": 1,
+      "generation_id": "kB8y5Li6eor0KksUqrtc",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "97727ff716693d08696a45299922d1dacf7cde1f70a77a07219c1365df5746bc"
+    },
+    {
+      "source_id": "pilot-pressure-inhale",
+      "take": 2,
+      "generation_id": "LgTFkR2OEE2gwG0b4r5y",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "473e72de37bf51685c6a871b8932b7b27696b6ad0309af487399064a9666cd8f"
+    },
+    {
+      "source_id": "pilot-pressure-inhale",
+      "take": 3,
+      "generation_id": "yHFpM4ZJPr9KZXsnel1m",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "9883c67e490d817238ab6ea844cfeb2cf9e7497749facafbae6bc7bd4452ffae"
+    },
+    {
+      "source_id": "pilot-pressure-inhale",
+      "take": 4,
+      "generation_id": "KBEnxWFJWMdvZEZCzau8",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "792c8d3816a7cef08bf2428be79154f1f7672edc240179a14571b6dbb46f3caf"
+    },
+    {
+      "source_id": "pilot-suit-inflate",
+      "take": 1,
+      "generation_id": "DTauBY3Si644HhZbHQiL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5e013785df87490d5ff9aa4434b25b73ab01a6cc5476b266e65551aa68cb0073"
+    },
+    {
+      "source_id": "pilot-suit-inflate",
+      "take": 2,
+      "generation_id": "Ro8Rh0ynkxva2BGepNCF",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "99aa01c4d36d5bc28240af4b603476d6510b19c9bb980593fcb78c3451fea0e0"
+    },
+    {
+      "source_id": "pilot-suit-inflate",
+      "take": 3,
+      "generation_id": "ocXUug6WnCCiLxevCDFL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "21e34e26b20203940201ecc6582d3c26d921494b6d1e80d05ef5cef98a020b8f"
+    },
+    {
+      "source_id": "pilot-suit-inflate",
+      "take": 4,
+      "generation_id": "w3LsHaNRsTTKx0sUVuiF",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "e947127b917737063a69de973569577c7dbe4ff6eb8ed474dc09823dad1a4074"
+    },
+    {
+      "source_id": "pilot-suit-vent",
+      "take": 1,
+      "generation_id": "6qkbKAi0JzRcCOzYhwjW",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "a1a4f82e6b2626f8afb365b844ccc1747f29b12bfc5efe095ea3f4ce35b1f393"
+    },
+    {
+      "source_id": "pilot-suit-vent",
+      "take": 2,
+      "generation_id": "ePaLjr5lP39UnEYmMouw",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7ec435c89b98a3e6561db33c08391484ac3da38ea8424c6069afaa894461d182"
+    },
+    {
+      "source_id": "pilot-suit-vent",
+      "take": 3,
+      "generation_id": "D23jo8Swrchozl5CR9d5",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "02240de1e6727427b2e5e2b6f6b9076e1b390755ce004757ecf84e4f76e00ac7"
+    },
+    {
+      "source_id": "pilot-suit-vent",
+      "take": 4,
+      "generation_id": "FtON34HzulcGYjFB9VPH",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7c5d6daefc70bec08c350ff1a795fb2ad0b8fc6b91df61ec4ddb41146f84a872"
+    },
+    {
+      "source_id": "pilot-keh",
+      "take": 1,
+      "generation_id": "5aGqdqMgCdc8r8bTOyoq",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "d3fb27081a79e2511ec3a7689c61c1fe627dc143010e20c7fbe6afde39a03a44"
+    },
+    {
+      "source_id": "pilot-keh",
+      "take": 2,
+      "generation_id": "cLqYqAVcNOFL9DYU2UiJ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f0e294647293d3b30aa119dc2b82d3f7ab8d9bac485b81e6a309aee50c0cd5e0"
+    },
+    {
+      "source_id": "pilot-keh",
+      "take": 3,
+      "generation_id": "2v2XAA76EdkdKZVhOobL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5d66c1965e464548102f0f9c9226a09a9b0ece6f80dd24216f94bf6a7d245f42"
+    },
+    {
+      "source_id": "pilot-keh",
+      "take": 4,
+      "generation_id": "Lz9hluoTySGeFxl01qrU",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "85fb3ffded9c6c8ab71399183a6931caaf79c634f7587addcfc3ba6d6d28a8a3"
+    },
+    {
+      "source_id": "pilot-keh-alt",
+      "take": 1,
+      "generation_id": "48uCg8wo3BkuTEkaav3Q",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "69ae5142aa3dbfe8b4b81e7fbc590b9b15ddb4c26d80e5b311ed097114f38eaf"
+    },
+    {
+      "source_id": "pilot-keh-alt",
+      "take": 2,
+      "generation_id": "3hHbxcJXMZgwXB6btdwz",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "0020a320ee3d3c7b577bebc8274626f86e97cc49adeca18f4f44b417fc2dd8c6"
+    },
+    {
+      "source_id": "pilot-keh-alt",
+      "take": 3,
+      "generation_id": "HmC5OjZTbdAxfDzIFDov",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "36e891533405bc7d588bb32e2b55821433f66b3c8405a04d5969fbe4374e9885"
+    },
+    {
+      "source_id": "pilot-keh-alt",
+      "take": 4,
+      "generation_id": "QCGU0iC2FBDyRx6zW1V9",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "7b50d68ecd08d5c269602be0bcae80b6b75e9f9509f93c713c378f958346a63b"
+    },
+    {
+      "source_id": "pilot-gasp",
+      "take": 2,
+      "generation_id": "phIsanVWPDaM3v0fXiwr",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "dd08d4d48678790d560c698f96a86a2676237ed7b9d9bfaffccea80221151c91"
+    },
+    {
+      "source_id": "pilot-gasp",
+      "take": 3,
+      "generation_id": "KoIllB4FWZbM1gbFAqAP",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8a8e657da9f4b87ca8d7956b2a2618bc238400ad55053df0a3c5034f452a28cb"
+    },
+    {
+      "source_id": "pilot-gasp",
+      "take": 4,
+      "generation_id": "Nq4JktDAaq62YHmpjbDI",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "736bb6cf7e0a1f304ce2642e5457de04e062b90e52225def6d25320a532427bd"
+    },
+    {
+      "source_id": "pilot-gasp",
+      "take": 5,
+      "generation_id": "BHxraC6Yed5d9wb6FCBZ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "8f3bb82da3206c7465f6009a0a3994ed29574506069f2015f4aa8238beda49bd"
+    },
+    {
+      "source_id": "lance-charge",
+      "take": 1,
+      "generation_id": "8bsT4hdT2G6I2PNIn6hd",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "ccc62bcb79f71eab14fb1891ecfac338ed48fc9df72234099ea38731077eecce"
+    },
+    {
+      "source_id": "lance-charge",
+      "take": 2,
+      "generation_id": "XFwyoCEf2d5nGyn1eCXe",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "663aac10c7fce0d8a6b645a895467879f6f69a7e586331f886394a6b063f055f"
+    },
+    {
+      "source_id": "lance-charge",
+      "take": 3,
+      "generation_id": "ui79vbpI6BFyW0AsLV57",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "1418c6c758240a110e117bcd0cf43e43864b7725b2beae3ea236279d1909b9ae"
+    },
+    {
+      "source_id": "lance-charge",
+      "take": 4,
+      "generation_id": "NPezm9dDHrqdsFLtOKPI",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "f9a0c41c6d99f068dfa1f76481c9a686646cf0148baad2df21f47d5a82447a8f"
+    },
+    {
+      "source_id": "sa74-geiger",
+      "take": 1,
+      "generation_id": "QUfCHYtkOJoA0MXbDmX7",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "532f936e8a0d86f6ef1e2cbcc5bf069a06b9e9d872d721269f395072e04313e9"
+    },
+    {
+      "source_id": "sa74-geiger",
+      "take": 2,
+      "generation_id": "rotqIEolvSbs7MxvqbrL",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "5dad2cd59b1eaad7dd27626de8b6abf8b00b6d424d7a3281ee33e8c83864be09"
+    },
+    {
+      "source_id": "sa74-geiger",
+      "take": 3,
+      "generation_id": "stn7jMdrhP0lB5iQBRWs",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b52128d00d1b3be0ecda97ad4f03a73516a189bef6a267880e01577cf83fa4cf"
+    },
+    {
+      "source_id": "sa74-geiger",
+      "take": 4,
+      "generation_id": "VFD9vh71KvV9CsZCqKD7",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "156919eb50f128b7dcaff0d4c07f7ac008893e1db650a8958959a8801d41b2a3"
+    },
+    {
+      "source_id": "sa74-blast",
+      "take": 1,
+      "generation_id": "LJtWrxG1pbdvY1v6467H",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "78635d2b5295c91ed43e223797625739d9e1b10ec744765fd71b451cbde78f84"
+    },
+    {
+      "source_id": "sa74-blast",
+      "take": 2,
+      "generation_id": "dfmgQDArZowXkfuu7jKh",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "76415bcad273cfcb2a2b16e2610ba72c2df7db384b3f0787e47f410081a93507"
+    },
+    {
+      "source_id": "sa74-blast",
+      "take": 3,
+      "generation_id": "cMgmf6q7xAw779xytl6T",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b4964960894b5b1001f238fad95b690267cd88cb0ff46201264ab6ec827f0fe1"
+    },
+    {
+      "source_id": "sa74-blast",
+      "take": 4,
+      "generation_id": "0xm7RZfem6tcuJ4AeRKJ",
+      "model_id": "eleven_text_to_sound_v2",
+      "raw_sha256": "b1c6b79dc444149da00fe168db3776ee428919f834a983870eb23d37bb5120ac"
+    }
+  ],
+  "rejected_generations": [
+    {
+      "source_id": "weather-rain-canopy-r2",
+      "take": 1,
+      "generation_id": "TQlPVPQWCLgwRRdCKPn2",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "weather-rain-canopy-r2",
+      "take": 2,
+      "generation_id": "E9BeKrP5ghmwtuqizMhP",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "weather-rain-canopy-r2",
+      "take": 3,
+      "generation_id": "fI4VTebYfZ284VzZBUWA",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "weather-rain-canopy-r2",
+      "take": 4,
+      "generation_id": "BiiIK4U3FBd8ULvLoLLr",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "emp-cockpit-static-r2",
+      "take": 1,
+      "generation_id": "j5lxiNpILopXD05zvz50",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "emp-cockpit-static-r2",
+      "take": 2,
+      "generation_id": "NSzAHbILEXE8muBsYN4L",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "emp-cockpit-static-r2",
+      "take": 3,
+      "generation_id": "KGG0R8OH7yFBUE5uCA3v",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    },
+    {
+      "source_id": "emp-cockpit-static-r2",
+      "take": 4,
+      "generation_id": "oskYemEwkjugukVTAGZx",
+      "model_id": "eleven_text_to_sound_v2",
+      "status": "failed",
+      "reason": "The model rejected a prompt longer than 450 characters; no audio was produced."
+    }
+  ]
+}

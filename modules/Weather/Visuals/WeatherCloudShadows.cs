@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Vector3 projectedDirection;
         private double centreX, centreZ;
         private float nextBuild, nextUpload, blendStart;
-        private int revision, generating;
+        private int revision, generating, clearanceRevision;
         private ShadowResult ready;
         private string failureReason;
         private bool attached;
@@ -63,6 +63,11 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             if (light == null) return;
 
             float now = Time.unscaledTime;
+            if (clearanceRevision != CloudClearance.Revision)
+            {
+                clearanceRevision = CloudClearance.Revision;
+                nextBuild = 0f;
+            }
             GlobalPosition eye = camera.transform.GlobalPosition();
             // SameTape ignores D: a held offset edit (a rebased key, SetFixtureTape) would otherwise leave the cookie built for the old D.
             bool keyChanged = key == null || !field.Key.SameTape(key) || field.Frame.Offset != builtOffset;

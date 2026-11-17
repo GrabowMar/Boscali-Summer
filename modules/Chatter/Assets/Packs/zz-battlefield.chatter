@@ -1,0 +1,272 @@
+# New battlefield ensemble. Static speech exactly matches recordings; location/event details remain in the tactical feed.
+
+@command.baselost tactical
+!replace
+[*] They've overrun the base! Fall back! Get the wounded out, now!
+[*] We can't hold this base! All squads, withdraw! Cover each other!
+[*] Perimeter's gone. We're pulling out. Don't leave anybody behind!
+
+@command.basetaken tactical
+!replace
+[*] We're inside! Base secured. Get that perimeter locked down!
+[*] The base is ours! Check your people. Watch for a counterattack.
+[*] Friendly forces hold the base! We did it. Now hold the line!
+
+@command.enemybase tactical
+!replace
+[*] Enemy forces have taken another base. Watch the front. They're gaining ground.
+[*] Confirmed enemy capture. Keep your routes clear of that field.
+
+@command.basewithdraw tactical
+!replace
+[*] Break contact! Smoke out, cover the wounded! Move!
+[*] All surviving squads, fall back together. We are not staying here!
+
+@command.carrierevac emergency
+!replace
+[*] This is the captain! All hands, abandon ship! Get clear of the flight deck!
+[*] We are losing the carrier. All hands, evacuate! Launch anything that can fly!
+[*] She's going under. Abandon ship. Get my people off this vessel!
+
+@command.shiplost tactical
+!replace
+[*] We've lost a friendly ship. Any boats still afloat, get clear of the wreck.
+[*] Friendly vessel is lost. Keep the survivors' channel open.
+
+@command.shipsunk tactical
+!replace
+[*] Enemy ship destroyed. Good hit. Keep clear of the blast.
+[*] Confirmed enemy vessel sunk. Stay alert for the rest of their group.
+
+@command.insertion status
+!replace
+[*] Drop lead, boots on the ground! Form up. Keep the landing zone covered!
+[*] We're down. Rally on me! Air cover, stay with us!
+[*] Insertion complete. All sticks, check in. We've got work to do.
+
+@command.event status
+!replace
+[*] Command update. Conditions across the theater have changed. Review the latest bulletin.
+[*] New orders from theater command. Check the bulletin before your next run.
+
+@command.superevent emergency
+!replace
+[*] All stations, priority traffic. Major development across the theater. Stand by for orders.
+[*] Break, break. This is command. A major theater emergency is in effect. Check the priority bulletin.
+
+@command.event.allied_intervention emergency
+!replace
+[*] Coalition relief is crossing the frontier. Reinforcements are coming into the theater. Keep those routes open.
+
+@command.event.emergency_appropriation emergency
+!replace
+[*] The war cabinet has opened the reserves. Emergency funding and supplies are being released to the hard pressed forces.
+
+@command.event.frontline_overstretch emergency
+!replace
+[*] The advance has outrun its supply line. Forward units, check your reserves. Don't push beyond your support.
+
+@command.event.munitions_crisis emergency
+!replace
+[*] Theater command reports a munitions crisis. Make every shot count. The depots are running dry.
+
+@command.event.ceasefire_ultimatum emergency
+!replace
+[*] A ceasefire ultimatum has been issued. This is not a ceasefire order. Maintain readiness until command confirms.
+
+@command.event.partisan_supply_raid emergency
+!replace
+[*] Rear supply routes have been hit. Escort crews, watch for ambushes. Replacement stores are being arranged.
+
+@command.event.industrial_surge emergency
+!replace
+[*] Factories are clearing their backlogs. Fresh supplies are moving to the front. Give those convoys room to work.
+
+@command.event.emergency_withdrawal emergency
+!replace
+[*] Emergency withdrawal is under way in the theater. Cover the recovery convoys. Keep the routes open for the wounded.
+
+@command.event.ceasefire_rumors status
+!replace
+[*] Ceasefire rumors are circulating. We have no ceasefire order. Keep your guard up.
+
+@command.event.monsoon_season status
+!replace
+[*] Monsoon conditions are slowing dispatches. Give support crews time to turn around.
+
+@command.event.fuel_depot_fire status
+!replace
+[*] A fuel depot is burning. Expect rationing and delays. Check your fuel before committing.
+
+@command.event.dust_storm status
+!replace
+[*] Dust over the forward strips. Expect slower support dispatches. Mind your approach.
+
+@command.event.black_market_surplus status
+!replace
+[*] Surplus stores just became available. Quartermaster says don't ask about the paperwork.
+
+@awacs.checkin status
+!replace
+[*] Skywatch, radar contact. Keep this channel clear for tactical traffic.
+[*] Skywatch has you. Stay sharp out there. Bring your people home.
+
+@awacs.bandit tactical
+!replace
+[*] Skywatch. Hostile aircraft detected. Check your tactical picture.
+[*] New hostile air contact. Watch your approach and check your radar.
+
+@awacs.missile emergency
+!replace
+[*] Missile inbound! Break! Defend now!
+[*] Launch warning! Go defensive! Keep moving!
+
+@awacs.sam emergency
+!replace
+[*] Surface missile launch! Defend! Watch the ground threats.
+
+@awacs.missileclear tactical
+!replace
+[*] Immediate missile threat is clear. Keep checking your six.
+
+@awacs.splash tactical
+!replace
+[*] Skywatch confirms a hostile down. Good work. Stay on the picture.
+[*] Enemy aircraft destroyed. Check for another before you turn away.
+
+@awacs.friendlydown tactical
+!replace
+[*] Friendly aircraft down. Watch for a chute. Keep the area covered.
+[*] We've lost a friendly aircraft. Stay together. Don't give them another.
+
+@awacs.clean tactical
+!replace
+[*] Skywatch picture is clean. Keep a lookout anyway.
+
+@awacs.fuel status
+!replace
+[*] Check your fuel state. Plan your way home before it becomes urgent.
+
+@awacs.fuelcritical tactical
+!replace
+[*] Fuel state critical. Get yourself home. Don't stretch it.
+
+@tower.taxi status
+!replace
+[*] Tower copies. Taxi with caution. Watch for crossing traffic.
+
+@tower.landing status
+!replace
+[*] Tower has your approach. Check the runway is clear before touchdown.
+
+@tower.goaround status
+!replace
+[*] Go around! Go around! Climb clear and reset your approach.
+
+@tower.airborne status
+!replace
+[*] Tower, airborne acknowledged. Good hunting. We'll keep the lights on.
+
+@tower.welcome status
+!replace
+[*] Welcome back. Clear the runway when able. Good to have you home.
+
+@tower.alarm emergency
+!replace
+[*] Airfield under attack! Clear the runway! All crews take cover!
+
+@allied.splash ambient
+!replace
+[*] Splash one! Yeah! Coming around, cover me!
+[*] Got him! He's going down. Checking for his wingman.
+
+@allied.lastwords tactical
+!replace
+[*] I'm hit! She's breaking up! Ejecting!
+[*] Mayday! Mayday! I can't hold her! I'm punching out!
+
+@allied.thanks status
+!replace
+[*] That was too close. You got him off me. I owe you one.
+
+@wing.copy status
+!replace
+[*] Copy that. Moving now.
+[*] Roger. I'm on it.
+
+@wing.unable status
+!replace
+[*] Unable. Can't make that work from here.
+
+@wing.airborne status
+!replace
+[*] Airborne. Coming up on your wing.
+
+@wing.rolling status
+!replace
+[*] Power up. Rolling. See you upstairs.
+
+@wing.splash tactical
+!replace
+[*] Target destroyed! Coming back to you.
+
+@wing.damaged tactical
+!replace
+[*] Taking damage! Still flying. Cover me!
+
+@wing.ejected emergency
+!replace
+[*] Ejecting! Ejecting!
+
+@wing.fox2 tactical
+!replace
+[*] Fox two! Missile away.
+
+@wing.fox3 tactical
+!replace
+[*] Fox three! Supporting the shot.
+
+@wing.rifle tactical
+!replace
+[*] Rifle. Weapon away.
+
+@wing.magnum tactical
+!replace
+[*] Magnum. Suppressing that radar.
+
+@enemy.lastwords tactical
+!replace
+[*] We're hit! I can't get out!
+[*] Mayday! Losing control!
+
+@enemy.splash ambient
+!replace
+[*] Target down. Stay on the others.
+
+# Sparse SA-74N aftermath: exact recorded survivor calls, never ordinary battle traffic.
+@command.survivor.ground tactical
+!replace
+[*] Is anybody still on this net? We survived the blast. There's no answer from command.
+[*] I can hear someone... Keep talking. Please, keep talking.
+[*] We've got wounded here. If anyone can hear this, we're still alive.
+
+@command.survivor.captain tactical
+!replace
+[*] This is a surviving naval station. The flash... We've lost contact with the fleet. Is anyone receiving?
+[*] All surviving crews, stay together. Keep calling. We need to know who's still out there.
+
+@command.survivor.paratrooper tactical
+!replace
+[*] Drop lead to any station. We made it through the blast. The squad's trying to regroup.
+[*] Anybody receiving? We've got survivors. Don't give up on this channel.
+
+@awacs.survivor tactical
+!replace
+[*] Skywatch to any surviving station. The picture's gone. I'm still here. Is anyone else receiving?
+[*] Emergency traffic. If you can hear this, stay on the net. We're trying to make contact.
+[*] I keep calling... Nothing back. Please, someone answer.
+
+@wing.survivor tactical
+!replace
+[*] I saw the flash. I'm still flying. Is anybody left on this frequency?
+[*] Any friendly aircraft, respond. I can't raise my flight. Please respond.

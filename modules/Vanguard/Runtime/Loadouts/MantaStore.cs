@@ -238,6 +238,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             return false;
         }
 
+        /// <summary>Stores were placed on an airframe registered late: pair its MANTA stations on the next Resolve.</summary>
+        public static void Invalidate() => resolved = false;
+
         public static void Resolve()
         {
             if (resolved) return;
@@ -253,6 +256,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             foreach (KeyValuePair<string, List<int>> entry in leads)
             {
+                if (Pairs.ContainsKey(entry.Key)) continue; // paired on an earlier pass
                 HardpointSet[] sets = PrefabSets(entry.Key);
                 if (sets == null) continue;
                 Vector3[][] points = Points(entry.Key, sets);

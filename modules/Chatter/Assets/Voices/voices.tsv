@@ -1,285 +1,91 @@
-# line id, built-in pack, event, spoken words (the strip shows the full line). Made with ElevenLabs eleven_multilingual_v2, mp3 22 kHz 32 kbps.
-c1ca984a	allied-a	allied.lastwords	I am hit! I am hit! Going down!
-c1ca984a	allied-b	allied.lastwords	I am hit! I am hit! Going down!
-882ea85b	allied-a	allied.lastwords	Mayday, mayday! I cannot hold it!
-882ea85b	allied-b	allied.lastwords	Mayday, mayday! I cannot hold it!
-71d2e82f	allied-a	allied.lastwords	Losing control! Ejecting!
-71d2e82f	allied-b	allied.lastwords	Losing control! Ejecting!
-9058f0c3	allied-a	allied.lastwords	They got me! Punching out!
-9058f0c3	allied-b	allied.lastwords	They got me! Punching out!
-a76a7ed2	allied-a	allied.lastwords	Engine is gone! I am going in!
-a76a7ed2	allied-b	allied.lastwords	Engine is gone! I am going in!
-0d2481bf	allied-a	allied.lastwords	Eject, eject, eject!
-0d2481bf	allied-b	allied.lastwords	Eject, eject, eject!
-006e2c0e	allied-a	allied.splash	Splash one! Got him!
-006e2c0e	allied-b	allied.splash	Splash one! Got him!
-3b31fcc2	allied-a	allied.splash	Scratch one bandit!
-3b31fcc2	allied-b	allied.splash	Scratch one bandit!
-c2a918f6	allied-a	allied.splash	Target down! That is a kill!
-c2a918f6	allied-b	allied.splash	Target down! That is a kill!
-febcec8e	allied-a	allied.splash	Splash! He is going in!
-febcec8e	allied-b	allied.splash	Splash! He is going in!
-a57f376c	allied-a	allied.splash	Bandit destroyed. Resuming patrol.
-a57f376c	allied-b	allied.splash	Bandit destroyed. Resuming patrol.
-a600dea2	allied-a	allied.splash	Got one! Somebody confirm that!
-a600dea2	allied-b	allied.splash	Got one! Somebody confirm that!
-1e6f806f	allied-a	allied.splash	Kill! He is burning!
-1e6f806f	allied-b	allied.splash	Kill! He is burning!
-46d34504	allied-a	allied.splash	Splash one!
-46d34504	allied-b	allied.splash	Splash one!
-6cca3fa5	allied-a	allied.thanks	Thanks for the save! I owe you one.
-6cca3fa5	allied-b	allied.thanks	Thanks for the save! I owe you one.
-17eabe1e	allied-a	allied.thanks	That was close. Good shooting!
-17eabe1e	allied-b	allied.thanks	That was close. Good shooting!
-abab2762	allied-a	allied.thanks	He was right on me. Thanks!
-abab2762	allied-b	allied.thanks	He was right on me. Thanks!
-4f6fb5c4	allied-a	allied.thanks	Nice kill! You saved my neck.
-4f6fb5c4	allied-b	allied.thanks	Nice kill! You saved my neck.
-9bb36842	allied-a	allied.thanks	Bandit off my tail. Appreciate it!
-9bb36842	allied-b	allied.thanks	Bandit off my tail. Appreciate it!
-05d324b7	allied-a	allied.thanks	Whoever that was, thank you!
-05d324b7	allied-b	allied.thanks	Whoever that was, thank you!
-c9475a25	skywatch	awacs.bandit	Bandit.
-5f6cf819	skywatch	awacs.bandit	Bandit. Type is on your display.
-ac36ae45	skywatch	awacs.bandit	New hostile. Check your display.
-778f1680	skywatch	awacs.bandit	Bandit. Your call.
-51c3aa97	skywatch	awacs.bandit	Contact, hostile.
-4e367761	skywatch	awacs.bandit	Hostile aircraft. Confirm visual.
-4a91973b	skywatch	awacs.bandit	Fresh bandit. And it knows you are here.
-eab83476	skywatch	awacs.bandit	Bandit. Do not lose sight of him.
-406d4312	skywatch	awacs.bandit	Bandit. He is dark, watch for his flare.
-600469b7	skywatch	awacs.bogeydope	Nearest threat.
-02f17648	skywatch	awacs.bogeydope	Bogey dope. One bandit, check your display.
-28c61590	skywatch	awacs.bogeydope	Closest hostile is on your display.
-7f51428b	skywatch	awacs.bogeydope	Picture: one bandit.
-8ed513db	skywatch	awacs.bogeydope	Nearest bandit. Heads up.
-69dfd6d6	skywatch	awacs.bogeydope	You have one bandit. He is the nearest.
-68d55de2	skywatch	awacs.bogeydope	Threat is on your display. Nothing closer.
-0127c61a	skywatch	awacs.bogeydope	Bogey dope. Keep your speed up.
-d22651a6	skywatch	awacs.checkin	Skywatch has you on radar. Picture is clean. Good hunting.
-9a3aab0d	skywatch	awacs.checkin	Radar contact. You are on my scope. Report any change.
-a65b0194	skywatch	awacs.checkin	Skywatch on station. I have you, and the picture is quiet.
-26347827	skywatch	awacs.checkin	You are radar contact, climbing out. I will call it if it moves.
-cc329b24	skywatch	awacs.checkin	Welcome to the party. Skywatch has your six.
-de6c0cfd	skywatch	awacs.checkin	Contact established. Nothing hostile in range, for now.
-b269a64f	skywatch	awacs.checkin	Skywatch is watching. Fly safe and bring everyone home.
-309a781f	skywatch	awacs.checkin	I have you on the scope. Picture is yours when you need it.
-105beeee	skywatch	awacs.checkin	Radar contact. It is a dark one, so trust your instruments.
-98c6200c	skywatch	awacs.checkin	Skywatch has you through the weather. Expect clutter on the scope.
-f18b18a6	skywatch	awacs.clean	Picture clean.
-08d5a8a5	skywatch	awacs.clean	Nothing out there. Picture is clean.
-756d2124	skywatch	awacs.clean	Skywatch sees no hostiles. All quiet.
-8473a491	skywatch	awacs.clean	Clean scope from here. Stay alert.
-c72e345e	skywatch	awacs.clean	No bandits on my picture. Enjoy it.
-ed2b9071	skywatch	awacs.clean	I have nothing hostile in range.
-3efed78a	skywatch	awacs.clean	Sky is empty for now. It will not last.
-ff0ac82a	skywatch	awacs.clean	Clean. Check your own six anyway.
-fd5a572f	skywatch	awacs.clean	Picture clean. Quiet night, so far.
-d16deff8	skywatch	awacs.friendlydown	We lost a friendly. Stay alert.
-1f8773df	skywatch	awacs.friendlydown	Friendly down. Watch your sector.
-482c0677	skywatch	awacs.friendlydown	Skywatch shows a friendly gone from the scope.
-91d79efc	skywatch	awacs.friendlydown	Lost contact with a friendly. Somebody is hunting out there.
-5049ff94	skywatch	awacs.friendlydown	Friendly is down. Keep your eyes open.
-e148ed75	skywatch	awacs.fuel	Fuel check. You are getting low.
-64ddb5e7	skywatch	awacs.fuel	Watch your fuel. Start thinking about home.
-bfc38cef	skywatch	awacs.fuel	Skywatch shows you low on fuel. Plan your way back.
-185a5330	skywatch	awacs.fuel	Fuel state is low. Do not stretch it.
-5a0841d5	skywatch	awacs.fuel	Fuel is getting low. Your home field is on the nav data.
-07ab87fd	skywatch	awacs.fuel	You are getting light. Joker.
-6840ce8f	skywatch	awacs.fuelcritical	Bingo fuel. Go home now.
-b788c6ea	skywatch	awacs.fuelcritical	Bingo. Break off and recover.
-253efaeb	skywatch	awacs.fuelcritical	Bingo, bingo. Take the nearest field.
-a5e0f36c	skywatch	awacs.fuelcritical	Fuel critical. Disengage and land.
-c02ac313	skywatch	awacs.fuelcritical	That is bingo. Turn for home and do not argue with the gauge.
-7b739731	skywatch	awacs.fuelcritical	You land in the next few minutes, one way or another.
-1b89d9fa	skywatch	awacs.gear	Check your gear. You are flying with the wheels down.
-12134ac5	skywatch	awacs.gear	Your landing gear is still down. Clean up when you can.
-80531bcd	skywatch	awacs.gear	Gear, gear, gear. You are dragging the wheels.
-2422f69c	skywatch	awacs.gear	I show you dirty at speed. Raise your gear.
-526a6b26	skywatch	awacs.gear	Friendly reminder: the wheels go up after takeoff.
-4b769317	skywatch	awacs.gear	Your gear is hanging. Retract before something bends.
-79aad60a	skywatch	awacs.missile	Missile launch. Break!
-810ace26	skywatch	awacs.missile	Missile! Defend now!
-cd73d620	skywatch	awacs.missile	Launch detected. Break and flare!
-bc80f0fa	skywatch	awacs.missile	Missile inbound! Go defensive!
-edbc0579	skywatch	awacs.missile	Shot fired at you! Break!
-93c0bf9e	skywatch	awacs.missile	Missile closing! Notch it!
-11ebfe65	skywatch	awacs.missileclear	Missile is defeated. You are clear.
-b5264976	skywatch	awacs.missileclear	Clear. Nothing guiding on you now.
-55ea8843	skywatch	awacs.missileclear	That one is gone. Well flown.
-9016eeb5	skywatch	awacs.missileclear	Skywatch shows no missiles. Take a breath.
-7d562f7b	skywatch	awacs.missileclear	You beat it. Reset and get your picture back.
-3b558f38	skywatch	awacs.missileclear	Missile lost lock. Stay on your toes.
-3b9e9185	skywatch	awacs.missileclear	No more tracks on you. Nice break.
-64db4f9d	skywatch	awacs.missileclear	Threat cleared. Come back to heading.
-038e6e15	skywatch	awacs.picture1	Picture, single group.
-80786a21	skywatch	awacs.picture1	Skywatch picture: one group.
-60840c19	skywatch	awacs.picture1	Single group. That is all I see.
-6532a12c	skywatch	awacs.picture1	One contact on my scope. Keep it in mind.
-610a3d1e	skywatch	awacs.picturemany	Picture, multiple groups.
-14da8ca7	skywatch	awacs.picturemany	Skywatch picture: multiple hostile groups.
-29e1f9a2	skywatch	awacs.picturemany	Busy sky. Multiple groups.
-f231cbbb	skywatch	awacs.picturemany	I count multiple hostile groups.
-2b962e80	skywatch	awacs.picturemany	Multiple groups out there in the dark.
-06281971	skywatch	awacs.sam	SAM launch! Break!
-4557b00f	skywatch	awacs.sam	Surface to air missile! Defend!
-8edc0c49	skywatch	awacs.sam	SAM in the air! Get low and notch it!
-64676e0c	skywatch	awacs.sam	Ground launch! Break now!
-36109a28	skywatch	awacs.sam	SAM! Chaff and break!
-17606324	skywatch	awacs.splash	Splash one target. Good kill.
-f99d15b1	skywatch	awacs.splash	Splash. Confirmed on my scope.
-b0ab15e0	skywatch	awacs.splash	Kill confirmed. That target is down.
-a0cae616	skywatch	awacs.splash	Splash. Target destroyed.
-013e37e7	skywatch	awacs.splash	Good shooting. Target is gone from my picture.
-ee5aed78	skywatch	awacs.splash	Scratch one. Skywatch confirms.
-cee4d7b9	skywatch	awacs.splash	That is a kill. Nicely done.
-e6b6b7b7	skywatch	awacs.splash	Target is out of the fight. Moving on.
-9abab9ac	command	command.askcontract	New tasking on the board. Can you take it?
-364be8c1	command	command.askcontract	Command has work for you. Will you take it?
-288ec6cb	command	command.askcontract	Contract up. You want it?
-761f7284	command	command.askcontract	We need a flight on a job. Are you available?
-ecb58217	command	command.askcontract	Priority job. Can you handle it?
-0f30651b	command	command.askcontract	Night work, if you want it. Taking it?
-3f89c707	command	command.askdrones	Vanguard here. Drones are up and you have a target. Send them?
-f3a92a85	command	command.askdrones	Your drones can take that target. Commit them?
-bd1b43d4	command	command.askdrones	Drones on station. Want them on your target?
-e6725843	command	command.askdrones	Vanguard control. Shall we put the drones on it?
-b74ce0ea	command	command.askfire	The package is armed on your aim. Fire?
-7f0da0f9	command	command.askfire	Your aim is the target. Release the package?
-2c5301dd	command	command.askfire	Standing by on the package. Send it?
-d1c3edd4	command	command.askperk	OPS here. The package is ready. Want it?
-aa03a893	command	command.askperk	The package is up and waiting on your word. Use it?
-ad11e853	command	command.askperk	OPS has the package on standby. Do you want it?
-8a639fe2	command	command.askperk	The package is ready for tasking. Shall we arm it?
-c7995a8a	command	command.baselost	We have lost the base. Reform and fall back.
-e782f535	command	command.baselost	The base is gone. Command is reassessing.
-f0064008	command	command.baselost	Enemy forces hold the base. Plan around it.
-bf83b781	command	command.baselost	Be advised, the base has been taken. Expect pressure on the next line.
-a54f1801	command	command.baselost	The base is lost. Redirect your sorties and stay alive.
-165c5ee2	command	command.baselost	Command confirms the loss of the base. We take it back.
-13da7ad3	command	command.basetaken	The base is ours. Secure the perimeter.
-2b131845	command	command.basetaken	Command confirms the base captured. Good work out there.
-e382f6f3	command	command.basetaken	The base has fallen to our side. Hold what we took.
-9d58b990	command	command.basetaken	We have the base. Engineers are moving up.
-dd8dc145	command	command.basetaken	The base is in friendly hands. Expect a counterattack.
-4701d9fd	command	command.basetaken	Capture of the base confirmed. Do not get comfortable.
-7b527d27	command	command.contractdone	Contract complete. Payment is on its way.
-0614e582	command	command.contractdone	Good work. The job is done. The money is wired.
-39187b1b	command	command.contractdone	Command confirms the contract complete. Nicely done.
-be8507fb	command	command.contractdone	That is the job done. Funds transferred.
-dd983ff1	command	command.contractdone	Tasking complete. Command is pleased.
-104623e5	command	command.contractno	Understood. We will pass it on.
-81c102e7	command	command.contractno	Copy. Another flight will take it.
-c43ade7f	command	command.contractno	Negative, copied. It stays on the board.
-251c991c	command	command.contractno	Roger. We will find someone else.
-bc842340	command	command.contractyes	Copy. It is yours. Marked on your HUD.
-1075d081	command	command.contractyes	Good. Contract is assigned to you. Do not let us down.
-873c839d	command	command.contractyes	Acknowledged. You have the job. Target data is on your display.
-5c211433	command	command.contractyes	Copy that. Tasking confirmed. Good hunting.
-94209ced	command	command.contractyes	Understood. It is on your board now.
-e63e02af	command	command.dronesno	Understood. Drones hold.
-b116ffeb	command	command.dronesno	Copy, drones stay on task.
-f598dd05	command	command.dronesno	Roger, drones holding.
-7605d7cc	command	command.dronesyes	Drones committed. Moving to your target.
-a21ef8ba	command	command.dronesyes	Copy. Drones are on it.
-62a8a7a8	command	command.dronesyes	Vanguard is engaging your target.
-6d78e871	command	command.event	Theater update. The event desk has the details.
-b8ed3184	command	command.event	All flights, be advised. Details at the event desk.
-bb6c5956	command	command.event	Command to all stations. Read the event desk.
-21cb10a1	command	command.event	That is now in effect. Check the event desk.
-596d52b3	command	command.event	Priority traffic. Acknowledge and stand by.
-98416ed7	command	command.event	Theater has logged a development. Carry on.
-333c7b44	command	command.fireno	Holding. It stays armed until you call it.
-7679973f	command	command.fireno	Copy, holding fire.
-cd8c9eed	command	command.fireno	Understood. Standing by.
-e9fc2cb8	command	command.fireyes	Fired. Stand by for effect.
-84d2ca14	command	command.fireyes	Release confirmed. It is on its way.
-2d0c776a	command	command.fireyes	Shot away. Watch the target.
-e7afa54a	command	command.insertion	Insertion element is down. Ground control has them.
-99c71db5	command	command.insertion	Friendly troops are on the ground. Keep the air clear.
-19e3db4e	command	command.insertion	Landing zone confirmed. The assault element is on the ground.
-4487d3b3	command	command.insertion	Air assault touched down. Cover them if you can.
-8d8d1f1a	command	command.insertion	Ground element reports boots down. Stay on station.
-c700f986	command	command.insertion	Insertion complete. They are on their own until relieved.
-f6110a9d	command	command.operation	Operation update. The phase has changed.
-3555f8bd	command	command.operation	All flights, the operation has a new phase. Adjust accordingly.
-0a220fb2	command	command.operation	Command advises: operation phase change. Acknowledge.
-b22e3ced	command	command.operation	Operation status change. Stay sharp.
-8c357219	command	command.operation	The operation has moved to a new phase. Orders follow if needed.
-24af2513	command	command.operation	New phase on the operation. Keep your flights tight.
-1d1908ab	command	command.operation	The operation moves on. Expect a long night.
-33dbee27	command	command.perkno	Understood. Holding it in reserve.
-290e409b	command	command.perkno	Copy. It stays on the shelf.
-1f6f67ad	command	command.perkno	Roger. We keep it ready.
-3d7283cc	command	command.perkyes	Armed. Put your aim on the target.
-fc05bd98	command	command.perkyes	Copy, it is armed. Aim where you want it.
-75c8c939	command	command.perkyes	Armed and waiting. Point it and call it.
-f595fb4e	tower	tower.airborne	Airborne. Contact departure.
-09ce4d06	tower	tower.airborne	You are off the ground. Good luck out there.
-d92b5281	tower	tower.airborne	Wheels up, I have you. Tower is off the net.
-141fa539	tower	tower.airborne	Airborne, clear of the field. Have a good one.
-cafef9f0	tower	tower.airborne	Tower sees you airborne. Cleared on course.
-f06953db	tower	tower.airborne	Off the deck. Fly safe.
-679486f3	tower	tower.airborne	Airborne. We will keep the light on for you.
-b4877783	tower	tower.airborne	Airborne. The runway lights fade behind you.
-1ecda359	tower	tower.alarm	Base under attack! Get airborne or take cover!
-25e0cfc3	tower	tower.alarm	Alarm, alarm! Hostiles over the field! Scramble!
-5513dcda	tower	tower.alarm	Tower to all aircraft: field is under attack. Launch now!
-050e05d8	tower	tower.alarm	Incoming! Clear the runway and take cover!
-8180f80e	tower	tower.alarm	We are hit! Scramble what you can!
-debb9f54	tower	tower.goaround	Go around.
-df25fdbc	tower	tower.goaround	Go around, I say again, go around. Climb and maintain.
-51d1fea4	tower	tower.goaround	Tower sees you are off the approach. Go around.
-979a52e9	tower	tower.goaround	Go around and set up again. No rush.
-505821b6	tower	tower.goaround	Missed approach. Fly the pattern again.
-68a2e84f	tower	tower.goaround	Go around, the field is yours when you are ready.
-1dad086f	tower	tower.goaround	Break off. Go around and call downwind.
-aa96f952	tower	tower.goaround	Go around. Visibility is down, give it another try.
-0a26821d	tower	tower.landing	Cleared to land.
-bd4f2c9c	tower	tower.landing	Cleared to land. Wind is calm.
-91375ddd	tower	tower.landing	You are cleared to land. Welcome back.
-463fa852	tower	tower.landing	Cleared to land. Runway is clear.
-c08651d1	tower	tower.landing	Cleared to land. Call down.
-e45a0ae3	tower	tower.landing	You are number one, cleared to land.
-72fa2f56	tower	tower.landing	Cleared to land. We have the field ready for you.
-0857b70b	tower	tower.landing	Cleared to land. The lights are up and steady.
-a5cd0412	tower	tower.landing	Cleared to land. Runway is wet, expect poor braking.
-457a5ed8	tower	tower.startup	Tower has you on the ramp. Field is open, call when ready.
-3fda66d3	tower	tower.startup	Good to see you. Field is clear, taxi when you are set.
-8ed4efcf	tower	tower.startup	Tower. You are on the board for departure. Take your time.
-b16acb26	tower	tower.startup	Ground crew reports you fueled and armed. Ready when you are.
-74b2f21c	tower	tower.startup	Field is quiet. Start up and call for taxi.
-463bd250	tower	tower.startup	Tower. Night operations, the field lights are on. Call for taxi.
-0b0b1db3	tower	tower.startup	Tower. Wet runway today. Call for taxi when ready.
-f3ce6dab	tower	tower.taxi	You are cleared to taxi. Hold short of the line.
-cf1ad2c8	tower	tower.taxi	Cleared to taxi. Report holding short.
-473b2293	tower	tower.taxi	Taxi to the hold point. Wind is light.
-baad5e88	tower	tower.taxi	Cleared to taxi. Mind the lead-in line.
-237abce6	tower	tower.taxi	You may taxi. Nothing in your way.
-2da046a0	tower	tower.taxi	Taxi via the main taxiway. Call at the hold.
-a48ec22e	tower	tower.taxi	Cleared to taxi. Fuel trucks are clear.
-778ee904	tower	tower.taxi	Cleared to taxi. Follow the blue lights.
-7a568fc5	tower	tower.taxi	Cleared to taxi. Taxiways are wet, go easy.
-9e917499	tower	tower.welcome	Welcome home.
-25a65663	tower	tower.welcome	Welcome back. Exit when able and taxi to parking.
-7bd98b02	tower	tower.welcome	You are down. Good to see you in one piece.
-e41c4970	tower	tower.welcome	Down and safe. Taxi to parking, the crew is waiting.
-d659c695	tower	tower.welcome	Welcome home. Coffee is on, you earned it.
-7637fec1	tower	tower.welcome	Nice landing. Taxi clear of the runway.
-90875826	tower	tower.welcome	You made it back. Tower is glad to see you.
-cf6ee101	tower	tower.welcome	Welcome home. Follow the lights in, we have the porch lit.
-118e4c7d	tower	tower.welcome	Welcome back. Wet one today, wasn't it? Taxi to parking.
-babc48db	tower	tower.wingdown	Your wingman is down.
-7e0092cb	tower	tower.wingdown	Your wingman has landed and is clear of the runway.
-af9124f8	tower	tower.wingdown	Welcome back, wingman.
-d649d756	tower	tower.wingdown	Your wingman is on the ground. Another one home.
-73291ef8	tower	tower.wingdown	Your wingman is down safely. Taxiing to parking.
-83657814	tower	tower.wingdown	Your wingman landed. That is one more accounted for.
-821b0dcf	tower	tower.wingdown	Tower has your wingman on the ground.
-26b67369	tower	tower.wingrolling	Your wingman is rolling.
-7ea77f04	tower	tower.wingrolling	Tower sees your wingman on the takeoff roll.
-a705e611	tower	tower.wingrolling	Your wingman is rolling. Runway is clear ahead.
-d0438dff	tower	tower.wingrolling	Your wingman has started the roll. Good luck.
-8c2167f8	tower	tower.wingrolling	Your wingman is rolling now. Watch for them off the end.
-aba8149d	tower	tower.wingrolling	Your wingman is on the takeoff roll. Stand by to join.
-bd655a56	tower	tower.wingrolling	Your wingman is on the run. Look for them climbing.
+# New battlefield recordings: exact line id, role pack, event, words. Four acting takes per script.
+5fc076a0	boscali-ground	command.baselost	They've overrun the base! Fall back! Get the wounded out, now!
+42b6b327	boscali-ground	command.baselost	We can't hold this base! All squads, withdraw! Cover each other!
+e4beaad8	boscali-ground	command.baselost	Perimeter's gone. We're pulling out. Don't leave anybody behind!
+29f1d31e	boscali-ground	command.basetaken	We're inside! Base secured. Get that perimeter locked down!
+4c339873	boscali-ground	command.basetaken	The base is ours! Check your people. Watch for a counterattack.
+f9c7ac58	boscali-ground	command.basetaken	Friendly forces hold the base! We did it. Now hold the line!
+bb1e8f0b	boscali-command	command.enemybase	Enemy forces have taken another base. Watch the front. They're gaining ground.
+1777a423	boscali-command	command.enemybase	Confirmed enemy capture. Keep your routes clear of that field.
+d7fe7495	boscali-ground	command.basewithdraw	Break contact! Smoke out, cover the wounded! Move!
+3b853c5f	boscali-ground	command.basewithdraw	All surviving squads, fall back together. We are not staying here!
+23341ed5	boscali-captain	command.carrierevac	This is the captain! All hands, abandon ship! Get clear of the flight deck!
+64974864	boscali-captain	command.carrierevac	We are losing the carrier. All hands, evacuate! Launch anything that can fly!
+ce860c2d	boscali-captain	command.carrierevac	She's going under. Abandon ship. Get my people off this vessel!
+415b9247	boscali-captain	command.shiplost	We've lost a friendly ship. Any boats still afloat, get clear of the wreck.
+e8519c90	boscali-captain	command.shiplost	Friendly vessel is lost. Keep the survivors' channel open.
+6858f14e	boscali-command	command.shipsunk	Enemy ship destroyed. Good hit. Keep clear of the blast.
+b5573120	boscali-command	command.shipsunk	Confirmed enemy vessel sunk. Stay alert for the rest of their group.
+44e5faba	boscali-paratrooper	command.insertion	Drop lead, boots on the ground! Form up. Keep the landing zone covered!
+d68b9ad4	boscali-paratrooper	command.insertion	We're down. Rally on me! Air cover, stay with us!
+fa9dbacf	boscali-paratrooper	command.insertion	Insertion complete. All sticks, check in. We've got work to do.
+cdecc7de	boscali-command	command.event	Command update. Conditions across the theater have changed. Review the latest bulletin.
+4027e467	boscali-command	command.event	New orders from theater command. Check the bulletin before your next run.
+630e7028	boscali-command	command.superevent	All stations, priority traffic. Major development across the theater. Stand by for orders.
+58ae31ae	boscali-command	command.superevent	Break, break. This is command. A major theater emergency is in effect. Check the priority bulletin.
+399aa761	boscali-command	command.event.allied_intervention	Coalition relief is crossing the frontier. Reinforcements are coming into the theater. Keep those routes open.
+a3dd7bd7	boscali-command	command.event.emergency_appropriation	The war cabinet has opened the reserves. Emergency funding and supplies are being released to the hard pressed forces.
+8d73622d	boscali-command	command.event.frontline_overstretch	The advance has outrun its supply line. Forward units, check your reserves. Don't push beyond your support.
+e119b259	boscali-command	command.event.munitions_crisis	Theater command reports a munitions crisis. Make every shot count. The depots are running dry.
+7a4a69e5	boscali-command	command.event.ceasefire_ultimatum	A ceasefire ultimatum has been issued. This is not a ceasefire order. Maintain readiness until command confirms.
+5a8972dc	boscali-command	command.event.partisan_supply_raid	Rear supply routes have been hit. Escort crews, watch for ambushes. Replacement stores are being arranged.
+b32c400b	boscali-command	command.event.industrial_surge	Factories are clearing their backlogs. Fresh supplies are moving to the front. Give those convoys room to work.
+cea7dd57	boscali-command	command.event.emergency_withdrawal	Emergency withdrawal is under way in the theater. Cover the recovery convoys. Keep the routes open for the wounded.
+cd8ffc6c	boscali-command	command.event.ceasefire_rumors	Ceasefire rumors are circulating. We have no ceasefire order. Keep your guard up.
+1d623ec5	boscali-command	command.event.monsoon_season	Monsoon conditions are slowing dispatches. Give support crews time to turn around.
+b52f6a12	boscali-command	command.event.fuel_depot_fire	A fuel depot is burning. Expect rationing and delays. Check your fuel before committing.
+58ec8422	boscali-command	command.event.dust_storm	Dust over the forward strips. Expect slower support dispatches. Mind your approach.
+afb6c08f	boscali-command	command.event.black_market_surplus	Surplus stores just became available. Quartermaster says don't ask about the paperwork.
+5bbe3575	boscali-skywatch	awacs.checkin	Skywatch, radar contact. Keep this channel clear for tactical traffic.
+e12e7f24	boscali-skywatch	awacs.checkin	Skywatch has you. Stay sharp out there. Bring your people home.
+5374a80a	boscali-skywatch	awacs.bandit	Skywatch. Hostile aircraft detected. Check your tactical picture.
+05210742	boscali-skywatch	awacs.bandit	New hostile air contact. Watch your approach and check your radar.
+9a8086b7	boscali-skywatch	awacs.missile	Missile inbound! Break! Defend now!
+753266ba	boscali-skywatch	awacs.missile	Launch warning! Go defensive! Keep moving!
+04a79aff	boscali-skywatch	awacs.sam	Surface missile launch! Defend! Watch the ground threats.
+f4058647	boscali-skywatch	awacs.missileclear	Immediate missile threat is clear. Keep checking your six.
+05d35240	boscali-skywatch	awacs.splash	Skywatch confirms a hostile down. Good work. Stay on the picture.
+801b516b	boscali-skywatch	awacs.splash	Enemy aircraft destroyed. Check for another before you turn away.
+d73f8cb1	boscali-skywatch	awacs.friendlydown	Friendly aircraft down. Watch for a chute. Keep the area covered.
+1f353d4c	boscali-skywatch	awacs.friendlydown	We've lost a friendly aircraft. Stay together. Don't give them another.
+143e1310	boscali-skywatch	awacs.clean	Skywatch picture is clean. Keep a lookout anyway.
+57dfbe2b	boscali-skywatch	awacs.fuel	Check your fuel state. Plan your way home before it becomes urgent.
+607c4ac7	boscali-skywatch	awacs.fuelcritical	Fuel state critical. Get yourself home. Don't stretch it.
+eea5fb0a	boscali-tower	tower.taxi	Tower copies. Taxi with caution. Watch for crossing traffic.
+e83d0849	boscali-tower	tower.landing	Tower has your approach. Check the runway is clear before touchdown.
+589218f0	boscali-tower	tower.goaround	Go around! Go around! Climb clear and reset your approach.
+650e83ae	boscali-tower	tower.airborne	Tower, airborne acknowledged. Good hunting. We'll keep the lights on.
+7e14de9b	boscali-tower	tower.welcome	Welcome back. Clear the runway when able. Good to have you home.
+69562a37	boscali-tower	tower.alarm	Airfield under attack! Clear the runway! All crews take cover!
+2af4cc8d	boscali-ace	allied.splash	Splash one! Yeah! Coming around, cover me!
+9fd96605	boscali-ace	allied.splash	Got him! He's going down. Checking for his wingman.
+81e87e97	boscali-ace	allied.lastwords	I'm hit! She's breaking up! Ejecting!
+d1e795e0	boscali-ace	allied.lastwords	Mayday! Mayday! I can't hold her! I'm punching out!
+46f2366a	boscali-ace	allied.thanks	That was too close. You got him off me. I owe you one.
+6e681b31	boscali-wing	wing.copy	Copy that. Moving now.
+8ba22d07	boscali-wing	wing.copy	Roger. I'm on it.
+8f40a243	boscali-wing	wing.unable	Unable. Can't make that work from here.
+c3593d7f	boscali-wing	wing.airborne	Airborne. Coming up on your wing.
+f429bfaf	boscali-wing	wing.rolling	Power up. Rolling. See you upstairs.
+a3a960ba	boscali-wing	wing.splash	Target destroyed! Coming back to you.
+a26032a8	boscali-wing	wing.damaged	Taking damage! Still flying. Cover me!
+55280e76	boscali-wing	wing.ejected	Ejecting! Ejecting!
+3bbcda7b	boscali-wing	wing.fox2	Fox two! Missile away.
+9a86f1c0	boscali-wing	wing.fox3	Fox three! Supporting the shot.
+88d82ce4	boscali-wing	wing.rifle	Rifle. Weapon away.
+588e06ca	boscali-wing	wing.magnum	Magnum. Suppressing that radar.
+a6a0e6a3	boscali-enemy	enemy.lastwords	We're hit! I can't get out!
+d9e517f0	boscali-enemy	enemy.lastwords	Mayday! Losing control!
+1ee1d0e7	boscali-enemy	enemy.splash	Target down. Stay on the others.
+7df6832d	boscali-ground	command.survivor.ground	Is anybody still on this net? We survived the blast. There's no answer from command.
+86cb2468	boscali-ground	command.survivor.ground	I can hear someone... Keep talking. Please, keep talking.
+946e14ef	boscali-ground	command.survivor.ground	We've got wounded here. If anyone can hear this, we're still alive.
+d88f037d	boscali-captain	command.survivor.captain	This is a surviving naval station. The flash... We've lost contact with the fleet. Is anyone receiving?
+f1ae4f0e	boscali-captain	command.survivor.captain	All surviving crews, stay together. Keep calling. We need to know who's still out there.
+947ed144	boscali-paratrooper	command.survivor.paratrooper	Drop lead to any station. We made it through the blast. The squad's trying to regroup.
+6d078cc9	boscali-paratrooper	command.survivor.paratrooper	Anybody receiving? We've got survivors. Don't give up on this channel.
+3b0a10ef	boscali-skywatch	awacs.survivor	Skywatch to any surviving station. The picture's gone. I'm still here. Is anyone else receiving?
+e78ffe68	boscali-skywatch	awacs.survivor	Emergency traffic. If you can hear this, stay on the net. We're trying to make contact.
+6e930bb2	boscali-skywatch	awacs.survivor	I keep calling... Nothing back. Please, someone answer.
+b1fa5d78	boscali-wing	wing.survivor	I saw the flash. I'm still flying. Is anybody left on this frequency?
+10670577	boscali-wing	wing.survivor	Any friendly aircraft, respond. I can't raise my flight. Please respond.

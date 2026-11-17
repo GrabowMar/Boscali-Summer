@@ -492,6 +492,8 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             state["immersionBreathPlaying"] = pilotBreathingAudio != null && pilotBreathingAudio.IsPlaying;
             state["immersionBreathPlayed"] = pilotBreathingAudio != null ? pilotBreathingAudio.Played : 0;
             state["immersionRecordedVoices"] = pilotBreathingAudio != null ? pilotBreathingAudio.RecordedVoices : 0;
+            state["immersionBreathClip"] = pilotBreathingAudio != null ? pilotBreathingAudio.LastClipId : "";
+            state["immersionBreathEffectsMixer"] = pilotBreathingAudio != null && pilotBreathingAudio.EffectsRouted;
             state["immersionFoleyPlayed"] = foley != null ? foley.Played : 0;
             state["immersionWarningsSaid"] = warnings != null ? warnings.Said : 0;
             state["immersionWarningsFoley"] = warnings != null ? warnings.Foley : 0;

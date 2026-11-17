@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Contracts;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -29,6 +30,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// The gates every delivered strike (EMP, flare barrage, PRSM) passes in this order: a resolved delivery missile (else <paramref name="unavailable"/> is logged),
         /// a spawner, a map point, the pilot's range and a free Strike slot. Accepted means every gate passed and the slot is reserved (the caller must release it).
         /// </summary>
+        /// <summary>Strike reach for this caller: the configured range, longer from a command platform (Skylark C2 mast).</summary>
+        public static float MaxRange(in SupportContext context) =>
+            context.Settings.MaximumRange.Value * (CommandPlatform.Is(context.Player) ? CommandPlatform.RangeFactor : 1f);
+
         public static SupportResult ReserveStrike(in SupportContext context, MissileDefinition definition, string unavailable, out Vector3 ground)
         {
             ground = default;
@@ -39,7 +44,7 @@ namespace BoscaliSummer.Modules.Support.Runtime
             }
             if (NetworkSceneSingleton<Spawner>.i == null) return SupportResult.CapabilityUnavailable;
             if (!TryMapPoint(context.Target, out ground)) return SupportResult.InvalidTarget;
-            if (TryOrigin(context.Player, out Vector3 origin) && Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value)
+            if (TryOrigin(context.Player, out Vector3 origin) && Vector3.Distance(origin, ground) > MaxRange(context))
                 return SupportResult.OutOfRange;
             return context.Host.TryReserve(context.Owner, SupportPool.Strike) ? SupportResult.Accepted : SupportResult.Busy;
         }

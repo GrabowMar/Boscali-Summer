@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../Core/Fx/SfxClips.cs" Link="SfxClips.cs" />
+    <Compile Include="../../Core/Fx/FxVoiceBus.cs" Link="FxVoiceBus.cs" />
+    <Compile Include="../../Core/Diagnostics/AudioAutomation.cs" Link="AudioAutomation.cs" />
+    <Compile Include="../../Core/Fx/VisorSoundRules.cs" Link="VisorSoundRules.cs" />
+    <Compile Include="../../Core/Util/PcmWav.cs" Link="PcmWav.cs" />
+    <Compile Include="../../Core/Util/EmbeddedResources.cs" Link="EmbeddedResources.cs" />
+    <Compile Include="../../AvionicsUi/AvUiSound.cs" Link="AvUiSound.cs" />
+    <EmbeddedResource Include="Fixtures/valid.wav" LogicalName="BoscaliSummer.Sfx.fixture-valid.wav" />
+    <EmbeddedResource Include="Fixtures/valid.wav" LogicalName="BoscaliSummer.Sfx.fixture-other.wav" />
+    <EmbeddedResource Include="Fixtures/invalid.wav" LogicalName="BoscaliSummer.Sfx.fixture-invalid.wav" />
+    <EmbeddedResource Include="Fixtures/valid.wav" LogicalName="BoscaliSummer.Sfx.bad.path.wav" />
+    <EmbeddedResource Include="Fixtures/valid.wav" LogicalName="OtherAudio.hidden.wav" />
+  </ItemGroup>
+</Project>

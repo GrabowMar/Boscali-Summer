@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -21,7 +22,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
     /// </summary>
     internal sealed class FlareMissileBurstVisuals : MonoBehaviour
     {
-        private const int SampleRate = 44100;
         private const int DeduplicationLimit = 16;
         private const int MaximumLiveBarrages = 2;
         private const int MaximumIrRegistrations = 256;
@@ -149,18 +149,21 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 snapSource.rolloffMode = AudioRolloffMode.Logarithmic;
                 snapSource.volume = 1f;
                 snapSource.pitch = UnityEngine.Random.Range(1.1f, 1.25f);
-                snapSource.Play();
+                snapSource.playOnAwake = false;
+                CineFx.Play(snapSource);
             }
 
             if (burstAudioClip != null)
             {
-                if (SceneSingleton<ExplosionAudioManager>.i != null)
+                if (SceneSingleton<ExplosionAudioManager>.i != null && FxVoiceBus.TryOneShot(burstAudioClip.length))
                 {
                     var boomObj = new GameObject("BurstAudioBoom");
                     boomObj.transform.position = impactPoint;
                     boomObj.transform.SetParent(transform, false);
                     var boomSrc = boomObj.AddComponent<AudioSource>();
                     boomSrc.clip = burstAudioClip;
+                    boomSrc.playOnAwake = false;
+                    if (SoundManager.i != null) boomSrc.outputAudioMixerGroup = SoundManager.i.EffectsMixer;
                     boomSrc.spatialBlend = 1f;
                     boomSrc.minDistance = 300f;
                     boomSrc.maxDistance = 18000f;
@@ -174,6 +177,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
             waveAudioSource.spatialBlend = 1f;
             waveAudioSource.minDistance = 200f;
             waveAudioSource.maxDistance = 12000f;
+            waveAudioSource.playOnAwake = false;
+            if (SoundManager.i != null) waveAudioSource.outputAudioMixerGroup = SoundManager.i.EffectsMixer;
 
             // 3. Initial Flare Salvo directly from impact point
             Aircraft targetAircraft = FindCandidateAircraft(impactPoint);
@@ -193,7 +198,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
                     if (burstAudioClip != null && waveAudioSource != null)
                     {
                         waveAudioSource.pitch = UnityEngine.Random.Range(0.92f, 1.12f);
-                        waveAudioSource.PlayOneShot(burstAudioClip, 0.85f);
+                        if (waveAudioSource.outputAudioMixerGroup != null && FxVoiceBus.TryOneShot(burstAudioClip.length / waveAudioSource.pitch))
+                            waveAudioSource.PlayOneShot(burstAudioClip, 0.85f);
                     }
 
                     // Each wave launches 4 to 6 new pyrotechnic flares high into the sky
@@ -523,33 +529,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private static void EnsureAudio()
         {
-            if (burstAudioClip != null) return;
-
-            int length = (int)(SampleRate * 3.0f);
-            float[] samples = new float[length];
-
-            for (int i = 0; i < length; i++)
-            {
-                float t = i / (float)SampleRate;
-
-                // Pyrotechnic mortar ejection fracture crack (0.0s - 0.09s)
-                float popEnvelope = Mathf.Exp(-t * 30f);
-                float pop = (UnityEngine.Random.value * 2f - 1f) * popEnvelope * 0.9f;
-
-                // Resonant hollow explosive mortar thud (85 Hz dropping to 45 Hz)
-                float thudFreq = Mathf.Lerp(85f, 45f, Mathf.Clamp01(t / 0.45f));
-                float thudEnvelope = Mathf.Exp(-t * 9.5f);
-                float thud = Mathf.Sin(2f * Mathf.PI * thudFreq * t) * thudEnvelope * 0.75f;
-
-                // Burning magnesium sizzling hiss
-                float sizzleEnvelope = Mathf.Pow(Mathf.Clamp01(1f - (t / 2.8f)), 1.5f);
-                float sizzle = (UnityEngine.Random.value * 2f - 1f) * sizzleEnvelope * 0.28f;
-
-                samples[i] = Mathf.Clamp(pop + thud + sizzle, -1f, 1f);
-            }
-
-            burstAudioClip = AudioClip.Create("FlareMissileBurstPop", length, 1, SampleRate, false);
-            burstAudioClip.SetData(samples, 0);
+            if (burstAudioClip == null) burstAudioClip = SfxClips.Get("flare-burst-pop");
         }
     }
 

@@ -54,7 +54,7 @@ namespace BoscaliSummer.Modules.Skylark
         {
             // Differential vertical thrust controls pitch/roll in hover. Fade it out as the fans turn forward,
             // otherwise a cruise roll command produces a large unintended differential-thrust yaw moment.
-            float authority = .12f * Mathf.Sin(propulsion.angle * Mathf.Deg2Rad);
+            float authority = .17f * Mathf.Sin(propulsion.angle * Mathf.Deg2Rad);
             float hoverBlend = Mathf.Pow(Mathf.Sin(propulsion.angle * Mathf.Deg2Rad), 2f)
                 * (1f - Mathf.InverseLerp(35f, 70f, aircraft.speed));
             // Wing angle of attack is not meaningful during vertical flight. Keep the normal native

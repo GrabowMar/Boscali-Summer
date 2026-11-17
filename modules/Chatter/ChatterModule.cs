@@ -12,6 +12,7 @@ namespace BoscaliSummer.Modules.Chatter
         private static readonly Type[] Patches =
         {
             typeof(BoscaliSummer.Modules.Chatter.Patches.ChatterKillPatch),
+            typeof(BoscaliSummer.Modules.Chatter.Patches.ChatterShipPatch),
             typeof(BoscaliSummer.Modules.Chatter.Patches.ChatterNoticePatch),
         };
 

@@ -33,14 +33,14 @@ namespace BoscaliSummer.Modules.Skylark
                 {
                     float angle = i * Mathf.PI / 8f;
                     float sector = Mathf.Repeat(angle + Mathf.PI / 8f, Mathf.PI / 4f) - Mathf.PI / 8f;
-                    float outside = .93f / Mathf.Cos(sector), radius = (.86f + outside) * .5f;
+                    float k = SkylarkTemplate.Scale, outside = .93f * k / Mathf.Cos(sector), radius = (.86f * k + outside) * .5f;
                     GameObject segment = new GameObject("ShroudHitbox_" + suffix + "_" + i);
                     segment.layer = owner.gameObject.layer;
                     segment.transform.SetParent(duct, false);
                     segment.transform.localPosition = new Vector3(radius * Mathf.Cos(angle), radius * Mathf.Sin(angle), 0);
                     segment.transform.localRotation = Quaternion.AngleAxis(angle * Mathf.Rad2Deg, Vector3.forward);
                     BoxCollider box = segment.AddComponent<BoxCollider>();
-                    box.size = new Vector3(outside - .86f, 2f * radius * Mathf.Tan(Mathf.PI / 16f), .32f);
+                    box.size = new Vector3(outside - .86f * k, 2f * radius * Mathf.Tan(Mathf.PI / 16f), .32f * k);
                     segment.AddComponent<SkylarkHitbox>().Owner = owner;
                 }
             }
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Skylark
                 LODGroup lod = part.gameObject.AddComponent<LODGroup>();
                 lod.SetLODs(new[] { new LOD(.06f, near), new LOD(.0015f, distant) });
                 lod.RecalculateBounds();
-                float sizeRatio = Mathf.Max(.001f, lod.size / 10.116f);
+                float sizeRatio = Mathf.Max(.001f, lod.size / (10.116f * SkylarkTemplate.Scale));
                 lod.SetLODs(new[] { new LOD(.04f * sizeRatio, near), new LOD(.001f * sizeRatio, distant) });
             }
             // Interior structural hardware does not need to draw once its openings are sub-pixel.

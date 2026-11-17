@@ -1,62 +1,9 @@
-Recorded effect clips: sources and licences
-===========================================
+Radio transport effects
+=======================
 
-Every clip in this folder is cut from a Creative Commons 0 (public domain) recording by tools/Build-SoundClips.py.
-Licences were checked on the source pages on 2026-10-10. CC0 needs no credit; the authors are named here as
-thanks and so the clips can be rebuilt. The source downloads are not kept in the repository.
+radio-keyup-0..3.wav and radio-tail-0..3.wav: ElevenLabs eleven_text_to_sound_v2, generated for this mod on 2026-11-17. Flow sN7Ssaxaz6p4JaCeQH2P; generation IDs in modules/Chatter/Assets/Voices/generations.json.
+Prepared by tools/Build-BattlefieldEffects.py: mono 22050 Hz PCM16, -9 dBFS peak; key-up <=0.55 s, tail <=0.85 s, fades. Runtime gain keeps these quieter than speech.
 
-hull-thud.wav          "Metal Sheet Hit" by Stereo Surgeon (slowed)
-hit-ping-0.wav         https://freesound.org/people/Stereo%20Surgeon/sounds/262516/      CC0
-hit-ping-1..3.wav      "bullet ricochet.wav" by aust_paul
-                       https://freesound.org/people/aust_paul/sounds/30932/               CC0
-harness-creak-0..2.wav "Leather Creak / Stretching" by IENBA
-                       https://freesound.org/people/IENBA/sounds/536187/                  CC0
-page-flip.wav          "Page Turn" by davidbain
-                       https://freesound.org/people/davidbain/sounds/136778/              CC0
-building-collapse.wav  "building collapse / demolition" by greyfeather
-                       https://freesound.org/people/greyfeather/sounds/712918/            CC0
-radio-tail-0.wav       "End radio transmission" by ReadeOnly
-                       https://freesound.org/people/ReadeOnly/sounds/47646/               CC0
-radio-tail-1.wav       "Radio Sign Off / Squelch" by JovianSounds
-                       https://freesound.org/people/JovianSounds/sounds/524205/           CC0
+nuclear-radio-static.wav: four generated textures from the same flow/model, combined into a 7.85 s seamless loop, -28 dBFS RMS and -13.99 dBFS peak.
 
-Processing: mono, 22050 Hz, 16-bit, rumble below 40 Hz removed, levelled to -3 dBFS.
-
-Decoded but not shipped: "Tire.ogg" by egomassive (https://freesound.org/people/egomassive/sounds/536769/, CC0).
-The game's own skid loop already squeals at touchdown, so a second chirp would double it.
-
-The kaiju (kaiju-*.wav) is made by `synth` in tools/Build-SoundClips.py from CC0 recordings and synthesis, nothing else:
-voices layer a synthesized growling throat with "strenuous_grunts" by takareads (841313), "AS060822_Short Exertion" by
-SuddenDice (558618) and "Masked_Breathing_Raspy_Loop" by Mediasaur (788055), slowed three to four times (sources in
-modules/Immersion/Assets/Voice/LICENSES.txt); the shriek adds the leather creak above, the footfall the building collapse
-above, the laser charge a slowed breath. The beam, spike and claw sounds are pure synthesis.
-
-rod-impact.wav         The boom is an ElevenLabs sound-effects generation (eleven_text_to_sound_v2) made for this mod on 2026-10-26;
-                       the crack, rolling thunder tail and debris patter layered around it are synthesized (scratch mix, numpy).
-
-radar-new.wav          SOFT COCKPIT TONES. ElevenLabs sound-effects generations (eleven_text_to_sound_v2) made for this mod on 2026-10-26:
-radar-sweep.wav        a warm bell (flow UCZg7H7zpuQU23nIS2cK; 2026-11-15 cut to 0.45 s with a 0.25 s fade, its long ring stacked into an echo at spawn) and a felt mallet tick (flow xJjlb2IRagwLkLwMIREt), cut and levelled by
-                       tools/Build-SoundClips.py.
-missile-alert.wav      COCKPIT ALARMS, 2026-10-27. ElevenLabs flow 89lBGhO1h2QbcoVgyTWO, generated for this mod: sound effects
-missile-alarm-0..2.wav (eleven_text_to_sound_v2) and the warning voice "Levi A." (eleven_v3, ElevenLabs library voice). The
-stall-horn.wav         missile loops are one generated beep and the stall loop one generated warble laid out by `pulse`; the rest
-gpws-whoop.wav         are cuts made by `build` in tools/Build-SoundClips.py.
-master-caution.wav
-vo-*.wav               Voice warnings remade 2026-10-28 (flow 2p0c5LzKv16HTnnMBjeh, voice "Amanda T", eleven_multilingual_v2):
-                       pull up, terrain, over G, bingo fuel and stall (replaces the game's spoken "stall"), band-limited
-                       280 Hz-4.5 kHz with light drive like a cockpit warning unit.
-ui-click-0.wav  ui-click-1.wav  ui-confirm.wav  ui-caution.wav
-near-crack-0.wav  near-crack-1.wav  gear-lever.wav  canopy-close.wav
-
-ui-click-0.wav  ui-tab.wav  ui-engage.wav  ui-release.wav  ui-confirm.wav  ui-caution.wav  ui-open.wav
-                       CONSOLE CUES, 2026-11-15 (replaces the 2026-10-27 ui-* cuts). ElevenLabs flow 7cdkxbBIpwBnewTwkKxj, generated
-                       for this mod with eleven_text_to_sound_v2: a membrane key press, a selector detent, a
-                       rising and a falling switch blip, a two-note confirm, a low refusal pulse and a display wake swell.
-                       One take of four each, cut to 0.16-0.60 s, low-passed 3.6-6 kHz for a soft contact, faded and levelled
-                       to -3 dBFS peak (mono 16-bit 22050 Hz). One clip per AvUiCue (AvionicsUi/AvUiSound.cs).
-
-visor-*.wav            HMD-9 VISOR SOUND FAMILY, 2026-11-16. Original procedural audio generated by tools/Build-VisorSounds.py (numpy and the
-                       standard wave module only; no samples, no downloads, fixed seeds, byte-identical on every run). Sine and soft
-                       partials with FM / ring-mod grit, relay and servo transients, band-limited 250 Hz-7 kHz, one A-minor-pentatonic
-                       pitch set. Mono 16-bit 22050 Hz, peaks -18 dBFS (ticks) to -6 dBFS (power-up). No licence questions: made for this mod.
-                       Played by Core/Fx/VisorSound.cs.
+All non-radio effects moved to Core/Fx/Audio/<category>/<id>.wav. Current production metadata and original preserved-source notes are in Core/Fx/Audio/production/.

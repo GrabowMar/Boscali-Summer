@@ -1,34 +1,28 @@
-BOSCALI RADIO STATIONS
-======================
+BOSCALI RADIO
+=============
 
-Add a station in three steps:
+RAD carries BROADCAST and MUSIC pages. Pick a station to listen to its music,
+adverts and news. Boscali Republic Radio and PALA State Radio keep their public
+programming. Base Broadcast is the same mercenary group station for all factions.
 
-1. Create a folder here using the station name.
-2. Put .ogg or .wav tracks directly inside it.
-3. Open RAD on the maximised map and press RESCAN.
+MILITARY CHANNEL receives command, AWACS, tower and battlefield communications
+independently of station playback. Turn RECEIVE off to stop communications; use
+its separate volume keys to adjust speech. Music gently ducks while speech airs.
+Station STOP and music deck STOP do not turn military receive off.
 
-Files placed directly in Music appear under LOCAL. The DECK page of the same RAD screen lists
-these folders and plays them directly - folders are stations on the receiver page and albums
-on the deck page.
+To add music, create a folder here, put .ogg or .wav tracks directly inside it,
+then press RESCAN. Files directly in Music appear as LOCAL. The MUSIC page lets
+you select tracks; folders are also stations on the BROADCAST page. Built-in
+station folders replace that station's soundtrack rotation when populated.
+Generated Bulletin tracks in imported folders are ignored.
 
-Boscali Republic Radio, PALA State Radio and Base Broadcast use local tracks when present.
-Each falls back to Nuclear Option's installed soundtrack if its folder is empty. Radio audio
-is stored here on this computer only; the mod does not bundle it.
-Generated Bulletin tracks in built-in folders are ignored by the receiver and deck.
+Built-in stations include original ElevenLabs songs, adverts and news, and fall
+back to the game's installed soundtrack. Your local music stays on this computer:
+nothing is bundled, uploaded or sent to another player.
 
-Between songs the built-in stations air their own talk: station stings and idents, hosts,
-adverts and news. Each station sounds like its side - the Republic's public radio, the
-State's propaganda service, and on Base Broadcast your own forces' network (BDF forces radio,
-the PALA army network, or the contractor net when you fly for the PMC). Set
-[Radio] BroadcastTalk = false in the config for music only.
+Custom stations can include station.png up to 256x256 pixels and 256 KiB. Missing
+or invalid art uses the station's two-letter badge. Frequencies identify stations;
+there is no propagation, signal-loss, jamming or transmit simulation.
 
-Reception on RAD is modelled: the three built-in stations each transmit from
-a tower on the map (your capital, another faction's, your nearest airbase), so range, your
-altitude, the radio horizon and terrain between you and the tower all matter. Tracks in your
-own folders are local archives and always come in clean.
-
-The three built-in station images stay embedded in the mod and are not copied here. Custom
-stations may use a station.png up to 256x256 pixels and 256 KiB. Missing or invalid custom
-icons fall back to the station's compact two-letter badge.
-
-Nothing here is ever bundled, uploaded or sent to another player.
+Config: [Radio] Volume, ReceiveMilitary, MilitaryVolume and BroadcastTalk. The
+Enabled switch controls station/deck playback; military receive stays independent.

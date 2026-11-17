@@ -1,0 +1,115 @@
+{
+  "name": "physics-query-attribution",
+  "description": "Bounded read-only attribution of ClosestPoint calls and native warning stacks during ordinary Terminal Control combat. Diagnostic evidence only; no physics calls are skipped or changed. Run at speed 1 with a 1200-second wall budget for locked-desktop rendering.",
+  "mission": "Terminal Control",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 1200,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    },
+    "resolution": [
+      960,
+      540
+    ]
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "near": [
+        50000,
+        15000
+      ],
+      "altitude": 9000,
+      "speed": 200,
+      "heading": 0
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AssetBindingProbe.Read",
+      "args": {},
+      "store": "assets"
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "orbit": {
+            "bank": 30,
+            "seconds": 300
+          }
+        }
+      ]
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.PhysicsWarningProbe.Install",
+      "args": {},
+      "store": "started"
+    },
+    {
+      "op": "wait",
+      "seconds": 240
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.PhysicsWarningProbe.Read",
+      "args": {},
+      "store": "trace"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.PhysicsWarningProbe.SelfTest",
+      "args": {},
+      "store": "canary"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.PhysicsWarningProbe.Stop",
+      "args": {},
+      "store": "stopped"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "started.installed",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "stopped.installed",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "trace.installed",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "canary.ok",
+      "value": true
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    }
+  ]
+}

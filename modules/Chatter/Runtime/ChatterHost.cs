@@ -36,6 +36,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private IChatterSettings settings;
         private ManualLogSource log;
         private float nextWorld;
+        private bool receiverWasOn = true;
+        private int aftermathRevision;
+        private bool aftermathWasActive;
 
         public static ChatterHost Instance { get; private set; }
 
@@ -50,22 +53,32 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             log = logger;
             flight = new FlightNets(this);
             voices = new ChatterVoices(logger, chatterSettings.DataRoot);
+            director.Ready = () => !voices.Loading;
             BoscaliSummer.Core.Fx.VisorSound.AddVoiceProbe(VoiceSounding);
             Instance = this;
             director.Aired += OnAired;
             LoadPacks();
         }
 
+        internal static bool Receiving => !ModuleServices.TryGet<IRadioComms>(out var receiver) || receiver.ReceiveMilitary;
+        private bool PrepareReceiver()
+        {
+            if (!Receiving || RadioAftermath.Active) return false;
+            // A callback can arrive in the same frame the receiver is enabled, before Update refreshes its level.
+            director.Level = settings?.Radio ?? ChatterLevel.Full;
+            return true;
+        }
+
         public bool Raise(string evt, ChatterSpeaker speaker, string key = null, params (string Name, string Value)[] facts) =>
-            director.Raise(Time.time, evt, speaker, key, facts);
+            PrepareReceiver() && director.Raise(Time.time, evt, speaker, key, facts);
 
         public bool Say(ChatterSpeaker speaker, string key, string text, ChatterPriority priority = ChatterPriority.Status) =>
-            director.Say(Time.time, speaker, key, text, priority);
+            PrepareReceiver() && director.Say(Time.time, speaker, key, text, priority);
 
         public bool Ask(ChatterSpeaker speaker, string evt, string key, Action yes, Action no = null, params (string Name, string Value)[] facts)
         {
             // Held before the line is raised: a free channel airs it inside Raise, and the question must already be waiting for it.
-            if (speaker == null || Application.isBatchMode || !questions.Ask(Time.time, key, evt, speaker.Id, Guard(yes), Guard(no))) return false;
+            if (!PrepareReceiver() || speaker == null || Application.isBatchMode || !questions.Ask(Time.time, key, evt, speaker.Id, Guard(yes), Guard(no))) return false;
             if (director.Raise(Time.time, evt, speaker, key, facts)) return true;
             questions.Withdraw(key);
             return false;
@@ -94,7 +107,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public bool Scripted(in ChatterAired line)
         {
             // COMMS stands down under the maximised map, so the script's own plate presents the line there.
-            if (!isActiveAndEnabled || Application.isBatchMode || DynamicMap.mapMaximized) return false;
+            if (!isActiveAndEnabled || Application.isBatchMode || DynamicMap.mapMaximized || RadioAftermath.Active) return false;
             if (strip == null) strip = new ChatterStrip(transform);
             return director.Scripted(Time.time, line);
         }
@@ -132,11 +145,21 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             if (voices != null && settings != null && !Application.isBatchMode) voices.Activate(settings.VoicePacks, director.Library);
             strip?.Clear();
             nextWorld = 0f;
+            receiverWasOn = Receiving;
+            aftermathRevision = -1;
+            aftermathWasActive = RadioAftermath.Active;
         }
 
-        private void OnDisable() => strip?.Clear();
+        private void OnDisable()
+        {
+            strip?.Clear();
+            voices?.Stop();
+            ChatterAudio.Reset();
+        }
 
         private bool VoiceSounding() => voices != null && voices.Sounding;
+        private float MilitaryVolume => settings.VoicePackVolume *
+            (ModuleServices.TryGet<IRadioComms>(out var receiver) ? receiver.MilitaryVolume : 1f);
 
         private void OnDestroy()
         {
@@ -154,22 +177,57 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             if (settings == null) return;
             voices.Tick();
-            director.Level = settings.Radio;
-            bool flying = GameManager.GetLocalAircraft(out Aircraft me) && me != null;
-            if (flying)
+            bool receive = Receiving;
+            if (aftermathRevision != RadioAftermath.Revision)
             {
-                if (Time.time >= nextWorld)
+                aftermathRevision = RadioAftermath.Revision;
+                bool stop = RadioAftermath.Active || aftermathWasActive;
+                aftermathWasActive = RadioAftermath.Active;
+                if (stop)
                 {
-                    nextWorld = Time.time + 2f;
+                    // The strategic strike ends the ordinary command net, including queued critical reports.
+                    director.Silence(); voices.Stop(); ChatterAudio.Reset(); questions.Reset(); strip?.Clear();
+                }
+            }
+            if (!receive && receiverWasOn)
+            {
+                director.Silence();
+                voices.Stop();
+                ChatterAudio.Reset();
+                questions.Reset();
+                strip?.Clear();
+            }
+            receiverWasOn = receive;
+            voices.Volume(MilitaryVolume);
+            ChatterAudio.Volume(MilitaryVolume);
+            // Wing's optional exchanges reach the director directly; Off closes that path during the blackout too.
+            director.Level = receive && !RadioAftermath.Active ? settings.Radio : ChatterLevel.Off;
+            if (RadioAftermath.Active)
+            {
+                if (receive && settings.Radio != ChatterLevel.Off && MilitaryVolume > 0f &&
+                    RadioAftermath.TrySurvivor(Time.time, !voices.Loading, director.Busy(Time.time), out int role))
+                    Survivor(role);
+                if (receive) director.Tick(Time.time, canTalk);
+                strip?.Question(false, 0f, 0f, "", "", null);
+                strip?.Tick(GameManager.GetLocalAircraft(out Aircraft survivor) && survivor != null);
+                return;
+            }
+            bool flying = GameManager.GetLocalAircraft(out Aircraft me) && me != null;
+            // Bind event publishers even while unseated: a superevent must not depend on entering a cockpit.
+            if (Time.time >= nextWorld)
+            {
+                nextWorld = Time.time + 2f;
+                command.Tick(this, flying ? me : null);
+                flight.Tick(flying ? me : null);
+                if (flying)
+                {
                     ReadWorld(me);
-                    command.Tick(this, me);
-                    flight.Tick(me);
                     asks.Tick(this, me);
                     foreach (string evt in director.Unknown)
                         if (warned.Add(evt)) log?.LogWarning("[Chatter] no pack has the event '" + evt + "'; nothing is said for it.");
                 }
-                director.Tick(Time.time, canTalk);
             }
+            if (receive) director.Tick(Time.time, canTalk);
             // The answer keys are read only while a question is up, and never while the pilot types.
             if (questions.Open && !BoscaliSummer.Core.Ui.MapTool.Typing())
             {
@@ -197,6 +255,25 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 if (word.Trim().Length > 0) director.Conditions.Add(word.Trim().ToLowerInvariant());
         }
 
+        private void Survivor(int role)
+        {
+            string evt, character, callsign;
+            ChatterNet net;
+            switch (role)
+            {
+                case 1: evt = "awacs.survivor"; character = "skywatch"; callsign = "SKYWATCH / SURVIVOR"; net = ChatterNet.Awacs; break;
+                case 2: evt = "wing.survivor"; character = "survivor-pilot"; callsign = "STRANDED FLIGHT"; net = ChatterNet.Wing; break;
+                case 3: evt = "command.survivor.captain"; character = "captain"; callsign = "BRIDGE / SURVIVOR"; net = ChatterNet.Command; break;
+                case 4: evt = "command.survivor.paratrooper"; character = "paratrooper"; callsign = "DROP LEAD / SURVIVOR"; net = ChatterNet.Command; break;
+                default: evt = "command.survivor.ground"; character = "ground"; callsign = "GROUND / SURVIVOR"; net = ChatterNet.Command; break;
+            }
+            ChatterSpeaker speaker = Station(net, callsign);
+            speaker.Character = character;
+            director.Level = settings.Radio;
+            try { director.Raise(Time.time, evt, speaker, "survivor:" + RadioAftermath.Revision + ":" + RadioAftermath.SurvivorCalls); }
+            finally { director.Level = ChatterLevel.Off; }
+        }
+
         private void Set(string condition, bool on)
         {
             if (on) director.Conditions.Add(condition); else director.Conditions.Remove(condition);
@@ -205,13 +282,15 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private void OnAired(ChatterAired line)
         {
             // A recorded voice holds the channel for as long as it really talks.
-            float spoken = voices.Play(line, transform, settings.VoicePackVolume);
+            ModuleServices.TryGet<IRadioComms>(out var receiver);
+            float spoken = Receiving && MilitaryVolume > 0f ? voices.Play(line, transform, MilitaryVolume) : 0f;
             if (spoken > 0f)
             {
                 director.Hold(Time.time, spoken);
                 line.Seconds = Mathf.Max(line.Seconds, spoken);
+                if (MilitaryVolume > 0f) receiver?.DuckMilitary(spoken);
             }
-            ChatterAudio.Transmit(line.Seconds);
+            if (Receiving && spoken > 0f) ChatterAudio.Transmit(spoken);
             // A question's line opens its answer window, and its row stays up for as long as the window is open.
             if (questions.OnAired(line)) line.Seconds += ChatterQuestions.AnswerSeconds;
             if (strip == null && !Application.isBatchMode) strip = new ChatterStrip(transform);

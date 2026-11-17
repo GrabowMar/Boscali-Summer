@@ -11,6 +11,8 @@ namespace BoscaliSummer.Modules.Skylark
     internal static class SkylarkLights
     {
         private static Mesh lensMesh;
+        /// <summary>The native gear lamp's lit material (white emissive), for glows tinted elsewhere.</summary>
+        internal static Material WhiteLit { get; private set; }
 
         internal static void Refit(Aircraft aircraft, Dictionary<string, Transform> nodes)
         {
@@ -19,6 +21,7 @@ namespace BoscaliSummer.Modules.Skylark
             Array original = SkylarkTemplate.Get<Array>(manager, "navLights");
             object left = Find(original, "navlight_L"), right = Find(original, "navlight_R");
             object landing = Find(original, "gearLight");
+            WhiteLit = SkylarkTemplate.Get<Material>(landing, "litMaterial");
             foreach (object record in original)
                 foreach (GameObject effect in SkylarkTemplate.Get<GameObject[]>(record, "objects"))
                     if (effect != null) effect.SetActive(false);
@@ -43,6 +46,29 @@ namespace BoscaliSummer.Modules.Skylark
                 "Landing", Color.white, gear), 3);
             SkylarkTemplate.Set(manager, "aircraft", aircraft);
             SkylarkTemplate.Set(manager, "navLights", records);
+            Renderer[] strobes = new[] { "Strobe_Top", "Strobe_Bottom" }.Where(nodes.ContainsKey).Select(n => nodes[n].GetComponent<Renderer>()).Where(r => r != null).ToArray();
+            if (strobes.Length > 0)
+            {
+                // Red anti-collision beacons: the native red nav lamp's lit material and a short pulsed glow, gated by the nav-light switch.
+                SkylarkStrobe strobe = aircraft.gameObject.AddComponent<SkylarkStrobe>();
+                strobe.strobes = strobes;
+                strobe.lit = SkylarkTemplate.Get<Material>(left, "litMaterial");
+                strobe.dark = SkylarkMaterials.Skin;
+                strobe.navLens = SkylarkTemplate.Get<Renderer>(records.GetValue(0), "renderer");
+                strobe.glows = strobes.Select(r =>
+                {
+                    var point = new GameObject("SkylarkStrobeGlow");
+                    point.transform.SetParent(r.transform, false);
+                    Light light = point.AddComponent<Light>();
+                    light.type = LightType.Point;
+                    light.color = new Color(1f, .08f, .04f);
+                    light.intensity = 1.6f;
+                    light.range = 3f * SkylarkTemplate.Scale;
+                    light.shadows = LightShadows.None;
+                    light.enabled = false;
+                    return light;
+                }).ToArray();
+            }
         }
 
         private static object Find(Array records, string name)
@@ -135,6 +161,39 @@ namespace BoscaliSummer.Modules.Skylark
             lensMesh.RecalculateNormals();
             lensMesh.RecalculateBounds();
             return lensMesh;
+        }
+    }
+
+    /// <summary>
+    /// Double-flash anti-collision strobes (optional Strobe_Top / Strobe_Bottom lamps): the lens swaps to the native lit lamp material and a
+    /// short point light pulses with it, while the aircraft is alive and its nav lights are on (gear out, or switched on; GO DARK turns them off).
+    /// </summary>
+    internal sealed class SkylarkStrobe : MonoBehaviour
+    {
+        private const float Period = 1.2f, Flash = .06f, Gap = .1f;
+        [SerializeField] internal Renderer[] strobes;
+        [SerializeField] internal Light[] glows;
+        [SerializeField] internal Material lit, dark;
+        [SerializeField] internal Renderer navLens;
+        private Aircraft aircraft;
+        private bool shown;
+
+        /// <summary>Times the strobe has lit since spawn, and when it last lit (sim readback).</summary>
+        internal int Flashes { get; private set; }
+        internal float LastFlash { get; private set; } = -100f;
+
+        private void Awake() => aircraft = GetComponent<Aircraft>();
+
+        private void LateUpdate()
+        {
+            float t = Time.time % Period;
+            // NavLights puts its lit material straight on the lens renderer when on (no copy), so a reference test is exact.
+            bool on = !aircraft.disabled && navLens != null && navLens.sharedMaterial == lit && (t < Flash || t > Flash + Gap && t < 2f * Flash + Gap);
+            if (on == shown) return;
+            shown = on;
+            if (on) { Flashes++; LastFlash = Time.time; }
+            foreach (Renderer strobe in strobes) if (strobe != null) strobe.sharedMaterial = on ? lit : dark;
+            foreach (Light glow in glows) if (glow != null) glow.enabled = on;
         }
     }
 

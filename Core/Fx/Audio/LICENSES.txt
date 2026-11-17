@@ -1,0 +1,8 @@
+Recorded effect provenance
+==========================
+
+The production catalog identifies every current effect. The 83 replacement recordings were generated for this mod with ElevenLabs eleven_text_to_sound_v2; prompts, model parameters, generation IDs, raw-source hashes and selected takes are recorded in production/sources.json. Flow: wvyupmnzsVQKk5CjAk5U.
+
+The other 27 recordings are existing ElevenLabs cockpit/UI/seasonal effects, preserved byte for byte and pinned by SHA-256 in production/catalog.json. Historical source notes are retained in production/legacy-provenance.txt.
+
+Preparation is offline through tools/Build-AudioEffects.py. The game's runtime never calls a generation service. Radio/chatter and Scenario media have separate provenance and inventory records; see README.md.

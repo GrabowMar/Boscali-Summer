@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1120" viewBox="0 0 1600 1120" role="img" aria-labelledby="title desc">
+  <title id="title">Breakwater: rapid invasion and reaction-force gameplay</title>
+  <desc id="desc">An original gameplay concept diagram showing preparation, arrival, deployment, contested ground capture, finite sustainment and handover or survivor recovery. Infantry, aerial and ground drones, onboard artillery, AWACS and rearm/refuel contribute together. Proposed force and stock allocations remain unvalidated.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#83cbb7"/></marker>
+    <style>
+      text{font-family:'Segoe UI',Arial,sans-serif;fill:#e7eff2}.label{font-size:15px;letter-spacing:1.4px}.body{font-size:21px}.small{font-size:17px}.muted{fill:#a1b6c1}.mint{fill:#83d4be}.warm{fill:#e2b782}.mono{font-family:Consolas,'Courier New',monospace}.flow{stroke:#83cbb7;stroke-width:2;fill:none;marker-end:url(#arrow)}.rule{stroke:#3a535f;stroke-width:1}
+    </style>
+  </defs>
+  <rect width="1600" height="1120" fill="#111f28"/>
+  <rect width="1600" height="8" fill="#83d4be"/>
+  <text x="48" y="49" class="label mint">BOSCALI SUMMER / MEGAPLANE / GAMEPLAY ROLE / 17 NOV 2026</text>
+  <text x="45" y="108" font-size="46" font-weight="650">BREAKWATER: THE INVASION HUB</text>
+  <text x="48" y="141" class="body muted">Bring a force. Establish a foothold. Keep it fighting. Recover the survivors.</text>
+  <!-- Read top row left to right, then bottom row right to left. -->
+  <rect x="48" y="182" width="480" height="190" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="74" y="219" class="label mint">01 / PREPARE</text>
+  <text x="74" y="260" class="body">Embark a finite mixed expedition.</text>
+  <text x="74" y="298" class="small muted">Personnel, craft, compatible stores and supplies</text>
+  <text x="74" y="327" class="small muted">All support roles remain part of the package.</text>
+  <path d="M534 275H553" class="flow"/>
+  <rect x="560" y="182" width="480" height="190" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="586" y="219" class="label mint">02 / ARRIVE AND OBSERVE</text>
+  <text x="586" y="260" class="body">Escorts open a useful working area.</text>
+  <text x="586" y="298" class="small muted">Actual AWACS tracks and a small aerial element</text>
+  <text x="586" y="327" class="small muted">A large aircraft still needs room and protection.</text>
+  <path d="M1046 275H1065" class="flow"/>
+  <rect x="1072" y="182" width="480" height="190" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="1098" y="219" class="label mint">03 / DEPLOY</text>
+  <text x="1098" y="260" class="body">Deliver the ground force and service kit.</text>
+  <text x="1098" y="298" class="small muted">Shuttles / supported drops / ground drones</text>
+  <text x="1098" y="327" class="small muted">The manifest actually moves to the ground.</text>
+  <path d="M1312 380V412" class="flow"/>
+  <rect x="1072" y="422" width="480" height="190" rx="13" fill="#29312f" stroke="#6c6650"/>
+  <text x="1098" y="459" class="label warm">04 / CAPTURE AND HOLD</text>
+  <text x="1098" y="500" class="body">Ground elements contest the objective.</text>
+  <text x="1098" y="538" class="small muted">Onboard artillery and drones support the fight.</text>
+  <text x="1098" y="567" class="small muted">Passing overhead grants no capture effect.</text>
+  <path d="M1065 515H1047" class="flow"/>
+  <rect x="560" y="422" width="480" height="190" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="586" y="459" class="label mint">05 / SUSTAIN AND REINFORCE</text>
+  <text x="586" y="500" class="body">Turn finite stores into useful sorties.</text>
+  <text x="586" y="538" class="small muted">Rearm / refuel / recover damaged craft</text>
+  <text x="586" y="567" class="small muted">Deliver stocks to real ground service equipment.</text>
+  <path d="M553 515H535" class="flow"/>
+  <rect x="48" y="422" width="480" height="190" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="74" y="459" class="label mint">06 / HAND OVER OR RECOVER</text>
+  <text x="74" y="500" class="body">Leave a sustainable foothold behind.</text>
+  <text x="74" y="538" class="small muted">A base or supply route takes over; survivors return.</text>
+  <text x="74" y="567" class="small muted">Replenish physically before the next expedition.</text>
+  <rect x="48" y="646" width="1504" height="78" rx="12" fill="#25493f"/>
+  <text x="800" y="679" text-anchor="middle" class="body">The carrier makes an invasion sustainable before a permanent base can.</text>
+  <text x="800" y="707" text-anchor="middle" class="small muted">Infantry + both drone domains + onboard artillery + AWACS + rearm/refuel operate as one combined role.</text>
+  <!-- Force and consequences. -->
+  <rect x="48" y="752" width="736" height="300" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="74" y="790" class="label mint">FIRST MANIFEST STUDY / WITHIN THE EXISTING 300 t</text>
+  <text x="74" y="839" font-size="32" class="mono">128 infantry</text><text x="422" y="839" class="small muted">16 squad records / native positions</text>
+  <text x="74" y="883" font-size="32" class="mono">12 aerial drones</text><text x="422" y="883" class="small muted">4 independently active at once</text>
+  <text x="74" y="927" font-size="32" class="mono">8 ground drones</text><text x="422" y="927" class="small muted">Recon / fire / logistics roles</text>
+  <text x="74" y="971" font-size="32" class="mono">2 shuttles</text><text x="422" y="971" class="small muted">Insertion, delivery and pickup</text>
+  <text x="74" y="1021" class="small muted">Counts and masses are design hypotheses, not measured assets.</text>
+  <rect x="808" y="752" width="744" height="300" rx="13" fill="#1a303c" stroke="#3a535f"/>
+  <text x="834" y="790" class="label warm">STOCKS, SURVIVORS AND MEANINGFUL CONSEQUENCES</text>
+  <text x="834" y="835" class="body">70 t transferable fuel + typed ammunition and supplies</text>
+  <text x="834" y="874" class="small muted">Carrier contingency fuel remains a separate protected reserve.</text>
+  <path d="M834 894H1526" class="rule"/>
+  <text x="834" y="927" class="small">Deployed survivors persist if the carrier retreats or is lost.</text>
+  <text x="834" y="960" class="small">Recovery returns actual damage, people and remaining stores.</text>
+  <text x="834" y="993" class="small">Handovers cannot bypass the faction expedition entity budget.</text>
+  <text x="834" y="1026" class="small muted">Reactor output does not manufacture fuel, ammunition or troops.</text>
+  <text x="48" y="1090" class="small muted">RESEARCH / GAMEPLAY SPECIFICATION ONLY / No carrier gameplay implementation, independent soldier AI or service acceptance established.</text>
+</svg>

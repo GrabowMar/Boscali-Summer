@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             Vector3 origin = ground + Vector3.forward * Standoff;
             if (SupportTargeting.TryOrigin(context.Player, out Vector3 player))
             {
-                if (Vector3.Distance(player, ground) > context.Settings.MaximumRange.Value)
+                if (Vector3.Distance(player, ground) > SupportTargeting.MaxRange(context))
                     return SupportResult.OutOfRange;
                 origin = player;
             }

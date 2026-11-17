@@ -30,6 +30,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private readonly bool nearDetail;
         private readonly Func<float, float, WeatherPoint> weatherSampler;
         private readonly float eyeX, eyeZ, eyeRadius, eyeStrength;
+        private readonly CloudClearanceSphere[] clearances;
 
         /// <summary>One sky everywhere: a one-keyframe tape of <paramref name="sky"/> (tests, and callers with no tape).</summary>
         public CloudBodies(byte[] noise, int size, in SkyParams sky, float prevailingHeading = 0f,
@@ -45,6 +46,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             bool nearDetail = false, Func<float, float, WeatherPoint> weatherSampler = null)
         {
             this.weatherSampler = weatherSampler;
+            clearances = CloudClearance.Current;
             this.shownHeroes = shownHeroes;
             this.nearDetail = nearDetail;
             this.fog = fog;
@@ -71,6 +73,13 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             => Density(p, x, y, z, out _);
 
         public float Density(WeatherPoint p, float x, float y, float z, out float localLightingHeight)
+        {
+            float keep = CloudClearance.Keep(clearances, x, y, z);
+            if (keep <= .001f) { localLightingHeight = 0f; return 0f; }
+            return DensityBody(p, x, y, z, out localLightingHeight) * keep;
+        }
+
+        private float DensityBody(WeatherPoint p, float x, float y, float z, out float localLightingHeight)
         {
             localLightingHeight = 0f;
             // Every tap of the low volume reads the noise where this tape's rotation and offset put it (spec 6): nx, nz are noise-space.

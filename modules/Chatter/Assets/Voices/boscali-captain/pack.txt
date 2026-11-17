@@ -1,0 +1,3 @@
+# battlefield-2026-11-17 | Garrison
+net: command
+character: captain

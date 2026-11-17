@@ -1021,6 +1021,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "rainAudioReady", rainSound != null && rainSound.ClipsReady ? 1 : 0 },
                 { "rainAudioRouted", rainSound != null && rainSound.IsRouted ? 1 : 0 },
                 { "rainAudioPlaying", rainSound != null && rainSound.IsPlaying ? 1 : 0 },
+                { "rainAudioClip", rainSound != null ? rainSound.ActiveClipName : "" },
+                { "rainAudioEffectsMixer", rainSound != null && rainSound.EffectsRouted },
                 { "rainRushVolume", rainSound != null ? rainSound.RushVolume : 0f },
                 { "rainPatterVolume", rainSound != null ? rainSound.PatterVolume : 0f },
                 { "rainExteriorCutoff", rainSound != null ? rainSound.ExteriorCutoff : 22000f },

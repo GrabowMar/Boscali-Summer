@@ -302,6 +302,9 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
             return kids;
         }
 
+        public static readonly string[] SkylarkDrives = { "AUTO", "EV", "HYBRID" }, SkylarkVectors = { "AUTO", "DRONE", "PLANE", "MANUAL" };
+        private const int SkylarkPlane = 2; // SkylarkVectors index
+
         private static int Clamp(int index, string[] values) => Math.Max(0, Math.Min(values.Length - 1, index));
 
         private static MenuCategory Hud(MenuWorld w, Builder b)
@@ -354,16 +357,31 @@ namespace BoscaliSummer.Modules.Autopilot.Domain
                     F("ENABLE ASSIST", "FLIGHT ASSIST: OFF", "LIMIT PITCH TO PREVENT STALLS", "FLIGHT ASSIST ON"),
                     F("DISABLE ASSIST", "FLIGHT ASSIST: ON", "REMOVE THE PITCH LIMITER", "FLIGHT ASSIST OFF"))));
             if (w.HasHover)
-                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/hover", "auto-hover", w.Hover,
+            {
+                MenuRow hover = MenuRow.Toggle("flight/hover", "auto-hover", w.Hover,
                     F("ENABLE AUTO-HOVER", "AUTO-HOVER: OFF", "HOLD POSITION AND ALTITUDE", "AUTO-HOVER ON"),
-                    F("DISABLE AUTO-HOVER", "AUTO-HOVER: ON", "RETURN VTOL CONTROL TO THE STICK", "AUTO-HOVER OFF"))));
+                    F("DISABLE AUTO-HOVER", "AUTO-HOVER: ON", "RETURN VTOL CONTROL TO THE STICK", "AUTO-HOVER OFF"));
+                // VS-4 PLANE holds the fans aft and cancels auto-hover every physics tick (SkylarkFlightMode): say so instead of a toggle that undoes itself.
+                if (w.SkylarkActive && w.SkylarkVector == SkylarkPlane && !w.Hover) hover.Blocked = "VS-4 PLANE: SET VECTOR DRONE OR AUTO";
+                c.Rows.Add(b.Reg(hover));
+            }
+            if (w.SkylarkActive)
+            {
+                string battery = string.IsNullOrEmpty(w.SkylarkBattery) ? "DRIVE: " : w.SkylarkBattery + D + "DRIVE: ";
+                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/drive", "engine", "SET DRIVE", battery, SkylarkDrives, Clamp(w.SkylarkDrive, SkylarkDrives), "DRIVE: ")));
+                c.Rows.Add(b.Reg(MenuRow.Cycle("flight/sk/vector", "auto-hover", "SET VECTOR", "VECTOR: ", SkylarkVectors, Clamp(w.SkylarkVector, SkylarkVectors), "VECTOR: ")));
+                c.Rows.Add(b.Reg(MenuRow.Toggle("flight/sk/mast", "radar", w.SkylarkMast,
+                    F("DEPLOY C2 MAST", "C2: OFFLINE", "STRIKE REACH X1.5 AND CHEAPER CALLS, BIGGER RADAR RETURN", "C2 MAST OUT"),
+                    F("STOW C2 MAST", "C2: ONLINE" + D + "REACH X1.5", "FOLD THE MAST AWAY: STEALTHIER, NO C2 BONUS", "C2 MAST STOWED", MenuTone.Active), checkbox: false)));
+            }
             if (w.Airborne || w.AutolandEngaged)
             {
                 MenuRow land = MenuRow.Toggle("flight/autoland", "autoland", w.AutolandEngaged,
                     F("AUTOLAND", "AUTOLAND: READY", "FLY THE APPROACH TO THE NEAREST STRIP", "AUTOLAND ENGAGED"),
                     F("CANCEL AUTOLAND", "AUTOLAND: ENGAGED", "ABORT THE APPROACH, TAKE THE STICK", "AUTOLAND CANCELLED", MenuTone.Active), checkbox: false);
                 land.IconOn = "autoland-cancel";
-                if (!w.AutolandEngaged) land.Blocked = w.AutolandBlock;
+                // The native landing autopilot cannot fly the VS-4 to touchdown (sim: it wanders or flies into the ground); DRONE hover lands it.
+                if (!w.AutolandEngaged) land.Blocked = w.SkylarkActive ? "VS-4: DESCEND IN DRONE HOVER" : w.AutolandBlock;
                 c.Rows.Add(b.Reg(land));
             }
             MenuRow engine = MenuRow.Toggle("flight/engine", "engine", w.Ignition,

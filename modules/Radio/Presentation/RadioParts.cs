@@ -113,7 +113,9 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         private readonly TMP_Text crestCode, station, slab, show, label, title, clock, next, nextIn;
         private Color tint = AvTheme.Friendly;
         private float placedW = -1f, progress;
-        private bool slabLive;
+        private bool slabLive, compact;
+        private float CardHeight => compact ? 92f : H;
+        public void SetCompact(bool value) { if (compact == value) return; compact = value; Changed(); }
 
         public RadioOnAirPart(RectTransform parent)
         {
@@ -149,7 +151,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
 
         public string Help { set => AvHelpTip.Attach(hit.gameObject, value); }
 
-        public override float Measure(float width) => H;
+        public override float Measure(float width) => CardHeight;
 
         public void Set(Color stationColor, Sprite crest, string code, string stationName, string stateWord, bool live,
             string showLine, string labelText, string titleText, float progress01, string clockText, string nextText, string nextInText)
@@ -171,32 +173,34 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         {
             base.Place(s);
             placedW = s.W;
-            AvLay.Place(back.rectTransform, 0f, 0f, s.W, H);
-            AvLay.Place(hit.rectTransform, 0f, 0f, s.W, H);
-            outline.Place(0f, 0f, s.W, H);
+            AvLay.Place(back.rectTransform, 0f, 0f, s.W, CardHeight);
+            AvLay.Place(hit.rectTransform, 0f, 0f, s.W, CardHeight);
+            outline.Place(0f, 0f, s.W, CardHeight);
             Arrange(s.W);
         }
 
         private void Arrange(float w)
         {
-            AvLay.Place(crestBack.rectTransform, Pad, Pad, Crest, Crest);
-            crestOutline.Place(Pad, Pad, Crest, Crest);
-            AvLay.Place(crestIcon.rectTransform, Pad + 17f, Pad + 8f, Crest - 34f, Crest - 34f);
-            AvLay.Place(crestCode.rectTransform, Pad, Pad + Crest - 22f, Crest, 18f);
+            float crest = compact ? 64f : Crest;
+            barBack.enabled = barFill.enabled = clock.enabled = next.enabled = nextIn.enabled = !compact;
+            AvLay.Place(crestBack.rectTransform, Pad, Pad, crest, crest);
+            crestOutline.Place(Pad, Pad, crest, crest);
+            AvLay.Place(crestIcon.rectTransform, Pad + 17f, Pad + 8f, crest - 34f, crest - 34f);
+            AvLay.Place(crestCode.rectTransform, Pad, Pad + crest - 22f, crest, 18f);
 
-            float x = Pad * 2f + Crest, rw = Mathf.Max(40f, w - x - Pad);
+            float x = Pad * 2f + crest, rw = Mathf.Max(40f, w - x - Pad);
             float slabW = Mathf.Min(rw * 0.35f, AvText.Width(slab) + 14f);
             AvLay.Place(station.rectTransform, x, Pad - 2f, Mathf.Max(20f, rw - slabW - 6f), 22f);
             AvLay.Place(slabBack.rectTransform, x + rw - slabW, Pad, slabW, 17f);
             AvLay.Place(slab.rectTransform, x + rw - slabW, Pad, slabW, 17f);
             AvLay.Place(show.rectTransform, x, Pad + 21f, rw, 16f);
             AvLay.Place(rule.rectTransform, x, Pad + 41f, rw, 1f);
-            AvLay.Place(label.rectTransform, x, Pad + 45f, rw, 14f);
-            AvLay.Place(title.rectTransform, x, Pad + 59f, rw, 18f);
+            AvLay.Place(label.rectTransform, x, Pad + 45f, rw, 18f);
+            AvLay.Place(title.rectTransform, x, Pad + 63f, rw, 18f);
             float barW = Mathf.Max(10f, rw - ClockW - 6f);
-            AvLay.Place(barBack.rectTransform, x, Pad + 82f, barW, 4f);
-            AvLay.Place(barFill.rectTransform, x, Pad + 82f, barW * progress, 4f);
-            AvLay.Place(clock.rectTransform, x + rw - ClockW, Pad + 76f, ClockW, 16f);
+            AvLay.Place(barBack.rectTransform, x, Pad + 86f, barW, 4f);
+            AvLay.Place(barFill.rectTransform, x, Pad + 86f, barW * progress, 4f);
+            AvLay.Place(clock.rectTransform, x + rw - ClockW, Pad + 80f, ClockW, 16f);
 
             AvLay.Place(next.rectTransform, Pad, H - 26f, Mathf.Max(20f, w - 2f * Pad - 70f), 18f);
             AvLay.Place(nextIn.rectTransform, w - Pad - 70f, H - 26f, 70f, 18f);
@@ -225,140 +229,4 @@ namespace BoscaliSummer.Modules.Radio.Presentation
         }
     }
 
-    /// <summary>
-    /// Big frequency on the left; the S-report, dBm / range line and the signal bar with its squelch gate on the right.
-    /// </summary>
-    internal sealed class RadioReadoutPart : AvPart
-    {
-        private const float FreqW = 128f, Gap = 10f;
-        private readonly TMP_Text value, unit, report, detail;
-        private readonly AvGaugeGraphic bar;
-        private readonly Image gate, hit;
-        private float barX, barW = 1f, squelch;
-
-        public RadioReadoutPart(RectTransform parent)
-        {
-            Rect = AvLay.Child(parent, "Readout");
-            hit = AvLay.Solid(Rect, "Hit", Color.clear);
-            hit.raycastTarget = true;
-            value = AvText.Make(Rect, "Value", AvTextRole.Display);
-            AvText.Fit(value, false);
-            unit = AvText.Make(Rect, "Unit", AvTextRole.Micro);
-            AvText.Fit(unit, false);
-            report = AvText.Make(Rect, "Report", AvTextRole.DataStrong);
-            AvText.Fit(report, false);
-            detail = AvText.Make(Rect, "Detail", AvTextRole.DataSmall, string.Empty, TextAlignmentOptions.MidlineRight);
-            AvText.Fit(detail, false);
-            var barGo = new GameObject("Bar", typeof(RectTransform), typeof(CanvasRenderer));
-            barGo.transform.SetParent(Rect, false);
-            bar = barGo.AddComponent<AvGaugeGraphic>();
-            bar.Shape = AvGaugeShape.Bar;
-            bar.raycastTarget = false;
-            gate = AvLay.Solid(Rect, "Gate", Color.clear);
-            Restyle();
-        }
-
-        public string Help { set => AvHelpTip.Attach(hit.gameObject, value); }
-
-        public override float Measure(float width) => 44f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            AvLay.Place(hit.rectTransform, 0f, 0f, s.W, s.H);
-            AvLay.Place(value.rectTransform, 0f, 0f, FreqW, 28f);
-            AvLay.Place(unit.rectTransform, 0f, 28f, FreqW, 15f);
-            barX = FreqW + Gap;
-            barW = Mathf.Max(20f, s.W - barX);
-            AvLay.Place(report.rectTransform, barX, 2f, barW * 0.4f, 18f);
-            AvLay.Place(detail.rectTransform, barX + barW * 0.4f, 2f, barW * 0.6f, 18f);
-            AvLay.Place((RectTransform)bar.transform, barX, 26f, barW, 10f);
-            PlaceGate();
-        }
-
-        public void Set(string frequency, string unitText, string reportText, string detailText, float level01, float squelch01, Color color)
-        {
-            if (value.text != (frequency ?? string.Empty)) value.text = frequency ?? string.Empty;
-            if (unit.text != (unitText ?? string.Empty)) unit.text = unitText ?? string.Empty;
-            report.text = reportText ?? string.Empty;
-            report.color = color;
-            detail.text = detailText ?? string.Empty;
-            bar.FillColor = bar.FillEnd = color;
-            bar.Value = level01;
-            squelch = Mathf.Clamp01(squelch01);
-            PlaceGate();
-        }
-
-        private void PlaceGate() => AvLay.Place(gate.rectTransform, barX + squelch * barW - 1f, 23f, 2f, 16f);
-
-        public override void Restyle()
-        {
-            value.color = AvStyleHost.FuiInk("readout", AvTheme.TextPrimary);
-            unit.color = AvStyleHost.FuiInk("readout-unit", AvTheme.Dim);
-            detail.color = AvStyleHost.FuiInk("row-sub", AvTheme.Dim);
-            bar.Track = AvStyleHost.FuiFill("gauge-track", AvTheme.Hairline);
-            gate.color = AvStyleHost.FuiColor("caution", AvTheme.Warning);
-            bar.SetVerticesDirty();
-        }
-    }
-
-    /// <summary>
-    /// Volume and squelch as two rings each with a stacked +/- pair, and the three receiver switches
-    /// (mode, bandwidth, step) stacked beside them: one 82 px block where there used to be a ring row,
-    /// a key row and a switch row.
-    /// </summary>
-    internal sealed class RadioLevelsPart : AvPart
-    {
-        private const float BlockH = 60f, GaugeW = 62f, KeyW = 30f, KeyH = 28f, BlockW = 104f, SwitchX = 214f, SwitchH = 18f;
-        public readonly AvGauge Volume, Squelch;
-        private readonly Image rule;
-        public readonly AvControl VolumeDown, VolumeUp, SquelchDown, SquelchUp, Mode, Bandwidth, Step;
-
-        public RadioLevelsPart(RectTransform parent, Action volumeDown, Action volumeUp, Action squelchDown,
-            Action squelchUp, Action mode, Action bandwidth, Action step)
-        {
-            Rect = AvLay.Child(parent, "Levels");
-            Volume = new AvGauge(Rect, "VOL");
-            Squelch = new AvGauge(Rect, "SQL");
-            VolumeUp = AvControl.Make(Rect, new AvControl.Spec(string.Empty, volumeUp, AvButtonStyle.Quiet, AvIcon.Plus));
-            VolumeDown = AvControl.Make(Rect, new AvControl.Spec(string.Empty, volumeDown, AvButtonStyle.Quiet, AvIcon.Minus));
-            SquelchUp = AvControl.Make(Rect, new AvControl.Spec(string.Empty, squelchUp, AvButtonStyle.Quiet, AvIcon.Plus));
-            SquelchDown = AvControl.Make(Rect, new AvControl.Spec(string.Empty, squelchDown, AvButtonStyle.Quiet, AvIcon.Minus));
-            Mode = AvControl.Make(Rect, new AvControl.Spec("MODE", mode, AvButtonStyle.Toggle));
-            Bandwidth = AvControl.Make(Rect, new AvControl.Spec("BANDWIDTH", bandwidth, AvButtonStyle.Toggle));
-            Step = AvControl.Make(Rect, new AvControl.Spec("STEP", step, AvButtonStyle.Toggle));
-            rule = AvLay.Solid(Rect, "Rule", Color.clear);
-            Restyle();
-        }
-
-        public override float Measure(float width) => 68f;
-
-        public override void Place(AvSlot s)
-        {
-            base.Place(s);
-            // One 60 px block: both rings, both key stacks and the three switches share its top and bottom edge.
-            float top = (s.H - BlockH) * 0.5f;
-            Volume.Place(new AvSlot(0f, top, GaugeW, BlockH));
-            AvLay.Place(VolumeUp.Rect, GaugeW + 2f, top, KeyW, KeyH);
-            AvLay.Place(VolumeDown.Rect, GaugeW + 2f, top + BlockH - KeyH, KeyW, KeyH);
-            Squelch.Place(new AvSlot(BlockW, top, GaugeW, BlockH));
-            AvLay.Place(SquelchUp.Rect, BlockW + GaugeW + 2f, top, KeyW, KeyH);
-            AvLay.Place(SquelchDown.Rect, BlockW + GaugeW + 2f, top + BlockH - KeyH, KeyW, KeyH);
-
-            float w = Mathf.Max(60f, s.W - SwitchX), gap = (BlockH - 3f * SwitchH) * 0.5f;
-            AvLay.Place(rule.rectTransform, SwitchX - 8f, top, 1f, BlockH);
-            AvLay.Place(Mode.Rect, SwitchX, top, w, SwitchH);
-            AvLay.Place(Bandwidth.Rect, SwitchX, top + SwitchH + gap, w, SwitchH);
-            AvLay.Place(Step.Rect, SwitchX, top + BlockH - SwitchH, w, SwitchH);
-        }
-
-        public override void Restyle()
-        {
-            Volume.Restyle();
-            Squelch.Restyle();
-            VolumeUp.Restyle(); VolumeDown.Restyle(); SquelchUp.Restyle(); SquelchDown.Restyle();
-            Mode.Restyle(); Bandwidth.Restyle(); Step.Restyle();
-            if (rule != null) rule.color = AvStyleHost.FuiBorder("section", AvTheme.Hairline);
-        }
-    }
 }

@@ -12,9 +12,10 @@ namespace BoscaliSummer.Modules.Weather.Runtime
     internal sealed class LightningDirector : IClientEffect
     {
         private struct ActiveStrike { internal LightningEvent Event; internal bool Valid; }
-        private const int Slots = 4, Branches = 2, Lines = 1 + Branches, Points = 13, BranchPoints = 7;
+        private const int Slots = 4, Branches = 4, Lines = 1 + Branches, Points = 33, BranchPoints = 17;
         private readonly ActiveStrike[] strikes = new ActiveStrike[Slots];
         private readonly LineRenderer[] bolts = new LineRenderer[Slots * Lines];
+        private readonly Vector3[] channel = new Vector3[Points], fork = new Vector3[BranchPoints];
         private readonly ThunderSoundscape thunder = new ThunderSoundscape();
         private readonly WeatherField slotField = new WeatherField();
         private readonly StormCell[] slotCells = new StormCell[StormLattice.EnumerateCap];
@@ -26,6 +27,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private float previousTime = -1f;
         private GameObject root;
         private Material boltMaterial;
+        private Texture2D boltTexture;
         public string EffectId => "lightning";
         /// <summary>Night-sky sprites and jets fired by strikes (WeatherManager sets it).</summary>
         internal SkyPhenomena Phenomena;
@@ -130,17 +132,21 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 if (bolts[index * Lines + k] != null) bolts[index * Lines + k].enabled = false;
         }
 
-        /// <param name="metresPerPixel">The bolt's size of one screen pixel: a 7 m channel is sub-pixel past ~15 km, so the width keeps ~2.5 px.</param>
-        private void DrawBolt(int index, LightningEvent strike, float gain, float metresPerPixel)
+        /// <param name="metresPerPixel">Keep the hot core resolved at distance; the broader ribbon carries only its faint corona.</param>
+        internal void DrawBolt(int index, LightningEvent strike, float gain, float metresPerPixel)
         {
             if (root == null)
             {
-                Shader shader = Shader.Find("Sprites/Default"); if (shader == null) return;
+                Shader shader = CanopyShaderBundle.GetSkyGlowShader() ?? Shader.Find("Sprites/Default");
+                if (shader == null || !shader.isSupported) return;
                 root = new GameObject("BoscaliStormBolts");
-                // HDR tint over the vertex colour (which clamps at 1), so bloom gives the channel its glow. Queue 2998, after the cloud
-                // composite (2997): before it, the composite laid the storm behind the bolt over it and no bolt ever showed (live 2026-10-19).
-                // Nothing hides the bolt now, which is why only the sub-base channel is drawn, for a viewer under the base.
-                boltMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave, renderQueue = 2998, color = new Color(2.2f, 2.4f, 3f, 1f) };
+                // After the cloud composite (2997), as before: only a sub-base channel seen from below is exposed here.
+                // One textured ribbon supplies both the white core and blue corona, even without camera bloom.
+                boltMaterial = new Material(shader) { hideFlags = HideFlags.HideAndDontSave, renderQueue = 2998 };
+                boltTexture = ChannelTexture();
+                boltMaterial.SetTexture("_MainTex", boltTexture);
+                if (boltMaterial.HasProperty("_Intensity")) boltMaterial.SetFloat("_Intensity", 4f);
+                if (boltMaterial.HasProperty("_Color")) boltMaterial.SetColor("_Color", new Color(4f, 4f, 4f, 1f));
                 for (int i = 0; i < bolts.Length; i++)
                 {
                     var obj = new GameObject("StormBolt" + i); obj.transform.SetParent(root.transform, false);
@@ -148,46 +154,76 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     line.sharedMaterial = boltMaterial; line.useWorldSpace = true;
                     line.positionCount = i % Lines == 0 ? Points : BranchPoints;
                     line.shadowCastingMode = ShadowCastingMode.Off; line.receiveShadows = false;
-                    line.numCapVertices = 2; line.enabled = false; bolts[i] = line;
+                    line.textureMode = LineTextureMode.Stretch; line.alignment = LineAlignment.View;
+                    line.numCornerVertices = 1; line.numCapVertices = 2; line.enabled = false; bolts[i] = line;
                 }
             }
-            float width = Mathf.Max(7f, metresPerPixel * 2.5f);
-            var colour = new Color(0.72f, 0.82f, 1f, Mathf.Clamp01(gain));
+            float width = Mathf.Max(5f, metresPerPixel * 1.4f) * 6f;
+            var colour = new Color(1f, 1f, 1f, Mathf.Clamp01(gain));
             LineRenderer bolt = bolts[index * Lines];
-            bolt.startWidth = width; bolt.endWidth = width * 0.35f;
-            for (int n = 0; n < Points; n++)
-            {
-                bolt.SetPosition(n, BoltPoint(strike, n));
-            }
+            bolt.startWidth = width; bolt.endWidth = width * 0.7f;
+            Vector3 top = new GlobalPosition(strike.X, strike.Base, strike.Z).ToLocalPosition();
+            Vector3 bottom = new GlobalPosition(strike.X, strike.BottomY, strike.Z).ToLocalPosition();
+            float height = strike.Base - strike.BottomY;
+            BuildChannel(channel, top, bottom, strike.Seed, Mathf.Min(250f, height * 0.09f));
+            bolt.SetPositions(channel);
             bolt.startColor = bolt.endColor = colour; bolt.enabled = true;
-            // Forks leave the channel part-way down and wander out and down; thinner and dimmer than the channel.
+            int count = 2 + Mathf.Min(2, (int)(WeatherMath.Hash01(strike.Seed, 29, 3) * 3f));
+            // Forks retain the same paths on every return stroke, but their fine tips disappear before the main channel.
             for (int b = 0; b < Branches; b++)
             {
                 LineRenderer branch = bolts[index * Lines + 1 + b];
-                int from = 3 + (int)(WeatherMath.Hash01(strike.Seed, 30 + b, 3) * 6f);
-                Vector3 start = BoltPoint(strike, from);
-                float drop = (strike.Base - strike.BottomY) * WeatherMath.HashRange(strike.Seed, 31 + b, 3, 0, 0.15f, 0.35f);
+                if (b >= count) { branch.enabled = false; continue; }
+                int from = 4 + (int)(WeatherMath.Hash01(strike.Seed, 30 + b, 3) * 20f);
+                Vector3 start = channel[from];
+                float drop = Mathf.Min(start.y - bottom.y, height * WeatherMath.HashRange(strike.Seed, 31 + b, 3, 0, 0.12f, 0.38f));
                 float heading = WeatherMath.HashRange(strike.Seed, 32 + b, 3, 0, 0f, 6.2832f);
-                float reach = drop * WeatherMath.HashRange(strike.Seed, 33 + b, 3, 0, 0.5f, 1.1f);
-                for (int n = 0; n < BranchPoints; n++)
-                {
-                    float h = n / (BranchPoints - 1f);
-                    float wobble = WeatherMath.HashRange(strike.Seed, 34 + b, n, 0, -0.3f, 0.3f) * drop * Mathf.Sin(h * Mathf.PI);
-                    branch.SetPosition(n, start + new Vector3((Mathf.Cos(heading) * reach + wobble) * h, -drop * h, (Mathf.Sin(heading) * reach - wobble) * h));
-                }
-                branch.startWidth = width * 0.55f; branch.endWidth = width * 0.15f;
-                branch.startColor = branch.endColor = new Color(colour.r, colour.g, colour.b, colour.a * 0.7f);
+                float reach = drop * WeatherMath.HashRange(strike.Seed, 33 + b, 3, 0, 0.4f, 1.2f);
+                Vector3 end = start + new Vector3(Mathf.Cos(heading) * reach, -drop, Mathf.Sin(heading) * reach);
+                BuildChannel(fork, start, end, strike.Seed ^ unchecked((uint)(b + 1) * 2246822519u), drop * 0.14f);
+                branch.SetPositions(fork);
+                branch.startWidth = width * WeatherMath.HashRange(strike.Seed, 35 + b, 3, 0, 0.35f, 0.6f);
+                branch.endWidth = width * 0.04f;
+                branch.startColor = new Color(1f, 1f, 1f, Mathf.Pow(colour.a, 1.5f) * 0.75f);
+                branch.endColor = new Color(0.65f, 0.78f, 1f, 0f);
                 branch.enabled = true;
             }
         }
 
-        private static Vector3 BoltPoint(LightningEvent strike, int n)
+        private static void BuildChannel(Vector3[] points, Vector3 start, Vector3 end, uint seed, float displacement)
         {
-            // Kinks scale with the channel: a fixed 170 m on a ~900 m sub-base channel drew a coiled squiggle (live 2026-10-19).
-            float h = n / (Points - 1f), bend = Mathf.Sin(h * Mathf.PI), kink = Mathf.Min(170f, 0.07f * (strike.Base - strike.BottomY));
-            float x = strike.X + WeatherMath.HashRange(strike.Seed, n, 19, 0, -kink, kink) * bend;
-            float z = strike.Z + WeatherMath.HashRange(strike.Seed, n, 21, 0, -kink, kink) * bend;
-            return new GlobalPosition(x, Mathf.Lerp(strike.Base, strike.BottomY, h), z).ToLocalPosition();
+            points[0] = start; points[points.Length - 1] = end;
+            // Seeded midpoint displacement: large bends carry smaller angular kinks instead of equal-size zigzags.
+            // Rebuild from global endpoints each frame so floating-origin shifts cannot detach the branches.
+            for (int span = points.Length - 1; span > 1; span /= 2)
+            {
+                for (int a = 0; a < points.Length - 1; a += span)
+                {
+                    int mid = a + span / 2;
+                    points[mid] = (points[a] + points[a + span]) * 0.5f + new Vector3(
+                        WeatherMath.HashRange(seed, mid, span, 19, -displacement, displacement), 0f,
+                        WeatherMath.HashRange(seed, mid, span, 21, -displacement, displacement));
+                }
+                displacement *= 0.55f;
+            }
+        }
+
+        private static Texture2D ChannelTexture()
+        {
+            const int height = 64;
+            var texture = new Texture2D(2, height, TextureFormat.RGBA32, false)
+            { name = "StormChannelCore", hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            var pixels = new Color[height * 2];
+            for (int y = 0; y < height; y++)
+            {
+                float cross = y / (height - 1f) * 2f - 1f;
+                float core = Mathf.Exp(-cross * cross * 36f);
+                Color colour = Color.Lerp(new Color(0.3f, 0.5f, 1f), Color.white, Mathf.Exp(-cross * cross * 18f));
+                colour.a = Mathf.Clamp01(core + 0.2f * Mathf.Exp(-cross * cross * 7f)) * (1f - Mathf.SmoothStep(0.75f, 1f, Mathf.Abs(cross)));
+                pixels[y * 2] = pixels[y * 2 + 1] = colour;
+            }
+            texture.SetPixels(pixels); texture.Apply(false, true);
+            return texture;
         }
 
         private void ClearEvents()
@@ -201,7 +237,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             ClearEvents(); previousTime = -1f; key = null; thunder.Dispose();
             if (root != null) Object.Destroy(root); if (boltMaterial != null) Object.Destroy(boltMaterial);
-            root = null; boltMaterial = null; for (int i = 0; i < bolts.Length; i++) bolts[i] = null;
+            if (boltTexture != null) Object.Destroy(boltTexture);
+            root = null; boltMaterial = null; boltTexture = null; for (int i = 0; i < bolts.Length; i++) bolts[i] = null;
         }
     }
 }

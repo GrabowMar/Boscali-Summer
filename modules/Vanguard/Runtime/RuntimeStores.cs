@@ -40,7 +40,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static readonly Dictionary<string, WeaponMount> Built = new Dictionary<string, WeaponMount>();
         private static readonly List<Placement> PlacedList = new List<Placement>();
         private static GameObject holder;
-        private static int next;
+        private static int next, placedFor;
+        // Aircraft each store already visited: a re-place pass touches only airframes registered since, so it never re-adds an option MANTA pairing pruned.
+        private static readonly Dictionary<string, HashSet<string>> Visited = new Dictionary<string, HashSet<string>>();
         private static float waitingSince = -1f;
 
         /// <summary>A station that offers a runtime store: aircraft jsonKey + index into its WeaponManager.hardpointSets.</summary>
@@ -117,9 +119,20 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// <summary>Runs every recipe whose turn it is and whose donor exists. Cheap once all have run.</summary>
         public static void Tick()
         {
-            if (next >= Recipes.Count) return;
             Encyclopedia e = GameAccess.EncyclopediaOrNull;
             if (e == null || Encyclopedia.WeaponLookup == null) return;
+            if (next >= Recipes.Count)
+            {
+                // An airframe another mod registers later (the Skylark) still gets every store its stations carry.
+                if (e.aircraft.Count == placedFor) return;
+                placedFor = e.aircraft.Count;
+                int added = 0;
+                foreach (StoreRecipe built in Recipes) if (Built.TryGetValue(built.Key, out WeaponMount store)) added += Place(e, built, store);
+                if (added == 0) return;
+                MantaPartners.Invalidate(); // new MANTA leads need partners too
+                Adopt();
+                return;
+            }
             while (next < Recipes.Count)
             {
                 StoreRecipe recipe = Recipes[next];
@@ -175,9 +188,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static int Place(Encyclopedia e, StoreRecipe recipe, WeaponMount mount)
         {
             var carriers = new HashSet<string>(recipe.Carriers ?? new string[0]);
+            if (!Visited.TryGetValue(recipe.Key, out HashSet<string> visited)) Visited[recipe.Key] = visited = new HashSet<string>();
             int count = 0;
             foreach (AircraftDefinition aircraft in e.aircraft)
             {
+                if (aircraft == null || !visited.Add(aircraft.jsonKey)) continue;
                 WeaponManager manager = aircraft != null && aircraft.unitPrefab != null ? aircraft.unitPrefab.GetComponentInChildren<WeaponManager>(true) : null;
                 if (manager == null) continue;
                 for (int i = 0; i < manager.hardpointSets.Length; i++)

@@ -23,6 +23,18 @@ namespace BoscaliSummer.Modules.Chatter.Patches
         }
     }
 
+    [HarmonyPatch(typeof(Ship), nameof(Ship.UnitDisabled))]
+    internal static class ChatterShipPatch
+    {
+        [HarmonyPrefix]
+        private static void Prefix(Ship __instance, bool oldState, bool newState)
+        {
+            if (oldState || !newState) return;
+            try { ChatterHost.Instance?.Flight?.OnShipDisabled(__instance); }
+            catch (Exception error) { PatchGuard.Report("Chatter.Ship", error); }
+        }
+    }
+
     /// <summary>
     /// The game's centre notice box ("Cleared to taxi to Runway 21", "Stability Assist Enabled"). The radio takes a clearance as the tower's line and hands the rest to the
     /// TAC BOARD's ticker, and the native box, which sits on the heading tape, stays empty. Fails open: whatever is not taken, or throws, shows the game's own way.

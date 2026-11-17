@@ -25,6 +25,17 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             return failure == null;
         }
 
+        /// <summary>Engage (default) or cancel the autoland, as the C-menu AUTOLAND row does: {engage bool}.</summary>
+        public static Dictionary<string, object> Autoland(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            AutopilotLandController land = AutopilotLandController.Instance;
+            if (land == null) return Failure("AutopilotAutomation", "Autoland", "no landing controller");
+            bool engage = !args.TryGetValue("engage", out object value) || Convert.ToBoolean(value);
+            if (engage != land.IsEngaged) land.Toggle();
+            return new Dictionary<string, object> { { "ok", true }, { "engaged", land.IsEngaged } };
+        }
+
         /// <summary>C-menu missile entries: visibility/enabled/status of the four VIEW leaves.</summary>
         public static Dictionary<string, object> Menu(Dictionary<string, object> args)
         {
@@ -32,25 +43,32 @@ namespace BoscaliSummer.Modules.Autopilot.Runtime
             MenuModel model;
             try { model = MenuGame.Build(); }
             catch (Exception e) { return Failure("AutopilotAutomation", "Menu", "catalog threw: " + e.Message); }
-            MenuCategory view = model.Category("view");
+            // Defaults: the VIEW missile leaves; {category, prefix} reads any other rows the same way.
+            string category = args.TryGetValue("category", out object c) && c is string cs ? cs : "view";
+            string prefix = args.TryGetValue("prefix", out object p) && p is string ps ? ps : "view/msl";
+            MenuCategory view = model.Category(category);
             var entries = new List<object>();
+            var rows = new Dictionary<string, object>(); // the same entries by id (sim paths cannot index lists)
             if (view != null)
                 foreach (MenuRow leaf in view.Rows)
                 {
-                    if (!leaf.Id.StartsWith("view/msl", StringComparison.Ordinal)) continue;
-                    entries.Add(new Dictionary<string, object>
+                    if (!leaf.Id.StartsWith(prefix, StringComparison.Ordinal)) continue;
+                    var entry = new Dictionary<string, object>
                     {
                         { "id", leaf.Id },
                         { "label", leaf.Label },
                         { "enabled", !leaf.IsBlocked },
                         { "status", leaf.State ?? "" },
-                    });
+                    };
+                    entries.Add(entry);
+                    rows[leaf.Id] = entry;
                 }
             var result = new Dictionary<string, object>
             {
                 { "ok", true },
                 { "view_found", view != null },
                 { "entries", entries },
+                { "rows", rows },
             };
             Debug.Log("[AutopilotAutomation] Menu: view=" + (view != null) + " msl_entries=" + entries.Count);
             return result;

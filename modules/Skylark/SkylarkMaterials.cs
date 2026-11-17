@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Skylark
         private static Material nativeSkin;
         private static Texture damageBase, damageNormal;
         internal static string DamageSource { get; private set; }
+        /// <summary>The shared undamaged skin (the strobes' dark state).</summary>
+        internal static Material Skin => nativeSkin;
 
         internal static void Refit(Aircraft aircraft, Dictionary<string, Transform> nodes)
         {
@@ -21,7 +23,10 @@ namespace BoscaliSummer.Modules.Skylark
                 .Where(r => r != null && r.sharedMaterial != null
                     && r.sharedMaterial.name.StartsWith(SkinName, StringComparison.Ordinal)
                     && !r.name.StartsWith("Fittings_", StringComparison.Ordinal)
-                    && !r.name.StartsWith("Rail_", StringComparison.Ordinal)).Distinct().ToArray();
+                    && !r.name.StartsWith("Rail_", StringComparison.Ordinal)
+                    && !r.name.StartsWith("Strobe_", StringComparison.Ordinal)
+                    && !r.name.StartsWith("GunCoil", StringComparison.Ordinal)
+                    && !r.name.StartsWith("GunGlow", StringComparison.Ordinal)).Distinct().ToArray();
             if (skin.Length == 0) throw new InvalidOperationException("Skylark skin renderers are missing.");
             if (skin.Any(r => r.sharedMaterials.Length != 1))
                 throw new InvalidOperationException("Skylark native damage expects one skin material per renderer.");
@@ -50,6 +55,10 @@ namespace BoscaliSummer.Modules.Skylark
                 nativeSkin.SetFloat("_HitPoints", 100f);
             }
             foreach (Renderer renderer in skin) renderer.sharedMaterial = nativeSkin;
+            // Strobe lenses stay out of the damage parts: SkylarkStrobe swaps them between this shared skin (dark) and a lit lamp material.
+            // The Halberd's coil collars and muzzle glow likewise: SkylarkTurret swaps them to a lit material on each round.
+            foreach (string name in new[] { "Strobe_Top", "Strobe_Bottom", "GunGlow", "GunCoil0", "GunCoil1", "GunCoil2", "GunCoil3", "GunCoil4", "GunCoil5" })
+                if (nodes.TryGetValue(name, out Transform strobe) && strobe.TryGetComponent(out Renderer lens)) lens.sharedMaterial = nativeSkin;
             foreach (UnitPart part in aircraft.GetComponentsInChildren<UnitPart>(true))
             {
                 Renderer[] owned = skin.Where(r => r.GetComponentInParent<UnitPart>(true) == part).ToArray();

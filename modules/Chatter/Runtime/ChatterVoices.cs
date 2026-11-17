@@ -12,8 +12,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
     /// <summary>
     /// Recorded voices (docs/CHATTER_PACKS.md, "Voice packs"). A pack is a folder of clips named after the lines or events they serve (<see cref="ChatterVoiceKeys"/>),
     /// with an optional <c>pack.txt</c> saying whose voice it is (<c>persona:</c>, <c>character:</c>, <c>net:</c>). A speaker keeps one pack for the whole mission: the
-    /// one recorded for their character, else one for their persona, else a plain pack of their net. A line with no clip is simply not voiced (the words and the static
-    /// are still there). Clips decode one at a time after the mission starts, inside fixed limits; a pack that cannot be read is skipped.
+    /// one recorded for their character, else one for their persona, else a plain pack of their net. A line with no clip remains text only. Clips decode one at a time
+    /// after the mission starts, inside fixed limits; a pack that cannot be read is skipped.
     /// </summary>
     internal sealed class ChatterVoices
     {
@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             try
             {
                 var assembly = typeof(ChatterVoices).Assembly;
-                string root = Path.Combine(Paths.CachePath, "BoscaliSummer", "voices");
+                string root = Path.Combine(Paths.CachePath, "BoscaliSummer", "voices", assembly.ManifestModule.ModuleVersionId.ToString("N"));
                 var folders = new SortedSet<string>(StringComparer.Ordinal);
                 foreach (string name in assembly.GetManifestResourceNames())
                 {
@@ -121,7 +121,11 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         }
 
         /// <summary>A radio voice line is sounding now: the visor's chatter keeps quiet under it (Core/Fx/VisorSound).</summary>
-        internal bool Sounding => source != null && source.isPlaying;
+        internal bool Sounding => source != null && source.isPlaying && source.volume > 0f;
+        internal bool Loading => decodedBytes < MaxDecodedBytes && (request != null || loadingPack < packs.Count);
+
+        public void Stop() { if (source != null) source.Stop(); }
+        public void Volume(float value) { if (source != null) source.volume = Mathf.Clamp01(value); }
 
         public void Deactivate()
         {
@@ -261,7 +265,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
 
         /// <summary>
         /// Voice a line that just went on air. Returns the clip's length, or 0 when this speaker has no recording for it. A line that cut another stops that one's clip.
-        /// Each speaker sits a little to one side and a touch higher or lower than the others, so voices from one pack can still be told apart.
+        /// Each speaker sits slightly to one side; the actor's original pitch and the mastered radio treatment are preserved.
         /// </summary>
         public float Play(in ChatterAired line, Transform host, float volume)
         {
@@ -285,16 +289,13 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     source.spatialBlend = 0f;
                     source.playOnAwake = false;
                     source.priority = 16;
-                    // The radio sound: a UHF set's narrow voice band and a little clipping, on every recorded voice.
-                    go.AddComponent<AudioHighPassFilter>().cutoffFrequency = 320f;
-                    go.AddComponent<AudioLowPassFilter>().cutoffFrequency = 3400f;
-                    go.AddComponent<AudioDistortionFilter>().distortionLevel = 0.18f;
+                    // Shipped masters are already band-limited and normalized offline. Preserve the actor's delivery.
                 }
                 uint h = Hash(line.SpeakerId);
                 source.outputAudioMixerGroup = sound.InterfaceMixer;
                 source.volume = Mathf.Clamp01(volume);
-                source.panStereo = ((h & 0xFF) / 255f - 0.5f) * 0.7f;
-                source.pitch = 0.96f + ((h >> 8) & 0xFF) / 255f * 0.08f;
+                source.panStereo = ((h & 0xFF) / 255f - 0.5f) * 0.2f;
+                source.pitch = 1f;
                 source.clip = clip;
                 source.Play();
                 Voiced++;
@@ -322,6 +323,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 foreach (Pack p in packs) if (p.Net == net && p.Character == null && p.Personas.Count == 0) scratch.Add(p);
             pack = scratch.Count == 0 ? null : scratch[(int)(Hash(line.SpeakerId) % (uint)scratch.Count)];
             scratch.Clear();
+            if (assigned.Count > 256) assigned.Clear();
             assigned[line.SpeakerId] = pack;
             return pack;
         }

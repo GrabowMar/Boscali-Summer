@@ -82,6 +82,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
         public bool Available { get; private set; }
         public ActiveEventView Current => current;
+        public event Action<ActiveEventView> EventStarted;
         public event Action<int, float> MoraleAwarded;
         public IReadOnlyList<ActiveEventView> History => history;
 
@@ -223,12 +224,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
             object missionId = MissionManager.CurrentMission;
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-            if (!ReferenceEquals(missionIdentity, missionId))
-            {
-                ResetForScene();
-                missionIdentity = missionId;
-                missionGeneration++;
-            }
+            EnsureMission(missionId);
             if (missionId == null || mission == null || !MissionManager.IsRunning)
             {
                 if (Available || history.Count > 0) ResetForScene();
@@ -262,6 +258,14 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 // A missed end broadcast still retires locally at the stamped time.
                 Retire();
             }
+        }
+
+        private void EnsureMission(object missionId)
+        {
+            if (ReferenceEquals(missionIdentity, missionId)) return;
+            ResetForScene();
+            missionIdentity = missionId;
+            missionGeneration++;
         }
 
         // ---- Superevent beats on the ticker ------------------------------------------------
@@ -449,6 +453,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 targetHash = 0;
             }
             current = View(definition, currentStart, currentEnd);
+            NotifyStarted();
             recent.Add(index);
             while (recent.Count > EventSelector.RecentWindow) recent.RemoveAt(0);
             nextHeartbeat = now + HeartbeatSeconds;
@@ -606,6 +611,9 @@ namespace BoscaliSummer.Modules.Events.Runtime
         {
             if (!float.IsFinite(start) || !float.IsFinite(end) || !float.IsFinite(effectStrength) ||
                 effectStrength < 0f || effectStrength > 2f) return;
+            // A valid snapshot can precede this manager's first Update after native mission synchronization.
+            // Establish that mission before applying it, so the following Update does not clear the new state.
+            if (MissionManager.CurrentMission != null) EnsureMission(MissionManager.CurrentMission);
             replicatedStrength = effectStrength;
             if (catalogIndex < 0)
             {
@@ -615,7 +623,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
             if (catalogIndex >= EventCatalog.Count) return;
 
             EventDefinition applied = EventCatalog.At(catalogIndex);
-            bool changed = currentIndex != catalogIndex;
+            bool changed = currentIndex != catalogIndex || currentStart != start;
             if (changed)
             {
                 if (current != null) Retire();
@@ -632,6 +640,16 @@ namespace BoscaliSummer.Modules.Events.Runtime
             currentStart = start;
             currentEnd = end;
             current = View(applied, start, end);
+            if (changed) NotifyStarted();
+        }
+
+        private void NotifyStarted()
+        {
+            // Presentation observers must never interrupt event rotation or replication.
+            if (EventStarted == null) return;
+            foreach (Action<ActiveEventView> observer in EventStarted.GetInvocationList())
+                try { observer(current); }
+                catch (Exception error) { Plugin.Logger?.LogWarning("[Events] event observer failed: " + error.Message); }
         }
 
         /// <summary>

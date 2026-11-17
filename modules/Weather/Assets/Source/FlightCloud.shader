@@ -26,6 +26,21 @@ Shader "Boscali/FlightCloud"
         // Lightning flash envelope, 0..1 (LightningDirector.FlashNow).
         float _CloudFlash;
         float4 _CloudFlashA, _CloudFlashB;
+        // Expanding blast holes in global metres; Core.Math.CloudClearance is the CPU mirror.
+        float _CloudBlastCount;
+        float4 _CloudBlastA[4], _CloudBlastB[4];
+
+        float BlastCloudKeep(float3 g)
+        {
+            float keep = 1.0;
+            [loop] for (int i = 0; i < min(4, (int)_CloudBlastCount); i++)
+            {
+                float radius = _CloudBlastA[i].w, edge = _CloudBlastB[i].y;
+                float boundary = smoothstep(max(0.0, radius - edge), radius + edge, length(g - _CloudBlastA[i].xyz));
+                keep *= 1.0 - saturate(_CloudBlastB[i].x) * (1.0 - boundary);
+            }
+            return keep;
+        }
         // The weather tape (BakedTape, uploaded by TapeTexture): every per-sample low genus and thin layer column comes from it.
         // RGBAFloat, _TapeInfo.x texels by 11 rows, point sampled and lerped by hand along s (TapeRow). Rows 0-2 hold the low
         // genus, 3-6 the middle layer, 7-10 the high layer; SkyColumns.GpuRow / GpuChannel say which column sits where.
@@ -936,8 +951,10 @@ Shader "Boscali/FlightCloud"
             gDeckSheet = 0.0;
             gErodeAO = 1.0;
             float3 g = world + _CloudWorldOffset;
+            float blastKeep = BlastCloudKeep(g);
+            if (blastKeep <= 0.001) return 0.0;
             if ((gNoHero || !NearHero(g)) && EmptyAt(g)) return 0.0;
-            return Density(world, coarse);
+            return Density(world, coarse) * blastKeep;
         }
 
         float AverageAirDensity(float cameraHeight, float sampleHeight, float scaleHeight)
@@ -1232,7 +1249,8 @@ Shader "Boscali/FlightCloud"
         float Slab2D(float3 g, float layer, LayerRow row, float foot)
         {
             float cover = row.cover * EyeCloudKeep(g);
-            if (cover <= 0.005) return 0.0;
+            float blastKeep = BlastCloudKeep(g);
+            if (cover <= 0.005 || blastKeep <= 0.001) return 0.0;
             // Mesoscale patches (a layer is never uniform across the whole map) and a slow warp
             // that bends the streaks (hooked cirrus) and breaks the tile period: one fetch.
             float2 nlow = NoiseXZ(g.xz, layer < 0.5 ? NOISE_MID : NOISE_HIGH);
@@ -1263,7 +1281,7 @@ Shader "Boscali/FlightCloud"
             // How deep a point sits inside the cover (0 at the edge, 1 at the top rank): Detail turns it into density.
             float depth = saturate((rank - (1.0 - c)) / max(c, 0.05));
             float interior = lerp(0.2 + 0.8 * depth, body, wts.w);
-            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, lerp(sqrt(row.detail), row.detail, wts.w));
+            return SlabCoverMask(body, c, row.softness) * lerp(1.0, interior, lerp(sqrt(row.detail), row.detail, wts.w)) * blastKeep;
         }
 
         // The layer's vertical profile saturate(5.2 h (1 - h)) and its integral (SlabMath.Profile / Integral).

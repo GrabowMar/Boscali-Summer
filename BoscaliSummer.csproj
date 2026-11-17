@@ -135,6 +135,18 @@
       <LogicalName>BoscaliSummer.SkylarkAssets.bundle</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+
+  <ItemGroup Label="SA-74N bomb artwork">
+    <EmbeddedResource Include="modules\Vanguard\Assets\sa74-mushroom.bundle" Condition="Exists('modules\Vanguard\Assets\sa74-mushroom.bundle')">
+      <LogicalName>BoscaliSummer.Vanguard.sa74-mushroom.bundle</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Vanguard\Assets\sa74n.mesh.gz">
+      <LogicalName>BoscaliSummer.Vanguard.sa74n.mesh.gz</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Vanguard\Assets\Textures\SA74N_*.png">
+      <LogicalName>BoscaliSummer.Vanguard.Textures.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
     <!-- FUI fonts, icon font and UI shaders, built by tools/Compile-AvionicsUiAssets.ps1
          (Unity 2022.3.62f3). Optional at build time: without it the kit uses vanilla fonts
@@ -240,12 +252,8 @@
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Spooktober\Assets\hell-meshes.bin" Condition="Exists('modules\Spooktober\Assets\hell-meshes.bin')" LogicalName="BoscaliSummer.Spooktober.hell-meshes.bin" />
       <EmbeddedResource Include="modules\Spooktober\Assets\hell-particles.bundle" Condition="Exists('modules\Spooktober\Assets\hell-particles.bundle')" LogicalName="BoscaliSummer.Spooktober.hell-particles.bundle" />
-    <!-- Spooktober's own sounds (ElevenLabs, see modules/Spooktober/Assets/Sfx/LICENSES.txt), served by Core/Fx/SfxClips. -->
     <!-- Complete raster case files, including all static print (see Dossiers/PROVENANCE.txt). -->
     <EmbeddedResource Include="modules\Spooktober\Assets\Dossiers\*.png" LogicalName="BoscaliSummer.Spooktober.Dossiers.%(Filename)%(Extension)" />
-    <EmbeddedResource Include="modules\Spooktober\Assets\Sfx\*.wav">
-      <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
     <EmbeddedResource Include="modules\Weather\Assets\weatherrain.bundle" Condition="Exists('modules\Weather\Assets\weatherrain.bundle')">
       <LogicalName>BoscaliSummer.Weather.weatherrain.bundle</LogicalName>
     </EmbeddedResource>
@@ -290,9 +298,11 @@
     <EmbeddedResource Include="modules\Immersion\Assets\Kneeboard\*.png">
       <LogicalName>BoscaliSummer.Immersion.Kneeboard.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
-    <EmbeddedResource Include="modules\Immersion\Assets\Voice\*.wav">
-      <LogicalName>BoscaliSummer.Immersion.Voice.%(Filename)%(Extension)</LogicalName>
+    <!-- Ordered recorded effects; categories preserve flat stable IDs through SfxClips. -->
+    <EmbeddedResource Include="Core\Fx\Audio\**\*.wav">
+      <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
+    <!-- Radio transport clicks and post-nuclear static have their own production workflow. -->
     <EmbeddedResource Include="Core\Fx\Sfx\*.wav">
       <LogicalName>BoscaliSummer.Sfx.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>

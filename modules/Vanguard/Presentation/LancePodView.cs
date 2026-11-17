@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using System.Collections.Generic;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
@@ -15,6 +16,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     internal sealed class LancePodView : MonoBehaviour
     {
         private const float ViewRange = 1500f;
+        private const float WhineRange = 800f;
         private const float FlashSeconds = 0.08f;
         private static readonly int EmissionColor = Shader.PropertyToID("_EmissionColor");
         private static readonly Color Cyan = new Color(0.25f, 0.85f, 1f);
@@ -32,6 +34,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private Light flash;
         private float flashAt = -99f, flashPower;
         private AudioSource whine;
+        private AudioSource weaponAudio;
+        private string voiceId;
+        private bool loopActive;
 
         public static LancePodView Attach(LancePod pod)
         {
@@ -171,32 +176,47 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             if (!look.Charging || look.Charge < 0.02f)
             {
-                if (whine != null && whine.isPlaying) whine.Stop();
+                StopWhine();
+                return;
+            }
+            bool mine = pod.Owner && pod.Aircraft.Player != null && GameManager.GetLocalAircraft(out Aircraft me) && me == pod.Aircraft;
+            CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
+            Camera listener = cameras != null && cameras.mainCamera != null ? cameras.mainCamera : Camera.main;
+            if (!mine && (listener == null || (listener.transform.position - transform.position).sqrMagnitude >= WhineRange * WhineRange))
+            {
+                StopWhine();
                 return;
             }
             if (whine == null)
             {
-                whineClip ??= MakeWhine();
+                if (whineClip == null) whineClip = SfxClips.Get("lance-charge");
+                if (whineClip == null) return;
+                voiceId = "lance-charge-" + GetInstanceID();
                 var go = new GameObject("LanceWhine");
                 go.transform.SetParent(transform, false);
                 whine = go.AddComponent<AudioSource>();
                 whine.clip = whineClip;
                 whine.loop = true;
+                whine.playOnAwake = false;
                 whine.dopplerLevel = 0f;
                 whine.minDistance = 20f;
-                whine.maxDistance = 800f;
+                whine.maxDistance = WhineRange;
                 whine.rolloffMode = AudioRolloffMode.Linear;
                 // The game's volume sliders live on its mixer groups: use the group of the gun's own sound source.
-                AudioSource vanilla = pod.Gun.GetComponent<AudioSource>();
-                AudioMixerGroup group = vanilla != null ? vanilla.outputAudioMixerGroup : null;
-                if (group == null && SoundManager.i != null) group = SoundManager.i.EffectsMixer;
-                if (group != null) whine.outputAudioMixerGroup = group;
+                weaponAudio = pod.Gun.GetComponent<AudioSource>();
             }
-            bool mine = pod.Owner && pod.Aircraft.Player != null && GameManager.GetLocalAircraft(out Aircraft me) && me == pod.Aircraft;
+            AudioMixerGroup group = weaponAudio != null ? weaponAudio.outputAudioMixerGroup : null;
+            if (group == null && SoundManager.i != null) group = SoundManager.i.EffectsMixer;
+            if (group == null) { StopWhine(); return; }
+            if (whine.outputAudioMixerGroup != group) whine.outputAudioMixerGroup = group;
             whine.spatialBlend = mine ? 0f : 1f;
             whine.pitch = 0.55f + 1.65f * look.Charge;
             whine.volume = 0.25f + 0.35f * look.Charge;
-            if (!whine.isPlaying) whine.Play();
+            if (!whine.isPlaying && whine.outputAudioMixerGroup != null && FxVoiceBus.TryStartLoop(voiceId))
+            {
+                loopActive = true;
+                whine.Play();
+            }
         }
 
         // Strips back to the material's own dim glow, barrel home, light and whine off.
@@ -211,33 +231,21 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             }
             if (barrel != null) barrel.localPosition = barrelRest;
             if (flash != null) flash.enabled = false;
-            if (whine != null && whine.isPlaying) whine.Stop();
+            StopWhine();
         }
 
         private void OnDisable()
         {
-            if (whine != null && whine.isPlaying) whine.Stop();
+            StopWhine();
         }
 
-        // Integer-Hz partials so the loop is seamless: 180 Hz fundamental, 360 Hz with a slow wobble, 1080 Hz whine.
-        private static AudioClip MakeWhine()
+        private void StopWhine()
         {
-            const int rate = 22050;
-            var samples = new float[rate];
-            float peak = 0f;
-            for (int i = 0; i < rate; i++)
-            {
-                float t = i / (float)rate;
-                float v = 0.45f * Mathf.Sin(2f * Mathf.PI * 180f * t) +
-                          0.25f * Mathf.Sin(2f * Mathf.PI * 360f * t + 1.2f * Mathf.Sin(2f * Mathf.PI * 3f * t)) +
-                          0.12f * Mathf.Sin(2f * Mathf.PI * 1080f * t);
-                samples[i] = v;
-                peak = Mathf.Max(peak, Mathf.Abs(v));
-            }
-            for (int i = 0; i < rate; i++) samples[i] *= 0.9f / peak;
-            AudioClip clip = AudioClip.Create("LanceWhine", rate, 1, rate, false);
-            clip.SetData(samples, 0);
-            return clip;
+            if (whine != null) whine.Stop();
+            if (loopActive) FxVoiceBus.EndLoop(voiceId);
+            loopActive = false;
         }
+
+        private void OnDestroy() => StopWhine();
     }
 }

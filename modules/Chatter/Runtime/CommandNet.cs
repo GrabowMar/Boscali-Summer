@@ -6,35 +6,51 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
 {
     /// <summary>
     /// The command net's publisher: watches what the theater modules already show (the rolling event, the active operation's phase, a friendly insertion touching down
-    /// nearby) and raises the matching <c>command.*</c> event when one changes. The first look at each is a baseline: joining a mission announces nothing that was already so.
+    /// nearby) and raises the matching <c>command.*</c> event when one changes. Operations baseline quietly; event starts arrive directly from the replicated event service.
     /// </summary>
     internal sealed class CommandNet
     {
         private const float InsertionRange = 20000f;
 
-        private string worldEvent;
-        private float worldEventStarted;
         private int operationId;
         private TheaterPhase operationPhase;
-        private bool eventBaseline, operationBaseline, insertion;
+        private bool operationBaseline, insertion;
         private IAirAssaultObservation assault;
+        private IActiveEventsView eventSource;
+        private IChatter radio;
+        private string lastEvent;
         private Aircraft player;
 
         public void Reset()
         {
             if (assault != null) assault.Landed -= InsertionLanded;
+            if (eventSource != null) eventSource.EventStarted -= EventStarted;
+            eventSource = null;
+            radio = null;
+            lastEvent = null;
             assault = null;
             player = null;
-            worldEvent = null;
-            worldEventStarted = 0f;
             operationId = 0;
             operationPhase = TheaterPhase.Awaiting;
-            eventBaseline = operationBaseline = insertion = false;
+            operationBaseline = insertion = false;
         }
 
         public void Tick(IChatter chatter, Aircraft me)
         {
+            radio = chatter;
             player = me;
+            ModuleServices.TryGet<IActiveEventsView>(out var events);
+            if (!ReferenceEquals(eventSource, events))
+            {
+                if (eventSource != null) eventSource.EventStarted -= EventStarted;
+                eventSource = events;
+                if (eventSource != null)
+                {
+                    eventSource.EventStarted += EventStarted;
+                    ActiveEventView current = eventSource.Current;
+                    if (current != null && (current.IsSuper || chatter.Now - current.StartedAtMissionTime < 3f)) EventStarted(current);
+                }
+            }
             ModuleServices.TryGet<IAirAssaultObservation>(out var observation);
             if (!ReferenceEquals(assault, observation))
             {
@@ -45,16 +61,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             if (insertion)
             {
                 insertion = false;
-                chatter.Raise("command.insertion", chatter.Station(ChatterNet.Command, "GROUND CONTROL"));
-            }
-            if (ModuleServices.TryGet<IActiveEventsView>(out var events) && events.Available)
-            {
-                ActiveEventView current = events.Current;
-                if (eventBaseline && current != null && (current.Id != worldEvent || current.StartedAtMissionTime != worldEventStarted))
-                    chatter.Raise("command.event", chatter.Station(ChatterNet.Command, "THEATER CONTROL"), "event:" + current.Id, ("title", current.Title));
-                worldEvent = current?.Id;
-                worldEventStarted = current?.StartedAtMissionTime ?? 0f;
-                eventBaseline = true;
+                ChatterSpeaker drop = chatter.Station(ChatterNet.Command, "DROP LEAD");
+                drop.Character = "paratrooper";
+                chatter.Raise("command.insertion", drop);
             }
             if (ModuleServices.TryGet<ITheaterWarView>(out var theater) && theater.Available && theater.IsFresh)
             {
@@ -66,6 +75,19 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 operationPhase = operation?.Phase ?? TheaterPhase.Awaiting;
                 operationBaseline = true;
             }
+        }
+
+        private void EventStarted(ActiveEventView current)
+        {
+            if (radio == null || current == null) return;
+            string key = "event:" + current.Id + ":" + current.StartedAtMissionTime.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            if (key == lastEvent) return;
+            lastEvent = key;
+            string evt = current.IsSuper ? "command.superevent" : "command.event";
+            string specific = evt + "." + current.Id;
+            if (current.IsSuper && !radio.Director.Library.Events.ContainsKey(specific)) specific = "command.event." + current.Id;
+            if (radio.Director.Library.Events.ContainsKey(specific)) evt = specific;
+            radio.Raise(evt, radio.Station(ChatterNet.Command, "COMMAND"), key, ("title", current.Title));
         }
 
         private void InsertionLanded(int faction, float x, float z, int shell)

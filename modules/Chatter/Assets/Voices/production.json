@@ -1,0 +1,935 @@
+{
+  "version": "battlefield-2026-11-17",
+  "model": "eleven_v4",
+  "flow_id": "sN7Ssaxaz6p4JaCeQH2P",
+  "cast": {
+    "command": {
+      "voice": "GLSWsaquVBsIPLPPRi2s",
+      "name": "Admiral Action",
+      "net": "command",
+      "character": "command"
+    },
+    "ground": {
+      "voice": "SOYHLrjzK2X1ezoPC6cr",
+      "name": "Harry",
+      "net": "command",
+      "character": "ground"
+    },
+    "captain": {
+      "voice": "xHxp1c5pQOzhWjBqV78M",
+      "name": "Garrison",
+      "net": "command",
+      "character": "captain"
+    },
+    "paratrooper": {
+      "voice": "N2lVS1w4EtoT3dr4eOWO",
+      "name": "Callum",
+      "net": "command",
+      "character": "paratrooper"
+    },
+    "skywatch": {
+      "voice": "XW70ikSsadUbinwLMZ5w",
+      "name": "Annie K",
+      "net": "awacs"
+    },
+    "tower": {
+      "voice": "MzqUf1HbJ8UmQ0wUsx2p",
+      "name": "Katie X",
+      "net": "tower"
+    },
+    "ace": {
+      "voice": "WtA85syCrJwasGeHGH2p",
+      "name": "Ember",
+      "net": "allied"
+    },
+    "wing": {
+      "voice": "IRHApOXLvnW57QJPQH2P",
+      "name": "Adam",
+      "net": "wing"
+    },
+    "enemy": {
+      "voice": "WzVKtqQpTUUQ2JNx8YxI",
+      "name": "Silas",
+      "net": "enemy"
+    }
+  },
+  "lines": [
+    {
+      "id": "5fc076a0",
+      "role": "ground",
+      "event": "command.baselost",
+      "priority": "tactical",
+      "text": "They've overrun the base! Fall back! Get the wounded out, now!",
+      "prompt": "[breathless] They've overrun the base! Fall back! Get the wounded out, now!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "42b6b327",
+      "role": "ground",
+      "event": "command.baselost",
+      "priority": "tactical",
+      "text": "We can't hold this base! All squads, withdraw! Cover each other!",
+      "prompt": "[shouting] We can't hold this base! All squads, withdraw! Cover each other!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "e4beaad8",
+      "role": "ground",
+      "event": "command.baselost",
+      "priority": "tactical",
+      "text": "Perimeter's gone. We're pulling out. Don't leave anybody behind!",
+      "prompt": "[trembling voice] Perimeter's gone. We're pulling out. Don't leave anybody behind!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "29f1d31e",
+      "role": "ground",
+      "event": "command.basetaken",
+      "priority": "tactical",
+      "text": "We're inside! Base secured. Get that perimeter locked down!",
+      "prompt": "[breathless] We're inside! Base secured. Get that perimeter locked down!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "4c339873",
+      "role": "ground",
+      "event": "command.basetaken",
+      "priority": "tactical",
+      "text": "The base is ours! Check your people. Watch for a counterattack.",
+      "prompt": "[relieved] The base is ours! Check your people. Watch for a counterattack.",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "f9c7ac58",
+      "role": "ground",
+      "event": "command.basetaken",
+      "priority": "tactical",
+      "text": "Friendly forces hold the base! We did it. Now hold the line!",
+      "prompt": "[excited] Friendly forces hold the base! We did it. Now hold the line!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "bb1e8f0b",
+      "role": "command",
+      "event": "command.enemybase",
+      "priority": "tactical",
+      "text": "Enemy forces have taken another base. Watch the front. They're gaining ground.",
+      "prompt": "[serious] Enemy forces have taken another base. Watch the front. They're gaining ground.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "1777a423",
+      "role": "command",
+      "event": "command.enemybase",
+      "priority": "tactical",
+      "text": "Confirmed enemy capture. Keep your routes clear of that field.",
+      "prompt": "[stern] Confirmed enemy capture. Keep your routes clear of that field.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "d7fe7495",
+      "role": "ground",
+      "event": "command.basewithdraw",
+      "priority": "tactical",
+      "text": "Break contact! Smoke out, cover the wounded! Move!",
+      "prompt": "[shouting] Break contact! Smoke out, cover the wounded! Move!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "3b853c5f",
+      "role": "ground",
+      "event": "command.basewithdraw",
+      "priority": "tactical",
+      "text": "All surviving squads, fall back together. We are not staying here!",
+      "prompt": "[breathless] All surviving squads, fall back together. We are not staying here!",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "23341ed5",
+      "role": "captain",
+      "event": "command.carrierevac",
+      "priority": "emergency",
+      "text": "This is the captain! All hands, abandon ship! Get clear of the flight deck!",
+      "prompt": "[shouting] This is the captain! All hands, abandon ship! Get clear of the flight deck!",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "64974864",
+      "role": "captain",
+      "event": "command.carrierevac",
+      "priority": "emergency",
+      "text": "We are losing the carrier. All hands, evacuate! Launch anything that can fly!",
+      "prompt": "[strained] We are losing the carrier. All hands, evacuate! Launch anything that can fly!",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "ce860c2d",
+      "role": "captain",
+      "event": "command.carrierevac",
+      "priority": "emergency",
+      "text": "She's going under. Abandon ship. Get my people off this vessel!",
+      "prompt": "[trembling voice] She's going under. Abandon ship. Get my people off this vessel!",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "415b9247",
+      "role": "captain",
+      "event": "command.shiplost",
+      "priority": "tactical",
+      "text": "We've lost a friendly ship. Any boats still afloat, get clear of the wreck.",
+      "prompt": "[strained] We've lost a friendly ship. Any boats still afloat, get clear of the wreck.",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "e8519c90",
+      "role": "captain",
+      "event": "command.shiplost",
+      "priority": "tactical",
+      "text": "Friendly vessel is lost. Keep the survivors' channel open.",
+      "prompt": "[somber] Friendly vessel is lost. Keep the survivors' channel open.",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "6858f14e",
+      "role": "command",
+      "event": "command.shipsunk",
+      "priority": "tactical",
+      "text": "Enemy ship destroyed. Good hit. Keep clear of the blast.",
+      "prompt": "[firm] Enemy ship destroyed. Good hit. Keep clear of the blast.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "b5573120",
+      "role": "command",
+      "event": "command.shipsunk",
+      "priority": "tactical",
+      "text": "Confirmed enemy vessel sunk. Stay alert for the rest of their group.",
+      "prompt": "[relieved] Confirmed enemy vessel sunk. Stay alert for the rest of their group.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "44e5faba",
+      "role": "paratrooper",
+      "event": "command.insertion",
+      "priority": "status",
+      "text": "Drop lead, boots on the ground! Form up. Keep the landing zone covered!",
+      "prompt": "[breathless] Drop lead, boots on the ground! Form up. Keep the landing zone covered!",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO"
+    },
+    {
+      "id": "d68b9ad4",
+      "role": "paratrooper",
+      "event": "command.insertion",
+      "priority": "status",
+      "text": "We're down. Rally on me! Air cover, stay with us!",
+      "prompt": "[tense] We're down. Rally on me! Air cover, stay with us!",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO"
+    },
+    {
+      "id": "fa9dbacf",
+      "role": "paratrooper",
+      "event": "command.insertion",
+      "priority": "status",
+      "text": "Insertion complete. All sticks, check in. We've got work to do.",
+      "prompt": "[determined] Insertion complete. All sticks, check in. We've got work to do.",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO"
+    },
+    {
+      "id": "cdecc7de",
+      "role": "command",
+      "event": "command.event",
+      "priority": "status",
+      "text": "Command update. Conditions across the theater have changed. Review the latest bulletin.",
+      "prompt": "[serious] Command update. Conditions across the theater have changed. Review the latest bulletin.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "4027e467",
+      "role": "command",
+      "event": "command.event",
+      "priority": "status",
+      "text": "New orders from theater command. Check the bulletin before your next run.",
+      "prompt": "[tired] New orders from theater command. Check the bulletin before your next run.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "630e7028",
+      "role": "command",
+      "event": "command.superevent",
+      "priority": "emergency",
+      "text": "All stations, priority traffic. Major development across the theater. Stand by for orders.",
+      "prompt": "[urgent] All stations, priority traffic. Major development across the theater. Stand by for orders.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "58ae31ae",
+      "role": "command",
+      "event": "command.superevent",
+      "priority": "emergency",
+      "text": "Break, break. This is command. A major theater emergency is in effect. Check the priority bulletin.",
+      "prompt": "[grave] Break, break. This is command. A major theater emergency is in effect. Check the priority bulletin.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "399aa761",
+      "role": "command",
+      "event": "command.event.allied_intervention",
+      "priority": "emergency",
+      "text": "Coalition relief is crossing the frontier. Reinforcements are coming into the theater. Keep those routes open.",
+      "prompt": "[relieved] Coalition relief is crossing the frontier. Reinforcements are coming into the theater. Keep those routes open.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "a3dd7bd7",
+      "role": "command",
+      "event": "command.event.emergency_appropriation",
+      "priority": "emergency",
+      "text": "The war cabinet has opened the reserves. Emergency funding and supplies are being released to the hard pressed forces.",
+      "prompt": "[firm] The war cabinet has opened the reserves. Emergency funding and supplies are being released to the hard pressed forces.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "8d73622d",
+      "role": "command",
+      "event": "command.event.frontline_overstretch",
+      "priority": "emergency",
+      "text": "The advance has outrun its supply line. Forward units, check your reserves. Don't push beyond your support.",
+      "prompt": "[grave] The advance has outrun its supply line. Forward units, check your reserves. Don't push beyond your support.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "e119b259",
+      "role": "command",
+      "event": "command.event.munitions_crisis",
+      "priority": "emergency",
+      "text": "Theater command reports a munitions crisis. Make every shot count. The depots are running dry.",
+      "prompt": "[angry] Theater command reports a munitions crisis. Make every shot count. The depots are running dry.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "7a4a69e5",
+      "role": "command",
+      "event": "command.event.ceasefire_ultimatum",
+      "priority": "emergency",
+      "text": "A ceasefire ultimatum has been issued. This is not a ceasefire order. Maintain readiness until command confirms.",
+      "prompt": "[tense] A ceasefire ultimatum has been issued. This is not a ceasefire order. Maintain readiness until command confirms.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "5a8972dc",
+      "role": "command",
+      "event": "command.event.partisan_supply_raid",
+      "priority": "emergency",
+      "text": "Rear supply routes have been hit. Escort crews, watch for ambushes. Replacement stores are being arranged.",
+      "prompt": "[urgent] Rear supply routes have been hit. Escort crews, watch for ambushes. Replacement stores are being arranged.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "b32c400b",
+      "role": "command",
+      "event": "command.event.industrial_surge",
+      "priority": "emergency",
+      "text": "Factories are clearing their backlogs. Fresh supplies are moving to the front. Give those convoys room to work.",
+      "prompt": "[energized] Factories are clearing their backlogs. Fresh supplies are moving to the front. Give those convoys room to work.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "cea7dd57",
+      "role": "command",
+      "event": "command.event.emergency_withdrawal",
+      "priority": "emergency",
+      "text": "Emergency withdrawal is under way in the theater. Cover the recovery convoys. Keep the routes open for the wounded.",
+      "prompt": "[grave] Emergency withdrawal is under way in the theater. Cover the recovery convoys. Keep the routes open for the wounded.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "cd8ffc6c",
+      "role": "command",
+      "event": "command.event.ceasefire_rumors",
+      "priority": "status",
+      "text": "Ceasefire rumors are circulating. We have no ceasefire order. Keep your guard up.",
+      "prompt": "[skeptical] Ceasefire rumors are circulating. We have no ceasefire order. Keep your guard up.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "1d623ec5",
+      "role": "command",
+      "event": "command.event.monsoon_season",
+      "priority": "status",
+      "text": "Monsoon conditions are slowing dispatches. Give support crews time to turn around.",
+      "prompt": "[serious] Monsoon conditions are slowing dispatches. Give support crews time to turn around.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "b52f6a12",
+      "role": "command",
+      "event": "command.event.fuel_depot_fire",
+      "priority": "status",
+      "text": "A fuel depot is burning. Expect rationing and delays. Check your fuel before committing.",
+      "prompt": "[tense] A fuel depot is burning. Expect rationing and delays. Check your fuel before committing.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "58ec8422",
+      "role": "command",
+      "event": "command.event.dust_storm",
+      "priority": "status",
+      "text": "Dust over the forward strips. Expect slower support dispatches. Mind your approach.",
+      "prompt": "[firm] Dust over the forward strips. Expect slower support dispatches. Mind your approach.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "afb6c08f",
+      "role": "command",
+      "event": "command.event.black_market_surplus",
+      "priority": "status",
+      "text": "Surplus stores just became available. Quartermaster says don't ask about the paperwork.",
+      "prompt": "[wry] Surplus stores just became available. Quartermaster says don't ask about the paperwork.",
+      "voice_id": "GLSWsaquVBsIPLPPRi2s"
+    },
+    {
+      "id": "5bbe3575",
+      "role": "skywatch",
+      "event": "awacs.checkin",
+      "priority": "status",
+      "text": "Skywatch, radar contact. Keep this channel clear for tactical traffic.",
+      "prompt": "[calm] Skywatch, radar contact. Keep this channel clear for tactical traffic.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "e12e7f24",
+      "role": "skywatch",
+      "event": "awacs.checkin",
+      "priority": "status",
+      "text": "Skywatch has you. Stay sharp out there. Bring your people home.",
+      "prompt": "[warmly] Skywatch has you. Stay sharp out there. Bring your people home.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "5374a80a",
+      "role": "skywatch",
+      "event": "awacs.bandit",
+      "priority": "tactical",
+      "text": "Skywatch. Hostile aircraft detected. Check your tactical picture.",
+      "prompt": "[focused] Skywatch. Hostile aircraft detected. Check your tactical picture.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "05210742",
+      "role": "skywatch",
+      "event": "awacs.bandit",
+      "priority": "tactical",
+      "text": "New hostile air contact. Watch your approach and check your radar.",
+      "prompt": "[urgent] New hostile air contact. Watch your approach and check your radar.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "9a8086b7",
+      "role": "skywatch",
+      "event": "awacs.missile",
+      "priority": "emergency",
+      "text": "Missile inbound! Break! Defend now!",
+      "prompt": "[shouting] Missile inbound! Break! Defend now!",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "753266ba",
+      "role": "skywatch",
+      "event": "awacs.missile",
+      "priority": "emergency",
+      "text": "Launch warning! Go defensive! Keep moving!",
+      "prompt": "[urgent] Launch warning! Go defensive! Keep moving!",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "04a79aff",
+      "role": "skywatch",
+      "event": "awacs.sam",
+      "priority": "emergency",
+      "text": "Surface missile launch! Defend! Watch the ground threats.",
+      "prompt": "[urgent] Surface missile launch! Defend! Watch the ground threats.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "f4058647",
+      "role": "skywatch",
+      "event": "awacs.missileclear",
+      "priority": "tactical",
+      "text": "Immediate missile threat is clear. Keep checking your six.",
+      "prompt": "[relieved] Immediate missile threat is clear. Keep checking your six.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "05d35240",
+      "role": "skywatch",
+      "event": "awacs.splash",
+      "priority": "tactical",
+      "text": "Skywatch confirms a hostile down. Good work. Stay on the picture.",
+      "prompt": "[pleased] Skywatch confirms a hostile down. Good work. Stay on the picture.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "801b516b",
+      "role": "skywatch",
+      "event": "awacs.splash",
+      "priority": "tactical",
+      "text": "Enemy aircraft destroyed. Check for another before you turn away.",
+      "prompt": "[focused] Enemy aircraft destroyed. Check for another before you turn away.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "d73f8cb1",
+      "role": "skywatch",
+      "event": "awacs.friendlydown",
+      "priority": "tactical",
+      "text": "Friendly aircraft down. Watch for a chute. Keep the area covered.",
+      "prompt": "[somber] Friendly aircraft down. Watch for a chute. Keep the area covered.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "1f353d4c",
+      "role": "skywatch",
+      "event": "awacs.friendlydown",
+      "priority": "tactical",
+      "text": "We've lost a friendly aircraft. Stay together. Don't give them another.",
+      "prompt": "[strained] We've lost a friendly aircraft. Stay together. Don't give them another.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "143e1310",
+      "role": "skywatch",
+      "event": "awacs.clean",
+      "priority": "tactical",
+      "text": "Skywatch picture is clean. Keep a lookout anyway.",
+      "prompt": "[calm] Skywatch picture is clean. Keep a lookout anyway.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "57dfbe2b",
+      "role": "skywatch",
+      "event": "awacs.fuel",
+      "priority": "status",
+      "text": "Check your fuel state. Plan your way home before it becomes urgent.",
+      "prompt": "[concerned] Check your fuel state. Plan your way home before it becomes urgent.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "607c4ac7",
+      "role": "skywatch",
+      "event": "awacs.fuelcritical",
+      "priority": "tactical",
+      "text": "Fuel state critical. Get yourself home. Don't stretch it.",
+      "prompt": "[urgent] Fuel state critical. Get yourself home. Don't stretch it.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "eea5fb0a",
+      "role": "tower",
+      "event": "tower.taxi",
+      "priority": "status",
+      "text": "Tower copies. Taxi with caution. Watch for crossing traffic.",
+      "prompt": "[professional] Tower copies. Taxi with caution. Watch for crossing traffic.",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "e83d0849",
+      "role": "tower",
+      "event": "tower.landing",
+      "priority": "status",
+      "text": "Tower has your approach. Check the runway is clear before touchdown.",
+      "prompt": "[focused] Tower has your approach. Check the runway is clear before touchdown.",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "589218f0",
+      "role": "tower",
+      "event": "tower.goaround",
+      "priority": "status",
+      "text": "Go around! Go around! Climb clear and reset your approach.",
+      "prompt": "[urgent] Go around! Go around! Climb clear and reset your approach.",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "650e83ae",
+      "role": "tower",
+      "event": "tower.airborne",
+      "priority": "status",
+      "text": "Tower, airborne acknowledged. Good hunting. We'll keep the lights on.",
+      "prompt": "[warmly] Tower, airborne acknowledged. Good hunting. We'll keep the lights on.",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "7e14de9b",
+      "role": "tower",
+      "event": "tower.welcome",
+      "priority": "status",
+      "text": "Welcome back. Clear the runway when able. Good to have you home.",
+      "prompt": "[relieved] Welcome back. Clear the runway when able. Good to have you home.",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "69562a37",
+      "role": "tower",
+      "event": "tower.alarm",
+      "priority": "emergency",
+      "text": "Airfield under attack! Clear the runway! All crews take cover!",
+      "prompt": "[shouting] Airfield under attack! Clear the runway! All crews take cover!",
+      "voice_id": "MzqUf1HbJ8UmQ0wUsx2p"
+    },
+    {
+      "id": "2af4cc8d",
+      "role": "ace",
+      "event": "allied.splash",
+      "priority": "ambient",
+      "text": "Splash one! Yeah! Coming around, cover me!",
+      "prompt": "[excited] Splash one! Yeah! Coming around, cover me!",
+      "voice_id": "WtA85syCrJwasGeHGH2p"
+    },
+    {
+      "id": "9fd96605",
+      "role": "ace",
+      "event": "allied.splash",
+      "priority": "ambient",
+      "text": "Got him! He's going down. Checking for his wingman.",
+      "prompt": "[breathless] Got him! He's going down. Checking for his wingman.",
+      "voice_id": "WtA85syCrJwasGeHGH2p"
+    },
+    {
+      "id": "81e87e97",
+      "role": "ace",
+      "event": "allied.lastwords",
+      "priority": "tactical",
+      "text": "I'm hit! She's breaking up! Ejecting!",
+      "prompt": "[panicked] I'm hit! She's breaking up! Ejecting!",
+      "voice_id": "WtA85syCrJwasGeHGH2p"
+    },
+    {
+      "id": "d1e795e0",
+      "role": "ace",
+      "event": "allied.lastwords",
+      "priority": "tactical",
+      "text": "Mayday! Mayday! I can't hold her! I'm punching out!",
+      "prompt": "[strained] Mayday! Mayday! I can't hold her! I'm punching out!",
+      "voice_id": "WtA85syCrJwasGeHGH2p"
+    },
+    {
+      "id": "46f2366a",
+      "role": "ace",
+      "event": "allied.thanks",
+      "priority": "status",
+      "text": "That was too close. You got him off me. I owe you one.",
+      "prompt": "[relieved] That was too close. You got him off me. I owe you one.",
+      "voice_id": "WtA85syCrJwasGeHGH2p"
+    },
+    {
+      "id": "6e681b31",
+      "role": "wing",
+      "event": "wing.copy",
+      "priority": "status",
+      "text": "Copy that. Moving now.",
+      "prompt": "[focused] Copy that. Moving now.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "8ba22d07",
+      "role": "wing",
+      "event": "wing.copy",
+      "priority": "status",
+      "text": "Roger. I'm on it.",
+      "prompt": "[confident] Roger. I'm on it.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "8f40a243",
+      "role": "wing",
+      "event": "wing.unable",
+      "priority": "status",
+      "text": "Unable. Can't make that work from here.",
+      "prompt": "[frustrated] Unable. Can't make that work from here.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "c3593d7f",
+      "role": "wing",
+      "event": "wing.airborne",
+      "priority": "status",
+      "text": "Airborne. Coming up on your wing.",
+      "prompt": "[confident] Airborne. Coming up on your wing.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "f429bfaf",
+      "role": "wing",
+      "event": "wing.rolling",
+      "priority": "status",
+      "text": "Power up. Rolling. See you upstairs.",
+      "prompt": "[focused] Power up. Rolling. See you upstairs.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "a3a960ba",
+      "role": "wing",
+      "event": "wing.splash",
+      "priority": "tactical",
+      "text": "Target destroyed! Coming back to you.",
+      "prompt": "[excited] Target destroyed! Coming back to you.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "a26032a8",
+      "role": "wing",
+      "event": "wing.damaged",
+      "priority": "tactical",
+      "text": "Taking damage! Still flying. Cover me!",
+      "prompt": "[strained] Taking damage! Still flying. Cover me!",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "55280e76",
+      "role": "wing",
+      "event": "wing.ejected",
+      "priority": "emergency",
+      "text": "Ejecting! Ejecting!",
+      "prompt": "[panicked] Ejecting! Ejecting!",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "3bbcda7b",
+      "role": "wing",
+      "event": "wing.fox2",
+      "priority": "tactical",
+      "text": "Fox two! Missile away.",
+      "prompt": "[focused] Fox two! Missile away.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "9a86f1c0",
+      "role": "wing",
+      "event": "wing.fox3",
+      "priority": "tactical",
+      "text": "Fox three! Supporting the shot.",
+      "prompt": "[focused] Fox three! Supporting the shot.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "88d82ce4",
+      "role": "wing",
+      "event": "wing.rifle",
+      "priority": "tactical",
+      "text": "Rifle. Weapon away.",
+      "prompt": "[focused] Rifle. Weapon away.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "588e06ca",
+      "role": "wing",
+      "event": "wing.magnum",
+      "priority": "tactical",
+      "text": "Magnum. Suppressing that radar.",
+      "prompt": "[firm] Magnum. Suppressing that radar.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "a6a0e6a3",
+      "role": "enemy",
+      "event": "enemy.lastwords",
+      "priority": "tactical",
+      "text": "We're hit! I can't get out!",
+      "prompt": "[panicked] We're hit! I can't get out!",
+      "voice_id": "WzVKtqQpTUUQ2JNx8YxI"
+    },
+    {
+      "id": "d9e517f0",
+      "role": "enemy",
+      "event": "enemy.lastwords",
+      "priority": "tactical",
+      "text": "Mayday! Losing control!",
+      "prompt": "[strained] Mayday! Losing control!",
+      "voice_id": "WzVKtqQpTUUQ2JNx8YxI"
+    },
+    {
+      "id": "1ee1d0e7",
+      "role": "enemy",
+      "event": "enemy.splash",
+      "priority": "ambient",
+      "text": "Target down. Stay on the others.",
+      "prompt": "[cold] Target down. Stay on the others.",
+      "voice_id": "WzVKtqQpTUUQ2JNx8YxI"
+    },
+    {
+      "id": "7df6832d",
+      "role": "ground",
+      "event": "command.survivor.ground",
+      "priority": "tactical",
+      "text": "Is anybody still on this net? We survived the blast. There's no answer from command.",
+      "prompt": "[breathless] Is anybody still on this net? We survived the blast. There's no answer from command.",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "86cb2468",
+      "role": "ground",
+      "event": "command.survivor.ground",
+      "priority": "tactical",
+      "text": "I can hear someone... Keep talking. Please, keep talking.",
+      "prompt": "[trembling voice] I can hear someone... Keep talking. Please, keep talking.",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "946e14ef",
+      "role": "ground",
+      "event": "command.survivor.ground",
+      "priority": "tactical",
+      "text": "We've got wounded here. If anyone can hear this, we're still alive.",
+      "prompt": "[strained] We've got wounded here. If anyone can hear this, we're still alive.",
+      "voice_id": "SOYHLrjzK2X1ezoPC6cr"
+    },
+    {
+      "id": "d88f037d",
+      "role": "captain",
+      "event": "command.survivor.captain",
+      "priority": "tactical",
+      "text": "This is a surviving naval station. The flash... We've lost contact with the fleet. Is anyone receiving?",
+      "prompt": "[shaken] This is a surviving naval station. The flash... [short pause] We've lost contact with the fleet. Is anyone receiving?",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "f1ae4f0e",
+      "role": "captain",
+      "event": "command.survivor.captain",
+      "priority": "tactical",
+      "text": "All surviving crews, stay together. Keep calling. We need to know who's still out there.",
+      "prompt": "[tired] All surviving crews, stay together. Keep calling. We need to know who's still out there.",
+      "voice_id": "xHxp1c5pQOzhWjBqV78M"
+    },
+    {
+      "id": "947ed144",
+      "role": "paratrooper",
+      "event": "command.survivor.paratrooper",
+      "priority": "tactical",
+      "text": "Drop lead to any station. We made it through the blast. The squad's trying to regroup.",
+      "prompt": "[breathless] Drop lead to any station. We made it through the blast. The squad's trying to regroup.",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO"
+    },
+    {
+      "id": "6d078cc9",
+      "role": "paratrooper",
+      "event": "command.survivor.paratrooper",
+      "priority": "tactical",
+      "text": "Anybody receiving? We've got survivors. Don't give up on this channel.",
+      "prompt": "[trembling voice] Anybody receiving? We've got survivors. Don't give up on this channel.",
+      "voice_id": "N2lVS1w4EtoT3dr4eOWO"
+    },
+    {
+      "id": "3b0a10ef",
+      "role": "skywatch",
+      "event": "awacs.survivor",
+      "priority": "tactical",
+      "text": "Skywatch to any surviving station. The picture's gone. I'm still here. Is anyone else receiving?",
+      "prompt": "[shaken] Skywatch to any surviving station. The picture's gone. I'm still here. Is anyone else receiving?",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "e78ffe68",
+      "role": "skywatch",
+      "event": "awacs.survivor",
+      "priority": "tactical",
+      "text": "Emergency traffic. If you can hear this, stay on the net. We're trying to make contact.",
+      "prompt": "[strained] Emergency traffic. If you can hear this, stay on the net. We're trying to make contact.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "6e930bb2",
+      "role": "skywatch",
+      "event": "awacs.survivor",
+      "priority": "tactical",
+      "text": "I keep calling... Nothing back. Please, someone answer.",
+      "prompt": "[quietly] I keep calling... [short pause] Nothing back. Please, someone answer.",
+      "voice_id": "XW70ikSsadUbinwLMZ5w"
+    },
+    {
+      "id": "b1fa5d78",
+      "role": "wing",
+      "event": "wing.survivor",
+      "priority": "tactical",
+      "text": "I saw the flash. I'm still flying. Is anybody left on this frequency?",
+      "prompt": "[breathless] I saw the flash. I'm still flying. Is anybody left on this frequency?",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    },
+    {
+      "id": "10670577",
+      "role": "wing",
+      "event": "wing.survivor",
+      "priority": "tactical",
+      "text": "Any friendly aircraft, respond. I can't raise my flight. Please respond.",
+      "prompt": "[trembling voice] Any friendly aircraft, respond. I can't raise my flight. Please respond.",
+      "voice_id": "IRHApOXLvnW57QJPQH2P"
+    }
+  ],
+  "effects": [
+    {
+      "id": "radio-keyup",
+      "model": "eleven_text_to_sound_v2",
+      "prompt": "One single half-second military handheld radio push-to-talk key-up: tactile microphone switch click, tight soft squelch burst, brief dry narrowband hiss. Intimate headset recording, restrained and realistic, no voice, no music, no warning alarm, isolated sound, silence after.",
+      "takes": 4,
+      "maximum_seconds": 0.55,
+      "asset_peak_dbfs": -9,
+      "runtime_gain": 0.35
+    },
+    {
+      "id": "radio-tail",
+      "model": "eleven_text_to_sound_v2",
+      "prompt": "One single short one-second military UHF radio end-of-transmission squelch tail: dry breath of narrowband static, subtle receiver flutter, a tiny release click, clean fade to silence. Restrained headset level, believable field radio, no voice, no music, no beeps, no alarm, isolated sound.",
+      "takes": 4,
+      "maximum_seconds": 0.85,
+      "asset_peak_dbfs": -9,
+      "runtime_gain": 0.3
+    },
+    {
+      "id": "nuclear-radio-static",
+      "model": "eleven_text_to_sound_v2",
+      "prompt": "An 8 second seamlessly looping emergency radio dead-air static after an enormous electromagnetic catastrophe. Dense soft analog shortwave hiss, irregular low crackles, thin distant electrical whine drifting slowly, occasional faint signal flutter. Bleak empty airwaves, unsettling and hopeless, restrained headset texture. No intelligible voices, no music, no explosions, no loud pops, no alarm beeps. Seamless sustained static texture.",
+      "source_takes": 4,
+      "composite_seconds": 7.85,
+      "rms_dbfs": -28,
+      "maximum_peak_dbfs": -12
+    }
+  ],
+  "backgrounds": [
+    {
+      "id": "bed-combat",
+      "events": [
+        "command.basetaken",
+        "command.baselost",
+        "command.basewithdraw"
+      ],
+      "prompt": "Distant ground battle heard behind a soldier's field radio microphone: sporadic muffled automatic rifle bursts, a few dull far-away impacts, boots scuffing rubble, webbing and equipment shifting. Restrained believable combat texture, no foreground weapons, no close explosions, no speech or shouts, no music. Natural uneven spacing and brief lulls. Seamlessly looping background only.",
+      "relative_rms_db": -20,
+      "lowpass_hz": 2500,
+      "fade_in_seconds": 0.1,
+      "fade_out_seconds": 0.25
+    },
+    {
+      "id": "bed-naval",
+      "events": [
+        "command.carrierevac",
+        "command.shiplost"
+      ],
+      "prompt": "Low background inside the bridge of a badly damaged naval vessel: a distant subdued evacuation alarm, soft steel hull strain and low groans, a little electrical crackle and distant rushing water. Tense realistic emergency atmosphere heard through a radio microphone, quiet restrained background only. No voices, no speech, no music, no loud stingers or foreground blasts. Seamless loop.",
+      "relative_rms_db": -22,
+      "lowpass_hz": 2500,
+      "fade_in_seconds": 0.1,
+      "fade_out_seconds": 0.25
+    },
+    {
+      "id": "bed-insertion",
+      "events": [
+        "command.insertion"
+      ],
+      "prompt": "Subtle field microphone background just after an infantry insertion: soft gusting wind, canvas and webbing rustle, boots settling on rough ground, brief equipment clacks, very distant scattered combat. Dry close radio microphone texture with distant battle subdued. No helicopter or aircraft engine, no voice, no speech, no music, no loud foreground gunfire or explosions. Seamlessly looping background ambience.",
+      "relative_rms_db": -22,
+      "lowpass_hz": 2500,
+      "fade_in_seconds": 0.1,
+      "fade_out_seconds": 0.25
+    }
+  ]
+}

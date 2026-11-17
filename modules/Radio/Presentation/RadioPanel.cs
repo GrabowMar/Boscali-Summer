@@ -1,538 +1,154 @@
 using NOAvionics;
 using System;
-using BoscaliSummer.Modules.Radio.Configuration;
 using BoscaliSummer.Modules.Radio.Runtime;
 using BoscaliSummer.Core.Game;
-using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Radio.Presentation
 {
-    /// <summary>
-    /// The receiver and the music deck in one set, on two compact kit v2 pages (no chip strip: every
-    /// state it used to repeat now lives in the page itself).
-    ///
-    /// <para>RECEIVER, top to bottom: the head line (frequency, station, programme, status slab), the
-    /// signal line with its squelch gate, ONE key row (band keys, seek/tune keys, play/stop), the
-    /// band scope, which is also the tuning control and is the part that grows to fill the page
-    /// (<see cref="BandScopePart"/> — hover to preview a channel, click to tune), the volume and squelch
-    /// rings with the receiver switches beside them, and the presets: a header that carries the paging
-    /// and rescan keys, and named station rows with frequency and reception reports.</para>
-    ///
-    /// <para>MUSIC: the track on the deck, a position bar, ONE transport
-    /// row (transport, shuffle, repeat, stop all), a folder header with folder and library keys, a track
-    /// header with paging keys and a track list sized to the page.</para>
-    /// </summary>
+    /// <summary>One local receiver: station programming and military receive are distinct controls.</summary>
     internal static class RadioPanel
     {
-        private const int TabReceiver = 0;
-        private const int TabDeck = 1;
-        private const int PresetRows = 6;
-        private const int MinPresetRows = 1;
-        private const int TrackRows = 15;
-        private const int MinTrackRows = 1;
-
+        private const int TabReceiver = 0, TabDeck = 1, PresetRows = 6, TrackRows = 15, MinTrackRows = 1;
         private const float ListRowHeight = 33f;
-
-        // Tooltips are swapped while a control is disabled, so a greyed key always says why.
-        private const string MonitorTip = "Monitor: listen to the tuned station's programme. Press again to pause it.";
-        private const string MonitorPauseTip = "Pause the programme. The station stays tuned and the soundtrack bus stays held.";
-        private const string MonitorResumeTip = "Resume the paused programme.";
-        private const string MonitorOffTip = "No programme on this station.";
-        private const string BandFmTip = "FM broadcast, 87.5 – 108 MHz in 100 kHz channels. Keeps its last frequency.";
-        private const string BandAirTip = "VHF air band, 118 – 137 MHz in 25 kHz channels, AM. Keeps its last frequency.";
-        private const string BandMwTip = "Medium wave, 530 – 1700 kHz in 10 kHz channels, AM. Keeps its last frequency.";
-        private const string BandOffTip = "No stations in the library.";
-        private const string StationPreviousTip = "Previous page of stations.";
-        private const string StationNextTip = "Next page of stations.";
-        private const string FirstPageTip = "Already on the first page.";
-        private const string LastPageTip = "Already on the last page.";
         private const string PlayTip = "Play or pause the selected track.";
-        private const string PlayNoLibraryTip = "No music found. Add OGG or WAV files and press RESCAN.";
+        private const string PlayNoLibraryTip = "Add OGG or WAV music, then press RESCAN.";
         private const string PlayNoTracksTip = "This folder has no tracks.";
-        private const string FolderPreviousTip = "Browse the previous music folder.";
-        private const string FolderNextTip = "Browse the next music folder.";
-        private const string FirstFolderTip = "Already on the first folder.";
-        private const string LastFolderTip = "Already on the last folder.";
-        private const string TrackPreviousTip = "Previous page of tracks.";
-        private const string TrackNextTip = "Next page of tracks.";
-        private const string OpenFolderTip = "Open the local music folder. OGG and WAV files only.";
-        private const string RescanTip = "Rescan the local music library for new folders and tracks. This signs the receiver off and rebuilds the dial.";
-
-        private static readonly MfdPanelInstaller installer =
-            new MfdPanelInstaller(MfdSlots.Rad, "RAD", "BoscaliRadio.Screen", preferLeft: false)
+        private const string FolderPreviousTip = "Previous music folder.", FolderNextTip = "Next music folder.";
+        private const string FirstFolderTip = "First folder.", LastFolderTip = "Last folder.";
+        private const string TrackPreviousTip = "Previous track page.", TrackNextTip = "Next track page.";
+        private const string FirstPageTip = "First page.", LastPageTip = "Last page.";
+        private const string OpenFolderTip = "Open the local OGG/WAV music folder.";
+        private const string RescanTip = "Stop music and rescan the local library.";
+        private static readonly MfdPanelInstaller installer = new MfdPanelInstaller(MfdSlots.Rad, "RAD", "BoscaliRadio.Screen", preferLeft: false)
             { Wrap = true, Builder = BuildScreen };
         private static AvConsole console;
         private static RadioManager manager;
-
-        // ------------------------------------------------------------------ receiver widgets
         private static RadioOnAirPart onAirPart;
-        private static RadioReadoutPart readoutPart;
-        private static RadioStripPart dialStrip;
-        private static BandScopePart scopePart;
-        private static RadioLevelsPart levelsPart;
-        private static AvKeyHeader presetHeader;
-        private static readonly AvRow[] stationRows = new AvRow[PresetRows];
-        private static int presetShown = PresetRows;
-
-        // ----------------------------------------------------------------------- deck widgets
+        private static RadioStripPart dialStrip, deckStrip, militaryStrip;
+        private static AvKeyHeader volumeHeader, presetHeader, folderHeader, trackHeader;
+        private static readonly AvRow[] stationRows = new AvRow[PresetRows], trackRows = new AvRow[TrackRows];
         private static AvRow nowRow;
         private static AvHazardBar deckBar;
-        private static RadioStripPart deckStrip;
-        private static AvKeyHeader folderHeader;
-        private static AvKeyHeader trackHeader;
-        private static readonly AvRow[] trackRows = new AvRow[TrackRows];
         private static AvAlert emptyAlert;
         private static bool deckHadFolders = true;
-        private static int trackShown = TrackRows;
-
-        // Per-row hover-help and badge caches, so a row only touches its widgets when its content changes.
-        private static readonly string[] stationTipName = new string[PresetRows];
-        private static readonly bool[] stationHasBadge = new bool[PresetRows];
-        private static readonly long[] stationKey = new long[PresetRows];
-        private static readonly long[] trackKey = new long[TrackRows];
-        private static readonly string[] trackTipName = new string[TrackRows];
-        private static int iconRevision = -1;
-
-        private static int stationPage;
-        private static int trackPage;
+        private static int presetShown = PresetRows, trackShown = TrackRows, stationPage, trackPage, iconRevision = -1;
         private static float nextAttempt;
-        private static bool unavailableLogged;
-
+        private static readonly long[] trackKey = new long[TrackRows], stationKey = new long[PresetRows];
+        private static readonly string[] trackTipName = new string[TrackRows];
         public static void Tick(RadioManager radio)
         {
             manager = radio;
-            if (installer.Failed) return;
-            if (!GameAccess.MfdAvailable)
-            {
-                if (!unavailableLogged)
-                {
-                    unavailableLogged = true;
-                    Plugin.Logger.LogWarning("Radio panel unavailable: VirtualMFD access did not resolve.");
-                }
-                return;
-            }
-
-            if (installer.Screen == null)
-            {
-                if (Time.unscaledTime < nextAttempt) return;
-                nextAttempt = Time.unscaledTime + 1f;
-                installer.Log = Plugin.Logger;
-                installer.Install();
-                if (installer.Failed)
-                {
-                    console = null;
-                    Plugin.Logger.LogWarning("Radio panel disabled. Playback remains available through config reload only.");
-                }
-            }
-
-            // The console's own AvTicker (a MonoBehaviour on its Root, inside
-            // MFDScreen.displayPanel) drives every readout from here on. Unity stops calling its
-            // Update() the moment the bezel shows a different screen on this slot, since
-            // displayPanel is deactivated then — the same gate the v1 panel enforced by hand.
+            if (installer.Failed || !GameAccess.MfdAvailable || installer.Screen != null || Time.unscaledTime < nextAttempt) return;
+            nextAttempt = Time.unscaledTime + 1f;
+            installer.Log = Plugin.Logger;
+            installer.Install();
         }
-
         public static void Reset()
         {
-            installer.Reset();
-            RadioStationIconCache.Clear();
-            scopePart?.Dispose();
-
-            console = null;
-            manager = null;
-
-            onAirPart = null;
-            readoutPart = null;
-            dialStrip = null;
-            scopePart = null;
-            levelsPart = null;
-            presetHeader = null;
-            Array.Clear(stationRows, 0, stationRows.Length);
-            presetShown = PresetRows;
-
-            nowRow = null;
-            deckBar = null;
-            deckStrip = null;
-            folderHeader = null;
-            trackHeader = null;
-            Array.Clear(trackRows, 0, trackRows.Length);
-            emptyAlert = null;
-            deckHadFolders = true;
-            trackShown = TrackRows;
-
-            Array.Clear(stationTipName, 0, stationTipName.Length);
-            Array.Clear(stationHasBadge, 0, stationHasBadge.Length);
-            Array.Clear(stationKey, 0, stationKey.Length);
-            Array.Clear(trackKey, 0, trackKey.Length);
-            Array.Clear(trackTipName, 0, trackTipName.Length);
-            iconRevision = -1;
-
-            stationPage = 0;
-            trackPage = 0;
-            nextAttempt = 0f;
+            installer.Reset(); RadioStationIconCache.Clear();
+            console = null; manager = null; onAirPart = null; dialStrip = deckStrip = militaryStrip = null;
+            volumeHeader = presetHeader = folderHeader = trackHeader = null;
+            nowRow = null; deckBar = null; emptyAlert = null;
+            Array.Clear(stationRows, 0, stationRows.Length); Array.Clear(trackRows, 0, trackRows.Length);
+            Array.Clear(stationKey, 0, stationKey.Length); Array.Clear(trackKey, 0, trackKey.Length); Array.Clear(trackTipName, 0, trackTipName.Length);
+            presetShown = PresetRows; trackShown = TrackRows; stationPage = trackPage = 0; iconRevision = -1; nextAttempt = 0f;
         }
-
         private static RectTransform BuildScreen(RectTransform display, float height)
         {
             console = AvConsole.Build(display, MfdSlots.Rad, "RADIO", 2, AvTokens.PanelWidth, height);
-            console.Tabs((AvIcon.Radio, "RECEIVER"), (AvIcon.Music, "MUSIC"));
-
-            BuildReceiver(console.Page(TabReceiver));
-            BuildDeck(console.Page(TabDeck));
-            console.Finish();
-            console.PageChanged += _ => { RefreshReceiver(); RefreshDeck(); };
-            RefreshReceiver();
-            RefreshDeck();
-            return null;
+            console.Tabs((AvIcon.Radio, "BROADCAST"), (AvIcon.Music, "MUSIC"));
+            BuildReceiver(console.Page(TabReceiver)); BuildDeck(console.Page(TabDeck));
+            console.Finish(); console.PageChanged += _ => { RefreshReceiver(); RefreshDeck(); };
+            RefreshReceiver(); RefreshDeck(); return null;
         }
-
-        // ------------------------------------------------------------------------ receiver page
-
         private static void BuildReceiver(AvFlow p)
         {
             onAirPart = p.Add(new RadioOnAirPart(p.Content));
-            onAirPart.Help = "The station you are tuned to, its show and host, and what is on air: a song with its clock, " +
-                "or the station's own talk. The bottom line is the break that comes after this song. The slab is the receiver " +
-                "state: ON AIR, STANDBY, PAUSED, DEAD AIR (nothing on this frequency) or OFF AIR (the station's tower is lost).";
-
-            readoutPart = p.Add(new RadioReadoutPart(p.Content));
-            readoutPart.Help = "Tuned frequency, and the signal as an S-report, dBm and the range to the tower. The amber gate on " +
-                "the bar is the squelch: a station weaker than the gate stays silent.";
-
+            onAirPart.Help = "Station music, adverts and news. Military communications use the independent channel below.";
             dialStrip = p.Add(new RadioStripPart(p.Content,
-                new RadioStripItem("FM", () => SetBandIndex(0), AvButtonStyle.Default, AvIcon.None, 1.3f),
-                new RadioStripItem("AIR", () => SetBandIndex(1), AvButtonStyle.Default, AvIcon.None, 1.3f),
-                new RadioStripItem("MW", () => SetBandIndex(2), AvButtonStyle.Default, AvIcon.None, 1.3f),
-                new RadioStripItem(string.Empty, () => manager?.SeekStation(-1), AvButtonStyle.Quiet, AvIcon.ChevronLeft, 1f, true),
-                new RadioStripItem(string.Empty, () => manager?.StepDial(-1), AvButtonStyle.Quiet, AvIcon.Minus),
-                new RadioStripItem(string.Empty, () => manager?.StepDial(1), AvButtonStyle.Quiet, AvIcon.Plus),
-                new RadioStripItem(string.Empty, () => manager?.SeekStation(1), AvButtonStyle.Quiet, AvIcon.ChevronRight),
-                new RadioStripItem(string.Empty, () => manager?.TogglePlayback(), AvButtonStyle.Primary, AvIcon.PlayerPlay, 1f, true),
-                new RadioStripItem(string.Empty, () => manager?.Stop(), AvButtonStyle.Danger, AvIcon.PlayerStop)));
-            dialStrip[0].Help = BandFmTip;
-            dialStrip[1].Help = BandAirTip;
-            dialStrip[2].Help = BandMwTip;
-            dialStrip[3].Help = "Seek: jump to the previous station down the band.";
-            dialStrip[4].Help = "Tune one step down. Between channels is dead air.";
-            dialStrip[5].Help = "Tune one step up. Between channels is dead air.";
-            dialStrip[6].Help = "Seek: jump to the next station up the band.";
-            dialStrip[8].Help = "Stop: sign off and hand the soundtrack bus back to the game.";
-
-            // The scope keeps a fixed strip; the station list takes the leftover height.
-            scopePart = p.Add(new BandScopePart(p.Content));
-
-            levelsPart = p.Add(new RadioLevelsPart(p.Content,
-                () => manager?.NudgeVolume(-0.1f), () => manager?.NudgeVolume(0.1f),
-                () => manager?.NudgeSquelch(-0.05f), () => manager?.NudgeSquelch(0.05f),
-                () => manager?.CycleMode(), () => manager?.ToggleBandwidth(), () => manager?.ToggleFineTuning()));
-            levelsPart.Volume.Help = "Receiver volume. Use the + and - keys beside the rectangular level meter.";
-            levelsPart.Squelch.Help = "Squelch threshold. Higher means only a stronger station opens the audio; the amber gate on the signal bar shows it.";
-            levelsPart.VolumeDown.Help = "Turn the receiver volume down.";
-            levelsPart.VolumeUp.Help = "Turn the receiver volume up.";
-            levelsPart.SquelchDown.Help = "Lower the squelch: a weaker station can open the audio.";
-            levelsPart.SquelchUp.Help = "Raise the squelch: only a stronger station opens the audio.";
-            levelsPart.Mode.Help = "Cycle AUTO, FM and AM. A forced mode on the wrong station garbles it.";
-            levelsPart.Bandwidth.Help = "Wide or narrow passband. Narrow trades audio quality for less noise.";
-            levelsPart.Step.Help = "Channel step, or a five-times finer tuning step.";
-
+                new RadioStripItem("PREV", () => manager?.SeekStation(-1), AvButtonStyle.Quiet, AvIcon.None),
+                new RadioStripItem("PLAY", () => manager?.TogglePlayback(), AvButtonStyle.Primary, AvIcon.None, 1.4f),
+                new RadioStripItem("NEXT", () => manager?.SeekStation(1), AvButtonStyle.Quiet, AvIcon.None),
+                new RadioStripItem("STOP", () => manager?.Stop(), AvButtonStyle.Danger, AvIcon.None)));
+            dialStrip[0].Help = "Listen to the previous station."; dialStrip[2].Help = "Listen to the next station.";
+            dialStrip[1].Help = "Play or pause this station."; dialStrip[3].Help = "Stop station programming. Military receive stays on.";
+            volumeHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.Music, "BROADCAST VOLUME",
+                new AvControl.Spec("−", () => manager?.NudgeVolume(-.1f), AvButtonStyle.Quiet),
+                new AvControl.Spec("+", () => manager?.NudgeVolume(.1f), AvButtonStyle.Quiet)));
+            volumeHeader[0].Help = "Lower station and music deck volume."; volumeHeader[1].Help = "Raise station and music deck volume.";
+            militaryStrip = p.Add(new RadioStripPart(p.Content,
+                new RadioStripItem("MILITARY ON", () => manager?.ToggleMilitary(), AvButtonStyle.Toggle, AvIcon.None, 4f),
+                new RadioStripItem("VOL −", () => manager?.NudgeMilitaryVolume(-.1f), AvButtonStyle.Quiet, AvIcon.None),
+                new RadioStripItem("VOL +", () => manager?.NudgeMilitaryVolume(.1f), AvButtonStyle.Quiet, AvIcon.None)));
+            militaryStrip[0].Help = "Receive military speech independently of station playback. Off stops the current transmission.";
+            militaryStrip[1].Help = "Lower military speech volume."; militaryStrip[2].Help = "Raise military speech volume.";
             presetHeader = p.Add(new AvKeyHeader(p.Content, AvIcon.ListDetails, "STATIONS",
                 new AvControl.Spec(string.Empty, () => manager?.Rescan(), AvButtonStyle.Quiet, AvIcon.Refresh),
-                new AvControl.Spec(string.Empty, () => { PreviousStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
-                new AvControl.Spec(string.Empty, () => { NextStationPage(); RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
-            presetHeader[0].Help = RescanTip;
-
+                new AvControl.Spec(string.Empty, () => { if (stationPage > 0) stationPage--; RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronLeft),
+                new AvControl.Spec(string.Empty, () => { stationPage++; RefreshReceiver(); }, AvButtonStyle.Quiet, AvIcon.ChevronRight)));
+            presetHeader[0].Help = RescanTip; presetHeader[1].Help = "Previous station page."; presetHeader[2].Help = "Next station page.";
             for (int i = 0; i < PresetRows; i++)
             {
-                int captured = i;
-                stationRows[i] = p.Add(new AvRow(p.Content, () => OnStationRowClick(captured)));
+                int slot = i;
+                stationRows[i] = p.Add(new AvRow(p.Content, () => manager?.SelectChannel(stationPage * presetShown + slot)));
                 stationRows[i].BadgeSlot = true;
             }
-
-            p.Ticker.Add(TabReceiver, AvTickRate.Fast, RefreshReceiver);
-            p.Ticker.Add(TabReceiver, AvTickRate.Fast, scopePart.Animate);
-
-            console.Orders(TabReceiver, "Pick a station below, or click the band scope to tune; hover the scope to preview.");
+            p.Ticker.Add(TabReceiver, AvTickRate.Slow, RefreshReceiver);
+            console.Orders(TabReceiver, "Choose a station to listen. Military receive works with music stopped.");
         }
-
         private static void RefreshReceiver()
         {
             if (manager == null || console == null || onAirPart == null) return;
-
-            bool hasChannels = manager.HasChannels;
-            bool offStation = manager.IsOffStation || manager.IsOffAir;
-            RadioDial dial = manager.TunedDial;
+            if (iconRevision != manager.StationRevision) { RadioStationIconCache.Clear(); iconRevision = manager.StationRevision; }
+            onAirPart.SetCompact(console.Page(TabReceiver).ViewportHeight > 0f && console.Page(TabReceiver).ViewportHeight < 340f);
             bool live = manager.IsEngaged && !manager.IsPaused;
-
-            string modeLine = hasChannels ? manager.BroadcastMode + " · " + StepText(dial.Band) : "NO LIBRARY";
-            string name, show, label = string.Empty, title = string.Empty;
-            if (hasChannels && !offStation)
-            {
-                name = manager.CurrentChannelName;
-                show = manager.ShowLine;
-                if (live)
-                {
-                    label = manager.IsTalking ? "ON AIR · STATION TALK" : "NOW PLAYING";
-                    title = manager.CurrentTrackTitle ?? string.Empty;
-                }
-                else if (manager.GetChannelTrackCount(manager.SelectedChannel) <= 0) label = "NO PROGRAMME ON THIS STATION";
-                else
-                {
-                    label = manager.IsPaused ? "PAUSED" : "STANDING BY";
-                    title = manager.IsPaused ? "Press play to resume" : "Press play to listen";
-                }
-            }
-            else if (hasChannels)
-            {
-                name = manager.IsOffAir ? manager.CurrentChannelName : "NO CARRIER";
-                show = manager.IsOffAir ? "TOWER LOST · THIS STATION IS OFF AIR" : "NOTHING ON THIS FREQUENCY";
-                label = "DEAD AIR";
-                title = "Pick a station below or click the scope";
-            }
-            else
-            {
-                name = "NO STATIONS ON FILE";
-                show = "THE DIAL HAS NOTHING TO TUNE";
-            }
-
-            string receiverState = manager.IsOffAir ? "OFF AIR"
-                : manager.IsOffStation ? "DEAD AIR"
-                : manager.IsEngaged && !manager.IsPaused ? "ON AIR"
-                : manager.IsPaused ? "PAUSED"
-                : hasChannels ? "STANDBY" : "NO LIBRARY";
             int selected = manager.SelectedChannel;
-            bool onStation = hasChannels && !offStation;
-            string nextText = onStation && live ? manager.NextBreakText : string.Empty;
-            float toBreak = manager.SecondsToBreak;
-            onAirPart.Set(
-                onStation || manager.IsOffAir ? manager.CurrentChannelColor : AvTheme.Dim,
-                onStation ? RadioStationIconCache.Get(manager.GetChannelIconPath(selected)) : null,
-                hasChannels ? manager.CurrentChannelCode + " · " + dial.FrequencyText : "--",
-                name, receiverState, live && onStation, show, label, title,
-                live ? manager.Progress : 0f,
-                live && manager.Duration > 0f ? AvNum.Clock(manager.Elapsed) + " / " + AvNum.Clock(manager.Duration) : string.Empty,
-                nextText.Length == 0 ? string.Empty : (manager.IsTalking ? "THEN  " : "NEXT BREAK  ") + nextText,
-                nextText.Length == 0 ? string.Empty : toBreak >= 0f ? "IN " + AvNum.Clock(toBreak) : "LIVE");
+            onAirPart.Set(manager.CurrentChannelColor, manager.HasChannels ? RadioStationIconCache.Get(manager.GetChannelIconPath(selected)) : null,
+                manager.CurrentChannelCode + " · " + manager.TunedDial.FrequencyText,
+                manager.CurrentChannelName, live && manager.NuclearBlackout ? "STATIC" : live ? "ON AIR" : manager.IsPaused ? "PAUSED" : "OFF", live, manager.ShowLine,
+                manager.NuclearBlackout ? "SIGNAL LOST" : live ? (manager.IsTalking ? "BROADCAST" : "NOW PLAYING") : "STATION PROGRAMMING",
+                manager.IsEngaged ? manager.CurrentTrackTitle : "Choose a station, then play",
+                live && !manager.NuclearBlackout ? manager.Progress : 0f,
+                live && !manager.NuclearBlackout && manager.Duration > 0f ? AvNum.Clock(manager.Elapsed) + " / " + AvNum.Clock(manager.Duration) : string.Empty,
+                live && !manager.NuclearBlackout ? "NEXT  " + manager.NextBreakText : string.Empty, string.Empty);
+            volumeHeader.SetCaption(AvNum.Percent(manager.VolumeLevel));
+            militaryStrip[0].Label = manager.ReceiveMilitary ? "MILITARY ON · " + AvNum.Percent(manager.MilitaryVolume) : "MILITARY OFF";
+            militaryStrip[0].Latched = manager.ReceiveMilitary;
+            dialStrip[1].Label = live ? "PAUSE" : manager.IsPaused ? "RESUME" : "PLAY";
+            dialStrip[1].Latched = live;
+            for (int i = 0; i < 4; i++) dialStrip[i].Interactable = manager.HasChannels && manager.BroadcastEnabled;
             FitPresetRows();
-
-            UpdateMeter(modeLine);
-
-            levelsPart.Volume.Set(Mathf.Clamp01(manager.VolumeLevel), AvNum.Percent(manager.VolumeLevel), AvState.Info);
-            levelsPart.Squelch.Set(Mathf.Clamp01(manager.Squelch), AvNum.Percent(manager.Squelch),
-                manager.Squelch > 0.6f ? AvState.Caution : AvState.Info);
-
-            AvControl mode = levelsPart.Mode;
-            mode.Label = "MODE · " + ModeText();
-            mode.Latched = manager.ReceiverModulation != dial.Modulation;
-            mode.Interactable = hasChannels;
-
-            AvControl bandwidth = levelsPart.Bandwidth;
-            bandwidth.Label = manager.NarrowBandwidth ? "BANDWIDTH · NARROW" : "BANDWIDTH · WIDE";
-            bandwidth.Latched = manager.NarrowBandwidth;
-            bandwidth.Interactable = hasChannels;
-
-            AvControl step = levelsPart.Step;
-            step.Label = manager.FineTuning ? "STEP · FINE" : "STEP · " + StepText(dial.Band);
-            step.Latched = manager.FineTuning;
-            step.Interactable = hasChannels;
-
-            int bandIndex = GetBandIndex();
-            for (int i = 0; i < 3; i++) dialStrip[i].Latched = i == bandIndex;
-            Gate(dialStrip[0], hasChannels, BandFmTip, BandOffTip);
-            Gate(dialStrip[1], hasChannels, BandAirTip, BandOffTip);
-            Gate(dialStrip[2], hasChannels, BandMwTip, BandOffTip);
-            for (int i = 3; i <= 6; i++) dialStrip[i].Interactable = hasChannels;
-
-            int selectedTracks = hasChannels ? manager.GetChannelTrackCount(manager.SelectedChannel) : 0;
-            bool monitorEnabled = selectedTracks > 0 && !offStation;
-            AvControl monitor = dialStrip[7];
-            monitor.Latched = manager.IsEngaged && !manager.IsPaused;
-            monitor.SetIcon(monitor.Latched ? AvIcon.PlayerPause : AvIcon.PlayerPlay);
-            Gate(monitor, monitorEnabled,
-                manager.IsPaused ? MonitorResumeTip : manager.IsEngaged ? MonitorPauseTip : MonitorTip, MonitorOffTip);
-
-
             int pages = Math.Max(1, (manager.ChannelCount + presetShown - 1) / presetShown);
             stationPage = Mathf.Clamp(stationPage, 0, pages - 1);
-            presetHeader.SetCaption(hasChannels
-                ? RangeText(stationPage, presetShown, manager.ChannelCount, "NO STATIONS")
-                : "NO STATIONS");
-            Gate(presetHeader[1], stationPage > 0, StationPreviousTip, FirstPageTip);
-            Gate(presetHeader[2], stationPage + 1 < pages, StationNextTip, LastPageTip);
-
-            // A rescan can replace the station art on disk; drop the cached sprites before the rows re-read them.
-            if (iconRevision != manager.StationRevision)
+            presetHeader.SetCaption(RangeText(stationPage, presetShown, manager.ChannelCount, "NO STATIONS"));
+            presetHeader[1].Interactable = stationPage > 0; presetHeader[2].Interactable = stationPage + 1 < pages;
+            for (int i = 0; i < PresetRows; i++)
             {
-                RadioStationIconCache.Clear();
-                iconRevision = manager.StationRevision;
-            }
-
-            bool badgesChanged = false;
-            for (int i = 0; i < presetShown; i++)
-            {
-                AvRow row = stationRows[i];
                 int index = stationPage * presetShown + i;
-                // Only real stations get a row; an empty dial keeps one line that says so.
-                row.SetShown(index < manager.ChannelCount || (!hasChannels && i == 0));
-                if (index >= manager.ChannelCount)
-                {
-                    stationKey[i] = 0;
-                    row.Set(hasChannels ? string.Empty
-                        : "ADD MUSIC FOLDERS, THEN PRESS RESCAN", string.Empty, string.Empty, AvState.Inert);
-                    row.Armed = false;
-                    row.Interactable = false;
-                    badgesChanged |= ApplyStationBadge(row, i, null);
-                    if (stationTipName[i] != null) { stationTipName[i] = null; row.Help = null; }
-                    continue;
-                }
-
-                // What the row shows, as one number: nothing is built or written unless it moved.
-                int code, tracks = 0;
-                if (manager.GetChannelOffAir(index)) code = 1;
-                else if (!manager.GetChannelHasTransmitter(index)) { code = 2; tracks = manager.GetChannelTrackCount(index); }
-                else
-                {
-                    float strength = Mathf.Clamp01(manager.GetChannelStrength(index));
-                    code = strength >= 0.7f ? 3 : strength >= 0.35f ? 4 : 5;
-                }
-                bool armed = index == manager.SelectedChannel && !offStation;
-                long key = (((long)(index + 1) * 8 + code) * 100000 + tracks) * 4 + (armed ? 1 : 0) + (manager.StationRevision & 0xFFFF) * 1000000000000L;
+                AvRow row = stationRows[i]; row.SetShown(i < presetShown && index < manager.ChannelCount);
+                if (index >= manager.ChannelCount) continue;
+                bool active = index == selected;
+                long key = ((long)(manager.StationRevision + 1) * 1000 + index + 1) * 2 + (active ? 1 : 0);
                 if (stationKey[i] == key) continue;
                 stationKey[i] = key;
-
-                row.Interactable = true;
-                string channelName = manager.GetChannelName(index);
-                if (stationTipName[i] != channelName)
-                {
-                    stationTipName[i] = channelName;
-                    row.Help = "Tune " + channelName + ". Its programme plays here; tracks are picked on the music tab.";
-                }
-                badgesChanged |= ApplyStationBadge(row, i, RadioStationIconCache.Get(manager.GetChannelIconPath(index)));
-                string status = code == 1 ? "OFF AIR" : code == 2 ? AvNum.Fixed(tracks, 0) + " TRK" : code == 3 ? "STRONG" : code == 4 ? "FAIR" : "WEAK";
-                AvState state = code == 1 ? AvState.Danger : code == 2 ? AvState.Info : code == 3 ? AvState.Ready : code == 4 ? AvState.Caution : AvState.Danger;
-                row.Set(channelName, manager.GetChannelSubtitle(index) + " · " + manager.GetChannelDial(index).FullText, status, state);
-                row.Armed = armed;
+                row.Set(manager.GetChannelName(index), manager.GetChannelSubtitle(index), active ? "TUNED" : manager.GetChannelDial(index).FrequencyText,
+                    active ? AvState.Ready : AvState.Info);
+                row.Armed = active; row.Interactable = true;
+                row.Help = "Listen to " + manager.GetChannelName(index) + ".";
+                row.SetBadge(RadioStationIconCache.Get(manager.GetChannelIconPath(index))?.texture);
             }
-            // A badge changes the row's text width and slot, so the page has to lay the rows out again.
-            if (badgesChanged) console.Page(TabReceiver).RequestRelayout();
-
-            // The head slab already says DEAD AIR / OFF AIR / NO LIBRARY; the footer only carries the manager's last action.
             console.Footer.Set(manager.Status, AvState.Inert);
         }
-
-        /// <summary>The list shows as many preset rows as the page can hold; a short console pages instead of scrolling.</summary>
         private static void FitPresetRows()
         {
-            AvFlow page = console.Page(TabReceiver);
-            // Measure the same inner width and six fixed lines used by AvFlow. Programme copy can
-            // wrap when a tower goes off air, so this runs after the current tune data is applied.
-            float width = page.Inner;
-            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap +
-                onAirPart.Measure(width) + readoutPart.Measure(width) + dialStrip.Measure(width) +
-                scopePart.Measure(width) + levelsPart.Measure(width) + presetHeader.Measure(width);
+            AvFlow p = console.Page(TabReceiver); float width = p.Inner;
+            float fixedHeight = 2f * AvGridTokens.Pad + 6f * AvGridTokens.Gap + onAirPart.Measure(width) + dialStrip.Measure(width) +
+                volumeHeader.Measure(width) + militaryStrip.Measure(width) + presetHeader.Measure(width);
             float rowHeight = ListRowHeight;
-            foreach (AvRow row in stationRows)
-                if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
-            // One row per station on file; nothing on file: one line says so.
-            int most = manager.HasChannels ? Mathf.Clamp(manager.ChannelCount, MinPresetRows, PresetRows) : MinPresetRows;
-            int shown = page.ViewportHeight <= 0f ? most :
-                Mathf.Clamp(Mathf.FloorToInt((page.ViewportHeight - fixedHeight) / rowHeight), MinPresetRows, most);
-            if (shown == presetShown) return;
-            int first = stationPage * presetShown;
-            presetShown = shown;
-            stationPage = first / shown;
-            for (int i = 0; i < PresetRows; i++) stationRows[i].SetShown(i < shown);
+            foreach (AvRow row in stationRows) if (row != null) rowHeight = Mathf.Max(rowHeight, row.Measure(width) + AvGridTokens.Gap);
+            presetShown = p.ViewportHeight <= 0f ? PresetRows : Mathf.Clamp(Mathf.FloorToInt((p.ViewportHeight - fixedHeight) / rowHeight), 1, PresetRows);
         }
-
-        /// <summary>The level bar, the squelch gate drawn on it, and the two reports.</summary>
-        private static void UpdateMeter(string modeLine)
-        {
-            if (manager == null || readoutPart == null) return;
-
-            float level;
-            string report;
-            string detail;
-            Color color;
-
-            if (!manager.HasChannels)
-            {
-                level = 0f; report = "S0"; detail = "NO STATIONS";
-                color = AvTheme.Dim;
-            }
-            else if (manager.IsOffStation)
-            {
-                level = 0.06f + Mathf.PerlinNoise(Time.unscaledTime * 3.5f, 0.71f) * 0.16f;
-                report = "S0"; detail = "DEAD AIR";
-                color = AvTheme.Warning;
-            }
-            else if (manager.IsOffAir)
-            {
-                level = 0f; report = "S0"; detail = "OFF AIR";
-                color = AvTheme.Alert;
-            }
-            else
-            {
-                RadioReception reception = manager.Reception;
-                level = Mathf.Max(Mathf.Max(0.04f, reception.Quality * 0.9f), manager.SignalLevel * 0.6f);
-                bool open = reception.Open(manager.Squelch);
-                bool live = open && manager.IsEngaged && !manager.IsPaused;
-                report = reception.SReport;
-                detail = open ? reception.DbmReport : "SQL SHUT";
-                if (manager.ReceptionModelled)
-                    detail += " · " + AvNum.Fixed(manager.TowerDistanceKm, 0) + " KM · " + (manager.TowerLineOfSight ? "LOS" : "BLOCKED");
-                color = open ? (live ? AvTheme.RailReady : AvTheme.Dim) : AvTheme.Warning;
-            }
-
-            RadioDial dial = manager.TunedDial;
-            readoutPart.Set(dial.FrequencyText, dial.UnitText + " · " + modeLine, report, detail, level, manager.Squelch, color);
-        }
-
-        /// <summary>Enable a control and swap its hover help with it, so a greyed key always says why.</summary>
-        private static void Gate(AvControl control, bool enabled, string onHelp, string offHelp)
-        {
-            if (control.Interactable != enabled) control.Interactable = enabled;
-            string help = enabled ? onHelp : offHelp;
-            if (control.Help != help) control.Help = help;
-        }
-
-        /// <summary>Shows the station's logo on its preset row (no-op when unchanged); true when the badge appeared or vanished.</summary>
-        private static bool ApplyStationBadge(AvRow row, int slot, Sprite icon)
-        {
-            bool has = icon != null;
-            row.SetBadge(has ? icon.texture : null);
-            if (stationHasBadge[slot] == has) return false;
-            stationHasBadge[slot] = has;
-            return true;
-        }
-
-        private static void OnStationRowClick(int slot)
-        {
-            int index = stationPage * presetShown + slot;
-            if (manager != null && index < manager.ChannelCount) manager.SelectChannel(index);
-        }
-
-        private static int GetBandIndex() => manager == null ? 0 : (int)manager.TunedDial.Band;
-
-        private static void SetBandIndex(int index)
-        {
-            RadioBand band = index == 1 ? RadioBand.Air : index == 2 ? RadioBand.Mw : RadioBand.Fm;
-            manager?.SetBand(band);
-        }
-
-        private static void PreviousStationPage()
-        {
-            if (stationPage > 0) stationPage--;
-        }
-
-        private static void NextStationPage()
-        {
-            int pages = manager == null ? 1 : Math.Max(1, (manager.ChannelCount + presetShown - 1) / presetShown);
-            if (stationPage + 1 < pages) stationPage++;
-        }
-
-        // ----------------------------------------------------------------------------- music page
-
         private static void BuildDeck(AvFlow p)
         {
             nowRow = p.Add(new AvRow(p.Content));
@@ -751,20 +367,6 @@ namespace BoscaliSummer.Modules.Radio.Presentation
                 " · " + AvNum.Fixed(manager.DeckTrackCount, 0) + " TRK";
         }
 
-        // -------------------------------------------------------------------------- shared text
-
-        private static string ModeText() =>
-            manager == null ? "AUTO" : manager.Mode == ReceiverMode.Fm ? "FM" : manager.Mode == ReceiverMode.Am ? "AM" : "AUTO";
-
-        private static string StepText(RadioBand band)
-        {
-            int step = RadioBands.Step(band);
-            return step >= 1000
-                ? AvNum.Fixed(step / 1000f, step % 1000 == 0 ? 0 : 1) + " MHz"
-                : AvNum.Fixed(step, 0) + " kHz";
-        }
-
-        /// <summary>"1 - 5 OF 12": a paged list reads as a range even when it is one page.</summary>
         private static string RangeText(int page, int perPage, int count, string empty)
         {
             if (count <= 0) return empty;
@@ -773,342 +375,7 @@ namespace BoscaliSummer.Modules.Radio.Presentation
             return AvNum.Fixed(first, 0) + " - " + AvNum.Fixed(last, 0) + " OF " + AvNum.Fixed(count, 0);
         }
 
-        private static string BandRangeText()
-        {
-            if (manager == null || !manager.HasChannels) return "TUNE TO A STATION";
-            RadioBand band = manager.TunedDial.Band;
-            return RadioBands.Format(band, RadioBands.Min(band)) + " - " + RadioBands.Format(band, RadioBands.Max(band)) +
-                " " + RadioBands.UnitText(band) + " · " + RadioBands.BandText(band);
-        }
-
-        private static string StationNameAt(RadioBand band, int kilohertz)
-        {
-            if (manager == null) return null;
-            for (int i = 0; i < manager.ChannelCount; i++)
-            {
-                RadioDial dial = manager.GetChannelDial(i);
-                if (dial.Band == band && dial.Kilohertz == kilohertz) return manager.GetChannelName(i);
-            }
-            return null;
-        }
-
-        /// <summary>The hover note's strength word, matching the preset row's own reading.</summary>
-        private static string StationStrengthAt(RadioBand band, int kilohertz)
-        {
-            if (manager == null) return null;
-            for (int i = 0; i < manager.ChannelCount; i++)
-            {
-                RadioDial dial = manager.GetChannelDial(i);
-                if (dial.Band != band || dial.Kilohertz != kilohertz) continue;
-                if (manager.GetChannelOffAir(i)) return "OFF AIR";
-                if (!manager.GetChannelHasTransmitter(i)) return AvNum.Fixed(manager.GetChannelTrackCount(i), 0) + " TRK";
-                float strength = Mathf.Clamp01(manager.GetChannelStrength(i));
-                return strength >= 0.7f ? "STRONG" : strength >= 0.35f ? "FAIR" : "WEAK";
-            }
-            return null;
-        }
-
-        private static int FractionToKhz(float fraction)
-        {
-            RadioBand band = manager == null ? RadioBand.Fm : manager.TunedDial.Band;
-            int min = RadioBands.Min(band);
-            int max = RadioBands.Max(band);
-            return min + Mathf.RoundToInt(Mathf.Clamp01(fraction) * (max - min));
-        }
-
-        // ------------------------------------------------------------------------- local parts
-
-        /// <summary>
-        /// The band scope: the data-viz <see cref="RadioWaterfall"/> hosted inside a kit v2
-        /// <see cref="AvPart"/>, plus a ruler, station markers and the needle that is also the
-        /// tuning control (hover to preview, click to tune). It is the growing part of the RECEIVER
-        /// page: the waterfall takes whatever height the page leaves over. Kit gap: nothing in v2
-        /// combines a scrolled texture with pointer-driven ruler input, so this is built locally from
-        /// primitives (<see cref="AvLay"/>, <see cref="AvText"/>) and the existing data-viz
-        /// waterfall, per the module's data-viz allowlist.
-        /// </summary>
-        private sealed class BandScopePart : AvPart
-        {
-            private const float HeadH = 15f;
-            private const float Top = HeadH + 3f;
-            private const float WaterfallMin = 44f;
-            private const float RulerH = 34f;
-            private const float Gap = 6f;
-            private const float SweepSeconds = 0.45f;
-
-            private readonly TMP_Text key, note;
-            private RadioWaterfall waterfall;
-            private RectTransform tickLayer;
-            private RectTransform markerLayer;
-            private Image needle;
-            private Image hoverCursor;
-            private RectTransform hitRect;
-
-            private RadioBand builtBand = (RadioBand)(-1);
-            private float width;
-            private float waterfallH = WaterfallMin;
-            private float builtW = -1f, builtH = -1f;
-            private int hoverKhz = int.MinValue;
-            private int markerRevision = -1;
-            private string idleNote = string.Empty;
-            private RadioDial shownDial;
-            private bool dialInitialized;
-            private bool sweeping;
-            private float sweepStart, sweepFrom, sweepTo;
-
-            private float RulerTop => Top + waterfallH + Gap;
-            private float ScopeHeight => RulerTop + RulerH;
-
-            public BandScopePart(RectTransform parent)
-            {
-                Rect = AvLay.Child(parent, "BandScope");
-                key = AvText.Make(Rect, "Key", AvTextRole.Micro, "// BAND SCOPE");
-                AvText.Fit(key, false);
-                note = AvText.Make(Rect, "Note", AvTextRole.Micro, string.Empty, TextAlignmentOptions.MidlineRight);
-                AvText.Fit(note, false);
-                Restyle();
-            }
-
-            public override float Measure(float w) => Top + WaterfallMin + Gap + RulerH;
-
-            public override void Place(AvSlot s)
-            {
-                base.Place(s);
-                width = s.W;
-                waterfallH = Mathf.Max(WaterfallMin, s.H - Top - Gap - RulerH);
-                AvLay.Place(key.rectTransform, 0f, 0f, s.W * 0.4f, HeadH);
-                AvLay.Place(note.rectTransform, s.W * 0.4f, 0f, s.W * 0.6f, HeadH);
-
-                var area = new Rect(0f, -Top, s.W, waterfallH);
-                if (waterfall == null) waterfall = new RadioWaterfall(Rect, area, RadioSpectrum.DefaultBins, 48);
-                else if (Mathf.Abs(builtW - s.W) > 0.5f || Mathf.Abs(builtH - waterfallH) > 0.5f) waterfall.Resize(area);
-
-                if (Mathf.Abs(builtW - s.W) > 0.5f || Mathf.Abs(builtH - waterfallH) > 0.5f || tickLayer == null)
-                {
-                    BuildTicks(manager == null ? RadioBand.Fm : manager.TunedDial.Band, s.W);
-                    RefreshMarkers();
-                }
-                builtW = s.W;
-                builtH = waterfallH;
-                EnsureChrome();
-                PlaceNeedle(manager == null || !manager.HasChannels ? 0f : manager.TunedDial.Fraction);
-                shownDial = manager == null ? default : manager.TunedDial;
-                dialInitialized = true;
-                idleNote = BandRangeText();
-                if (hoverKhz == int.MinValue) SetNote(idleNote);
-
-                if (hitRect == null)
-                {
-                    Image hit = AvLay.Solid(Rect, "Hit", Color.clear);
-                    hit.raycastTarget = true;
-                    hitRect = hit.rectTransform;
-                    var input = hit.gameObject.AddComponent<RadioScopeInput>();
-                    input.Area = hitRect;
-                    input.Moved = OnHover;
-                    input.Exited = OnExit;
-                    input.Clicked = OnClick;
-                    AvHelpTip.Attach(hit.gameObject, "Band scope: the waterfall of the band, newest signal on top. Hover to preview a channel, " +
-                        "click to tune to it. Coloured ticks below the ruler are stations; the bright needle is your dial.");
-                }
-                AvLay.Place(hitRect, 0f, Top, s.W, ScopeHeight - Top);
-            }
-
-            public override void Restyle()
-            {
-                key.color = AvStyleHost.FuiInk("metric-key", AvTheme.RailInfo);
-                note.color = AvStyleHost.FuiInk("section-caption", AvTheme.Disabled);
-            }
-
-            private void SetNote(string text)
-            {
-                if (note.text != text) note.text = text ?? string.Empty;
-            }
-
-            public void Animate()
-            {
-                if (manager == null) return;
-                RadioDial dial = manager.TunedDial;
-                if (dial.Band != builtBand) { BuildTicks(dial.Band, width); RefreshMarkers(); }
-
-                string idle = BandRangeText();
-                if (idle != idleNote)
-                {
-                    idleNote = idle;
-                    if (hoverKhz == int.MinValue) SetNote(idleNote);
-                }
-
-                if (!dial.Equals(shownDial))
-                {
-                    if (dialInitialized && !manager.FineTuning && dial.Band == shownDial.Band)
-                    {
-                        sweeping = true;
-                        sweepStart = Time.unscaledTime;
-                        sweepFrom = shownDial.Fraction;
-                        sweepTo = dial.Fraction;
-                    }
-                    else PlaceNeedle(dial.Fraction);
-                    shownDial = dial;
-                    dialInitialized = true;
-                }
-
-                if (sweeping)
-                {
-                    float t = (Time.unscaledTime - sweepStart) / SweepSeconds;
-                    if (t >= 1f) { sweeping = false; PlaceNeedle(sweepTo); }
-                    else PlaceNeedle(Mathf.Lerp(sweepFrom, sweepTo, t * t * (3f - 2f * t)));
-                }
-
-                waterfall?.Push(manager.Spectrum);
-                if (markerRevision != manager.StationRevision) RefreshMarkers();
-            }
-
-            public void Dispose() => waterfall?.Dispose();
-
-            private void EnsureChrome()
-            {
-                if (needle != null) return;
-                needle = AvLay.Solid(Rect, "Needle", AvTheme.Accent);
-                hoverCursor = AvLay.Solid(Rect, "HoverCursor", AvTheme.Accent.WithAlpha(0.7f));
-                hoverCursor.enabled = false;
-            }
-
-            private void BuildTicks(RadioBand band, float w)
-            {
-                if (tickLayer != null) UnityEngine.Object.Destroy(tickLayer.gameObject);
-                if (markerLayer != null) UnityEngine.Object.Destroy(markerLayer.gameObject);
-                tickLayer = AvLay.Child(Rect, "Ticks");
-                AvLay.Place(tickLayer, 0f, 0f, w, ScopeHeight);
-                markerLayer = AvLay.Child(Rect, "Markers");
-                AvLay.Place(markerLayer, 0f, 0f, w, ScopeHeight);
-
-                builtBand = band;
-                width = w;
-                hoverKhz = int.MinValue;
-                if (hoverCursor != null) hoverCursor.enabled = false;
-                markerRevision = -1;
-
-                int min = RadioBands.Min(band), max = RadioBands.Max(band), step = Math.Max(1, RadioBands.Step(band));
-                int span = Math.Max(1, max - min);
-                int minorStep = Math.Max(step, span / 60 / step * step);
-                int labelStep = band == RadioBand.Mw ? 200 : 2000;
-                float rulerTop = RulerTop;
-
-                for (int khz = min; khz <= max; khz += minorStep)
-                {
-                    bool major = (khz - min) % labelStep == 0;
-                    float x = TickX(khz, min, max, w);
-                    Image tick = AvLay.Solid(tickLayer, "Tick", AvTheme.Hairline.WithAlpha(major ? 0.55f : 0.28f));
-                    AvLay.Place(tick.rectTransform, x, rulerTop, 1f, major ? 10f : 6f);
-                    if (!major) continue;
-
-                    TMP_Text label = AvText.Make(tickLayer, "Label", AvTextRole.Micro, RadioBands.Format(band, khz));
-                    float labelLeft = Mathf.Clamp(x - 26f, 0f, Mathf.Max(0f, w - 52f));
-                    AvLay.Place(label.rectTransform, labelLeft, rulerTop + 12f, 52f, 18f);
-                    label.alignment = x <= 26f ? TextAlignmentOptions.MidlineLeft
-                        : x >= w - 26f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Center;
-                    label.color = AvTheme.Dim;
-                }
-            }
-
-            private void RefreshMarkers()
-            {
-                if (manager == null || markerLayer == null) return;
-                for (int i = markerLayer.childCount - 1; i >= 0; i--)
-                    UnityEngine.Object.Destroy(markerLayer.GetChild(i).gameObject);
-
-                int min = RadioBands.Min(builtBand), max = RadioBands.Max(builtBand);
-                float rulerTop = RulerTop;
-                for (int i = 0; i < manager.ChannelCount; i++)
-                {
-                    RadioDial dial = manager.GetChannelDial(i);
-                    if (dial.Band != builtBand) continue;
-                    float x = TickX(dial.Kilohertz, min, max, width);
-                    float strength = Mathf.Clamp01(manager.GetChannelStrength(i));
-                    Color c = Color.Lerp(AvTheme.RailInert, manager.GetChannelColor(i), 0.25f + 0.75f * strength);
-                    Image mark = AvLay.Solid(markerLayer, "Marker", c);
-                    AvLay.Place(mark.rectTransform, Mathf.Clamp(x - 3f, 0f, Mathf.Max(0f, width - 6f)), rulerTop, 6f, 12f);
-                }
-                markerRevision = manager.StationRevision;
-            }
-
-            private static float TickX(int khz, int min, int max, float w) =>
-                Mathf.Clamp01((khz - min) / (float)Math.Max(1, max - min)) * Mathf.Max(0f, w - 1f);
-
-            private void PlaceNeedle(float fraction)
-            {
-                if (needle == null) return;
-                float x = Mathf.Clamp01(fraction) * Mathf.Max(0f, width - 2f);
-                AvLay.Place(needle.rectTransform, x, Top, 2f, ScopeHeight - Top);
-            }
-
-            private void OnHover(float fraction)
-            {
-                if (manager == null) return;
-                RadioBand band = manager.TunedDial.Band;
-                int khz = RadioDialTuning.Nearest(band, FractionToKhz(fraction)).Kilohertz;
-                if (khz != hoverKhz)
-                {
-                    hoverKhz = khz;
-                    string name = StationNameAt(band, khz);
-                    string strength = name == null ? null : StationStrengthAt(band, khz);
-                    SetNote("> " + RadioBands.Format(band, khz) + " " + RadioBands.UnitText(band) +
-                        " · " + (name ?? "NO STATION") + (strength == null ? string.Empty : " · " + strength));
-                }
-                if (hoverCursor != null)
-                {
-                    int min = RadioBands.Min(builtBand), max = RadioBands.Max(builtBand);
-                    float x = TickX(khz, min, max, width);
-                    AvLay.Place(hoverCursor.rectTransform, x - 0.5f, Top, 1f, ScopeHeight - Top);
-                    hoverCursor.enabled = true;
-                }
-            }
-
-            private void OnExit()
-            {
-                hoverKhz = int.MinValue;
-                if (hoverCursor != null) hoverCursor.enabled = false;
-                SetNote(idleNote);
-            }
-
-            private void OnClick(float fraction)
-            {
-                manager?.TuneTo(FractionToKhz(fraction));
-            }
-        }
-    }
-
-    /// <summary>
-    /// Turns pointer positions over the band scope into a fraction of the ruler, so the scope
-    /// itself is the tuning control. A plain pointer handler, not a Selectable, so it never
-    /// takes navigation focus from the flight controls.
-    /// </summary>
-    internal sealed class RadioScopeInput : MonoBehaviour, IPointerMoveHandler, IPointerClickHandler, IPointerExitHandler
-    {
-        public RectTransform Area;
-        public Action<float> Moved;
-        public Action<float> Clicked;
-        public Action Exited;
-
-        public void OnPointerMove(PointerEventData eventData) =>
-            Moved?.Invoke(Fraction(eventData, eventData.enterEventCamera));
-
-        public void OnPointerClick(PointerEventData eventData)
-        {
-            if (eventData.button != PointerEventData.InputButton.Left) return;
-            Clicked?.Invoke(Fraction(eventData, eventData.pressEventCamera));
-            AvInput.Deselect(gameObject);
-        }
-
-        public void OnPointerExit(PointerEventData eventData) => Exited?.Invoke();
-
-        private float Fraction(PointerEventData eventData, Camera camera)
-        {
-            if (Area == null) return 0f;
-            if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                    Area, eventData.position, camera, out Vector2 local))
-                return 0f;
-            float width = Mathf.Max(1f, Area.rect.width);
-            return Mathf.Clamp01(local.x / width);
-        }
+        private static void Gate(AvControl control, bool enabled, string yes, string no)
+        { control.Interactable = enabled; SetHelp(control, enabled ? yes : no); }
     }
 }

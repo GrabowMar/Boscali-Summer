@@ -556,14 +556,16 @@ namespace BoscaliSummer.Modules.Support.Runtime
         /// module has to install first. Exactly 1 when Events is absent or the theater is calm.
         /// </summary>
         internal static float EventsCostMultiplier(Player player) =>
-            player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
+            (CommandPlatform.Is(player) ? CommandPlatform.CostFactor : 1f) *
+            (player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
                 ? events.SupportCostMultiplierFor(PlayerIdentity.Of(player))
-                : 1f;
+                : 1f);
 
         internal static float EventsCooldownMultiplier(Player player) =>
-            player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
+            (CommandPlatform.Is(player) ? CommandPlatform.CooldownFactor : 1f) *
+            (player != null && ModuleServices.TryGet<IActiveEventsView>(out IActiveEventsView events)
                 ? events.SupportCooldownMultiplierFor(PlayerIdentity.Of(player))
-                : 1f;
+                : 1f);
 
         private bool TryArmMap(string prompt)
         {

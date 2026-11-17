@@ -42,6 +42,7 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private Coroutine pendingCoroutine;
         private int loadGeneration;
         private float volume = 1f;
+        private bool muted;
         private float crossfadeSeconds = 1.5f;
         private float currentGain = 1f, incomingGain = 1f; // loudness levelling per clip (Loudness.Gain)
 
@@ -96,12 +97,23 @@ namespace BoscaliSummer.Modules.Radio.Runtime
                 currentSource.volume = Level(currentGain);
         }
 
+        /// <summary>Radio damage silences every current/incoming source, including a crossfade already running.</summary>
+        public void SetMuted(bool value)
+        {
+            muted = value;
+            if (value)
+            {
+                if (currentSource != null) currentSource.volume = 0f;
+                if (incomingSource != null) incomingSource.volume = 0f;
+            }
+        }
+
         /// <summary>
         /// Knob × levelling × the game's own Master and Music sliders. The sources sit off the game's
         /// mixer (see <see cref="Prepare"/>), so the sliders are applied here instead.
         /// </summary>
         private float Level(float gain) =>
-            volume * gain * AudioMixerVolume.GetPref(AudioMixerVolume.Master) * AudioMixerVolume.GetPref(AudioMixerVolume.Music);
+            muted ? 0f : volume * gain * AudioMixerVolume.GetPref(AudioMixerVolume.Master) * AudioMixerVolume.GetPref(AudioMixerVolume.Music);
 
         public void SetCrossfade(float seconds) => crossfadeSeconds = Mathf.Max(0f, seconds);
 

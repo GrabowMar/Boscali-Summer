@@ -51,7 +51,7 @@ namespace BoscaliSummer.Modules.Skylark
                 damagedWingHp = skin.Where(s => s.owner == "wing1_L").Select(s => s.hp).DefaultIfEmpty(-1f).Min(),
                 neighborWingHp = skin.Where(s => s.owner == "wing1_R").Select(s => s.hp).DefaultIfEmpty(-1f).Min(),
                 ejected = aircraft.HasEjected(), canopyUpSpeed = canopies.Where(c => c != null).Select(c => SkylarkTemplate.Get<Rigidbody>(c, "rb"))
-                    .Where(rb => rb != null).Select(rb => rb.velocity.y).DefaultIfEmpty(0f).Max(),
+                    .Where(rb => rb != null).Select(rb => rb.velocity.y - aircraft.rb.velocity.y).DefaultIfEmpty(0f).Max(), // relative: the airframe may be sinking
                 pilots, separatedPilots = pilots.Count(p => !p.onRail && p.separation > 3f),
                 unparentedCanopies = canopies.Count(c => c != null && c.ejectionTransform != null && c.ejectionTransform.parent == null),
                 collision = new { crossAssemblyPairs, crossAssemblyIgnored, detachedInternalPairs, detachedInternalIgnored },

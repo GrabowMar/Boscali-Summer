@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using System.Collections;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -12,11 +13,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
     /// 2. HUD scramble, target marker corruption, and attitude ladder jitter.
     /// 3. Cockpit MFD screen flicker and reboot glitch.
     /// 4. Dashboard electrical spark flashes and camera electromagnetic jolt.
-    /// 5. Procedurally synthesized static, spark pops, and 400Hz avionics failure squeal.
+    /// 5. One recorded cockpit electrical failure loop on the effects mixer.
     /// </summary>
     internal sealed class CockpitEmpDisruption : MonoBehaviour
     {
-        private const int SampleRate = 44100;
+        private const string VoiceId = "cockpit-emp";
         private const float E1Window = 0.3f;
         private const float E2Window = 2.6f;
         private static AudioClip staticAudioClip;
@@ -49,7 +50,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private float disruptionDuration;
         private float currentSeverity;
         private AudioSource staticSource;
-        private AudioSource radioStaticSource;
+        private bool loopActive;
         private Light cockpitSparkLight;
         private VirtualMFD virtualMfd;
         private Coroutine disruptionRoutine;
@@ -87,28 +88,17 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 staticSource = gameObject.AddComponent<AudioSource>();
                 staticSource.clip = staticAudioClip;
                 staticSource.spatialBlend = 0f; // Direct 2D in-headset audio
+                staticSource.playOnAwake = false;
                 staticSource.volume = 0.85f;
                 staticSource.loop = true;
             }
 
-            if (staticSource != null && !staticSource.isPlaying)
+            var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
+            if (staticAudioClip != null && mixer != null && !staticSource.isPlaying && FxVoiceBus.TryStartLoop(VoiceId))
             {
+                staticSource.outputAudioMixerGroup = mixer;
+                loopActive = true;
                 staticSource.Play();
-            }
-
-            // Radio static noise layer from game assets
-            if (radioStaticSource == null && GameAssets.i?.radioStatic != null)
-            {
-                radioStaticSource = gameObject.AddComponent<AudioSource>();
-                radioStaticSource.clip = GameAssets.i.radioStatic;
-                radioStaticSource.spatialBlend = 0f;
-                radioStaticSource.volume = 0.75f;
-                radioStaticSource.loop = true;
-            }
-
-            if (radioStaticSource != null && !radioStaticSource.isPlaying)
-            {
-                radioStaticSource.Play();
             }
 
             // Initial camera jolt
@@ -211,12 +201,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
                         staticSource.volume = 0.85f * (0.35f + 0.65f * Mathf.Max(prompt, intermediate));
                     }
 
-                    if (radioStaticSource != null)
-                    {
-                        radioStaticSource.volume = 0.75f *
-                            (0.25f + 0.75f * Mathf.Max(intermediate, late * 0.35f));
-                    }
-
                     yield return null;
                 }
             }
@@ -234,16 +218,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 }
             }
 
-            // Cleanup
-            if (staticSource != null && staticSource.isPlaying)
-            {
-                staticSource.Stop();
-            }
-
-            if (radioStaticSource != null && radioStaticSource.isPlaying)
-            {
-                radioStaticSource.Stop();
-            }
+            StopAudio();
 
             if (cockpitSparkLight != null)
             {
@@ -254,39 +229,21 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private static void EnsureAudio()
         {
-            if (staticAudioClip != null) return;
-
-            int length = (int)(SampleRate * 3.5f);
-            float[] samples = new float[length];
-
-            for (int i = 0; i < length; i++)
-            {
-                float t = i / (float)SampleRate;
-
-                // Cockpit radio static noise
-                float whiteNoise = (UnityEngine.Random.value * 2f - 1f) * 0.42f;
-
-                // 400Hz aircraft avionics bus failure squeal (collapsing frequency)
-                float squealFreq = Mathf.Lerp(420f, 60f, Mathf.Clamp01(t / 2.8f));
-                float squeal = Mathf.Sin(2f * Mathf.PI * squealFreq * t) * 0.25f;
-
-                // 60Hz power transformer hum
-                float hum = Mathf.Sin(2f * Mathf.PI * 60f * t) * 0.2f;
-
-                // Electrical circuit breaker spark pops
-                float pop = UnityEngine.Random.value > 0.982f
-                    ? (UnityEngine.Random.value * 2f - 1f) * 0.85f
-                    : 0f;
-
-                samples[i] = Mathf.Clamp(whiteNoise + squeal + hum + pop, -1f, 1f);
-            }
-
-            staticAudioClip = AudioClip.Create("EmpCockpitStatic", length, 1, SampleRate, false);
-            staticAudioClip.SetData(samples, 0);
+            if (staticAudioClip == null) staticAudioClip = SfxClips.Get("emp-cockpit-static");
         }
+
+        private void StopAudio()
+        {
+            if (staticSource != null) staticSource.Stop();
+            if (loopActive) FxVoiceBus.EndLoop(VoiceId);
+            loopActive = false;
+        }
+
+        private void OnDisable() => StopAudio();
 
         private void OnDestroy()
         {
+            StopAudio();
             if (cockpitSparkLight != null) Destroy(cockpitSparkLight.gameObject);
         }
     }

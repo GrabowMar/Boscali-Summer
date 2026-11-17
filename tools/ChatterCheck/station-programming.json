@@ -1,0 +1,421 @@
+{
+  "name": "radio-breaks",
+  "description": "Civil stations air music, adverts and news; Base Broadcast uses the same mercenary programming for every faction.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "timescale": 1,
+  "_note": "Exercises real embedded clip decoding and RadioProgram playback. Each forced song end starts one advert/news item directly, with no host/ident/sting chain. Faction arguments remain compatibility inputs and must not change Base Broadcast's bb-pmc set. Military receive remains independent when station music stops. Does not establish multiplayer behavior or subjective audio quality. Warm runs retain legitimate station cursors. After tuning, wait for a real music phase and completed decode before forcing its end; a resumed advert/news item may already be airing. Never infer phase from an arbitrary three-second delay.",
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      }
+    }
+  },
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        0,
+        130000
+      ],
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit",
+      "timeout": 30
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 8
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "station": "agrapol-fm",
+        "receive": true,
+        "music_volume": 0.55
+      },
+      "store": "br_start"
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.IsTalking",
+      "eq": false,
+      "timeout_s": 35
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.receiver.IsPlaying",
+      "eq": true,
+      "timeout_s": 10
+    },
+    {
+      "op": "wait",
+      "seconds": 4
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "br_music"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "advance": true
+      },
+      "store": "br_ad_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "br_ad"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "advance": true
+      },
+      "store": "br_song2"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "advance": true
+      },
+      "store": "br_news_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "br_news"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "station": "maris-network"
+      },
+      "store": "ps_start"
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.IsTalking",
+      "eq": false,
+      "timeout_s": 35
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.receiver.IsPlaying",
+      "eq": true,
+      "timeout_s": 10
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "ps_music"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "advance": true
+      },
+      "store": "ps_ad_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "ps_ad"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "station": "base-broadcast",
+        "faction": "Boscali"
+      },
+      "store": "bb_start"
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.IsTalking",
+      "eq": false,
+      "timeout_s": 35
+    },
+    {
+      "op": "wait_until",
+      "path": "BoscaliSummer.Modules.Radio.Runtime.RadioManager.active.receiver.IsPlaying",
+      "eq": true,
+      "timeout_s": 10
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "bb_music"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "advance": true
+      },
+      "store": "bb_ad_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state",
+        "faction": "Boscali"
+      },
+      "store": "bb_boscali"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state",
+        "faction": "Primeva"
+      },
+      "store": "bb_pala"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state",
+        "faction": "PMC"
+      },
+      "store": "bb_pmc"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "stopped"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "off"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "br_music.set",
+      "value": "br"
+    },
+    {
+      "check": "result_equals",
+      "path": "br_music.segment",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "br_music.source_playing",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "br_ad.segment",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "br_ad.queued",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "br_ad.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_above",
+      "path": "br_ad.duration",
+      "min": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "br_news.segment",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "br_news.queued",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "br_news.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_equals",
+      "path": "ps_ad.set",
+      "value": "ps"
+    },
+    {
+      "check": "result_equals",
+      "path": "ps_ad.segment",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ps_ad.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_boscali.set",
+      "value": "bb-pmc"
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_pala.set",
+      "value": "bb-pmc"
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_pmc.set",
+      "value": "bb-pmc"
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_boscali.segment",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_boscali.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_equals",
+      "path": "off.source_playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "off.receive_military",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "off.deck_engaged",
+      "value": false
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "br_music.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_equals",
+      "path": "ps_music.segment",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "ps_music.state",
+      "value": "Playing"
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_music.segment",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "bb_music.state",
+      "value": "Playing"
+    }
+  ]
+}

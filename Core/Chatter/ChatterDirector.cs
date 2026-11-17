@@ -32,18 +32,22 @@ namespace BoscaliSummer.Core.Chatter
         /// <summary>What <c>&lt;lead&gt;</c> reads as.</summary>
         public string Lead = "Lead";
         public Action<ChatterAired> Aired;
+        /// <summary>Optional preparation gate (recordings loading). Required reports wait without expiring.</summary>
+        public Func<bool> Ready;
 
         private sealed class Entry
         {
             public ChatterSpeaker Speaker;
             public ChatterPriority Priority;
-            public string Key, Event, LineId, Text;
+            public string Key, Event, LineId, Text, Role;
+            public bool Important;
             public float Born;
             public int Exchange;
         }
 
         private readonly List<Entry> pending = new List<Entry>(Capacity);
         private readonly Dictionary<string, float> lastAired = new Dictionary<string, float>(StringComparer.Ordinal);
+        private readonly Dictionary<string, float> lastCategory = new Dictionary<string, float>(StringComparer.Ordinal);
         private readonly Dictionary<string, HashSet<string>> used = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         private readonly HashSet<string> usedExchanges = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<ChatterLineDef> scratch = new List<ChatterLineDef>();
@@ -54,6 +58,7 @@ namespace BoscaliSummer.Core.Chatter
         private float busyUntil = float.NegativeInfinity;
         private float scriptedUntil = float.NegativeInfinity;
         private ChatterPriority onAir;
+        private bool importantOnAir;
         private ChatterExchangeDef exchange;
         private ChatterSpeaker[] cast;
         private int exchangeSerial, exchangeStep;
@@ -76,6 +81,7 @@ namespace BoscaliSummer.Core.Chatter
         {
             pending.Clear();
             lastAired.Clear();
+            lastCategory.Clear();
             used.Clear();
             usedExchanges.Clear();
             Log.Clear();
@@ -84,6 +90,7 @@ namespace BoscaliSummer.Core.Chatter
             busyUntil = float.NegativeInfinity;
             scriptedUntil = float.NegativeInfinity;
             onAir = default;
+            importantOnAir = false;
             LastUrgent = float.NegativeInfinity;
             exchange = null;
             cast = null;
@@ -100,14 +107,22 @@ namespace BoscaliSummer.Core.Chatter
             if (!Library.Events.TryGetValue(evt, out ChatterEventDef def)) { Unknown.Add(evt); return false; }
             if (Level == ChatterLevel.Essential && def.Priority == ChatterPriority.Ambient) return false;
             key = key ?? evt + ":" + speaker.Id;
-            if (Repeat(now, key)) return false;
+            bool important = Important(evt) || evt.StartsWith("command.event.", StringComparison.Ordinal) && def.Priority == ChatterPriority.Emergency;
+            if (Repeat(now, key, important)) return false;
+            string category = Category(evt, out float cooldown);
+            if (important) category = null;
+            if (category != null && lastCategory.TryGetValue(category, out float at) && now - at < cooldown) return false;
             ChatterLineDef line = Pick(def, speaker, facts);
             if (line == null) return false;
-            return Enqueue(now, new Entry
+            bool accepted = Enqueue(now, new Entry
             {
                 Speaker = speaker, Priority = def.Priority, Key = key, Event = evt, LineId = line.Id,
-                Text = Fill(line.Text, line.Tokens, speaker, facts), Born = now,
+                Text = Fill(line.Text, line.Tokens, speaker, facts), Born = now, Important = important,
+                Role = Fact(facts, "base") ?? Fact(facts, "title") ?? Fact(facts, "runway") ?? Fact(facts, "bra") ??
+                    Fact(facts, "clock") ?? Fact(facts, "target") ?? Fact(facts, "type"),
             });
+            if (accepted && category != null) lastCategory[category] = now;
+            return accepted;
         }
 
         /// <summary>Exact words, for a publisher whose text is made elsewhere (a mission script, a support desk's answer).</summary>
@@ -131,7 +146,7 @@ namespace BoscaliSummer.Core.Chatter
             aired.Priority = ChatterPriority.Tactical;
             aired.Event = "scenario";
             aired.Scripted = true;
-            bool emergency = now < busyUntil && onAir == ChatterPriority.Emergency;
+            bool emergency = now < busyUntil && (onAir == ChatterPriority.Emergency || importantOnAir);
             aired.Cut = Busy(now) && !emergency;
             CancelExchange();
             scriptedUntil = now + aired.Seconds;
@@ -154,10 +169,36 @@ namespace BoscaliSummer.Core.Chatter
             scriptedUntil = float.NegativeInfinity;
         }
 
-        private bool Repeat(float now, string key)
+        private bool Repeat(float now, string key, bool important = false)
         {
             foreach (Entry e in pending) if (e.Key == key) return true;
-            return lastAired.TryGetValue(key, out float at) && now - at < RepeatSeconds;
+            return !important && lastAired.TryGetValue(key, out float at) && now - at < RepeatSeconds;
+        }
+
+        internal static bool Important(string evt) => evt == "command.basetaken" || evt == "command.baselost" || evt == "command.basewithdraw" ||
+            evt == "command.enemybase" || evt == "command.superevent" || evt.StartsWith("command.superevent.", StringComparison.Ordinal);
+
+        private static string Category(string evt, out float seconds)
+        {
+            seconds = 0f;
+            if (Important(evt)) return null;
+            if (evt == "command.shiplost" || evt == "command.shipsunk" || evt == "command.carrierevac") { seconds = 40f; return "ships"; }
+            if (evt == "awacs.splash" || evt == "awacs.friendlydown" || evt == "wing.splash" || evt == "allied.splash" ||
+                evt == "enemy.lastwords" || evt == "enemy.matedown" || evt == "enemy.splash" || evt == "allied.lastwords" || evt == "allied.thanks") { seconds = 18f; return "aircraft"; }
+            if (evt == "command.event" || evt.StartsWith("command.event.", StringComparison.Ordinal)) { seconds = 60f; return "events"; }
+            if (evt == "command.operation") { seconds = 25f; return "operations"; }
+            if (evt == "command.insertion") { seconds = 35f; return "insertions"; }
+            if (evt == "awacs.bandit") { seconds = 22f; return "bandits"; }
+            return null;
+        }
+
+        /// <summary>Turning the receiver off discards waiting traffic, without forgetting the mission or its history.</summary>
+        public void Silence()
+        {
+            pending.Clear();
+            CancelExchange();
+            busyUntil = float.NegativeInfinity;
+            importantOnAir = false;
         }
 
         private bool Enqueue(float now, Entry entry)
@@ -167,12 +208,16 @@ namespace BoscaliSummer.Core.Chatter
                 LastUrgent = now;
                 if (entry.Exchange == 0) CancelExchange();
             }
-            if (pending.Count >= Capacity)
+            int ordinary = 0;
+            foreach (Entry item in pending) if (!item.Important) ordinary++;
+            // Required ownership/superevent reports are retained; only discretionary traffic is capacity limited.
+            if (!entry.Important && ordinary >= Capacity)
             {
                 // Full: the least urgent, oldest line makes room for a more urgent one.
-                int worst = 0;
-                for (int i = 1; i < pending.Count; i++)
-                    if (pending[i].Priority < pending[worst].Priority || pending[i].Priority == pending[worst].Priority && pending[i].Born < pending[worst].Born) worst = i;
+                int worst = -1;
+                for (int i = 0; i < pending.Count; i++)
+                    if (!pending[i].Important && (worst < 0 || pending[i].Priority < pending[worst].Priority || pending[i].Priority == pending[worst].Priority && pending[i].Born < pending[worst].Born)) worst = i;
+                if (worst < 0) { DroppedCount++; return false; }
                 if (pending[worst].Priority >= entry.Priority) { DroppedCount++; return false; }
                 Drop(worst);
             }
@@ -219,20 +264,21 @@ namespace BoscaliSummer.Core.Chatter
         /// </summary>
         public void Tick(float now, Func<ChatterSpeaker, bool> alive = null)
         {
+            if (Ready != null && !Ready()) return;
             if (exchange != null && !stepWaiting && now >= nextStepAt && now >= busyUntil && pending.Count == 0) QueueStep(now);
 
             for (int i = pending.Count - 1; i >= 0; i--)
-                if (now - pending[i].Born > Patience(pending[i].Priority)) Drop(i);
+                if (!pending[i].Important && now - pending[i].Born > Patience(pending[i].Priority)) Drop(i);
 
             while (pending.Count > 0)
             {
                 int best = 0;
                 for (int i = 1; i < pending.Count; i++)
-                    if (pending[i].Priority > pending[best].Priority || pending[i].Priority == pending[best].Priority && pending[i].Born < pending[best].Born) best = i;
+                    if (Rank(pending[i]) > Rank(pending[best]) || Rank(pending[i]) == Rank(pending[best]) && pending[i].Born < pending[best].Born) best = i;
                 Entry e = pending[best];
                 bool busy = Busy(now);
                 ChatterPriority priority = now < busyUntil ? onAir : ChatterPriority.Tactical;
-                if (busy && !(e.Priority >= ChatterPriority.Tactical && e.Priority > priority)) return;
+                if (busy && (importantOnAir || !(e.Priority >= ChatterPriority.Tactical && e.Priority > priority))) return;
                 if (!busy && now < System.Math.Max(busyUntil, scriptedUntil) + GapSeconds && e.Priority < ChatterPriority.Emergency) return;
                 if (alive != null && !alive(e.Speaker)) { Drop(best); continue; }
                 pending.RemoveAt(best);
@@ -246,6 +292,8 @@ namespace BoscaliSummer.Core.Chatter
             float seconds = Airtime(e.Text);
             busyUntil = now + seconds;
             onAir = e.Priority;
+            importantOnAir = e.Important;
+            if (lastAired.Count > 512) lastAired.Clear();
             lastAired[e.Key] = now;
             if (e.Priority >= ChatterPriority.Tactical) LastUrgent = now;
             if (e.Exchange != 0 && e.Exchange == exchangeSerial)
@@ -258,11 +306,14 @@ namespace BoscaliSummer.Core.Chatter
             {
                 Time = now, Net = e.Speaker.Net, Priority = e.Priority, Speaker = e.Speaker.Callsign, SpeakerId = e.Speaker.Id,
                 Event = e.Event, LineId = e.LineId, Text = e.Text, Seconds = seconds, Cut = cut, Persona = e.Speaker.Persona, Character = e.Speaker.Character,
+                Role = e.Role,
             };
             AiredCount++;
             Log.Push(aired);
             Aired?.Invoke(aired);
         }
+
+        private static int Rank(Entry entry) => (entry.Important ? 8 : 0) + (int)entry.Priority;
 
         // ------------------------------------------------------------------ drawing a line
 
@@ -279,6 +330,7 @@ namespace BoscaliSummer.Core.Chatter
             }
             if (scratch.Count == 0) return null;
             string bag = speaker.Id + "|" + def.Id;
+            if (used.Count > 512) used.Clear();
             if (!used.TryGetValue(bag, out HashSet<string> seen)) used[bag] = seen = new HashSet<string>(StringComparer.Ordinal);
             int fresh = 0;
             foreach (ChatterLineDef line in scratch) if (!seen.Contains(line.Id)) fresh++;

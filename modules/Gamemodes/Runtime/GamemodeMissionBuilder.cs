@@ -11,9 +11,9 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
     {
         internal const string BaseMission = "Escalation";
         internal static readonly string[] FuzzballAircraft =
-            { "COIN", "trainer", "VTOLTrainer1", "CAS1", "SmallFighter1", "Fighter1", "Multirole1" };
+            { "COIN", "trainer", "VTOLTrainer1", "BS_Skylark", "CAS1", "SmallFighter1", "Fighter1", "Multirole1" };
         internal static readonly string[] HeavyweightAircraft =
-            { "COIN", "trainer", "VTOLTrainer1", "CAS1", "SmallFighter1", "Fighter1", "Multirole1", "QuadVTOL1", "UtilityHelo1" };
+            { "COIN", "trainer", "VTOLTrainer1", "BS_Skylark", "CAS1", "SmallFighter1", "Fighter1", "Multirole1", "QuadVTOL1", "UtilityHelo1" };
 
         internal static string Title(GameModeKind mode) => mode switch
         {

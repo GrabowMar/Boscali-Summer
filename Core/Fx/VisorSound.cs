@@ -112,10 +112,9 @@ namespace BoscaliSummer.Core.Fx
             {
                 int n = VisorSoundRules.Variants(clip);
                 set = new AudioClip[n];
-                string name = VisorSoundRules.Name(clip);
-                for (int i = 0; i < n; i++) set[i] = SfxClips.Get(name + "-" + i);
                 clips[(int)clip] = set;
             }
+            if (set[variant] == null) set[variant] = SfxClips.Get(VisorSoundRules.Name(clip) + "-" + variant);
             return set[variant];
         }
 
@@ -138,8 +137,22 @@ namespace BoscaliSummer.Core.Fx
             return true;
         }
 
-        /// <summary>Forget every limit (a scene change, the sim's reset).</summary>
-        public static void Reset() => gate.Reset();
+        /// <summary>Stop visor sounds and reset rate limits for a scene change or the sim's reset.</summary>
+        public static void Reset()
+        {
+            gate.Reset();
+            Banner = false;
+            if (sources != null) foreach (AudioSource source in sources) if (source != null) source.Stop();
+        }
+
+        internal static void Shutdown()
+        {
+            Reset();
+            if (sources != null && sources[0] != null) UnityEngine.Object.Destroy(sources[0].gameObject);
+            sources = null;
+            for (int i = 0; i < clips.Length; i++) { clips[i] = null; lastVariant[i] = 0; }
+            voiceProbes.Clear();
+        }
 
 #if !PUBLIC_RELEASE
         /// <summary>The dev-only record of what the visor was asked to play and what happened to it (the sim reads it; the same lines go to the BepInEx log).</summary>

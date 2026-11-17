@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Vanguard
 
         public ModuleMetadata Metadata => Module;
         public Type[] PatchTypes => CorePatchTypes.Concat(TorchBoost.PatchTypes).Concat(SunspearPod.PatchTypes)
-            .Concat(StormcellPod.PatchTypes).Concat(WatchtowerPod.PatchTypes).Concat(MantaStore.PatchTypes).ToArray();
+            .Concat(StormcellPod.PatchTypes).Concat(WatchtowerPod.PatchTypes).Concat(MantaStore.PatchTypes).Concat(Sa74Store.PatchTypes).ToArray();
 
         private static readonly Type[] CorePatchTypes =
         {
@@ -60,6 +60,7 @@ namespace BoscaliSummer.Modules.Vanguard
             StormcellPod.Register(context);    // PCU-9 STORMCELL capacitor pod
             WatchtowerPod.Register(context);   // ASQ-X WATCHTOWER recon pod
             MantaStore.Register(context);      // XQ-90 MANTA heavy escort drone (needs the bundle's REMORA, so it runs last)
+            Sa74Store.Register(context);       // SA-74N strategic gravity bomb, both native cargo slots
             context.AddSceneService<RuntimeStoreService>(55);
             context.AddSceneService<VanguardPricing>(60);
             context.AddSceneService<Presentation.VanguardHudFeeds>(60);

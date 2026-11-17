@@ -1,0 +1,40 @@
+{
+  "name": "vg-sa74-destruction",
+  "description": "Native networked building fixtures at 1 km, 65 km and outside the theater blast edge. Age jumps exercise bounded supplemental collapse and native GPU forest-buffer changes, not real-time pressure propagation.",
+  "timeout_s": 180,
+  "mods": ["boscalisummer"],
+  "ops": [
+    {"op":"spawn","id":"observer","type":"VL-49 Tarantula","faction":"Boscali","at":{"map":[-24500,-17400]},"altitude":3000,"speed":80,"heading":0},
+    {"op":"observe","follow":"observer"},
+    {"op":"wait","seconds":2},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"fixture"},"store":"fixture"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"detonate"},"store":"blast"},
+    {"op":"wait","seconds":1},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":100},"store":"earlyAge"},
+    {"op":"wait","seconds":2},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"early"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":200},"store":"distantAge"},
+    {"op":"wait","seconds":10},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"distant"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":600},"store":"finalAge"},
+    {"op":"wait","seconds":15},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"final"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step","args":{"action":"reset"}},
+    {"op":"wait","seconds":0.1},
+    {"op":"end"}
+  ],
+  "checks": [
+    {"check":"result_equals","path":"fixture.fixtureReady","value":true},
+    {"check":"result_above","path":"fixture.distantDistance","min":54500},
+    {"check":"result_equals","path":"early.nearCollapsed","value":true},
+    {"check":"result_equals","path":"early.distantCollapsed","value":false},
+    {"check":"result_equals","path":"distant.distantCollapsed","value":true},
+    {"check":"result_equals","path":"final.outsideStanding","value":true},
+    {"check":"result_above","path":"final.forestRadius","min":74999},
+    {"check":"result_above","path":"final.nativeForestBurnCount","min":1},
+    {"check":"result_equals","path":"final.nativeForestRemainingCount","value":0},
+    {"check":"result_equals","path":"final.verificationPending","value":false},
+    {"check":"result_below","path":"final.maxDeathsPerFrame","max":8.01},
+    {"check":"result_equals","path":"final.failures","value":0}
+  ]
+}

@@ -450,7 +450,7 @@ namespace BoscaliSummer.Fire
                     BuildingDefinition definition = network.definition as BuildingDefinition;
                     if (definition != null && definition.buildingType == BuildingType.CIV)
                     {
-                        float d = (collider.ClosestPoint(local) - local).sqrMagnitude;
+                        float d = (ClosestBuildingPoint(collider, local) - local).sqrMagnitude;
                         if (d < nearestSq) { nearestSq = d; nearestNetwork = network; nearestMap = null; }
                         continue;
                     }
@@ -458,7 +458,7 @@ namespace BoscaliSummer.Fire
                 MapBuilding map = collider.GetComponentInParent<MapBuilding>();
                 if (map != null)
                 {
-                    float d = (collider.ClosestPoint(local) - local).sqrMagnitude;
+                    float d = (ClosestBuildingPoint(collider, local) - local).sqrMagnitude;
                     if (d < nearestSq) { nearestSq = d; nearestMap = map; nearestNetwork = null; }
                 }
             }
@@ -519,6 +519,12 @@ namespace BoscaliSummer.Fire
                     ? $"Vehicle destruction ignited nearby forest at {anchor}."
                     : $"Vehicle destruction ignited nearby building at {anchor}.");
         }
+
+        private static Vector3 ClosestBuildingPoint(Collider collider, Vector3 position) =>
+            // Native map buildings can use non-convex meshes; Unity rejects ClosestPoint on those and terrain.
+            collider is BoxCollider || collider is SphereCollider || collider is CapsuleCollider ||
+            (collider is MeshCollider mesh && mesh.convex)
+                ? collider.ClosestPoint(position) : collider.bounds.ClosestPoint(position);
 
         private void Ignite(GlobalPosition position, float now, bool forest, int generation = 0,
             bool mergeExisting = true, Building burningBuilding = null, MapBuilding burningMapBuilding = null)

@@ -6,6 +6,7 @@ using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Math;
 using BoscaliSummer.Core.Services;
+using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Chatter.Runtime
@@ -20,7 +21,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
     internal sealed class FlightNets
     {
         public const string Awacs = ChatterStations.Awacs;
-        private const float BanditRange = 60000f, MateRange = 30000f, EnemyGap = 9f, MissileGap = 6f;
+        private const float BanditRange = 60000f, EnemyGap = 9f, MissileGap = 6f;
         private const float PictureRange = 80000f, GroupRadius = 8000f, PictureSeconds = 180f, FriendlyRange = 40000f, AlliedRange = 25000f,
             ThanksRange = 3000f, AlliedGap = 8f, WingmanRange = 2500f;
 
@@ -36,13 +37,17 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private float nextPicture, lastAllied = float.NegativeInfinity;
         private readonly HashSet<uint> called = new HashSet<uint>();
         private readonly List<FactionHQ> headquarters = new List<FactionHQ>();
+        private readonly Dictionary<Airbase, FactionHQ> baseOwners = new Dictionary<Airbase, FactionHQ>();
+        private readonly HashSet<uint> reportedShips = new HashSet<uint>();
+        private FactionHQ playerHq;
         private readonly System.Random rng = new System.Random();
 
         private Aircraft me;
         private MissileWarning warning;
         private ChatterSpeaker tower;
         private bool checkedIn, wasAirborne, grounded = true, alarm, missiles;
-        private float lastEnemy = float.NegativeInfinity, lastMissile = float.NegativeInfinity, levelStart;
+        private float lastEnemy = float.NegativeInfinity, lastMissile = float.NegativeInfinity;
+        private int captureSerial;
         private float gearSince = float.NaN, lastGear = float.NegativeInfinity;
         private int fuelCalled;
 
@@ -56,6 +61,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             Watch(null);
             foreach (FactionHQ hq in headquarters) if (hq != null) hq.onAirbaseAdded -= OnAirbase;
             headquarters.Clear();
+            baseOwners.Clear();
+            reportedShips.Clear();
+            playerHq = null;
             enemies.Clear();
             allies.Clear();
             called.Clear();
@@ -67,20 +75,29 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             lastEnemy = lastMissile = lastGear = float.NegativeInfinity;
             gearSince = float.NaN;
             fuelCalled = 0;
-            levelStart = Time.time;
+            captureSerial = 0;
         }
 
         /// <summary>Every two seconds while the player sits in an aircraft.</summary>
         public void Tick(Aircraft player)
         {
             if (!ReferenceEquals(me, player)) Watch(player);
-            if (me == null || me.NetworkHQ == null) return;
+            if (player != null) playerHq = player.NetworkHQ;
+            else if (GameManager.GetLocalPlayer<Player>(out Player local)) playerHq = local.HQ;
+            if (playerHq == null) return;
             if (headquarters.Count == 0)
-                foreach (FactionHQ hq in UnityEngine.Object.FindObjectsOfType<FactionHQ>())
+            {
+                foreach (FactionHQ hq in FactionRegistry.GetAllHQs())
                 {
+                    if (hq == null) continue;
                     hq.onAirbaseAdded += OnAirbase;
                     headquarters.Add(hq);
                 }
+                if (FactionRegistry.airbaseLookup != null)
+                    foreach (Airbase airbase in FactionRegistry.airbaseLookup.Values)
+                        if (airbase != null && !airbase.AttachedAirbase) baseOwners[airbase] = airbase.CurrentHQ;
+            }
+            if (me == null || me.NetworkHQ == null) return;
             TickGround();
             TickBandits();
             TickPicture();
@@ -214,6 +231,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
             if (nearest == null) return;
             // Called once, whoever says it: a wingman who saw it first uses the same key, and the radio's repeat rule refuses the second call.
+            if (called.Count > 512) called.Clear();
             called.Add(nearest.persistentID.Id);
             Vec3 vel = nearest.rb != null ? Pure(nearest.rb.velocity) : Vec3.Zero;
             string bra = Bra.Format(from, nearestAt, vel, PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Imperial);
@@ -292,8 +310,15 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         /// <summary>A kill message: the player's own kill is confirmed by the AWACS, and an aircraft's pilot or a mate nearby is heard.</summary>
         public void OnKill(PersistentID killerID, PersistentID killedID)
         {
-            if (me == null || me.NetworkHQ == null || !UnitRegistry.TryGetPersistentUnit(killedID, out PersistentUnit victim) || victim.unit is Missile) return;
+            if (!UnitRegistry.TryGetPersistentUnit(killedID, out PersistentUnit victim) || victim.unit is Missile) return;
+            if (victim.unit is Ship ship) { OnShipDisabled(ship); return; }
+            if (me == null || me.NetworkHQ == null) return;
             bool known = UnitRegistry.TryGetPersistentUnit(killerID, out PersistentUnit killer);
+            if (ReferenceEquals(victim.unit, me) && known && killer.unit is Aircraft enemyKiller && enemyKiller.NetworkHQ != me.NetworkHQ)
+            {
+                Enemy("enemy.splash", enemyKiller, 0.5f);
+                return;
+            }
             if (!known || !ReferenceEquals(killer.unit, me))
             {
                 OthersKill(known ? killer : null, victim, killedID);
@@ -301,17 +326,33 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
             if (victim.GetHQ() == me.NetworkHQ) return;
             string type = victim.definition != null ? victim.definition.unitName : victim.unitName;
-            chatter.Raise("awacs.splash", chatter.Station(ChatterNet.Awacs, Awacs), "awacs.splash:" + killedID.Id.ToString(CultureInfo.InvariantCulture),
-                ("target", type));
             if (!(victim.unit is Aircraft down)) return;
-            // A friendly the bandit was chasing says thanks.
-            Aircraft saved = NearestFriendly(down.transform.position, ThanksRange);
-            if (saved != null && rng.NextDouble() < 0.6) Allied("allied.thanks", saved, 1f);
             ChatterSpeaker lost = EnemySpeaker(down);
             lost.CanTalk = null;                // the last transmission goes out whatever became of the aircraft
-            if (rng.NextDouble() < 0.5 && Enemy("enemy.lastwords", down, 1f)) return;
-            Aircraft mate = NearestEnemy(down);
-            if (mate != null) Enemy("enemy.matedown", mate, 1f, ("who", Title(lost.Callsign)));
+            // One loss, one contextual response. Drawing the AWACS call first would consume the shared cooldown
+            // and make the new enemy performances unreachable.
+            if (rng.NextDouble() < 0.35 && Enemy("enemy.lastwords", down, 1f)) return;
+            if (rng.NextDouble() < 0.15)
+            {
+                Aircraft saved = NearestFriendly(down.transform.position, ThanksRange);
+                if (saved != null && Allied("allied.thanks", saved, 1f)) return;
+            }
+            chatter.Raise("awacs.splash", chatter.Station(ChatterNet.Awacs, Awacs), "awacs.splash:" + killedID.Id.ToString(CultureInfo.InvariantCulture),
+                ("target", type));
+        }
+
+        /// <summary>The native disable transition begins flooding: the captain can order evacuation before the hull disappears.</summary>
+        public void OnShipDisabled(Ship ship)
+        {
+            if (ship == null || playerHq == null || ship.NetworkHQ == null) return;
+            uint id = ship.persistentID.Id;
+            if (!reportedShips.Add(id)) return;
+            bool friendly = ship.NetworkHQ == playerHq;
+            bool carrier = ship.GetAirbase() != null;
+            string evt = friendly ? carrier ? "command.carrierevac" : "command.shiplost" : "command.shipsunk";
+            ChatterSpeaker speaker = chatter.Station(ChatterNet.Command, friendly ? carrier ? "CARRIER CAPTAIN" : "SHIP CAPTAIN" : "COMMAND");
+            if (friendly) speaker.Character = "captain";
+            chatter.Raise(evt, speaker, "ship:" + id.ToString(CultureInfo.InvariantCulture), ("target", TypeOf(ship)));
         }
 
         // ------------------------------------------------------------------ allied flights (2026-11-15)
@@ -374,6 +415,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             uint id = aircraft.persistentID.Id;
             if (allies.TryGetValue(id, out ChatterSpeaker speaker)) return speaker;
+            if (allies.Count >= 128) allies.Clear();
             string callsign = AlliedFlights[(id / 4) % AlliedFlights.Length] + " " + (id % 4 + 1).ToString(CultureInfo.InvariantCulture);
             speaker = new ChatterSpeaker("allied:" + id.ToString(CultureInfo.InvariantCulture), ChatterNet.Allied, callsign) { CanTalk = () => aircraft != null && !aircraft.disabled };
             allies[id] = speaker;
@@ -392,30 +434,12 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         {
             uint id = aircraft.persistentID.Id;
             if (enemies.TryGetValue(id, out ChatterSpeaker speaker)) return speaker;
+            if (enemies.Count >= 128) enemies.Clear();
             string callsign = EnemyFlights[(id / 4) % EnemyFlights.Length] + " " + (id % 4 + 1).ToString(CultureInfo.InvariantCulture);
             speaker = new ChatterSpeaker("enemy:" + id.ToString(CultureInfo.InvariantCulture), ChatterNet.Enemy, callsign,
                 EnemyPersonas[(id * 2654435761u >> 16) % EnemyPersonas.Length]) { CanTalk = () => aircraft != null && !aircraft.disabled };
             enemies[id] = speaker;
             return speaker;
-        }
-
-        private Aircraft NearestEnemy(Aircraft lost)
-        {
-            FactionHQ hq = me.NetworkHQ;
-            if (hq.trackingDatabase == null) return null;
-            Aircraft nearest = null;
-            float best = MateRange * MateRange;
-            Vector3 at = lost.transform.position;
-            foreach (KeyValuePair<PersistentID, TrackingInfo> pair in hq.trackingDatabase)
-            {
-                TrackingInfo t = pair.Value;
-                if (t == null || !t.TryGetUnit(out Unit u) || !(u is Aircraft enemy) || u.disabled || ReferenceEquals(u, lost) || u.NetworkHQ != lost.NetworkHQ) continue;
-                float d = (enemy.transform.position - at).sqrMagnitude;
-                if (d >= best) continue;
-                best = d;
-                nearest = enemy;
-            }
-            return nearest;
         }
 
         // ------------------------------------------------------------------ command
@@ -425,11 +449,18 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             try
             {
                 // The game fills the lists while the mission loads: only a change during play is news.
-                if (me == null || airbase == null || airbase.AttachedAirbase || Time.time - levelStart < 15f || airbase.SavedAirbase == null) return;
-                bool ours = airbase.CurrentHQ == me.NetworkHQ;
+                if (playerHq == null || airbase == null || airbase.AttachedAirbase || airbase.SavedAirbase == null) return;
+                bool known = baseOwners.TryGetValue(airbase, out FactionHQ previous);
+                FactionHQ owner = airbase.CurrentHQ;
+                baseOwners[airbase] = owner;
+                if (!known || owner == previous) return;
+                bool ours = owner == playerHq, wasOurs = previous == playerHq;
                 string name = airbase.SavedAirbase.DisplayName;
                 if (string.IsNullOrEmpty(name)) return;
-                chatter.Raise(ours ? "command.basetaken" : "command.baselost", chatter.Station(ChatterNet.Command, "COMMAND"), "base:" + name + ":" + ours, ("base", name));
+                ChatterSpeaker speaker = chatter.Station(ChatterNet.Command, ours || wasOurs ? "GROUND CONTROL" : "COMMAND");
+                if (ours || wasOurs) speaker.Character = "ground";
+                string evt = ours ? "command.basetaken" : wasOurs ? "command.baselost" : "command.enemybase";
+                chatter.Raise(evt, speaker, "base:" + airbase.GetInstanceID() + ":" + ++captureSerial, ("base", name));
             }
             catch (Exception error) { BoscaliSummer.Core.Diagnostics.PatchGuard.Report("Chatter.Airbase", error); }
         }
@@ -444,8 +475,5 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return string.IsNullOrEmpty(type) ? "bandit" : type;
         }
 
-        /// <summary>"VOLK 3" as a line says it: "Volk 3".</summary>
-        private static string Title(string callsign) =>
-            string.IsNullOrEmpty(callsign) ? "" : callsign.Substring(0, 1) + callsign.Substring(1).ToLowerInvariant();
     }
 }

@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -270,27 +271,25 @@ namespace BoscaliSummer.Modules.Support.Visuals
             if (k > 0.02f) csm.ShakeCamera(Mathf.Lerp(0.2f, 3.4f, k * k) * strength, Mathf.Lerp(0.3f, 4.2f, k) * strength);
         }
 
-        // ---- audio synthesis ----------------------------------------------------------------------------------------------
+        // ---- recorded audio ----------------------------------------------------------------------------------------------
 
-        private const int SampleRate = 44100;
-
-        public static AudioClip Clip(string name, float seconds, System.Func<float, float> sample)
+        /// <summary>Local presentation only; the game's effects slider and shared voice limit own every one-shot.</summary>
+        public static void Play(AudioSource source, float delay = 0f)
         {
-            int n = (int)(SampleRate * seconds);
-            var data = new float[n];
-            for (int i = 0; i < n; i++) data[i] = Mathf.Clamp(sample(i / (float)SampleRate), -1f, 1f);
-            var clip = AudioClip.Create(name, n, 1, SampleRate, false);
-            clip.SetData(data, 0);
-            return clip;
+            var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
+            if (source == null || source.clip == null || mixer == null ||
+                !FxVoiceBus.TryOneShot(source.clip.length / Mathf.Max(.1f, Mathf.Abs(source.pitch)) + delay)) return;
+            source.outputAudioMixerGroup = mixer;
+            if (delay > 0f) source.PlayDelayed(delay);
+            else source.Play();
         }
-
-        public static float Noise() => Random.value * 2f - 1f;
 
         public static AudioSource Speaker(GameObject go, AudioClip clip, float min, float max, float volume)
         {
             var s = go.AddComponent<AudioSource>();
             s.clip = clip; s.spatialBlend = 1f; s.minDistance = min; s.maxDistance = max; s.volume = volume;
             s.rolloffMode = AudioRolloffMode.Logarithmic; s.playOnAwake = false;
+            if (SoundManager.i != null) s.outputAudioMixerGroup = SoundManager.i.EffectsMixer;
             return s;
         }
     }

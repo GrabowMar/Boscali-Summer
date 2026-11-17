@@ -4,7 +4,7 @@ using UnityEngine;
 namespace BoscaliSummer.Core.Fx
 {
     /// <summary>
-    /// The voice bus: caps concurrent procedural loops and one-shots so rain + thunder + creaks
+    /// The voice bus: caps concurrent effect loops and one-shots so rain + thunder + creaks
     /// + ambience can never stack into a wall of noise (or voices). Loops register for their
     /// whole Play/Stop span; one-shots hold a slot for their clip length, expired by time.
     /// Refusals return false — the caller stays silent, never queues.

@@ -24,8 +24,8 @@ namespace BoscaliSummer.Modules.Radio
         {
             RadioManager radio = context.AddSceneService<RadioManager>(40);
             radio.Configure(context.Settings.Radio, context.Services);
-            context.AddClientEffect(radio.ClientFx);
             context.AddService<IRadioRemote>(radio);
+            context.AddService<IRadioComms>(radio);
             context.AddSceneService<Presentation.RadioHudLine>(41).Configure(radio);
             new RadioScopeGauge(radio).Register();      // the TAC BOARD's RADIO gauge
         }

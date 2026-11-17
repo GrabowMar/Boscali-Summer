@@ -156,14 +156,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (!v.Active) continue;
                 Aircraft tanker = SkywellBoard.Resolve(v.Tanker);
                 if (tanker == null || tanker.disabled || !tanker.LocalSim) continue;
-                foreach (CargoRamp ramp in tanker.GetComponentsInChildren<CargoRamp>())
-                    if (RampPartField?.GetValue(ramp) is Component part && part != null)
-                        foreach (UnityEngine.Joint joint in part.GetComponents<UnityEngine.Joint>())
-                        {
-                            joint.breakForce = float.PositiveInfinity;
-                            joint.breakTorque = float.PositiveInfinity;
-                        }
+                ReinforceCargoRamps(tanker);
             }
+        }
+
+        internal static void ReinforceCargoRamps(Aircraft tanker)
+        {
+            if (tanker == null || !tanker.LocalSim) return;
+            foreach (CargoRamp ramp in tanker.GetComponentsInChildren<CargoRamp>())
+                if (RampPartField?.GetValue(ramp) is Component part && part != null)
+                    foreach (UnityEngine.Joint joint in part.GetComponents<UnityEngine.Joint>())
+                    {
+                        joint.breakForce = float.PositiveInfinity;
+                        joint.breakTorque = float.PositiveInfinity;
+                    }
         }
 
         // ---- tender and door (render peers)
@@ -337,11 +343,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static void HoldDoor(Rig rig)
         {
             rig.NextDoor = Time.time + 1f;
-            WeaponStation station = SkywellBoard.KitStation(rig.Tanker);
+            HoldCargoDoors(rig.Tanker, SkywellBoard.KitStation(rig.Tanker));
+        }
+
+        internal static void HoldCargoDoors(Aircraft tanker, WeaponStation station)
+        {
             if (station != null)
                 foreach (Weapon w in station.Weapons)
                     if (w is MountedCargo cargo && CargoDoorField?.GetValue(cargo) is BayDoor door && door != null) door.OpenDoor(2f);
-            foreach (CargoRamp ramp in rig.Tanker.GetComponentsInChildren<CargoRamp>())
+            foreach (CargoRamp ramp in tanker.GetComponentsInChildren<CargoRamp>())
                 ramp.OpenDoor(2f);
         }
 

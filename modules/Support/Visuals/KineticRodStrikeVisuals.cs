@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using NuclearOption.Effects;
 using System.Collections.Generic;
 using UnityEngine;
@@ -109,6 +110,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
     internal sealed class KineticRodDescentEffect : MonoBehaviour
     {
         private static AudioClip whine;
+        private string voiceId;
+        private bool loopActive;
         private Renderer[] stock;
         private RodTrailFx trail;
         private Light head;
@@ -127,16 +130,17 @@ namespace BoscaliSummer.Modules.Support.Visuals
             head = l.AddComponent<Light>();
             head.type = LightType.Point; head.color = new Color(1f, 0.93f, 0.8f);
             head.range = 1200f; head.intensity = 60f; head.shadows = LightShadows.None;
-            if (whine == null) whine = BuildWhine();
+            if (whine == null) whine = SfxClips.Get("rod-descent");
+            voiceId = "rod-descent-" + GetInstanceID();
             audioSource = CineFx.Speaker(gameObject, whine, 500f, 60000f, 1f);
             audioSource.loop = true; audioSource.dopplerLevel = 1.5f;
-            audioSource.Play();
+            UpdateAudio();
         }
 
         public void MarkDetonated()
         {
             detonated = true;
-            if (audioSource != null) audioSource.Stop();
+            StopAudio();
             if (head != null) head.enabled = false;
             if (trail != null) { trail.End(); trail = null; }
         }
@@ -144,6 +148,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private void LateUpdate()
         {
             if (detonated || trail == null) return;
+            UpdateAudio();
             Vector3 p = transform.position;
             if (haveLast) trail.Feed(last, p, Time.deltaTime);
             last = p; haveLast = true;
@@ -154,16 +159,37 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void OnDestroy()
         {
+            StopAudio();
             if (trail != null) { trail.End(); trail = null; }
             if (head != null) Destroy(head.gameObject);
         }
 
-        private static AudioClip BuildWhine() => CineFx.Clip("RodWhine", 2f, t =>
+        private void StopAudio()
         {
-            float w = 1000f + 140f * Mathf.Sin(t * 6.28f);
-            float tone = Mathf.Sin(6.2832f * w * t) * 0.07f + Mathf.Sin(6.2832f * w * 1.51f * t) * 0.04f;
-            return CineFx.Noise() * 0.33f + tone;
-        });
+            if (audioSource != null) audioSource.Stop();
+            if (loopActive) FxVoiceBus.EndLoop(voiceId);
+            loopActive = false;
+        }
+
+        private void UpdateAudio()
+        {
+            Camera listener = CineFx.Cam();
+            var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
+            if (audioSource == null || whine == null || mixer == null || listener == null ||
+                (listener.transform.position - transform.position).sqrMagnitude >= audioSource.maxDistance * audioSource.maxDistance)
+            {
+                StopAudio();
+                return;
+            }
+            if (audioSource.outputAudioMixerGroup != mixer) audioSource.outputAudioMixerGroup = mixer;
+            if (!audioSource.isPlaying && FxVoiceBus.TryStartLoop(voiceId))
+            {
+                loopActive = true;
+                audioSource.Play();
+            }
+        }
+
+        private void OnDisable() => StopAudio();
     }
 
     /// <summary>The descent trail: plasma head and wake, spall sparks, and the vapour contrail that stays behind after the rod is gone.</summary>
@@ -361,9 +387,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
             glowLight.transform.position = ground + Vector3.up * 60f;
             float dist = CineFx.CameraDistance(ground);
             shakeAt = Mathf.Min(dist / 1800f, 4f); shakeStrength = s;
-            if (boom == null) boom = BoscaliSummer.Core.Fx.SfxClips.Get("rod-impact") ?? BuildBoom();
+            if (boom == null) boom = SfxClips.Get("rod-impact");
             audioSource.clip = boom; audioSource.transform.position = ground;
-            audioSource.PlayDelayed(Mathf.Clamp(dist / 700f, 0f, 7f));
+            CineFx.Play(audioSource, Mathf.Clamp(dist / 700f, 0f, 7f));
         }
 
         private void Burst(ParticleSystem ps, Vector3 at, float size, float life, Color c) =>
@@ -508,19 +534,5 @@ namespace BoscaliSummer.Modules.Support.Visuals
             }
         }
 
-        private static AudioClip BuildBoom()
-        {
-            float lp = 0f;
-            return CineFx.Clip("RodBoom", 10f, t =>
-            {
-                float crack = CineFx.Noise() * Mathf.Exp(-t * 55f) * 0.95f;
-                float f = Mathf.Lerp(52f, 19f, Mathf.Clamp01(t / 5f));
-                float thump = Mathf.Sin(6.2832f * f * t) * Mathf.Exp(-t * 0.75f) * 0.95f * Mathf.Clamp01(t * 30f);
-                lp += (CineFx.Noise() - lp) * 0.04f;
-                float roar = lp * 3.2f * Mathf.Clamp01(t * 8f) * Mathf.Exp(-t * 0.55f);
-                float patter = Random.value > 0.9993f ? CineFx.Noise() * Mathf.Exp(-(t - 1f) * 0.3f) * (t > 1f ? 0.7f : 0f) : 0f;
-                return crack + thump + roar + patter;
-            });
-        }
     }
 }

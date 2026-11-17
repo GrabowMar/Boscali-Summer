@@ -26,7 +26,7 @@ namespace BoscaliSummer.Modules.Support.Runtime.Actions
             RodGuard.Track(definition);
             if (!SupportTargeting.TryMapPoint(context.Target, out Vector3 ground)) return SupportResult.InvalidTarget;
             bool hasOrigin = SupportTargeting.TryOrigin(context.Player, out Vector3 origin);
-            if (hasOrigin && Vector3.Distance(origin, ground) > context.Settings.MaximumRange.Value) return SupportResult.OutOfRange;
+            if (hasOrigin && Vector3.Distance(origin, ground) > SupportTargeting.MaxRange(context)) return SupportResult.OutOfRange;
 
             int count = StarfallPlan.Count(context.Power);
             var points = new SpaceImpact[count];

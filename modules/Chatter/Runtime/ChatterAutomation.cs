@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Chatter;
+using BoscaliSummer.Core.Contracts;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Chatter.Runtime
@@ -73,6 +74,100 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         }
 
         private static int simYes, simNo;
+        private static int acceptanceSerial;
+
+        /// <summary>Live acceptance of the battlefield receiver. cold restarts the bank and immediately queues a required base report.</summary>
+        public static Dictionary<string, object> Acceptance(Dictionary<string, object> args)
+        {
+            if (!Guard(out ChatterHost host, out Dictionary<string, object> failure)) return failure;
+            string step = args != null && args.TryGetValue("step", out object raw) ? raw as string : "state";
+            int accepted = 0;
+            bool second = false;
+            string key = "acceptance:" + ++acceptanceSerial;
+            ChatterSpeaker Speaker(string role, string callsign)
+            {
+                ChatterSpeaker speaker = host.Station(ChatterNet.Command, callsign);
+                speaker.Character = role;
+                return speaker;
+            }
+            void Raise(string evt, ChatterSpeaker speaker, string suffix, params (string Name, string Value)[] facts)
+            { if (host.Raise(evt, speaker, key + suffix, facts)) accepted++; }
+            switch (step)
+            {
+                case "burst":
+                    host.Director.Reset(17);
+                    ChatterSpeaker ambient = Speaker("command", "COMMAND");
+                    for (int i = 0; i < 32; i++) host.Say(ambient, key + ":ambient:" + i, "Routine traffic awaiting the channel.", ChatterPriority.Ambient);
+                    Raise("command.baselost", Speaker("ground", "GROUND CONTROL"), ":lost", ("base", "HALDEN"));
+                    Raise("command.basetaken", Speaker("ground", "GROUND CONTROL"), ":taken", ("base", "NORTH FIELD"));
+                    Raise("command.enemybase", Speaker("command", "COMMAND"), ":enemy", ("base", "WEST FIELD"));
+                    Raise("command.superevent", Speaker("command", "COMMAND"), ":super1", ("title", "PRIORITY TRAFFIC ONE"));
+                    Raise("command.superevent", Speaker("command", "COMMAND"), ":super2", ("title", "PRIORITY TRAFFIC TWO"));
+                    break;
+                case "cold":
+                    host.ResetForScene();
+                    Raise("command.baselost", Speaker("ground", "GROUND CONTROL"), ":cold", ("base", "COLD START FIELD"));
+                    break;
+                case "reset": host.Director.Reset(17); break;
+                case "nuclear": RadioAftermath.Observe(1, 1, Time.time, 0f); break;
+                case "nuclearreset": RadioAftermath.Reset(); break;
+                case "direct":
+                    second = host.Director.Say(Time.time, Speaker("command", "COMMAND"), key + ":direct", "Direct normal traffic must be silent.", ChatterPriority.Emergency);
+                    accepted = host.Director.StartExchange(Time.time, new[] { new ChatterSpeaker("direct:1", ChatterNet.Wing, "ONE", "veteran"), new ChatterSpeaker("direct:2", ChatterNet.Wing, "TWO", "rookie") }) ? 1 : 0;
+                    break;
+                case "bases":
+                    Raise("command.baselost", Speaker("ground", "GROUND CONTROL"), ":lost", ("base", "HALDEN"));
+                    Raise("command.basetaken", Speaker("ground", "GROUND CONTROL"), ":taken", ("base", "NORTH FIELD"));
+                    Raise("command.enemybase", Speaker("command", "COMMAND"), ":enemy", ("base", "WEST FIELD"));
+                    break;
+                case "super":
+                    Raise("command.superevent", Speaker("command", "COMMAND"), ":super1", ("title", "PRIORITY TRAFFIC ONE"));
+                    Raise("command.superevent", Speaker("command", "COMMAND"), ":super2", ("title", "PRIORITY TRAFFIC TWO"));
+                    break;
+                case "ship":
+                    Raise("command.carrierevac", Speaker("captain", "CARRIER CAPTAIN"), ":carrier", ("target", "FRIENDLY CARRIER"));
+                    second = host.Raise("command.shiplost", Speaker("captain", "SHIP CAPTAIN"), key + ":ship");
+                    break;
+                case "event":
+                    Raise("command.event", Speaker("command", "COMMAND"), ":event1", ("title", "ORDINARY EVENT ONE"));
+                    second = host.Raise("command.event", Speaker("command", "COMMAND"), key + ":event2");
+                    break;
+                case "insertion": Raise("command.insertion", Speaker("paratrooper", "DROP LEAD"), ":insertion"); break;
+                case "aircraft":
+                    Raise("awacs.splash", host.Station(ChatterNet.Awacs, ChatterStations.Awacs), ":air1", ("target", "HOSTILE AIRCRAFT"));
+                    second = host.Raise("awacs.splash", host.Station(ChatterNet.Awacs, ChatterStations.Awacs), key + ":air2");
+                    break;
+            }
+            var recent = new List<object>();
+            var eventCounts = new Dictionary<string, object>();
+            var characterCounts = new Dictionary<string, object>();
+            for (int i = 0; i < host.Director.Log.Count; i++)
+            {
+                ChatterAired line = host.Director.Log[i];
+                string evt = (line.Event ?? "").Replace('.', '_'), character = line.Character ?? "";
+                eventCounts[evt] = eventCounts.TryGetValue(evt, out object events) ? (int)events + 1 : 1;
+                characterCounts[character] = characterCounts.TryGetValue(character, out object characters) ? (int)characters + 1 : 1;
+            }
+            for (int i = Math.Max(0, host.Director.Log.Count - 8); i < host.Director.Log.Count; i++)
+            {
+                ChatterAired line = host.Director.Log[i];
+                recent.Add(new Dictionary<string, object> { ["event"] = line.Event, ["role"] = line.Role ?? "", ["character"] = line.Character ?? "", ["text"] = line.Text });
+            }
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["step"] = step, ["accepted"] = accepted, ["secondAccepted"] = second,
+                ["receiving"] = ChatterHost.Receiving, ["loading"] = host.Voices?.Loading ?? false,
+                ["clips"] = host.Voices?.ClipsReady ?? 0, ["builtInPacks"] = host.Voices?.BuiltInPacks ?? 0,
+                ["voiced"] = host.Voices?.Voiced ?? 0, ["sounding"] = host.Voices?.Sounding ?? false,
+                ["fxSounding"] = ChatterAudio.Sounding,
+                ["nuclearBlackout"] = RadioAftermath.Active,
+                ["level"] = host.Director.Level.ToString(),
+                ["survivors"] = RadioAftermath.SurvivorCalls,
+                ["nextSurvivor"] = RadioAftermath.NextSurvivorAt,
+                ["aired"] = host.Director.AiredCount, ["dropped"] = host.Director.DroppedCount, ["pending"] = host.Director.Pending, ["last"] = recent,
+                ["eventCounts"] = eventCounts, ["characterCounts"] = characterCounts,
+            };
+        }
 
         /// <summary>
         /// The YES/NO questions (2026-11-15). <c>step</c>: ask (COMMAND asks about a made-up contract; its answer only counts), allied (an allied pilot's splash call),

@@ -13,6 +13,8 @@ namespace BoscaliSummer.Core.Contracts
     {
         /// <summary>Host-only morale changes from authored event beats.</summary>
         event Action<int, float> MoraleAwarded;
+        /// <summary>A newly started event on this peer, including a newly replicated event; heartbeat snapshots do not repeat it.</summary>
+        event Action<ActiveEventView> EventStarted;
         /// <summary>True once a mission is running on this peer, host or client.</summary>
         bool Available { get; }
 

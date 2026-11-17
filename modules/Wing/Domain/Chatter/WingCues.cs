@@ -53,7 +53,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
             new WingCue(Maneuvering, Tac, true, true, "detail"), new WingCue(ManeuverDone, Sta),
             new WingCue(FallingBack, Tac, wingWide: true), new WingCue(Rejoining, Sta, wingWide: true),
             new WingCue(Winchester, Sta), new WingCue(OutOfAmmo, Sta), new WingCue(Joker, Sta, false, true, "n"), new WingCue(Bingo, Sta), new WingCue(FallingBehind, Sta),
-            new WingCue(Damaged, Sta), new WingCue(AirframeLost, Tac, false, true, "n"), new WingCue(Ejected, Tac, false, true, "n"), new WingCue(EscortLost, Tac, wingWide: true),
+            new WingCue(Damaged, Tac), new WingCue(AirframeLost, Tac, false, true, "n"), new WingCue(Ejected, Emg, false, true, "n"), new WingCue(EscortLost, Tac, wingWide: true),
         };
 
         public static bool WingWide(string evt)

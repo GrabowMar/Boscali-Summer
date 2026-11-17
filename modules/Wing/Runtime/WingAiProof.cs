@@ -28,7 +28,7 @@ namespace BoscaliSummer.Modules.Wing.Runtime
             string shape = Text(args, "shape");
             if (shape != null && !w.SetShape(shape)) return Failure("WingAiProof", "Call", $"no formation '{shape}'");
             int n = SpawnService.Instance.Call((int)Number(args, "count", 2), null);
-            return new Dictionary<string, object> { { "ok", n > 0 }, { "spawned", n } };
+            return new Dictionary<string, object> { { "ok", n > 0 }, { "spawned", n }, { "toast", Presentation.WingToast.Last ?? "" }, { "error", n > 0 ? null : Presentation.WingToast.Last } };
         }
 
         /// <summary>{verb: move|engage|rtb|formup|shape|call, numbers?: [wingman numbers], element?, x?, z?, alt?, shape?, confirm?, lead?}: one

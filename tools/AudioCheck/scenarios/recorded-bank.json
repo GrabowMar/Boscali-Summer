@@ -1,0 +1,641 @@
+{
+  "name": "recorded-audio-bank",
+  "description": "Native shared recorded bank loading, cache bounds, mixer routing and explicit loop ownership.",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 150,
+  "timescale": 1,
+  "environment": {
+    "config": {
+      "bepinex": {
+        "Logging.Disk": {
+          "WriteUnityLog": true
+        }
+      },
+      "com.marci.boscalisummer": {
+        "Mission": {
+          "AskAtStart": false
+        },
+        "Weather": {
+          "Enabled": true,
+          "RainAudioEnabled": true,
+          "LightningEnabled": false
+        },
+        "Immersion": {
+          "Enabled": true,
+          "PilotBreathingEnabled": true,
+          "WindAudioEnabled": true
+        }
+      }
+    }
+  },
+  "_note": "Load all 110 catalogue effects plus 9 separately maintained radio effects from the built mod. The first load can hit already warm clips; only its complete ready count is asserted. The second load must perform zero decodes and add no cache entries. Unknown IDs must not grow the cache. The explicit probe uses real Unity AudioSources, native interface/effects mixer groups and FxVoiceBus; zero volume and mute stop its loop immediately. Weather is pinned dry and cockpit immersion is disabled to isolate global loop counts. This does not assert subjective audio quality, live trigger semantics, FPS or multiplayer. Run this explicit path after the final asset build; an older built DLL cannot expose these hooks. Both new thunder recordings are also started through the native generic acceptance source and observed sounding, then stopped. These short probes use InterfaceMixer; the production LightningDirector-to-ThunderSoundscape queue/delay/effects-mixer integration was checked in source. Natural storm timing and a naturally triggered thunder arrival are not asserted here.",
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "aircraft": "FS-20 Vortex",
+      "near": [
+        0,
+        130000
+      ],
+      "altitude": 3000,
+      "speed": 220,
+      "heading": 0,
+      "view": "cockpit",
+      "timeout": 30
+    },
+    {
+      "op": "fly",
+      "id": "player",
+      "program": [
+        {
+          "level": 300
+        }
+      ]
+    },
+    {
+      "op": "wait",
+      "seconds": 5
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Radio.Runtime.RadioAutomation.Step",
+      "args": {
+        "action": "stop",
+        "receive": false
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Immersion.Runtime.ImmersionAutomation.SetEnabled",
+      "args": {
+        "enabled": false
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.ForceWeather",
+      "args": {
+        "conditions": 0.1,
+        "cloudHeight": 6000,
+        "rain": 0,
+        "follow": "player"
+      }
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
+      "args": {
+        "action": "reset"
+      }
+    },
+    {
+      "op": "wait",
+      "seconds": 3
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "baseline"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "load"
+      },
+      "store": "loaded"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "load"
+      },
+      "store": "cached"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "unknown"
+      },
+      "store": "unknown"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "play",
+        "id": "ui-confirm",
+        "volume": 0.3
+      },
+      "store": "ui_play"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "ui_stop"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "loop",
+        "id": "cockpit-wind",
+        "volume": 0.3
+      },
+      "store": "loop_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "loop_running"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "volume",
+        "volume": 0
+      },
+      "store": "zero"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "loop",
+        "id": "cockpit-wind",
+        "volume": 0.3
+      },
+      "store": "loop_restart"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "mute"
+      },
+      "store": "muted"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "loop",
+        "id": "cockpit-wind",
+        "volume": 0.3,
+        "mute": true
+      },
+      "store": "muted_start"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "loop",
+        "id": "cockpit-wind",
+        "volume": 0
+      },
+      "store": "zero_start"
+    },
+    {
+      "op": "wait",
+      "seconds": 2
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "clean"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "play",
+        "id": "weather-thunder-0",
+        "volume": 0.4
+      },
+      "store": "thunder_0"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "thunder_0_sounding"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "play",
+        "id": "weather-thunder-1",
+        "volume": 0.4
+      },
+      "store": "thunder_1"
+    },
+    {
+      "op": "wait",
+      "seconds": 0.25
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "state"
+      },
+      "store": "thunder_1_sounding"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Core.Diagnostics.AudioAutomation.Step",
+      "args": {
+        "action": "stop"
+      },
+      "store": "thunder_stopped"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "baseline.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "baseline.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.ok",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.ready",
+      "value": 119
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.audioKnownClips",
+      "value": 119
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.audioCachedClips",
+      "value": 119
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.missing",
+      "value": []
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.missingCount",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.knownReady",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loaded.audioFailed",
+      "value": 0
+    },
+    {
+      "check": "result_above",
+      "path": "loaded.audioDecodedBytes",
+      "min": 1
+    },
+    {
+      "check": "result_below",
+      "path": "loaded.audioDecodedBytes",
+      "max": 67108864
+    },
+    {
+      "check": "result_equals",
+      "path": "cached.ready",
+      "value": 119
+    },
+    {
+      "check": "result_equals",
+      "path": "cached.knownReady",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "cached.newDecodes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cached.newCacheEntries",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "cached.audioFailed",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "unknown.newDecodes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "unknown.newCacheEntries",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "unknown.audioCachedClips",
+      "value": 119
+    },
+    {
+      "check": "result_above",
+      "path": "unknown.audioRejected",
+      "min": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.accepted",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.playing",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.interfaceMixer",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.id",
+      "value": "ui-confirm"
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.loop",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_play.newDecodes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "ui_stop.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_start.accepted",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_start.effectsMixer",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_start.interfaceMixer",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_start.loop",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_running.playing",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_running.id",
+      "value": "cockpit-wind"
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_running.fxLoops",
+      "value": 1
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_running.effectsMixer",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "zero.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "zero.gain",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "zero.loop",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "zero.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "loop_restart.accepted",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "muted.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "muted.gain",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "muted.loop",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "muted.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "muted_start.accepted",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "muted_start.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "muted_start.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "zero_start.accepted",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "zero_start.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "zero_start.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "clean.playing",
+      "value": false
+    },
+    {
+      "check": "result_equals",
+      "path": "clean.fxLoops",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "clean.fxShots",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "clean.audioCachedClips",
+      "value": 119
+    },
+    {
+      "check": "result_equals",
+      "path": "clean.audioFailed",
+      "value": 0
+    },
+    {
+      "check": "log_match",
+      "pattern": "Exception",
+      "max": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_0.accepted",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_0.id",
+      "value": "weather-thunder-0"
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_0.newDecodes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_0_sounding.playing",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_0_sounding.interfaceMixer",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "thunder_0_sounding.seconds",
+      "min": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_1.accepted",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_1.id",
+      "value": "weather-thunder-1"
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_1.newDecodes",
+      "value": 0
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_1_sounding.playing",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_1_sounding.interfaceMixer",
+      "value": true
+    },
+    {
+      "check": "result_above",
+      "path": "thunder_1_sounding.seconds",
+      "min": 3
+    },
+    {
+      "check": "result_equals",
+      "path": "thunder_stopped.playing",
+      "value": false
+    }
+  ]
+}

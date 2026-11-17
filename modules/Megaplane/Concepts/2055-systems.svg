@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1350" viewBox="0 0 1600 1350" role="img" aria-labelledby="title description">
+  <title id="title">Breakwater 2055: fission flagship concept</title>
+  <desc id="description">Original conceptual aircraft systems sheet. A giant eight-nacelle aircraft uses four inboard nuclear-heated airbreathing powertrains, four chemical auxiliary nacelles, a protected central plant region, an instrumented wing and layered defensive systems. A high-level energy ledger and technology notes identify assumptions and unresolved flight engineering. This is not a reactor, weapon, piping or production aircraft blueprint.</desc>
+  <defs>
+    <pattern id="grid55" width="32" height="32" patternUnits="userSpaceOnUse"><path d="M32 0H0V32" stroke="#28404d" stroke-width=".6" fill="none"/></pattern>
+    <marker id="flow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="#e2b07a"/></marker>
+    <g id="auxpod"><rect x="-13" y="-30" width="26" height="75" rx="11" fill="#8da8b6" stroke="#d2e4eb" stroke-width="1.5"/><ellipse cy="-23" rx="10" ry="5" fill="#15303e"/><path d="M-7 45L-5 55H5L7 45" fill="#678491"/></g>
+    <g id="hotpod"><rect x="-18" y="-38" width="36" height="98" rx="14" fill="#c39a77" stroke="#f5d7b1" stroke-width="1.6"/><ellipse cy="-30" rx="14" ry="7" fill="#352d2b"/><path d="M-10 61L-8 79H8L10 61" fill="#996e52" stroke="#eac69e"/><path d="M-14 7H14M-14 14H14M-14 21H14" stroke="#6c5143"/></g>
+    <style>
+      text{font-family:'Segoe UI',Arial,sans-serif;fill:#e5eef1}.label{font-size:15px;letter-spacing:1.6px}.body{font-size:19px}.small{font-size:16px}.muted{fill:#a0b5bf}.mint{fill:#87d6c3}.warm{fill:#e6b786}.mono{font-family:Consolas,'Courier New',monospace}.rule{stroke:#3c5360;stroke-width:1}.leader{stroke:#a3bac4;stroke-width:1.2;fill:none}
+    </style>
+  </defs>
+  <rect width="1600" height="1350" fill="#101d26"/>
+  <rect width="1600" height="8" fill="#e6b786"/>
+  <text x="48" y="49" class="label warm">BOSCALI SUMMER / MEGAPLANE / ORIGINAL SYSTEMS STUDY / 17 NOV 2026</text>
+  <text x="45" y="108" font-size="48" font-weight="650">BREAKWATER 2055</text>
+  <text x="820" y="78" class="body">Fission heat. An actively managed giant wing.</text>
+  <text x="820" y="110" class="body muted">Layered protection. A strategic expedition in the air.</text>
+  <!-- Original plan schematic. -->
+  <rect x="48" y="146" width="1040" height="680" rx="13" fill="#162a35" stroke="#3c5360"/>
+  <rect x="49" y="147" width="1038" height="678" rx="13" fill="url(#grid55)"/>
+  <text x="72" y="182" class="label mint">01 / AIRCRAFT ARCHITECTURE</text>
+  <text x="72" y="209" class="small muted">240 m span / 150 m length / 2,400 t ceiling to test / equipment volumes unresolved</text>
+  <path d="M568 230V765" stroke="#668591" stroke-dasharray="6 9"/>
+  <path d="M135 489L296 449L466 379L520 372H616L670 379L840 449L1001 489L991 537L831 529L688 543L630 554H506L448 543L305 529L145 537Z" fill="#597987" stroke="#c4d9e1" stroke-width="2"/>
+  <path d="M153 522L310 505L461 480M983 522L826 505L675 480" stroke="#c5dce4" stroke-width="1.5" fill="none"/>
+  <path d="M163 528L309 516L439 531M973 528L827 516L697 531" stroke="#87d6c3" stroke-width="3" fill="none"/>
+  <path d="M481 486L499 488L510 730L497 746L486 729Z M655 486L637 488L626 730L639 746L650 729Z" fill="#7595a4" stroke="#c4d9e1" stroke-width="1.5"/>
+  <path d="M495 683L409 729L413 748L509 722H627L723 748L727 729L641 683Z" fill="#678795" stroke="#c4d9e1" stroke-width="1.5"/>
+  <path d="M495 697L502 654L512 699L508 752H498Z M641 697L634 654L624 699L628 752H638Z" fill="#bbd0d8"/>
+  <path d="M568 242Q548 251 535 294L523 357L510 410L508 505L520 585L539 648L560 693L568 756L576 693L597 648L616 585L628 505L626 410L613 357L601 294Q588 251 568 242Z" fill="#8da7b3" stroke="#dce8ed" stroke-width="2"/>
+  <path d="M561 292L564 289H572L575 292L574 295H562Z" fill="#15333f" stroke="#e2edf1"/>
+  <path d="M568 289V295" stroke="#a7c0cb"/>
+  <path d="M532 344H604M515 404H621M514 497H622M527 574H609M542 636H594" fill="none" stroke="#587886"/>
+  <!-- Generic protected plant volume; no internal design. -->
+  <rect x="523" y="411" width="90" height="120" rx="12" fill="#4c3e37" stroke="#edc89b" stroke-width="2"/>
+  <text x="568" y="448" text-anchor="middle" font-size="13" class="warm">PROTECTED</text>
+  <text x="568" y="469" text-anchor="middle" font-size="13" class="warm">PLANT</text>
+  <text x="568" y="492" text-anchor="middle" font-size="12" class="muted">volume only</text>
+  <!-- Conceptual adjacency marks, not piping or wiring. -->
+  <path d="M523 457L477 443M523 481L427 465M613 457L659 443M613 481L709 465" stroke="#e6b786" stroke-width="4" opacity=".7"/>
+  <use href="#hotpod" x="475" y="456"/><use href="#hotpod" x="423" y="478"/>
+  <use href="#hotpod" x="661" y="456"/><use href="#hotpod" x="713" y="478"/>
+  <use href="#auxpod" x="300" y="508"/><use href="#auxpod" x="353" y="491"/>
+  <use href="#auxpod" x="836" y="508"/><use href="#auxpod" x="783" y="491"/>
+  <!-- Accessory cooling and mission volume. -->
+  <path d="M518 541H536V576H524Z M618 541H600V576H612Z" fill="#87d6c3" stroke="#c9ece2"/>
+  <path d="M543 589H593L588 628H548Z" fill="#173c47" stroke="#87d6c3" stroke-dasharray="5 4"/>
+  <circle cx="535" cy="382" r="5" fill="#bfd8e3"/><circle cx="601" cy="382" r="5" fill="#bfd8e3"/>
+  <circle cx="523" cy="563" r="4" fill="#bfd8e3"/><circle cx="613" cy="563" r="4" fill="#bfd8e3"/>
+  <path d="M561 292H416L386 267H275" class="leader"/>
+  <text x="72" y="265" class="small">Separated forward crew section</text><text x="72" y="289" class="small muted">Shielding and occupancy need analysis.</text>
+  <path d="M448 540L407 598H248" class="leader"/>
+  <text x="72" y="626" class="small warm">FOUR INBOARD NUCLEAR-HEATED UNITS</text>
+  <text x="72" y="651" class="small muted">Short thermal routes / indirect engine-air heating</text>
+  <path d="M839 559L882 608H1013" class="leader"/>
+  <text x="760" y="635" class="small">Four chemical auxiliary nacelles</text>
+  <text x="760" y="659" class="small muted">Contingency performance unsized.</text>
+  <path d="M571 608H674L709 687H820" class="leader"/>
+  <text x="760" y="712" class="small mint">Isolated aft mission bay</text>
+  <text x="760" y="737" class="small muted">Heat, structure and release clearance.</text>
+  <text x="72" y="755" class="small mint">Monitored structure / segmented controls / local protection</text>
+  <text x="72" y="790" class="label muted">SCHEMATIC ADJACENCY ONLY / NO REACTOR, PIPING OR WEAPON DESIGN</text>
+  <!-- Power bookkeeping. -->
+  <rect x="1112" y="146" width="440" height="680" rx="13" fill="#20313a" stroke="#3c5360"/>
+  <text x="1140" y="182" class="label warm">02 / ILLUSTRATIVE ENERGY LEDGER</text>
+  <text x="1140" y="235" font-size="40" class="mono">1,500 MWth</text>
+  <text x="1140" y="264" class="small muted">Invented reactor thermal-power case</text>
+  <path d="M1140 286H1524" class="rule"/>
+  <text x="1140" y="322" class="body warm">1,400 MWth → propulsion</text>
+  <text x="1140" y="356" class="small">32% overall heat-to-useful-power assumption</text>
+  <text x="1140" y="402" font-size="36" class="mono">448 MW</text>
+  <text x="1140" y="428" class="small muted">Useful thrust power</text>
+  <text x="1140" y="464" class="small">952 MW ideally leaves in engine air / wake</text>
+  <path d="M1140 488H1524" class="rule"/>
+  <text x="1140" y="522" class="body mint">100 MWth → accessories</text>
+  <text x="1140" y="558" class="small">40 MWe gross / 10 MWe plant demand</text>
+  <text x="1140" y="588" class="small">30 MWe hotel + mission allocation</text>
+  <text x="1140" y="624" class="small">~100 MW accessory heat before added losses</text>
+  <path d="M1140 649H1524" class="rule"/>
+  <text x="1140" y="681" class="label">NOT CLOSED AIRCRAFT PERFORMANCE</text>
+  <text x="1140" y="714" class="small muted">Heat has an exit path; it has not disappeared.</text>
+  <text x="1140" y="744" class="small muted">Installed drag, shielding and masses unproven.</text>
+  <text x="1140" y="774" class="small muted">Shutdown still requires heat removal.</text>
+  <!-- Protection and supporting tech. -->
+  <rect x="48" y="850" width="728" height="420" rx="13" fill="#162a35" stroke="#3c5360"/>
+  <text x="72" y="887" class="label mint">03 / KINETIC VEIL — A LAYERED PROTECTION CONCEPT</text>
+  <text x="72" y="929" class="body">Warning → disruption → interception → damage tolerance</text>
+  <path d="M72 952H748" class="rule"/>
+  <text x="72" y="990" class="body">Distributed RF / EO / IR warning</text><text x="72" y="1025" class="body">EW, decoys and infrared-guidance jamming</text>
+  <text x="72" y="1060" class="body">Limited physical point defense</text><text x="72" y="1095" class="body">Localized sacrificial and fragment protection</text>
+  <text x="72" y="1130" class="body">Separated vital functions and degraded flight limits</text>
+  <text x="72" y="1180" class="small muted">Finite supplies, apertures, power and cooling remain constraints.</text>
+  <text x="72" y="1210" class="small muted">DIRCM disrupts guidance; a damaging laser is a different system.</text>
+  <text x="72" y="1240" class="small muted">No magnetic bubble or all-projectile protection is established.</text>
+  <rect x="800" y="850" width="752" height="420" rx="13" fill="#162a35" stroke="#3c5360"/>
+  <text x="824" y="887" class="label warm">04 / A COHERENT 2055 TECHNOLOGY STACK</text>
+  <text x="824" y="931" class="body">Actively managed composite wing + optical strain sensing</text>
+  <text x="824" y="970" class="body">Fault-tolerant controls + segmented power distribution</text>
+  <text x="824" y="1009" class="body">Multiple thermal loops + independent post-trip support</text>
+  <text x="824" y="1048" class="body">Robotic inspection + digital maintenance record</text>
+  <text x="824" y="1087" class="body">Human-scale crew spaces + automated payload handling</text>
+  <path d="M824 1111H1524" class="rule"/>
+  <text x="824" y="1146" class="small mint">300 t payload / 250 t chemical reserve / 170 t growth allowance</text>
+  <text x="824" y="1180" class="small muted">Mass figures are allocations, not sized equipment.</text>
+  <text x="824" y="1210" class="small muted">Terrestrial fission is established; this airborne plant is not.</text>
+  <text x="824" y="1240" class="small muted">2055 is the setting target, not a technology-delivery guarantee.</text>
+  <text x="48" y="1310" class="small muted">RESEARCH AND CONCEPT ONLY / Original vector art / No production model, reactor engineering, weapon implementation or flight evidence.</text>
+</svg>
