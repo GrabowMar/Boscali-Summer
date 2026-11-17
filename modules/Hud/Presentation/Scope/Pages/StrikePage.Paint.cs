@@ -109,14 +109,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool idle = ph == StrikePhase.Done, flying = m.Eta > 0f, rod = m.Kind == StrikeKind.Rod, cruise = m.Kind == StrikeKind.Cruise, arc = !rod && !cruise;
             ScopeTone tone = idle ? Dim : soon ? Hi : Ink;
             float t = now, gy = y0 + th - 7f, tx = X1, ty = gy - 5f, dy = (th - 46f) / 2f, kv = StrikeMath.Depth(th), since = -m.Eta;
-            if (soon)
-            {
-                g.Fill(1f, y0, W - 2f, th - 1f, Ink, 0.07f);
-                g.Fill(2f, y0 + 5f, 2f, th - 11f, Hi);
-            }
+            if (soon) g.Fill(2f, y0 + 5f, 2f, th - 11f, Hi);
 
             // left column: the weapon, where it is going, how far from us
-            g.FitText(OpsScopeWords.Name(m.Kind), 9f, y0 + 10f + dy, 114f, idle ? Dim : Ink, 12f, 12f, ScopeAlign.Left, true);
+            g.FitText(OpsScopeWords.Name(m.Kind), 9f, y0 + 10f + dy, 114f, tone, 12f, 12f, ScopeAlign.Left, true);
             if (m.Target != null) g.FitText(m.Target, 9f, y0 + 24f + dy, 114f, Dim);
             if (StrikeMath.Close(m)) g.Text(ScopeStr.Distance("CLOSE", m.RangeM, units, 14), 9f, y0 + 38f + dy, Amber, 12f, ScopeAlign.Left, true);
             else
@@ -216,8 +212,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else gx = head ? headX : flying ? X0 : X1;
             gx = Math.Max(X0, Math.Min(X1, gx));
-            g.Line(X0, gy, gx, gy, tone, 1f, 2f);
-            g.Line(gx, gy, X1, gy, Faint);
+            g.Bar(X0, gy - 1f, X1 - X0, 3f, (gx - X0) / (X1 - X0), tone);
 
             // the target: a diamond until it has landed, then a cross; the danger ring, the closing ring, the burst
             if (!flying) g.Cross(tx, ty, 8f, idle ? Dim : Hi);
@@ -233,7 +228,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             else
             {
                 int secs = (int)Math.Ceiling(ph == StrikePhase.Effect ? Math.Max(0f, m.Linger - since) : m.Eta);
-                g.Text(ScopeStr.Int(secs), 424f, y0 + 19f + dy, soon ? Hi : Ink, 20f, ScopeAlign.Right, true);
+                g.Text(ScopeStr.Int(secs), 435f - ScopeCanvas.TextW("S", 12f) - 4f, y0 + 19f + dy, soon ? Hi : Ink, soon ? HudType.Emphasis : HudType.Value, ScopeAlign.Right, true);
                 g.Text("S", 435f, y0 + 22f + dy, Dim, 12f, ScopeAlign.Right);
             }
             g.Text(OpsScopeWords.Phase(m, ph), 435f, y0 + 37f + dy, ph == StrikePhase.Warn || ph == StrikePhase.Fall || ph == StrikePhase.Flight ? Ink : Dim, 12f, ScopeAlign.Right, soon);
@@ -263,9 +258,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float t = now, rem = d.SatLeft, total = d.SatTotal, cx = 184f, cy = 224f;
             bool late = StrikeMath.SatLate(rem);
             ScopeTone tone = late ? Amber : Ink;
-            g.Text(d.SatCamera ? "SAT OPTICAL" : "SAT RADAR", 8f, 186f, Ink, 12f, ScopeAlign.Left, true);
+            g.Text(d.SatCamera ? "SAT OPTICAL" : "SAT RADAR", 8f, 186f, Dim, 12f, ScopeAlign.Left, true);
             int contacts = d.SatContacts;
-            g.Text(contacts <= 0 ? "NO CONTACTS" : ScopeStr.Cat("", contacts, contacts == 1 ? " CONTACT" : " CONTACTS"), 204f, 186f, Dim, 12f, ScopeAlign.Right);      // 24 short of the CYBER block
+            g.Text(contacts <= 0 ? "NO CONTACTS" : ScopeStr.Cat("", contacts, contacts == 1 ? " CONTACT" : " CONTACTS"), 204f, 186f, contacts > 0 ? Ink : Dim, 12f, ScopeAlign.Right);      // 24 short of the CYBER block
 
             // a geostationary bird, parked over the footprint for the whole window
             const float ox = 74f, oy = 330f, R = 126f, a = -7f, gyL = 262f, rw = 33f;
@@ -287,8 +282,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // the window's countdown
             float frac = StrikeMath.SatFill(rem, total);
-            g.Ring(cx, cy, 17f, Faint, 1f, 4f);
-            if (frac > 0.003f) g.Arc(cx, cy, 17f, 0f, 360f * frac - 0.01f, tone, 1f, 4f);
+            g.Ring(cx, cy, 17f, Faint, 1f, 2f);
+            if (frac > 0.003f) g.Arc(cx, cy, 17f, 0f, 360f * frac - 0.01f, tone, 1f, 2f);
             g.Text(ScopeStr.Int((int)Math.Ceiling(rem)), cx, cy + 1f, late ? Amber : Hi, 14f, ScopeAlign.Center, true);
             g.Text("IN VIEW", cx, 252f, late ? Amber : Dim, 12f, ScopeAlign.Center, late);
             g.Text(d.SatCamera ? "R2 CAMERA" : "R1 RECON", cx, 266f, Dim, 12f, ScopeAlign.Center);
@@ -321,8 +316,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             bool hopping = d.CyberHopping;
             int held = d.ChainHeld, hopTo = hopping ? held : -1;
             ScopeTone tt = StrikeMath.TraceTone(d.Trace);
-            g.Text("CYBER", 228f, 186f, Ink, 12f, ScopeAlign.Left, true);
-            g.Text(hopping ? "HOPPING" : "HOLDING", 436f, 186f, hopping ? Ink : Hi, 12f, ScopeAlign.Right, true);
+            g.Text("CYBER", 228f, 186f, Dim, 12f, ScopeAlign.Left, true);
+            g.Text(hopping ? "HOPPING" : "HOLDING", 436f, 186f, hopping ? Ink : Dim, 12f, ScopeAlign.Right, true);
 
             for (int i = 0; i < 4; i++)
             {
@@ -357,20 +352,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
 
             g.Text("TRACE", 228f, 250f, Dim);
-            g.Bar(272f, 245f, 128f, 11f, d.Trace / 100f, tt, 32);
-            g.BarTick(272f, 245f, 128f, 11f, StrikeMath.TraceCaution / 100f, d.Trace >= StrikeMath.TraceCaution ? Amber : Dim);
-            g.BarTick(272f, 245f, 128f, 11f, StrikeMath.TraceWarning / 100f, d.Trace >= StrikeMath.TraceWarning ? Red : Dim);
+            g.Bar(272f, 249f, 128f, 3f, d.Trace / 100f, tt);
+            g.BarTick(272f, 249f, 128f, 3f, StrikeMath.TraceCaution / 100f, d.Trace >= StrikeMath.TraceCaution ? Amber : Dim);
+            g.BarTick(272f, 249f, 128f, 3f, StrikeMath.TraceWarning / 100f, d.Trace >= StrikeMath.TraceWarning ? Red : Dim);
             g.Text(ScopeStr.Pct((int)Math.Round(d.Trace)), 436f, 250f, tt == Ink ? Hi : tt, 12f, ScopeAlign.Right, true);
-            if (hopping && d.ChainCount > held) g.Text(ScopeStr.Cat(OpsScopeWords.Hop(d.Chain[held]), (int)Math.Ceiling(d.HopLeft), " S"), 228f, 266f, Ink);
+            if (hopping && d.ChainCount > held) g.Text(ScopeStr.Cat(OpsScopeWords.Hop(d.Chain[held]), (int)Math.Ceiling(d.HopLeft), "S"), 228f, 266f, Ink);
             else if (held > 0) g.Text(OpsScopeWords.Held(d.Chain[held - 1]), 228f, 266f, Hi);
-            g.Text(ScopeStr.Cat("+", d.TraceRate, 1, "%/S"), 436f, 266f, hopping ? Dim : Faint, 12f, ScopeAlign.Right);
         }
 
         // ------------------------------------------------------------------------------------------------ perk strip
 
         /// <summary>
-        /// The perk row (LAYOUT.md 12.6): three lamp-style items, no rings and no separators. A 4 x 4 marker 14 in from the column's left (filled INK when ready, BRIGHT when armed, a DIM hollow while cooling), the name 10
-        /// on (bold BRIGHT when lit, else INK) and the state word at the column's right end less 14 (RDY / ARMED bold BRIGHT, the cooldown clock DIM: a digit makes it INK).
+        /// The perk row (LAYOUT.md 12.6): three lamp-style items, no rings and no separators, 14 in from the column's left. Armed: a 6 pip filled Hi, the name Hi and ARMED bold Hi. Ready: a 4 pip filled Ink and RDY Ink. Cooling: a 4 pip hollow Dim and the clock Dim.
         /// </summary>
         public override void PaintStrip(ScopeCanvas g, in PagePaint p)
         {
@@ -380,9 +373,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 PerkTile q = d.Perks[i];
                 bool cool = q.State == PerkPhase.Cooling;
                 float x = Mathf.Round(i * cw + 14f), cy = 10f;
-                g.Marker(x, cy, 4f, cool ? Dim : q.State == PerkPhase.Armed ? Hi : Ink, !cool);
-                g.Text(q.Name, x + 10f, cy, cool ? Ink : Hi, 12f, ScopeAlign.Left, !cool);
-                g.Text(OpsScopeWords.Perk(q), Mathf.Round(i * cw + cw - 14f), cy, cool ? Dim : Hi, 12f, ScopeAlign.Right, !cool);
+                bool armed = q.State == PerkPhase.Armed;
+                ScopeTone tn = cool ? Dim : armed ? Hi : Ink;
+                g.Marker(x, cy, armed ? 6f : 4f, tn, !cool);
+                g.Text(q.Name, x + 10f, cy, tn, 12f, ScopeAlign.Left, armed);
+                g.Text(OpsScopeWords.Perk(q), Mathf.Round(i * cw + cw - 14f), cy, tn, 12f, ScopeAlign.Right, armed);
             }
         }
     }

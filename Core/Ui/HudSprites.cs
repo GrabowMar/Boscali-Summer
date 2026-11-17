@@ -13,8 +13,8 @@ namespace BoscaliSummer.Core.Ui
     {
         private static Sprite bandPlain, bandFaded, feather;
 
-        /// <summary>The visor look's shade colour, rgb(2, 12, 8): what a soft patch behind symbology is tinted (the TAC BOARD's sun band and clouds are the same colour); its alpha is the caller's.</summary>
-        public static readonly Color ShadeTint = new Color(2f / 255f, 12f / 255f, 8f / 255f, 1f);
+        /// <summary>The visor look's shade colour, a cool blue-grey frost rgb(18, 30, 42):what a soft patch behind symbology is tinted (the TAC BOARD's sun band and clouds are the same colour); its alpha is the caller's.</summary>
+        public static readonly Color ShadeTint = new Color(18f / 255f, 30f / 255f, 42f / 255f, 1f);
 
         /// <summary>
         /// The one backdrop every mod HUD block stands on (2026-10-28: the board's clouds, the left column, the TAC MAP, the wing strip, the top-centre lane): a <see cref="Feather"/> patch of

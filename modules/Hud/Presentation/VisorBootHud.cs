@@ -95,7 +95,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!NativeRefs.HudCanvas(out _, out Canvas canvas)) return false;
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
-            root = CombatAlerts.Holder(canvasRoot, "BoscaliBoot");
+            root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Static : canvasRoot, "BoscaliBoot");
             mesh = AvVector.Create(root, "Boot", Quads);
             text = new ScopeText(CombatAlerts.Holder(root, "Words"), font, fontMaterial);
             lastK = 0f;

@@ -21,18 +21,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <item>BEACONS: a pillar over the way home (JOKER, BINGO or damage) and over a live contract zone.</item>
     /// <item>LOCK SPIN-IN and HIT GLITCH: the HUD reacting to the fight.</item>
     /// </list>
-    /// Our own objects under the native HUDCanvas (vanilla owns visibility) on a nested Canvas, so the per-frame redraw never rebuilds the rest of the HUD. Data at the
-    /// board's 10 Hz (<see cref="Read"/>, the SAM picture once a second); projection and paint every frame (<see cref="Frame"/>) on the CPU into two
-    /// <see cref="AvVector"/>s, labels written only when their words change.
+    /// Our own objects on the AV layer's <see cref="HudLayer.Under"/> root (inside the native HUDCanvas, vanilla owns visibility; its own nested canvas, so the per-frame redraw
+    /// never rebuilds the rest of the HUD). Data at the board's 10 Hz (<see cref="Read"/>, the SAM picture once a second); projection and paint every frame in the layer's late
+    /// Paint phase (<see cref="Frame"/>, through the frame's <see cref="HudView"/>, after the native boxes were repaired) on the CPU into two <see cref="AvVector"/>s, labels
+    /// written only when their words change. Ink round a target reads the target's native box (the repaired one), so the two never slip apart; distant ink fades by
+    /// <see cref="HudInk.Range"/> (never the selected target's, never an inbound missile's).
     /// </summary>
     internal sealed class ArLayer
     {
         private const int LabelMax = 12, SpinMax = 6, InboundMax = 6;
-        private const float Near = 0.5f, Wire = 1.2f, Bold = 2.2f, PillarM = 800f, InboundLeadS = 2f;
+        private const float Wire = 1.2f, Bold = 2.2f, PillarM = 800f, InboundLeadS = 2f, BoxHalf = 14f;
         /// <summary>The missile's private guidance target, as the shot book reads it (set from the synced target id; a seeker drops it when it loses the target).</summary>
         private static readonly HarmonyLib.AccessTools.FieldRef<Missile, Unit> TargetRef = NativeRefs.Field<Missile, Unit>("target");
 
-        private RectTransform canvasRoot, root;
+        private RectTransform root;
         private TMP_FontAsset font;
         private Material fontMaterial;
         private AvVector lines, fx;
@@ -42,9 +44,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly char[] buf = new char[48];
         private float lastK;
 
-        // Projection, once per frame: world -> clip -> the layer's 1080-high reference units round the screen centre.
-        private Matrix4x4 vp;
-        private float halfW, halfH;
+        // Projection, once per frame: the frame's view (canvas units round the canvas centre) over k = the layer's 1080-high reference units.
+        private HudView view;
+        private float k = 1f, halfW, halfH;
 
         private bool on, showDomes, showMissiles, showBeacons, showFx;
         private Aircraft aircraft;
@@ -66,7 +68,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         // BEACONS
         private Airbase home;
         private bool objectiveOn;
-        private float objectiveX, objectiveZ;
+        private float objectiveX, objectiveZ, objectiveY;
+        private int objectiveId;
 
         // LOCK SPIN-IN
         private readonly List<Unit> lastTargets = new List<Unit>(16);
@@ -83,8 +86,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly Missile[] inbound = new Missile[InboundMax];
         private readonly int[] inboundNumbers = new int[InboundMax];
 
-        /// <summary>The glitch's sideways jitter this frame in reference pixels (the TAC BOARD shakes with the layer).</summary>
-        internal float JitterX { get; private set; }
+        /// <summary>The glitch's sideways jitter at <paramref name="now"/> in reference pixels (the TAC BOARD shakes with the layer; a pure function of the clock, so the board reads it in LateUpdate before the layer paints).</summary>
+        internal float Jitter(float now) => on && showFx && !AvFxDriver.ReducedMotion ? ArRules.Jitter(now - glitchAt, glitchSeed) : 0f;
 
         // What the layer drew on its last frame (the sim probe in HudAutomation reads these).
         internal bool PathShown { get; private set; }
@@ -115,16 +118,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public bool Ensure()
         {
-            if (root != null && canvasRoot != null) return true;
-            root = null;
-            if (!NativeRefs.HudCanvas(out _, out Canvas canvas)) return false;
-            canvasRoot = (RectTransform)canvas.transform;
+            if (root != null) return true;
+            if (!HudLayer.Ensure()) return false;
             VanillaHudStyle.TryHudFont(out font, out fontMaterial);
 
-            root = Holder(canvasRoot, "BoscaliArLayer");
-            root.SetAsFirstSibling();      // under the game's own symbology and the mod's centre alerts: the world is behind the HUD
-            Canvas nested = root.gameObject.AddComponent<Canvas>();      // its own batch: a per-frame redraw never rebuilds the rest of the HUD
-            nested.overrideSorting = false;
+            root = Holder(HudLayer.Under, "BoscaliArLayer");      // the layer's Under root: its own batch, under the game's own symbology (the world is behind the HUD)
             lines = AvVector.Create(root, "World", 1600);
             fx = AvVector.Create(root, "Fx", 96);
             for (int i = 0; i < LabelMax; i++)
@@ -236,6 +234,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (dx * dx + dz * dz > ArRules.ObjectiveMinM * ArRules.ObjectiveMinM)
                 {
                     objectiveOn = true;
+                    if (o.Id != objectiveId || o.X != objectiveX || o.Z != objectiveZ) objectiveY = Ground(o.X, o.Z);      // one long raycast per objective, not one a frame
+                    objectiveId = o.Id;
                     objectiveX = o.X;
                     objectiveZ = o.Z;
                 }
@@ -281,26 +281,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             glitchSeed++;
         }
 
-        /// <summary>Every frame: project and paint what the read decided (the camera and everything in the world move every frame).</summary>
-        public void Frame(MissileTracker tracker, ThreatWatch threats, float now)
+        /// <summary>Every frame, in the layer's Paint phase: project through <paramref name="frameView"/> and paint what the read decided (the camera and everything in the world move every frame).</summary>
+        public void Frame(MissileTracker tracker, ThreatWatch threats, float now, in HudView frameView)
         {
             if (root == null) return;
             bool show = on && aircraft != null && !aircraft.disabled;
             if (root.gameObject.activeSelf != show) root.gameObject.SetActive(show);
-            JitterX = 0f;
             if (!show) { Clear(); return; }
-            CameraStateManager state = SceneSingleton<CameraStateManager>.i;
-            Camera cam = state != null ? state.mainCamera : null;
-            float k = canvasRoot.rect.height / 1080f;
-            if (cam == null || !(k > 0.01f)) return;
+            float scale = frameView.CanvasSize.y / 1080f;
+            if (!frameView.Valid || !(scale > 0.01f)) return;
+            view = frameView;
+            k = scale;
             if (k != lastK)
             {
                 root.localScale = new Vector3(k, k, 1f);
                 lastK = k;
             }
-            halfW = canvasRoot.rect.width / k * 0.5f;
+            halfW = view.CanvasSize.x / k * 0.5f;
             halfH = 540f;
-            vp = cam.projectionMatrix * cam.worldToCameraMatrix;
 
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             bool calm = AvFxDriver.ReducedMotion;
@@ -308,19 +306,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             b.Clear();
             f.Clear();
             labelsUsed = 0;
-            Vector3 eye = cam.transform.position;
+            Vector3 eye = view.Eye;
 
             PaintDomes(b, palette, eye, now, calm);
             PaintBeacons(b, palette, eye);
             PaintMissiles(b, palette, tracker, threats, now, calm);
-            PaintSpins(f, palette, now, calm);
+            PaintSpins(f, palette, eye, now, calm);
             PaintGlitch(f, palette, now, calm);
 
             for (int i = labelsUsed; i < LabelMax; i++)
                 if (labels[i].gameObject.activeSelf) labels[i].gameObject.SetActive(false);
             lines.Commit();
             fx.Commit();
-            root.anchoredPosition = new Vector2(JitterX, 0f);
+            var jitter = new Vector2(Jitter(now), 0f);
+            if (root.anchoredPosition != jitter) root.anchoredPosition = jitter;
         }
 
         // ------------------------------------------------------------------ DOMES
@@ -335,8 +334,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 Dome dome = domes[d];
                 Vector3 site = new GlobalPosition(dome.X, dome.GroundY, dome.Z).ToLocalPosition();
-                float fade = ArRules.Fade(Vector3.Distance(eye, site), 4000f, 60000f);
-                Rgba ink = (dome.Inside ? palette.Alert : palette.Warning).ToRgba().WithAlpha(fade * (dome.Inside ? 0.7f : 0.5f));
+                Rgba ink = HudInk.Range((dome.Inside ? palette.Alert : palette.Warning).ToRgba().WithAlpha(dome.Inside ? 0.7f : 0.5f), Vector3.Distance(eye, site));
                 float reach = AirDefenceRing.EffectiveRadius(dome.MaxRange, dome.MinAltitude, dome.MaxAltitude, agl);
                 if (dome.Inside)
                 {
@@ -442,17 +440,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (home != null && home.center != null)
             {
                 Vector3 at = home.center.position;
-                Pillar(b, at, palette.AllClear.ToRgba(), eye, diamond: true);
-                if (Project(at + Vector3.up * PillarHeight(Vector3.Distance(eye, at)), out float x, out float y))
-                    LabelDistance(x, y + 12f, 4_000_000, palette.AllClear.ToRgba(), "HOME ", Vector3.Distance(aircraft.transform.position, at));
+                float far = Vector3.Distance(eye, at);
+                Rgba ink = HudInk.Range(palette.AllClear.ToRgba(), far);
+                Pillar(b, at, ink, far, diamond: true);
+                if (Project(at + Vector3.up * PillarHeight(far), out float x, out float y))
+                    LabelDistance(x, y + 12f, 4_000_000, ink, "HOME ", Vector3.Distance(aircraft.transform.position, at));
                 HomeShown = true;
             }
             if (objectiveOn)
             {
-                Vector3 at = new GlobalPosition(objectiveX, Ground(objectiveX, objectiveZ), objectiveZ).ToLocalPosition();
-                Rgba ink = palette.Warning.ToRgba();
-                Pillar(b, at, ink, eye, diamond: false);
-                if (Project(at + Vector3.up * PillarHeight(Vector3.Distance(eye, at)), out float x, out float y))
+                Vector3 at = new GlobalPosition(objectiveX, objectiveY, objectiveZ).ToLocalPosition();
+                float far = Vector3.Distance(eye, at);
+                Rgba ink = HudInk.Range(palette.Warning.ToRgba(), far);
+                Pillar(b, at, ink, far, diamond: false);
+                if (Project(at + Vector3.up * PillarHeight(far), out float x, out float y))
                     LabelDistance(x, y + 12f, 5_000_000, ink, "OBJ ", Vector3.Distance(aircraft.transform.position, at));
                 ObjectiveShown = true;
             }
@@ -461,11 +462,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A pillar's height: about 2.5 degrees tall from far out, never under <see cref="PillarM"/> nor over 6 km.</summary>
         private static float PillarHeight(float distance) => Mathf.Clamp(distance * 0.045f, PillarM, 6000f);
 
-        /// <summary>A beam of light from the ground: the line, three ticks up it, a diamond (home) or a square (objective) on top; whole up close, a third far out.</summary>
-        private void Pillar(AvQuadBuffer b, Vector3 foot, Rgba ink, Vector3 eye, bool diamond)
+        /// <summary>A beam of light from the ground: the line, three ticks up it, a diamond (home) or a ring (objective) on top; <paramref name="ink"/> comes range-inked.</summary>
+        private void Pillar(AvQuadBuffer b, Vector3 foot, Rgba ink, float far, bool diamond)
         {
-            float far = Vector3.Distance(eye, foot);
-            ink = ink.WithAlpha(ArRules.Fade(far, 3000f, 50000f));
             float height = PillarHeight(far);
             Vector3 top = foot + Vector3.up * height;
             Seg(b, foot, top, Bold, ink);
@@ -480,7 +479,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             else
             {
-                AvStrokes.Bracket(b, tx - 6f, ty - 6f, 12f, 12f, 4f, 1.6f, ink);
+                AvStrokes.Ring(b, tx, ty, 6f, 16, 1.6f, ink);
                 AvStrokes.Fill(b, tx - 2f, ty - 2f, 4f, 4f, ink);
             }
         }
@@ -504,20 +503,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Unit target = NativeRefs.Get(TargetRef, m);
                 if (target != null && !target.disabled)
                 {
-                    Vector3 to = target.transform.position;
+                    bool first = true;
+                    for (int j = 0; j < i; j++) if (own[j] != null && NativeRefs.Get(TargetRef, own[j]) == target) first = false;
+                    // The ring sits on the target's native box (repaired this frame); the line runs to where the box says the target is.
+                    bool boxed = Anchor(target, out float tx, out float ty, out float half, out Vector3 to);
                     float range = Vector3.Distance(pos, to);
                     Vector3 targetVelocity = target.rb != null ? target.rb.velocity : Vector3.zero;
                     float closure = range > 1f ? Vector3.Dot(velocity - targetVelocity, (to - pos) / range) : 0f;
-                    DashedSeg(b, pos, to, ink.WithAlpha(0.55f));
-                    bool first = true;
-                    for (int j = 0; j < i; j++) if (own[j] != null && NativeRefs.Get(TargetRef, own[j]) == target) first = false;
-                    if (first && Project(to, out float tx, out float ty))
+                    Rgba near = Ramp(ink, target, Vector3.Distance(view.Eye, to));
+                    DashedSeg(b, pos, to, near.WithAlpha(near.A * 0.55f));
+                    if (first && boxed)
                     {
-                        AvStrokes.Bracket(b, tx - 14f, ty - 14f, 28f, 28f, 6f, 1.6f, ink);
+                        float r = half + 4f;
+                        AvStrokes.Ring(b, tx, ty, r, 32, HudStroke.Standard, near);
                         if (closure > 5f)
                         {
                             int seconds = Mathf.Clamp(Mathf.CeilToInt(range / closure), 0, 99);
-                            Label(tx + 62f, ty - 7f, 6_000_000 + i * 1000 + seconds, ink, "IMPACT ", seconds, "S");      // right of the bracket: the game writes the name above it, the range under it
+                            Label(tx + r + 44f, ty - 7f, 6_000_000 + i * 1000 + seconds, near, "IMPACT ", seconds, "S");      // right of the ring: the game writes the name above the box, the range under it
                         }
                     }
                 }
@@ -545,7 +547,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------ LOCK SPIN-IN
 
-        private void PaintSpins(AvQuadBuffer f, VanillaHudStyle.Palette palette, float now, bool calm)
+        /// <summary>A new lock: two opposed arcs of one ring turn in and close onto the target's native box, then go (AllClear, never red; full colour while the target stays selected).</summary>
+        private void PaintSpins(AvQuadBuffer f, VanillaHudStyle.Palette palette, Vector3 eye, float now, bool calm)
         {
             SpinsShown = SpinsActive = 0;
             Rgba ink = palette.AllClear.ToRgba();
@@ -553,14 +556,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 Unit u = spinUnits[s];
                 if (u == null) continue;
-                if (u.disabled || !ArRules.Spin(now - spinAt[s], calm, out float scale, out float angle, out float alpha))
+                if (u.disabled || !ArRules.Spin(now - spinAt[s], calm, out float close, out float angle, out float alpha))
                 {
                     spinUnits[s] = null;
                     continue;
                 }
                 SpinsActive++;
-                if (!Project(u.transform.position, out float x, out float y)) continue;
-                RotatedBracket(f, x, y, 28f * scale, angle, 2f, ink.WithAlpha(alpha));      // closes just outside the game's own target box
+                if (!Anchor(u, out float x, out float y, out float half, out Vector3 at)) continue;
+                Rgba c = Ramp(ink, u, Vector3.Distance(eye, at));
+                c = c.WithAlpha(c.A * alpha);
+                float r = ArRules.SpinRadius(close, half);
+                AvStrokes.Arc(f, x, y, r, angle - 45f, angle + 45f, 12, HudStroke.Standard, c);
+                AvStrokes.Arc(f, x, y, r, angle + 135f, angle + 225f, 12, HudStroke.Standard, c);
                 SpinsShown++;
             }
         }
@@ -576,71 +583,66 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Rgba ink = palette.Alert.ToRgba();
             if (calm)
             {
-                // REDUCED MOTION: one still band across the top of the view, no shake.
-                AvStrokes.Fill(f, -halfW, halfH - 6f, halfW * 2f, 6f, ink.WithAlpha(0.25f * life));
+                // REDUCED MOTION: one still line across the top of the view, no shake.
+                AvStrokes.Line(f, -halfW, halfH - 3f, halfW, halfH - 3f, HudStroke.Hairline, ink.WithAlpha(0.35f * life));
                 return;
             }
-            JitterX = ArRules.Jitter(age, glitchSeed);
+            // Scan lines, 1 px (no filled bands); the sideways shake is Jitter's.
             for (int i = 0; i < ArRules.GlitchBars; i++)
             {
-                ArRules.Bar(glitchSeed, i, out float share, out float thick);
+                ArRules.Bar(glitchSeed, i, out float share, out _);
                 float y = -halfH + share * halfH * 2f + ArRules.Noise(glitchSeed, (int)(age * 30f) + i) * 6f;
-                AvStrokes.Fill(f, -halfW, y, halfW * 2f, thick, ink.WithAlpha(0.18f * life));
+                AvStrokes.Line(f, -halfW, y, halfW, y, HudStroke.Hairline, ink.WithAlpha(0.3f * life));
             }
         }
 
         // ------------------------------------------------------------------ drawing helpers
 
+        /// <summary>A world point (local) to the layer's reference units; false behind the near cut or well off the screen.</summary>
         private bool Project(Vector3 world, out float x, out float y)
         {
-            Vector4 c = vp * new Vector4(world.x, world.y, world.z, 1f);
-            if (c.w < Near) { x = y = 0f; return false; }
-            x = c.x / c.w * halfW;
-            y = c.y / c.w * halfH;
+            if (!view.Project(world, out Vector2 c)) { x = y = 0f; return false; }
+            x = c.x / k;
+            y = c.y / k;
             return x > -halfW * 1.5f && x < halfW * 1.5f && y > -halfH * 1.5f && y < halfH * 1.5f;
         }
 
-        /// <summary>A world segment, cut at the near plane and dropped when it lies wholly off one side of the view.</summary>
+        /// <summary>
+        /// Where a unit's native box is this frame, in the layer's units, and its half-size: the box itself (the layer's Repair placed it already, so ink round it never slips),
+        /// else the unit's known position projected (a stale track where the game knows it, not where it is). <paramref name="world"/>: the point the box stands for.
+        /// </summary>
+        private bool Anchor(Unit u, out float x, out float y, out float half, out Vector3 world)
+        {
+            half = BoxHalf;
+            world = u.transform.position;
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || !hud.TryGetMarker(u, out HUDUnitMarker m) || m == null || m.image == null) return Project(world, out x, out y);
+            FactionHQ hq = aircraft.NetworkHQ;
+            if (m.outdated && hq != null && hq.TryGetKnownPosition(u, out GlobalPosition known)) world = known.ToLocalPosition();
+            if (!m.image.isActiveAndEnabled) return Project(world, out x, out y);
+            RectTransform box = m.image.rectTransform;
+            Vector2 c = view.FromScreen(box.position);      // an overlay canvas: world units are screen pixels
+            x = c.x / k;
+            y = c.y / k;
+            float size = box.rect.width * 0.5f * box.lossyScale.x / view.Scale / k;
+            if (size > 2f && size < 200f) half = size;
+            return true;
+        }
+
+        /// <summary>Mod ink tied to a target, by range (<see cref="HudInk.Range"/>); full colour while the target is selected.</summary>
+        private Rgba Ramp(Rgba ink, Unit target, float metres) => lastTargets.Contains(target) ? ink : HudInk.Range(ink, metres);
+
+        /// <summary>A world segment, cut at the near plane and to the view (<see cref="HudView.Clip"/>).</summary>
         private void Seg(AvQuadBuffer b, Vector3 a, Vector3 c, float width, Rgba ink)
         {
-            if (!Clip(a, c, out float ax, out float ay, out float bx, out float by)) return;
-            AvStrokes.Line(b, ax, ay, bx, by, width, ink);
+            if (!view.Clip(a, c, out Vector2 p, out Vector2 q)) return;
+            AvStrokes.Line(b, p.x / k, p.y / k, q.x / k, q.y / k, width, ink);
         }
 
         private void DashedSeg(AvQuadBuffer b, Vector3 a, Vector3 c, Rgba ink)
         {
-            if (!Clip(a, c, out float ax, out float ay, out float bx, out float by)) return;
-            AvStrokes.DashedLine(b, ax, ay, bx, by, 6f, 5f, 1.4f, ink);
-        }
-
-        private bool Clip(Vector3 a, Vector3 c, out float ax, out float ay, out float bx, out float by)
-        {
-            ax = ay = bx = by = 0f;
-            Vector4 p = vp * new Vector4(a.x, a.y, a.z, 1f), q = vp * new Vector4(c.x, c.y, c.z, 1f);
-            if (p.w < Near && q.w < Near) return false;
-            if (p.w < Near) p = Vector4.Lerp(p, q, (Near - p.w) / (q.w - p.w));
-            else if (q.w < Near) q = Vector4.Lerp(q, p, (Near - q.w) / (p.w - q.w));
-            ax = p.x / p.w * halfW; ay = p.y / p.w * halfH;
-            bx = q.x / q.w * halfW; by = q.y / q.w * halfH;
-            // Cut to the screen (Liang-Barsky): a line running far off-screen (a point just past the near plane projects absurdly far) costs only what shows, and a
-            // dashed one never fills the buffer with dashes nobody sees.
-            float lx = halfW * 1.05f, ly = halfH * 1.05f, dx = bx - ax, dy = by - ay, t0 = 0f, t1 = 1f;
-            if (!Edge(-dx, ax + lx, ref t0, ref t1) || !Edge(dx, lx - ax, ref t0, ref t1) || !Edge(-dy, ay + ly, ref t0, ref t1) || !Edge(dy, ly - ay, ref t0, ref t1))
-                return false;
-            float sx = ax, sy = ay;
-            ax = sx + dx * t0; ay = sy + dy * t0;
-            bx = sx + dx * t1; by = sy + dy * t1;
-            return true;
-        }
-
-        /// <summary>One edge of the Liang-Barsky clip: false when the line lies wholly outside it.</summary>
-        private static bool Edge(float p, float q, ref float t0, ref float t1)
-        {
-            if (p == 0f) return q >= 0f;
-            float r = q / p;
-            if (p < 0f) { if (r > t1) return false; if (r > t0) t0 = r; }
-            else { if (r < t0) return false; if (r < t1) t1 = r; }
-            return true;
+            if (!view.Clip(a, c, out Vector2 p, out Vector2 q)) return;
+            AvStrokes.DashedLine(b, p.x / k, p.y / k, q.x / k, q.y / k, 6f, 5f, 1.4f, ink);
         }
 
         /// <summary>A horizontal ring in the world, its points worked out once and joined.</summary>
@@ -666,23 +668,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             AvStrokes.Line(b, x + py, y - px, x + px, y + py, width, ink);
         }
 
-        /// <summary>Four corner arms of a square of half-size <paramref name="h"/> turned by <paramref name="angleDeg"/>.</summary>
-        private static void RotatedBracket(AvQuadBuffer b, float x, float y, float h, float angleDeg, float width, Rgba ink)
-        {
-            float a = angleDeg * Mathf.Deg2Rad, cos = Mathf.Cos(a), sin = Mathf.Sin(a), arm = Mathf.Min(8f, h * 0.45f);
-            for (int c = 0; c < 4; c++)
-            {
-                float sx = (c & 1) == 0 ? -1f : 1f, sy = (c & 2) == 0 ? -1f : 1f;
-                float cx = sx * h, cy = sy * h;
-                // Each corner: one arm along x toward the centre, one along y.
-                Arm(b, x, y, cx, cy, cx - sx * arm, cy, cos, sin, width, ink);
-                Arm(b, x, y, cx, cy, cx, cy - sy * arm, cos, sin, width, ink);
-            }
-        }
-
-        private static void Arm(AvQuadBuffer b, float x, float y, float ax, float ay, float bx, float by, float cos, float sin, float width, Rgba ink) =>
-            AvStrokes.Line(b, x + ax * cos - ay * sin, y + ax * sin + ay * cos, x + bx * cos - by * sin, y + bx * sin + by * cos, width, ink);
-
         // ------------------------------------------------------------------ labels
 
         /// <summary>A label at (x, y): "<paramref name="head"/><paramref name="number"/><paramref name="tail"/>" (just the head for a negative number), written only when <paramref name="key"/> changed.</summary>
@@ -691,7 +676,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI t = NextLabel(x, y, ink, size);
             if (t == null || labelKeys[labelsUsed - 1] == key) return;
             labelKeys[labelsUsed - 1] = key;
-            t.text = number < 0 ? head : head + number + tail;
+            int n = AvNumFormat.Append(buf, 0, head);
+            if (number >= 0)
+            {
+                n = AvNumFormat.Write(buf, n, number, 0);
+                n = AvNumFormat.Append(buf, n, tail);
+            }
+            t.SetText(buf, 0, n);      // no string built: nothing allocated
         }
 
         /// <summary>A distance label in the pilot's units ("SAM 18KM"), rewritten only when the reading moves by 100 m.</summary>
@@ -714,7 +705,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI t = labels[labelsUsed++];
             if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
             if (t.fontSize != size) t.fontSize = size;
-            t.rectTransform.anchoredPosition = new Vector2(x, y);
+            var at = new Vector2(x, y);
+            if (t.rectTransform.anchoredPosition != at) t.rectTransform.anchoredPosition = at;
             Color c = new Color(ink.R, ink.G, ink.B, ink.A);
             if (t.color != c) t.color = c;
             return t;
@@ -740,7 +732,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             on = false;
             aircraft = null;
-            JitterX = 0f;
             Clear();
             if (root != null) root.gameObject.SetActive(false);
         }
@@ -749,7 +740,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (root != null) Object.Destroy(root.gameObject);
             root = null;
-            canvasRoot = null;
             Hide();
             domeCount = 0;
             lastTargets.Clear();

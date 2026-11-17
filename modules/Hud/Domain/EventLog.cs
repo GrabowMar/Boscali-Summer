@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public float Arrival, RemoveAt;
         /// <summary>Counts up with every line ever added: a row's identity.</summary>
         public int Serial;
+        /// <summary>How many times the game said this same line back to back while it was still up (drawn "x3" after it; 1 = once).</summary>
+        public int Repeat = 1;
 
         public bool Alive(float now) => now < RemoveAt;
 
@@ -66,6 +68,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             Tick(arrival);
             if (!float.IsFinite(removeAt) || removeAt <= arrival || removeAt > arrival + 3600f) removeAt = arrival + FallbackSeconds;
+            if (count > 0 && ring[count - 1].Alive(arrival) && ring[count - 1].Raw == raw)
+            {
+                // the same line again while the last one is still up (three INTERCEPTED shells in a row): one row that counts, not three that wall the log
+                EventRow same = ring[count - 1];
+                same.Repeat++;
+                same.Stamp = stamp ?? same.Stamp;
+                same.Arrival = arrival - WipeSeconds;      // BRIGHT again, without wiping in again
+                same.RemoveAt = Math.Max(same.RemoveAt, removeAt);
+                same.Serial = ++serial;
+                return same;
+            }
             if (count == Capacity)
             {
                 Array.Copy(ring, 1, ring, 0, Capacity - 1);
@@ -171,7 +184,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// Where DL EVT LOG's pieces go, pure. The block hangs from the game's feed box (its top-left corner, in design units; 16 in and <see cref="TopGap"/> down, which puts the shelf's line at y 18 like the board's shelves on the right):
+    /// Where DL EVT LOG's pieces go, pure. The block hangs from the game's feed box (its top-left corner, in design units; 12 in (the left column's edge) and <see cref="TopGap"/> down, which puts the shelf's line at y 18 like the board's shelves on the right):
     /// a caption shelf on top (its line 6 under the block's top, 280..560 wide in steps of 40 so it does not jump with every line), the rows 16 apart with the first one 24 under the top (8 without the shelf), a spine at the
     /// block's left edge with a tick on every row. A row is a stamp
     /// (<see cref="StampChars"/> cells), the class word (<see cref="ClassChars"/>) and the line, in the 12 unit mono face (<see cref="Advance"/> a cell), two cells between the class word and the line.
@@ -181,7 +194,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         /// <summary>A character cell of the 12 unit mono face (0.65 em).</summary>
         public const float Advance = 7.8f, LineAdvance = 9.1f;      // the stamp and class word are LABEL cells (12), the line BODY (14)
-        public const float Pitch = 20f, Margin = 16f, TopGap = 12f, MinWidth = 280f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 6f, RightPad = 8f, SpineTick = 4f;
+        public const float Pitch = 20f, Margin = 12f, TopGap = 12f, MinWidth = 280f, WidthStep = 40f, ShelfToRow = 24f, RowOffset = 8f, Indent = 12f, LeanIndent = 12f, RightPad = 8f, SpineTick = 4f;
         public const int StampChars = 6, ClassChars = 5;
 
         /// <summary>The characters a line may have in a block <paramref name="maxWidth"/> wide (Full furniture: the narrowest line column): 55 at the 562 column.</summary>

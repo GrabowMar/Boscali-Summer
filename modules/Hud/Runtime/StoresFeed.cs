@@ -19,6 +19,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         private static readonly AccessTools.FieldRef<Gun, float> GunReload = NativeRefs.Field<Gun, float>("reloadTime");
         private static readonly AccessTools.FieldRef<MissileLauncher, float> LauncherReload = NativeRefs.Field<MissileLauncher, float>("reloadTime");
         private static readonly AccessTools.FieldRef<PowerSupply, float> MaxCharge = NativeRefs.Field<PowerSupply, float>("maxCharge");
+        private static readonly AccessTools.FieldRef<CombatHUD, HUDWeaponState> WeaponStateRef = NativeRefs.Field<CombatHUD, HUDWeaponState>("weaponState");
+        // Set in HUDMissileState.DisplayText once range, minimum range, arc and platform speed all pass; stale once the target list empties (DisplayText returns through HideAll first), hence the Targets guard.
+        private static readonly AccessTools.FieldRef<HUDMissileState, bool> AllMet = NativeRefs.Field<HUDMissileState, bool>("allRequirementsMet");
 
         private readonly StoreStation[] stations = new StoreStation[StoresScope.MaxStations];
         private readonly string[] names = new string[StoresScope.MaxStations];
@@ -83,11 +86,21 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     cache.Safe = s.SafetyIsOn(aircraft);
                     cache.Link = manager.HasMultipleGuns() && NativeRefs.Get(GunsLinked, manager);
                     cache.TurretAuto = s.HasTurret() && combat != null && combat.turretAutoControl;
+                    cache.Targets = manager.GetTargetList()?.Count ?? 0;
+                    cache.Salvo = Salvo(info);
+                    cache.InRange = InRange(cache.Safe, cache.Targets, combat);
                 }
                 count++;
             }
             cache.StationCount = count;
         }
+
+        /// <summary>A trigger fires one round per designated target: <c>WeaponManager.Fire</c> salvoes unless the weapon is a gun, a sling or has no fire interval.</summary>
+        internal static bool Salvo(WeaponInfo info) => !info.gun && !info.sling && info.fireInterval != 0f;
+
+        /// <summary>Every launch requirement is met: armed, a target designated, and the native missile state's verdict (bombs use another state, so they never are).</summary>
+        internal static bool InRange(bool safe, int targets, CombatHUD combat) =>
+            !safe && targets > 0 && combat != null && NativeRefs.Get(WeaponStateRef, combat) is HUDMissileState ms && NativeRefs.Get(AllMet, ms);
 
         /// <summary>The weapon's own name in capitals, as the native panel words it (cargo stations say so), and the handle of its picture (<see cref="StoreIcons"/>), both made only when the station's weapon changed.</summary>
         private string NameOf(int index, WeaponStation s, WeaponInfo info)

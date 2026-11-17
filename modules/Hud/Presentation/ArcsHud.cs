@@ -8,21 +8,23 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// The visor's two SEGMENTED ARCS round the reticle (2026-11-16, mockup <c>arcs(d)</c>): fuel on the left, throttle on the right, 22 segments each over 29 degrees, lit segments in full ink
-    /// 8 px wide, unlit ones 5 px at 0.4. Fuel carries an amber BINGO tick ("B") and a white JOKER tick ("J") at the board's own numbers (<see cref="FuelState.Need"/>, plus
-    /// <see cref="FuelEndurance.JokerMargin"/>) and its percentage at the top end; below BINGO the lit segments turn amber and the percentage says BINGO. Throttle carries the game's own afterburner
-    /// detent tick (read off the game's gauge, none when the aircraft has none), its segments past it amber, and the game's own throttle word (79%, AIRBRAKE, AFTERBURNER) at the top end.
+    /// The visor's two ARCS round the reticle (2026-11-16, mockup <c>arcs(d)</c>; 2026-11-17 one continuous stroke): fuel on the left, throttle on the right, 29 degrees each. A faint full-length
+    /// track (1 px core at 0.35) and over it the lit fill (2.5 px core), both one polygon of 1-degree steps whose quads share their edges (no gaps, no stair dashes) with a 1 px soft edge each side
+    /// (the UI has no MSAA: a hard 1-3 px quad on a slant aliases into dashes). Ticks cross the stroke radially, centred on it, with no letters (2026-11-17 refit: the colour is the word). Fuel carries a JOKER and a BINGO tick at the board's own numbers
+    /// (<see cref="FuelState.Need"/>, plus <see cref="FuelEndurance.JokerMargin"/>): Dim until reached, then amber; the fill is Ink, amber once joker is reached, and the number (VALUE bold amber and a
+    /// Dim %) shows only then. Throttle carries the game's own afterburner detent (the throttle past it lights the burner; read off the game's gauge, none when the aircraft has none): a Dim tick, Hi once
+    /// passed, and the fill Ink up to it and Hi past it. Throttle's value (the game's throttle word 79% / AIRBRAKE / AFTERBURNER) is VALUE bold Hi with a Dim %, above its top end; each caption (bold InkDim) sits below its bottom end.
     /// <para>They replace the game's two plain arcs (<see cref="NativeFlightArcs"/>) and stand exactly where those are: centre, radius and axis are measured off the game's gauges every frame.
     /// FAIL OPEN: the game's gauges are hidden (renderer alpha only) in the very frame this layer has painted and is showing, and shown again the same frame it is not wanted (<c>want</c> false:
     /// switch off, external view, pause, map, a board tick gone stale), cannot measure, or throws (<see cref="Fail"/>). Built like <see cref="TapeHud"/>: a holder under the native HUD canvas
     /// scaled by canvas height / 1080, one quad mesh and pooled <see cref="ScopeText"/> labels per arc, a mesh rebuilt only when an int signature of what it draws changed (a moving throttle
-    /// repaints once per segment, not per frame), no per-frame allocation.</para>
+    /// repaints once per whole percent, not per frame), no per-frame allocation.</para>
     /// </summary>
     internal sealed class ArcsHud
     {
-        private const int Quads = 72;
-        private const float BingoPrefixPt = HudType.Label, PercentPt = HudType.Label, CaptionPt = HudType.Label, TickPt = HudType.Label, TickLength = 18f, LabelInset = 28f, EndGap = 16f, CaptionDrop = 22f;
-        private static readonly char[] BingoWord = { 'B', 'I', 'N', 'G', 'O', ' ' };
+        // 29 one-degree steps x 3 quads (core + two soft edges), one extra step where the fill meets the track and where it crosses the detent, 3 ticks x 3: 96 at most.
+        private const int Quads = 128;
+        private const float PercentPt = HudType.Value, CaptionPt = HudType.Label, TickHalf = 6f, EndGap = 4f;
 
         private sealed class Side
         {
@@ -42,12 +44,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float lastK;
         private bool drawing;
 
-        /// <summary>How far the visor's power-on has filled the arcs, 0..1 (1 in flight): the lit segments are the real level times this, so they fill up from zero to their real values.</summary>
+        /// <summary>How far the visor's power-on has filled the arcs, 0..1 (1 in flight): the fill is the real level times this, so they fill up from zero to their real values.</summary>
         public float Boot = 1f;
 
         // The 10 Hz read: the HUD aircraft's fuel and the board's BINGO need.
         private float level = float.NaN, need;
         private bool hasNeed, bingo;
+        private bool bingoReached, jokerReached;      // the ticks' reached bits (they go into the signature)
 
         // What the last frame drew (the sim probe reads it).
         internal bool Shown => drawing;
@@ -76,7 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!NativeRefs.HudCanvas(out _, out Canvas canvas)) return false;
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
-            root = CombatAlerts.Holder(canvasRoot, "BoscaliArcs");
+            root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Data : canvasRoot, "BoscaliArcs");
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = false;
             Build(left, "Fuel", font, fontMaterial);
@@ -116,30 +119,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float throttle = Mathf.Clamp01(inputs != null ? inputs.throttle : 0f);
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             Color ink = palette.AllClear, amber = palette.Warning;
-            bool low = bingo || level <= FuelEndurance.WarningLevel;
+            float bingoAt = hasNeed ? need : float.NaN, jokerAt = hasNeed ? Mathf.Min(need + FuelEndurance.JokerMargin, 1f) : float.NaN;
+            bingoReached = bingo || (hasNeed && level <= bingoAt);
+            jokerReached = hasNeed && level <= jokerAt;
+            bool low = bingoReached || jokerReached || level <= FuelEndurance.WarningLevel;      // caution: the fill and the number go amber
 
             Place(left, fuelArc, k);
             Place(right, throttleArc, k);
             float fill = Mathf.Clamp01(Boot);
             FuelLit = FlightArcs.Lit(level * fill);
             ThrottleLit = FlightArcs.Lit(throttle * fill);
+            int fuelFill = FlightArcs.Percent(level * fill), throttleFill = FlightArcs.Percent(throttle * fill);      // the fill moves in whole percents (0.29 degree, 1.6 px)
             int fuelPct = FlightArcs.Percent(level);
-            float bingoAt = hasNeed ? need : float.NaN, jokerAt = hasNeed ? Mathf.Min(need + FuelEndurance.JokerMargin, 1f) : float.NaN;
             Color32 inkKey = ink, amberKey = amber;
             int colours = (inkKey.r << 16 | inkKey.g << 8 | inkKey.b) ^ (amberKey.r << 12 | amberKey.g << 4 | amberKey.b) * 31;
             float radius = fuelArc.Radius / k, thrRadius = throttleArc.Radius / k;
 
-            int sigL = Mix(FuelLit, FlightArcs.Quant(bingoAt), FlightArcs.Quant(jokerAt), low ? 1 : 0, fuelPct, (int)(radius * 2f), (int)(fuelArc.AxisDeg * 2f), colours);
+            int sigL = Mix(fuelFill, FlightArcs.Quant(bingoAt), FlightArcs.Quant(jokerAt), (low ? 1 : 0) | (bingoReached ? 2 : 0) | (jokerReached ? 4 : 0), fuelPct, (int)(radius * 2f), (int)(fuelArc.AxisDeg * 2f), colours);
             if (sigL != left.Signature)
             {
-                PaintFuel(left, radius, fuelArc.AxisDeg, FuelLit, bingoAt, jokerAt, low, fuelPct, ink, amber);
+                PaintFuel(left, radius, fuelArc.AxisDeg, fuelFill * 0.01f, bingoAt, jokerAt, low, fuelPct, ink, amber);
                 left.Signature = sigL;
             }
             int wordKey = word != null ? word.GetHashCode() : 0;
-            int sigR = Mix(ThrottleLit, FlightArcs.Quant(detent), 0, 0, wordKey, (int)(thrRadius * 2f), (int)(throttleArc.AxisDeg * 2f), colours);
+            int sigR = Mix(throttleFill, FlightArcs.Quant(detent), !float.IsNaN(detent) && throttleFill * 0.01f > detent ? 1 : 0, 0, wordKey, (int)(thrRadius * 2f), (int)(throttleArc.AxisDeg * 2f), colours);
             if (sigR != right.Signature)
             {
-                PaintThrottle(right, thrRadius, throttleArc.AxisDeg, ThrottleLit, detent, word, ink, amber);
+                PaintThrottle(right, thrRadius, throttleArc.AxisDeg, throttleFill * 0.01f, detent, word, ink, amber);
                 right.Signature = sigR;
             }
             FuelRadius = fuelArc.Radius;
@@ -178,71 +184,81 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        private void PaintFuel(Side s, float radius, float axis, int lit, float bingoAt, float jokerAt, bool low, int percent, Color ink, Color amber)
+        private void PaintFuel(Side s, float radius, float axis, float fill, float bingoAt, float jokerAt, bool low, int percent, Color ink, Color amber)
         {
-            Rgba on = (low ? amber : ink).ToRgba(), off = ink.ToRgba().WithAlpha(FlightArcs.UnlitAlpha);
+            Rgba on = (low ? amber : ink).ToRgba(), hot = amber.ToRgba(), dim = ink.ToRgba().WithAlpha(HudInk.LineMid);
             AvQuadBuffer b = s.Mesh.Buffer;
             b.Clear();
-            Segments(b, radius, true, lit, on, off, float.NaN, amber.ToRgba());
-            if (!float.IsNaN(bingoAt)) Tick(b, radius, FlightArcs.At(bingoAt, true), amber.ToRgba());
-            if (!float.IsNaN(jokerAt)) Tick(b, radius, FlightArcs.At(jokerAt, true), new Rgba(1f, 1f, 1f));
+            Stroke(b, radius, true, fill, on, float.NaN, on, ink.ToRgba().WithAlpha(FlightArcs.UnlitAlpha));
+            if (!float.IsNaN(bingoAt)) Tick(b, radius, FlightArcs.At(bingoAt, true), bingoReached ? hot : dim);
+            if (!float.IsNaN(jokerAt)) Tick(b, radius, FlightArcs.At(jokerAt, true), jokerReached ? hot : dim);
             s.Mesh.Commit();
 
             ScopeText t = s.Text;
             t.Begin();
-            Color word = low ? amber : Lift(ink);
-            int n = 0;
-            if (bingo)
-            {
-                for (; n < BingoWord.Length; n++) scratch[n] = BingoWord[n];
-            }
-            n = FlightArcs.PercentText(scratch, n, percent);
-            Anchor(axis, radius + EndGap, FlightArcs.At(1f, true), out float x, out float y);
-            t.Draw(new System.ReadOnlySpan<char>(scratch, 0, n), x, y, PercentPt, OutsideAlign(axis), word, false);
-            Caption(t, "FUEL", axis, radius, FlightArcs.At(0f, true), ink);
-            if (!float.IsNaN(bingoAt)) TickLabel(t, "B", axis, radius, FlightArcs.At(bingoAt, true), amber);
-            if (!float.IsNaN(jokerAt)) TickLabel(t, "J", axis, radius, FlightArcs.At(jokerAt, true), VanillaHudStyle.InkHi);
+            int n = low ? FlightArcs.PercentText(scratch, 0, percent) - 1 : 0;      // the number shows at caution only, its % apart
+            Ends(t, new System.ReadOnlySpan<char>(scratch, 0, n), true, "FUEL", axis, radius, true, amber);
             t.End();
         }
 
-        private void PaintThrottle(Side s, float radius, float axis, int lit, float detent, string word, Color ink, Color amber)
+        private void PaintThrottle(Side s, float radius, float axis, float fill, float detent, string word, Color ink, Color amber)
         {
-            Rgba on = ink.ToRgba(), off = ink.ToRgba().WithAlpha(FlightArcs.UnlitAlpha);
+            Rgba hi = Lift(ink).ToRgba(), dim = ink.ToRgba().WithAlpha(HudInk.LineMid);
             AvQuadBuffer b = s.Mesh.Buffer;
             b.Clear();
-            Segments(b, radius, false, lit, on, off, detent, amber.ToRgba());
-            if (!float.IsNaN(detent)) Tick(b, radius, FlightArcs.At(detent, false), amber.ToRgba());
+            Stroke(b, radius, false, fill, ink.ToRgba(), detent, hi, ink.ToRgba().WithAlpha(FlightArcs.UnlitAlpha));
+            if (!float.IsNaN(detent)) Tick(b, radius, FlightArcs.At(detent, false), fill > detent ? hi : dim);
             s.Mesh.Commit();
 
             ScopeText t = s.Text;
             t.Begin();
-            if (!string.IsNullOrEmpty(word))
-            {
-                Anchor(axis, radius + EndGap, FlightArcs.At(1f, false), out float x, out float y);
-                t.Draw(word, x, y, PercentPt, OutsideAlign(axis), Lift(ink), false);
-            }
-            Caption(t, "THROTTLE", axis, radius, FlightArcs.At(0f, false), ink);
+            string w = word ?? "";
+            bool pct = w.Length > 1 && w[w.Length - 1] == '%';
+            Ends(t, System.MemoryExtensions.AsSpan(w, 0, pct ? w.Length - 1 : w.Length), pct, "THROTTLE", axis, radius, false, Lift(ink));
             t.End();
         }
 
-        /// <summary>The 22 segments: <paramref name="lit"/> in <paramref name="on"/> 8 px wide (past <paramref name="detent"/> in <paramref name="hot"/>), the rest in <paramref name="off"/> 5 px.</summary>
-        private static void Segments(AvQuadBuffer b, float radius, bool reversed, int lit, Rgba on, Rgba off, float detent, Rgba hot)
+        /// <summary>The whole arc: the fill from the empty end to <paramref name="fill"/> in <paramref name="on"/> (past <paramref name="detent"/> in <paramref name="hot"/>), the faint track on to the full end.</summary>
+        private static void Stroke(AvQuadBuffer b, float radius, bool reversed, float fill, Rgba on, float detent, Rgba hot, Rgba track)
         {
-            for (int i = 0; i < FlightArcs.Segments; i++)
+            float split = float.IsNaN(detent) ? fill : Mathf.Min(fill, detent);
+            Band(b, radius, FlightArcs.At(0f, reversed), FlightArcs.At(split, reversed), FlightArcs.LitWidth, on);
+            if (fill > split) Band(b, radius, FlightArcs.At(split, reversed), FlightArcs.At(fill, reversed), FlightArcs.LitWidth, hot);
+            Band(b, radius, FlightArcs.At(fill, reversed), FlightArcs.At(1f, reversed), FlightArcs.UnlitWidth, track);
+        }
+
+        /// <summary>
+        /// One stretch of the circle from angle <paramref name="from"/> to <paramref name="to"/> (the arc's own degrees): a core <paramref name="width"/> wide and a <see cref="FlightArcs.Feather"/>
+        /// soft edge each side, in steps of at most <see cref="FlightArcs.StepDeg"/> whose quads share their radial edges exactly, so the curve is one unbroken stroke.
+        /// </summary>
+        private static void Band(AvQuadBuffer b, float radius, float from, float to, float width, Rgba c)
+        {
+            float span = to - from;
+            if (Mathf.Abs(span) < 0.01f) return;
+            int steps = Mathf.CeilToInt(Mathf.Abs(span) / FlightArcs.StepDeg);
+            float hw = width * 0.5f, inner = radius - hw, outer = radius + hw, f = FlightArcs.Feather;
+            Rgba clear = c.WithAlpha(0f);
+            float ca = Mathf.Cos(from * Mathf.Deg2Rad), sa = Mathf.Sin(from * Mathf.Deg2Rad);
+            for (int i = 1; i <= steps; i++)
             {
-                FlightArcs.Segment(i, reversed, out float a0, out float a1);
-                bool isLit = i < lit;
-                Rgba c = isLit ? (!float.IsNaN(detent) && (i + 0.5f) / FlightArcs.Segments >= detent ? hot : on) : off;
-                float r0 = a0 * Mathf.Deg2Rad, r1 = a1 * Mathf.Deg2Rad;
-                AvStrokes.Line(b, radius * Mathf.Cos(r0), radius * Mathf.Sin(r0), radius * Mathf.Cos(r1), radius * Mathf.Sin(r1), isLit ? FlightArcs.LitWidth : FlightArcs.UnlitWidth, c);
+                float a = (from + span * i / steps) * Mathf.Deg2Rad, cb = Mathf.Cos(a), sb = Mathf.Sin(a);
+                Ring(b, ca, sa, cb, sb, inner, outer, c, c);
+                Ring(b, ca, sa, cb, sb, outer, outer + f, c, clear);
+                Ring(b, ca, sa, cb, sb, inner, inner - f, c, clear);
+                ca = cb;
+                sa = sb;
             }
         }
 
-        /// <summary>A tick across the arc at angle <paramref name="a"/>: from the circle toward the reticle (the mockup's 18 px, 2 px wide).</summary>
+        /// <summary>One quad of a ring between two directions (cos/sin a, cos/sin b) and two radii, <paramref name="c0"/> on the first radius and <paramref name="c1"/> on the second.</summary>
+        private static void Ring(AvQuadBuffer b, float ca, float sa, float cb, float sb, float r0, float r1, Rgba c0, Rgba c1) =>
+            b.Add(ca * r0, sa * r0, cb * r0, sb * r0, cb * r1, sb * r1, ca * r1, sa * r1, c0, c0, c1, c1);
+
+        /// <summary>A tick across the arc at angle <paramref name="a"/>: radial (square to the stroke), centred on the circle, <see cref="TickHalf"/> each side, standard weight with a soft edge.</summary>
         private static void Tick(AvQuadBuffer b, float radius, float a, Rgba c)
         {
             float cos = Mathf.Cos(a * Mathf.Deg2Rad), sin = Mathf.Sin(a * Mathf.Deg2Rad);
-            AvStrokes.Line(b, radius * cos, radius * sin, (radius - TickLength) * cos, (radius - TickLength) * sin, 2f, c);
+            AvStrokes.Line(b, (radius - TickHalf) * cos, (radius - TickHalf) * sin, (radius + TickHalf) * cos, (radius + TickHalf) * sin, HudStroke.Standard, c, FlightArcs.Feather);
         }
 
         /// <summary>The word's anchor in the holder's upright frame, text coordinates (y down): the point at angle <paramref name="a"/> in the arc's frame and distance <paramref name="r"/> from the reticle.</summary>
@@ -261,19 +277,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private static float Snap(float refPx) => Mathf.Round(refPx * devPerRef) / devPerRef;
 
-        /// <summary>Words on the outside of the arc: right-aligned on the left arc, left-aligned on the right one.</summary>
-        private static ScopeAlign OutsideAlign(float axis) => Mathf.Cos(axis * Mathf.Deg2Rad) < 0f ? ScopeAlign.Right : ScopeAlign.Left;
-
-        private void Caption(ScopeText t, string word, float axis, float radius, float endAngle, Color ink)
+        /// <summary>
+        /// The same on both arcs: the value just above the full (top) end, the caption (LABEL bold InkDim) centred just below the empty (bottom) end. A value with a <paramref name="percent"/> sign is its digits
+        /// (VALUE bold) right-aligned at the anchor + 6 and a Dim % (LABEL) left-aligned at the anchor + 10; any other word (AIRBRAKE) is VALUE bold, centred.
+        /// </summary>
+        private static void Ends(ScopeText t, System.ReadOnlySpan<char> value, bool percent, string caption, float axis, float radius, bool reversed, Color valueColour)
         {
-            Anchor(axis, radius, endAngle, out float x, out float y);
-            t.Draw(word, x, y + CaptionDrop, CaptionPt, ScopeAlign.Center, Lift(ink), false);
-        }
-
-        private void TickLabel(ScopeText t, string word, float axis, float radius, float a, Color colour)
-        {
-            Anchor(axis, radius - LabelInset, a, out float x, out float y);
-            t.Draw(word, x, y, TickPt, ScopeAlign.Center, colour, false);
+            Anchor(axis, radius, FlightArcs.At(1f, reversed), out float x, out float y);
+            float vy = y - Snap(EndGap + PercentPt * 0.5f);
+            if (value.Length > 0)
+            {
+                if (percent)
+                {
+                    t.Draw(value, x + 6f, vy, PercentPt, ScopeAlign.Right, valueColour, true);
+                    t.Draw("%", x + 10f, vy + 2f, CaptionPt, ScopeAlign.Left, VanillaHudStyle.InkDim, false);
+                }
+                else t.Draw(value, x, vy, PercentPt, ScopeAlign.Center, valueColour, true);
+            }
+            Anchor(axis, radius, FlightArcs.At(0f, reversed), out x, out y);
+            t.Draw(caption, x, y + Snap(EndGap + CaptionPt * 0.5f), CaptionPt, ScopeAlign.Center, VanillaHudStyle.InkDim, false);      // regular, as the board draws LABEL captions: bold with the text edge turned chunky in game
         }
 
         /// <summary>The game's gauges back, this layer down: the same frame, every time. Safe to call every frame.</summary>

@@ -105,6 +105,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>This page's own gauges for the row (at most <see cref="GaugeRow.Slots"/>), written into <paramref name="into"/>; the registered gauges fill the rest. Returns the count.</summary>
         public virtual int Gauges(GaugeSpec[] into) => 0;
 
+        /// <summary>The id of a registered gauge this page's own body already draws (null: none).</summary>
+        public virtual string OwnedGauge => null;
+
         /// <summary>
         /// A lamp this page overrides (by its legend, e.g. <c>ENG</c>, <c>MSL</c>, <c>SPKE</c>): its state, whether it flashes and the word it shows instead of its own legend
         /// (<paramref name="text"/> null keeps the legend: an engine out lights ENG, a strike landing close lights MSL as DNGR). False = the lamp shows its own state.

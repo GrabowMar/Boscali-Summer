@@ -39,16 +39,104 @@ namespace NOAvionics
         private ulong committedHash;
         private int committedCount = -1;
 
-        /// <summary>Marks the mesh dirty so the buffer's current contents are (re)drawn; a no-op when they match the last commit.</summary>
-        public void Commit()
+        /// <summary>
+        /// Marks the mesh dirty so the buffer's current contents are (re)drawn; a no-op when they match the last commit. <paramref name="force"/> is for a buffer
+        /// redrawn every frame anyway (Motion): it always redraws, and from then on the buffer stops hashing what it is fed.
+        /// </summary>
+        public void Commit(bool force = false)
         {
             AvQuadBuffer b = Buffer;
+            if (force)
+            {
+                if (b != null) b.Hashing = false;
+                committedCount = -1;
+                SetVerticesDirty();
+                return;
+            }
             if (b != null && b.Count == committedCount && b.ContentHash == committedHash) return;
             committedCount = b != null ? b.Count : -1;
             committedHash = b != null ? b.ContentHash : 0;
             SetVerticesDirty();
         }
 
+        // Own mesh and capacity arrays: no VertexHelper list appends or second copy on a rebuild; the index buffer is written once.
+        private Mesh mesh;
+        private Vector3[] verts;
+        private Color[] cols;
+        private Vector2[] uvs;
+        private int[] tris;
+        private int meshQuads = -1;
+
+        protected override void UpdateGeometry()
+        {
+            AvQuadBuffer b = Buffer;
+            int n = b != null ? b.Count : 0;
+            if (mesh == null)
+            {
+                mesh = new Mesh { name = "AvVector", hideFlags = HideFlags.HideAndDontSave };
+                mesh.MarkDynamic();
+            }
+            if (n <= 0)
+            {
+                if (meshQuads != 0) mesh.Clear();
+                meshQuads = 0;
+                canvasRenderer.SetMesh(mesh);
+                return;
+            }
+
+            int cap = 4 * b.Capacity;
+            if (verts == null || verts.Length < cap)
+            {
+                verts = new Vector3[cap];
+                cols = new Color[cap];
+                uvs = new Vector2[cap];
+                tris = new int[6 * b.Capacity];
+                for (int q = 0, t = 0; q < b.Capacity; q++, t += 6)
+                {
+                    int i = q * 4;
+                    tris[t] = i; tris[t + 1] = i + 1; tris[t + 2] = i + 2;
+                    tris[t + 3] = i + 2; tris[t + 4] = i + 3; tris[t + 5] = i;
+                }
+                meshQuads = -1;
+            }
+
+            Color tint = color;
+            bool plain = tint == Color.white;
+            float[] x = b.X, y = b.Y;
+            Rgba[] c = b.C;
+            int nv = n * 4;
+            for (int i = 0; i < nv; i++)
+            {
+                verts[i] = new Vector3(x[i], y[i], 0f);
+                Rgba s = c[i];
+                cols[i] = plain ? new Color(s.R, s.G, s.B, s.A) : new Color(s.R * tint.r, s.G * tint.g, s.B * tint.b, s.A * tint.a);
+            }
+
+            if (n != meshQuads)
+            {
+                mesh.Clear();
+                mesh.SetVertices(verts, 0, nv);
+                mesh.SetColors(cols, 0, nv);
+                mesh.SetUVs(0, uvs, 0, nv);
+                mesh.SetTriangles(tris, 0, n * 6, 0);
+                meshQuads = n;
+            }
+            else
+            {
+                mesh.SetVertices(verts, 0, nv);
+                mesh.SetColors(cols, 0, nv);
+            }
+            canvasRenderer.SetMesh(mesh);
+        }
+
+        protected override void OnDestroy()
+        {
+            if (mesh != null) Destroy(mesh);
+            mesh = null;
+            base.OnDestroy();
+        }
+
+        /// <summary>The stock path (unused while <see cref="UpdateGeometry"/> is overridden; kept for anything that asks a graphic for its mesh).</summary>
         protected override void OnPopulateMesh(VertexHelper vh)
         {
             vh.Clear();

@@ -9,44 +9,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>The rules of the SYSTEMS page, pure: tones, the fuel marks, the headline, the dispenser grids and the words they use.</summary>
     internal static class SystemsMath
     {
-        /// <summary>The fuel marks: BINGO goes red within this share of the tanks of the level, JOKER amber within this (the prototype's 6 / 21 points).</summary>
-        public const float BingoNear = 0.06f, JokerNear = 0.21f;
-        /// <summary>The endurance reads red under this many minutes, amber under <see cref="EndCautionMin"/>.</summary>
-        public const float EndWarningMin = 5f, EndCautionMin = 10f;
-        /// <summary>A margin at or under this many points of the tanks cautions; at or under zero it is gone.</summary>
-        public const int MarginCaution = 15;
-
         public static ScopeTone ToneOf(HudTone tone) => tone == HudTone.Warning ? ScopeTone.Red : tone == HudTone.Caution ? ScopeTone.Amber : ScopeTone.Ink;
 
         public static ScopeTone ToneOf(LampState state) => state == LampState.Warning ? ScopeTone.Red : state == LampState.Caution ? ScopeTone.Amber : ScopeTone.Ink;
 
         public static int Percent(float level01) => (int)Math.Round(Math.Max(0f, Math.Min(1f, level01)) * 100f, MidpointRounding.AwayFromZero);
-
-        /// <summary>Whole minutes of endurance, or false when it is unknown (a parked aircraft, no burn rate yet).</summary>
-        public static bool EnduranceMinutes(float seconds, out int minutes)
-        {
-            minutes = 0;
-            if (!float.IsFinite(seconds) || seconds < 0f || seconds >= 360000f) return false;
-            minutes = (int)(seconds / 60f);
-            return true;
-        }
-
-        public static ScopeTone EndTone(float seconds) =>
-            !EnduranceMinutes(seconds, out int _) ? ScopeTone.Dim : seconds < EndWarningMin * 60f ? ScopeTone.Red : seconds < EndCautionMin * 60f ? ScopeTone.Amber : ScopeTone.Dim;
-
-        /// <summary>Margin over BINGO in points of the tanks (negative: past it).</summary>
-        public static int MarginPoints(in FuelState f) => (int)Math.Round((f.Level - f.Need) * 100f, MidpointRounding.AwayFromZero);
-
-        public static ScopeTone MarginTone(int points) => points <= 0 ? ScopeTone.Red : points <= MarginCaution ? ScopeTone.Amber : ScopeTone.Ink;
-
-        /// <summary>Reference marks stay dim until they matter.</summary>
-        public static ScopeTone BingoMarkTone(in FuelState f) => f.Level <= f.Need + BingoNear ? ScopeTone.Red : ScopeTone.Dim;
-
-        public static ScopeTone JokerMarkTone(in FuelState f) => f.Level <= f.Need + JokerNear ? ScopeTone.Amber : ScopeTone.Dim;
-
-        /// <summary>The burn rate in points of the tanks per minute (0 when no endurance is known).</summary>
-        public static float BurnPointsPerMinute(in FuelState f) =>
-            EnduranceMinutes(f.EnduranceS, out int _) && f.EnduranceS > 0f ? f.Level / f.EnduranceS * 6000f : 0f;
 
         /// <summary>The page's headline and its tone for this damage and fuel state.</summary>
         public static SystemsHeadline Headline(in DamageState d, in FuelState f)
@@ -107,12 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return now - lastAt <= GaugeHoldSeconds;
         }
 
-        /// <summary>
-        /// The margin over BINGO as the base line of the SYSTEMS strip says it: "+90%", or "NO MARGIN" once it is gone. <paramref name="shortForm"/> is the one that gives way when the base name needs the room:
-        /// "+90" and "NO MGN". Composed in the shared scratch (see <see cref="ScopeStr"/>): use it at once.
-        /// </summary>
-        public static ReadOnlySpan<char> MarginWords(int points, bool shortForm) =>
-            points > 0 ? ScopeStr.Cat("+", points, shortForm ? null : "%") : shortForm ? "NO MGN" : "NO MARGIN";
+        /// <summary>The sky-cover word of a 0..1 cover: CLR below 0.1, FEW below 0.3, SCT below 0.6, BKN below 0.9, else OVC.</summary>
+        public static string SkyWord(float cover) => cover < 0.1f ? "CLR" : cover < 0.3f ? "FEW" : cover < 0.6f ? "SCT" : cover < 0.9f ? "BKN" : "OVC";
 
         /// <summary>The wind's compass-from degrees as 1..360 (a calm north wind reads 360, never 000).</summary>
         public static int WindFromDegrees(float deg)

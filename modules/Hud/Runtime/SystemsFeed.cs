@@ -28,11 +28,10 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return valid;
         }
 
-        public void Update(Aircraft aircraft, BoardFrame frame, bool rotary)
+        public void Update(Aircraft aircraft, BoardFrame frame)
         {
             valid = false;      // set again at the end: a read that throws half way leaves no stale reading behind
             if (aircraft == null || !frame.Fuel.Valid) return;
-            cache.Rotary = rotary;
             cache.Damage = frame.Damage;
             cache.Fuel = frame.Fuel;
             cache.HeadingDeg = aircraft.transform.eulerAngles.y;
@@ -48,7 +47,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 cache.HasWind = true;
                 cache.WindMps = new Vector2(wind.x, wind.z).magnitude;
                 cache.WindFromDeg = (Mathf.Atan2(wind.x, wind.z) * Mathf.Rad2Deg + 180f + 360f) % 360f;   // the wind vector is where it blows TO
+                cache.GustMps = snapshot.GustMps;
+                cache.Turb01 = snapshot.Turbulence01;
+                cache.TempC = snapshot.TemperatureC;
             }
+            else cache.GustMps = cache.Turb01 = cache.TempC = 0f;
+            LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
+            cache.TodH = level != null ? Mathf.Repeat(level.NetworktimeOfDay, 24f) : float.NaN;
 
             cache.ClockS = BoscaliSummer.Core.Game.MissionTimeSource.Now();
             bool squad = ModuleServices.TryGet(out ISquadView aces) && !(aces is Object dropped && dropped == null);
@@ -61,6 +66,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                 if (view.TrySample(at.x, at.z, out WeatherViewSample sky))
                 {
                     cache.HasCloud = true;
+                    cache.Cover = sky.Cover;
+                    cache.CloudBaseM = sky.CloudBase;
+                    cache.Rain01 = sky.Rain01;
                     cache.InCloud = sky.Cover >= CloudCover && at.y >= sky.CloudBase && at.y <= sky.CloudTop;
                 }
             }

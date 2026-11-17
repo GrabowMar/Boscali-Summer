@@ -106,13 +106,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (cornerFurniture != null) return true;
             if (canvasRect == null) return false;
-            cornerShade = CornerRoot("BoscaliCornerShade");
+            if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);      // the furniture died with its layer root: the shade is rebuilt with it
+            cornerShade = CornerRoot("BoscaliCornerShade", canvasRect);
             cornerShade.SetAsFirstSibling();
             leftShadow = ShadeChild<Image>(cornerShade, "LeftStackShadow");
             HudSprites.Slice(leftShadow, HudSprites.Feather);
             mapShadow = ShadeChild<Image>(cornerShade, "MapBackdrop");
             HudSprites.Slice(mapShadow, HudSprites.Feather);
-            cornerFurniture = CornerRoot("BoscaliCornerFurniture");
+            cornerFurniture = CornerRoot("BoscaliCornerFurniture");      // Over.Data: the pieces drawn over the native HUD; the shade stays beneath it
             cornerGroup = cornerFurniture.gameObject.AddComponent<CanvasGroup>();
             cornerGroup.ignoreParentGroups = true;
             cornerGroup.interactable = cornerGroup.blocksRaycasts = false;
@@ -125,12 +126,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>A root as big as the HUD canvas (every child is placed from its top-left corner), off until the first paint.</summary>
-        private RectTransform CornerRoot(string name)
+        private RectTransform CornerRoot(string name, RectTransform parent = null)
         {
+            if (parent == null) parent = BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Data : canvasRect;      // Over.Data unless the layer is missing
             var go = new GameObject(name, typeof(RectTransform));
             go.SetActive(false);
             var rect = (RectTransform)go.transform;
-            rect.SetParent(canvasRect, false);
+            rect.SetParent(parent, false);
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0f, 1f);
@@ -254,14 +256,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Show(cornerShade, true);
         }
 
-        /// <summary>TAC MAP: four DIM brackets round the plate, the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
+        /// <summary>TAC MAP (no corner brackets: user 2026-11-17): the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
         private static void DrawMapFurniture(ScopeCanvas g, in CornerFurniture f, in CornerLayout.MapNorth north)
         {
-            if (f.Present) g.Brackets(f.X0, f.Y0, f.X1 - f.X0, f.Y1 - f.Y0, f.Arm, Dim);
             g.CaptionShelf(f.ShelfX, f.ShelfY, f.ShelfW, "TAC MAP");
             if (!north.Present) return;
             g.Line(north.X, north.Y, north.InX, north.InY, Dim);
-            g.Text("N", north.LabelX, north.LabelY, Ink, 12f, ScopeAlign.Center, true);
+            g.Text("N", north.LabelX, north.LabelY, Dim, 12f, ScopeAlign.Center, true);
         }
 
         private void DestroyCorners()

@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static string RangeDetail(float metres, NOAvionics.AvUnits units) => ScopeStr.Distance("RANGE", metres, units, 16).ToString();
 
         /// <summary>How many radars get the full two-line tag (name, range); the rest get one dim line of ten characters (six boxed tags walled the scope in game: a 71 km fighter weighed as much as a 14 km SAM).</summary>
-        public const int FullTags = 3;
+        public const int FullTags = 2;
 
         /// <summary>A radar at this range or nearer has the deepest spoke, one at <see cref="SpokeFarM"/> or beyond a stub at the rim.</summary>
         public const float SpokeNearM = 5000f, SpokeFarM = 60000f;

@@ -30,8 +30,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float lastTrace, heldAt = float.NegativeInfinity;
         private int lastHeld;
         private readonly float[] allocTicks = new float[4];
-        private string headlineText, rodSub, traceSub;
-        private int headlineKey = -1, rodSubCost = -1, traceSubKey = -1;
+        private string headlineText, rodSub;
+        private int headlineKey = -1, rodSubCost = -1;
         private ScopeTone headlineTone;
         private bool headlineFlash;
 
@@ -108,7 +108,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (StrikeMath.Close(t) && t.Eta <= 15f && !m.Close)
                 {
                     m.Close = true;
-                    env.Notice?.Invoke("ops", HudTone.Warning, "DANGER CLOSE - " + OpsScopeWords.Short(t.Kind) + " IMPACT T-" + (int)Math.Ceiling(t.Eta) + " S",
+                    env.Notice?.Invoke("ops", HudTone.Warning, "DANGER CLOSE - " + OpsScopeWords.Short(t.Kind) + " IMPACT T-" + (int)Math.Ceiling(t.Eta) + "S",
                         ScopeStr.Distance("", t.RangeM, env.Units, 12).ToString());
                 }
                 if (StrikeMath.InFlight(t)) m.Flying = true;
@@ -154,7 +154,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 StrikeTrack t = d.Tracks[soon];
                 int n = (int)Math.Ceiling(t.Eta);
                 key = 2000000 + (int)t.Kind * 1000 + n;
-                if (key != headlineKey) text = ScopeStr.Cat(OpsScopeWords.Short(t.Kind) + " ", n, " S").ToString();
+                if (key != headlineKey) text = ScopeStr.Cat(OpsScopeWords.Short(t.Kind) + " ", n, "S").ToString();
                 bool close = StrikeMath.Close(t);
                 tone = close ? Amber : Hi;
                 flash = close && n <= 4;
@@ -165,13 +165,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 StrikeTrack t = d.Tracks[effect];
                 int n = (int)Math.Ceiling(Math.Max(0f, t.Linger + t.Eta));
                 key = 4000000 + (int)t.Kind * 1000 + n;
-                if (key != headlineKey) text = ScopeStr.Cat(OpsScopeWords.Short(t.Kind) + " ", n, " S").ToString();
+                if (key != headlineKey) text = ScopeStr.Cat(OpsScopeWords.Short(t.Kind) + " ", n, "S").ToString();
             }
             else if (d.SatOpen)
             {
                 int n = (int)Math.Ceiling(d.SatLeft);
                 key = 5000000 + n;
-                if (key != headlineKey) text = ScopeStr.Cat("SAT ", n, " S").ToString();
+                if (key != headlineKey) text = ScopeStr.Cat("SAT ", n, "S").ToString();
                 tone = StrikeMath.SatLate(d.SatLeft) ? Amber : Hi;
             }
             else if (d.CyberLive)
@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     int n = (int)Math.Ceiling(d.HopLeft);
                     key = 7000000 + n;
-                    if (key != headlineKey) text = ScopeStr.Cat("HOP ", n, " S").ToString();
+                    if (key != headlineKey) text = ScopeStr.Cat("HOP ", n, "S").ToString();
                 }
                 else { key = 8000000; text = "HOLDING"; }
             }
@@ -205,7 +205,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         // ------------------------------------------------------------------------------------------------ gauges
 
-        /// <summary>ALLOC with the strikes' prices as ticks, the kinetic bird's fuel, the trace burn and the own SOF team's mission clock.</summary>
+        /// <summary>ALLOC with the strikes' prices as ticks, the kinetic bird's fuel and the own SOF team's mission clock. The trace burn is the CYBER block's bar; the perk strip is drawn under the body.</summary>
+        public override string OwnedGauge => strip ? "perk" : null;
+
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live) return 0;
@@ -223,12 +225,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             if (d.HasBird)
                 into[n++] = new GaugeSpec { Id = "bird", Label = "BIRD", Kind = GaugeKind.Arc, Value = d.BirdFuel, Text = ScopeStr.Pct((int)Math.Round(d.BirdFuel * 100f)), Sub = "KINETIC", Tone = d.BirdFuel <= 0.25f ? Amber : Ink };
-            if (d.CyberLive)
-            {
-                int slot = d.ChainHeld + (d.CyberHopping ? 1 : 0);
-                if (slot != traceSubKey) { traceSubKey = slot; traceSub = ScopeStr.Cat("HOP ", slot, "/", 5, null).ToString(); }
-                into[n++] = new GaugeSpec { Id = "trace", Label = "TRACE", Kind = GaugeKind.Arc, Value = d.Trace / 100f, Text = ScopeStr.Pct((int)d.Trace), Sub = traceSub, Tone = StrikeMath.TraceTone(d.Trace) };
-            }
             if (d.HasSof)
                 into[n++] = new GaugeSpec
                 {

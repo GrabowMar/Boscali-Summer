@@ -13,25 +13,20 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>This tick's alert conditions and the numbers their detail lines quote (the board's 10 Hz read).</summary>
     internal struct AlertInputs
     {
-        /// <summary>Live missiles inbound, and the nearest one's seeker, range and seconds to impact (NaN: not known).</summary>
+        /// <summary>Live missiles inbound, and the nearest one's seeker and seconds to impact (NaN: not known).</summary>
         public int Missiles;
         public string Seeker;
-        public float MissileRangeM, MissileTtiS;
-        /// <summary>Where the nearest one is off the nose, degrees clockwise (NaN: not known), and our heading: the line says its compass bearing, the number the heading tape shows under the mark.</summary>
-        public float MissileBearingDeg, OwnHeadingDeg;
+        public float MissileTtiS;
         /// <summary>The ground is closer than <see cref="HudCues.PullUpSeconds"/> at the sink rate; <see cref="GroundS"/> is how many seconds.</summary>
         public bool PullUp;
         public float GroundS;
         public bool Fire;
         public int Engines, EnginesOut;
-        /// <summary>A radar has us locked: its name and range.</summary>
+        /// <summary>A radar has us locked: its name.</summary>
         public bool Locked;
         public string LockName;
-        public float LockRangeM;
-        /// <summary>Fuel at BINGO, and the field to go home to (null: none known) with its range.</summary>
+        /// <summary>Fuel at BINGO.</summary>
         public bool Bingo;
-        public string Field;
-        public float FieldM;
 
         /// <summary>The raised alerts as a bit per <see cref="AlertKind"/>.</summary>
         public int Raised =>
@@ -138,33 +133,23 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static string CallWord(ThreatCue c) => c == ThreatCue.Flare ? "FLARE" : c == ThreatCue.Chaff ? "CHAFF" : c == ThreatCue.Beam ? "BEAM" : "";
 
         /// <summary>
-        /// The middle word of the warning line into <paramref name="b"/>; returns its length. Missile: "ARH · 095° · 6S" (the seeker, the compass bearing the tape shows under its mark, the seconds to impact),
-        /// "TERRAIN · 3S", "HLT RADAR · 35KM", "RTB · K92 HIGHWAY STRIP · 22KM". The order (BEAM, CHAFF, FLARE) is the line's right word, <see cref="CallWord"/>.
+        /// The middle word of the warning line into <paramref name="b"/>; returns its length. Missile: "ARH" (the seeker alone: the seconds are the ring's, the bearing the tape's), "TERRAIN · 3S", "HLT RADAR" (the radar's name alone),
+        /// and none for BINGO FUEL. The order (BEAM, CHAFF, FLARE, RTB) is the line's right word, <see cref="CallWord"/>.
         /// </summary>
-        public static int Detail(char[] b, AlertKind kind, in AlertInputs a, AvUnits units)
+        public static int Detail(char[] b, AlertKind kind, in AlertInputs a)
         {
             int n = 0;
             switch (kind)
             {
                 case AlertKind.Missile:
                     if (!string.IsNullOrEmpty(a.Seeker)) n = Up(b, n, a.Seeker);
-                    if (Finite(a.MissileBearingDeg))
-                    {
-                        int deg = (int)Math.Round(((a.MissileBearingDeg + (Finite(a.OwnHeadingDeg) ? a.OwnHeadingDeg : 0f)) % 360f + 360f) % 360f) % 360;
-                        n = Sep(b, n);
-                        b[n++] = (char)('0' + deg / 100);
-                        b[n++] = (char)('0' + deg / 10 % 10);
-                        b[n++] = (char)('0' + deg % 10);
-                        b[n++] = '°';
-                    }
-                    if (Finite(a.MissileTtiS)) { n = AvNumFormat.Write(b, Sep(b, n), Math.Max(0f, Math.Min(99f, (float)Math.Round(a.MissileTtiS))), 0); n = AvNumFormat.Append(b, n, "S"); }
                     break;
                 case AlertKind.PullUp:
                     n = AvNumFormat.Append(b, n, "TERRAIN");
                     if (Finite(a.GroundS)) { n = AvNumFormat.Write(b, Sep(b, n), Math.Max(0f, a.GroundS), 0); n = AvNumFormat.Append(b, n, "S"); }
                     break;
                 case AlertKind.Fire:
-                    n = AvNumFormat.Append(b, n, "AIRFRAME ON FIRE");
+                    n = AvNumFormat.Append(b, n, "AIRFRAME");
                     break;
                 case AlertKind.EngineOut:
                     if (a.Engines > 1 && a.EnginesOut < a.Engines)
@@ -178,12 +163,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                     break;
                 case AlertKind.Locked:
                     if (!string.IsNullOrEmpty(a.LockName)) n = Up(b, n, a.LockName);
-                    if (Finite(a.LockRangeM)) n = Up(b, Sep(b, n), a.LockRangeM, units);
-                    break;
-                case AlertKind.Bingo:
-                    n = AvNumFormat.Append(b, n, "RTB");
-                    if (!string.IsNullOrEmpty(a.Field)) n = Up(b, Sep(b, n), a.Field);
-                    if (!string.IsNullOrEmpty(a.Field) && Finite(a.FieldM)) n = Up(b, Sep(b, n), a.FieldM, units);
                     break;
             }
             return n;
@@ -200,13 +179,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return n;
         }
 
-        private static int Up(char[] b, int n, float metres, AvUnits units)
-        {
-            int start = n;
-            n = AvUnitTable.DistanceReading(b, n, metres, units);
-            for (int i = start; i < n; i++) b[i] = char.ToUpperInvariant(b[i]);
-            return n;
-        }
     }
 
     /// <summary>
@@ -221,6 +193,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// </summary>
         public const float WidthShare = 0.27f, HeightShare = 0.30f;
 
+        /// <summary>Below the centre the ring is this share of its height: at 0.30 H six o'clock sat on the cockpit's screens (its rim is ~0.16 H under the centre) and under the jet in third person.</summary>
+        public const float BelowRatio = 0.5f;
+
         /// <summary>
         /// Where on the ring a threat's mark goes, in degrees (0 = right, counter-clockwise). <paramref name="x"/>/<paramref name="y"/>/<paramref name="z"/>: the threat in the camera's
         /// frame (x right, y up, z ahead); <paramref name="sx"/>/<paramref name="sy"/>: its offset from the screen centre when it is ahead. False: it is ahead, on the screen and inside
@@ -232,7 +207,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             angleDeg = -90f;
             if (z > 0f)
             {
-                if (Math.Abs(sx) <= halfW && Math.Abs(sy) <= halfH && (sx / rx) * (sx / rx) + (sy / ry) * (sy / ry) <= 1f) return false;
+                float ey = sy < 0f ? ry * BelowRatio : ry;
+                if (Math.Abs(sx) <= halfW && Math.Abs(sy) <= halfH && (sx / rx) * (sx / rx) + (sy / ey) * (sy / ey) <= 1f) return false;
                 angleDeg = (float)(Math.Atan2(sy, sx) * 180.0 / Math.PI);
                 return true;
             }
@@ -240,18 +216,18 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return true;
         }
 
-        /// <summary>How far out from the centre the ellipse is along <paramref name="angleDeg"/>.</summary>
+        /// <summary>How far out from the centre the ring is along <paramref name="angleDeg"/>: an ellipse above the centre, a flatter one (<see cref="BelowRatio"/>) below it.</summary>
         public static float Reach(float angleDeg, float rx, float ry)
         {
-            double a = angleDeg * Math.PI / 180.0, c = Math.Cos(a) / rx, s = Math.Sin(a) / ry;
+            double a = angleDeg * Math.PI / 180.0, sn = Math.Sin(a), c = Math.Cos(a) / rx, s = sn / (sn < 0.0 ? ry * BelowRatio : ry);
             return (float)(1.0 / Math.Sqrt(c * c + s * s));
         }
 
-        /// <summary>The chevron's size: 14 far out, growing to 24 as impact nears (2 s); NaN reads far.</summary>
-        public static float Size(float ttiS) => float.IsNaN(ttiS) ? 14f : 14f + 10f * (1f - Math.Max(0f, Math.Min(1f, (ttiS - 2f) / 10f)));
+        /// <summary>The chevron's size: 14 far out, growing to 34 as impact nears (2 s); NaN reads far.</summary>
+        public static float Size(float ttiS) => float.IsNaN(ttiS) ? 14f : 14f + 20f * (1f - Math.Max(0f, Math.Min(1f, (ttiS - 2f) / 10f)));
 
         /// <summary>The screen-edge glow toward a missile: none until impact is under <see cref="EdgeS"/>, then rising to <see cref="EdgeMax"/> as it closes (steady, never a flash).</summary>
-        public const float EdgeS = 6f, EdgeMax = 0.45f;
+        public const float EdgeS = 6f, EdgeMax = 0.70f;
 
         public static float EdgeAlpha(float ttiS) => !(ttiS < EdgeS) ? 0f : EdgeMax * (0.25f + 0.75f * (1f - Math.Max(0f, ttiS) / EdgeS));
 

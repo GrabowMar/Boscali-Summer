@@ -2,7 +2,7 @@ using System;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
-    /// <summary>The ink of a mark on the heading tape: WARNING (an inbound missile, a lock, the ace), CAUTION (a radar spike) and INK-HI (the navigation marks).</summary>
+    /// <summary>The ink of a mark on the heading tape: WARNING (an inbound missile: a solid triangle), CAUTION (a lock, a radar spike, the ace: an open amber triangle) and INK-HI (the navigation marks: a diamond, the word in regular Ink). A threat word is bold in its tone.</summary>
     internal enum TapeTone : byte { Warning, Caution, Hi }
 
     /// <summary>
@@ -67,13 +67,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public const int MaxMarks = 6;
         /// <summary>The triangle: gap under the tick line, depth, half width; the chevron past an end stands this far outside the triangle.</summary>
-        public const float TriGap = 3f, TriDepth = 9f, TriHalf = 5f, ChevronOut = 14f, ChevronSize = 8f;
+        public const float TriGap = 3f, TriDepth = 7f, TriHalf = 4f, ChevronOut = 12f, ChevronSize = 7f;
         /// <summary>A label's centre under the tick line on its row (clear of the triangle), and the lower row that clears the game's heading readout and its boresight triangle under the tape's middle.</summary>
-        public const float LabelDrop = 24f, LowLabelDrop = 58f;
+        public const float LabelDrop = 19f, LowLabelDrop = 58f;
         /// <summary>A mark this close to the middle (px) puts its word on the lower row.</summary>
-        public const float CentreClear = 34f;
+        public const float CentreClear = 48f;
         /// <summary>A label character's advance at LABEL (the HUD face's 0.65 em), its padding and the clear gap between two labels.</summary>
-        public const float CharW = 7.8f, LabelPad = 4f, LabelGap = 4f;
+        public const float CharW = 7.8f, LabelPad = 4f, LabelGap = 12f;
 
         public static float LabelWidth(int chars) => chars * CharW + LabelPad;
     }
@@ -184,13 +184,13 @@ namespace BoscaliSummer.Modules.Hud.Domain
     /// <summary>The marks' words that carry a number, built once per value (a mark's seconds change once a second; nothing is allocated twice).</summary>
     internal static class TapeLabels
     {
-        private static readonly string[] Missiles = new string[10 * 100];
+        private static readonly string[] Missiles = new string[10];
 
-        /// <summary>"M1 6S": the missile's index and the seconds to impact (0..99, NaN reads 99).</summary>
-        public static string Missile(int number, float ttiS)
+        /// <summary>"M1": the missile's index (the seconds live on the THREAT time bar and the banner).</summary>
+        public static string Missile(int number)
         {
-            int n = Math.Max(0, Math.Min(9, number)), s = float.IsNaN(ttiS) ? 99 : Math.Max(0, Math.Min(99, (int)Math.Round(ttiS)));
-            return Missiles[n * 100 + s] ??= "M" + n + " " + s + "S";
+            int n = Math.Max(0, Math.Min(9, number));
+            return Missiles[n] ??= "M" + n;
         }
     }
 

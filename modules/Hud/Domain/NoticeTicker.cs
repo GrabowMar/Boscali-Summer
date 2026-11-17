@@ -154,7 +154,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static string Words(in TickerLine line)
         {
             int budget = Budget(line.Tone), phase = Phase(line), textPages = PageCount(line.Text, budget);
-            return phase < textPages ? Page(line.Text, phase, budget) : Page(line.Detail, phase - textPages, budget);
+            if (phase < textPages) return Page(line.Text, phase, budget);
+            string head = line.Text ?? "";
+            int cut = head.IndexOf(" - ", StringComparison.Ordinal);
+            string detail = Page(line.Detail, phase - textPages, budget);
+            return cut > 0 ? head.Substring(0, cut) + " · " + detail : detail;
         }
 
         /// <summary>How many pages <paramref name="s"/> needs (at least 1).</summary>

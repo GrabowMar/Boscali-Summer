@@ -12,8 +12,8 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// THREAT MARKS ON THE GAME'S HEADING TAPE (2026-11-16, concept A): every bearing that matters now hangs under the native heading tape at its true bearing as a small solid triangle with a short word under it, most urgent first
-    /// (<see cref="TapeMarkSet"/>): missiles inbound (WARNING, "M1 6S"), radars locking (WARNING, LOCK) or painting us (CAUTION, SPK), the ace on the hunt (WARNING, ACE), the objective (OBJ), the runway or pad (RWY, PAD), the tanker (TKR)
+    /// THREAT MARKS ON THE GAME'S HEADING TAPE (2026-11-16, concept A): every bearing that matters now hangs under the native heading tape at its true bearing as a small triangle with a short word under it, most urgent first
+    /// (<see cref="TapeMarkSet"/>): missiles inbound (WARNING, "M1 6S"), radars locking (CAUTION, an open amber triangle, LOCK) or painting us (CAUTION, SPK), the ace on the hunt (CAUTION, ACE), the objective (OBJ), the runway or pad (RWY, PAD), the tanker (TKR)
     /// and the landing zone (LZ). A bearing past the tape's end stands at that end with a chevron pointing out. The tape is the game's own: its <c>FlightHud.compass</c> RawImage, a window of <c>uvRect.width * 360</c> degrees whose middle is
     /// the nose; its place on the screen is measured from the RawImage's rectangle every frame (<see cref="Measure"/>), so the marks follow it wherever the game puts it. Where it cannot be found or measured, or is hidden (an external
     /// view, a suppressed HUD), nothing is drawn: it never guesses. Nothing native is touched. Our own holder under the HUD canvas, scaled by canvas height / 1080; per frame only the marks' holders move (the tape scrolls with the heading),
@@ -47,7 +47,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private bool heardPrimed, on, dirty, tapeOk;
         private Transform own;
         private float lastK, jitterDeg, alpha = 1f;
-        private Color drawnAlert, drawnCaution, drawnHi;
+        private Color drawnAlert, drawnCaution, drawnHi, drawnInk;
         private TapeFrame tape;
 
         /// <summary>How far the power-on has come: the marks wait until it is 1 (a self-test pip sweeps the tape meanwhile).</summary>
@@ -92,14 +92,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             ownCam = CameraOf(canvas);
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
-            root = CombatAlerts.Holder(canvasRoot, "BoscaliTape");
+            root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Motion : canvasRoot, "BoscaliTape");
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = false;
             group.alpha = alpha;
             for (int i = 0; i < slots.Length; i++)
             {
                 var s = new Slot { Holder = CombatAlerts.Holder(root, i < TapeLayout.MaxMarks ? "Mark" : "Sweep") };
-                s.Shape = AvVector.Create(s.Holder, "Shape", 4);
+                s.Shape = AvVector.Create(s.Holder, "Shape", 8);
                 s.Text = new ScopeText(s.Holder, font, fontMaterial);
                 s.Holder.gameObject.SetActive(false);
                 slots[i] = s;
@@ -134,18 +134,18 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     ThreatMissile m = threat.Missiles[i];
                     if (!m.Live) continue;
-                    marks.Add(heading + m.BearingDeg, TapeTone.Warning, TapeLabels.Missile(m.Number, m.TtiS), float.IsNaN(m.TtiS) ? 90f : Mathf.Min(m.TtiS, 90f));
+                    marks.Add(heading + m.BearingDeg, TapeTone.Warning, TapeLabels.Missile(m.Number), float.IsNaN(m.TtiS) ? 90f : Mathf.Min(m.TtiS, 90f));
                 }
                 for (int i = 0; i < threat.EmitterCount; i++)
                 {
                     ThreatEmitter e = threat.Emitters[i];
-                    marks.Add(heading + e.BearingDeg, e.Lock ? TapeTone.Warning : TapeTone.Caution, e.Lock ? "LOCK" : "SPK", e.Lock ? 100f : 300f + Mathf.Min(e.RangeM * 0.001f, 99f));
+                    marks.Add(heading + e.BearingDeg, TapeTone.Caution, e.Lock ? "LOCK" : "SPK", e.Lock ? 100f : 300f + Mathf.Min(e.RangeM * 0.001f, 99f));
                 }
             }
             if (ModuleServices.TryGet(out ISquadView squad) && !(squad is Object gone && gone == null) && squad.HuntActive && squad.TryAce(out Aircraft ace, out _) && ace != null)
             {
                 Vector3 d = ace.transform.position - own.position;
-                marks.Add(TapeBearings.CompassBearing(d.x, d.z), TapeTone.Warning, "ACE", 200f);
+                marks.Add(TapeBearings.CompassBearing(d.x, d.z), TapeTone.Caution, "ACE", 200f);
             }
             if (ScopeFeeds.TryRead(out DockScope dock)) marks.Add(heading + dock.TankerBearingDeg, TapeTone.Hi, "TKR", 400f);
             if (ScopeFeeds.TryRead(out ApproachScope approach) && approach.HasBearing) marks.Add(heading + approach.BearingDeg, TapeTone.Hi, approach.Pad ? "PAD" : "RWY", 410f);
@@ -190,12 +190,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!show) return;
             float heading = own != null ? own.eulerAngles.y : 0f;
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
-            Color alert = palette.Alert, caution = palette.Warning, hi = VanillaHudStyle.InkHi;
+            Color alert = palette.Alert, caution = palette.Warning, hi = VanillaHudStyle.InkHi, ink = palette.AllClear;
             bool booting = Boot < 1f;
             int shown = booting ? 0 : marks.Count;
             int sig = marks.Signature() * 31 + shown;
-            bool repaint = dirty || sig != drawnSig || alert != drawnAlert || caution != drawnCaution || hi != drawnHi;
-            drawnSig = sig; drawnAlert = alert; drawnCaution = caution; drawnHi = hi;
+            bool repaint = dirty || sig != drawnSig || alert != drawnAlert || caution != drawnCaution || hi != drawnHi || ink != drawnInk;
+            drawnSig = sig; drawnAlert = alert; drawnCaution = caution; drawnHi = hi; drawnInk = ink;
             dirty = false;
             for (int i = 0; i < TapeLayout.MaxMarks; i++)
             {
@@ -209,10 +209,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (repaint || beyond != s.Beyond)
                 {
                     s.Beyond = beyond;
-                    Shape(s, beyond);
+                    Shape(s, beyond, m.Tone);
                     s.Shape.color = tone;
                     s.Text.Begin();
-                    s.Text.Draw(System.MemoryExtensions.AsSpan(m.Label), m.LabelDx, m.Low ? TapeLayout.LowLabelDrop : TapeLayout.LabelDrop, HudType.Label, ScopeAlign.Center, tone, true);
+                    bool nav = m.Tone == TapeTone.Hi;      // a navigation mark's word is regular Ink; a threat's is bold in its tone
+                    s.Text.Draw(System.MemoryExtensions.AsSpan(m.Label), m.LabelDx, m.Low ? TapeLayout.LowLabelDrop : TapeLayout.LabelDrop, HudType.Label, ScopeAlign.Center, nav ? ink : tone, !nav);
                     s.Text.End();
                 }
             }
@@ -224,7 +225,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 float x = tape.CentreX + (Boot * 2f - 1f) * tape.HalfRangeDeg * tape.PxPerDeg;
                 Place(sweep, x, tape.TickY);
-                if (sweep.Beyond != 0) { sweep.Beyond = 0; Shape(sweep, 0); sweep.Shape.color = hi; }
+                if (sweep.Beyond != 0) { sweep.Beyond = 0; Shape(sweep, 0, TapeTone.Warning); sweep.Shape.color = hi; }
             }
         }
 
@@ -236,14 +237,25 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>The mark's solid triangle hanging under the tick line (apex up), and past an end of the tape a chevron beside it pointing out. White vertices: the slot's colour tints them.</summary>
-        private static void Shape(Slot s, int beyond)
+        private static void Shape(Slot s, int beyond, TapeTone tone)
         {
             AvQuadBuffer b = s.Shape.Buffer;
             b.Clear();
             Rgba white = new Rgba(1f, 1f, 1f, 1f);
-            float top = -TapeLayout.TriGap, bottom = top - TapeLayout.TriDepth;
-            b.Add(0f, top, -TapeLayout.TriHalf, bottom, TapeLayout.TriHalf, bottom, TapeLayout.TriHalf, bottom, white, white, white, white);
-            if (beyond != 0) AvStrokes.Chevron(b, beyond * TapeLayout.ChevronOut, (top + bottom) * 0.5f, TapeLayout.ChevronSize, beyond > 0 ? 0f : 180f, ChevronStroke, white);
+            float top = -TapeLayout.TriGap, bottom = top - TapeLayout.TriDepth, mid = (top + bottom) * 0.5f, h = TapeLayout.TriHalf;
+            if (beyond != 0)
+            {
+                // Past the tape's end: one crisp chevron pointing out, in place of the symbol; the word stays under it.
+                AvStrokes.Chevron(b, beyond * TapeLayout.ChevronOut * 0.5f, mid, TapeLayout.ChevronSize, beyond > 0 ? 0f : 180f, ChevronStroke, white);
+            }
+            else if (tone == TapeTone.Warning) b.Add(0f, top, -h, bottom, h, bottom, h, bottom, white, white, white, white);      // threat: solid triangle
+            else if (tone == TapeTone.Caution)      // spike / ace: open triangle
+            {
+                AvStrokes.Line(b, 0f, top, -h, bottom, ChevronStroke, white);
+                AvStrokes.Line(b, 0f, top, h, bottom, ChevronStroke, white);
+                AvStrokes.Line(b, -h, bottom, h, bottom, ChevronStroke, white);
+            }
+            else AvStrokes.Diamond(b, 0f, mid, h * 0.85f, ChevronStroke, white);      // navigation: diamond
             s.Shape.Commit();
         }
 

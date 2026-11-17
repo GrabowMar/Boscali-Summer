@@ -11,9 +11,9 @@ using UnityEngine.UI;
 namespace BoscaliSummer.Modules.Chatter.Presentation
 {
     /// <summary>
-    /// The radio on the glass: a COMMS block in the left column of the screen, under the game's event log and in its look (a caption shelf, a bracket down the left
-    /// edge, a soft readability shade). The shelf names the net and frequency of the line being spoken; each row is the net's tag, the callsign and the words, typed on as they are
-    /// spoken and wrapped when long. The net colours a row, an emergency is amber, intercepted enemy traffic is red and set in guillemets. A row stays while it is spoken
+    /// The radio on the glass: a COMMS block in the left column of the screen, under the game's event log and in its row grammar (a short caption shelf, a 3 x 12 tick
+    /// at the left of every row, the words 12 in, a soft readability shade). The shelf names the net and frequency of the line being spoken; each row is the net's tag, the callsign and the words in capitals, typed on as they are
+    /// spoken and wrapped when long. The tick says which row: BRIGHT for the newest, DIM for older ones, AMBER for an emergency or intercepted enemy traffic (SIGINT, set in guillemets). There is no red on this block. A row stays while it is spoken
     /// and a little after, then fades; older rows sit back so the live one reads first. Nothing here takes input.
     /// </summary>
     internal sealed class ChatterStrip
@@ -35,10 +35,20 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             public bool Scripted;
         }
 
-        private readonly AvHudHost host;
+        // The surface: a holder inside the HUD layer's Data root (HudLayer on), else the old overlay host (A/B switch off or no HUD canvas yet).
+        private AvHudHost host;
+        private GameObject holderGo;
+        private RectTransform holder, dataRoot, staticRoot;
+        private Canvas holderCanvas;
+        private CanvasGroup holderGroup;
+        private bool inLayer, shown, subscribed;
+        private float ownScale = 1f;
         private readonly Row[] rows = new Row[Rows];
         private readonly TextMeshProUGUI shelf, channel, prompt;
-        private readonly RectTransform shelfLead, shelfLine, shelfEnd, bracket, promptTrack, promptBar;
+        private readonly RectTransform shelfLine, promptTrack, promptBar;
+        private readonly RectTransform[] ticks = new RectTransform[Rows];
+        /// <summary>The net the shelf's flag was last written for (-1: none yet): the flag is rewritten only when the net changes.</summary>
+        private int paintedNet = -1;
         private const float PromptHeight = 34f;
         private bool promptOn;
         private float promptFill;
@@ -49,14 +59,17 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         public ChatterStrip(Transform parent)
         {
-            host = AvHudHost.Create("Boscali / Chatter", parent, 3);
+            this.parent = parent;
+            Mount();
             shelf = Label("Shelf", LeftHudStack.HeaderSize);
+            shelf.fontStyle = FontStyles.Bold;      // caption family: 12 bold DIM like the board's shelves
+            shelf.text = "COMMS";
+            shelf.color = VanillaHudStyle.InkDim;
             channel = Label("Channel", LeftHudStack.HeaderSize);
             channel.alignment = TextAlignmentOptions.TopRight;
-            shelfLead = Bar("ShelfLead");
+            channel.color = VanillaHudStyle.InkDim;
             shelfLine = Bar("ShelfLine");
-            shelfEnd = Bar("ShelfEnd");
-            bracket = Bar("Bracket");
+            for (int i = 0; i < Rows; i++) ticks[i] = Bar("Tick" + i);
             prompt = Label("Prompt", LeftHudStack.BodySize);
             promptTrack = Bar("PromptTrack");
             promptBar = Bar("PromptBar");
@@ -68,16 +81,80 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 rows[i].Text = text;
             }
             RefreshFace();
-            host.SetVisible(false);
+            SetVisible(false);
+            subscribed = true;
+            HudLayer.Paint += OnPaint;
         }
+
+        private readonly Transform parent;
+        private float ScaleFactor => ownScale;
+
+        private RectTransform DataRoot => host != null ? host.Data : dataRoot;
+        private RectTransform StaticRoot => host != null ? host.Static : staticRoot;
+
+        private void SetVisible(bool visible)
+        {
+            if (host != null) host.SetVisible(visible);
+            else if (holderCanvas != null && holderCanvas.enabled != visible) holderCanvas.enabled = visible;
+        }
+
+        private float Alpha { set { CanvasGroup g = host != null ? host.Group : holderGroup; if (g != null && g.alpha != value) g.alpha = value; } }
+
+        /// <summary>Keeps the surface in the mode the A/B switch wants; on a change the labels and bars move to the new one.</summary>
+        private void Mount()
+        {
+            bool want = HudLayer.Enabled && HudLayer.Ensure();
+            if (want == inLayer && (host != null || holder != null)) return;
+            inLayer = want;
+            host?.Destroy();
+            host = null;
+            if (holderGo != null) Object.Destroy(holderGo);
+            holderGo = null; holder = dataRoot = staticRoot = null;
+            holderCanvas = null; holderGroup = null;
+            if (want)
+            {
+                holderGo = new GameObject("Boscali / Chatter", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
+                holder = (RectTransform)holderGo.transform;
+                holder.SetParent(HudLayer.Data, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = Vector2.zero;
+                holderCanvas = holderGo.GetComponent<Canvas>();
+                holderCanvas.overrideSorting = false;
+                holderGroup = holderGo.GetComponent<CanvasGroup>();
+                holderGroup.blocksRaycasts = false;
+                holderGroup.interactable = false;
+                staticRoot = Layer("Static");
+                dataRoot = Layer("Data");
+            }
+            else host = AvHudHost.Create("Boscali / Chatter", parent, 3);
+            if (shelf == null) return;      // the first mount: the labels are built next
+            Move(shelf); Move(channel); Move(prompt);
+            for (int i = 0; i < Rows; i++) Move(rows[i].Text);
+            Move(shelfLine, true); Move(promptTrack, true); Move(promptBar, true);
+            for (int i = 0; i < Rows; i++) Move(ticks[i], true);
+            SetVisible(false);
+        }
+
+        private RectTransform Layer(string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(holder, false);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            go.GetComponent<Canvas>().overrideSorting = false;
+            return rt;
+        }
+
+        private void Move(TextMeshProUGUI text) => text.rectTransform.SetParent(DataRoot, false);
+        private void Move(RectTransform rect, bool bar) => rect.SetParent(StaticRoot, false);
 
         private TextMeshProUGUI Label(string name, float size)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(host.Data, false);
+            go.transform.SetParent(DataRoot, false);
             var text = go.AddComponent<TextMeshProUGUI>();
             AvType.Apply(text, AvTextRole.DataStrong);
-            text.characterSpacing = 0f;
+            text.characterSpacing = HudType.Tracking(HudType.StepOf(size));
             text.fontSize = size;
             text.fontStyle = FontStyles.Normal;
             text.raycastTarget = false;
@@ -92,7 +169,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         private RectTransform Bar(string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(host.Static, false);
+            go.transform.SetParent(StaticRoot, false);
             var image = go.AddComponent<Image>();
             image.raycastTarget = false;
             return (RectTransform)go.transform;
@@ -110,12 +187,13 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             bool enemy = line.Net == ChatterNet.Enemy, emergency = line.Priority == ChatterPriority.Emergency;
             string tag = Tag(line.Net), who = Plain(line.Speaker).ToUpperInvariant();
             string heading = tag + "  " + who + (string.IsNullOrEmpty(line.Role) ? "" : " / " + Plain(line.Role).ToUpperInvariant());
+            // Head: the net tag bold (AMBER for SIGINT, else DIM), the callsign and role DIM, a little under the words' size. Words: BODY capitals, INK, AMBER for an emergency or the enemy's.
             sb.Clear();
-            sb.Append("<color=#").Append(Colour(line.Net)).Append("><size=75%>").Append(heading).Append("</size></color>\n");
-            sb.Append("<color=#").Append(emergency ? Hex(VanillaHudStyle.Caution) : Words(line.Net)).Append('>');
-            if (enemy) sb.Append("<< ");
-            sb.Append(Plain(line.Text));
-            if (enemy) sb.Append(" >>");
+            sb.Append("<size=86%><b><color=#").Append(enemy ? Hex(VanillaHudStyle.Caution) : Hex(VanillaHudStyle.InkDim)).Append('>').Append(tag).Append("</color></b>  <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append('>').Append(heading, tag.Length + 2, heading.Length - tag.Length - 2).Append("</color></size>\n");
+            sb.Append("<color=#").Append(emergency || enemy ? Hex(VanillaHudStyle.Caution) : Hex(VanillaHudStyle.Ink)).Append('>');
+            if (enemy) sb.Append("« ");
+            sb.Append(Plain(line.Text).ToUpperInvariant());
+            if (enemy) sb.Append(" »");
             sb.Append("</color>");
 
             ref Row row = ref rows[used++];
@@ -147,11 +225,11 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             if (open)
             {
                 // The choice is INK-HI (YES) and INK (NO), the keys INK-DIM at LABEL: no colour of its own (HudStandard).
-                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkHi)).Append(">YES</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
-                  .Append("<color=#").Append(Hex(VanillaHudStyle.Ink)).Append(">NO</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>[").Append(Plain(noKey)).Append("]</size></color>");
+                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkHi)).Append(">YES</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=86%>[").Append(Plain(yesKey)).Append("]</size></color>     ")
+                  .Append("<color=#").Append(Hex(VanillaHudStyle.Ink)).Append(">NO</color> <color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=86%>[").Append(Plain(noKey)).Append("]</size></color>");
             }
             else
-                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=75%>ANSWER</size></color>  <color=#")
+                sb.Append("<color=#").Append(Hex(VanillaHudStyle.InkDim)).Append("><size=86%>ANSWER</size></color>  <color=#")
                   .Append(Hex(echo == "YES" ? VanillaHudStyle.InkHi : echo == "NO" ? VanillaHudStyle.Ink : VanillaHudStyle.InkDim)).Append('>').Append(echo).Append("</color>");
             prompt.text = sb.ToString();
         }
@@ -182,39 +260,62 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 if (Clock(rows[i]) > rows[i].Until + FadeSeconds) Drop(i);
             // The maximised map owns the screen (its left host slot sits where this column is): stand down under it; rows keep their clocks.
             bool visible = used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
-            host.SetVisible(visible);
-            if (host.Group != null && host.Group.alpha != LeftHudStack.BootAlpha) host.Group.alpha = LeftHudStack.BootAlpha;      // the visor's power-on brings the column up with the rest
-            if (!visible) { LeftHudStack.CommsBottom = 0f; return; }
+            Mount();
+            shown = visible;
+            if (!visible) { SetVisible(false); LeftHudStack.CommsBottom = 0f; return; }
+            // The layer's late pass lays the block out on the rendered pose (OnPaint); the old path does it here.
+            if (!inLayer) Layout(default);
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (!inLayer || !HudLayer.Enabled || !shown || holder == null || !view.Valid) return;
+            Layout(view);
+        }
+
+        private void Layout(HudView view)
+        {
+            SetVisible(true);
+            Alpha = LeftHudStack.BootAlpha;      // the visor's power-on brings the column up with the rest
             RefreshFace();
             float fit = Mathf.Max(0.1f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
-            host.Refresh(Mathf.Max(0.85f, Screen.height / 1080f) / fit);
+            float step = Mathf.Max(0.85f, Screen.height / 1080f) / fit;
+            if (host != null) { host.Refresh(step); ownScale = host.ScaleFactor; }
+            else
+            {
+                // The holder keeps this block's own design scale inside the HUD canvas: its units stay the 1080 grid the layout is written in.
+                ownScale = Mathf.Max(0.1f, fit * step);
+                holder.localScale = Vector3.one * (ownScale / Mathf.Max(0.01f, view.Scale));
+                holder.sizeDelta = new Vector2(Screen.width / ownScale, Screen.height / ownScale);
+                holder.anchoredPosition = new Vector2(LeftHudStack.ShiftX, LeftHudStack.ShiftY);
+            }
             // The 1080-high reference width, as the event log uses: the host's scale has a 0.85 floor, so dividing by it disagrees below 918 px of height.
             float column = HudZones.ColumnWidth(Screen.width / (float)Mathf.Max(1, Screen.height) * 1080f);
             if (column != width) { width = column; Rewrap(); }
-            float canvasHeight = Screen.height / Mathf.Max(0.1f, host.ScaleFactor);
+            float canvasHeight = Screen.height / Mathf.Max(0.1f, ScaleFactor);
             Paint(canvasHeight);
         }
 
         private void Paint(float canvasHeight)
         {
             // The game's own feed is up in our log's place (free camera hides the HUD canvas the log lives on): start under it.
-            float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, host.ScaleFactor) + 16f : 0f);
+            float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, ScaleFactor) + 16f : 0f);
             float y = canvasHeight - top;
             Color frame = VanillaHudStyle.Ink;
             frame.a = HudInk.LineMid;
 
             ChatterNet live = rows[used - 1].Net;
-            shelf.text = "COMMS";
-            shelf.color = VanillaHudStyle.InkDim;
-            channel.text = "<color=#" + Colour(live) + ">" + Tag(live) + " " + Frequency(live) + "</color>";
-            AvHudHost.Place(shelf.rectTransform, Left + Indent, y - 16f, 60f, 20f);
-            AvHudHost.Place(channel.rectTransform, Left + Width - 160f, y - 16f, 148f, 20f);
-            SetBar(shelfLead, Left, y - 6f, 8f, 1f, frame);
-            SetBar(shelfLine, Left + 56f, y - 6f, Width - 220f, 1f, frame);
-            SetBar(shelfEnd, Left + Width - 2f, y - 8f, 4f, 4f, frame);
+            if ((int)live != paintedNet)
+            {
+                paintedNet = (int)live;
+                channel.text = Tag(live) + " " + Frequency(live);      // the flag is written when the net changes, not every frame
+            }
+            // The HUD's one section head (ScopeCanvas.CaptionShelf): caption left, flag right, one hairline under both; no lead or end marks.
+            AvHudHost.Place(shelf.rectTransform, Left, y - 16f, 60f, 20f);
+            AvHudHost.Place(channel.rectTransform, Left + Width - 148f, y - 16f, 148f, 20f);
+            SetBar(shelfLine, Left, y - 15f, Width, 1f, frame);
 
             float cursor = y - ShelfHeight - 4f;
-            float bodyTop = cursor;
             for (int i = 0; i < used; i++)
             {
                 ref Row row = ref rows[i];
@@ -225,7 +326,12 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 row.Text.maxVisibleCharacters = row.Head + (int)((now - row.Shown) * CharsPerSecond);
                 float alpha = now <= row.Until ? 1f : Mathf.Clamp01(1f - (now - row.Until) / FadeSeconds);
                 row.Text.alpha = alpha;
+                // The row's tick (3 x 12, 3 in from the edge, on the head line): AMBER for an emergency or the enemy, BRIGHT for the newest row, DIM for the older ones.
+                Color tick = row.Net == ChatterNet.Enemy || row.Priority == ChatterPriority.Emergency ? VanillaHudStyle.Caution : i == used - 1 ? VanillaHudStyle.InkHi : VanillaHudStyle.InkDim;
+                tick.a *= alpha;
+                SetBar(ticks[i], Left + 3f, cursor + RowGap + row.Height - 13f, 3f, 12f, tick);
             }
+            for (int i = used; i < Rows; i++) SetBar(ticks[i], 0f, 0f, 0f, 0f, Color.clear);
             if (promptOn)
             {
                 float barWidth = Width - Indent - 8f;
@@ -234,9 +340,9 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 prompt.maxVisibleCharacters = 99999;
                 prompt.alpha = 1f;
                 Color track = frame;
-                track.a = promptFill > 0f ? 0.25f : 0f;
+                track.a = promptFill > 0f ? HudInk.LineLow : 0f;
                 SetBar(promptTrack, Left + Indent, cursor + 2f, barWidth, 2f, track);
-                Color fill = Color.Lerp(VanillaHudStyle.Caution, VanillaHudStyle.Ink, promptFill);
+                Color fill = promptFill > 0.33f ? VanillaHudStyle.Ink : VanillaHudStyle.Caution;
                 fill.a = promptFill > 0f ? 0.9f : 0f;
                 SetBar(promptBar, Left + Indent, cursor + 2f, barWidth * promptFill, 2f, fill);
                 cursor -= RowGap;
@@ -246,7 +352,6 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 SetBar(promptTrack, 0f, 0f, 0f, 0f, Color.clear);
                 SetBar(promptBar, 0f, 0f, 0f, 0f, Color.clear);
             }
-            SetBar(bracket, Left + 1f, cursor + RowGap, 1f, bodyTop - cursor - RowGap, frame);
             LeftHudStack.CommsBottom = top + Height();
             paintedTop = top;
         }
@@ -308,7 +413,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             promptOn = false;
             prompt.text = "";
             LeftHudStack.CommsBottom = 0f;
-            host.SetVisible(false);
+            shown = false;      // the Paint subscription outlives a clear (host disabled, scene reset): it must not lay out an empty block again
+            SetVisible(false);
         }
 
         public void ClearScripted()
@@ -318,7 +424,13 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             else LeftHudStack.CommsBottom = paintedTop + Height();
         }
 
-        public void Destroy() { Clear(); host.Destroy(); }
+        public void Destroy()
+        {
+            if (subscribed) { subscribed = false; HudLayer.Paint -= OnPaint; }
+            Clear();
+            host?.Destroy();
+            if (holderGo != null) Object.Destroy(holderGo);
+        }
 
         public static string Tag(ChatterNet net)
         {
@@ -341,25 +453,11 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 case ChatterNet.Awacs: return "364.200";
                 case ChatterNet.Tower: return "118.700";
                 case ChatterNet.Command: return "30.550 FM";
-                case ChatterNet.Enemy: return "9.4 GHz";
+                case ChatterNet.Enemy: return "9.4 GHZ";
                 case ChatterNet.Allied: return "255.400";
                 default: return "251.000";
             }
         }
-
-        /// <summary>A speaker's tag and callsign: INK-HI for a friendly net (AWACS, tower, command, allies: the INFO role is the lifted ink), INK for the flight's own, WARNING for the enemy.</summary>
-        private static string Colour(ChatterNet net)
-        {
-            switch (net)
-            {
-                case ChatterNet.Enemy: return Hex(VanillaHudStyle.WarningRed);
-                case ChatterNet.Wing: return Hex(VanillaHudStyle.Ink);
-                default: return Hex(VanillaHudStyle.InkHi);
-            }
-        }
-
-        /// <summary>The spoken words: INK, and WARNING for the enemy net.</summary>
-        private static string Words(ChatterNet net) => Hex(net == ChatterNet.Enemy ? VanillaHudStyle.WarningRed : VanillaHudStyle.Ink);
 
         private static string Hex(Color c) => ColorUtility.ToHtmlStringRGB(c);
     }

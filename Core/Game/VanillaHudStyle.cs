@@ -87,7 +87,7 @@ namespace BoscaliSummer.Core.Game
 
         /// <summary>
         /// The hair-thin dark edge round every glyph (2026-11-16, the approved mockup's 1 px dark-green rim: small text reads on bright sky and cloud). TMP's own outline, centred on the glyph edge: it
-        /// would eat half its width off the face, so the face dilate is raised by <c>width * EdgeFaceBack</c> and the letters keep today's weight. The colour is the mockup's <c>--edge</c> (2,16,10 at 0.82).
+        /// would eat half its width off the face, so the face dilate is raised by <c>width * EdgeFaceBack</c> and the letters keep today's weight. The colour is the mockup's <c>--edge</c> (2,16,10 at 0.92).
         /// Width 0 turns it off; <see cref="SetEdge"/> re-applies it to every material already made.
         /// </summary>
         internal const float EdgeDefault = 0.16f, EdgeMax = 0.25f, EdgeFaceBack = 1.1f;
@@ -148,38 +148,53 @@ namespace BoscaliSummer.Core.Game
             return m;
         }
 
-        /// <summary>Vanilla HUD colours, live so a custom theme carries over. AllClear is INK (the theme colour as it looks on sky, HudInk.Ink); Warning is CAUTION and Alert WARNING.</summary>
+        /// <summary>Vanilla HUD colours, live so a custom theme carries over. AllClear is INK (the theme colour as it looks on sky, HudInk.Ink); Warning is CAUTION (HudInk.Caution) and Alert WARNING (HudInk.Warning).</summary>
         internal static Palette Colours
         {
             get
             {
-                try
+                // Read 5-7 times a frame by the HUD: one theme read (try/catch, Math.Pow in the luminance floors) per frame.
+                int frame = Time.frameCount;
+                if (frame != coloursFrame)
                 {
-                    ThemeGroup group = ThemeManager.Active ?? ThemeManager.Vanilla;
-                    ColorTheme theme = group != null ? group.ColorTheme : null;
-                    if (theme != null)
-                        return new Palette
-                        {
-                            AllClear = Washed(theme.AllClear),
-                            Warning = theme.Warning,
-                            Alert = theme.Alert
-                        };
+                    colours = ReadColours();
+                    coloursFrame = frame;
                 }
-                catch (Exception)
-                {
-                }
-
-                return new Palette
-                {
-                    AllClear = Washed(VanillaGreen),
-                    Warning = VanillaYellow,
-                    Alert = VanillaRed
-                };
+                return colours;
             }
         }
 
+        private static int coloursFrame = -1;
+        private static Palette colours;
+
+        private static Palette ReadColours()
+        {
+            try
+            {
+                ThemeGroup group = ThemeManager.Active ?? ThemeManager.Vanilla;
+                ColorTheme theme = group != null ? group.ColorTheme : null;
+                if (theme != null)
+                    return new Palette
+                    {
+                        AllClear = Washed(theme.AllClear),
+                        Warning = ToColor(HudInk.Caution(ToRgba(theme.Warning))),
+                        Alert = ToColor(HudInk.Warning(ToRgba(theme.Alert)))
+                    };
+            }
+            catch (Exception)
+            {
+            }
+
+            return new Palette
+            {
+                AllClear = Washed(VanillaGreen),
+                Warning = ToColor(HudInk.Caution(ToRgba(VanillaYellow))),
+                Alert = ToColor(HudInk.Warning(ToRgba(VanillaRed)))
+            };
+        }
+
         /// <summary>
-        /// The visor's colour roles (HudStandard): INK is the game's HUD colour as it looks on sky, INK-HI that lifted toward white, INK-DIM the ink at one alpha, CAUTION the theme's amber, WARNING its red. All live (a custom theme
+        /// The visor's colour roles (HudStandard): INK is the game's HUD colour as it looks on sky, INK-HI that lifted toward white, INK-DIM an opaque darker tone, CAUTION the theme's amber, WARNING its red. All live (a custom theme
         /// recolours the whole display). INFO (allied, radio, navigation) is INK-HI: the HUD theme has no cool tone.
         /// </summary>
         internal static Color Ink => Colours.AllClear;

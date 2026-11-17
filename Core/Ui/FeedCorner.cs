@@ -16,46 +16,26 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>Every card in the column is this wide (canvas units at 1080p). From the top: a caption shelf <see cref="Header"/> tall, the picture, a one-line data strip <see cref="Strip"/> tall.</summary>
         public const float Width = 264f, Header = 18f, Strip = 16f;
 
-        /// <summary>The shelf's lead rule, the gap round the name, and where the state word's right edge stands (all from the card's left or right edge).</summary>
-        public const float ShelfLead = 10f, ShelfGap = 4f, ShelfText = ShelfLead + ShelfGap, StateInset = 8f;
+        /// <summary>Where the shelf's caption starts and the state word's right edge stands (from the card's left and right edges): flush, the rule below them is the picture's top edge.</summary>
+        public const float ShelfText = 0f, StateInset = 0f;
 
         /// <summary>Where a card's picture ends and its data strip starts, y up, for a card whose foot is at <paramref name="bottom"/>.</summary>
         public static float PictureBottom(float bottom) => bottom + Strip;
 
         /// <summary>
-        /// The cards' one chrome (2026-11-16 visor look), in the HUD's own ink, y up: a caption shelf in the board's grammar (a short lead rule, the name, a long rule, the state word at the right, an end tick),
-        /// the picture in a faint frame with sharp corner ticks, and room for the data strip under it. No plate: the cards sit on the HUD like its other line art.
+        /// The cards' one chrome (2026-11-17 refit), in the HUD's own ink, y up: the caption shelf (a Dim caption at the left, the state word at the right) over ONE rule across the picture's top edge, and 6-long hairline
+        /// brackets round the picture (the top corners drop from the rule, the bottom corners have both arms), with room under it for the data strip. No plate, no box: the cards sit on the HUD like its other line art.
         /// </summary>
-        /// <param name="nameW">Width of the name word on the shelf (the caller measures its text; the rule starts after it).</param>
-        /// <param name="stateW">Width of the state word at the right (0 = none: the rule runs to the end tick).</param>
-        public static void Frame(AvQuadBuffer b, float left, float bottom, float right, float top, Rgba ink, float nameW, float stateW)
+        public static void Frame(AvQuadBuffer b, float left, float bottom, float right, float top, Rgba ink)
         {
-            float y = top - Header * 0.5f + 1.5f, picTop = top - Header, picBottom = PictureBottom(bottom), arm = 8f;
-            Rgba rule = ink.WithAlpha(0.85f);
-            AvStrokes.Line(b, left, y, left + ShelfLead, y, 1f, rule);
-            float from = left + ShelfText + nameW + ShelfGap, to = stateW > 0f ? right - StateInset - stateW - ShelfGap : right;
-            if (to > from) AvStrokes.Line(b, from, y, to, y, 1f, rule);
-            AvStrokes.Line(b, right, y - 4f, right, y + 4f, 1.5f, ink);
-
-            Rgba faint = ink.WithAlpha(0.4f);
-            AvStrokes.Line(b, left, picBottom, right, picBottom, 1f, faint);
-            AvStrokes.Line(b, left, picTop, right, picTop, 1f, faint);
-            AvStrokes.Line(b, left, picBottom, left, picTop, 1f, faint);
-            AvStrokes.Line(b, right, picBottom, right, picTop, 1f, faint);
-            AvStrokes.Line(b, left, picTop, left + arm, picTop, 1.5f, ink);
-            AvStrokes.Line(b, left, picTop, left, picTop - arm, 1.5f, ink);
-            AvStrokes.Line(b, right, picTop, right - arm, picTop, 1.5f, ink);
-            AvStrokes.Line(b, right, picTop, right, picTop - arm, 1.5f, ink);
-            AvStrokes.Line(b, left, picBottom, left + arm, picBottom, 1.5f, ink);
-            AvStrokes.Line(b, left, picBottom, left, picBottom + arm, 1.5f, ink);
-            AvStrokes.Line(b, right, picBottom, right - arm, picBottom, 1.5f, ink);
-            AvStrokes.Line(b, right, picBottom, right, picBottom + arm, 1.5f, ink);
+            float picTop = top - Header;      // one rule over the picture, no corner arms (user 2026-11-17)
+            AvStrokes.Line(b, left, picTop, right, picTop, HudStroke.Hairline, ink.WithAlpha(HudInk.LineMid));
         }
 
         /// <summary>The data strip's text size for a card <paramref name="width"/> wide: 12 pt at the full 264, smaller on a narrower card so three cells still fit.</summary>
         public static float StripPt(float width) => HudType.Label;
 
         /// <summary>The rich-text lead of a strip cell: the label dimmed ("RNG "), the value after it full. Pair with <see cref="CellTail"/>.</summary>
-        public const string CellHead = "<alpha=#E0>", CellTail = "<alpha=#FF> ";
+        public const string CellHead = "<alpha=#CC>", CellTail = "<alpha=#FF> ";
     }
 }

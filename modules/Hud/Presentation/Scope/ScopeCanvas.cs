@@ -395,7 +395,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             HudStep step = HudType.StepOf(size);
             bold = HudType.Bold(step, tone == Amber || tone == Red);      // regular for LABEL and BODY, bold from VALUE up or a warning word
             float drawn = HudType.Of(step) * TextBoost;
-            alpha = tone == Dim || tone == Faint ? (alpha >= 0.5f ? 1f : alpha) : HudInk.Text(alpha);      // INK or INK-DIM (the dim tone carries its own 0.8), nothing between
+            if (tone == Ink && alpha >= 0.5f && alpha < 0.95f) tone = Dim;      // a mid-alpha INK word is INK-DIM (an opaque tone), nothing between
+            alpha = HudInk.Text(alpha);
             Rgba c = pal.Of(tone, alpha);
             // TMP centres the line box, the canvas "middle" baseline the em box: the glyphs sit a little low unless nudged up.
             text?.Draw(s, X(x), Y2(y) - drawn * u * LineNudge, drawn * u, align, new Color(c.R, c.G, c.B, c.A), bold);
@@ -410,7 +411,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             while (size > minSize && TextW(s, size) > maxW) size -= 1f;
             if (TextW(s, size) > maxW)
             {
-                int keep = Math.Max(1, (int)(maxW / (ScopeText.DesignAdvance * size)) - 1);
+                int keep = Math.Max(1, (int)(maxW / (ScopeText.DesignAdvance * HudType.Snap(size) * TextBoost)) - 3);
                 if (keep < s.Length)
                 {
                     Span<char> cut = stackalloc char[keep + 1];

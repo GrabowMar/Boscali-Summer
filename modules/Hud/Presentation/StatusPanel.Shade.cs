@@ -11,7 +11,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     // but in a group of their own that ignores the root's: the pilot's Opacity dims the ink and the line art, not the shade.
     internal sealed partial class StatusPanel
     {
-        private static readonly Color ShadeColor = new Color(2f / 255f, 12f / 255f, 8f / 255f, 1f);
+        private static readonly Color ShadeColor = HudSprites.ShadeTint;
 
         private RectTransform shadeRect;
         private Image shadeBand;
@@ -76,12 +76,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             Show(shadeField, area.Present);
 
-            float margin = ScopeLayout.Margin * baseUnit / unit;      // board units: the screen's right edge is this far right of the box with no offset (the anchor, 8 base units in, when the board is moved)
-            bool fadedTop = fromTop > (ScopeLayout.MarginTop + 0.5f) * baseUnit;
+            float margin = ScopeLayout.Margin * baseUnit / unit;      // board units: the screen's right edge is this far right of the box with no offset (the anchor, 12 base units in, when the board is moved)
+            bool fadedTop = fromTop > (ScopeLayout.Margin + 0.5f) * baseUnit;
             Show(shadeBand, true);
             Sprite sprite = HudSprites.SunBand(fadedTop ? ScopeLayout.BandFadeTop / ScopeLayout.BandHeight : 0f);
             if (shadeBand.sprite != sprite) shadeBand.sprite = sprite;
-            PlaceBox(shadeBand.rectTransform, new BoardRect(-ScopeLayout.BandRamp, -ScopeLayout.MarginTop * baseUnit / unit, geo.Width + margin + ScopeLayout.BandRamp * 2f, ScopeLayout.BandHeight));
+            PlaceBox(shadeBand.rectTransform, new BoardRect(-ScopeLayout.BandRamp, -ScopeLayout.Margin * baseUnit / unit, geo.Width + margin + ScopeLayout.BandRamp * 2f, ScopeLayout.BandHeight));
             shadeBandBase = shadeBand.rectTransform.anchoredPosition;      // the band stays hung from the top of the screen while the board sways
             shadeBand.rectTransform.anchoredPosition = shadeBandBase - new Vector2(0f, swayShift.y);
             float ramp = HudSprites.BandRamp / (ScopeLayout.BandRamp * unit);

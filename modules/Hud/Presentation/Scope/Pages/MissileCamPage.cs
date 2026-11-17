@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// MISSILE CAM (prototype: <c>pages/missilecam.js</c>): what the seeker of the missile the camera rides knows. There is no second camera, so the view is a schematic: the
     /// horizon and a ground grid tilted with the missile, a tunnel of chevron gates from the boresight reticle to the target and a box on the target that grows as the range
     /// falls (dashed on the data-link, snapping solid at the lock, dashed amber on the last known place while the seeker is blind or searching). Around it: the phase chain
-    /// (BOOST, MID, ACTIVE, TERM), the range-to-go tape (the target at the top, hatched = still to fly, ACT and TERM marks), the seeker block (the target against the cone) and,
+    /// (BOOST, MID, ACTIVE, TERM), the range-to-go tape (the target at the top, an Ink track = still to fly, ACT and TERM marks), the seeker block (the target against the cone) and,
     /// under the view, the side profile of the flight since launch. When the ride ends the view turns to static for a moment with the result of the shot.
     /// Fed by <see cref="MissileCamScope"/>; the away, pitbull and result notices are the SHOT page's.
     /// </summary>
@@ -30,14 +30,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvUnits units;
         private float now, lockAt = float.NegativeInfinity;
         private CamMode lastMode;
-        private readonly float[] quad = new float[8], rangeTick = new float[1];
+        private readonly float[] quad = new float[8];
         /// <summary>
         /// Where words sit on the view (x0, y0, x1, y1 each; the chain's chips, the header's words, the seeker block, the tape block): the ground picture, the gates and the static are cut round them, because the plates that used to
         /// hide a line behind a word are gone (LAYOUT.md 9). The chips' and the words' are measured by <see cref="Header"/> every paint, the others are fixed. <see cref="cut"/> is the scratch of <see cref="Cut"/>.
         /// </summary>
         private readonly float[] hole = new float[Holes * 4] { 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 6f, 154f, 182f, 236f, TapeLeft, 36f, FX + FW, 236f }, cut = new float[8];
-        private int ttiKey = int.MinValue, rangeKey = int.MinValue, nextKey = int.MinValue, burnKey = int.MinValue;
-        private string modeWord = "", ttiText = "", ttiSub = "", rangeText = "", nextLabel = "", burnSub;
+        private int ttiKey = int.MinValue, nextKey = int.MinValue, burnKey = int.MinValue;
+        private string modeWord = "", ttiText = "", nextLabel = "", burnSub;
 
         public override ScopePage Id => ScopePage.MissileCam;
 
@@ -74,11 +74,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (tti != ttiKey)
             {
                 ttiKey = tti;
-                ttiText = tti < 0 ? "--" : ScopeStr.Cat("", tti, " S").ToString();
-                ttiSub = tti < 0 ? "TTI --" : ScopeStr.Cat("TTI ", tti, "S").ToString();
+                ttiText = tti < 0 ? "--" : ScopeStr.Cat("", tti, "S").ToString();
             }
-            int range = float.IsNaN(d.RangeM) ? -1 : (int)(d.RangeM / 100f) * 2 + (units == AvUnits.Imperial ? 1 : 0);
-            if (range != rangeKey) { rangeKey = range; rangeText = range < 0 ? "--" : ScopeStr.Cat("", d.RangeM / UnitM, 1, units == AvUnits.Imperial ? "NM" : "KM").ToString(); }
         }
 
         /// <summary>The player's distance unit in metres (a km or a nautical mile).</summary>
@@ -97,20 +94,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new ScopeHeadline { Text = ttiKey < 0 ? modeWord : ttiText, Tone = Hi };
         }
 
-        /// <summary>The seeker (how well it holds the target), the range to go against the tape, the missile the view steps to next and the motor.</summary>
+        /// <summary>The missile the view steps to next and the motor. The seeker and the range are the view's and the tape's own, and the time to go is the headline's.</summary>
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live) return 0;
             int n = 0;
-            bool missile = MissileCamMath.ChainIndex(d.Phase) >= 0, term = missile && d.TapeTopM > ShotMath.TerminalRangeM;
-            float strength = d.Lost ? 0f : MissileCamMath.Strength(d.Mode, MissileCamMath.OffBoresight(d.ErrXDeg, d.ErrYDeg), d.ConeDeg);
-            into[n++] = new GaugeSpec { Id = "seek", Label = "SEEKER", Kind = GaugeKind.Arc, Value = strength, Text = modeWord, Sub = d.Seeker, Tone = caution ? Amber : Ink, Flash = caution };
-            rangeTick[0] = term ? ShotMath.TerminalRangeM / d.TapeTopM : 0f;
-            into[n++] = new GaugeSpec
-            {
-                Id = "rng", Label = "RANGE", Kind = GaugeKind.Bar, Value = MissileCamMath.TapeFrac(d.RangeM, d.TapeTopM), Text = rangeText,
-                Sub = d.Lost ? MissileCamMath.ResultWord(d.Result) : ttiSub, Tone = Ink, Ticks = rangeTick, TickCount = term ? 1 : 0, TickTone = Dim,
-            };
+            bool missile = MissileCamMath.ChainIndex(d.Phase) >= 0;
             if (d.Next != null && d.Count > 1)
             {
                 int next = (d.Index + 1) % d.Count + 1;
@@ -139,8 +128,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Header(g);      // first: it measures the words the picture is cut round
             if (gone) Static(g);
             else View(g);
-            g.Box(FX, FY, FW, FH, Dim, 0.9f);
-            g.Brackets(FX + 1f, FY + 1f, FW - 2f, FH - 2f, 8f, Ink);
             if (!d.Lost)
             {
                 // the target's place in the view: its angles off the boresight, kept with its box inside the frame and left of the tape
@@ -160,7 +147,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The horizon where the missile's pitch and roll put it and a ground grid running toward it (it scrolls with the closure), cut at the frame.</summary>
         private void View(ScopeCanvas g)
         {
-            g.Fill(FX, FY, FW, FH, Bg, 0.5f);
             float a = -d.RollDeg * Mathf.Deg2Rad, ca = Mathf.Cos(a), sa = Mathf.Sin(a), yh = Mathf.Clamp(d.PitchDeg * MissileCamMath.PxPerDeg, -300f, 300f);
             float ph = float.IsNaN(d.ClosureMps) ? 0f : (now * 0.55f * d.ClosureMps / 1000f % 1f + 1f) % 1f;
             for (int i = 0; i < 11; i++)
@@ -268,7 +254,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             const float gx = 46f, gy = 196f, r = 34f, k = r / 50f;
             bool locked = d.Mode == CamMode.Locked, dim = warn && ScopeCanvas.Blink(now, 3f, 0.7f);
             ScopeTone tone = warn ? Amber : locked ? Hi : Dim;
-            g.Fill(8f, 156f, 172f, 78f, Bg, 0.55f);
             g.Ring(gx, gy, r, Faint);
             g.Line(gx - r, gy, gx + r, gy, Faint); g.Line(gx, gy - r, gx, gy + r, Faint);
             if (d.ConeDeg > 0f) g.Ring(gx, gy, Math.Min(r, d.ConeDeg * k), tone, 0.95f, 1f, Ink, locked ? 0.1f : 0f, locked ? 0f : 3f, 3f);
@@ -288,7 +273,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text(d.Seeker, 86f, 220f, Dim);
         }
 
-        /// <summary>The phase chain (a bomb has none) over the missile's place in the follow list, its name, its target and its heading.</summary>
+        /// <summary>The phase chain (a bomb has none: words, the current one Hi with a 2 bu bar under it, past Dim, future Faint) over the missile's place in the follow list, its name, its target and its heading.</summary>
         private void Header(ScopeCanvas g)
         {
             int cur = MissileCamMath.ChainIndex(d.Phase);
@@ -298,43 +283,34 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < 4 && cur >= 0; i++)
             {
                 bool on = i == cur;
-                float w = Mathf.Round(ScopeCanvas.TextW(Chain[i]) + 10f);
+                float w = Mathf.Round(ScopeCanvas.TextW(Chain[i]));
                 ScopeTone tone = on ? Hi : i < cur ? Dim : Faint;
-                g.Fill(x, 36f, w, 17f, Bg, 0.7f);
-                g.Box(x, 36f, w, 17f, tone, on ? 1f : 0.9f, 1f, Ink, on ? 0.28f : 0f);
-                g.Text(Chain[i], x + w / 2f, 45f, tone, 12f, ScopeAlign.Center, on);
-                x += w + 3f;
-                hole[0] = 6f; hole[1] = 34f; hole[2] = x - 1f; hole[3] = 55f;
+                g.Text(Chain[i], x, 45f, tone, 12f, ScopeAlign.Left, on);
+                if (on) g.Fill(x, 52f, w, 2f, Hi);
+                hole[0] = 6f; hole[1] = 34f; hole[2] = x + w + 2f; hole[3] = 55f;
+                x += w + 10f;
             }
-            float w1 = g.Text(ScopeStr.Cat("MSL ", d.Index + 1, "/", d.Count, null), 8f, 66f, Hi, 12f, ScopeAlign.Left, true) + 16f;
-            w1 += g.FitText(d.Full, 8f + w1, 66f, 322f - w1, Hi, 12f, 12f, ScopeAlign.Left, true);
+            float w1 = g.Text(ScopeStr.Cat("MSL ", d.Index + 1, "/", d.Count, null), 8f, 66f, Dim) + 16f;
+            w1 += g.FitText(d.Full, 8f + w1, 66f, 322f - w1, Ink, HudType.Body, 12f);
             float w2 = string.IsNullOrEmpty(d.Target) ? 0f : g.Text(ScopeStr.Cat("TGT ", d.Target), 8f, 82f, Dim) + 16f;
             int hdg = ((int)Math.Round(d.HeadingDeg) % 360 + 360) % 360;
             w2 += g.Text(ScopeStr.Cat("HDG ", hdg < 10 ? "00" : hdg < 100 ? "0" : null, hdg, null), 8f + w2, 82f, Dim);
             hole[4] = 4f; hole[5] = 56f; hole[6] = 5f + Mathf.Round(Math.Max(w1, w2)) + 7f; hole[7] = 92f;      // the horizon and the static do not run through these words
         }
 
-        /// <summary>The range-to-go tape: the target at the top, the missile's marker rising toward it; hatched = still to fly; ACT (the seeker goes active) and TERM (the last 2.5 km) marks.</summary>
+        /// <summary>The range-to-go tape: the target at the top, the missile's marker rising toward it; the Ink part of the track = still to fly; ACT (the seeker goes active) and TERM (the last 2.5 km) marks.</summary>
         private void Tape(ScopeCanvas g)
         {
             bool imperial = units == AvUnits.Imperial;
             float unitM = UnitM, top = Math.Max(d.TapeTopM, 1f), span = TapeBottom - TapeTop, ym = TapeTop + MissileCamMath.TapeFrac(d.RangeM, d.TapeTopM) * span;
-            g.Fill(TapeLeft, 36f, FX + FW - TapeLeft, 200f, Bg, 0.55f);
             g.Text(imperial ? "RNG NM" : "RNG KM", TX + TW / 2f, 44f, Dim, 12f, ScopeAlign.Center);
-            g.Box(TX, TapeTop, TW, span, Dim, 0.9f);
-            g.Fill(TX + 2f, Mathf.Round(ym), TW - 4f, Mathf.Round(TapeBottom - ym - 1f), Faint, 0.8f);
-            if (ym - TapeTop > 3f)
-            {
-                quad[0] = TX + 2f; quad[1] = TapeTop + 2f; quad[2] = TX + TW - 2f; quad[3] = TapeTop + 2f; quad[4] = TX + TW - 2f; quad[5] = ym; quad[6] = TX + 2f; quad[7] = ym;
-                int n = g.Poly(quad, 4);
-                g.FillPoly(n, Ink, 0.22f);
-                g.Hatch(n, 4f, Ink, 0.7f);
-            }
+            g.Fill(TX + 3f, TapeTop, 3f, span, Faint);
+            if (ym - TapeTop > 1f) g.Fill(TX + 3f, TapeTop, 3f, Mathf.Round(ym - TapeTop), Ink);      // Ink: the distance still to fly
             float step = MissileCamMath.TapeStep(top, unitM);
             for (int k = 0; k * step <= top; k++)
             {
                 float y = Mathf.Round(TapeTop + k * step / top * span);
-                g.Line(TX - (k % 5 == 0 ? 7f : 3f), y, TX, y, Dim, 0.9f);
+                g.Line(TX - (k % 5 == 0 ? 4f : 0f), y, TX + 3f, y, Dim, 0.9f);
             }
             float act = float.NaN;
             if (d.ActiveAtM <= top) Mark(g, "ACT", act = Mathf.Round(TapeTop + d.ActiveAtM / top * span), d.ActivePassed);
@@ -346,11 +322,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Diamond(TX + TW / 2f, TapeTop - 1f, 5f, Hi);
             g.Tri(TX - 3f, ym, 90f, 5f, Hi);
             g.PlateTag(ScopeStr.Cat("", d.RangeM / unitM, 1, null), TX - 11f, Mathf.Clamp(ym, TapeTop + 4f, TapeBottom - 4f), Hi, 12f, ScopeAlign.Right);
-            if (float.IsNaN(d.ClosureMps)) g.Text("CLS --", 432f, 214f, Dim, 12f, ScopeAlign.Right);
-            else g.Text(ScopeStr.Cat("CLS ", (int)Math.Round(AvUnitTable.Speed(d.ClosureMps, units)), ScopeStr.SpeedUnit(units)), 432f, 214f, Dim, 12f, ScopeAlign.Right);
-            g.Text("TTI", 346f, 229f, Dim);
-            int tti = Seconds(d.TtiS);
-            g.Text(tti < 0 ? "--" : ScopeStr.Cat("", tti, " S"), 432f, 228f, Hi, 16f, ScopeAlign.Right, true);
+            if (float.IsNaN(d.ClosureMps)) g.Text("CLS --", 432f, 228f, Dim, 12f, ScopeAlign.Right);
+            else g.Text(ScopeStr.Cat("CLS ", (int)Math.Round(AvUnitTable.Speed(d.ClosureMps, units)), ScopeStr.SpeedUnit(units)), 432f, 228f, Dim, 12f, ScopeAlign.Right);
         }
 
         private static void Mark(ScopeCanvas g, string word, float y, bool passed)
@@ -364,7 +337,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             const float xL = 20f, xT = PX + PW - 30f, gy = PY + PH - 5f;
             bool imperial = units == AvUnits.Imperial;
-            g.Box(PX, PY, PW, PH, Faint, 0.9f, 1f, Bg, 0.6f);
             quad[0] = PX + 3f; quad[1] = gy; quad[2] = PX + PW - 3f; quad[3] = gy; quad[4] = PX + PW - 3f; quad[5] = gy + 3f; quad[6] = PX + 3f; quad[7] = gy + 3f;
             int n = g.Poly(quad, 4);
             g.FillPoly(n, Faint, 0.5f);

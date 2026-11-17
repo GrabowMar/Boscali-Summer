@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// </summary>
         public static RectF MissileCard(float width, float height, RectF uav = default, RectF board = default, RectF keepOff = default)
         {
-            RectF card = new RectF(width * 0.5f - SafeMargin - TargetCardWidth * 0.5f, Floor(height, uav) + CardHeight * 0.5f, TargetCardWidth, CardHeight);
+            RectF card = new RectF(width * 0.5f - HudZones.Margin - TargetCardWidth * 0.5f, Floor(height, uav) + CardHeight * 0.5f, TargetCardWidth, CardHeight);
             if (uav.Height <= 0f || board.Width <= 0f || board.Height <= 0f ||
                 !Overlaps(card, new RectF(board.CenterX, board.CenterY, board.Width + 2f * GuardMargin, board.Height + 2f * GuardMargin))) return card;
             card = new RectF(uav.Left - CardGap - TargetCardWidth * 0.5f, uav.Bottom + CardHeight * 0.5f, TargetCardWidth, CardHeight);

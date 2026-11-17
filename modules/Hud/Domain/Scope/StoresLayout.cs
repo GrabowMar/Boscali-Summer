@@ -4,81 +4,32 @@ using BoscaliSummer.Core.Contracts;
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
-    /// The numbers inside the three stores blocks (HERO, PWR BUS, EXPENDABLES), pure: board units from the block's own rectangle (<see cref="BoardRect"/>), the y of a word the middle of its line, as LAYOUT.md 3.1 to 3.3 gives
+    /// The numbers inside the stores cells (WPN here; CM in StoresLayout.Cm.cs, SYS's capacitor row in StoresLayout.Power.cs), pure: board units from the block's own rectangle (<see cref="BoardRect"/>), the y of a word the middle of its line, as LAYOUT.md 3.1 to 3.3 gives
     /// them for WIDE and STACK. Where a block sits is <see cref="ScopeLayout"/>'s; what is inside it is this table, so a later change to the design is a change here.
     /// </summary>
-    internal static class StoresLayout
+    internal static partial class StoresLayout
     {
         /// <summary>The prototype's face advances this many em per character (what <c>ScopeText</c> sizes its words to).</summary>
         private const float Advance = 0.65f;
 
-        // ---- every block: the caption shelf. The line is 6 under the block's top; it is drawn ShelfShort shorter than the block, the node and the 45 degree stub reaching past its end to the block's own edge.
-        public const float ShelfY = 6f, ShelfShort = 8f;
-        /// <summary>STACK's PWR BUS shelf is 12 shorter, so the stub tip is 12 clear of the EXPENDABLES shelf that starts 12 right of the block.</summary>
-        public const float StackPwrShelfShort = 12f;
+        // ---- WPN (ONE BAR spec 4.2): rows come from ScopeLayout (ShelfY, RuleY, R1..R3); x values are cell-local.
+        public const float NumeralX = 1f, NumeralGap = 8f, MaxSize = 12f, MaxGap = 5f, MaxDy = 4f;
+        /// <summary>The numeral's room bound (<see cref="NumeralSize"/>); the arm word itself is right-aligned to the cell end.</summary>
+        public const float ArmWordX = 200f, ArmSize = HudType.Value;
+        /// <summary>The arm pip (ARMED filled, SAFE hollow): its size, and its left edge this far left of the arm word's start.</summary>
+        public const float ArmMarker = 6f, ArmMarkerGap = 10f;
+        public const float NameSize = HudType.Body, WordSize = 12f, WordGap = 10f, TagGap = 10f;
+        public const float ArtY = 48f, ArtH = 24f, GlyphMaxW = 220f, GlyphHalf = 8f;
 
-        /// <summary>The width of PWR BUS's caption shelf line in a block <paramref name="w"/> wide: 8 short of the block, 12 short in STACK.</summary>
-        public static float PwrShelf(bool stack, float w) => w - (stack ? StackPwrShelfShort : ShelfShort);
-
-        /// <summary>The width of EXPENDABLES's caption shelf line in a block <paramref name="w"/> wide.</summary>
-        public static float ExpShelf(float w) => w - ShelfShort;
-
-        // ---- HERO (LAYOUT.md 3.1)
-        public const float NumeralX = 1f, NumeralY = 39f, NumeralGap = 8f;
-        /// <summary>"/500" beside the numeral: 14 regular, 4 right of it, its middle 9 under the numeral's.</summary>
-        public const float MaxSize = 12f, MaxGap = 4f, MaxDy = 9f;
-        public const float ArmMarkerX = 156f, ArmMarkerSize = 6f, ArmWordX = 168f, ArmY = 23f, ArmSize = HudType.Value;
-        /// <summary>The tag column (LINK, TRT AUTO): from <see cref="ArmMarkerX"/>, the first row 41 down, rows 18 apart, tags 10 apart.</summary>
-        public const float TagX = 156f, TagY = 41f, TagPitch = 18f, TagGap = 10f;
-        public const float NameX = 0f, NameSize = 13f, WordGap = 10f, WordSize = 12f;
-        /// <summary>The DCL flag clears the arm word (or a tag row) by this much.</summary>
-        public const float DclGap = 10f;
-        /// <summary>The glyph drawn when the store has no picture: at most 220 x 20, centred in the art box.</summary>
-        public const float GlyphMaxW = 220f, GlyphHalf = 10f;
-
-        /// <summary>What differs between HERO in WIDE and in STACK.</summary>
-        internal readonly struct HeroPlan
-        {
-            public readonly float NameY, TagW, ArtX, ArtY, ArtW, ArtH, RailY, RailW, DclX, DclY, ShelfW;
-
-            public HeroPlan(float nameY, float tagW, float artX, float artY, float artW, float artH, float railY, float railW, float dclX, float dclY, float shelfW)
-            {
-                NameY = nameY; TagW = tagW; ArtX = artX; ArtY = artY; ArtW = artW; ArtH = artH; RailY = railY; RailW = railW; DclX = dclX; DclY = dclY; ShelfW = shelfW;
-            }
-        }
-
-        /// <summary>HERO's plan for a block <paramref name="w"/> wide: WIDE (272) has the art box under the name, STACK (440) to the right of the words; the declutter flag sits in the arm row (WIDE) or at the top right (STACK) when the shelf is off.</summary>
-        public static HeroPlan Hero(bool stack, float w) => stack
-            ? new HeroPlan(76f, 76f, 240f, 18f, 200f, 56f, 100f, w - 2f, w - 12f, 6f, w - ShelfShort)
-            : new HeroPlan(68f, 116f, 0f, 76f, w, 56f, 144f, w - 2f, w - 6f, ArmY, w - ShelfShort);
-
-        /// <summary>The rounds numeral: HERO (44) when it and its "/max" (LABEL) end <see cref="NumeralGap"/> short of the arm column, else EMPHASIS (22). The sizes are steps of the type scale; the board draws them at the boost.</summary>
+        /// <summary>The rounds numeral: EMPHASIS (22, still the biggest value of the stores) when it and its "/max" (LABEL) end <see cref="NumeralGap"/> short of the arm column, else VALUE (16). The sizes are steps of the type scale; the board draws them at the boost.</summary>
         public static float NumeralSize(int digits, int maxDigits)
         {
-            float slash = maxDigits > 0 ? MaxGap + (1 + maxDigits) * Advance * HudType.Label * HudType.BoardBoost : 0f, room = ArmMarkerX - NumeralX - NumeralGap - slash;
-            return Math.Max(1, digits) * Advance * HudType.Hero * HudType.BoardBoost <= room ? HudType.Hero : HudType.Emphasis;
+            float slash = maxDigits > 0 ? MaxGap + (1 + maxDigits) * Advance * HudType.Label * HudType.BoardBoost : 0f, room = ArmWordX - NumeralX - NumeralGap - slash;
+            return Math.Max(1, digits) * Advance * HudType.Emphasis * HudType.BoardBoost <= room ? HudType.Emphasis : HudType.Value;
         }
 
-        /// <summary>The x of the next tag in a column <paramref name="column"/> wide, <paramref name="used"/> of its current row taken (0: the row is empty): packed after the last, or at the start of the next row when it would not fit (<paramref name="wrap"/>).</summary>
-        public static float TagAt(float used, float tagW, float column, out bool wrap)
-        {
-            wrap = used > 0f && used + TagGap + tagW > column;
-            return wrap || used <= 0f ? 0f : used + TagGap;
-        }
-
-        /// <summary>
-        /// The row the DCL flag takes while the shelf is off: <paramref name="rowRight"/> says how far right the words of each row of the tag column go (row 0 is the arm word's, then the tag rows; 0 for an empty
-        /// one). The first row whose words end <see cref="DclGap"/> clear of the flag's left edge, or the row after the last.
-        /// </summary>
-        public static int DclRow(ReadOnlySpan<float> rowRight, float dclLeft)
-        {
-            for (int k = 0; k < rowRight.Length; k++)
-                if (rowRight[k] + DclGap <= dclLeft) return k;
-            return rowRight.Length;
-        }
-
-        // ---- the station rail: n markers a pitch apart, marker i at 1 + i * pitch; a glyph then the tag, the selected one bracketed (px - 1, y - 8, pitch - 3, 16)
-        public const float RailX = 1f, RailBracketArm = 4f, RailBracketHalf = 8f, RailGlyphHalf = 3.2f, RailGlyphLen = 14f, RailGunExtra = 1f;
+        // ---- the station rail: n markers a pitch apart, marker i at 1 + i * pitch; a glyph then the tag, the selected one marked by a lit rule segment under it
+        public const float RailX = 1f, RailGlyphHalf = 3.2f, RailGlyphLen = 14f, RailGunExtra = 1f;
         /// <summary>The rail is drawn for eight stations (WIDE's 33, STACK's 54): an aircraft with fewer packs its markers from the left at that pitch instead of spreading them over the block, so the selected one's brackets (3 short of the
         /// pitch) stay marker sized (four stations on WIDE spread to 54 in game: a bracket 51 wide round a marker 31 wide).</summary>
         public const int RailStations = 8;
@@ -95,46 +46,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Where a marker's tag starts, from the marker's x: after its glyph (2 in, <paramref name="glyph"/> long, 4 clear), or at 2 when it has none.</summary>
         public static float RailTagX(float glyph) => glyph > 0f ? 2f + glyph + 4f : 2f;
 
-        // ---- PWR BUS (LAYOUT.md 3.2)
-        public const float PwrNumeralY = 28f, PwrNumeralSize = 24f, PwrUnitY = 32f, PwrUnitGap = 4f, PwrRateY = 28f;
-        public const float CellsTop = 44f, TickBottom = 57f, JamMarkY = 59f;
+        /// <summary>The lit rule segment under the selected station.</summary>
+        public const float SelRuleW = 2f;
 
-        /// <summary>
-        /// The jammer marker's y: +59 under a block that has room for it (one with its cost row, 72 high, or any in STACK, where nothing sits below). WIDE's block without a cost row ends at 54, and +59 stands in the gap under it against the
-        /// shelf stub of the block below (its tip 8 under the block): it touched it at a full charge in game. It rides at the cost tick's foot, +57, then.
-        /// </summary>
-        public static float JamMark(bool room) => room ? JamMarkY : TickBottom;
-
-        /// <summary>
-        /// The jammer marker's x from the block's left: the fill's edge (<paramref name="edge"/>), but under a block with no room below it (WIDE without a cost row) no further right than the shelf node of the block below, whose stub rises from it
-        /// to a tip at the block's right edge: at a full charge the marker stood right over that tip, 3 clear of it in game (the capacitor's last cell is 2 short of the block's edge, the triangle 3 either side of it).
-        /// </summary>
-        public static float JamMarkX(float edge, bool room, float width) => room ? edge : Math.Min(edge, ExpShelf(width));
-
-        /// <summary>STACK's PWR BUS (216 wide) keeps its cells, rate word and cost label inside 196, so the rate word ends well short of the EXPENDABLES block beside it.</summary>
-        public const float StackPwrInset = 20f;
-
-        /// <summary>The width of PWR BUS's inner row (LAYOUT.md 3.2 "iw"): the block's own in WIDE (180), 196 of 216 in STACK.</summary>
-        public static float PwrInner(bool stack, float w) => stack ? w - StackPwrInset : w;
-
-        /// <summary>The cells' fade after a shot: just-spent cells are BRIGHT at this alpha, fading over <see cref="StoresMath.ShotWordS"/>.</summary>
-        public const float SpentCellAlpha = 0.6f;
-
-        // ---- EXPENDABLES (LAYOUT.md 3.3, reworked 2026-10-18): one row per countermeasure, the jammer too, in the order the game's Next Countermeasure steps through them. Only the selected row has the
-        // caret; every row's level is a bar in one column at BarX, the state word right-aligned at the block's end.
-        public const float CaretX = 3f, CaretSize = 5f, CountX = 10f, CountSize = 14f, NameGap = 5f, BarX = 68f, BarH = 3f, StateClear = 8f;
-        /// <summary>The bar ends this far short of the block's end: room for the longest state word (DISPENSE) and its clearance.</summary>
-        public const float StateRoom = 72f, BarMinW = 24f;
-        public const float CallPad = 5f, CallHalf = 9f, CallArm = 4f;
-        /// <summary>The jammer's picture and word stand where a dispenser's count and short name do.</summary>
-        public const float JamIcon = 14f, JamWordX = 29f;
-        /// <summary>The countermeasures a block has rows for (an airframe with a fourth shows the first three of the cycle).</summary>
-        public const int Rows = 3;
-
-        /// <summary>The middle of row <paramref name="row"/> (0 = the first stop of the cycle): 25, 46, 66 under the block's top.</summary>
-        public static float RowY(int row) => row <= 0 ? 25f : row == 1 ? 46f : 66f;
-
-        /// <summary>The level bar's width in a block <paramref name="w"/> wide: 40 in WIDE (180), 76 in STACK (216); DISPENSE still fits after it.</summary>
-        public static float BarW(float w) => Math.Max(BarMinW, w - BarX - StateRoom);
+        // ---- R2's lock pips (ONE BAR v3 3.1): one per round of a pooled load of 2..PipMax, right-aligned before the TGT word; the art box ends ArtGap short of the first pip.
+        public const int PipMax = 8;
+        public const float PipPitch = 11f, PipSize = 6f, SpentPip = 4f, TgtW = 56f, PipGap = 8f, ArtGap = 10f;
     }
 }

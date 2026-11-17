@@ -116,10 +116,30 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return new ReadOnlySpan<char>(Scratch, 0, n + dist);
         }
 
-        /// <summary>The base's name on a row of its own: upper case, trimmed, cut with an ellipsis so it fits <paramref name="maxChars"/>; empty with no name or no room.</summary>
+        private static readonly string[] AbbrFrom = { "GENERAL AVIATION", "INTERNATIONAL", "HIGHWAY", "AIRPORT", "AIRFIELD", "AIR BASE", "AIRBASE", "NORTH", "SOUTH", "EAST", "WEST", "STRIP" };
+        private static readonly string[] AbbrTo = { "GA", "INTL", "HWY", "AP", "AF", "AB", "AB", "N", "S", "E", "W", "STR" };
+        private static string abbrIn, abbrOut;
+        private static int abbrMax;
+
+        /// <summary>
+        /// A name too long for <paramref name="maxChars"/> with its common words shortened one at a time ("K92 Highway Strip" -> "K92 HWY STRIP"), upper case,
+        /// until it fits; the name itself when it already fits. The last answer is cached (one base on screen), so a paint allocates nothing.
+        /// </summary>
+        public static string Abbreviate(string name, int maxChars)
+        {
+            if (string.IsNullOrEmpty(name) || name.Trim().Length <= maxChars) return name;
+            if (ReferenceEquals(name, abbrIn) && maxChars == abbrMax) return abbrOut;
+            string s = name.Trim().ToUpperInvariant();
+            for (int i = 0; i < AbbrFrom.Length && s.Length > maxChars; i++) s = System.Text.RegularExpressions.Regex.Replace(s, @"\b" + AbbrFrom[i] + @"\b", AbbrTo[i]);
+            abbrIn = name; abbrMax = maxChars; abbrOut = s;
+            return s;
+        }
+
+        /// <summary>The base's name on a row of its own: upper case, trimmed, common words shortened (<see cref="Abbreviate"/>), then cut with an ellipsis so it fits <paramref name="maxChars"/>; empty with no name or no room.</summary>
         public static ReadOnlySpan<char> Name(string name, int maxChars)
         {
             if (string.IsNullOrEmpty(name) || maxChars < 1) return default;
+            name = Abbreviate(name, maxChars);
             int a = 0, b = name.Length;
             while (a < b && char.IsWhiteSpace(name[a])) a++;
             while (b > a && char.IsWhiteSpace(name[b - 1])) b--;

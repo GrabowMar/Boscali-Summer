@@ -17,6 +17,16 @@ namespace BoscaliSummer.Core.Ui
     /// <summary>
     /// The zone map of the HUD re-layout, in reference pixels of a 1080-high screen. Left zones keep their x, right zones their distance to the right edge, centre zones their distance to
     /// the centre line. The LANE is <see cref="TopCentre"/>'s slot above the game's heading tape (width 312, 144..210): the warning line or the ace card. The visor's frame and the tape's threat marks take no zone. Pure: the test project links it.
+    /// The contract (bar v3):
+    /// R1 one outer margin of 12 (FEEDS' bottom stays 24 up: the native name label sits at 1064..1080).
+    /// R2 one gutter of 16.
+    /// R3 the bar's SYS + INFO cells are the spine column (BOARD SPINE's x is SYS's).
+    /// R4 one row grid for all the bar's cells.
+    /// R5 the centre zones are symmetric about x 960.
+    /// R6 LANE's bottom + the gutter stays at or above 232 (the heading tape).
+    /// R7 the right and left columns are 281, 374 or 264 wide, nothing else.
+    /// R8 the top band reads LOG | LANE | BAR, the bar's left edge at least LANE's right edge + 16.
+    /// Under 16:9 (<see cref="Narrow"/>) the board is the 448-wide STACK: BOARD TOP and BOARD SPINE take its size, CENTRE shrinks between the two columns and NOTICE stops a gutter short of CENTRE.
     /// </summary>
     internal static class HudZones
     {
@@ -24,6 +34,9 @@ namespace BoscaliSummer.Core.Ui
         private const float NarrowMin = 281f;
         /// <summary>The wide LOG / COMMS / NOTICE column's width.</summary>
         public const float WideLog = 562f, CommsHeight = 154f;
+        /// <summary>The STACK board at the default Scale 0.85: 448 x 0.85 wide, its two bar lines (202) x 0.85 high, the spine round(12 + 218 x 0.85) down; the spine's bottom stays 666.</summary>
+        public const float StackW = 381f, StackTopH = 172f, StackSpineTop = 197f, SpineBottom = 666f;
+        private const float CentreW = 740f;
 
         private enum Side { Left, Centre, Right }
 
@@ -40,11 +53,11 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.TargetCam: side = Side.Left; x = 12; y = 592; w = 281; h = 200; break;
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
                 case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.LineTop; w = TopCentre.Width; h = TopCentre.CardHeight; break;
-                case HudZone.Callout: side = Side.Centre; x = 888; y = 594; w = 140; h = 38; break;
-                case HudZone.BoardTop: side = Side.Right; x = 1132; y = 6; w = 383; h = 134; break;
-                case HudZone.BoardSpine: side = Side.Right; x = 1531; y = 6; w = 381; h = 660; break;
-                case HudZone.Feeds: side = Side.Right; x = 1632; y = 714; w = 264; h = 342; break;
-                default: side = Side.Centre; x = 576; y = 324; w = 768; h = 432; break;
+                case HudZone.Callout: side = Side.Centre; x = 890; y = 641; w = 140; h = 38; break;      // centred on x 960 and on CombatAlerts.CalloutDown (y 660)
+                case HudZone.BoardTop: side = Side.Right; x = 1148; y = 12; w = 760; h = 82; break;      // ONE BAR: the 894 x 96 bar at the default Scale 0.85, right edge 1908
+                case HudZone.BoardSpine: side = Side.Right; x = 1534; y = 107; w = 374; h = SpineBottom - 107; break;      // the 440 column, 16 under the bar; its bottom stays 666
+                case HudZone.Feeds: side = Side.Right; x = 1644; y = 714; w = 264; h = 342; break;
+                default: side = Side.Centre; x = 960f - CentreW * 0.5f; y = 324; w = CentreW; h = 432; break;      // left = NOTICE's right (574) + 16
             }
         }
 
@@ -58,6 +71,16 @@ namespace BoscaliSummer.Core.Ui
             {
                 float laneLeft = refW * 0.5f - TopCentre.Width * 0.5f;
                 w = System.Math.Max(NarrowMin, System.Math.Min(WideLog, laneLeft - Gutter - Margin));
+            }
+            if (!Narrow(refW)) return new ZoneRect(x, y, w, h);
+            // Under 16:9 the board is STACK: the two right zones take its size, CENTRE fits between the two columns and NOTICE stops a gutter short of it (no recursion: CENTRE's left is worked out here).
+            float centreW = System.Math.Max(0f, System.Math.Min(CentreW, refW - 2f * (Margin + StackW + Gutter))), centreLeft = refW * 0.5f - centreW * 0.5f;
+            switch (zone)
+            {
+                case HudZone.BoardTop: return new ZoneRect(refW - Margin - StackW, Margin, StackW, StackTopH);
+                case HudZone.BoardSpine: return new ZoneRect(refW - Margin - StackW, StackSpineTop, StackW, SpineBottom - StackSpineTop);
+                case HudZone.Centre: return new ZoneRect(centreLeft, y, centreW, h);
+                case HudZone.Notice: return new ZoneRect(x, y, System.Math.Min(w, centreLeft - Gutter - Margin), h);
             }
             return new ZoneRect(x, y, w, h);
         }

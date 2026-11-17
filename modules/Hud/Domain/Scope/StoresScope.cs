@@ -51,6 +51,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public bool Safe;
         /// <summary>Guns are linked (more than one gun station and the pilot linked them), and the turrets fire at will: tags on the gun's cell.</summary>
         public bool Link, TurretAuto;
+        /// <summary>The selected weapon's designated targets (<c>WeaponManager.GetTargetList</c>), whether a trigger fires one round per target (a salvo), and whether every launch requirement is met (the native missile state's verdict).</summary>
+        public int Targets;
+        public bool Salvo, InRange;
 
         public CmStation[] Cm;
         public int CmCount;

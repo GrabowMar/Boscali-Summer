@@ -30,10 +30,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private readonly TMP_Text[] cells = new TMP_Text[3];
         private readonly int[] cellKeys = { int.MinValue, int.MinValue, int.MinValue };
         private string lastCallsign, lastWord, state;
-        private float nameW, stateW, drawnNameW, drawnStateW;
         private DroneFeedView feed;
         private float lostFlashUntil, cardH;
-        private bool wasLost;
+        private bool wasLost, inLayer;
         private Color lastInk;
         private readonly Vector3[] corners = new Vector3[4];
 
@@ -64,8 +63,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (root != null && root.activeSelf) root.SetActive(false);
                 return;
             }
-            if (root == null) Build();
+            bool layer = HudLayer.Enabled && HudLayer.Ensure();
+            if (root != null && layer != inLayer) { Destroy(root); root = null; }      // the A/B switch moved: rebuild on the other parent
+            if (root == null) Build(layer);
             if (!root.activeSelf) root.SetActive(true);
+            if (inLayer) Fit();
             // The bottom of the feed column, every view.
             card.GetWorldCorners(corners);
             FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
@@ -85,21 +87,17 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 lastWord = word;
                 state = word.Length > 0 ? callsign + " · " + word : callsign;
                 AvText.Set(stateText, state);
-                stateW = state.Length > 0 ? stateText.GetPreferredValues(state).x : 0f;
             }
-            if (nameW <= 0f) nameW = nameText.GetPreferredValues(nameText.text).x;
-            nameText.color = ink;
+            nameText.color = VanillaHudStyle.InkDim;
             stateText.color = tone;
             Strip(v, ink);
             Color frameInk = flash ? theme.Alert : ink;
-            if (frameInk != lastInk || nameW != drawnNameW || stateW != drawnStateW)
+            if (frameInk != lastInk)
             {
                 lastInk = frameInk;
-                drawnNameW = nameW;
-                drawnStateW = stateW;
                 AvQuadBuffer b = chrome.Buffer;
                 b.Clear();
-                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba(), nameW, stateW);
+                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba());
                 chrome.Commit();
             }
         }
@@ -114,23 +112,44 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (cellKeys[2] != hdg) { cellKeys[2] = hdg; AvText.Set(cells[2], v != null ? FeedCorner.CellHead + "HDG" + FeedCorner.CellTail + hdg.ToString("000") : ""); }
         }
 
-        private void Build()
+        /// <summary>Layer on: the holder keeps this card's own 1920x1080 Expand grid inside the HUD canvas, so the card's sizes and its screen corners (<see cref="FeedCorner.Uav"/>) are unchanged.</summary>
+        private void Fit()
         {
+            float own = Mathf.Max(0.01f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
+            var holder = (RectTransform)root.transform;
+            holder.localScale = Vector3.one * (own / Mathf.Max(0.01f, HudLayer.HudCanvas.scaleFactor));
+            holder.sizeDelta = new Vector2(Screen.width / own, Screen.height / own);
+        }
+
+        private void Build(bool layer)
+        {
+            inLayer = layer;
             // A scene object like the other HUD canvases: it goes with the scene, before the font materials unload at quit.
             root = new GameObject("BoscaliUavFeedCard", typeof(RectTransform));
-            var canvas = root.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = SortOrder;
-            var scaler = root.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            if (layer)
+            {
+                // Over.Data of the HUD layer: the card gains the HUD's visibility and the visor's glitch with the rest of the mod's blocks.
+                var holder = (RectTransform)root.transform;
+                holder.SetParent(HudLayer.Data, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = Vector2.zero;
+                holder.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                var canvas = root.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = SortOrder;
+                var scaler = root.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            }
 
             float w = FeedCorner.Width, feedH = Mathf.Round(w * 9f / 16f);
             cardH = FeedCorner.Header + feedH;
             card = AvLay.Child((RectTransform)root.transform, "Card");
             card.anchorMin = card.anchorMax = card.pivot = new Vector2(1f, 0f);
-            card.anchoredPosition = new Vector2(-Margin, Margin);
+            card.anchoredPosition = new Vector2(-HudZones.Margin, Margin);
             card.sizeDelta = new Vector2(w, cardH);
             feed = new DroneFeedView(card, "Feed", 10f);
             // The picture takes what the shelf above and the data strip below leave (the card keeps its total height: the missile card stands on it).
@@ -138,7 +157,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             chrome = AvVector.Create(card, "Chrome", 64);
             lastInk = Color.clear;
             state = null;
-            nameW = 0f;
             nameText = Word("Name", FeedCorner.ShelfText, 150f, TextAlignmentOptions.MidlineLeft);
             nameText.text = "UAV FEED";
             nameText.fontStyle = FontStyles.Bold;

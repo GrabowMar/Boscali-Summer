@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// Set any of the TAC BOARD's options through the settings contract (<see cref="ITacBoardSettings"/>, the same door the SET console and the C menu use) so ONE sim run can try several looks, and return every option as it
         /// now stands. The names are the contract's, in any case (enabled, layout, scale, offsetX, offsetY, opacity, shade, declutter, scopeMode, sway, corners, showLamps, showSystemsStrip, showGauges, showTicker, pageThreat,
         /// pageShot, pageMissileCam, pageApproach, pageWing, pageStrike, pageDock, pageObjective, pageSystems, threatHoldSeconds, pageMinSeconds); an enum is given by name (wide, stack, full, lean, minimal, auto, off). A name that is
-        /// none of them fails the call, so a typo cannot waste a run. IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
+        /// none of them fails the call, so a typo cannot waste a run, and so does a value the option does not take (a retired one: Declutter is always Full, ScopeMode Manual reads as Auto on the board). IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
         /// disk is never written by this hook and the pilot's saved options come back with the next start. <c>restore</c> true first puts every option back to what it was at the first call of the run (the pilot's own values).
         /// The board takes a change on its next 10 Hz tick: wait before a capture.
         /// </summary>
@@ -69,7 +69,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     PropertyInfo option = properties[i];
                     if (Bool(args, "restore")) option.SetValue(options, pilotOptions[i]);
                     object given = args != null ? FindIgnoringCase(args, option.Name) : null;
-                    if (given != null) option.SetValue(options, OptionValue(option.PropertyType, given));
+                    if (given == null) continue;
+                    object wanted = OptionValue(option.PropertyType, given);
+                    option.SetValue(options, wanted);
+                    // A retired value (Declutter Lean/Minimal, ArPath, ArDomes) or one out of range is not taken: fail rather than capture a look that never applied.
+                    object now = option.GetValue(options);
+                    if (!Equals(now, wanted))
+                        return Failure("HudAutomation", "Configure", "option '" + option.Name + "' did not take " + given + " (reads " + now + "): retired or out of range");
                 }
             }
             catch (Exception e) { return Failure("HudAutomation", "Configure", "could not set an option: " + e.Message); }
@@ -471,6 +477,61 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return result;
         }
 
+        /// <summary>
+        /// Select the first loaded anti-air missile station and designate the <c>count</c> (default 2) nearest enemy aircraft inside <c>range</c> (default 30000 m), then report what the WPN cell reads: the
+        /// designated targets, salvo and IN RNG, computed as <see cref="StoresFeed"/> does (tests/ingame/hud-bar.json). Call it twice about a second apart: the first sights the targets, the second designates them.
+        /// </summary>
+        public static Dictionary<string, object> Lock(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!GameManager.GetLocalAircraft(out Aircraft a) || a == null || a.disabled)
+                return Failure("HudAutomation", "Lock", "no live local aircraft");
+            WeaponStation station = null;
+            if (a.weaponStations != null)
+                foreach (WeaponStation s in a.weaponStations)
+                {
+                    WeaponInfo w = s != null ? s.WeaponInfo : null;
+                    if (w == null || !w.missile || w.effectiveness.antiAir < w.effectiveness.antiSurface || s.Ammo <= 0) continue;
+                    station = s;
+                    break;
+                }
+            if (station == null)
+                return Failure("HudAutomation", "Lock", "no loaded anti-air missile station");
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || hud.aircraft != a)
+                return Failure("HudAutomation", "Lock", "the combat HUD is not attached to the local aircraft");
+            if (a.weaponManager.currentWeaponStation != station) a.SetActiveStation(station.Number);
+            int count = (int)Number(args, "count", 2f);
+            float range = Number(args, "range", 30000f);
+            var picked = new List<Unit>(hud.GetTargetList());
+            // Keep the designated tracks fresh and only fill the list up to count: a repeat call must not add a farther target (it pushed the WPN cell OUT OF RANGE).
+            foreach (Unit held in picked)
+                if (held != null) a.NetworkHQ.RpcUpdateTrackingInfo(held.persistentID);
+            for (int k = picked.Count; k < count; k++)
+            {
+                Unit target = NearestEnemy(a, range, picked);
+                if (target == null) break;
+                picked.Add(target);
+                // A sighting keeps the track "accurate" for 4 s and spawns the HUD marker SelectUnit needs (the second call designates).
+                a.NetworkHQ.RpcUpdateTrackingInfo(target.persistentID);
+                if (!hud.GetTargetList().Contains(target)) hud.SelectUnit(target);
+            }
+            int targets = a.weaponManager.GetTargetList()?.Count ?? 0;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "weapon", station.WeaponInfo.shortName ?? station.WeaponInfo.weaponName ?? "MSL" },
+                { "targets", targets },
+                { "salvo", StoresFeed.Salvo(station.WeaponInfo) },
+                { "in_range", StoresFeed.InRange(station.SafetyIsOn(a), targets, hud) },
+            };
+            Debug.Log("[HudAutomation] Lock: " + Describe(result));
+            return result;
+        }
+
+        /// <summary><see cref="Lock"/>'s IN RNG alone, for a <c>wait_until {call, truthy}</c> (tests/ingame/hud-bar.json): each poll re-sights the targets, the capture waits until the shot is really on.</summary>
+        public static bool LockedInRange(Dictionary<string, object> args) => Lock(args).TryGetValue("in_range", out object v) && v is bool b && b;
+
         /// <summary>Tracker snapshot: preview lines exactly as the HUD publishes them.</summary>
         public static Dictionary<string, object> Missiles(Dictionary<string, object> args)
         {
@@ -618,6 +679,367 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return string.Join(",", list.ToArray());
         }
 
+        // ---- AV LAYER probes (tests/ingame/hud-sync.json, hud-ink.json, hud-perf.json, hud-layout.json) ----
+
+        /// <summary>
+        /// The AV layer's A/B switch and counters. <c>enabled</c> false runs the game's own placement and every module's old path (the baseline half of hud-sync / hud-perf in the same run); true gives the late pass back.
+        /// Reads back the switch and the layer's counters (late frames, forced rebuilds, the last frame the Repair phase finished clean).
+        /// </summary>
+        public static Dictionary<string, object> Layer(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (Has(args, "enabled")) BoscaliSummer.Core.Ui.HudLayer.Enabled = Bool(args, "enabled");
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "enabled", BoscaliSummer.Core.Ui.HudLayer.Enabled }, { "late_frames", BoscaliSummer.Core.Ui.HudLayer.LateFrames },
+                { "forced_rebuilds", BoscaliSummer.Core.Ui.HudLayer.ForcedRebuilds }, { "repair_ok_frame", BoscaliSummer.Core.Ui.HudLayer.RepairOkFrame }, { "frame", Time.frameCount },
+                { "roots", BoscaliSummer.Core.Ui.HudLayer.Under != null && BoscaliSummer.Core.Ui.HudLayer.Data != null },
+            };
+            Debug.Log("[HudAutomation] Layer: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// The footprint profiler for the HUD (the spec's watch list by default), without a map: <c>do</c> uncap (vsync off, no frame cap: a hidden sim window otherwise stalls), profile (<c>deep</c>, <c>watch</c>), reset
+        /// (a fresh window), snapshot (the JSON, <c>snapshot</c> in the result). Same calls as the map sims' <c>MapInputAutomation.Step</c>.
+        /// </summary>
+        public static Dictionary<string, object> Profile(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            switch (Text(args, "do"))
+            {
+                case "uncap":
+                    QualitySettings.vSyncCount = 0;
+                    Application.targetFrameRate = -1;
+                    return new Dictionary<string, object> { { "ok", true } };
+                case "profile":
+                    BoscaliSummer.Core.Diagnostics.FootprintProfiler.Watch = Text(args, "watch") ?? HudProfileWatch;
+                    return new Dictionary<string, object> { { "ok", true }, { "mode", BoscaliSummer.Core.Diagnostics.FootprintProfiler.Start(Bool(args, "deep")) } };
+                case "reset":
+                    BoscaliSummer.Core.Diagnostics.FootprintProfiler.ResetWindow();
+                    return new Dictionary<string, object> { { "ok", true } };
+                case "snapshot":
+                    return new Dictionary<string, object> { { "ok", true }, { "snapshot", BoscaliSummer.Core.Diagnostics.FootprintProfiler.SnapshotJson() } };
+                default: return Failure("HudAutomation", "Profile", "do must be uncap/profile/reset/snapshot");
+            }
+        }
+
+        private const string HudProfileWatch = "HudLayer.OnLate;ThirdPersonHudCenter.RefreshProjection;ArLayer.Frame;CombatAlerts.Frame;StatusPanel.Repaint;StatusPanel.Animate;AvVector.UpdateGeometry;AvVector.OnPopulateMesh;ScopeText.Draw;VisorGlitch.Scan;HudBoard.LateUpdate";
+
+        /// <summary>
+        /// A deterministic stand-in for head shake and roll: yaw at a peak of <c>deg_per_s</c> (half a hertz sine), roll <c>roll</c> degrees, FOV breath <c>zoom</c> (fraction), added after the game's own cockpit camera update
+        /// (<see cref="BoscaliSummer.Modules.Hud.Patches.SimSpinPatch"/>). <c>off</c> true (or <c>deg_per_s</c> 0 with no roll or zoom) stops it. Cockpit view only.
+        /// </summary>
+        public static Dictionary<string, object> Spin(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (Bool(args, "off") || (Has(args, "deg_per_s") && Number(args, "deg_per_s", 0f) == 0f && !Has(args, "roll") && !Has(args, "zoom")))
+                BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.Stop();
+            else
+                BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.Start(Number(args, "deg_per_s", 90f), Number(args, "roll", 4f), Number(args, "zoom", 0.15f));
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "active", BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.Active }, { "yaw_deg_s", BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.YawDegS },
+                { "roll", BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.RollDeg }, { "zoom", BoscaliSummer.Modules.Hud.Patches.SimSpinPatch.Zoom },
+            };
+            Debug.Log("[HudAutomation] Spin: " + Describe(result));
+            return result;
+        }
+
+        private static int faultFrames;
+
+        private static void FaultOnce(BoscaliSummer.Core.Ui.HudView view)
+        {
+            if (faultFrames <= 0) return;
+            faultFrames--;
+            throw new InvalidOperationException("HudAutomation fault probe");
+        }
+
+        /// <summary>Makes the layer's Repair phase throw for the next <c>frames</c> late passes (default 3), through a subscriber of its own: the fail-open check (the repair-ok frame must lag, then recover, and the log must not spam).</summary>
+        public static Dictionary<string, object> Fault(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            faultFrames = (int)Number(args, "frames", 3f);
+            BoscaliSummer.Core.Ui.HudLayer.Repair += FaultOnce;
+            var result = new Dictionary<string, object> { { "ok", true }, { "frames", faultFrames } };
+            Debug.Log("[HudAutomation] Fault: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// The sync probe. <c>do</c> start (default; resets the window), stop, read. In every frame the main camera renders it takes, for each visible native marker (not selected, not jammed), the distance in screen pixels between where the game
+        /// drew the marker and where the rendered camera puts the unit (<c>hq.TryGetKnownPosition</c> when the marker is outdated); the HUD centre (position and roll) against the aim point 4 km down the cockpit; the velocity vector against the velocity point.
+        /// Returns max, p95 and mean of the marker error, the centre and velocity-vector error, the origin-shift frames and the worst error on them, the frames the Repair phase had finished clean, and the layer's counters over the window.
+        /// </summary>
+        public static Dictionary<string, object> Sync(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            switch (Text(args, "do") ?? "start")
+            {
+                case "start": SyncProbe.Start(); break;
+                case "stop": SyncProbe.Stop(); break;
+                case "read": break;
+                default: return Failure("HudAutomation", "Sync", "do must be start/stop/read");
+            }
+            Dictionary<string, object> result = SyncProbe.Read();
+            Debug.Log("[HudAutomation] Sync: " + Describe(result));
+            return result;
+        }
+
+        private static class SyncProbe
+        {
+            private const int Cap = 60000;
+            private static readonly MarkerRefs Refs = new MarkerRefs();
+            private static readonly float[] errors = new float[Cap];
+            private static int count, frames, okFrames, shiftFrames, rollSamples, fpmSamples, centreSamples;
+            private static float max, sum, shiftMax, notOkMax, centreMax, centreSum, rollMax, fpmMax, fpmSum;
+            private static int lateAt, forcedAt, lastFrame = -1, notOkSamples;
+            private static Vector3 lastOrigin;
+            private static bool on;
+
+            public static void Start()
+            {
+                count = frames = okFrames = shiftFrames = rollSamples = fpmSamples = centreSamples = notOkSamples = 0;
+                max = sum = shiftMax = notOkMax = centreMax = centreSum = rollMax = fpmMax = fpmSum = 0f;
+                lateAt = BoscaliSummer.Core.Ui.HudLayer.LateFrames;
+                forcedAt = BoscaliSummer.Core.Ui.HudLayer.ForcedRebuilds;
+                lastOrigin = Datum.originPosition;
+                lastFrame = -1;
+                if (on) return;
+                on = true;
+                UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering += OnCamera;
+            }
+
+            public static void Stop()
+            {
+                if (!on) return;
+                on = false;
+                UnityEngine.Rendering.RenderPipelineManager.beginCameraRendering -= OnCamera;
+            }
+
+            private static void OnCamera(UnityEngine.Rendering.ScriptableRenderContext context, Camera camera)
+            {
+                CameraStateManager state = SceneSingleton<CameraStateManager>.i;
+                if (state == null || camera != state.mainCamera || Time.frameCount == lastFrame) return;
+                lastFrame = Time.frameCount;
+                bool repairOk = BoscaliSummer.Core.Ui.HudLayer.RepairOkFrame == lastFrame;
+                bool shifted = Datum.originPosition != lastOrigin;
+                lastOrigin = Datum.originPosition;
+                frames++;
+                if (repairOk) okFrames++;
+                if (shifted) shiftFrames++;
+                CombatHUD hud = SceneSingleton<CombatHUD>.i;
+                if (hud == null || !GameManager.GetLocalAircraft(out Aircraft own) || own == null) return;
+                List<HUDUnitMarker> markers = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(Refs.Markers, hud);
+                if (markers != null && hud.jamAccumulation <= 0f && own.NetworkHQ != null)
+                    for (int i = 0; i < markers.Count; i++)
+                    {
+                        HUDUnitMarker m = markers[i];
+                        if (m == null || m.image == null || m.unit == null || m.selected || !m.image.enabled || BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(Refs.Hidden, m)) continue;
+                        GlobalPosition known = m.unit.GlobalPosition();
+                        if (m.outdated && !own.NetworkHQ.TryGetKnownPosition(m.unit, out known)) continue;
+                        Vector3 expect = camera.WorldToScreenPoint(known.ToLocalPosition());
+                        // Only points well inside the screen and in front: the game pins and clamps the rest.
+                        if (expect.z < 1f || expect.x < camera.pixelWidth * 0.05f || expect.x > camera.pixelWidth * 0.95f || expect.y < camera.pixelHeight * 0.05f || expect.y > camera.pixelHeight * 0.95f) continue;
+                        Vector3 drawn = m.image.transform.position;
+                        float error = Mathf.Sqrt((drawn.x - expect.x) * (drawn.x - expect.x) + (drawn.y - expect.y) * (drawn.y - expect.y));
+                        if (count < Cap) errors[count] = error;
+                        count++;
+                        sum += error;
+                        if (error > max) max = error;
+                        if (shifted && error > shiftMax) shiftMax = error;
+                        if (!repairOk) { notOkSamples++; if (error > notOkMax) notOkMax = error; }
+                    }
+                FlightHud flight = SceneSingleton<FlightHud>.i;
+                if (flight == null || own.cockpit == null || own.cockpit.rb == null) return;
+                Transform cockpit = own.cockpit.transform;
+                Transform centre = flight.GetHUDCenter();
+                if (centre != null)
+                {
+                    Vector3 aim = camera.WorldToScreenPoint(cockpit.position + cockpit.forward * 4000f);
+                    if (aim.z > 0f)
+                    {
+                        Vector3 p = centre.position;
+                        float e = Mathf.Sqrt((p.x - aim.x) * (p.x - aim.x) + (p.y - aim.y) * (p.y - aim.y));
+                        centreSamples++;
+                        centreSum += e;
+                        if (e > centreMax) centreMax = e;
+                    }
+                    float wantRoll = -(camera.transform.eulerAngles.z - cockpit.eulerAngles.z);
+                    float re = Mathf.Abs(Mathf.DeltaAngle(centre.eulerAngles.z, wantRoll));
+                    rollSamples++;
+                    if (re > rollMax) rollMax = re;
+                }
+                if (flight.velocityVector != null && flight.velocityVector.gameObject.activeSelf)
+                {
+                    Vector3 vel = camera.WorldToScreenPoint(cockpit.position + own.cockpit.rb.velocity * 1000f);
+                    if (vel.z > 0f)
+                    {
+                        Vector3 p = flight.velocityVector.transform.position;
+                        float e = Mathf.Sqrt((p.x - vel.x) * (p.x - vel.x) + (p.y - vel.y) * (p.y - vel.y));
+                        fpmSamples++;
+                        fpmSum += e;
+                        if (e > fpmMax) fpmMax = e;
+                    }
+                }
+            }
+
+            public static Dictionary<string, object> Read()
+            {
+                int n = Mathf.Min(count, Cap);
+                float p95 = 0f;
+                if (n > 0)
+                {
+                    var copy = new float[n];
+                    Array.Copy(errors, copy, n);
+                    Array.Sort(copy);
+                    p95 = copy[Mathf.Min(n - 1, (int)(n * 0.95f))];
+                }
+                int late = BoscaliSummer.Core.Ui.HudLayer.LateFrames - lateAt, forced = BoscaliSummer.Core.Ui.HudLayer.ForcedRebuilds - forcedAt;
+                return new Dictionary<string, object>
+                {
+                    { "ok", true }, { "running", on }, { "layer", BoscaliSummer.Core.Ui.HudLayer.Enabled },
+                    { "frames", frames }, { "samples", count }, { "err_max", max }, { "err_p95", p95 }, { "err_mean", count > 0 ? sum / count : 0f },
+                    { "centre_samples", centreSamples }, { "centre_max", centreMax }, { "centre_mean", centreSamples > 0 ? centreSum / centreSamples : 0f },
+                    { "roll_max_deg", rollMax }, { "fpm_samples", fpmSamples }, { "fpm_max", fpmMax }, { "fpm_mean", fpmSamples > 0 ? fpmSum / fpmSamples : 0f },
+                    { "origin_shift_frames", shiftFrames }, { "err_max_on_shift", shiftMax },
+                    { "repair_ok_frames", okFrames }, { "repair_not_ok_frames", frames - okFrames }, { "err_max_not_ok", notOkMax }, { "samples_not_ok", notOkSamples },
+                    { "late_frames", late }, { "forced_rebuilds", forced }, { "forced_pct", late > 0 ? 100f * forced / late : 0f },
+                };
+            }
+        }
+
+        /// <summary>The game's private marker state the probes read (a renamed field gives a null ref and reads default, never an exception).</summary>
+        private sealed class MarkerRefs
+        {
+            public readonly HarmonyLib.AccessTools.FieldRef<CombatHUD, List<HUDUnitMarker>> Markers = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<CombatHUD, List<HUDUnitMarker>>("markers");
+            public readonly HarmonyLib.AccessTools.FieldRef<HUDUnitMarker, bool> Hidden = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<HUDUnitMarker, bool>("hidden");
+            public readonly HarmonyLib.AccessTools.FieldRef<HUDUnitMarker, bool> Flashing = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<HUDUnitMarker, bool>("flashing");
+            public readonly HarmonyLib.AccessTools.FieldRef<HUDUnitMarker, bool> Maximized = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<HUDUnitMarker, bool>("maximized");
+            public readonly HarmonyLib.AccessTools.FieldRef<HUDUnitMarker, Color> Color = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<HUDUnitMarker, Color>("color");
+            public readonly HarmonyLib.AccessTools.FieldRef<HUDUnitMarker, float> Opacity = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Field<HUDUnitMarker, float>("opacity");
+        }
+
+        private static float Luma(Color c) => 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b;
+
+        private static float Chroma(Color c)
+        {
+            float l = Luma(c);
+            return Mathf.Sqrt((c.r - l) * (c.r - l) + (c.g - l) * (c.g - l) + (c.b - l) * (c.b - l));
+        }
+
+        /// <summary>
+        /// The range ink on the game's own markers (tests/ingame/hud-ink.json). For up to <c>max</c> (default 12) visible markers, nearest first: distance, the 16-step ramp index (<c>HudInk.RangeStep</c>), the observed saturation ratio
+        /// (chroma of the drawn colour over chroma of the colour the game keeps for the marker, 1 = untouched) and alpha ratio (drawn alpha over the game's own opacity), both colours, and the flags that exempt a marker (selected, fresh, flashing,
+        /// jammed, outdated). Also the number of distinct materials across the HUD canvas's renderers (a ramp that swaps materials would raise it). Lines read "name d=m k=step s=ratio a=ratio rgb=... native=... flags".
+        /// </summary>
+        public static Dictionary<string, object> Ink(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || !GameManager.GetLocalAircraft(out Aircraft own) || own == null) return Failure("HudAutomation", "Ink", "no HUD or aircraft");
+            var refs = new MarkerRefs();
+            List<HUDUnitMarker> markers = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(refs.Markers, hud);
+            var rows = new List<KeyValuePair<float, string>>();
+            Vector3 eye = SceneSingleton<CameraStateManager>.i.transform.position;
+            if (markers != null)
+                foreach (HUDUnitMarker m in markers)
+                {
+                    if (m == null || m.image == null || m.unit == null || !m.image.enabled) continue;
+                    GlobalPosition known = m.unit.GlobalPosition();
+                    if (m.outdated && own.NetworkHQ != null && !own.NetworkHQ.TryGetKnownPosition(m.unit, out known)) continue;
+                    float d = Vector3.Distance(eye, known.ToLocalPosition());
+                    Color native = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(refs.Color, m), drawn = m.image.color;
+                    float opacity = BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(refs.Opacity, m) * (m.outdated && BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(refs.Maximized, m) ? 0.5f : 1f);
+                    float cn = Chroma(native);
+                    string flags = (m.selected ? "selected " : "") + (m.fresh ? "fresh " : "") + (BoscaliSummer.Modules.Hud.Runtime.NativeRefs.Get(refs.Flashing, m) ? "flashing " : "") +
+                                   (hud.jamAccumulation > 0f ? "jammed " : "") + (m.outdated ? "outdated " : "");
+                    string line = string.Format(CultureInfo.InvariantCulture, "{0} d={1:F0} k={2} s={3:F3} a={4:F3} rgb={5:F3},{6:F3},{7:F3} native={8:F3},{9:F3},{10:F3} {11}",
+                        m.image.gameObject.name, d, BoscaliSummer.Core.Contracts.HudInk.RangeStep(d), cn > 1e-4f ? Chroma(drawn) / cn : 1f, opacity > 1e-4f ? drawn.a / opacity : 1f,
+                        drawn.r, drawn.g, drawn.b, native.r, native.g, native.b, flags.Trim());
+                    rows.Add(new KeyValuePair<float, string>(d, line));
+                }
+            rows.Sort((a, b) => a.Key.CompareTo(b.Key));
+            int take = Mathf.Min(rows.Count, (int)Number(args, "max", 12f));
+            var lines = new List<object>();
+            for (int i = 0; i < take; i++) lines.Add(rows[i].Value);
+            var materials = new HashSet<Material>();
+            Canvas canvas = BoscaliSummer.Core.Ui.HudLayer.HudCanvas;
+            if (canvas != null)
+                foreach (UnityEngine.UI.Graphic g in canvas.GetComponentsInChildren<UnityEngine.UI.Graphic>(false))
+                    if (g != null && g.canvasRenderer != null && g.canvasRenderer.materialCount > 0) materials.Add(g.canvasRenderer.GetMaterial(0));
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true }, { "layer", BoscaliSummer.Core.Ui.HudLayer.Enabled }, { "markers", rows.Count }, { "lines", lines }, { "materials", materials.Count },
+                { "nearest_d", rows.Count > 0 ? rows[0].Key : -1f }, { "farthest_d", rows.Count > 0 ? rows[rows.Count - 1].Key : -1f },
+            };
+            Debug.Log("[HudAutomation] Ink: " + Describe(result));
+            return result;
+        }
+
+        /// <summary>
+        /// Where the HUD's blocks are on screen (tests/ingame/hud-layout.json), so a run before and after the re-parenting can be compared: for each top-level object the mod keeps in the game's HUD canvas whose name starts with "Boscali",
+        /// the screen-pixel bounds of its drawn graphics ("x0,y0,x1,y1 (n graphics)"), plus the game's own dock (topRightPanel). Keys are <c>rect.name</c>; the name list is <c>names</c>.
+        /// </summary>
+        public static Dictionary<string, object> Layout(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!BoscaliSummer.Modules.Hud.Runtime.NativeRefs.HudCanvas(out CombatHUD hud, out Canvas canvas))
+                return Failure("HudAutomation", "Layout", "no HUD canvas");
+            var result = new Dictionary<string, object> { { "ok", true }, { "layer", BoscaliSummer.Core.Ui.HudLayer.Enabled }, { "screen", $"{Screen.width}x{Screen.height}" } };
+            var names = new List<object>();
+            var corners = new Vector3[4];
+            var topRight = HarmonyLib.AccessTools.Field(typeof(CombatHUD), "topRightPanel")?.GetValue(hud) as GameObject;
+            if (topRight != null) result["rect.dock"] = Bounds(topRight.transform, corners, false);
+            LayoutWalk(canvas.transform, result, names, corners, 0);
+            result["names"] = names;
+            result["blocks"] = names.Count;
+            Debug.Log("[HudAutomation] Layout: " + Describe(result));
+            return result;
+        }
+
+        private static void LayoutWalk(Transform parent, Dictionary<string, object> result, List<object> names, Vector3[] corners, int depth)
+        {
+            for (int i = 0; i < parent.childCount; i++)
+            {
+                Transform child = parent.GetChild(i);
+                if (!child.gameObject.activeInHierarchy) continue;
+                bool layerRoot = child.name == "BoscaliHudOver" || child.name == "BoscaliHudUnder";      // the AV layer roots hold blocks: walk into them
+                if (!layerRoot && child.name.StartsWith("Boscali", StringComparison.Ordinal))
+                {
+                    string key = child.name;
+                    for (int n = 2; result.ContainsKey("rect." + key); n++) key = child.name + "#" + n;
+                    result["rect." + key] = Bounds(child, corners, true);
+                    names.Add(key);
+                }
+                else if (depth < 3) LayoutWalk(child, result, names, corners, depth + 1);
+            }
+        }
+
+        /// <summary>The screen-pixel bounds of the drawn graphics under a transform (or of its own rect when <paramref name="graphics"/> is false).</summary>
+        private static string Bounds(Transform root, Vector3[] corners, bool graphics)
+        {
+            float x0 = float.MaxValue, y0 = float.MaxValue, x1 = float.MinValue, y1 = float.MinValue;
+            int n = 0;
+            if (graphics)
+            {
+                foreach (UnityEngine.UI.Graphic g in root.GetComponentsInChildren<UnityEngine.UI.Graphic>(false))
+                {
+                    if (g == null || !g.enabled || g.canvasRenderer == null || g.canvasRenderer.cull || g.canvasRenderer.GetInheritedAlpha() * g.color.a < 0.01f) continue;
+                    g.rectTransform.GetWorldCorners(corners);
+                    for (int k = 0; k < 4; k++) { x0 = Mathf.Min(x0, corners[k].x); x1 = Mathf.Max(x1, corners[k].x); y0 = Mathf.Min(y0, corners[k].y); y1 = Mathf.Max(y1, corners[k].y); }
+                    n++;
+                }
+            }
+            else if (root is RectTransform rect)
+            {
+                rect.GetWorldCorners(corners);
+                for (int k = 0; k < 4; k++) { x0 = Mathf.Min(x0, corners[k].x); x1 = Mathf.Max(x1, corners[k].x); y0 = Mathf.Min(y0, corners[k].y); y1 = Mathf.Max(y1, corners[k].y); }
+                n = 1;
+            }
+            return n == 0 ? "none" : string.Format(CultureInfo.InvariantCulture, "{0:F1},{1:F1},{2:F1},{3:F1} ({4} graphics)", x0, y0, x1, y1, n);
+        }
+
         private static int OwnMissiles(Aircraft own)
         {
             int count = 0;
@@ -628,7 +1050,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return count;
         }
 
-        private static Unit NearestEnemy(Aircraft own, float maxM)
+        private static Unit NearestEnemy(Aircraft own, float maxM, List<Unit> skip = null)
         {
             Unit best = null;
             float bestSqr = maxM * maxM;
@@ -639,6 +1061,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 if (!(all[i] is Aircraft a) || a == null || a.disabled || a == own) continue;
                 if (a.NetworkHQ == null || own.NetworkHQ == null || a.NetworkHQ == own.NetworkHQ) continue;
+                if (skip != null && skip.Contains(a)) continue;
                 float d = (a.transform.position - p).sqrMagnitude;
                 if (d < bestSqr) { bestSqr = d; best = a; }
             }

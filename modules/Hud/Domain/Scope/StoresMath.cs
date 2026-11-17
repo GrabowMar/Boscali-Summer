@@ -112,6 +112,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The countermeasure station is called for: its seeker classes meet the call mask (flares for IR, chaff for radar). A jammer is never called (it is a switch, not a round).</summary>
         public static bool Called(in CmStation s, byte call) => !s.Chargeable && (s.Mask & call) != 0;
 
+        // ---- WPN's lock pips and TGT word (ONE BAR v3 3.1)
+
+        /// <summary>How many rounds leave on the next trigger at a designated target: none without rounds or targets; a salvo weapon one per target (<c>WeaponManager.SalvoFire</c>), else one.</summary>
+        public static int Cued(int ammo, int targets, bool salvo) => ammo <= 0 || targets <= 0 ? 0 : salvo ? Math.Min(ammo, targets) : 1;
+
+        /// <summary>The weapon takes designated targets: the TGT word is drawn.</summary>
+        public static bool ShowTargets(StoreClass c) => c == StoreClass.Aam || c == StoreClass.Agm || c == StoreClass.Bomb;
+
+        /// <summary>One pip per round: a targeted store of 2 to <see cref="StoresLayout.PipMax"/> rounds.</summary>
+        public static bool ShowPips(StoreClass c, int max) => ShowTargets(c) && max > 1 && max <= StoresLayout.PipMax;
+
         // ---- which blocks exist, and the HERO block's words and tones (LAYOUT.md 3.1)
 
         /// <summary>HERO: a station is selected.</summary>
@@ -160,7 +171,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>An unlit cell is a 1 x <see cref="CellH"/> DIM tick this far into its slot (the middle of the 7), not an outline.</summary>
         public const float UnlitTickX = 3f;
 
-        /// <summary>How many cells a row <paramref name="width"/> units wide holds (each <see cref="CellW"/> wide, <see cref="CellPitch"/> apart): 20 in WIDE's 180, 22 in STACK's inner 196 (<see cref="StoresLayout.PwrInner"/>).</summary>
+        /// <summary>How many cells a row <paramref name="width"/> units wide holds (each <see cref="CellW"/> wide, <see cref="CellPitch"/> apart): 20 in WIDE's 180, 22 in STACK's inner 196.</summary>
         public static int Cells(float width) => Math.Max(1, (int)Math.Floor((width + CellPitch - CellW) / CellPitch));
 
         /// <summary>The lit cells for a charge share <paramref name="frac"/> of <paramref name="cells"/>.</summary>

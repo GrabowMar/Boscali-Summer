@@ -47,7 +47,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private AvUnits units;
         private MissionDashboardStatus missionStatus;
         private bool hasMission;
-        private const float MissionRowsHeight = 36f;
 
         private void BuildBoard()
         {
@@ -116,30 +115,44 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             units = frame.Units;
 
             SystemStates systems = frame.Systems;
-            if (nativeSafety != null) systems.WeaponSafe = nativeSafety.enabled;
+            systems.Fuel = frame.Fuel;
+            systems.Damage = frame.Damage;
+            if (ScopeFeeds.TryRead(out SystemsScope sys))
+            {
+                systems.Heat = sys.Heat;
+                systems.AcesInbound = sys.AcesInbound;
+            }
+            else systems.Heat = float.NaN;
             HudLamps.Fill(systems, lamps);
             HudThreats.Fill(frame.Threat, threatLamps);
 
             MeasurePixel();
-            // Every feed remains polled for notices, warning lamps and dispenser calls, whether or not a panel shows it.
-            allow = Options.Effective();
-            var voiced = new ScopeEnv(now, frame.Units, Notice);
-            var silent = new ScopeEnv(now, frame.Units, null);
-            if (systemsNotice == null) systemsNotice = NoticeFromSystems;
-            var systemsEnv = new ScopeEnv(now, frame.Units, systemsNotice);      // SYSTEMS at Minimal speaks only in its critical form
-            for (int i = 0; i < pages.Length; i++)
+            // What is measured now (headline, lamp and gauge widths) is measured at the type boost the board draws at, not at whatever the last canvas left (C14: "PLATFORM18KM").
+            float keepBoost = ScopeCanvas.TextBoost;
+            ScopeCanvas.TextBoost = HudType.BoardBoost;
+            try
             {
-                var id = (ScopePage)i;
-                ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
-                pageLive[i] = PollPage(pages[i], env);
-            }
-            UpdateRoute();
-            PickPanels(frame.Threat.Missiles > 0);      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
-            PollStores();
-            MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
+                // Every feed remains polled for notices, warning lamps and dispenser calls, whether or not a panel shows it.
+                allow = Options.Effective();
+                var voiced = new ScopeEnv(now, frame.Units, Notice);
+                var silent = new ScopeEnv(now, frame.Units, null);
+                if (systemsNotice == null) systemsNotice = NoticeFromSystems;
+                var systemsEnv = new ScopeEnv(now, frame.Units, systemsNotice);      // SYSTEMS at Minimal speaks only in its critical form
+                for (int i = 0; i < pages.Length; i++)
+                {
+                    var id = (ScopePage)i;
+                    ScopeEnv env = !CuePriority.Has(allow.Voiced, id) ? silent : id == ScopePage.Systems ? systemsEnv : voiced;
+                    pageLive[i] = PollPage(pages[i], env);
+                }
+                UpdateRoute();
+                PickPanels(frame.Threat.Missiles > 0);      // the count that raises AlertKind.Missile (CombatAlerts) and lights the MSL lamp (HudThreats.Fill)
+                PollStores();
+                MeasureScreen();      // after the header's read: where the board goes depends on what the header stands in for
 
-            PresentLamps(frame);
-            PresentGauges();
+                PresentLamps(frame);
+                PresentGauges();
+            }
+            finally { ScopeCanvas.TextBoost = keepBoost; }
             hasBoard = true;
             Repaint(true);
             presentedAt = Time.unscaledTime;
@@ -158,7 +171,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rwrOpen = on && ScopePick.RwrOpen(liveMask, missile);
             bool fires = ScopePick.Fires(liveMask, out ScopePage host) && on;
             float rwrH = on ? ScopeLayout.RwrHeight(rwrOpen) : 0f, firesH = fires ? ScopeLayout.FiresHeight(host) : 0f;
-            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(rwrH, firesH, ScopeLayout.Compact + (hasMission ? MissionRowsHeight : 0f));
+            bool wing = on && pageLive[(int)ScopePage.Wing] && ScopeLayout.WingFits(ScopeLayout.BarLinesH(StackWanted), rwrH, firesH, hasMission ? ScopeLayout.MissionRowsH : 0f);
             SetSlot(ScopeLayout.SlotRwr, on ? pages[(int)ScopePage.Threat] : null, rwrH);
             SetSlot(ScopeLayout.SlotFires, fires ? pages[(int)host] : null, firesH);
             SetSlot(ScopeLayout.SlotWing, wing ? pages[(int)ScopePage.Wing] : null, ScopeLayout.WingH);
@@ -277,15 +290,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             now = clock;
             int phase = (int)(clock * FlashHz * 2f);
             bool flashChanged = beat && phase != lastPhase;
-            bool fast = allow.ShowSystems && pages[(int)ScopePage.Systems].Fast;
-            bool wiping = false;
+            bool fast = false, wiping = false;
             for (int i = 0; i < slotPages.Length; i++)
             {
                 fast |= SlotBody(i) && slotPages[i].Fast;
                 wiping |= transitions[i].Running;
             }
             if (!flashChanged && !wiping && !fast) return;
-            Repaint(flashChanged || wiping);
+            // Between two 10 Hz presents nothing but a wipe moves the layout, so a beat or a live page repaints only what it has to (the slots that move, all of them on the beat).
+            int mask = 0;
+            for (int i = 0; i < slotPages.Length; i++) if (flashChanged || (SlotBody(i) && slotPages[i].Fast)) mask |= 1 << i;
+            Repaint(flashChanged || wiping, mask, true);
         }
 
         // ------------------------------------------------------------------------------------------------ layout and paint
@@ -293,9 +308,27 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The layout the board is drawn in: STACK on a screen narrower than 16:9 whatever the stored option, else the option.</summary>
         private bool boardStack;
 
-        private void Repaint(bool shellToo)
+        /// <summary>A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.</summary>
+        private bool StackWanted => HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
+
+        /// <summary>The geometry, and each slot's wipe state, of the last full <see cref="Repaint"/>: what a repaint that finds the wipes still reuses (nothing else moves the layout between presents).</summary>
+        private BoardGeometry paintedGeo;
+        private bool paintedValid;
+        private readonly float[] paintedHeight = new float[ScopeLayout.MaxSlots], paintedWipe = new float[ScopeLayout.MaxSlots];
+
+        private bool WipesUnchanged()
         {
-            wingPainted = false;
+            for (int i = 0; i < transitions.Length; i++)
+                if (transitions[i].Height != paintedHeight[i] || transitions[i].Wipe != paintedWipe[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// <paramref name="reuse"/> (from <see cref="Animate"/>): when no wipe has moved since the last full repaint, skip the layout (two <c>ScopeLayout.Compute</c>, the anchor, the shade) and paint only the slots in
+        /// <paramref name="slotMask"/> (plus the shell's blocks when <paramref name="shellToo"/>). A present, a wipe or an unknown state always repaints everything.
+        /// </summary>
+        private void Repaint(bool shellToo, int slotMask = -1, bool reuse = false)
+        {
             // Each slot wipes on its own: a panel that comes, goes or changes its page (FIRES: SHOT or STRIKE) wipes, RWR opening from or closing to its header line only changes height.
             int signature = 0;
             for (int i = 0; i < slotPages.Length; i++)
@@ -310,14 +343,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (wipeSoundKey != int.MinValue) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Wipe);
                 wipeSoundKey = signature;
             }
-            // A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.
-            boardStack = HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
-            // SYSTEMS is the board's own block, not a page: there while there is an aircraft to read and its switch is on, whatever the slots or the declutter level.
+            if (reuse && paintedValid && WipesUnchanged())
+            {
+                ScopePalette fastPal = Palette();
+                lastPhase = (int)(now * FlashHz * 2f);
+                bool fastFlash = lastPhase % 2 == 0;
+                if (paintedGeo.Page.Present) PaintPages(fastPal, paintedGeo, fastFlash, slotMask);
+                if (shellToo)
+                {
+                    if (paintedGeo.Info.Present) PaintStatus(fastPal, paintedGeo, fastFlash);
+                    PaintWing(fastPal, paintedGeo, fastFlash);
+                    PaintStores(fastPal, paintedGeo, fastFlash);
+                }
+                return;
+            }
+            wingPainted = false;
+            paintedValid = false;
+            boardStack = StackWanted;
+            // SYS and INFO are the board's own cells, not a page. SYS while it has a lamp to show or a capacitor to draw; INFO while its switch is on and there is an aircraft to read, never at Minimal (the first to drop).
             ScopePageBase systems = pages[(int)ScopePage.Systems];
+            bool anyLamp = false;
+            for (int i = 0; i < lamps.Length; i++) anyLamp |= lamps[i].Present;
             var blocks = new BoardBlocks
             {
-                Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Pwr = header.HasCap, Exp = header.HasCm, StoresHidden = !allow.ShowStores, NoShelves = !allow.Furniture, Lamps = lampRow, RwrH = transitions[0].Height, FiresH = transitions[1].Height, WingH = transitions[2].Height,
-                StatusH = allow.ShowSystems && systems.Ready ? ScopeLayout.Compact + (hasMission ? MissionRowsHeight : 0f) : 0f, GaugeLines = gaugeLines,
+                Layout = boardStack ? BoardLayout.Stack : BoardLayout.Wide, Hero = header.HasWeapon, Exp = header.HasCm, StoresHidden = !allow.ShowStores,
+                Sys = (allow.ShowLamps && anyLamp) || (header.HasCap && allow.ShowStores), Info = allow.ShowSystems && systems.Ready && !allow.ThreatLampsOnly,
+                MissionH = hasMission ? ScopeLayout.MissionRowsH : 0f, RwrH = transitions[0].Height, FiresH = transitions[1].Height, WingH = transitions[2].Height, GaugeLines = gaugeLines,
             };
             BoardGeometry geo = ScopeLayout.Compute(blocks);
             // Where the wipes are heading: the size, the anchor and the shade go by it, so panels coming in never pump the scale or move the box.
@@ -357,13 +408,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 for (int i = 0; i < pageSurfaces.Length; i++) Show(pageSurfaces[i].Scope, false);
                 scopeBeat = false;
             }
-            if (!geo.Status.Present) Show(statusRect, false);
-            else if (shellToo || systems.Fast) PaintStatus(pal, geo, flashOn);
+            if (!geo.Info.Present) Show(statusRect, false);
+            else if (shellToo) PaintStatus(pal, geo, flashOn);
             if (shellToo)
             {
                 PaintWing(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }
+            paintedGeo = geo;
+            for (int i = 0; i < transitions.Length; i++) { paintedHeight[i] = transitions[i].Height; paintedWipe[i] = transitions[i].Wipe; }
+            paintedValid = true;
         }
     }
 }

@@ -40,7 +40,10 @@ namespace NOAvionics
             ContentHash = 0;
         }
 
-        private void Fold(float v) => ContentHash = (ContentHash ^ (ulong)BitConverter.DoubleToInt64Bits(v)) * 1099511628211UL;
+        /// <summary>False for a buffer redrawn every frame anyway (<c>AvVector.Commit(force: true)</c> clears it): <see cref="Add"/> stops folding into <see cref="ContentHash"/>.</summary>
+        public bool Hashing { get; set; } = true;
+
+        private void Fold(float v) => ContentHash = (ContentHash ^ (uint)BitConverter.SingleToInt32Bits(v)) * 1099511628211UL;
 
         /// <summary>
         /// Appends one quad. At capacity it sets <see cref="Overflowed"/> and returns false
@@ -61,6 +64,7 @@ namespace NOAvionics
             X[i + 2] = x2; Y[i + 2] = y2; C[i + 2] = c2;
             X[i + 3] = x3; Y[i + 3] = y3; C[i + 3] = c3;
             Count++;
+            if (!Hashing) return true;
             Fold(x0); Fold(y0); Fold(x1); Fold(y1); Fold(x2); Fold(y2); Fold(x3); Fold(y3);
             Fold(c0.R); Fold(c0.G); Fold(c0.B); Fold(c0.A);
             Fold(c1.R); Fold(c1.G); Fold(c1.B); Fold(c1.A);

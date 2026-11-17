@@ -20,8 +20,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const int DomeMax = 4, DomeLevels = 5, DomeSegments = 32, DomeStruts = 8;
         /// <summary>The objective beacon stands only while the zone is farther than this.</summary>
         public const float ObjectiveMinM = 2000f;
-        /// <summary>Lock spin-in: the spin, the hold, the fade.</summary>
-        public const float SpinS = 0.18f, SpinHoldS = 0.35f, SpinFadeS = 0.25f;
+        /// <summary>Lock spin-in: the close, the fade after it; the ring's radius at the start and its gap outside the target box at the end (reference pixels).</summary>
+        public const float SpinS = 0.35f, SpinFadeS = 0.12f, SpinStartPx = 64f, SpinGapPx = 6f;
         /// <summary>Hit glitch: how long, and the least time between two (under 2 a second, the flashing limit is 3).</summary>
         public const float GlitchS = 0.28f, GlitchGapS = 0.6f, GlitchJitterPx = 5f;
         public const int GlitchBars = 4;
@@ -89,14 +89,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             radius = AirDefenceRing.EffectiveRadius(maxRange, minAltitude, maxAltitude, Math.Min(height, maxAltitude));
         }
 
-        /// <summary>Alpha by distance for world symbols: whole up close, a third far out.</summary>
-        public static float Fade(float metres, float near = 2000f, float far = 40000f)
-        {
-            float t = (metres - near) / (far - near);
-            t = t < 0f ? 0f : t > 1f ? 1f : t;
-            return 1f - 0.65f * t;
-        }
-
         /// <summary>The way home stands when the pilot needs it: fuel at JOKER or BINGO, or damage that lasts.</summary>
         public static bool HomeWanted(bool joker, bool bingo, DamageFlags damage, int enginesOut, float detached) =>
             joker || bingo || damage != DamageFlags.None || enginesOut > 0 || detached > 0.02f;
@@ -106,19 +98,22 @@ namespace BoscaliSummer.Modules.Hud.Domain
             (now.Flags & ~before.Flags) != 0 || now.EnginesOut > before.EnginesOut || now.DetachedRatio > before.DetachedRatio + 0.005f;
 
         /// <summary>
-        /// The lock spin-in at <paramref name="age"/> seconds: a bracket that closes from 3x to 1x and turns 45 degrees to square in <see cref="SpinS"/> (with a little
-        /// overshoot), holds, then fades. <paramref name="calm"/> (REDUCED MOTION) skips the spin and shows the final bracket. False once it is over.
+        /// The lock spin-in at <paramref name="age"/> seconds: two opposed arcs of one ring that turn in 90 degrees and close onto the target box in <see cref="SpinS"/>
+        /// (<paramref name="close"/> 0..1, a little overshoot), then fade out fast. <paramref name="calm"/> (REDUCED MOTION) skips the turn and the close. False once it is over.
         /// </summary>
-        public static bool Spin(float age, bool calm, out float scale, out float angleDeg, out float alpha)
+        public static bool Spin(float age, bool calm, out float close, out float angleDeg, out float alpha)
         {
-            scale = 1f; angleDeg = 0f; alpha = 0f;
-            if (age < 0f || age > SpinS + SpinHoldS + SpinFadeS) return false;
+            close = 1f; angleDeg = 0f; alpha = 0f;
+            if (age < 0f || age > SpinS + SpinFadeS) return false;
             float e = calm ? 1f : BackOut(Math.Min(1f, age / SpinS));
-            scale = 3f - 2f * e;
-            angleDeg = 45f * (1f - e);
-            alpha = age < SpinS + SpinHoldS ? 1f : 1f - (age - SpinS - SpinHoldS) / SpinFadeS;
+            close = e;
+            angleDeg = 90f * (1f - e);
+            alpha = age < SpinS ? 1f : 1f - (age - SpinS) / SpinFadeS;
             return true;
         }
+
+        /// <summary>The spin-in ring's radius: <see cref="SpinStartPx"/> at the start, <see cref="SpinGapPx"/> outside a box of half-size <paramref name="boxHalf"/> once closed.</summary>
+        public static float SpinRadius(float close, float boxHalf) => SpinStartPx + (boxHalf + SpinGapPx - SpinStartPx) * close;
 
         /// <summary>Ease-out with an overshoot (the "back" curve, gentle: about 4 % past 1), then settles exactly on 1.</summary>
         public static float BackOut(float t)

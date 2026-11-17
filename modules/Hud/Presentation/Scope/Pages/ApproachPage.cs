@@ -129,34 +129,30 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             int key;
             string text = null;      // built only when the key changes (this runs at 10 Hz): a steady figure builds nothing
-            ScopeTone tone = Hi;
+            ScopeTone tone = Amber;      // the headline is the ROUTE card's status (refit 5.4): a caution, else the stage word in DIM
             bool flash = false;
             float dv = d.SpeedMps - d.TargetMps;
-            if (!d.GearDown && d.Stage != ApproachStage.Rollout) { key = 1; text = "GEAR"; tone = Amber; flash = true; }
+            if (!d.GearDown && d.Stage != ApproachStage.Rollout) { key = 1; text = "GEAR"; flash = true; }
             else if (CautionSpeed)
             {
                 int v = (int)Math.Round(Math.Abs(AvUnitTable.Speed(dv, u)));
                 key = 2000 + v * 2 + (dv > 0f ? 1 : 0) + (u == AvUnits.Imperial ? 1000 : 0);
                 if (key != headlineKey) text = (dv > 0f ? "FAST +" : "SLOW -") + v;
-                tone = Amber; flash = true;
+                flash = true;
             }
-            else if (d.Stage == ApproachStage.Intercept && d.HasIls)
+            else if (d.Stage <= ApproachStage.Glide && CautionLoc)
             {
                 int v = (int)Math.Round(Math.Abs(d.LocDeg) * 10f);
                 key = 20000 + v + (d.LocDeg < 0f ? 1000 : 0);
                 if (key != headlineKey) text = (d.LocDeg < 0f ? "LOC L " : "LOC R ") + (v / 10) + "." + (v % 10);
-                tone = CautionLoc ? Amber : Hi;
             }
-            else if (d.Stage <= ApproachStage.Glide && d.HasIls)
+            else if (d.Stage <= ApproachStage.Glide && CautionGs)
             {
                 int v = (int)Math.Round(d.GsDeg * 10f);
                 key = 30000 + v;
                 if (key != headlineKey) text = "GS " + (v < 0 ? "-" : "+") + (Math.Abs(v) / 10) + "." + (Math.Abs(v) % 10);
-                tone = CautionGs ? Amber : Hi;
             }
-            else if (d.Stage <= ApproachStage.Glide) { key = 4; text = d.Pad ? "PAD" : "FINAL"; }
-            else if (d.Stage == ApproachStage.Flare) { key = 5; text = d.Pad ? "TOUCHDOWN" : "FLARE"; }
-            else { bool td = now < rolloutAt + 1.2f; key = td ? 6 : 7; text = td ? "TOUCHDOWN" : "ROLLOUT"; }
+            else { key = 4 + (int)d.Stage * 2 + (d.Pad ? 1 : 0); text = ApproachWords.Of(d.Stage, d.Pad); tone = Dim; }
             if (key != headlineKey) { headlineKey = key; headlineText = text; }
             headlineTone = tone;
             headlineFlash = flash;

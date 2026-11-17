@@ -79,7 +79,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             state = LampState.Caution;
             flash = true;
             text = null;
-            if (live && inSam && legend == "SPKE") return true;
+            if (live && inSam && legend == "SPK") return true;
             state = LampState.Dark;
             flash = false;
             return false;
@@ -182,17 +182,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             else if (line == ObjectiveLine.ContactLost) { key = 5; text = "NO CONTACT"; tone = Amber; flash = true; }
             else if (inGun && !inZone) { key = 6; text = "GUN ENV"; tone = Amber; flash = true; }
             else if (now < doneAt + DoneSeconds) { key = 7; text = doneWord; }
-            else if (line == ObjectiveLine.Progress)
-            {
-                int pct = (int)Math.Round(ObjectiveMath.Progress(d) * 100f);
-                key = 100000 + pct * 10 + d.Current;
-                text = key == headlineKey ? headlineText : ScopeStr.Cat(d.Phases[d.Current].Title + " ", pct, "%").ToString();
-            }
             else
             {
-                int shown = (int)(edge / 100f);
-                key = 200000 + shown * 2 + (units == AvUnits.Imperial ? 1 : 0);
-                text = key == headlineKey ? headlineText : ScopeStr.Distance("", edge, units, 10).ToString();
+                key = 300000 + d.Current * 1024 + d.PhaseCount;      // the ROUTE card's status (refit 5.4): the phase, built on a key change only
+                text = key == headlineKey ? headlineText : d.PhaseCount > 0 ? "PH " + (d.Current + 1) + "/" + d.PhaseCount : null;
+                tone = Dim;
             }
             headlineText = text;
             headlineKey = key;
