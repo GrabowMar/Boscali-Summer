@@ -135,6 +135,10 @@
          lists every BoscaliSummer.Maps.*.bsmap resource. -->
     <EmbeddedResource Include="modules\Maps\Assets\*.bsmap" LogicalName="BoscaliSummer.Maps.%(Filename).bsmap" />
   </ItemGroup>
+  <Target Name="WarnWhenNoMapBundle" BeforeTargets="CoreCompile">
+    <ItemGroup><MapBundle Include="modules\Maps\Assets\*.bsmap" /></ItemGroup>
+    <Warning Condition="'@(MapBundle)' == ''" Text="No map bundle in modules\Maps\Assets: this build ships without Marisol Shoals. Run nomod map gen and nomod map bake." />
+  </Target>
   <ItemGroup Label="Skylark aircraft artwork">
     <EmbeddedResource Include="assets\SkylarkVTOL\Unity\skylark.bundle" Condition="Exists('assets\SkylarkVTOL\Unity\skylark.bundle')">
       <LogicalName>BoscaliSummer.SkylarkAssets.bundle</LogicalName>

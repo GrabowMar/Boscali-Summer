@@ -79,6 +79,13 @@ namespace BoscaliSummer.Modules.Session.Networking
         private readonly HashSet<ConfigEntryBase> owned = new HashSet<ConfigEntryBase>();
         private readonly HashSet<ConfigEntryBase> dirty = new HashSet<ConfigEntryBase>();
         private readonly Dictionary<INetworkPlayer, float> peers = new Dictionary<INetworkPlayer, float>();
+        // Map builds each client reported, and the clients about to be turned away (player -> when).
+        private readonly Dictionary<INetworkPlayer, string> peerMaps = new Dictionary<INetworkPlayer, string>();
+        private readonly Dictionary<INetworkPlayer, float> turnedAway = new Dictionary<INetworkPlayer, float>();
+        private readonly List<INetworkPlayer> leaving = new List<INetworkPlayer>();
+        private const float TurnAwayDelay = 1.5f; // long enough for the reply that tells the client why
+        private string checkedMap = "";
+        private float nextMapCheck;
         private readonly List<INetworkPlayer> dropped = new List<INetworkPlayer>();
         private readonly List<KeyValuePair<string, string>> outgoing = new List<KeyValuePair<string, string>>();
         private readonly HostValueLedger ledger = new HostValueLedger();
@@ -138,6 +145,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             {
                 // This peer became the host (or never left it): its own values are the ones that count.
                 if (sessionActive) EndSession("now hosting");
+                CheckPeerMaps(now);
                 if (dirty.Count > 0 && now >= nextFlush)
                 {
                     nextFlush = now + FlushInterval;
@@ -191,9 +199,47 @@ namespace BoscaliSummer.Modules.Session.Networking
             }
         }
 
+        private void TurnAwayIfMapDiffers(INetworkPlayer player, string hosted, float now)
+        {
+            if (turnedAway.ContainsKey(player) || !peerMaps.TryGetValue(player, out string maps) || !MapBuilds.Mismatch(hosted, maps)) return;
+            turnedAway[player] = now + TurnAwayDelay;
+            Plugin.Logger?.LogWarning("[Session] Turning a client away: map " + MapBuilds.NameOf(hosted) + " differs from the host's build.");
+        }
+
+        /// <summary>Once a second on the host: a map change re-checks every client that joined on another map, and
+        /// clients whose notice has had time to arrive are disconnected.</summary>
+        private void CheckPeerMaps(float now)
+        {
+            if (now < nextMapCheck) return;
+            nextMapCheck = now + 1f;
+            string hosted = MapBuilds.Hosted();
+            leaving.Clear();
+            foreach (INetworkPlayer player in peerMaps.Keys)
+                if (!peers.ContainsKey(player)) leaving.Add(player); // forgotten by the handshake: forget its maps too
+            foreach (INetworkPlayer player in leaving) peerMaps.Remove(player);
+            if (hosted != checkedMap)
+            {
+                checkedMap = hosted;
+                leaving.Clear();
+                leaving.AddRange(peerMaps.Keys);
+                foreach (INetworkPlayer player in leaving) TurnAwayIfMapDiffers(player, hosted, now);
+            }
+            leaving.Clear();
+            foreach (KeyValuePair<INetworkPlayer, float> due in turnedAway)
+                if (now >= due.Value) leaving.Add(due.Key);
+            foreach (INetworkPlayer player in leaving)
+            {
+                turnedAway.Remove(player);
+                peerMaps.Remove(player);
+                try { player.Disconnect(); }
+                catch (Exception error) { Plugin.Logger?.LogWarning("[Session] Could not disconnect a client: " + error.Message); }
+            }
+        }
+
         private void ResetHandshake()
         {
             answered = false;
+            mapShown = false;
             helloAttempts = 0;
             hostSilentShown = false;
             versionShown = false;
@@ -223,13 +269,9 @@ namespace BoscaliSummer.Modules.Session.Networking
                     "; this host runs " + Plugin.PluginVersion + ". Mismatched versions can break panels.");
 
             // On one of the mod's own maps the terrain itself must match, or the client flies through the host's ground.
-            string hosted = MapBuilds.Hosted();
-            if (MapBuilds.Mismatch(hosted, hello.Maps))
-            {
-                Plugin.Logger?.LogWarning("[Session] A client was turned away: map " + MapBuilds.NameOf(hosted) + " differs from the host's build.");
-                sender.Disconnect();
-                return;
-            }
+            // The reply below still goes out: it names the host's map build, which is how the client learns why it is leaving.
+            peerMaps[sender] = hello.Maps ?? "";
+            TurnAwayIfMapDiffers(sender, MapBuilds.Hosted(), now);
 
             outgoing.Clear();
             for (int i = 0; i < entries.Length; i++)

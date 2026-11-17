@@ -156,6 +156,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 GameObject copy = Object.Instantiate(donor.gameObject, airfields);
                 copy.name = "airbase_" + manifest.id + "_" + (n + 1);
                 var airbase = copy.GetComponent<Airbase>();
+                airbase.MapTower = null; // a reference into the vanilla map's prefab, not into this copy
                 Airbase.Runway runway = airbase.runways[0];
                 Vector3 along = runway.End.position - runway.Start.position;
                 Quaternion turn = Quaternion.FromToRotation(new Vector3(along.x, 0f, along.z), Quaternion.Euler(0f, strip.heading, 0f) * Vector3.forward);

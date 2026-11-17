@@ -43,24 +43,30 @@ namespace BoscaliSummer.Modules.Maps.Patches
     [HarmonyPatch(typeof(MissionEditorNewMenuV2), "Awake")]
     internal static class NewMissionTilesPatch
     {
-        private static void Prefix(MissionEditorNewMenuV2 __instance, MapLoader ___mapLoader, RectTransform ___mapListParent,
-            NewMissionMapButton ___mapButtonPrefab, ref NewMissionMapButton[] ___mapButtons)
+        // The screen's private fields are read by name inside the guarded body, not bound as patch parameters: a field
+        // the game renames then costs only the tiles, where a failed patch would take map registration down with it.
+        private static void Prefix(MissionEditorNewMenuV2 __instance)
         {
             try
             {
-                MapCatalog.EnsureListed(___mapLoader);
-                if (___mapLoader == null || ___mapButtons == null || ___mapButtons.Length == 0) return;
-                NewMissionMapButton source = ___mapButtonPrefab != null ? ___mapButtonPrefab : ___mapButtons[0];
-                Transform parent = ___mapListParent != null ? ___mapListParent : ___mapButtons[0].transform.parent;
-                var tiles = ___mapButtons.ToList();
-                for (int i = tiles.Count; i < ___mapLoader.Maps.Length; i++)
+                Traverse screen = Traverse.Create(__instance);
+                var loader = screen.Field("mapLoader").GetValue<MapLoader>();
+                var buttons = screen.Field("mapButtons").GetValue<NewMissionMapButton[]>();
+                MapCatalog.EnsureListed(loader);
+                if (loader == null || buttons == null || buttons.Length == 0) return;
+                var prefab = screen.Field("mapButtonPrefab").GetValue<NewMissionMapButton>();
+                var list = screen.Field("mapListParent").GetValue<RectTransform>();
+                NewMissionMapButton source = prefab != null ? prefab : buttons[0];
+                Transform parent = list != null ? list : buttons[0].transform.parent;
+                var tiles = buttons.ToList();
+                for (int i = tiles.Count; i < loader.Maps.Length; i++)
                 {
                     NewMissionMapButton tile = UnityEngine.Object.Instantiate(source, parent);
-                    tile.name = "MapTile_" + ___mapLoader.Maps[i].PrefabName;
-                    tile.SetMap(___mapLoader.Maps[i]);
+                    tile.name = "MapTile_" + loader.Maps[i].PrefabName;
+                    tile.SetMap(loader.Maps[i]);
                     tiles.Add(tile);
                 }
-                ___mapButtons = tiles.ToArray();
+                screen.Field("mapButtons").SetValue(tiles.ToArray());
             }
             catch (Exception e) { PatchGuard.Report("Maps.NewMissionTiles", e); }
         }
