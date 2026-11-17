@@ -76,7 +76,7 @@ public static class BuildMapBundle
                 assetBundleName = info.id + ".bsmap",
                 assetNames = new[] { prefabPath, Dir + "map.json", Dir + "trees.bytes", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image,
                     Dir + "macro.png", Dir + "splat_grass.png", Dir + "splat_rock.png", Dir + "splat_lush.png", Dir + "grass_mask.png",
-                    Dir + "forest_0.bytes", Dir + "forest_1.bytes", Dir + "forest_2.bytes", Dir + "forest_3.bytes" },
+                    Dir + "forest_0.bytes" },
             };
             if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
                 BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null) // LZMA: a height field packs far smaller than with LZ4

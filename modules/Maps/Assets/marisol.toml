@@ -4,8 +4,12 @@ seed = 7
 cell = 20
 islands = 12
 max_island_m = 3500
-land_fraction = 0.02
+sea_ratio = 0.985
+bank = 0.02
+worldgen_size = 1024
 peak = 420
 stacks = 40
 strips = 2
 latitude = 8
+[worldgen]
+tectonicFactor = 1.5
