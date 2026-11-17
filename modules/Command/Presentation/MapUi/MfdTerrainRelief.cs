@@ -32,6 +32,15 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const string NavalHeightResource = "BoscaliSummer.Command.terrain_naval_map.bmap";
         private const string NavalStyleResource = "BoscaliSummer.Command.terrain_naval_intel.png";
         private const string NavalMap = "terrain_naval_map";
+        private const string OwnPrefix = "BoscaliSummer.Command.";
+
+        /// <summary>A map the mod ships itself (modules/Maps): its chart sprite is <c>bs_&lt;id&gt;_map</c> and the bake embeds
+        /// the matching heightfield and chart. Those maps are open sea, so they take the Archipelago's sea styling.</summary>
+        private static bool OwnMap(string name) => name != null && name.StartsWith("bs_", StringComparison.Ordinal) &&
+            name.EndsWith("_map", StringComparison.Ordinal) &&
+            typeof(MfdTerrainRelief).Assembly.GetManifestResourceInfo(OwnPrefix + name + ".bmap") != null;
+
+        private static bool SeaStyle => mapAssetName == NavalMap || OwnMap(mapAssetName);
         private const int Samples = 513;
         private const int TileCells = 128;
         private const int TerrainLayer = 31;
@@ -710,12 +719,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                 return Unavailable("No matching baked terrain; using the native map.");
             string external = MapAssetPath(mapAssetName + ".bmap");
             bool custom = File.Exists(external);
-            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap;
+            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap || OwnMap(mapAssetName);
             if (!custom && !bundled)
                 return Unavailable("No matching baked terrain; using the native map.");
             try
             {
-                string resource = mapAssetName == NavalMap ? NavalHeightResource : HeightResource;
+                string resource = OwnMap(mapAssetName) ? OwnPrefix + mapAssetName + ".bmap" :
+                    mapAssetName == NavalMap ? NavalHeightResource : HeightResource;
                 using (Stream stream = custom ? File.OpenRead(external) :
                     typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(resource))
                 {
@@ -748,7 +758,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                                 (heights[i] - seaLevel) * VerticalScale * ModelWidth / 81920f);
                             if (land[i]) landCount++;
                         }
-                        if (landCount < 1024) return Unavailable("Terrain asset has too little land.");
+                        // An open-sea map has little land by design (Marisol Shoals: about 1,500 samples).
+                        if (landCount < (SeaStyle ? 256 : 1024)) return Unavailable("Terrain asset has too little land.");
                         ReliefHoles.FillRaised(heights, land, Samples, seaLevel, CutOutRimRise);
                         dryLand = new bool[land.Length];
                         for (int i = 0; i < dryLand.Length; i++)
@@ -888,7 +899,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             Shader ground = GroundShader();
             groundMaterial = new Material(ground != null ? ground : opaque != null ? opaque : shader) {
                 mainTexture = styleTexture != null ? styleTexture : sprite.texture,
-                color = mapAssetName == NavalMap
+                color = SeaStyle
                     ? new Color(1.93f, 2.00f, 2.00f, 1f)
                     : new Color(1.52f, 1.50f, 1.43f, 1f) };
             if (ground != null)
@@ -971,7 +982,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             camera.orthographicSize = 440f;
             camera.cullingMask = 1 << TerrainLayer;
             camera.clearFlags = CameraClearFlags.SolidColor;
-            camera.backgroundColor = mapAssetName == NavalMap
+            camera.backgroundColor = SeaStyle
                 ? new Color(5f / 255f, 12f / 255f, 18f / 255f, 1f)
                 : new Color(17f / 255f, 28f / 255f, 36f / 255f, 1f);
             camera.nearClipPlane = 0.3f;
@@ -1051,11 +1062,12 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private static void LoadStyle()
         {
             string custom = mapAssetName != null ? MapAssetPath(mapAssetName + "_intel.png") : null;
-            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap;
+            bool bundled = mapAssetName == SupportedMap || mapAssetName == NavalMap || OwnMap(mapAssetName);
             try
             {
                 using (Stream stream = custom != null && File.Exists(custom) ? File.OpenRead(custom) :
                     bundled ? typeof(MfdTerrainRelief).Assembly.GetManifestResourceStream(
+                        OwnMap(mapAssetName) ? OwnPrefix + mapAssetName.Substring(0, mapAssetName.Length - 4) + "_intel.png" :
                         mapAssetName == NavalMap ? NavalStyleResource : StyleResource) : null)
                 {
                     byte[] bytes = EmbeddedResources.ReadAll(stream, 32 * 1024 * 1024);

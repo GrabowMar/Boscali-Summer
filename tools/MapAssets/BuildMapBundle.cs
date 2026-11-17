@@ -4,6 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using Object = UnityEngine.Object;
 
 // Standalone editor entry point used by Build-MapBundle.ps1: turns the folder `nomod map gen` wrote into one bundle.
@@ -20,7 +21,7 @@ public static class BuildMapBundle
     private static readonly Color[] Palette =
     {
         new Color(.10f, .16f, .20f), new Color(.62f, .60f, .48f), new Color(.45f, .38f, .30f), new Color(.86f, .82f, .66f),
-        new Color(.89f, .82f, .63f), new Color(.42f, .50f, .24f), new Color(.13f, .30f, .10f), new Color(.36f, .33f, .30f),
+        new Color(.89f, .82f, .63f), new Color(.44f, .47f, .28f), new Color(.17f, .29f, .13f), new Color(.36f, .33f, .30f),
     };
 
     [Serializable] private class IslandInfo { public float cx, cz, radius, cell, peak; public string kind; public int res; }
@@ -42,6 +43,7 @@ public static class BuildMapBundle
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.StandaloneWindows64, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.StandaloneWindows64, new[] { GraphicsDeviceType.Direct3D11 });
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+            ConfigureScratchPipeline();
             var info = JsonUtility.FromJson<MapInfo>(File.ReadAllText(Path.Combine(source, "map.json")));
             if (info == null || string.IsNullOrEmpty(info.id) || info.islands == null || info.islands.Length == 0)
                 throw new Exception("map.json has no id or no islands.");
@@ -104,6 +106,64 @@ public static class BuildMapBundle
         }
     }
 
+    // Same setup as tools/WorldDetailAssets: without a pipeline asset URP strips every variant of a bundle's shader
+    // ("After scriptable stripping: 0") and the game draws the map magenta.
+    private static void ConfigureScratchPipeline()
+    {
+        const string rendererPath = Dir + "BuildRenderer.asset", pipelinePath = Dir + "BuildPipeline.asset";
+        UniversalRendererData renderer = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(rendererPath);
+        if (renderer == null)
+        {
+            renderer = ScriptableObject.CreateInstance<UniversalRendererData>();
+            AssetDatabase.CreateAsset(renderer, rendererPath);
+        }
+        UniversalRenderPipelineAsset pipeline = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
+        if (pipeline == null)
+        {
+            pipeline = UniversalRenderPipelineAsset.Create(renderer);
+            AssetDatabase.CreateAsset(pipeline, pipelinePath);
+        }
+        GraphicsSettings.defaultRenderPipeline = pipeline;
+        QualitySettings.renderPipeline = pipeline;
+
+        // These settings apply only to this disposable authoring project. Runtime-built
+        // materials cannot keep shader_feature/instancing variants through scene analysis.
+        var graphics = new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]);
+        SerializedProperty instancing = graphics.FindProperty("m_InstancingStripping");
+        if (instancing == null) throw new Exception("Unity's instancing stripping setting was not found.");
+        instancing.intValue = 2; // Unity 2022.3: StripUnused = 0, StripAll = 1, KeepAll = 2.
+        SerializedProperty fog = graphics.FindProperty("m_FogStripping");
+        if (fog == null) throw new Exception("Unity's fog stripping setting was not found.");
+        fog.intValue = 1; // Custom: asset bundles must also support the game's runtime fog modes.
+        foreach (string name in new[] { "m_FogKeepLinear", "m_FogKeepExp", "m_FogKeepExp2" })
+        {
+            SerializedProperty keep = graphics.FindProperty(name);
+            if (keep == null) throw new Exception("Unity's fog mode setting was not found: " + name);
+            keep.boolValue = true;
+        }
+        graphics.ApplyModifiedPropertiesWithoutUndo();
+
+        // URP 14's GlobalSettings type is internal. Pin its serialized settings rather
+        // than changing the game's pipeline or relying on a player-side included shader.
+        const string globalPath = Dir + "BuildGlobalSettings.asset";
+        RenderPipelineGlobalSettings global = AssetDatabase.LoadAssetAtPath<RenderPipelineGlobalSettings>(globalPath);
+        if (global == null)
+        {
+            Type type = typeof(UniversalRenderPipelineAsset).Assembly.GetType(
+                "UnityEngine.Rendering.Universal.UniversalRenderPipelineGlobalSettings", true);
+            global = (RenderPipelineGlobalSettings)ScriptableObject.CreateInstance(type);
+            AssetDatabase.CreateAsset(global, globalPath);
+        }
+        var settings = new SerializedObject(global);
+        SerializedProperty stripVariants = settings.FindProperty("m_StripUnusedVariants");
+        SerializedProperty stripPost = settings.FindProperty("m_StripUnusedPostProcessingVariants");
+        if (stripVariants == null || stripPost == null) throw new Exception("URP 14 shader stripping settings were not found.");
+        stripVariants.boolValue = false;
+        stripPost.boolValue = false;
+        settings.ApplyModifiedPropertiesWithoutUndo();
+        GraphicsSettings.RegisterRenderPipelineSettings<UniversalRenderPipeline>(global);
+    }
+
     private static string Argument(string name)
     {
         string[] args = Environment.GetCommandLineArgs();
@@ -157,7 +217,8 @@ public static class BuildMapBundle
                 for (int layer = 0; layer < 8; layer++) { sum += Palette[layer] * w[layer]; total += w[layer]; }
                 sum /= Mathf.Max(1f, total);
                 float vary = .92f + .16f * Mathf.PerlinNoise(x * .06f + n * 17f, z * .06f);
-                colours[z * res + x] = new Color(sum.r * vary, sum.g * vary, sum.b * vary, 0f);
+                Color lit = new Color(sum.r * vary, sum.g * vary, sum.b * vary).linear; // authored as seen on screen; the game shades in linear
+                colours[z * res + x] = new Color(lit.r, lit.g, lit.b, 0f);
             }
         return colours;
     }
@@ -267,7 +328,8 @@ public static class BuildMapBundle
 
         public int Add(Vector3 p, Vector3 normal, Color colour, float sway)
         {
-            Vertices.Add(p); Normals.Add(normal); Colours.Add(new Color(colour.r, colour.g, colour.b, sway));
+            Color lit = new Color(colour.r, colour.g, colour.b).linear;
+            Vertices.Add(p); Normals.Add(normal); Colours.Add(new Color(lit.r, lit.g, lit.b, sway));
             return Vertices.Count - 1;
         }
 
@@ -304,7 +366,7 @@ public static class BuildMapBundle
     {
         float height = Range(random, 7f, 12f), lean = Range(random, .6f, 2.4f), turn = Range(random, 0f, Mathf.PI * 2f);
         var leanTo = new Vector3(Mathf.Cos(turn), 0f, Mathf.Sin(turn));
-        var bark = new Color(.33f, .26f, .18f) * Range(random, .85f, 1.1f);
+        var bark = new Color(.47f, .39f, .28f) * Range(random, .85f, 1.1f);
         const int Sides = 5, Rings = 4;
         int first = b.Vertices.Count;
         for (int ring = 0; ring <= Rings; ring++)
@@ -331,7 +393,7 @@ public static class BuildMapBundle
             float a = turn + f * Mathf.PI * 2f / fronds + Range(random, -.25f, .25f), length = Range(random, 3.2f, 4.6f), droop = Range(random, 1.4f, 2.6f);
             var along = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
             var across = new Vector3(-along.z, 0f, along.x);
-            var leaf = new Color(.16f, .38f, .12f) * Range(random, .8f, 1.2f);
+            var leaf = new Color(.30f, .52f, .20f) * Range(random, .8f, 1.2f);
             int previousLeft = -1, previousRight = -1;
             const int Segments = 4;
             for (int s = 0; s <= Segments; s++)
@@ -349,7 +411,7 @@ public static class BuildMapBundle
     private static void JungleTree(Builder b, System.Random random, Vector3 at)
     {
         float height = Range(random, 7f, 13f), radius = Range(random, 3.2f, 5.5f);
-        var canopy = new Color(.10f, .27f, .09f) * Range(random, .8f, 1.25f);
+        var canopy = new Color(.22f, .42f, .17f) * Range(random, .8f, 1.25f);
         Blob(b, random, at + Vector3.up * height, new Vector3(radius, radius * .62f, radius), canopy, .6f);
         var bark = new Color(.24f, .19f, .14f);
         int first = b.Vertices.Count;
