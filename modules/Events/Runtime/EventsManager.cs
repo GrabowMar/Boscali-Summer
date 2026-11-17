@@ -223,12 +223,7 @@ namespace BoscaliSummer.Modules.Events.Runtime
 
             object missionId = MissionManager.CurrentMission;
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-            if (!ReferenceEquals(missionIdentity, missionId))
-            {
-                ResetForScene();
-                missionIdentity = missionId;
-                missionGeneration++;
-            }
+            EnsureMission(missionId);
             if (missionId == null || mission == null || !MissionManager.IsRunning)
             {
                 if (Available || history.Count > 0) ResetForScene();
@@ -262,6 +257,14 @@ namespace BoscaliSummer.Modules.Events.Runtime
                 // A missed end broadcast still retires locally at the stamped time.
                 Retire();
             }
+        }
+
+        private void EnsureMission(object missionId)
+        {
+            if (ReferenceEquals(missionIdentity, missionId)) return;
+            ResetForScene();
+            missionIdentity = missionId;
+            missionGeneration++;
         }
 
         // ---- Superevent beats on the ticker ------------------------------------------------
@@ -606,6 +609,9 @@ namespace BoscaliSummer.Modules.Events.Runtime
         {
             if (!float.IsFinite(start) || !float.IsFinite(end) || !float.IsFinite(effectStrength) ||
                 effectStrength < 0f || effectStrength > 2f) return;
+            // A valid snapshot can precede this manager's first Update after native mission synchronization.
+            // Establish that mission before applying it, so the following Update does not clear the new state.
+            if (MissionManager.CurrentMission != null) EnsureMission(MissionManager.CurrentMission);
             replicatedStrength = effectStrength;
             if (catalogIndex < 0)
             {

@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.CombatAdjust
             typeof(Patches.CombatAccuracyScopePatch),
             typeof(Patches.CombatMissileStartPatch),
             typeof(Patches.CombatMissileLocalStartPatch),
+            typeof(Patches.MissileWaterImpactPatch),
             typeof(Patches.CombatProxyFusePatch),
             typeof(Patches.CombatAimPatch),
             typeof(Patches.CombatSmokeLosPatch)
