@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private string lastCallsign, lastWord, state;
         private DroneFeedView feed;
         private float lostFlashUntil, cardH;
-        private bool wasLost;
+        private bool wasLost, inLayer;
         private Color lastInk;
         private readonly Vector3[] corners = new Vector3[4];
 
@@ -63,8 +63,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (root != null && root.activeSelf) root.SetActive(false);
                 return;
             }
-            if (root == null) Build();
+            bool layer = HudLayer.Enabled && HudLayer.Ensure();
+            if (root != null && layer != inLayer) { Destroy(root); root = null; }      // the A/B switch moved: rebuild on the other parent
+            if (root == null) Build(layer);
             if (!root.activeSelf) root.SetActive(true);
+            if (inLayer) Fit();
             // The bottom of the feed column, every view.
             card.GetWorldCorners(corners);
             FeedCorner.Uav = new Rect(corners[0].x, corners[0].y, corners[2].x - corners[0].x, corners[2].y - corners[0].y);
@@ -109,17 +112,38 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (cellKeys[2] != hdg) { cellKeys[2] = hdg; AvText.Set(cells[2], v != null ? FeedCorner.CellHead + "HDG" + FeedCorner.CellTail + hdg.ToString("000") : ""); }
         }
 
-        private void Build()
+        /// <summary>Layer on: the holder keeps this card's own 1920x1080 Expand grid inside the HUD canvas, so the card's sizes and its screen corners (<see cref="FeedCorner.Uav"/>) are unchanged.</summary>
+        private void Fit()
         {
+            float own = Mathf.Max(0.01f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
+            var holder = (RectTransform)root.transform;
+            holder.localScale = Vector3.one * (own / Mathf.Max(0.01f, HudLayer.HudCanvas.scaleFactor));
+            holder.sizeDelta = new Vector2(Screen.width / own, Screen.height / own);
+        }
+
+        private void Build(bool layer)
+        {
+            inLayer = layer;
             // A scene object like the other HUD canvases: it goes with the scene, before the font materials unload at quit.
             root = new GameObject("BoscaliUavFeedCard", typeof(RectTransform));
-            var canvas = root.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = SortOrder;
-            var scaler = root.AddComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            if (layer)
+            {
+                // Over.Data of the HUD layer: the card gains the HUD's visibility and the visor's glitch with the rest of the mod's blocks.
+                var holder = (RectTransform)root.transform;
+                holder.SetParent(HudLayer.Data, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = Vector2.zero;
+                holder.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                var canvas = root.AddComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = SortOrder;
+                var scaler = root.AddComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
+            }
 
             float w = FeedCorner.Width, feedH = Mathf.Round(w * 9f / 16f);
             cardH = FeedCorner.Header + feedH;

@@ -41,6 +41,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         private readonly char[] buf = new char[48];
+        private string fuelLegend, fuelLegendSpaced;
 
         private RectTransform canvasRoot;
         private RectTransform root;
@@ -150,7 +151,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             var rootObject = new GameObject("BoscaliWingviewCluster", typeof(RectTransform));
             root = (RectTransform)rootObject.transform;
-            root.SetParent(canvasRoot, false);
+            root.SetParent(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Data : canvasRoot, false);      // Over.Data: the HUD canvas keeps its visibility, the cards batch apart from the native symbols
             root.anchorMin = new Vector2(0.5f, 0.5f);
             root.anchorMax = new Vector2(0.5f, 0.5f);
             root.pivot = new Vector2(0.5f, 0.5f);
@@ -323,7 +324,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 root.gameObject.SetActive(shown);
                 builtActive = shown;
             }
-            if (!shown) return;
+            if (!shown) { MissileFeedCamera.CardOnScreen = true; return; }
             if (active != flightShown)
             {
                 flightShown = active;
@@ -375,7 +376,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 Style(alt, ink, altLit);
                 Style(hdg, ink, null);
                 Fill(ref spd, Mathf.Clamp01(f.Throttle), ink, "THR ");
-                Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone) + " ");
+                string legend = FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone);      // constants: the spaced copy is made once per word, not per tick
+                if (!ReferenceEquals(legend, fuelLegend)) { fuelLegend = legend; fuelLegendSpaced = legend + " "; }
+                Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, fuelLegendSpaced);
 
                 WriteSpeedCaption(overG);
                 WriteSpeed(f.SpeedMps, units);
@@ -394,6 +397,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The cards' words first (their widths set where the shelf rules stop), then the mesh over them.
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, targetRect, ink, units);
             PresentMissileCard(missileRect, ink, units);
+            // The feed camera only renders while its card can be seen (a faded or hidden HUD block): see MissileFeedCamera.CardOnScreen.
+            MissileFeedCamera.CardOnScreen = !(missile.Active && !(root.gameObject.activeInHierarchy && (BoscaliSummer.Core.Ui.HudLayer.Over == null || BoscaliSummer.Core.Ui.HudLayer.Over.Group == null || BoscaliSummer.Core.Ui.HudLayer.Over.Group.alpha > 0.01f)));
             PaintSymbols(screenW, screenH, ink, cameraTexture != null ? targetRect : default, f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
         }
 

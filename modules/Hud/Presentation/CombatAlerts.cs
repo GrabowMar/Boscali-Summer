@@ -21,9 +21,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <item>THREAT RING round the screen centre (<see cref="ThreatRing"/>): a double chevron toward every live inbound missile labelled "M1 6S", an amber diamond (no word) toward a radar locking us.</item>
     /// <item>SHOT CALLOUT under the reticle (<see cref="ShotCallouts"/>): HIT / DESTROYED / MISSED / DECOYED, no box; only DESTROYED names its target (and keeps its two side rules).</item>
     /// </list>
-    /// Our own objects under the native HUDCanvas (vanilla owns visibility), in the native HUD face, laid out on a 1080-high reference screen and scaled to the real one, with the
-    /// lane's one set of strokes, brackets, sizes and motion. While it is up it hides the game's own missile list ("Missile [ARH] 4.9km" above the map), which the banner and the
-    /// ring now say better, through a group it owns (alpha back to 1 whenever the layer is down). Data at the board's 10 Hz (<see cref="Read"/>); blink, ring and pop every frame. The bearings of the threats
+    /// Our own objects on the AV layer inside the native HUDCanvas (vanilla owns visibility): the banner, callout and EW JAM on <see cref="HudLayer.Data"/>, the ring and edge glow on
+    /// <see cref="HudLayer.Motion"/> (painted in the layer's late Paint phase through the frame's <see cref="HudView"/>, <see cref="PaintRing"/>); in the native HUD face, laid out on a
+    /// 1080-high reference screen and scaled to the real one, with the lane's one set of strokes, sizes and motion. While it is up it hides the game's own missile list ("Missile [ARH] 4.9km" above the map), which the banner and the
+    /// ring now say better, through a group it owns (alpha back to 1 whenever the layer is down). Data at the board's 10 Hz (<see cref="Read"/>); blink and pop every frame in LateUpdate
+    /// (<see cref="Frame"/>), the ring every frame at the late point. The bearings of the threats
     /// hang on the heading tape itself (<see cref="TapeHud"/>).
     /// </summary>
     internal sealed class CombatAlerts
@@ -37,8 +39,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float IconGap = 8f, EdgeDepth = 90f, WordSpacing = 10f, LineSpacing = 2f;
         private static readonly AccessTools.FieldRef<CombatHUD, ThreatList> ThreatListRef = NativeRefs.Field<CombatHUD, ThreatList>("threatList");
 
-        private RectTransform canvasRoot, root, line, callout;
-        /// <summary>The layer's holder (the visor glitch shader's material goes onto the graphics under it; null until built).</summary>
+        private RectTransform canvasRoot, root, ring, line, callout;
+        /// <summary>The banner's holder (on the layer's Data root; null until built).</summary>
         internal Transform Root => root;
         private TMP_FontAsset font;
         private Material fontMaterial;
@@ -56,7 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private readonly AlertBoard board = new AlertBoard();
         private AlertInputs inputs;
-        private readonly char[] buf = new char[96];
+        private readonly char[] buf = new char[96], ringBuf = new char[24];
         private bool on;
         private int kindKey = -1, detailKey, calloutVersion = -1, ledgerVersion = -1;
         private float lastCalled = float.PositiveInfinity;
@@ -85,18 +87,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public bool Ensure()
         {
-            if (root != null && canvasRoot != null) return true;
-            root = null;
-            if (!NativeRefs.HudCanvas(out _, out Canvas canvas)) return false;
-            canvasRoot = (RectTransform)canvas.transform;
+            if (root != null && ring != null && canvasRoot != null) return true;
+            if (root != null) Object.Destroy(root.gameObject);      // half a pair (its layer root died): build both again
+            if (ring != null) Object.Destroy(ring.gameObject);
+            root = ring = null;
+            if (!HudLayer.Ensure()) return false;
+            canvasRoot = (RectTransform)HudLayer.HudCanvas.transform;
             VanillaHudStyle.TryHudFont(out font, out fontMaterial);
 
-            root = Holder(canvasRoot, "BoscaliCombatAlerts");
-            edgeLines = AvVector.Create(root, "EdgeGlow", 32);      // first: behind every other piece
-            ringLines = AvVector.Create(root, "Ring", 160);
+            root = Holder(HudLayer.Data, "BoscaliCombatAlerts");
+            // The ring and the edge glow move every frame: their own holder on the Motion root, so their rebuild never re-batches the banner.
+            ring = Holder(HudLayer.Motion, "BoscaliThreatRing");
+            edgeLines = AvVector.Create(ring, "EdgeGlow", 32);      // first: behind every other piece
+            ringLines = AvVector.Create(ring, "Ring", 160);
             for (int i = 0; i < RingMax; i++)
             {
-                ringLabels[i] = Text(root, "RingLabel", TopCentre.ValuePt, LineSpacing, bold: true);
+                ringLabels[i] = Text(ring, "RingLabel", TopCentre.ValuePt, LineSpacing, bold: true);
                 ringLabels[i].rectTransform.sizeDelta = new Vector2(112f, TopCentre.ValuePt * 1.5f);
                 ringLabels[i].gameObject.SetActive(false);
                 ringKeys[i] = int.MinValue;
@@ -127,6 +133,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             line.gameObject.SetActive(false);
             callout.gameObject.SetActive(false);
             root.gameObject.SetActive(false);
+            ring.gameObject.SetActive(false);
+            VisorGlitch.Attach(root);      // once per build: the glitch material goes onto what was just made
+            VisorGlitch.Attach(ring);
+            VisorGlitch.Rescan();
             lastK = 0f;
             kindKey = calloutVersion = -1;
             detailKey = 0;      // a rebuilt layer writes its words again
@@ -174,12 +184,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             WatchShots(now);
         }
 
-        /// <summary>Every frame: place and paint the banner (its blink), the ring (missiles move every frame) and the callout's pop; hide or give back the game's missile list.</summary>
-        public void Frame(Aircraft aircraft, ThreatWatch threats, IHudBoard boardBox, float now)
+        /// <summary>Every frame (LateUpdate): place and paint the banner (its blink) and the callout's pop; hide or give back the game's missile list. The ring is <see cref="PaintRing"/>'s.</summary>
+        public void Frame(Aircraft aircraft, IHudBoard boardBox, float now)
         {
             if (root == null) return;
             bool show = on && aircraft != null;
             if (root.gameObject.activeSelf != show) root.gameObject.SetActive(show);
+            if (ring.gameObject.activeSelf != show) ring.gameObject.SetActive(show);
             if (!show)
             {
                 TopCentre.LineUp = lineUp = false;
@@ -191,13 +202,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!(k > 0.01f)) return;
             if (k != lastK)
             {
-                root.localScale = new Vector3(k, k, 1f);
+                root.localScale = ring.localScale = new Vector3(k, k, 1f);
                 lastK = k;
             }
-            float w = canvasRoot.rect.width / k, h = 1080f;
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
-            PaintLine(now, h, boardBox, palette);
-            PaintRing(aircraft, threats, now, w, h, palette);
+            PaintLine(now, 1080f, boardBox, palette);
             PaintCallout(now, palette);
             NativeList(true);      // only once the layer has painted: a paint that throws leaves the game's own list up (fail open)
         }
@@ -321,52 +330,53 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
 
-        private void PaintRing(Aircraft aircraft, ThreatWatch threats, float now, float w, float h, VanillaHudStyle.Palette palette)
+        /// <summary>
+        /// The THREAT RING and the edge glow, every frame in the AV layer's late Paint phase (the camera's final pose): a mark toward every live inbound missile and a locking radar.
+        /// The "on you" fact: never range-inked. Does nothing while the layer is down (<see cref="Frame"/> owns that).
+        /// </summary>
+        public void PaintRing(Aircraft aircraft, ThreatWatch threats, float now, in HudView view)
         {
+            if (ring == null || !ring.gameObject.activeSelf || aircraft == null) return;
+            float k = view.CanvasSize.y / 1080f;
+            if (!view.Valid || !(k > 0.01f)) return;
+            float w = view.CanvasSize.x / k, h = 1080f;
+            VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
             AvQuadBuffer b = ringLines.Buffer, e = edgeLines.Buffer;
             b.Clear();
             e.Clear();
             int used = 0;
             bool calm = AvFxDriver.ReducedMotion;
-            CameraStateManager state = SceneSingleton<CameraStateManager>.i;
-            Camera cam = state != null ? state.mainCamera : null;
-            if (cam != null)
+            float rx = ThreatRing.WidthShare * w, ry = ThreatRing.HeightShare * h;
+            Vector3 ownPos = aircraft.transform.position, ownVelocity = aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero;
+            int n = threats.LiveMissiles(missiles, numbers);
+            for (int i = 0; i < n && used < RingMax; i++)
             {
-                float rx = ThreatRing.WidthShare * w, ry = ThreatRing.HeightShare * h;
-                Transform eye = cam.transform;
-                Rect px = cam.pixelRect;
-                float kx = w / Mathf.Max(1f, px.width), ky = h / Mathf.Max(1f, px.height);
-                Vector3 ownPos = aircraft.transform.position, ownVelocity = aircraft.rb != null ? aircraft.rb.velocity : Vector3.zero;
-                int n = threats.LiveMissiles(missiles, numbers);
-                for (int i = 0; i < n && used < RingMax; i++)
-                {
-                    Vector3 pos = missiles[i].transform.position, rel = pos - ownPos;
-                    Vector3 velocity = missiles[i].rb != null ? missiles[i].rb.velocity : Vector3.zero;
-                    float range = rel.magnitude, closure = range > 1f ? -Vector3.Dot(velocity - ownVelocity, rel / range) : float.NaN;
-                    float tti = ThreatWatch.Tti(range, closure, velocity.magnitude);
-                    if (!Mark(eye, cam, pos, px, kx, ky, w, h, rx, ry, out float angle)) continue;
-                    float size = ThreatRing.Size(tti);
-                    Rgba c = palette.Alert.ToRgba().WithAlpha(calm || ThreatRing.Lit(tti, now) ? 1f : 0.25f);
-                    float rad = angle * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), r = ThreatRing.Reach(angle, rx, ry) + size * 0.5f;
-                    // A double chevron pointing out at the missile, the nearer half dimmer: the way to look, at a glance.
-                    AvStrokes.Chevron(b, cos * r, sin * r, size, angle, HudStroke.Standard, c);
-                    AvStrokes.Chevron(b, cos * (r - size * 0.6f), sin * (r - size * 0.6f), size * 0.75f, angle, HudStroke.Hairline, c.WithAlpha(c.A * 0.55f));
-                    float glow = ThreatRing.EdgeAlpha(tti);
-                    if (glow > 0f) EdgeGlow(e, angle, w * 0.5f, h * 0.5f, palette.Alert.ToRgba().WithAlpha(glow));
-                    int seconds = Mathf.Clamp(Mathf.CeilToInt(tti), 0, 999);
-                    // Near twelve o'clock the label reads inward: outward it would sit on the banner's detail line; near six too: outward it would sit on the cockpit's rim.
-                    bool inward = sin > 0.6f || sin < -0.6f;
-                    RingLabel(used++, cos, sin, inward ? r - size * 1.1f - 4f : r + size * 0.5f + 6f, numbers[i] * 1000 + seconds, numbers[i], seconds, c, inward);
-                }
-                System.Array.Clear(missiles, 0, missiles.Length);
-                if (used < RingMax && threats.TryLock(now, out Unit emitter, out _) && Mark(eye, cam, emitter.transform.position, px, kx, ky, w, h, rx, ry, out float lockAngle))
-                {
-                    Rgba c = palette.Warning.ToRgba();
-                    float rad = lockAngle * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), r = ThreatRing.Reach(lockAngle, rx, ry) + 8f;
-                    AvStrokes.Diamond(b, cos * r, sin * r, 7f, HudStroke.Standard, c);      // a lock is the diamond alone: the banner and the tape say LOCK
-                    if (ringLabels[used].gameObject.activeSelf) ringLabels[used].gameObject.SetActive(false);
-                    used++;
-                }
+                Vector3 pos = missiles[i].transform.position, rel = pos - ownPos;
+                Vector3 velocity = missiles[i].rb != null ? missiles[i].rb.velocity : Vector3.zero;
+                float range = rel.magnitude, closure = range > 1f ? -Vector3.Dot(velocity - ownVelocity, rel / range) : float.NaN;
+                float tti = ThreatWatch.Tti(range, closure, velocity.magnitude);
+                if (!Mark(view, k, pos, w, h, rx, ry, out float angle)) continue;
+                float size = ThreatRing.Size(tti);
+                Rgba c = palette.Alert.ToRgba().WithAlpha(calm || ThreatRing.Lit(tti, now) ? 1f : 0.25f);
+                float rad = angle * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), r = ThreatRing.Reach(angle, rx, ry) + size * 0.5f;
+                // A double chevron pointing out at the missile, the nearer half dimmer: the way to look, at a glance.
+                AvStrokes.Chevron(b, cos * r, sin * r, size, angle, HudStroke.Standard, c);
+                AvStrokes.Chevron(b, cos * (r - size * 0.6f), sin * (r - size * 0.6f), size * 0.75f, angle, HudStroke.Hairline, c.WithAlpha(c.A * 0.55f));
+                float glow = ThreatRing.EdgeAlpha(tti);
+                if (glow > 0f) EdgeGlow(e, angle, w * 0.5f, h * 0.5f, palette.Alert.ToRgba().WithAlpha(glow));
+                int seconds = Mathf.Clamp(Mathf.CeilToInt(tti), 0, 999);
+                // Near twelve o'clock the label reads inward: outward it would sit on the banner's detail line; near six too: outward it would sit on the cockpit's rim.
+                bool inward = sin > 0.6f || sin < -0.6f;
+                RingLabel(used++, cos, sin, inward ? r - size * 1.1f - 4f : r + size * 0.5f + 6f, numbers[i] * 1000 + seconds, numbers[i], seconds, c, inward);
+            }
+            System.Array.Clear(missiles, 0, missiles.Length);
+            if (used < RingMax && threats.TryLock(now, out Unit emitter, out _) && Mark(view, k, emitter.transform.position, w, h, rx, ry, out float lockAngle))
+            {
+                Rgba c = palette.Warning.ToRgba();
+                float rad = lockAngle * Mathf.Deg2Rad, cos = Mathf.Cos(rad), sin = Mathf.Sin(rad), r = ThreatRing.Reach(lockAngle, rx, ry) + 8f;
+                AvStrokes.Diamond(b, cos * r, sin * r, 7f, HudStroke.Standard, c);      // a lock is the diamond alone: the banner and the tape say LOCK
+                if (ringLabels[used].gameObject.activeSelf) ringLabels[used].gameObject.SetActive(false);
+                used++;
             }
             edgeLines.Commit();
             RingMarks = used;
@@ -398,16 +408,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        /// <summary>A threat's place on the ring (<see cref="ThreatRing.Place"/>) from where the camera sees it: its own frame, and its screen offset from the centre in the layer's units while ahead.</summary>
-        private static bool Mark(Transform eye, Camera cam, Vector3 world, Rect px, float kx, float ky, float w, float h, float rx, float ry, out float angle)
+        /// <summary>A threat's place on the ring (<see cref="ThreatRing.Place"/>) from where the camera sees it: its own frame, and its offset from the centre in the layer's units (canvas units over <paramref name="k"/>) while ahead.</summary>
+        private static bool Mark(in HudView view, float k, Vector3 world, float w, float h, float rx, float ry, out float angle)
         {
-            Vector3 local = eye.InverseTransformPoint(world);
+            Vector3 local = view.Cam.transform.InverseTransformPoint(world);
             float sx = 0f, sy = 0f;
-            if (local.z > 0f)
+            if (local.z > 0f && view.Project(world, out Vector2 c))
             {
-                Vector3 s = cam.WorldToScreenPoint(world);
-                sx = (s.x - px.center.x) * kx;
-                sy = (s.y - px.center.y) * ky;
+                sx = c.x / k;
+                sy = c.y / k;
             }
             return ThreatRing.Place(local.x, local.y, local.z, sx, sy, rx, ry, w * 0.5f, h * 0.5f, out angle);
         }
@@ -423,14 +432,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (ringKeys[slot] != key)
             {
                 ringKeys[slot] = key;
-                label.text = "M" + number + " " + seconds + "S";
+                int n = AvNumFormat.Append(ringBuf, 0, "M");
+                n = AvNumFormat.Write(ringBuf, n, number, 0);
+                n = AvNumFormat.Append(ringBuf, n, " ");
+                n = AvNumFormat.Write(ringBuf, n, seconds, 0);
+                n = AvNumFormat.Append(ringBuf, n, "S");
+                label.SetText(ringBuf, 0, n);      // no string built: nothing allocated
             }
             RectTransform rect = label.rectTransform;
             float px = inward ? -cos : cos, py = inward ? -sin : sin;
-            rect.pivot = new Vector2(px > 0.35f ? 0f : px < -0.35f ? 1f : 0.5f, 0.5f - 0.5f * py);
-            label.alignment = px > 0.35f ? TextAlignmentOptions.MidlineLeft : px < -0.35f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Center;
-            rect.anchoredPosition = new Vector2(cos * r, sin * r);
-            label.color = new Color(c.R, c.G, c.B, c.A);
+            // Every write gated: an unchanged pivot, alignment, place or colour dirties nothing.
+            var pivot = new Vector2(px > 0.35f ? 0f : px < -0.35f ? 1f : 0.5f, 0.5f - 0.5f * py);
+            if (rect.pivot != pivot) rect.pivot = pivot;
+            TextAlignmentOptions align = px > 0.35f ? TextAlignmentOptions.MidlineLeft : px < -0.35f ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.Center;
+            if (label.alignment != align) label.alignment = align;
+            var at = new Vector2(cos * r, sin * r);
+            if (rect.anchoredPosition != at) rect.anchoredPosition = at;
+            var colour = new Color(c.R, c.G, c.B, c.A);
+            if (label.color != colour) label.color = colour;
         }
 
         private void PaintCallout(float now, VanillaHudStyle.Palette palette)
@@ -556,6 +575,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             board.Reset();
             NativeList(false);
             if (root != null) root.gameObject.SetActive(false);
+            if (ring != null) ring.gameObject.SetActive(false);
         }
 
         public void Destroy()
@@ -563,7 +583,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (nativeList != null) Object.Destroy(nativeList);
             nativeList = null;
             if (root != null) Object.Destroy(root.gameObject);
-            root = null;
+            if (ring != null) Object.Destroy(ring.gameObject);
+            root = ring = null;
             canvasRoot = null;
             on = false;
             board.Reset();

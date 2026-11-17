@@ -26,7 +26,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly List<Graphic> graphics = new List<Graphic>(512);
         private static Material ui;
         private static float nextResolve, nextScan;
-        private static bool live;
+        private static bool live, dirty;
+        private static RectTransform calmPage;
 
         /// <summary>The sim's pin (<c>HudAutomation.Visor shader=off</c>): the stock UI and text shaders are back everywhere and nothing glitches, for the pixel-for-pixel comparison of the healthy visor.</summary>
         internal static bool Disabled { get; private set; }
@@ -47,6 +48,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
                 graphics.Clear();
                 nextScan = 0f;
+                dirty = true;
             }
             BoscaliSummer.Core.Game.VanillaHudStyle.UseStockText(disabled);
         }
@@ -70,23 +72,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The material the mod's HUD line art takes (null while not <see cref="Ready"/>).</summary>
         internal static Material LineArt => ui;
 
-        /// <summary>A mod-owned HUD holder whose graphics should glitch with the visor.</summary>
+        /// <summary>A mod-owned HUD holder whose graphics should glitch with the visor. Idempotent (safe to call every frame); a new holder is scanned on the next <see cref="Scan"/>.</summary>
         public static void Attach(Transform root)
         {
-            if (root != null && !roots.Contains(root)) roots.Add(root);
+            if (root == null || roots.Contains(root)) return;
+            roots.Add(root);
+            dirty = true;
         }
+
+        /// <summary>A block was (re)built under an attached holder: the next <see cref="Scan"/> puts the glitch material on its graphics.</summary>
+        public static void Rescan() => dirty = true;
 
         // TMP owns its labels and fallback submeshes; their material getter may clone a null shared material.
         private static bool IsLineArt(Graphic graphic) => graphic != null && !(graphic is TMP_Text) && !(graphic is TMP_SubMeshUI);
 
         /// <summary>
-        /// Twice a second: every graphic under an attached holder that still has the stock UI material takes the glitch material (a graphic with a material of its own, and every label, is left alone).
+        /// On a (re)build (<see cref="Attach"/> of a new holder, <see cref="Rescan"/>) and, while the glitch runs, twice a second: every graphic under an attached holder that still has the stock UI material takes the glitch material (a graphic with a material of its own, and every label, is left alone).
         /// Holders that were destroyed drop out. No allocation: one reused list.
         /// </summary>
         public static void Scan(float now)
         {
-            if (!Ready || now < nextScan) return;
+            if (!Ready || (!dirty && !live) || now < nextScan) return;      // a calm visor costs nothing here: no 2 Hz GetComponentsInChildren
             nextScan = now + 0.5f;
+            dirty = false;
             Material stock = Graphic.defaultGraphicMaterial;
             for (int r = roots.Count - 1; r >= 0; r--)
             {
@@ -112,7 +120,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (live) { Shader.SetGlobalVector(FxId, Vector4.zero); live = false; }
                 return;
             }
+            if (!live) nextScan = 0f;      // a glitch starts: take in the graphics built since the last scan on the next one
             live = true;
+            ApplyCalm();
             float[] t = fx.Tear;
             Shader.SetGlobalVector(FxId, new Vector4(1f, fx.Clock, fx.Seed, 0f));
             Shader.SetGlobalVector(Tear0Id, new Vector4(t[0], t[1], t[2], t[3]));
@@ -127,11 +137,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static readonly Vector4 CentreCalm = new Vector4(0.31f, 0.10f, 0.71f, 0.62f);
 
         /// <summary>Where the effect is eased to a mild version (a third of the tear, fewer and paler dropouts, fainter shimmer): the centre of the screen and the board's scope page (null: none).</summary>
-        public static void SetCalm(RectTransform scopePage)
+        public static void SetCalm(RectTransform scopePage) => calmPage = scopePage;      // written to the shader by Drive, only while a glitch runs (the terms are off otherwise)
+
+        private static void ApplyCalm()
         {
-            if (!Ready) return;
             Shader.SetGlobalVector(Calm0Id, CentreCalm);
-            Shader.SetGlobalVector(Calm1Id, ScreenRect(scopePage));
+            Shader.SetGlobalVector(Calm1Id, ScreenRect(calmPage));
         }
 
         private static Vector4 ScreenRect(RectTransform rt)
@@ -173,7 +184,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.raycastTarget = false;
                 g.material = staticMat;
             }
-            if (!staticGo.activeSelf) { staticGo.SetActive(true); staticGo.transform.SetAsLastSibling(); }
+            if (!staticGo.activeSelf) staticGo.SetActive(true);
+            Transform tr = staticGo.transform;
+            if (tr.parent != null && tr.GetSiblingIndex() != tr.parent.childCount - 1) tr.SetAsLastSibling();      // over the layer roots too, whenever they were built after it
         }
 
         /// <summary>Everything off (the board went down, the scene ended): the globals rest and the next frame draws the stock look.</summary>

@@ -106,13 +106,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             if (cornerFurniture != null) return true;
             if (canvasRect == null) return false;
-            cornerShade = CornerRoot("BoscaliCornerShade");
+            if (cornerShade != null) UnityEngine.Object.Destroy(cornerShade.gameObject);      // the furniture died with its layer root: the shade is rebuilt with it
+            cornerShade = CornerRoot("BoscaliCornerShade", canvasRect);
             cornerShade.SetAsFirstSibling();
             leftShadow = ShadeChild<Image>(cornerShade, "LeftStackShadow");
             HudSprites.Slice(leftShadow, HudSprites.Feather);
             mapShadow = ShadeChild<Image>(cornerShade, "MapBackdrop");
             HudSprites.Slice(mapShadow, HudSprites.Feather);
-            cornerFurniture = CornerRoot("BoscaliCornerFurniture");
+            cornerFurniture = CornerRoot("BoscaliCornerFurniture");      // Over.Data: the pieces drawn over the native HUD; the shade stays beneath it
             cornerGroup = cornerFurniture.gameObject.AddComponent<CanvasGroup>();
             cornerGroup.ignoreParentGroups = true;
             cornerGroup.interactable = cornerGroup.blocksRaycasts = false;
@@ -125,12 +126,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>A root as big as the HUD canvas (every child is placed from its top-left corner), off until the first paint.</summary>
-        private RectTransform CornerRoot(string name)
+        private RectTransform CornerRoot(string name, RectTransform parent = null)
         {
+            if (parent == null) parent = BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Data : canvasRect;      // Over.Data unless the layer is missing
             var go = new GameObject(name, typeof(RectTransform));
             go.SetActive(false);
             var rect = (RectTransform)go.transform;
-            rect.SetParent(canvasRect, false);
+            rect.SetParent(parent, false);
             rect.anchorMin = Vector2.zero;
             rect.anchorMax = Vector2.one;
             rect.pivot = new Vector2(0f, 1f);

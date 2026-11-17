@@ -3,6 +3,8 @@ using BoscaliSummer.Modules.DynamicOperations.Domain;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Ui;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,6 +34,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         private int cardCount;
         private float nextContent, textSize;
         private bool styleWarned;
+        // Layer on: markers sit on a holder inside the HUD layer's Motion root and are placed at its late point (OnPaint); off: the old own canvas, placed in Update.
+        private bool inLayer, wanted;
+        private float unit = 1f;      // device pixels per canvas unit of this block (the 1080-high grid)
+        private Vector3 self;
 
         internal void Configure(OperationsManager owner)
         {
@@ -49,6 +55,10 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         }
 
         private void OnDestroy() => ResetForScene();
+
+        private void OnEnable() => HudLayer.Paint += OnPaint;
+
+        private void OnDisable() => HudLayer.Paint -= OnPaint;
 
         private void Update()
         {
@@ -68,11 +78,25 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 ? SceneSingleton<CameraStateManager>.i.mainCamera
                 : Camera.main;
             if (camera == null) { Hide(); return; }
-            if (root == null) Build();
+            bool layer = HudLayer.Enabled && HudLayer.Ensure();
+            if (root != null && layer != inLayer) ResetForScene();      // the A/B switch moved: rebuild on the other parent
+            if (root == null) Build(layer);
             if (root == null) return;
 
-            Vector3 self = aircraft.transform.position.ToGlobalPosition().AsVector3();
-            Render(camera, self);
+            self = aircraft.transform.position.ToGlobalPosition().AsVector3();
+            wanted = true;
+            if (!inLayer) Render(camera, default);
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (!inLayer || !wanted || root == null || !view.Valid || !HudLayer.Enabled) return;
+            // The holder keeps the 1080-high grid the sizes are written in, whatever the HUD canvas scale is.
+            unit = Mathf.Max(0.1f, Screen.height / 1080f);
+            var holder = (RectTransform)root.transform;
+            holder.localScale = Vector3.one * (unit / Mathf.Max(0.01f, view.Scale));
+            holder.sizeDelta = new Vector2(Screen.width / unit, 1080f);
+            Render(view.Cam, view);
         }
 
         private void Pull()
@@ -85,7 +109,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                         (manager.SelectedForHud == 0 || card.Id == manager.SelectedForHud)) cards[cardCount++] = card;
         }
 
-        private void Render(Camera camera, Vector3 self)
+        private void Render(Camera camera, HudView hud)
         {
             float canvasHeight = canvasRect.rect.height;
             float halfWidth = canvasRect.rect.width * 0.5f - EdgeMarginX;
@@ -114,7 +138,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 ContractCard card = cards[i];
                 GlobalPosition target = new GlobalPosition(card.X, 0f, card.Z);
                 Vector3 world = target.ToLocalPosition();
-                if (!Project(camera, world, halfWidth, halfHeight, out float x, out float y, out float bearing, out bool clamped))
+                if (!Project(camera, hud, world, halfWidth, halfHeight, out float x, out float y, out float bearing, out bool clamped))
                 {
                     marker.SetVisible(false);
                     continue;
@@ -127,9 +151,11 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 marker.SetVisible(true);
                 marker.Place(x, y);
                 marker.SetPointer(bearing, clamped);
-                marker.SetRing(card.Radius, toTarget.magnitude, canvasHeight, camera, clamped, colours.AllClear);
+                // Range ink: desaturated and dimmed with the target's distance (the ink's own colour, 16 steps).
+                float range = toTarget.magnitude;
+                marker.SetRing(card.Radius, range, canvasHeight, camera, clamped, Ranged(colours.AllClear, range));
                 float distance = ContractMarkerMath.Distance(self.x, self.z, card.X, card.Z);
-                marker.SetLabel(card, distance, metric, x, halfWidth, clamped, colours.AllClear, ToneColour(colours, card.Tone));
+                marker.SetLabel(card, distance, metric, x, halfWidth, clamped, Ranged(colours.AllClear, range), Ranged(ToneColour(colours, card.Tone), range));
                 visible++;
             }
 
@@ -165,6 +191,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 if (markers[i].Visible) markers[i].GlideLabel();
         }
 
+        private static Color Ranged(Color c, float metres)
+        {
+            Rgba r = HudInk.Range(c.ToRgba(), metres);
+            return new Color(r.R, r.G, r.B, r.A);
+        }
+
         /// <summary>Caution is vanilla's warning colour, everything located is vanilla's own green.</summary>
         private static Color ToneColour(VanillaHudStyle.Palette colours, MarkerTone tone) =>
             tone == MarkerTone.Caution ? colours.Warning : colours.AllClear;
@@ -176,16 +208,22 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
         /// the point is kept inside the frame. The bearing is measured before the clamp, exactly
         /// like vanilla, so a marker pinned to the edge still points at its target.
         /// </summary>
-        private bool Project(Camera camera, Vector3 world, float halfWidth, float halfHeight,
+        private bool Project(Camera camera, HudView hud, Vector3 world, float halfWidth, float halfHeight,
             out float x, out float y, out float bearing, out bool clamped)
         {
             x = 0f; y = 0f; bearing = 0f; clamped = false;
-            Vector3 view = camera.WorldToScreenPoint(world);
-            bool inFront = view.z > 0f;
             Vector2 local = default;
-            bool projected = false;
-            if (inFront)
-                projected = RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, view, null, out local);
+            bool projected;
+            if (inLayer)
+            {
+                projected = hud.Project(world, out local);
+                local *= hud.Scale / unit;      // HUD canvas units to this block's grid
+            }
+            else
+            {
+                Vector3 view = camera.WorldToScreenPoint(world);
+                projected = view.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, view, null, out local);
+            }
             if (projected)
             {
                 bearing = Mathf.Atan2(local.y, local.x) * Mathf.Rad2Deg;
@@ -210,11 +248,12 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
 
         private void Hide()
         {
+            wanted = false;
             if (markers == null) return;
             for (int i = 0; i < markers.Length; i++) markers[i].SetVisible(false);
         }
 
-        private void Build()
+        private void Build(bool layer)
         {
             if (!VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style))
             {
@@ -226,20 +265,33 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 return;
             }
 
-            root = new GameObject("Boscali Contract Markers", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-            root.transform.SetParent(transform, false);
-            Canvas canvas = root.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 1;
-            canvas.pixelPerfect = false;
-            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 1f;
-            CanvasGroup group = root.AddComponent<CanvasGroup>();
-            group.blocksRaycasts = false;
-            group.interactable = false;
+            inLayer = layer;
+            if (layer)
+            {
+                root = new GameObject("Boscali Contract Markers", typeof(RectTransform));
+                var holder = (RectTransform)root.transform;
+                holder.SetParent(HudLayer.Motion, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = new Vector2(0.5f, 0.5f);
+                holder.anchoredPosition = Vector2.zero;
+                unit = Mathf.Max(0.1f, Screen.height / 1080f);
+            }
+            else
+            {
+                root = new GameObject("Boscali Contract Markers", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+                root.transform.SetParent(transform, false);
+                Canvas canvas = root.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 1;
+                canvas.pixelPerfect = false;
+                CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 1f;
+                CanvasGroup group = root.AddComponent<CanvasGroup>();
+                group.blocksRaycasts = false;
+                group.interactable = false;
+            }
 
             canvasRect = (RectTransform)root.transform;
             markers = new ContractMarker[MaxMarkers];

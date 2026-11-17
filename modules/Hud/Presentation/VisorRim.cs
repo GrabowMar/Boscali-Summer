@@ -58,7 +58,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!NativeRefs.HudCanvas(out _, out Canvas canvas)) return false;
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
-            root = CombatAlerts.Holder(canvasRoot, "BoscaliRim");
+            root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Static : canvasRoot, "BoscaliRim");
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = false;
             mesh = AvVector.Create(root, "Rim", Quads);

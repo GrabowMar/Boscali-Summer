@@ -37,7 +37,26 @@ namespace NOAvionics
             var canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.sortingOrder = sortingOrder;
+            return Build(root, canvas);
+        }
 
+        /// <summary>
+        /// The same host nested inside an existing canvas (<paramref name="parent"/>): no render mode, sorting or scale of its own, so it inherits the parent canvas's
+        /// visibility and scale; its root stretches over the parent at identity scale, so a full-screen holder moved into it keeps its place. Do not call <see cref="Refresh"/> on it.
+        /// </summary>
+        public static AvHudHost Nested(RectTransform parent, string name)
+        {
+            var root = new GameObject(name, typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
+            var rt = (RectTransform)root.transform;
+            rt.SetParent(parent, worldPositionStays: false);
+            Stretch(rt);
+            var canvas = root.GetComponent<Canvas>();
+            canvas.overrideSorting = false;
+            return Build(root, canvas);
+        }
+
+        private static AvHudHost Build(GameObject root, Canvas canvas)
+        {
             var group = root.GetComponent<CanvasGroup>();
             group.blocksRaycasts = false;
             group.interactable = false;
@@ -64,16 +83,21 @@ namespace NOAvionics
             var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
             var rt = (RectTransform)go.transform;
             rt.SetParent(parent, worldPositionStays: false);
+            Stretch(rt);
+
+            var canvas = go.GetComponent<Canvas>();
+            canvas.overrideSorting = false;
+            return rt;
+        }
+
+        private static void Stretch(RectTransform rt)
+        {
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.pivot = new Vector2(0.5f, 0.5f);
             rt.offsetMin = Vector2.zero;
             rt.offsetMax = Vector2.zero;
             rt.localScale = Vector3.one;
-
-            var canvas = go.GetComponent<Canvas>();
-            canvas.overrideSorting = false;
-            return rt;
         }
 
         /// <summary>

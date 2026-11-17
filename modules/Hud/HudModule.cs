@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Hud
             typeof(BoscaliSummer.Core.Fx.FeedStackRecoveryPatch),
             typeof(WingviewCameraPatch), typeof(ShotDetonatePatch), typeof(EventFeedPatch),
             typeof(CueReportPatch), typeof(CueReservePatch), typeof(CueAllocationPatch), typeof(CueScorePatch), typeof(CueBonusPatch),
+            typeof(MarkerUpdatePatch), typeof(MarkerPositionPatch), typeof(MarkerJammingPatch), typeof(MarkerColorPatch),
         };
 
         public ModuleMetadata Metadata => Module;

@@ -31,7 +31,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal bool MissionNoticeShown => frame.HasTicker && frame.Ticker.Channel == "mission";
         private readonly ExternalHudEnabler externalHud = new ExternalHudEnabler();
         private readonly WingviewCameraState wingview = new WingviewCameraState();
-        private readonly ThirdPersonHudCenter hudCenterProjection = new ThirdPersonHudCenter();
         private readonly NativeFlightNumberHider flightNumberHider = new NativeFlightNumberHider();
         private readonly VisorSwayDriver visorSway = new VisorSwayDriver();
         // The reactive visor (2026-11-16, round 2): what happens to the pilot and the jet as a per-frame look of the mod's own symbology (see StepVisor); the load factor is read at 10 Hz.
@@ -148,9 +147,49 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeFeeds.Register(shotProvider ??= shotFeed.Read);
             ScopeFeeds.Register(camProvider ??= camFeed.Read);
             missileTracker.Launched += OnOwnLaunch;
-            hudCenterProjection.Subscribe(
-                () => isActiveAndEnabled && ExternalHudEnabler.CanShowExternalHud(OwnExternalView(out _)),
-                () => OwnExternalView(out Aircraft aircraft) ? aircraft : null);
+            // The native repair (the AV layer's Repair phase): every view where the HUD shows the pilot's own aircraft, the cockpit or outside it.
+            ThirdPersonHudCenter.Install(RepairAircraft, () => OwnExternalView(out _));
+            HudLayer.Paint += OnLayerPaint;
+        }
+
+        /// <summary>The aircraft whose native HUD the layer repairs this frame: the pilot's own, seen from outside (where the HUD is forced open) or from its cockpit; null otherwise.</summary>
+        private Aircraft RepairAircraft()
+        {
+            if (!isActiveAndEnabled) return null;
+            if (OwnExternalView(out Aircraft outside)) return ExternalHudEnabler.CanShowExternalHud(true) ? outside : null;
+            CameraStateManager cams = SceneSingleton<CameraStateManager>.i;
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            return cams != null && hud != null && cams.currentState == cams.cockpitState ? hud.aircraft : null;
+        }
+
+        /// <summary>
+        /// The AV layer's Paint phase (after every LateUpdate and the native repair, before the canvas rebuild): the world-locked ink (the AR layer, the THREAT RING) placed with the
+        /// camera's final pose, so it sits on the native boxes in every view. Each block fails open on its own.
+        /// </summary>
+        private void OnLayerPaint(HudView view)
+        {
+            if (!isActiveAndEnabled || Application.isBatchMode) return;
+            PaintWorld(view);
+        }
+
+        private void PaintWorld(in HudView view)
+        {
+            float now = Time.unscaledTime;
+            try { alerts?.PaintRing(alertAircraft, threats, now, view); }
+            catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Ring", e); }      // fail open: the game's own missile list comes back
+            try { ar?.Frame(missileTracker, threats, now, view); }
+            catch (Exception e) { ar?.Hide(); PatchGuard.Report("Hud.Ar.Frame", e); }
+        }
+
+        /// <summary>The A/B switch's old timing (<see cref="HudLayer.Enabled"/> false): the same paint from LateUpdate with the camera as it stands there.</summary>
+        private static bool LateView(out HudView view)
+        {
+            view = default;
+            CameraStateManager state = SceneSingleton<CameraStateManager>.i;
+            Camera cam = state != null ? state.mainCamera : null;
+            if (cam == null || !HudLayer.Ensure()) return false;
+            view = new HudView(cam, ((RectTransform)HudLayer.HudCanvas.transform).rect.size, HudLayer.HudCanvas.scaleFactor);
+            return view.Valid;
         }
 
         /// <summary>The camera shows the local pilot's own aircraft from outside, or rides one of its missiles: the native HUD is forced open.</summary>
@@ -197,12 +236,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (Application.isBatchMode) return;
             try { Tick(); }
             catch (Exception e) { PatchGuard.Report("Hud.Tick", e); }
-            // The centre combat layer's blink, ring and pop, every frame (its data comes with the 10 Hz read).
-            try { alerts?.Frame(alertAircraft, threats, this, Time.unscaledTime); }
+            // The centre combat layer's blink and pop, every frame (its data comes with the 10 Hz read); its ring and the AR layer are world-locked: the AV layer's Paint phase draws them.
+            try { alerts?.Frame(alertAircraft, this, Time.unscaledTime); }
             catch (Exception e) { alerts?.Hide(); PatchGuard.Report("Hud.Alerts.Frame", e); }      // fail open: the game's own missile list comes back
-            // The AR helmet layer: world-locked symbols are projected every frame (the data comes with the 10 Hz read).
-            try { ar?.Frame(missileTracker, threats, Time.unscaledTime); }
-            catch (Exception e) { ar?.Hide(); PatchGuard.Report("Hud.Ar.Frame", e); }
+            if (!HudLayer.Enabled && LateView(out HudView late)) PaintWorld(late);      // the A/B switch off: the old LateUpdate timing
             // The power-on's clock first: how far each zone has come alive is set before they draw this frame. A throw ends the boot and snaps everything to flying state.
             try { StepBoot(); }
             catch (Exception e) { boot.Abort(); ReleaseBoot(); PatchGuard.Report("Hud.Boot", e); }
@@ -218,12 +255,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The visor's reactions (G, hits, EMP, warning onset, idle life): after the layers above exist for this frame, before the board takes its place.
             try { StepVisor(); }
             catch (Exception e) { fx.Reset(); PatchGuard.Report("Hud.Visor", e); }
+            float swayX = 0f, swayY = 0f;
             if (panel != null)
             {
                 // The visor's lag (the option Sway): zero in a pause, the map and a cinematic, and while the board is off (its corners then stay still too). The driver itself answers only in the cockpit view.
                 visorSway.Tick(Time.unscaledDeltaTime, options.Sway && options.Enabled && BoscaliSummer.Core.Game.CockpitOverlayGate.NotSuppressed());
-                panel.ApplySway(visorSway.X + fx.ShiftX + (ar != null ? ar.JitterX : 0f), visorSway.Y + fx.ShiftY, fx.TearBoard, fx.TearLeft);
+                swayX = visorSway.X + fx.ShiftX + (ar != null ? ar.Jitter(Time.unscaledTime) : 0f);
+                swayY = visorSway.Y + fx.ShiftY;
+                panel.ApplySway(swayX, swayY, fx.TearBoard, fx.TearLeft);
             }
+            // The left column's sway and tear for this frame (design units, as ApplySway takes them), read in the layer's Paint phase by blocks that follow the column (COMMS).
+            LeftHudStack.ShiftX = swayX + fx.TearLeft;
+            LeftHudStack.ShiftY = swayY;
+            LeftHudStack.TearLeft = fx.TearLeft != 0;
         }
 
         /// <summary>
@@ -287,11 +331,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             alerts?.SetJam(fx.JamUp);
             if (!VisorGlitch.Ready) { tape?.ApplyGlitch(0f); return; }
+            // Attach is idempotent and only marks a new holder for the next Scan; Scan walks the holders only after a (re)build or while the glitch runs (the centre alerts attach their own in Ensure).
             VisorGlitch.Attach(panel?.Root);
             VisorGlitch.Attach(tape?.Root);
             VisorGlitch.Attach(rim?.Root);
             VisorGlitch.Attach(arcs?.Root);
-            VisorGlitch.Attach(alerts?.Root);
             VisorGlitch.Scan(Time.unscaledTime);
             VisorGlitch.SetCalm(panel?.PageRect);
             VisorGlitch.Drive(fx);
@@ -798,7 +842,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             externalHud.Release();
             wingview.Reset();
             flightNumberHider.Tick(false, null);
-            hudCenterProjection.Unsubscribe();
+            ThirdPersonHudCenter.Uninstall();
+            HudLayer.Paint -= OnLayerPaint;
+            LeftHudStack.ShiftX = LeftHudStack.ShiftY = 0f;
+            LeftHudStack.TearLeft = false;
             threats.Release();
             fuelWatch.Release();
             damageWatch.Release();
@@ -806,7 +853,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void OnDestroy()
         {
             ResetForScene();
-            hudCenterProjection.Unsubscribe();
+            ThirdPersonHudCenter.Uninstall();
+            HudLayer.Paint -= OnLayerPaint;
             if (Instance == this) Instance = null;
         }
     }

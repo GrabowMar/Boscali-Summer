@@ -35,7 +35,14 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             public bool Scripted;
         }
 
-        private readonly AvHudHost host;
+        // The surface: a holder inside the HUD layer's Data root (HudLayer on), else the old overlay host (A/B switch off or no HUD canvas yet).
+        private AvHudHost host;
+        private GameObject holderGo;
+        private RectTransform holder, dataRoot, staticRoot;
+        private Canvas holderCanvas;
+        private CanvasGroup holderGroup;
+        private bool inLayer, shown, subscribed;
+        private float ownScale = 1f;
         private readonly Row[] rows = new Row[Rows];
         private readonly TextMeshProUGUI shelf, channel, prompt;
         private readonly RectTransform shelfLine, promptTrack, promptBar;
@@ -52,7 +59,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
 
         public ChatterStrip(Transform parent)
         {
-            host = AvHudHost.Create("Boscali / Chatter", parent, 3);
+            this.parent = parent;
+            Mount();
             shelf = Label("Shelf", LeftHudStack.HeaderSize);
             shelf.fontStyle = FontStyles.Bold;      // caption family: 12 bold DIM like the board's shelves
             shelf.text = "COMMS";
@@ -73,13 +81,77 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 rows[i].Text = text;
             }
             RefreshFace();
-            host.SetVisible(false);
+            SetVisible(false);
+            subscribed = true;
+            HudLayer.Paint += OnPaint;
         }
+
+        private readonly Transform parent;
+        private float ScaleFactor => ownScale;
+
+        private RectTransform DataRoot => host != null ? host.Data : dataRoot;
+        private RectTransform StaticRoot => host != null ? host.Static : staticRoot;
+
+        private void SetVisible(bool visible)
+        {
+            if (host != null) host.SetVisible(visible);
+            else if (holderCanvas != null && holderCanvas.enabled != visible) holderCanvas.enabled = visible;
+        }
+
+        private float Alpha { set { CanvasGroup g = host != null ? host.Group : holderGroup; if (g != null && g.alpha != value) g.alpha = value; } }
+
+        /// <summary>Keeps the surface in the mode the A/B switch wants; on a change the labels and bars move to the new one.</summary>
+        private void Mount()
+        {
+            bool want = HudLayer.Enabled && HudLayer.Ensure();
+            if (want == inLayer && (host != null || holder != null)) return;
+            inLayer = want;
+            host?.Destroy();
+            host = null;
+            if (holderGo != null) Object.Destroy(holderGo);
+            holderGo = null; holder = dataRoot = staticRoot = null;
+            holderCanvas = null; holderGroup = null;
+            if (want)
+            {
+                holderGo = new GameObject("Boscali / Chatter", typeof(RectTransform), typeof(Canvas), typeof(CanvasGroup));
+                holder = (RectTransform)holderGo.transform;
+                holder.SetParent(HudLayer.Data, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = Vector2.zero;
+                holderCanvas = holderGo.GetComponent<Canvas>();
+                holderCanvas.overrideSorting = false;
+                holderGroup = holderGo.GetComponent<CanvasGroup>();
+                holderGroup.blocksRaycasts = false;
+                holderGroup.interactable = false;
+                staticRoot = Layer("Static");
+                dataRoot = Layer("Data");
+            }
+            else host = AvHudHost.Create("Boscali / Chatter", parent, 3);
+            if (shelf == null) return;      // the first mount: the labels are built next
+            Move(shelf); Move(channel); Move(prompt);
+            for (int i = 0; i < Rows; i++) Move(rows[i].Text);
+            Move(shelfLine, true); Move(promptTrack, true); Move(promptBar, true);
+            for (int i = 0; i < Rows; i++) Move(ticks[i], true);
+            SetVisible(false);
+        }
+
+        private RectTransform Layer(string name)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Canvas));
+            var rt = (RectTransform)go.transform;
+            rt.SetParent(holder, false);
+            rt.anchorMin = Vector2.zero; rt.anchorMax = Vector2.one; rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.offsetMin = rt.offsetMax = Vector2.zero;
+            go.GetComponent<Canvas>().overrideSorting = false;
+            return rt;
+        }
+
+        private void Move(TextMeshProUGUI text) => text.rectTransform.SetParent(DataRoot, false);
+        private void Move(RectTransform rect, bool bar) => rect.SetParent(StaticRoot, false);
 
         private TextMeshProUGUI Label(string name, float size)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(host.Data, false);
+            go.transform.SetParent(DataRoot, false);
             var text = go.AddComponent<TextMeshProUGUI>();
             AvType.Apply(text, AvTextRole.DataStrong);
             text.characterSpacing = HudType.Tracking(HudType.StepOf(size));
@@ -97,7 +169,7 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         private RectTransform Bar(string name)
         {
             var go = new GameObject(name, typeof(RectTransform));
-            go.transform.SetParent(host.Static, false);
+            go.transform.SetParent(StaticRoot, false);
             var image = go.AddComponent<Image>();
             image.raycastTarget = false;
             return (RectTransform)go.transform;
@@ -188,23 +260,46 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 if (Clock(rows[i]) > rows[i].Until + FadeSeconds) Drop(i);
             // The maximised map owns the screen (its left host slot sits where this column is): stand down under it; rows keep their clocks.
             bool visible = used > 0 && !DynamicMap.mapMaximized && (flying || HasScripted());
-            host.SetVisible(visible);
-            if (host.Group != null && host.Group.alpha != LeftHudStack.BootAlpha) host.Group.alpha = LeftHudStack.BootAlpha;      // the visor's power-on brings the column up with the rest
-            if (!visible) { LeftHudStack.CommsBottom = 0f; return; }
+            Mount();
+            shown = visible;
+            if (!visible) { SetVisible(false); LeftHudStack.CommsBottom = 0f; return; }
+            // The layer's late pass lays the block out on the rendered pose (OnPaint); the old path does it here.
+            if (!inLayer) Layout(default);
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (!inLayer || !HudLayer.Enabled || !shown || holder == null || !view.Valid) return;
+            Layout(view);
+        }
+
+        private void Layout(HudView view)
+        {
+            SetVisible(true);
+            Alpha = LeftHudStack.BootAlpha;      // the visor's power-on brings the column up with the rest
             RefreshFace();
             float fit = Mathf.Max(0.1f, Mathf.Min(Screen.width / 1920f, Screen.height / 1080f));
-            host.Refresh(Mathf.Max(0.85f, Screen.height / 1080f) / fit);
+            float step = Mathf.Max(0.85f, Screen.height / 1080f) / fit;
+            if (host != null) { host.Refresh(step); ownScale = host.ScaleFactor; }
+            else
+            {
+                // The holder keeps this block's own design scale inside the HUD canvas: its units stay the 1080 grid the layout is written in.
+                ownScale = Mathf.Max(0.1f, fit * step);
+                holder.localScale = Vector3.one * (ownScale / Mathf.Max(0.01f, view.Scale));
+                holder.sizeDelta = new Vector2(Screen.width / ownScale, Screen.height / ownScale);
+                holder.anchoredPosition = new Vector2(LeftHudStack.ShiftX, LeftHudStack.ShiftY);
+            }
             // The 1080-high reference width, as the event log uses: the host's scale has a 0.85 floor, so dividing by it disagrees below 918 px of height.
             float column = HudZones.ColumnWidth(Screen.width / (float)Mathf.Max(1, Screen.height) * 1080f);
             if (column != width) { width = column; Rewrap(); }
-            float canvasHeight = Screen.height / Mathf.Max(0.1f, host.ScaleFactor);
+            float canvasHeight = Screen.height / Mathf.Max(0.1f, ScaleFactor);
             Paint(canvasHeight);
         }
 
         private void Paint(float canvasHeight)
         {
             // The game's own feed is up in our log's place (free camera hides the HUD canvas the log lives on): start under it.
-            float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, host.ScaleFactor) + 16f : 0f);
+            float top = Mathf.Max(LeftHudStack.CommsTop, LeftHudStack.NativeFeedBottomPx > 0f ? LeftHudStack.NativeFeedBottomPx / Mathf.Max(0.1f, ScaleFactor) + 16f : 0f);
             float y = canvasHeight - top;
             Color frame = VanillaHudStyle.Ink;
             frame.a = HudInk.LineMid;
@@ -318,7 +413,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             promptOn = false;
             prompt.text = "";
             LeftHudStack.CommsBottom = 0f;
-            host.SetVisible(false);
+            shown = false;      // the Paint subscription outlives a clear (host disabled, scene reset): it must not lay out an empty block again
+            SetVisible(false);
         }
 
         public void ClearScripted()
@@ -328,7 +424,13 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
             else LeftHudStack.CommsBottom = paintedTop + Height();
         }
 
-        public void Destroy() { Clear(); host.Destroy(); }
+        public void Destroy()
+        {
+            if (subscribed) { subscribed = false; HudLayer.Paint -= OnPaint; }
+            Clear();
+            host?.Destroy();
+            if (holderGo != null) Object.Destroy(holderGo);
+        }
 
         public static string Tag(ChatterNet net)
         {

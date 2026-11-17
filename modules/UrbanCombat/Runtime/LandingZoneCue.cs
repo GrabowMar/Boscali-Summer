@@ -5,6 +5,8 @@ using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Services;
+using BoscaliSummer.Core.Ui;
+using NOAvionics;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -35,6 +37,9 @@ namespace BoscaliSummer.Garrisons
         private RectTransform hudCanvas;
         private LandingZoneMarker hudMarker;
         private string hudCaption = "LZ";
+        // Layer on: the fix sits on a holder inside the HUD layer's Motion root and is placed at its late point (OnPaint); off: the old own canvas, placed in LateUpdate.
+        private bool hudInLayer;
+        private float hudUnit = 1f, lzRange;      // device pixels per canvas unit of the 1080-high grid; the zone's range (m) for the ink ramp
 
         public void ResetForScene()
         {
@@ -56,7 +61,13 @@ namespace BoscaliSummer.Garrisons
             smoke = null;
         }
 
-        private void OnDisable() => ResetForScene();
+        private void OnEnable() => HudLayer.Paint += OnPaint;
+
+        private void OnDisable()
+        {
+            HudLayer.Paint -= OnPaint;
+            ResetForScene();
+        }
         private void OnDestroy() => ResetForScene();
 
         private void Update()
@@ -84,6 +95,7 @@ namespace BoscaliSummer.Garrisons
             if (smoke == null) smoke = LandingSmoke.Mark(zone.AsVector3());
             Vector3 self = me.GlobalPosition().AsVector3();
             float dist = new Vector2(zone.x - self.x, zone.z - self.z).magnitude;
+            lzRange = dist;
             hudCaption = "LZ  " + (VanillaHudStyle.Metric ? Km(dist) :
                 (dist / 1852f).ToString("0.0", CultureInfo.InvariantCulture) + " NM");
 
@@ -123,40 +135,84 @@ namespace BoscaliSummer.Garrisons
 
         private void LateUpdate()
         {
+            if (!HudLayer.Enabled) Cue(default, false);      // A/B switch off: the old LateUpdate placement
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (HudLayer.Enabled && view.Valid) Cue(view, true);
+        }
+
+        private void Cue(HudView view, bool layer)
+        {
             if (!seen) return;
             CombatHUD nativeHud = SceneSingleton<CombatHUD>.i;
             if (!CockpitOverlayGate.Open() || nativeHud == null || nativeHud.aircraft != seenAircraft)
             { hudMarker?.SetVisible(false); return; }
-            Camera camera = SceneSingleton<CameraStateManager>.i != null
+            Camera camera = layer ? view.Cam : SceneSingleton<CameraStateManager>.i != null
                 ? SceneSingleton<CameraStateManager>.i.mainCamera : Camera.main;
             if (camera == null) { hudMarker?.SetVisible(false); return; }
-            if (hudRoot == null) BuildHud();
+            if (hudRoot != null && hudInLayer != layer)
+            {
+                Destroy(hudRoot);      // the A/B switch moved: rebuild on the other parent
+                hudRoot = null; hudCanvas = null; hudMarker = null;
+            }
+            if (hudRoot == null) BuildHud(layer);
+            if (layer)
+            {
+                // The holder keeps the 1080-high grid the marker is written in, whatever the HUD canvas scale is.
+                hudUnit = Mathf.Max(0.1f, Screen.height / 1080f);
+                hudCanvas.localScale = Vector3.one * (hudUnit / Mathf.Max(0.01f, view.Scale));
+                hudCanvas.sizeDelta = new Vector2(Screen.width / hudUnit, 1080f);
+            }
 
             Vector3 world = landing.ToLocalPosition();
-            Vector3 view = camera.WorldToScreenPoint(world);
             Vector2 point = default;
-            bool projected = view.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(hudCanvas, view, null, out point);
+            bool projected;
+            if (layer)
+            {
+                projected = view.Project(world, out point);
+                point *= view.Scale / hudUnit;      // HUD canvas units to this block's grid
+            }
+            else
+            {
+                Vector3 screen = camera.WorldToScreenPoint(world);
+                projected = screen.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(hudCanvas, screen, null, out point);
+            }
             Vector3 direction = camera.transform.InverseTransformPoint(world);
             if (!LandingZoneMarkerMath.Place(point.x, point.y, projected, direction.x, direction.y,
                 hudCanvas.rect.width * .5f - 150f, hudCanvas.rect.height * .5f - 110f,
                 out float x, out float y, out float bearing, out bool pinned))
             { hudMarker.SetVisible(false); return; }
-            hudMarker.Show(new Vector2(x, y), hudCaption, VanillaHudStyle.Colours.AllClear, pinned, bearing);
+            Rgba ink = HudInk.Range(VanillaHudStyle.Colours.AllClear.ToRgba(), lzRange);      // desaturates and dims with the zone's distance
+            hudMarker.Show(new Vector2(x, y), hudCaption, new Color(ink.R, ink.G, ink.B, ink.A), pinned, bearing);
         }
 
-        private void BuildHud()
+        private void BuildHud(bool layer)
         {
-            hudRoot = new GameObject("Boscali Landing Zone HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-            hudRoot.transform.SetParent(transform, false);
-            Canvas canvas = hudRoot.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 1;
-            CanvasScaler scaler = hudRoot.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.matchWidthOrHeight = 1f;
-            CanvasGroup group = hudRoot.AddComponent<CanvasGroup>();
-            group.blocksRaycasts = group.interactable = false;
+            hudInLayer = layer;
+            if (layer)
+            {
+                hudRoot = new GameObject("Boscali Landing Zone HUD", typeof(RectTransform));
+                var holder = (RectTransform)hudRoot.transform;
+                holder.SetParent(HudLayer.Motion, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = new Vector2(0.5f, 0.5f);
+                holder.anchoredPosition = Vector2.zero;
+            }
+            else
+            {
+                hudRoot = new GameObject("Boscali Landing Zone HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+                hudRoot.transform.SetParent(transform, false);
+                Canvas canvas = hudRoot.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 1;
+                CanvasScaler scaler = hudRoot.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.matchWidthOrHeight = 1f;
+                CanvasGroup group = hudRoot.AddComponent<CanvasGroup>();
+                group.blocksRaycasts = group.interactable = false;
+            }
             hudCanvas = (RectTransform)hudRoot.transform;
             hudMarker = new LandingZoneMarker(hudCanvas, "Landing zone HUD fix", true);
         }

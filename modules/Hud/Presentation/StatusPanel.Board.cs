@@ -297,7 +297,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 wiping |= transitions[i].Running;
             }
             if (!flashChanged && !wiping && !fast) return;
-            Repaint(flashChanged || wiping);
+            // Between two 10 Hz presents nothing but a wipe moves the layout, so a beat or a live page repaints only what it has to (the slots that move, all of them on the beat).
+            int mask = 0;
+            for (int i = 0; i < slotPages.Length; i++) if (flashChanged || (SlotBody(i) && slotPages[i].Fast)) mask |= 1 << i;
+            Repaint(flashChanged || wiping, mask, true);
         }
 
         // ------------------------------------------------------------------------------------------------ layout and paint
@@ -308,9 +311,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A screen narrower than 16:9 always gets the STACK layout (the stored option is kept): WIDE would reach into the left column.</summary>
         private bool StackWanted => HudZones.Narrow(canvasRect.rect.width / baseUnit) || Options.Layout == BoardLayout.Stack;
 
-        private void Repaint(bool shellToo)
+        /// <summary>The geometry, and each slot's wipe state, of the last full <see cref="Repaint"/>: what a repaint that finds the wipes still reuses (nothing else moves the layout between presents).</summary>
+        private BoardGeometry paintedGeo;
+        private bool paintedValid;
+        private readonly float[] paintedHeight = new float[ScopeLayout.MaxSlots], paintedWipe = new float[ScopeLayout.MaxSlots];
+
+        private bool WipesUnchanged()
         {
-            wingPainted = false;
+            for (int i = 0; i < transitions.Length; i++)
+                if (transitions[i].Height != paintedHeight[i] || transitions[i].Wipe != paintedWipe[i]) return false;
+            return true;
+        }
+
+        /// <summary>
+        /// <paramref name="reuse"/> (from <see cref="Animate"/>): when no wipe has moved since the last full repaint, skip the layout (two <c>ScopeLayout.Compute</c>, the anchor, the shade) and paint only the slots in
+        /// <paramref name="slotMask"/> (plus the shell's blocks when <paramref name="shellToo"/>). A present, a wipe or an unknown state always repaints everything.
+        /// </summary>
+        private void Repaint(bool shellToo, int slotMask = -1, bool reuse = false)
+        {
             // Each slot wipes on its own: a panel that comes, goes or changes its page (FIRES: SHOT or STRIKE) wipes, RWR opening from or closing to its header line only changes height.
             int signature = 0;
             for (int i = 0; i < slotPages.Length; i++)
@@ -325,6 +343,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (wipeSoundKey != int.MinValue) BoscaliSummer.Core.Fx.VisorSound.Play(BoscaliSummer.Core.Fx.VisorClip.Wipe);
                 wipeSoundKey = signature;
             }
+            if (reuse && paintedValid && WipesUnchanged())
+            {
+                ScopePalette fastPal = Palette();
+                lastPhase = (int)(now * FlashHz * 2f);
+                bool fastFlash = lastPhase % 2 == 0;
+                if (paintedGeo.Page.Present) PaintPages(fastPal, paintedGeo, fastFlash, slotMask);
+                if (shellToo)
+                {
+                    if (paintedGeo.Info.Present) PaintStatus(fastPal, paintedGeo, fastFlash);
+                    PaintWing(fastPal, paintedGeo, fastFlash);
+                    PaintStores(fastPal, paintedGeo, fastFlash);
+                }
+                return;
+            }
+            wingPainted = false;
+            paintedValid = false;
             boardStack = StackWanted;
             // SYS and INFO are the board's own cells, not a page. SYS while it has a lamp to show or a capacitor to draw; INFO while its switch is on and there is an aircraft to read, never at Minimal (the first to drop).
             ScopePageBase systems = pages[(int)ScopePage.Systems];
@@ -381,6 +415,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 PaintWing(pal, geo, flashOn);
                 PaintStores(pal, geo, flashOn);
             }
+            paintedGeo = geo;
+            for (int i = 0; i < transitions.Length; i++) { paintedHeight[i] = transitions[i].Height; paintedWipe[i] = transitions[i].Wipe; }
+            paintedValid = true;
         }
     }
 }

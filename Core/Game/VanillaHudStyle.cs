@@ -153,29 +153,44 @@ namespace BoscaliSummer.Core.Game
         {
             get
             {
-                try
+                // Read 5-7 times a frame by the HUD: one theme read (try/catch, Math.Pow in the luminance floors) per frame.
+                int frame = Time.frameCount;
+                if (frame != coloursFrame)
                 {
-                    ThemeGroup group = ThemeManager.Active ?? ThemeManager.Vanilla;
-                    ColorTheme theme = group != null ? group.ColorTheme : null;
-                    if (theme != null)
-                        return new Palette
-                        {
-                            AllClear = Washed(theme.AllClear),
-                            Warning = ToColor(HudInk.Caution(ToRgba(theme.Warning))),
-                            Alert = ToColor(HudInk.Warning(ToRgba(theme.Alert)))
-                        };
+                    colours = ReadColours();
+                    coloursFrame = frame;
                 }
-                catch (Exception)
-                {
-                }
-
-                return new Palette
-                {
-                    AllClear = Washed(VanillaGreen),
-                    Warning = ToColor(HudInk.Caution(ToRgba(VanillaYellow))),
-                    Alert = ToColor(HudInk.Warning(ToRgba(VanillaRed)))
-                };
+                return colours;
             }
+        }
+
+        private static int coloursFrame = -1;
+        private static Palette colours;
+
+        private static Palette ReadColours()
+        {
+            try
+            {
+                ThemeGroup group = ThemeManager.Active ?? ThemeManager.Vanilla;
+                ColorTheme theme = group != null ? group.ColorTheme : null;
+                if (theme != null)
+                    return new Palette
+                    {
+                        AllClear = Washed(theme.AllClear),
+                        Warning = ToColor(HudInk.Caution(ToRgba(theme.Warning))),
+                        Alert = ToColor(HudInk.Warning(ToRgba(theme.Alert)))
+                    };
+            }
+            catch (Exception)
+            {
+            }
+
+            return new Palette
+            {
+                AllClear = Washed(VanillaGreen),
+                Warning = ToColor(HudInk.Caution(ToRgba(VanillaYellow))),
+                Alert = ToColor(HudInk.Warning(ToRgba(VanillaRed)))
+            };
         }
 
         /// <summary>

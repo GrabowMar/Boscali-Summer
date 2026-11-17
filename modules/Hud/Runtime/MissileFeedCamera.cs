@@ -17,6 +17,9 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         private readonly FeedCamera feed = new FeedCamera("BoscaliMissileFeed", Width, Height, FeedLook.Seeker, pointFilter: false) { Fps = Fps, FieldOfView = FieldOfView };
         private Missile riding;
+
+        /// <summary>The missile card can be seen (written by the cluster each tick; true until it says otherwise): while it is not, the camera stays off and the card keeps its last picture.</summary>
+        internal static bool CardOnScreen = true;
         private float lostAt = -1f;
 
         /// <summary>The picture while there is a feed to show (live or held), else null.</summary>
@@ -79,7 +82,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             }
             // Ahead of the nose, so the weapon's own body and plume stay behind the lens.
             Transform t = last.transform;
-            if (!feed.Shoot(t.position + t.forward * (last.maxRadius + 0.5f), t.rotation, now)) { Texture = null; return; }
+            if (CardOnScreen) { if (!feed.Shoot(t.position + t.forward * (last.maxRadius + 0.5f), t.rotation, now)) { Texture = null; return; } }
+            else feed.Idle();
             if (!ReferenceEquals(last, riding))
             {
                 riding = last;
@@ -95,6 +99,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         public void Release()
         {
             feed.Release();
+            CardOnScreen = true;      // a static: a scene that ends with the card faded must not start the next one with the camera off
             riding = null;
             Texture = null;
             Name = null;

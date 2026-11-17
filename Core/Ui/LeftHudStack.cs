@@ -13,6 +13,9 @@ namespace BoscaliSummer.Core.Ui
         public static float NativeFeedBottomPx;
         /// <summary>How far the visor's power-on has brought the radio column up, 0..1 (1 outside a boot): the COMMS block follows the board's left column while it comes alive (<c>StatusPanel.ApplyBoot</c>).</summary>
         public static float BootAlpha = 1f;
+        /// <summary>The left column's sway and tear this frame, written by the board in LateUpdate and read in <c>HudLayer.Paint</c> the same frame (no one-frame lag).</summary>
+        public static float ShiftX, ShiftY;
+        public static bool TearLeft;
         public static TMP_FontAsset Font;
         public static Material FontMaterial;
 

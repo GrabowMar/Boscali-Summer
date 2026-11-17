@@ -5,6 +5,8 @@ using BoscaliSummer.Modules.Comms.Domain;
 using BoscaliSummer.Modules.Comms.Runtime;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Ui;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -39,6 +41,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         private readonly float[] bearings = new float[MaxMarkers];
         private readonly bool[] projected = new bool[MaxMarkers], pinned = new bool[MaxMarkers];
         private float nextContent;
+        // Layer on: the markers sit on a holder inside the HUD layer's Motion root and are placed at its late point (OnPaint); off: the old own canvas, placed in Update.
+        private bool inLayer, wanted;
+        private float unit = 1f;      // device pixels per canvas unit of this block (the 1080-high grid)
+        private Vector3 self;
 
         public void Configure(CommsSettings config, CommsManager owner)
         {
@@ -58,6 +64,10 @@ namespace BoscaliSummer.Modules.Comms.Presentation
         }
 
         private void OnDestroy() => ResetForScene();
+
+        private void OnEnable() => HudLayer.Paint += OnPaint;
+
+        private void OnDisable() => HudLayer.Paint -= OnPaint;
 
         private void Update()
         {
@@ -88,11 +98,25 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 Hide();
                 return;
             }
-            if (root == null) Build();
+            bool layer = HudLayer.Enabled && HudLayer.Ensure();
+            if (root != null && layer != inLayer) ResetForScene();      // the A/B switch moved: rebuild on the other parent
+            if (root == null) Build(layer);
             if (root == null) return;
 
-            Vector3 self = aircraft.transform.position.ToGlobalPosition().AsVector3();
-            Render(camera, self);
+            self = aircraft.transform.position.ToGlobalPosition().AsVector3();
+            wanted = true;
+            if (!inLayer) Render(camera, default);
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (!inLayer || !wanted || root == null || !view.Valid || !HudLayer.Enabled) return;
+            // The holder keeps the 1080-high grid the sizes are written in, whatever the HUD canvas scale is.
+            unit = Mathf.Max(0.1f, Screen.height / 1080f);
+            var holder = (RectTransform)root.transform;
+            holder.localScale = Vector3.one * (unit / Mathf.Max(0.01f, view.Scale));
+            holder.sizeDelta = new Vector2(Screen.width / unit, 1080f);
+            Render(view.Cam, view);
         }
 
         /// <summary>The newest live pings from players who are not muted, newest first.</summary>
@@ -129,7 +153,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             return float.NaN;
         }
 
-        private void Render(Camera camera, Vector3 self)
+        private void Render(Camera camera, HudView view)
         {
             float halfWidth = canvasRect.rect.width * 0.5f - EdgeMarginX;
             float halfHeight = canvasRect.rect.height * 0.5f - EdgeMarginY;
@@ -141,7 +165,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
             float now = Time.unscaledTime;
             bool metric = VanillaHudStyle.Metric;
-            float minimumFontSize = AvTypeScale.Floor / Mathf.Max(.1f, canvas.scaleFactor);
+            float minimumFontSize = AvTypeScale.Floor / Mathf.Max(.1f, inLayer ? unit : canvas.scaleFactor);
             int captionCount = 0;
             // Reserve every fixed glyph before placing any caption, including older calls.
             for (int i = 0; i < markers.Length; i++)
@@ -150,7 +174,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 if (i >= pings.Count) continue;
                 CommsItem ping = pings[i];
                 Vector3 target = new GlobalPosition(ping.X, float.IsNaN(ping.Height) ? 0f : ping.Height, ping.Z).ToLocalPosition();
-                projected[i] = Project(camera, target, halfWidth, halfHeight, out positions[i], out bearings[i], out pinned[i]);
+                projected[i] = Project(camera, view, target, halfWidth, halfHeight, out positions[i], out bearings[i], out pinned[i]);
             }
             for (int i = 0; i < markers.Length; i++)
             {
@@ -166,6 +190,8 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 float fade = Mathf.Clamp01((ping.Expires - now) / 5f);
                 Color colour = CommsMesh.Tone(ping.Faction == manager.LocalFaction ? kind.Tone : CommsTone.Caution);
                 colour.a *= fade;
+                Rgba ranged = HudInk.Range(colour.ToRgba(), range);      // desaturates and dims with the ping's distance
+                colour = new Color(ranged.R, ranged.G, ranged.B, ranged.A);
                 string code = ping.IsCall && !string.IsNullOrEmpty(ping.Text) ? ping.Text : kind.Code;
                 Vector2 at = positions[i];
                 Vector2 captionAt = PlaceCaption(at, captionCount);
@@ -212,16 +238,25 @@ namespace BoscaliSummer.Modules.Comms.Presentation
             new Rect(top.x - CaptionWidth * .5f, top.y - CaptionHeight, CaptionWidth, CaptionHeight);
 
         /// <summary>Screen position in canvas units, clamped to the frame when off screen or behind.</summary>
-        private bool Project(Camera camera, Vector3 world, float halfWidth, float halfHeight,
+        private bool Project(Camera camera, HudView hud, Vector3 world, float halfWidth, float halfHeight,
             out Vector2 at, out float bearing, out bool clamped)
         {
             at = Vector2.zero;
             bearing = 0f;
             clamped = false;
-            Vector3 view = camera.WorldToScreenPoint(world);
-            Vector2 local;
-            if (view.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, view, null, out local) &&
-                Mathf.Abs(local.x) <= halfWidth && Mathf.Abs(local.y) <= halfHeight)
+            Vector2 local = default;
+            bool front;
+            if (inLayer)
+            {
+                front = hud.Project(world, out local);
+                local *= hud.Scale / unit;      // HUD canvas units to this block's grid
+            }
+            else
+            {
+                Vector3 view = camera.WorldToScreenPoint(world);
+                front = view.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(canvasRect, view, null, out local);
+            }
+            if (front && Mathf.Abs(local.x) <= halfWidth && Mathf.Abs(local.y) <= halfHeight)
             {
                 at = local;
                 return true;
@@ -243,26 +278,41 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
         private void Hide()
         {
+            wanted = false;
             if (markers == null) return;
             for (int i = 0; i < markers.Length; i++) markers[i].SetVisible(false);
         }
 
-        private void Build()
+        private void Build(bool layer)
         {
-            root = new GameObject("Boscali Comms Markers", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-            root.transform.SetParent(transform, false);
-            canvas = root.GetComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.sortingOrder = 1;
-            canvas.pixelPerfect = false;
-            CanvasScaler scaler = root.GetComponent<CanvasScaler>();
-            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1920f, 1080f);
-            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
-            scaler.matchWidthOrHeight = 1f;
-            CanvasGroup group = root.AddComponent<CanvasGroup>();
-            group.blocksRaycasts = false;
-            group.interactable = false;
+            inLayer = layer;
+            if (layer)
+            {
+                root = new GameObject("Boscali Comms Markers", typeof(RectTransform));
+                var holder = (RectTransform)root.transform;
+                holder.SetParent(HudLayer.Motion, false);
+                holder.anchorMin = holder.anchorMax = holder.pivot = new Vector2(0.5f, 0.5f);
+                holder.anchoredPosition = Vector2.zero;
+                canvas = null;
+                unit = Mathf.Max(0.1f, Screen.height / 1080f);
+            }
+            else
+            {
+                root = new GameObject("Boscali Comms Markers", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
+                root.transform.SetParent(transform, false);
+                canvas = root.GetComponent<Canvas>();
+                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+                canvas.sortingOrder = 1;
+                canvas.pixelPerfect = false;
+                CanvasScaler scaler = root.GetComponent<CanvasScaler>();
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1920f, 1080f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 1f;
+                CanvasGroup group = root.AddComponent<CanvasGroup>();
+                group.blocksRaycasts = false;
+                group.interactable = false;
+            }
 
             canvasRect = (RectTransform)root.transform;
             bool nativeStyle = VanillaHudStyle.TryCockpit(out VanillaHudStyle.CockpitStyle style);
@@ -318,6 +368,7 @@ namespace BoscaliSummer.Modules.Comms.Presentation
 
                 captionBack = AvLay.Solid(root, "Caption backing", Color.clear);
                 captionBack.raycastTarget = false;
+                captionBack.enabled = false;      // AR-helmet look: no filled plate behind the words
                 captionBack.rectTransform.anchorMin = captionBack.rectTransform.anchorMax = new Vector2(.5f, .5f);
                 captionBack.rectTransform.pivot = new Vector2(.5f, 1f);
                 captionBack.rectTransform.sizeDelta = new Vector2(CaptionWidth, CaptionHeight);
@@ -345,7 +396,6 @@ namespace BoscaliSummer.Modules.Comms.Presentation
                 if (!root.gameObject.activeSelf) root.gameObject.SetActive(true);
                 root.anchoredPosition = at;
                 captionBack.rectTransform.anchoredPosition = captionOffset;
-                Color back = CommsMesh.Under; back.a = colour.a * (230f / 255f); captionBack.color = back;
                 label.rectTransform.anchoredPosition = captionOffset + new Vector2(0f, -2f);
                 bool moved = (captionOffset - new Vector2(0f, -24f)).sqrMagnitude > 4f;
                 leader.enabled = moved;

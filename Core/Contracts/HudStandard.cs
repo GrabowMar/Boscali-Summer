@@ -115,6 +115,34 @@ namespace BoscaliSummer.Core.Contracts
         /// <summary>A text alpha: DIM is a tone now, so 0.5 and up is full; under 0.5 it is a fade and passes through.</summary>
         public static float Text(float alpha) => alpha >= 0.5f ? 1f : alpha;
 
+        /// <summary>The range ramp (AV LAYER 2.3): full colour inside <see cref="RangeNear"/>, flat past <see cref="RangeFar"/>, <see cref="RangeSteps"/> steps between.</summary>
+        public const float RangeNear = 5000f, RangeFar = 40000f, RangeSatFar = 0.35f, RangeValueFar = 0.65f;
+        public const int RangeSteps = 16;
+
+        /// <summary>The ramp step of a distance, 0 (near, full colour) to 15 (far): smoothstep over Near..Far, quantised so a native write lands only on a step change. NaN is near.</summary>
+        public static int RangeStep(float metres)
+        {
+            float x = (metres - RangeNear) / (RangeFar - RangeNear);
+            if (!(x > 0f)) return 0;
+            if (x > 1f) x = 1f;
+            float t = x * x * (3f - 2f * x);
+            return (int)(t * (RangeSteps - 1) + 0.5f);
+        }
+
+        /// <summary>
+        /// <paramref name="ink"/> at <paramref name="metres"/>: desaturated toward its own luma (hue kept, never toward red) to 0.35 and its alpha dimmed to 0.65 at range. Step 0 returns the ink unchanged.
+        /// Exceptions (selected, fresh, flashing, jammed, threats on us) are the caller's: they skip this.
+        /// </summary>
+        public static Rgba Range(Rgba ink, float metres)
+        {
+            int step = RangeStep(metres);
+            if (step == 0) return ink;
+            float k = step / (float)(RangeSteps - 1);
+            float s = 1f - (1f - RangeSatFar) * k, v = 1f - (1f - RangeValueFar) * k;
+            float l = 0.2126f * ink.R + 0.7152f * ink.G + 0.0722f * ink.B;
+            return new Rgba(l + (ink.R - l) * s, l + (ink.G - l) * s, l + (ink.B - l) * s, ink.A * v);
+        }
+
         private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
     }
 

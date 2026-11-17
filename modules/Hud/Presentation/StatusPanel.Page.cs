@@ -21,11 +21,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float PageGrow = 8f;
 
         /// <summary>Every slot the layout placed (<see cref="BoardGeometry.Slot"/>) gets its panel: the hosted page's body while it has one, under the panel's header.</summary>
-        private void PaintPages(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
+        private void PaintPages(in ScopePalette pal, in BoardGeometry geo, bool flashOn, int slotMask = -1)
         {
-            scopeBeat = false;
+            int all = (1 << pageSurfaces.Length) - 1;
+            if ((slotMask & all) == all) scopeBeat = false;      // a partial paint keeps the beat of the slots it leaves
             for (int i = 0; i < pageSurfaces.Length; i++)
             {
+                if ((slotMask & (1 << i)) == 0) continue;      // a slot that did not move keeps its last paint
                 BoardRect r = geo.Slot(i);
                 ScopePageBase current = slotPages[i];
                 bool on = current != null && r.Present;

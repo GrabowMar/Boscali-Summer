@@ -92,7 +92,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             canvasRoot = (RectTransform)canvas.transform;
             ownCam = CameraOf(canvas);
             VanillaHudStyle.TryHudFont(out TMPro.TMP_FontAsset font, out Material fontMaterial);
-            root = CombatAlerts.Holder(canvasRoot, "BoscaliTape");
+            root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Motion : canvasRoot, "BoscaliTape");
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = false;
             group.alpha = alpha;

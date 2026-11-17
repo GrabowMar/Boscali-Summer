@@ -47,13 +47,21 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private int lineKey = int.MinValue;
         private string portraitKey, flight = "";
         private int shownHuntId = -1, distanceKey = int.MinValue, markerKey = int.MinValue;
-        private bool shown;
+        private bool shown, inLayer;
+        private Aircraft aceUnit;
+        private string aceHandle;
+        private float aceMetres, screenWidth;
+        private Color markerBase = Color.white;
         private EnemyWingView shownWing;
         private float introducedAt, nextRefresh;
         private readonly char[] scratch = new char[24];
         private string distance = "";
 
         public void Configure(ISquadView view) => squad = view;
+
+        private void OnEnable() => HudLayer.Paint += OnPaint;
+
+        private void OnDisable() => HudLayer.Paint -= OnPaint;
 
         private void Update()
         {
@@ -72,7 +80,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 root.localScale = new Vector3(k, k, 1f);
                 lastK = k;
             }
-            Track(canvasRoot.rect.width / k);      // first: the card's second row reads what it found
+            screenWidth = canvasRoot.rect.width / k;
+            Track(screenWidth);      // first: the card's second row reads what it found
             Animate(now);
         }
 
@@ -132,14 +141,20 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// <summary>Build once per HUD canvas (the native canvas, found as the board finds it); false while there is none.</summary>
         private bool Ensure()
         {
-            if (root != null) return true;
+            bool layer = HudLayer.Enabled && HudLayer.Ensure();
+            if (root != null)
+            {
+                if (layer == inLayer) return true;
+                ResetForScene();      // the A/B switch moved: rebuild on the other parent
+            }
+            inLayer = layer;
             CombatHUD hud = SceneSingleton<CombatHUD>.i;
             Canvas canvas = hud != null && hud.iconLayer != null && hud.iconLayer.gameObject.activeInHierarchy ? hud.iconLayer.GetComponentInParent<Canvas>() : null;
             if (canvas == null) return false;
             canvasRoot = (RectTransform)canvas.transform;
             VanillaHudStyle.TryHudFont(out font, out fontMaterial);
             tinted.Clear();
-            root = Holder(canvasRoot, "Boscali Ace Hunt", 0f, 0f, 0f, 0f);
+            root = Holder(layer ? HudLayer.Motion : canvasRoot, "Boscali Ace Hunt", 0f, 0f, 0f, 0f);      // the HUD layer's Motion root: the marker is placed at the late point
             lastK = 0f;
             // A rebuilt card writes everything again (the old canvas took the texts and pictures with it).
             shown = false;
@@ -246,7 +261,15 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 distance = new string(scratch, 0, AvUnitTable.DistanceReading(scratch, 0, metres, units)).ToUpperInvariant();
             }
             WriteLine(true);      // the card's second row: the flight and the range
-            Paint(cam, ace.transform.position, handle, screenW, metres <= CloseM);
+            aceUnit = ace; aceHandle = handle; aceMetres = metres;
+            // Layer on: the marker is placed in OnPaint on the rendered pose; off: the old Update-phase projection.
+            if (!inLayer || !HudLayer.Enabled) Paint(cam, default, false);
+        }
+
+        private void OnPaint(HudView view)
+        {
+            if (!inLayer || !HudLayer.Enabled || !aceHave || !view.Valid || aceUnit == null || root == null || !root.gameObject.activeSelf || !(lastK > 0.01f)) return;
+            Paint(view.Cam, view, true);
         }
 
         /// <summary>The card's second row, written only when the flight or the range changed (<paramref name="known"/> false: the ace's position is not known, so no range).</summary>
@@ -261,15 +284,35 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         }
 
         /// <summary>The marker in the root's units (1080 high, centre origin): a breathing diamond on the ace with its words while it is on the screen; off the screen nothing (the tape's ACE mark points the way).</summary>
-        private void Paint(Camera cam, Vector3 world, string handle, float screenW, bool close)
+        private void Paint(Camera cam, HudView view, bool layer)
         {
-            float k = 1080f / Mathf.Max(1f, Screen.height), hw = screenW * 0.5f, hh = 540f, margin = 60f;
-            Vector3 local = cam.transform.InverseTransformPoint(world), s = cam.WorldToScreenPoint(world);
-            float x = (s.x - Screen.width * 0.5f) * k, y = (s.y - Screen.height * 0.5f) * k;
-            bool onScreen = local.z > 0f && Mathf.Abs(x) < hw - margin && Mathf.Abs(y) < hh - margin;
+            if (aceUnit == null) return;
+            Vector3 world = aceUnit.transform.position;
+            string handle = aceHandle;
+            bool close = aceMetres <= CloseM;
+            float hw = screenWidth * 0.5f, hh = 540f, margin = 60f, x, y;
+            bool front;
+            if (layer)
+            {
+                front = view.Project(world, out Vector2 c);
+                x = c.x / lastK; y = c.y / lastK;      // canvas units to the root's 1080-high units
+            }
+            else
+            {
+                float k = 1080f / Mathf.Max(1f, Screen.height);
+                Vector3 s = cam.WorldToScreenPoint(world);
+                front = cam.transform.InverseTransformPoint(world).z > 0f;
+                x = (s.x - Screen.width * 0.5f) * k; y = (s.y - Screen.height * 0.5f) * k;
+            }
+            bool onScreen = front && Mathf.Abs(x) < hw - margin && Mathf.Abs(y) < hh - margin;
             if (marker.gameObject.activeSelf != onScreen) marker.gameObject.SetActive(onScreen);
             if (!onScreen) return;
             var white = new Rgba(1f, 1f, 1f, 1f);
+            // Range ink: the marker desaturates and dims with the ace's distance (the ink's own colour, 16 steps, so a write lands only on a step change).
+            Rgba ranged = HudInk.Range(markerBase.ToRgba(), aceMetres);
+            Color ink = AvTheme.Unity(ranged);
+            if (markerLines.color != ink) markerLines.color = ink;
+            if (markerLabel.color != ink) markerLabel.color = ink;
             AvQuadBuffer b = markerLines.Buffer;
             b.Clear();
             float r = AvFxDriver.ReducedMotion ? 16f : 16f * (1f + 0.1f * Mathf.Sin(Time.unscaledTime * 2f * Mathf.PI));      // a slow 1 Hz breath, not a blink
@@ -329,9 +372,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             label.richText = false;
             label.characterSpacing = HudType.Tracking(HudStep.Label);
             label.fontStyle |= FontStyles.Bold;
-            Tint(label, Tone.Caution);
-            Tint(markerLines, Tone.Caution);
-            return label;
+            return label;      // its colour is the range ramp's (Paint); Recolor keeps only the halo material and the base
         }
 
         private static Image ImageBox(RectTransform parent, float x, float y, float size)
@@ -354,6 +395,12 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         private void Recolor()
         {
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
+            if (markerLabel != null)
+            {
+                markerBase = palette.Warning;
+                Material markerGlow = VanillaHudStyle.Glow(fontMaterial, markerBase);      // keyed by the tone, never by the ramped colour
+                if (markerGlow != null && markerLabel.fontSharedMaterial != markerGlow) markerLabel.fontSharedMaterial = markerGlow;
+            }
             for (int i = 0; i < tinted.Count; i++)
             {
                 Tinted t = tinted[i];
@@ -380,6 +427,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             distanceKey = markerKey = lineKey = int.MinValue;
             TopCentre.CardUp = false;
             aceHave = false;
+            aceUnit = null;
             shown = false;
             introducedAt = 0f;
             nextRefresh = 0f;
