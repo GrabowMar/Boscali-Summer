@@ -130,6 +130,11 @@
       <LogicalName>BoscaliSummer.Assets.nobp</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
+  <ItemGroup Label="Custom maps">
+    <!-- One bundle per map, written by `nomod map gen` + `nomod map bake` (tools/Build-MapBundle.ps1). The Maps module
+         lists every BoscaliSummer.Maps.*.bsmap resource. -->
+    <EmbeddedResource Include="modules\Maps\Assets\*.bsmap" LogicalName="BoscaliSummer.Maps.%(Filename).bsmap" />
+  </ItemGroup>
   <ItemGroup Label="Skylark aircraft artwork">
     <EmbeddedResource Include="assets\SkylarkVTOL\Unity\skylark.bundle" Condition="Exists('assets\SkylarkVTOL\Unity\skylark.bundle')">
       <LogicalName>BoscaliSummer.SkylarkAssets.bundle</LogicalName>
@@ -182,6 +187,9 @@
     <EmbeddedResource Include="modules\Command\Assets\terrain_naval_intel.png">
       <LogicalName>BoscaliSummer.Command.terrain_naval_intel.png</LogicalName>
     </EmbeddedResource>
+    <!-- Relief data of the mod's own maps, copied here by tools/Build-MapBundle.ps1. -->
+    <EmbeddedResource Include="modules\Command\Assets\bs_*_map.bmap" LogicalName="BoscaliSummer.Command.%(Filename).bmap" />
+    <EmbeddedResource Include="modules\Command\Assets\bs_*_intel.png" LogicalName="BoscaliSummer.Command.%(Filename).png" />
     <!-- Plan-view ground vehicle map icons, baked by tools/Build-VehicleMapIcons.py. -->
     <EmbeddedResource Include="modules\Command\Assets\vehicle-map-icons.png">
       <LogicalName>BoscaliSummer.Command.vehicle-map-icons.png</LogicalName>
