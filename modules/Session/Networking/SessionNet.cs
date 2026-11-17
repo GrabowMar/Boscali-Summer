@@ -20,6 +20,8 @@ namespace BoscaliSummer.Modules.Session.Networking
     {
         public byte Protocol;
         public string Version;
+        /// <summary>The client's <see cref="MapBuilds.Catalog"/>.</summary>
+        public string Maps;
     }
 
     /// <summary>Host-owned settings as serialized text, in parallel arrays.</summary>
@@ -28,6 +30,8 @@ namespace BoscaliSummer.Modules.Session.Networking
     {
         public byte Protocol;
         public string Version;
+        /// <summary>The host's <see cref="MapBuilds.Hosted"/>: "" on a vanilla map.</summary>
+        public string Map;
         public byte Flags;
         public string[] Keys;
         public string[] Values;
@@ -51,7 +55,7 @@ namespace BoscaliSummer.Modules.Session.Networking
     /// </summary>
     internal sealed class SessionNet : MonoBehaviour
     {
-        internal const byte ProtocolVersion = 1;
+        internal const byte ProtocolVersion = 2; // 2: both messages carry map builds (MapBuilds)
         /// <summary>The message answers this client's hello.</summary>
         internal const byte FlagReply = 1;
         /// <summary>Last message of a full snapshot.</summary>
@@ -65,6 +69,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         private const float FlushInterval = 0.5f;
         private const int MaximumPeers = 64;
         private const int MaximumVersionLength = 32;
+        private const int MaximumMapsLength = 160;
 
         private readonly Dictionary<string, ConfigEntryBase> allowed =
             new Dictionary<string, ConfigEntryBase>(StringComparer.Ordinal);
@@ -93,6 +98,7 @@ namespace BoscaliSummer.Modules.Session.Networking
         private bool answered;
         private bool hostSilentShown;
         private bool versionShown;
+        private bool mapShown;
         private bool savedSaveOnSet;
         private bool sessionActive;
         private bool applying;
@@ -164,7 +170,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             }
             helloAttempts++;
             nextHello = now + HelloInterval;
-            client.Send(new SessionHello { Protocol = ProtocolVersion, Version = Plugin.PluginVersion });
+            client.Send(new SessionHello { Protocol = ProtocolVersion, Version = Plugin.PluginVersion, Maps = MapBuilds.Catalog() });
         }
 
         private void Register()
@@ -215,6 +221,15 @@ namespace BoscaliSummer.Modules.Session.Networking
             if (!string.Equals(hello.Version, Plugin.PluginVersion, StringComparison.Ordinal))
                 Plugin.Logger?.LogWarning("[Session] A client joined with Boscali Summer " + (hello.Version ?? "?") +
                     "; this host runs " + Plugin.PluginVersion + ". Mismatched versions can break panels.");
+
+            // On one of the mod's own maps the terrain itself must match, or the client flies through the host's ground.
+            string hosted = MapBuilds.Hosted();
+            if (MapBuilds.Mismatch(hosted, hello.Maps))
+            {
+                Plugin.Logger?.LogWarning("[Session] A client was turned away: map " + MapBuilds.NameOf(hosted) + " differs from the host's build.");
+                sender.Disconnect();
+                return;
+            }
 
             outgoing.Clear();
             for (int i = 0; i < entries.Length; i++)
@@ -287,6 +302,7 @@ namespace BoscaliSummer.Modules.Session.Networking
             {
                 Protocol = ProtocolVersion,
                 Version = Plugin.PluginVersion,
+                Map = MapBuilds.Hosted(),
                 Flags = flags,
                 Keys = chunk.Key,
                 Values = chunk.Value
@@ -327,6 +343,12 @@ namespace BoscaliSummer.Modules.Session.Networking
                         Plugin.PluginVersion + ".");
                     Notice(HudTone.Caution, "BOSCALI SUMMER " + Plugin.PluginVersion + " · HOST " + host,
                         "Install the host's version so every panel matches.");
+                }
+                if (!mapShown && MapBuilds.Mismatch(message.Map, MapBuilds.Catalog()))
+                {
+                    mapShown = true;
+                    Notice(HudTone.Caution, "MAP " + MapBuilds.NameOf(message.Map).ToUpperInvariant() + " DIFFERS FROM THE HOST'S BUILD",
+                        "The host will end this connection. Install the host's Boscali Summer version.");
                 }
             }
 
@@ -430,18 +452,24 @@ namespace BoscaliSummer.Modules.Session.Networking
             {
                 w.WriteByte(v.Protocol);
                 w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
+                w.WriteString(NetText.Clip(v.Maps ?? "", MaximumMapsLength));
             }),
             (Func<NetworkReader, SessionHello>)(r =>
             {
                 byte protocol = r.ReadByte();
                 if (protocol != ProtocolVersion) return new SessionHello { Protocol = protocol };
-                return new SessionHello { Protocol = protocol, Version = NetText.Clip(r.ReadString(), MaximumVersionLength) };
+                return new SessionHello
+                {
+                    Protocol = protocol, Version = NetText.Clip(r.ReadString(), MaximumVersionLength),
+                    Maps = NetText.Clip(r.ReadString(), MaximumMapsLength),
+                };
             }));
 
             MirageSerializers.Strict.Install<HostSettingsMessage>((Action<NetworkWriter, HostSettingsMessage>)((w, v) =>
             {
                 w.WriteByte(v.Protocol);
                 w.WriteString(NetText.Clip(v.Version, MaximumVersionLength));
+                w.WriteString(NetText.Clip(v.Map ?? "", MaximumMapsLength));
                 w.WriteByte(v.Flags);
                 int count = v.Keys == null || v.Values == null ? 0 : Math.Min(v.Keys.Length, v.Values.Length);
                 if (count > HostValueChunks.MaximumEntries) count = HostValueChunks.MaximumEntries;
@@ -458,6 +486,7 @@ namespace BoscaliSummer.Modules.Session.Networking
                 var message = new HostSettingsMessage { Protocol = protocol };
                 if (protocol != ProtocolVersion) return message;
                 message.Version = NetText.Clip(r.ReadString(), MaximumVersionLength);
+                message.Map = NetText.Clip(r.ReadString(), MaximumMapsLength);
                 message.Flags = r.ReadByte();
                 int count = r.ReadByte();
                 // An oversized or broken message is dropped whole; the handler ignores null arrays.
