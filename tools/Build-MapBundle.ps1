@@ -38,7 +38,8 @@ Copy-Input (Join-Path $repoDirectory 'modules/Maps/Assets/Source/MapSurface.shad
 Copy-Input (Join-Path $PSScriptRoot 'MapAssets/BuildMapBundle.cs') (Join-Path $ProjectDirectory 'Assets/Editor/BuildMapBundle.cs')
 Copy-Input $mapJson (Join-Path $mapAssets 'map.json')
 Copy-Input (Join-Path $Source 'trees.bin') (Join-Path $mapAssets 'trees.bytes')
-foreach ($name in 'ocean_depth.png', 'ocean_color.png', 'colormap.png', "bs_${id}_map.png") {
+foreach ($n in 0..3) { Copy-Input (Join-Path $Source "forest_$n.bin") (Join-Path $mapAssets "forest_$n.bytes") }
+foreach ($name in 'ocean_depth.png', 'ocean_color.png', 'colormap.png', "bs_${id}_map.png", 'macro.png', 'splat_grass.png', 'splat_rock.png', 'splat_lush.png', 'grass_mask.png') {
     Copy-Input (Join-Path $Source $name) (Join-Path $mapAssets $name)
 }
 
@@ -62,8 +63,8 @@ try {
 finally { $process.Dispose() }
 
 $bundlePath = Join-Path $ProjectDirectory "BundleOutput/$id.bsmap"
-if (-not (Test-Path -LiteralPath $bundlePath) -or (Get-Item -LiteralPath $bundlePath).Length -gt 40MB) {
-    throw 'Map bundle missing or exceeds the 40 MiB cap.'
+if (-not (Test-Path -LiteralPath $bundlePath) -or (Get-Item -LiteralPath $bundlePath).Length -gt 80MB) {
+    throw 'Map bundle missing or exceeds the 80 MiB cap.'
 }
 Copy-Item -LiteralPath $bundlePath -Destination (Join-Path $repoDirectory "modules/Maps/Assets/$id.bsmap") -Force
 Copy-Input (Join-Path $Source 'relief.bmap') (Join-Path $repoDirectory "modules/Command/Assets/bs_${id}_map.bmap")

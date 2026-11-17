@@ -13,7 +13,7 @@ using Object = UnityEngine.Object;
 public static class BuildMapBundle
 {
     private const string Dir = "Assets/Map/";
-    private const long BundleLimit = 40L * 1024 * 1024;
+    private const long BundleLimit = 80L * 1024 * 1024; // embedded in the mod DLL: past this, ship the bundle as a loose file
 
     [Serializable] private class StripInfo { public float x, y, z, length; public int heading; }
     [Serializable] private class MapInfo
@@ -67,17 +67,22 @@ public static class BuildMapBundle
             ImportTexture(Dir + "ocean_color.png", true, false, false);
             ImportTexture(Dir + "colormap.png", true, true, false);
             ImportTexture(Dir + image, true, false, true);
+            // For the game's own terrain shader, grass and trees: whole-map colour, ground-cover weights, grass mask.
+            ImportTexture(Dir + "macro.png", true, false, false, 4096);
+            foreach (string cover in new[] { "splat_grass.png", "splat_rock.png", "splat_lush.png", "grass_mask.png" }) ImportTexture(Dir + cover, false, false, false);
             Directory.CreateDirectory("BundleOutput");
             var build = new AssetBundleBuild
             {
                 assetBundleName = info.id + ".bsmap",
-                assetNames = new[] { prefabPath, Dir + "map.json", Dir + "trees.bytes", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image },
+                assetNames = new[] { prefabPath, Dir + "map.json", Dir + "trees.bytes", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image,
+                    Dir + "macro.png", Dir + "splat_grass.png", Dir + "splat_rock.png", Dir + "splat_lush.png", Dir + "grass_mask.png",
+                    Dir + "forest_0.bytes", Dir + "forest_1.bytes", Dir + "forest_2.bytes", Dir + "forest_3.bytes" },
             };
             if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
                 BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null) // LZMA: a height field packs far smaller than with LZ4
                 throw new Exception("Map bundle build returned no manifest.");
             long bytes = new FileInfo("BundleOutput/" + info.id + ".bsmap").Length;
-            if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 40 MiB: " + bytes + " bytes.");
+            if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 80 MiB: " + bytes + " bytes.");
             File.WriteAllText("result.txt", $"PASS: {info.displayName}: {info.islandCount} islands, {chunkCount} terrain tiles ({landTiles} with land), " +
                 $"{triangleCount} triangles, {trees} scenery items, {info.strips.Length} strips; bundle {bytes} bytes.");
             EditorApplication.Exit(0);
@@ -208,58 +213,139 @@ public static class BuildMapBundle
     /// </summary>
     private static void BuildTerrain(GameObject parent, MapInfo info, float[] heights, Color32[] colours, Material material)
     {
-        int res = info.res, tile = info.tile;
-        float half = res * info.cell * .5f;
-        for (int z0 = 0; z0 < res; z0 += tile)
-            for (int x0 = 0; x0 < res; x0 += tile)
+        int res = info.res, tile = info.tile, block = tile * 8;
+        groundHeights = heights; groundColours = colours; groundRes = res; groundCell = info.cell; groundPads = info.strips ?? new StripInfo[0];
+        // Deep water is drawn and collided in blocks of 8 x 8 tiles: thousands of separate deep tiles cost the game
+        // frame time for ground nobody sees. Only blocks that hold shallows or land are cut into tiles.
+        for (int bz = 0; bz < res; bz += block)
+            for (int bx = 0; bx < res; bx += block)
             {
-                int x1 = Mathf.Min(x0 + tile, res - 1), z1 = Mathf.Min(z0 + tile, res - 1);
-                float top = float.MinValue;
-                for (int z = z0; z <= z1; z++)
-                    for (int x = x0; x <= x1; x++) top = Mathf.Max(top, heights[z * res + x]);
-                int step = top > 0f ? 1 : top > -40f ? 2 : top > -150f ? 8 : 32;
-                var go = Child(parent, $"tile_{x0 / tile}_{z0 / tile}");
-                // A tile's origin is its own south-west sample, in map coordinates: small numbers keep float precision.
-                go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
-                Mesh near = GridMesh(go.name, heights, colours, res, info.cell, x0, z0, x1, z1, step);
-                go.AddComponent<MeshFilter>().sharedMesh = near;
-                var renderer = go.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = material;
-                go.AddComponent<MeshCollider>().sharedMesh = near;
-                chunkCount++;
-                triangleCount += near.triangles.Length / 3;
-                if (step != 1)
+                if (Top(heights, res, bx, bz, Mathf.Min(bx + block, res - 1), Mathf.Min(bz + block, res - 1)) <= -150f)
                 {
-                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    Piece(parent, info, heights, colours, material, $"deep_{bx / block}_{bz / block}", bx, bz, block, 32);
                     continue;
                 }
-                landTiles++;
-                var low = Child(go, "lod1");
-                low.AddComponent<MeshFilter>().sharedMesh = GridMesh(go.name + "_lod1", heights, colours, res, info.cell, x0, z0, x1, z1, 4);
-                var lowRenderer = low.AddComponent<MeshRenderer>();
-                lowRenderer.sharedMaterial = material;
-                lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
-                go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(.1f, new Renderer[] { renderer }), new LOD(.0005f, new Renderer[] { lowRenderer }) });
+                for (int z0 = bz; z0 < Mathf.Min(bz + block, res); z0 += tile)
+                    for (int x0 = bx; x0 < Mathf.Min(bx + block, res); x0 += tile)
+                    {
+                        float top = Top(heights, res, x0, z0, Mathf.Min(x0 + tile, res - 1), Mathf.Min(z0 + tile, res - 1));
+                        Piece(parent, info, heights, colours, material, $"tile_{x0 / tile}_{z0 / tile}", x0, z0, tile, top > 0f ? 1 : top > -40f ? 2 : top > -150f ? 8 : 32);
+                    }
             }
     }
 
-    private static Mesh GridMesh(string name, float[] heights, Color32[] colours, int res, float cell, int x0, int z0, int x1, int z1, int step)
+    private static float Top(float[] heights, int res, int x0, int z0, int x1, int z1)
     {
-        var xs = Samples(x0, x1, step);
-        var zs = Samples(z0, z1, step);
+        float top = float.MinValue;
+        for (int z = z0; z <= z1; z++)
+            for (int x = x0; x <= x1; x++) top = Mathf.Max(top, heights[z * res + x]);
+        return top;
+    }
+
+    private static void Piece(GameObject parent, MapInfo info, float[] heights, Color32[] colours, Material material, string name, int x0, int z0, int size, int step)
+    {
+        int res = info.res, x1 = Mathf.Min(x0 + size, res - 1), z1 = Mathf.Min(z0 + size, res - 1);
+        float half = res * info.cell * .5f;
+        var go = Child(parent, name);
+        // A piece's origin is its own south-west sample, in map coordinates: small numbers keep float precision.
+        go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
+        Mesh near = GridMesh(name, x0, z0, x1, z1, step == 1 ? .5f : step);   // land gets a vertex every half sample: 10 m
+        go.AddComponent<MeshFilter>().sharedMesh = near;
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        go.AddComponent<MeshCollider>().sharedMesh = near;
+        chunkCount++;
+        triangleCount += near.triangles.Length / 3;
+        if (step != 1)
+        {
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            return;
+        }
+        landTiles++;
+        var low = Child(go, "lod1");
+        low.AddComponent<MeshFilter>().sharedMesh = GridMesh(name + "_lod1", x0, z0, x1, z1, 4f);
+        var lowRenderer = low.AddComponent<MeshRenderer>();
+        lowRenderer.sharedMaterial = material;
+        lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
+        go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(.1f, new Renderer[] { renderer }), new LOD(.0005f, new Renderer[] { lowRenderer }) });
+    }
+
+    // The ground being cut into pieces: set once by BuildTerrain, read by every mesh.
+    private static float[] groundHeights;
+    private static Color32[] groundColours;
+    private static int groundRes;
+    private static float groundCell;
+    private static StripInfo[] groundPads;
+
+    /// <summary>The generator's height between its samples.</summary>
+    private static float Base(float fx, float fz)
+    {
+        fx = Mathf.Clamp(fx, 0f, groundRes - 1); fz = Mathf.Clamp(fz, 0f, groundRes - 1);
+        int x = Mathf.Min((int)fx, groundRes - 2), z = Mathf.Min((int)fz, groundRes - 2);
+        float tx = fx - x, tz = fz - z;
+        float south = Mathf.Lerp(groundHeights[z * groundRes + x], groundHeights[z * groundRes + x + 1], tx);
+        float north = Mathf.Lerp(groundHeights[(z + 1) * groundRes + x], groundHeights[(z + 1) * groundRes + x + 1], tx);
+        return Mathf.Lerp(south, north, tz);
+    }
+
+    /// <summary>
+    /// The height the mesh uses. On dry land it adds three scales of small relief (40 m, 17 m and 7 m across) that the
+    /// generator's 20 m samples cannot hold: little on flats, more where the ground is steep, none on a strip's pad.
+    /// It is a function of map position only, so neighbouring pieces agree along their shared edge.
+    /// </summary>
+    private static float Height(float fx, float fz, bool detail)
+    {
+        float h = Base(fx, fz);
+        if (!detail || h < 1.5f) return h;
+        float sx = Base(fx + 1f, fz) - Base(fx - 1f, fz), sz = Base(fx, fz + 1f) - Base(fx, fz - 1f);
+        float slope = Mathf.Sqrt(sx * sx + sz * sz) / (2f * groundCell);
+        float wx = fx * groundCell, wz = fz * groundCell;
+        float relief = (Mathf.PerlinNoise(wx / 41f, wz / 41f) - .5f) + .5f * (Mathf.PerlinNoise(wx / 17f + 31f, wz / 17f + 7f) - .5f) +
+            .25f * (Mathf.PerlinNoise(wx / 7f + 3f, wz / 7f + 59f) - .5f);
+        return h + relief * Mathf.Clamp01((h - 1.5f) / 3f) * (.5f + 5f * Mathf.Clamp01(slope / .7f)) * OffPads(wx, wz);
+    }
+
+    /// <summary>0 on a strip's pad and 60 m around it, rising to 1 by 160 m out.</summary>
+    private static float OffPads(float wx, float wz)
+    {
+        float half = groundRes * groundCell * .5f, least = 1f;
+        foreach (StripInfo pad in groundPads)
+        {
+            float alongX = pad.heading == 90 ? 750f : 150f, alongZ = pad.heading == 90 ? 150f : 750f;
+            float dx = Mathf.Max(0f, Mathf.Abs(wx - half - pad.x) - alongX), dz = Mathf.Max(0f, Mathf.Abs(wz - half - pad.z) - alongZ);
+            least = Mathf.Min(least, Mathf.Clamp01((Mathf.Sqrt(dx * dx + dz * dz) - 60f) / 100f));
+        }
+        return least;
+    }
+
+    /// <summary>
+    /// One piece of ground from sample (x0, z0) to (x1, z1), a vertex every `stride` samples (0.5 on land, which is
+    /// where the extra relief goes). It carries what the game's terrain shader may read: normals, tangents and a UV that
+    /// is the vertex's place on the whole map, 0..1; and a vertex colour for the mod's own fallback shader.
+    /// </summary>
+    private static Mesh GridMesh(string name, int x0, int z0, int x1, int z1, float stride)
+    {
+        List<float> xs = Samples(x0, x1, stride), zs = Samples(z0, z1, stride);
+        bool detail = stride < 1f;
         var vertices = new Vector3[xs.Count * zs.Count];
         var normals = new Vector3[vertices.Length];
+        var tangents = new Vector4[vertices.Length];
+        var uvs = new Vector2[vertices.Length];
         var tint = new Color32[vertices.Length];
+        float reach = Mathf.Max(.5f, stride * .5f);
         for (int j = 0; j < zs.Count; j++)
             for (int i = 0; i < xs.Count; i++)
             {
-                int x = xs[i], z = zs[j], at = j * xs.Count + i;
-                vertices[at] = new Vector3((x - x0) * cell, heights[z * res + x], (z - z0) * cell);
-                // Normals come from the whole island's heights, so neighbouring chunks agree along their shared edge.
-                float dx = heights[z * res + Mathf.Min(x + 1, res - 1)] - heights[z * res + Mathf.Max(x - 1, 0)];
-                float dz = heights[Mathf.Min(z + 1, res - 1) * res + x] - heights[Mathf.Max(z - 1, 0) * res + x];
-                normals[at] = new Vector3(-dx, 2f * cell, -dz).normalized;
-                tint[at] = colours[z * res + x];
+                float x = xs[i], z = zs[j];
+                int at = j * xs.Count + i;
+                vertices[at] = new Vector3((x - x0) * groundCell, Height(x, z, detail), (z - z0) * groundCell);
+                float dx = Height(x + reach, z, detail) - Height(x - reach, z, detail), dz = Height(x, z + reach, detail) - Height(x, z - reach, detail);
+                float run = 2f * reach * groundCell;
+                normals[at] = new Vector3(-dx, run, -dz).normalized;
+                Vector3 east = new Vector3(run, dx, 0f).normalized;
+                tangents[at] = new Vector4(east.x, east.y, east.z, -1f);
+                uvs[at] = new Vector2((x + .5f) / groundRes, (z + .5f) / groundRes);
+                tint[at] = groundColours[Mathf.Min(groundRes - 1, Mathf.RoundToInt(z)) * groundRes + Mathf.Min(groundRes - 1, Mathf.RoundToInt(x))];
             }
         var triangles = new int[(xs.Count - 1) * (zs.Count - 1) * 6];
         int t = 0;
@@ -270,14 +356,14 @@ public static class BuildMapBundle
                 triangles[t++] = a; triangles[t++] = c; triangles[t++] = b;
                 triangles[t++] = b; triangles[t++] = c; triangles[t++] = d;
             }
-        return Keep(new Mesh { name = name, vertices = vertices, normals = normals, colors32 = tint, triangles = triangles });
+        return Keep(new Mesh { name = name, vertices = vertices, normals = normals, tangents = tangents, uv = uvs, colors32 = tint, triangles = triangles });
     }
 
-    /// <summary>Every `step`-th sample from first to last, always ending on last so chunk edges meet.</summary>
-    private static List<int> Samples(int first, int last, int step)
+    /// <summary>Every `stride` from first to last, always ending on last so neighbouring pieces meet.</summary>
+    private static List<float> Samples(int first, int last, float stride)
     {
-        var list = new List<int>();
-        for (int i = first; i < last; i += step) list.Add(i);
+        var list = new List<float>();
+        for (float at = first; at < last - .001f; at += stride) list.Add(at);
         list.Add(last);
         return list;
     }
@@ -479,7 +565,7 @@ public static class BuildMapBundle
 
     // ---- import settings and the final check -----------------------------------------------------------------------
 
-    private static void ImportTexture(string path, bool srgb, bool readable, bool sprite)
+    private static void ImportTexture(string path, bool srgb, bool readable, bool sprite, int maxSize = 2048)
     {
         var importer = AssetImporter.GetAtPath(path) as TextureImporter;
         if (importer == null) throw new Exception(path + " was not imported as a texture.");
@@ -490,7 +576,7 @@ public static class BuildMapBundle
         importer.mipmapEnabled = !sprite;
         importer.wrapMode = TextureWrapMode.Clamp;
         importer.filterMode = FilterMode.Bilinear;
-        importer.maxTextureSize = 2048;
+        importer.maxTextureSize = maxSize;
         importer.npotScale = TextureImporterNPOTScale.None;
         importer.textureCompression = readable ? TextureImporterCompression.Uncompressed : TextureImporterCompression.CompressedHQ;
         importer.SaveAndReimport();

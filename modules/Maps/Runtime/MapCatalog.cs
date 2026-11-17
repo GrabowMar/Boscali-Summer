@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
     internal static class MapCatalog
     {
         private const string Prefix = "BoscaliSummer.Maps.", Suffix = ".bsmap";
-        private const int MaxBundleBytes = 64 * 1024 * 1024;
+        private const int MaxBundleBytes = 96 * 1024 * 1024;
         private static List<MapEntry> entries;
 
         public static IReadOnlyList<MapEntry> All => entries ?? (entries = Scan(typeof(MapCatalog).Assembly));

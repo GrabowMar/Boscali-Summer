@@ -38,6 +38,17 @@ namespace BoscaliSummer.Modules.Maps.Patches
         }
     }
 
+    /// <summary>Once the game has put a map in the scene, a mod map gets the game's grass, trees and blast scars.</summary>
+    [HarmonyPatch(typeof(LevelInfo), nameof(LevelInfo.ApplyMapSettings))]
+    internal static class MapGroundPatch
+    {
+        private static void Postfix(MapSettings mapSettings)
+        {
+            try { MapGround.Attach(mapSettings); }
+            catch (Exception e) { PatchGuard.Report("Maps.Ground", e); }
+        }
+    }
+
     /// <summary>The new-mission screen has one tile per map and pairs tile i with map i: add a tile for each of ours
     /// before the screen wires them up.</summary>
     [HarmonyPatch(typeof(MissionEditorNewMenuV2), "Awake")]

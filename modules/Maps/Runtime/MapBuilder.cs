@@ -53,6 +53,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 var settings = root.AddComponent<MapSettings>();
                 Fill(settings, entry, donor);
                 int chunks = MarkTerrain(root.transform.Find("Terrain"), manager);
+                MapGround.Dress(root.transform.Find("Terrain"), entry, manager);
                 List<NetworkIdentity> identities = BuildAirbases(root.transform.Find("Airfields"), manifest, manager);
                 var network = root.AddComponent<NetworkMap>();
                 network.MapPrefix = MapPrefix;
