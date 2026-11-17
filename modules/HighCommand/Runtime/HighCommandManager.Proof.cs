@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Modules.HighCommand.Domain;
+using HarmonyLib;
 using NuclearOption.Networking;
 using UnityEngine;
 
@@ -13,6 +14,63 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
     internal sealed partial class HighCommandManager
     {
         private FactionHQ SeatHq => GameManager.GetLocalPlayer<Player>(out Player p) && p != null ? p.HQ : null;
+        private Convoy damagedConvoy;
+        private Unit[] damagedConvoyVehicles;
+
+        /// <summary>Exercises the real lethal impact path, then observes cleanup by the ordinary next host tick.</summary>
+        internal Dictionary<string, object> ProofConvoyDamage(bool after)
+        {
+            if (after)
+            {
+                if (damagedConvoy == null) throw new InvalidOperationException("Damage a proof convoy first.");
+                bool released = damagedConvoyVehicles != null;
+                foreach (Unit vehicle in damagedConvoyVehicles ?? Array.Empty<Unit>())
+                    if (vehicle != null && vehicle.IsServer) released = false;
+                var result = new Dictionary<string, object>
+                {
+                    ["ok"] = true, ["convoyRetired"] = !convoys.Contains(damagedConvoy),
+                    ["vehiclesUnspawned"] = released,
+                    ["watchRemoved"] = FindAsset(damagedConvoy.Owner, damagedConvoy.Slot, AssetKind.ConvoyLead) == null,
+                    ["disruptionPreserved"] = damagedConvoy.Slot.Status == CommanderStatus.Disrupted,
+                };
+                if (released && !convoys.Contains(damagedConvoy))
+                { damagedConvoy = null; damagedConvoyVehicles = null; }
+                return result;
+            }
+            if (!MissionManager.IsRunning) throw new InvalidOperationException("A running mission is required.");
+            if (damagedConvoy != null) throw new InvalidOperationException("This proof already damaged a convoy.");
+            foreach (FactionCommand owner in factions)
+            {
+                foreach (CommandSlot slot in owner.Tree.Slots)
+                {
+                    AssetWatch post = FindAsset(owner, slot, AssetKind.Post);
+                    if (slot.Status != CommanderStatus.Active || post?.Unit == null || post.Unit.disabled ||
+                        FindConvoy(owner, slot) != null || !TryStartTransfer(owner, slot)) continue;
+                    damagedConvoy = FindConvoy(owner, slot);
+                    break;
+                }
+                if (damagedConvoy != null) break;
+            }
+            if (damagedConvoy == null) throw new InvalidOperationException("No healthy post could start a native VIP convoy.");
+            Unit lead = damagedConvoy.Lead;
+            UnitPart critical = null;
+            var criticalField = AccessTools.Field(typeof(UnitPart), "criticalPart");
+            foreach (UnitPart part in lead.partLookup)
+                if (part != null && part.parentUnit == lead && criticalField?.GetValue(part) is true)
+                { critical = part; break; }
+            if (critical == null) throw new InvalidOperationException("The native convoy lead has no critical part.");
+            damagedConvoyVehicles = damagedConvoy.Vehicles.ToArray();
+            // The old callback unspawned the lead here, before TakeDamage could send its native RpcDamage.
+            critical.TakeDamage(0f, 0f, 1f, 0f, 1000000f, PersistentID.None);
+            return new Dictionary<string, object>
+            {
+                ["ok"] = true, ["vehicleCount"] = damagedConvoyVehicles.Length,
+                ["damageReturned"] = true, ["leadStillServer"] = lead != null && lead.IsServer,
+                ["leadDisabled"] = lead != null && lead.disabled,
+                ["commanderDisrupted"] = damagedConvoy.Slot.Status == CommanderStatus.Disrupted,
+                ["convoyPending"] = convoys.Contains(damagedConvoy),
+            };
+        }
 
         internal Dictionary<string, object> ProofRead()
         {

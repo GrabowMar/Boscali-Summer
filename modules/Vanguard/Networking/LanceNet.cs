@@ -137,11 +137,15 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             else SendIntent(pod, IntentCancel, 0f);
         }
 
-        private static void SendIntent(LancePod pod, byte kind, float level01, int count = 1) =>
-            NetworkManagerNuclearOption.i?.Client?.Send(new LanceIntent
+        private static void SendIntent(LancePod pod, byte kind, float level01, int count = 1)
+        {
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
+            client.Send(new LanceIntent
             {
                 Protocol = ProtocolVersion, Station = pod.Station.Number, Kind = kind, Level = Level(level01), Count = (byte)Mathf.Clamp(count, 1, 255),
             });
+        }
 
         // ---- server
 

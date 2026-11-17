@@ -1,5 +1,6 @@
 using System;
 using System.Reflection;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Util;
 using HarmonyLib;
 using Mirage;
@@ -35,7 +36,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
         {
             get
             {
-                if (node == null && !nodeTried && Encyclopedia.i != null) { nodeTried = true; node = BuildNode(); }
+                if (node == null && !nodeTried && GameAccess.EncyclopediaOrNull != null) { nodeTried = true; node = BuildNode(); }
                 return node;
             }
         }
@@ -44,7 +45,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
         /// re-registers after the game rebuilt its own prefab table.</summary>
         public static void EnsureRegistered(bool force = false)
         {
-            ClientObjectManager objects = NetworkManagerNuclearOption.i != null ? NetworkManagerNuclearOption.i.ClientObjectManager : null;
+            ClientObjectManager objects = GameAccess.NetworkManagerOrNull?.ClientObjectManager;
             if (objects == null || (objects == registeredWith && !force) || Node == null) return;
             objects.RegisterPrefab(Node.GetComponent<NetworkIdentity>());
             registeredWith = objects;
@@ -81,10 +82,11 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 
         private static GameObject BuildNode()
         {
-            if (Encyclopedia.i == null) return null;
+            Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
+            if (encyclopedia == null) return null;
             BuildingDefinition donor = null;
             float best = float.MaxValue;
-            foreach (BuildingDefinition def in Encyclopedia.i.buildings)
+            foreach (BuildingDefinition def in encyclopedia.buildings)
             {
                 if (def == null || def.unitPrefab == null || def.unitPrefab.GetComponent<Building>() == null) continue;
                 GameObject p = def.unitPrefab;

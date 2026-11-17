@@ -21,6 +21,16 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             return manager == null ? Failure("HighCommandAutomation", "Read", "high command is not running") : manager.ProofRead();
         }
 
+        /// <summary>Kills a real VIP lead through native critical-part damage; {after:true} observes next-tick retirement.</summary>
+        public static Dictionary<string, object> ConvoyDamage(Dictionary<string, object> args)
+        {
+            if (!InSimRun || GameManager.gameState != GameState.SinglePlayer || !BoscaliSummer.Core.Game.GameAccess.IsServer())
+                return Failure("HighCommandAutomation", "ConvoyDamage", "requires a hosted single-player nomodkit scenario");
+            HighCommandManager manager = HighCommandManager.Active;
+            return manager == null ? Failure("HighCommandAutomation", "ConvoyDamage", "high command is not running") :
+                manager.ProofConvoyDamage(Bool(args, "after"));
+        }
+
         /// <summary>Records the sighting a patrol would of every standing enemy post for the seat's faction. {confirmed}.</summary>
         public static Dictionary<string, object> Confirm(Dictionary<string, object> args)
         {

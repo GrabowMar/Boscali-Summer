@@ -84,14 +84,14 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Networking
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            var handler = NetworkManagerNuclearOption.i?.Client?.MessageHandler;
+            var handler = GameAccess.NetworkManagerOrNull?.Client?.MessageHandler;
             StateHandlers.Swap(handler);
             SpikeHandlers.Swap(handler);
         }
 
         internal static void Send(KaijuState state)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active) return;
             state.Protocol = ProtocolVersion;
             server.SendToAll(state, authenticatedOnly: true, excludeLocalPlayer: true);
@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Networking
 
         internal static void SendSpikes(uint[] ids)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server == null || !server.Active || ids.Length == 0) return;
             server.SendToAll(new KaijuSpikes { Protocol = ProtocolVersion, Ids = ids }, authenticatedOnly: true, excludeLocalPlayer: true);
         }

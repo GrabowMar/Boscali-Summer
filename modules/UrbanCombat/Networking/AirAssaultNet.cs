@@ -85,7 +85,9 @@ namespace BoscaliSummer.Garrisons
                 Exfil(aircraft);
                 return;
             }
-            NetworkManagerNuclearOption.i?.Client?.Send(new RopeExfilRequest { Protocol = ProtocolVersion });
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
+            client.Send(new RopeExfilRequest { Protocol = ProtocolVersion });
         }
 
         private static void Exfil(Aircraft aircraft)
@@ -106,7 +108,7 @@ namespace BoscaliSummer.Garrisons
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             ClientHandlers.Swap(network?.Client != null && network.Client.Active ? network.Client.MessageHandler : null);
             throttle.Prune(Time.unscaledTime);

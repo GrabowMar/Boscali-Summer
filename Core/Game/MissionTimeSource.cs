@@ -53,8 +53,10 @@ namespace BoscaliSummer.Core.Game
                 MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
                 bool multiplayer = GameManager.gameState == GameState.Multiplayer;
                 bool source = mission != null || (!requireManager && !multiplayer);
-                if (mission != null) raw = mission.MissionTime;
-                else if (source) raw = Time.timeSinceLevelLoad;
+                // The replicated component can exist before Mirage attaches its world and clock.
+                if (multiplayer)
+                    source = mission != null && mission.multiplayerStartTime > 0d && mission.World?.Time != null;
+                if (source) raw = mission != null ? mission.MissionTime : Time.timeSinceLevelLoad;
                 valid = MissionClockGate.IsValid(source, multiplayer,
                     mission != null ? mission.multiplayerStartTime : 0d, raw);
             }

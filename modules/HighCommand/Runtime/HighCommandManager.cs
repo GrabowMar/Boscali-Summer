@@ -154,6 +154,10 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
 
         public void ResetForScene()
         {
+#if !PUBLIC_RELEASE
+            damagedConvoy = null;
+            damagedConvoyVehicles = null;
+#endif
             for (int i = 0; i < assets.Count; i++) Unwatch(assets[i]);
             for (int i = 0; i < convoys.Count; i++) DestroyConvoyVehicles(convoys[i]);
             factions.Clear();

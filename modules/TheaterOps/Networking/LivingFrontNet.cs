@@ -150,8 +150,9 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
             if (now < nextRegistration) return;
             nextRegistration = now + 0.5f;
             NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
+            NetworkClient transport = network?.Client;
             MessageHandler server = network?.Server?.Active == true ? network.Server.MessageHandler : null;
-            MessageHandler client = network?.Client?.Active == true ? network.Client.MessageHandler : null;
+            MessageHandler client = transport?.Active == true ? transport.MessageHandler : null;
             if (ServerHandlers.Swap(server))
             {
                 nextQuery.Clear(); nextIntent.Clear(); clientSessions.Clear();
@@ -171,14 +172,16 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                     queriedHq = hq;
                     ClearClientState(); owner?.ClearRemoteState();
                 }
-                if (hq != null && hq.faction != null && now >= nextClientQuery)
+                if (hq != null && hq.faction != null && now >= nextClientQuery &&
+                    transport != null && transport.Active && transport.IsConnected &&
+                    transport.Player != null && transport.Player.IsAuthenticated)
                 {
                     // Retry absent/stale pictures; heartbeat also keeps a paused
                     // mission's transport current while gameplay clocks stand still.
                     nextClientQuery = now + (owner?.HasSnapshot == true &&
                         owner.SnapshotAgeSeconds <= LivingWarRules.SnapshotFreshSeconds ? 10f : 4f);
                     if (UnansweredQueries++ == 0) firstQueryAt = now;
-                    network.Client.Send(new LivingFrontQuery { Protocol = ProtocolVersion, Session = clientSession });
+                    transport.Send(new LivingFrontQuery { Protocol = ProtocolVersion, Session = clientSession });
                 }
             }
             nextQuery.Prune(now, forgetSession ??= id => clientSessions.Remove(id));
@@ -191,7 +194,7 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 seenHostEpoch <= 0 || !GameAccess.TryGetLocalFaction(out FactionHQ hq) || hq?.faction == null)
                 return false;
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active) return false;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
             pendingRequestId = nextRequestId = nextRequestId >= int.MaxValue ? 1 : nextRequestId + 1;
             pendingFaction = hq.faction.factionName;
             pendingDeadline = Time.unscaledTime + IntentTimeout;

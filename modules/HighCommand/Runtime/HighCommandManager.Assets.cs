@@ -298,7 +298,8 @@ namespace BoscaliSummer.Modules.HighCommand.Runtime
             {
                 // The commander is in that vehicle: a real death.
                 CreditKill(owner, slot, key, attacker, unit, "KILLED IN TRANSIT");
-                AbortTransfer(FindConvoy(owner, slot));
+                // Native TakeDamage still sends RpcDamage after this callback returns.
+                // TickConvoys retires the disabled lead on its next tick, after that RPC.
                 KillCommander(owner, slot, now, "KILLED IN TRANSIT", postDestroyed: false);
                 return;
             }

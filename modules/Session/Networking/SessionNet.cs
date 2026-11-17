@@ -147,7 +147,8 @@ namespace BoscaliSummer.Modules.Session.Networking
                 ResetHandshake();
                 return;
             }
-            if (answered || now < nextHello || !GameManager.GetLocalPlayer<Player>(out Player local) || local == null)
+            if (!client.IsConnected || client.Player == null || !client.Player.IsAuthenticated ||
+                answered || now < nextHello || !GameManager.GetLocalPlayer<Player>(out Player local) || local == null)
                 return;
             if (helloAttempts >= HelloAttempts)
             {

@@ -114,6 +114,8 @@ namespace BoscaliSummer.Garrisons
         {
             if (!float.IsFinite(point.x) || !float.IsFinite(point.y) || !float.IsFinite(point.z)) return;
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled) return;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (!GameAccess.IsServer() && (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)) return;
             local = point;
             localFrom = aircraft;
             LandingZones.Order(aircraft, point); // own drops plan at once; the host's broadcast re-orders the same point
@@ -122,6 +124,8 @@ namespace BoscaliSummer.Garrisons
 
         public void ClearLocal()
         {
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (!GameAccess.IsServer() && (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)) return;
             local = null;
             localFrom = null;
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null || aircraft.disabled) return;
@@ -138,7 +142,9 @@ namespace BoscaliSummer.Garrisons
                 Apply(aircraft, hasZone, x, z);
                 return;
             }
-            NetworkManagerNuclearOption.i?.Client?.Send(new LandingZoneOrder
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
+            client.Send(new LandingZoneOrder
             {
                 Protocol = ProtocolVersion, HasZone = hasZone, X = x, Z = z,
             });
@@ -167,7 +173,7 @@ namespace BoscaliSummer.Garrisons
         {
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             ClientHandlers.Swap(network?.Client != null && network.Client.Active ? network.Client.MessageHandler : null);
             throttle.Prune(Time.unscaledTime);

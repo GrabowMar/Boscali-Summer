@@ -100,8 +100,12 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         public void ResetForScene() => throttle.Clear();
 
         /// <summary>Owner peer: the fire press became a cut of its own aircraft's decoy.</summary>
-        public static void RequestCut() =>
-            NetworkManagerNuclearOption.i?.Client?.Send(new AlexIntent { Protocol = ProtocolVersion, Action = Cut });
+        public static void RequestCut()
+        {
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
+            client.Send(new AlexIntent { Protocol = ProtocolVersion, Action = Cut });
+        }
 
         private void Update()
         {

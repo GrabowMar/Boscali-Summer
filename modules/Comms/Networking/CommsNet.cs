@@ -84,7 +84,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
             InstallSerializers();
         }
 
-        /// <summary>Whether a client transport is up, so a request has somewhere to go.</summary>
+        /// <summary>Whether the native client connection is authenticated and ready for requests.</summary>
         public bool ClientActive
         {
             get
@@ -92,7 +92,7 @@ namespace BoscaliSummer.Modules.Comms.Networking
                 try
                 {
                     NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-                    return client != null && client.Active;
+                    return client != null && client.Active && client.IsConnected && client.Player != null && client.Player.IsAuthenticated;
                 }
                 catch { return false; }
             }
@@ -124,13 +124,13 @@ namespace BoscaliSummer.Modules.Comms.Networking
 
         // ---- Send --------------------------------------------------------------------------
 
-        /// <summary>Hand a request to the host. False when there is no client transport.</summary>
+        /// <summary>Hand a request to the host. False until the client connection is authenticated.</summary>
         public bool SendUp(CommsIntent intent)
         {
             NetworkClient client;
             try { client = GameAccess.NetworkManagerOrNull?.Client; }
             catch { return false; }
-            if (client == null || !client.Active) return false;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
             client.Send(new CommsUpMessage
             {
                 Protocol = ProtocolVersion,

@@ -131,12 +131,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         /// without it. <paramref name="byGame"/>: the game's pass just ran and covers it if the definition was in the Encyclopedia.</summary>
         internal static void EnsureRegistered(bool byGame)
         {
-            NetworkManagerNuclearOption manager = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
             ClientObjectManager objects = manager != null ? manager.ClientObjectManager : null;
             if (objects == null || prefab == null) return;
             if (byGame)
             {
-                if (definition != null && Encyclopedia.i != null && Encyclopedia.i.missiles.Contains(definition)) registeredWith = objects;
+                if (definition != null && GameAccess.EncyclopediaOrNull?.missiles.Contains(definition) == true) registeredWith = objects;
                 return;
             }
             if (objects == registeredWith || manager.Client == null || !manager.Client.Active) return;

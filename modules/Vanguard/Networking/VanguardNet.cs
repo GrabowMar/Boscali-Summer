@@ -107,27 +107,30 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         public void Strike()
         {
             if (!LocalTarget(out Aircraft aircraft, out Unit target)) return;
+            if (!Send(aircraft, true, target)) return;
             designated = target;
             designatedFrom = aircraft;
-            Send(aircraft, true, target);
         }
 
         public void Screen()
         {
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
+            if (!Send(aircraft, false, null)) return;
             designated = null;
             designatedFrom = null;
-            Send(aircraft, false, null);
         }
 
         /// <summary>RAM MODE on or off for the local aircraft's REMORAs: they ram instead of firing.</summary>
         public void SetRamMode(bool on)
         {
             if (!GameManager.GetLocalAircraft(out Aircraft aircraft) || aircraft == null) return;
+            bool server = GameAccess.IsServer();
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (!server && (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)) return;
             ramMode = on;
             ramFrom = aircraft;
-            if (GameAccess.IsServer()) { DroneOrders.SetRamMode(aircraft, on); return; }
-            NetworkManagerNuclearOption.i?.Client?.Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Link = RamLink, X = on ? 1f : 0f });
+            if (server) { DroneOrders.SetRamMode(aircraft, on); return; }
+            client.Send(new VanguardDroneOrder { Protocol = ProtocolVersion, Link = RamLink, X = on ? 1f : 0f });
         }
 
         /// <summary>A drone link order for one of the local aircraft's drones (AUTO releases it); the host applies it to SteerOrders.</summary>
@@ -139,6 +142,8 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
                 if (Linkable(aircraft, drone)) SteerOrders.Set(drone, mode, point);
                 return;
             }
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
             // The host takes one order per aircraft per OrderInterval and drops the rest without a word, while this client's mirror
             // already shows them: queue per drone (the newest wins) and send at the host's pace (Flush).
             pendingLinks[drone] = new VanguardDroneOrder
@@ -157,13 +162,15 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         private void Flush()
         {
             if (pendingLinks.Count == 0 || Time.unscaledTime < nextLinkSend) return;
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
             Missile first = null;
             foreach (Missile m in pendingLinks.Keys) { first = m; break; }
             VanguardDroneOrder order = pendingLinks[first];
             pendingLinks.Remove(first);
             if (first == null || first.disabled) return;
             nextLinkSend = Time.unscaledTime + OrderInterval + 0.05f;
-            NetworkManagerNuclearOption.i?.Client?.Send(order);
+            client.Send(order);
         }
 
         /// <summary>The sender's own live, steerable drone inside link range.</summary>
@@ -181,19 +188,22 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             return target != null && !target.disabled;
         }
 
-        private static void Send(Aircraft aircraft, bool strike, Unit target)
+        private static bool Send(Aircraft aircraft, bool strike, Unit target)
         {
             if (GameAccess.IsServer())
             {
                 DroneOrders.Order(aircraft, strike ? target : null);
-                return;
+                return true;
             }
-            NetworkManagerNuclearOption.i?.Client?.Send(new VanguardDroneOrder
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
+            client.Send(new VanguardDroneOrder
             {
                 Protocol = ProtocolVersion,
                 Strike = strike,
                 TargetId = target != null ? target.persistentID.Id : 0u,
             });
+            return true;
         }
 
         private void Update()
@@ -201,7 +211,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             Flush();
             if (Time.unscaledTime < nextRegistration) return;
             nextRegistration = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             ServerHandlers.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             throttle.Prune(Time.unscaledTime);
         }
@@ -245,7 +255,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (Time.unscaledTime < next) return;
             next = Time.unscaledTime + 0.5f;
-            slot.Swap(NetworkManagerNuclearOption.i?.Client?.MessageHandler);
+            slot.Swap(GameAccess.NetworkManagerOrNull?.Client?.MessageHandler);
         }
 
         /// <summary>Both sides (a service that also takes client intents): same cadence; true on the frames it ran, so the caller can prune its throttle then.</summary>
@@ -253,7 +263,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         {
             if (Time.unscaledTime < next) return false;
             next = Time.unscaledTime + 0.5f;
-            NetworkManagerNuclearOption network = NetworkManagerNuclearOption.i;
+            NetworkManagerNuclearOption network = GameAccess.NetworkManagerOrNull;
             server.Swap(network?.Server != null && network.Server.Active ? network.Server.MessageHandler : null);
             client.Swap(network?.Client?.MessageHandler);
             return true;
@@ -262,7 +272,7 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
         /// <summary>Host to every authenticated client but its own peer (the host shows its own side directly).</summary>
         internal static void Broadcast<T>(T message)
         {
-            NetworkServer server = NetworkManagerNuclearOption.i?.Server;
+            NetworkServer server = GameAccess.NetworkManagerOrNull?.Server;
             if (server != null && server.Active) server.SendToAll(message, authenticatedOnly: true, excludeLocalPlayer: true);
         }
     }

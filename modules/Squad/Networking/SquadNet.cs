@@ -76,8 +76,12 @@ namespace BoscaliSummer.Modules.Squad.Networking
         {
             if (!GameManager.GetLocalPlayer<Player>(out Player player) || player == null || player.HQ == null)
             { manager.ClearLocal("Join a faction to receive squad intelligence."); return; }
-            if (requestedHq != player.HQ) { ResetClient(); requestedHq = player.HQ; manager.ClearLocal("Receiving squad intelligence."); }
             bool server = GameAccess.IsServer();
+            NetworkClient client = server ? null : GameAccess.NetworkManagerOrNull?.Client;
+            if (!server && (client == null || !client.Active || !client.IsConnected ||
+                client.Player == null || !client.Player.IsAuthenticated))
+            { manager.ClearLocal("Squad host link unavailable."); return; }
+            if (requestedHq != player.HQ) { ResetClient(); requestedHq = player.HQ; manager.ClearLocal("Receiving squad intelligence."); }
             // The host reads its own board in-process, so it keeps the fast cadence for free.
             if (pending || Time.unscaledTime - lastQuery < (fast || server ? FastPoll : IdlePoll)) return;
             lastQuery = Time.unscaledTime;
@@ -87,8 +91,6 @@ namespace BoscaliSummer.Modules.Squad.Networking
                 if (local.Revision != manager.AppliedRevision) manager.Apply(local, PlayerIdentity.Of(player));
                 return;
             }
-            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active) { manager.ClearLocal("Squad host link unavailable."); return; }
             pending = true;
             client.Send(new SquadQuery { Protocol = ProtocolVersion, Scene = scene, Token = ++token, Revision = manager.AppliedRevision });
         }

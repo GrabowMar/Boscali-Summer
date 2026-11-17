@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Diagnostics;
+using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using NOAvionics;
 using UnityEngine;
@@ -45,8 +46,8 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         {
             text = MfdNewsFeed.CleanTags(text).Trim();
             if (text.Length == 0) return;
-            MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-            entries.Insert(0, new TacticalLogEntry(mission != null ? AvNum.Clock(mission.MissionTime) : "--:--", category, text, placed, x, z));
+            string stamp = MissionTimeSource.TryNow(out float time) ? AvNum.Clock(time) : "--:--";
+            entries.Insert(0, new TacticalLogEntry(stamp, category, text, placed, x, z));
             if (entries.Count > MaximumEntries) entries.RemoveAt(entries.Count - 1);
             revision++;
         }

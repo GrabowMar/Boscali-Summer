@@ -1,0 +1,36 @@
+{
+  "name": "high-command-convoy-damage",
+  "description": "Native VIP convoy lethal-impact regression. Critical UnitPart.TakeDamage must finish its RpcDamage while the lead remains spawned; the ordinary next HighCommand tick then retires all convoy vehicles without undoing commander disruption. Hosted single-player proof, not multiplayer replication acceptance.",
+  "mission": "Escalation",
+  "mods": ["boscalisummer"],
+  "timeout_s": 300,
+  "environment": {"config": {"com.marci.boscalisummer": {
+    "HighCommand": {"TransfersEnabled": false, "DisruptionSeconds": 120},
+    "Mission": {"AskAtStart": false}
+  }}},
+  "ops": [
+    {"op": "seat", "id": "player", "faction": "Boscali", "altitude": 9000, "speed": 200},
+    {"op": "wait", "seconds": 45},
+    {"op": "call", "method": "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandAutomation.ConvoyDamage", "args": {}, "store": "damage"},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.HighCommand.Runtime.HighCommandAutomation.ConvoyDamage", "args": {"after": true}, "store": "after"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_equals", "path": "damage.ok", "value": true},
+    {"check": "result_equals", "path": "damage.vehicleCount", "value": 3},
+    {"check": "result_equals", "path": "damage.damageReturned", "value": true},
+    {"check": "result_equals", "path": "damage.leadStillServer", "value": true},
+    {"check": "result_equals", "path": "damage.leadDisabled", "value": true},
+    {"check": "result_equals", "path": "damage.commanderDisrupted", "value": true},
+    {"check": "result_equals", "path": "damage.convoyPending", "value": true},
+    {"check": "result_equals", "path": "after.ok", "value": true},
+    {"check": "result_equals", "path": "after.convoyRetired", "value": true},
+    {"check": "result_equals", "path": "after.vehiclesUnspawned", "value": true},
+    {"check": "result_equals", "path": "after.watchRemoved", "value": true},
+    {"check": "result_equals", "path": "after.disruptionPreserved", "value": true},
+    {"check": "log_clean", "sources": ["Boscali Summer"]},
+    {"check": "log_match", "pattern": "Client RPC can only be called when server is active|InvalidOperationException", "max": 0}
+  ]
+}

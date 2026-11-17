@@ -242,7 +242,7 @@ namespace BoscaliSummer.Modules.Support.Networking
             }
 
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active)
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)
             {
                 manager.ReportOffline();
                 return;
@@ -314,7 +314,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 return true;
             }
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active) return false;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
             client.Send(new SpaceCommandMessage { Command = command });
             return true;
         }
@@ -333,7 +333,7 @@ namespace BoscaliSummer.Modules.Support.Networking
                 return true;
             }
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active) return false;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
             client.Send(new CruiseWaypointMessage
             {
                 Protocol = ProtocolVersion, RequestId = requestId, X = leg.x, Z = leg.z, Clear = clear

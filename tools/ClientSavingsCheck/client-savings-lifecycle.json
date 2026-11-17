@@ -1,0 +1,111 @@
+{
+  "name": "client-savings-lifecycle",
+  "description": "Single-player regression for native far-unit sleep ownership: normal wake, stopped particles, setting disable, missing camera, scene reset, and disabled wreck release. The disposable target is explicitly named; no settings are saved.",
+  "mission": "Free Flight",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 240,
+  "ops": [
+    {
+      "op": "seat",
+      "id": "player",
+      "faction": "Boscali",
+      "altitude": 2500,
+      "speed": 180
+    },
+    {
+      "op": "spawn",
+      "id": "savings-proof",
+      "type": "Linebreaker SAM",
+      "faction": "Boscali",
+      "at": {
+        "map": [
+          27200,
+          -18000
+        ]
+      },
+      "hold": true
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Performance.Runtime.ClientSavings.LifecycleProof",
+      "args": {
+        "name": "Sim_savings-proof"
+      },
+      "store": "proof"
+    },
+    {
+      "op": "wait",
+      "seconds": 1
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.targetName",
+      "value": "Sim_savings-proof"
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.slept",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.normalWake",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.stoppedParticleStayedStopped",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.settingDisableWoke",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.missingCameraWoke",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.sceneResetWoke",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.disabledRemovedFromRoster",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.disabledWoke",
+      "value": true
+    },
+    {
+      "check": "result_equals",
+      "path": "proof.disabledStayedAwake",
+      "value": true
+    },
+    {
+      "check": "log_clean",
+      "sources": [
+        "Boscali Summer"
+      ]
+    }
+  ]
+}

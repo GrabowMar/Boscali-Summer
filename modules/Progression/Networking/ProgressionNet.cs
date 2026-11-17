@@ -190,7 +190,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
                 return;
             }
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client != null && client.Active)
+            if (client != null && client.Active && client.IsConnected && client.Player != null && client.Player.IsAuthenticated)
                 client.Send(new PlaneTuneRequest { Protocol = ProtocolVersion,
                     AircraftId = aircraft.persistentID.Id, Mode = (byte)mode });
         }
@@ -335,7 +335,7 @@ namespace BoscaliSummer.Modules.Progression.Networking
                 return;
             }
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active)
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated)
             {
                 manager.ReportOffline();
                 return;

@@ -111,7 +111,8 @@ namespace BoscaliSummer.Modules.TheaterOps.Networking
                 now - lastClientQuery >= ClientQueryInterval)
             {
                 NetworkClient transport = GameAccess.NetworkManagerOrNull?.Client;
-                if (transport != null && transport.Active)
+                if (transport != null && transport.Active && transport.IsConnected &&
+                    transport.Player != null && transport.Player.IsAuthenticated)
                 {
                     queried = true;
                     lastClientQuery = now;

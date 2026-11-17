@@ -169,8 +169,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override void Paint(ScopeCanvas g, in PagePaint p)
         {
-            if (!ScopeFeeds.TryRead(out d)) return;      // fresh positions every frame: the page is Fast
-            live = true;
+            live = ScopeFeeds.TryRead(out d);      // a shot can expire between the slower Poll and this frame's paint
+            if (!live) { lead = -1; return; }
             now = p.Now;
             units = p.Units;
             lead = ShotMath.Lead(d.Missiles, d.MissileCount);

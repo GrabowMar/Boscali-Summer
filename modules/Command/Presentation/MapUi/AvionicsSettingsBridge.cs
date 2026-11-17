@@ -84,8 +84,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             switch (line)
             {
                 case 0:
-                    MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
-                    return mission != null ? "T+" + AvNum.Clock(mission.MissionTime) : "";
+                    return MissionTimeSource.TryNow(out float time) ? "T+" + AvNum.Clock(time) : "";
                 case 1:
                     LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
                     if (level == null) return "";

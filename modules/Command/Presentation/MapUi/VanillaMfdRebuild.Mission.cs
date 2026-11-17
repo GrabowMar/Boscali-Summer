@@ -2,6 +2,7 @@ using NOAvionics;
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Services;
 using NuclearOption.SavedMission;
 using UnityEngine;
@@ -604,7 +605,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             }
 
             private static string MissionClock(MissionManager manager) =>
-                manager == null ? "—" : AvNum.Clock(Mathf.Max(0, Mathf.FloorToInt(manager.MissionTime)));
+                manager == null || !MissionTimeSource.TryNow(out float time) ? "—" : AvNum.Clock(Mathf.Max(0, Mathf.FloorToInt(time)));
 
             /// <summary>Objective-type icon: chrome (a real AvIcon), driven by the vanilla ObjectiveType.</summary>
             private static AvIcon ObjectiveIcon(string typeName)

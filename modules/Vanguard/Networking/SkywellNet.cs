@@ -150,11 +150,15 @@ namespace BoscaliSummer.Modules.Vanguard.Networking
             else Send(OrderAction, 0u, order, (byte)(station + 1));
         }
 
-        private static void Send(byte action, uint tanker = 0u, byte value = 0, byte station = 0) =>
-            NetworkManagerNuclearOption.i?.Client?.Send(new SkywellIntent
+        private static void Send(byte action, uint tanker = 0u, byte value = 0, byte station = 0)
+        {
+            NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return;
+            client.Send(new SkywellIntent
             {
                 Protocol = ProtocolVersion, Action = action, Tanker = tanker, Value = value, Station = station,
             });
+        }
 
         private void Update()
         {

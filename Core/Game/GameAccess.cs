@@ -326,17 +326,12 @@ namespace BoscaliSummer.Core.Game
         /// <summary>The unit's infrared sources as the game's seekers see them, or null.</summary>
         public static List<IRSource> GetIrSources(Unit unit) => irSourcesRef == null || unit == null ? null : irSourcesRef(unit);
 
-        private static int serverFrame = -1;
-        private static bool serverActive;
-
         public static bool IsServer()
         {
-            int frame = Time.frameCount;
-            if (serverFrame == frame) return serverActive;
-            serverFrame = frame;
-            try { serverActive = NetworkManagerOrNull?.Server?.Active == true; }
-            catch { serverActive = false; }
-            return serverActive;
+            // Hosting and disconnecting can change authority within one frame.
+            // The preloaded singleton is cheap to read; never retain the previous role.
+            try { return NetworkManagerOrNull?.Server?.Active == true; }
+            catch { return false; }
         }
 
         // The native singleton getter logs an error until MainMenu finishes its async preload.

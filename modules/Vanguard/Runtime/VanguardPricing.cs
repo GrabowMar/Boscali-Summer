@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using UnityEngine;
@@ -32,9 +33,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         // Also re-applies once the runtime stores have joined the mount list, so they get their icons.
         private bool Drifted()
         {
-            if (Encyclopedia.i == null) return false;
-            if (Encyclopedia.i.weaponMounts.Count != labelledMounts) return true;
-            foreach (MissileDefinition def in Encyclopedia.i.missiles)
+            Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
+            if (encyclopedia == null) return false;
+            if (encyclopedia.weaponMounts.Count != labelledMounts) return true;
+            foreach (MissileDefinition def in encyclopedia.missiles)
                 if (def != null && def.jsonKey == VanguardKeys.MaldX)
                     return def.value != VanguardPrices.Munition(VanguardKeys.MaldX) || def.unitName != VanguardLabels.MaldXName;
             return false;
@@ -42,10 +44,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void Apply()
         {
-            if (Encyclopedia.i == null) return;
-            VanguardLabels.Apply(Encyclopedia.i);
-            labelledMounts = Encyclopedia.i.weaponMounts.Count;
-            foreach (MissileDefinition def in Encyclopedia.i.missiles)
+            Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
+            if (encyclopedia == null) return;
+            VanguardLabels.Apply(encyclopedia);
+            labelledMounts = encyclopedia.weaponMounts.Count;
+            foreach (MissileDefinition def in encyclopedia.missiles)
             {
                 float price = def != null ? VanguardPrices.Munition(def.jsonKey) : 0f;
                 if (price <= 0f) continue;

@@ -41,6 +41,8 @@ namespace BoscaliSummer.Modules.Support.Visuals
         private readonly Dictionary<Unit, Dressed> dressed = new Dictionary<Unit, Dressed>();
         private readonly List<Unit> scratch = new List<Unit>();
         private float nextScan;
+        private int prewarmKind;
+        private static int prewarmedModels, missionBuiltModels;
 
         // Loaded once per process: one mesh per compound, one material per palette name.
         private static readonly Dictionary<string, KeyValuePair<Mesh, Material[]>> models = new Dictionary<string, KeyValuePair<Mesh, Material[]>>();
@@ -57,7 +59,9 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void Update()
         {
-            if (Application.isBatchMode || Time.unscaledTime < nextScan) return;
+            if (Application.isBatchMode) return;
+            PrewarmModels();
+            if (Time.unscaledTime < nextScan) return;
             nextScan = Time.unscaledTime + ScanInterval;
 
             scratch.Clear();
@@ -76,6 +80,20 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 for (int k = 0; k < Kinds.Length; k++)
                     if (name.StartsWith(Kinds[k][0], StringComparison.Ordinal)) { Dress(unit, Kinds[k][1]); break; }
             }
+        }
+
+        // PNG decode/upload and tangent generation still need the main thread. Pay that cost before the mission,
+        // one model per frame, rather than on the first new kind of compound built during flight.
+        private void PrewarmModels()
+        {
+            if (MissionManager.IsRunning || GameManager.IsHeadless || prewarmKind >= Kinds.Length) return;
+            string kind = Kinds[prewarmKind][1];
+            if (models.ContainsKey(kind)) { prewarmKind++; return; }
+            if (!Unpacking(kind).IsCompleted) return;
+            Shader shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null || !shader.isSupported) return;
+            if (TryModel(kind, out _, out _, out _)) prewarmedModels++;
+            prewarmKind++;
         }
 
         private void Dress(Unit unit, string kind)
@@ -170,7 +188,10 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 camera.SetDesiredFoV(50f, 50f);
                 SceneSingleton<DynamicMap>.i?.Minimize();
             }
-            return new Dictionary<string, object> { ["ok"] = true, ["count"] = rows.Count, ["dressed"] = rows, ["controlIcons"] = controlIcons, ["controlShown"] = controlShown };
+            return new Dictionary<string, object> { ["ok"] = true, ["count"] = rows.Count, ["dressed"] = rows,
+                ["controlIcons"] = controlIcons, ["controlShown"] = controlShown,
+                ["cachedModels"] = models.Count, ["prewarmedModels"] = prewarmedModels,
+                ["missionBuiltModels"] = missionBuiltModels };
         }
 
         /// <summary>A compound blob unpacked off the main thread: plain arrays, no Unity objects.</summary>
@@ -211,7 +232,11 @@ namespace BoscaliSummer.Modules.Support.Visuals
             try
             {
                 Unpacked data = task.Result; // a faulted task rethrows here
-                if (data != null) Build(data, kind, out mesh, out materials);
+                if (data != null)
+                {
+                    Build(data, kind, out mesh, out materials);
+                    if (MissionManager.IsRunning) missionBuiltModels++;
+                }
             }
             catch (Exception e)
             {

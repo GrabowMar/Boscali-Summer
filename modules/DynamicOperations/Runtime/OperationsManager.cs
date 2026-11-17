@@ -167,16 +167,19 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             }
             var current = MissionManager.CurrentMission;
             MissionManager mission = NetworkSceneSingleton<MissionManager>.i;
+            if (current == null || mission == null || !MissionManager.IsRunning)
+            {
+                if (boards.Count > 0) ResetForScene();
+                SetLocalStatus("Waiting for a running mission.");
+                return;
+            }
+            // A multiplayer scene singleton can exist before its network clock is bound.
+            // Hold the existing board and baseline until the shared mission clock is valid.
+            if (!MissionTimeSource.TryNow(out float now)) return;
             if (!ReferenceEquals(missionIdentity, current))
             {
                 ResetForScene(); missionIdentity = current;
-                previousTime = mission == null ? 0f : mission.MissionTime;
-            }
-            if (current == null || mission == null || !MissionManager.IsRunning)
-            {
-                if (boards.Count > 0) { ResetForScene(); missionIdentity = current; }
-                SetLocalStatus("Waiting for a running mission.");
-                return;
+                previousTime = now;
             }
             if (!GameAccess.IsServer())
             {
@@ -185,8 +188,6 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                     SetLocalStatus("Waiting for the host's faction objectives.");
                 return;
             }
-            float now = mission.MissionTime;
-            if (!float.IsFinite(now)) return;
             if (now < previousTime) { ResetForScene(); missionIdentity = current; }
             // The boards the last tick left for the frames after it: one faction a frame (a board's tick can run a generation pass over every unit).
             if (tickCursor < tickFactions.Count) StepBoard();

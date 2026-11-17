@@ -138,7 +138,7 @@ namespace BoscaliSummer.Modules.Nation.Networking
         internal bool SendIntent(NationVerb verb, int a, int b)
         {
             NetworkClient client = GameAccess.NetworkManagerOrNull?.Client;
-            if (client == null || !client.Active) return false;
+            if (client == null || !client.Active || !client.IsConnected || client.Player == null || !client.Player.IsAuthenticated) return false;
             client.Send(new NationIntent { Protocol = ProtocolVersion, Verb = (byte)verb, A = a, B = b });
             return true;
         }
