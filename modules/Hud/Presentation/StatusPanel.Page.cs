@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 {
     // The wing side's panels (LAYOUT.md 3.5; RWR, FIRES, WING since 2026-11-16): each a scope (page body, header shelf and strip, corner brackets and the wipe edge) in its slot's rectangle of ScopeLayout. A slot's
     // height animates on its own (one ScopeTransition each); the rectangles never depend on the gauge line or the ticker that hang under them. There is no glass, no header band and no closed frame: the body is drawn through the
-    // page conversions (ScopeCanvas.Open), the header is a caption shelf, four DIM brackets are the only frame.
+    // page conversions (ScopeCanvas.Open), the header is a caption shelf: the shelf and its rule are the only frame.
     internal sealed partial class StatusPanel
     {
         private readonly ScopeTransition[] transitions = { new ScopeTransition(), new ScopeTransition(), new ScopeTransition() };
@@ -87,71 +87,91 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.End();
             surface.OverlayVector.Commit();
 
-            // The four corner brackets round the body, and the wipe's edge: the new page is revealed left to right behind it.
+            // The wipe's edge: the new page is revealed left to right behind it.
             g = surface.FrameCanvas;
             g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
-            if (hS >= 40f) g.Brackets(-3f, 14f, w + 6f, hS - 11f, 10f, Dim);
             if (wipe.Wipe < 1f) g.Fill(wipeW - PageGrow - 1f, -PageGrow, 1f, hS + PageGrow * 2f, Hi, 0.9f);
             g.End();
             surface.FrameVector.Commit();
         }
 
-        /// <summary>The page's header (LAYOUT.md 3.5): the shelf with the page's title and its headline, which is INK 12 unless it is a caution or a warning (bold 14 in that tone, pulsing while it flashes).</summary>
+        /// <summary>The page's header (LAYOUT.md 3.5): the shelf with the page's title and its headline (<see cref="HeaderShelf"/>); a panel with nothing to draw says <paramref name="idle"/> there (RWR ... CLEAR).</summary>
         private void PaintHeader(ScopeCanvas g, ScopePageBase p, string title, string idle, float w, bool flashOn)
         {
             ScopeHeadline hl = HeadlineOf(p);
-            if (string.IsNullOrEmpty(hl.Text)) hl.Text = idle;      // a panel with nothing to draw says so in its header (RWR ... CLEAR)
-            bool hot = hl.Tone == Amber || hl.Tone == Red;
-            if (hot && hl.Flash) scopeBeat = true;
-            g.PageShelf(0f, 0f, w, title, hl.Text, hot ? hl.Tone : Ink, hot ? 14f : 12f, hot, hot && hl.Flash && flashOn ? 0.45f : 1f);
-            // The panel's name remains data even when declutter removes the decorative shelf.
-            if (!g.Furniture) g.Text(title, 12f, 6f, Hi, 12f, ScopeAlign.Left, true);
+            if (string.IsNullOrEmpty(hl.Text)) hl.Text = idle;
+            if (HeaderShelf(g, w, title, hl.Text, hl.Tone, hl.Flash, flashOn)) scopeBeat = true;
         }
 
         /// <summary>
-        /// SYSTEMS (<see cref="BoardGeometry.Status"/>): the SYSTEMS page's compact strip, shelf and brackets, always on the board under the lamp line, whatever panels are up. One surface; no wipe
-        /// of its own. Repainted with the shell, and every frame while SYSTEMS has something pulsing (<see cref="ScopePageBase.Fast"/>).
+        /// One header shelf for a spine panel and a ROUTE card (refit C1): the <paramref name="title"/> (12 bold DIM) and the status right-aligned to <paramref name="w"/> after a pip. The ladder: a warning (RED) is VALUE 16 bold,
+        /// a caution (AMBER) LABEL 12 bold, anything else LABEL DIM with a DIM pip; a flashing hot status dips to 0.55 on the off beat (<paramref name="flashOn"/> false). Lean draws the title DIM at x 0 and no rule.
+        /// True while the status flashes (the caller repaints on the beat).
+        /// </summary>
+        private static bool HeaderShelf(ScopeCanvas g, float w, string title, ReadOnlySpan<char> text, ScopeTone tone, bool flash, bool flashOn)
+        {
+            bool red = tone == Red, hot = red || tone == Amber;
+            float a = hot && flash && !flashOn ? 0.55f : 1f, size = red ? HudType.Value : HudType.Label;
+            g.PageShelf(0f, 0f, w, title, text, hot ? tone : Dim, size, hot, a);
+            if (g.Furniture && !text.IsEmpty) g.Marker(w - ScopeCanvas.TextW(text, size) - (hot ? 12f : 10f), 6f, hot ? 5f : 4f, hot ? tone : Dim, true, a);
+            if (!g.Furniture) g.Text(title, 0f, 6f, Dim, HudType.Label, ScopeAlign.Left, true);
+            return hot && flash;
+        }
+
+        /// <summary>
+        /// INFO (<see cref="BoardGeometry.Info"/>): the SYSTEMS page's bar cell, on a surface of its own over the whole box from its top to the last bar line's bottom (box units, grown by
+        /// <see cref="PageGrow"/>). No wipe of its own. Repainted with the shell.
         /// </summary>
         private void PaintStatus(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
         {
-            BoardRect r = geo.Status;
-            ScopePageBase sys = pages[(int)ScopePage.Systems];
-            float w = r.W, hS = r.H, body = ScopeLayout.Body(true, false);
+            var sys = (SystemsPage)pages[(int)ScopePage.Systems];
+            float barsBottom = Math.Max(geo.Bar0.Present ? geo.Bar0.Bottom : 0f, geo.Bar1.Present ? geo.Bar1.Bottom : 0f);
             Show(statusRect, true);
-            PlaceOnGrid(statusRect, (r.X - PageGrow) * unit, (r.Y - PageGrow) * unit, Whole((w + PageGrow * 2f) * unit), Whole((hS + PageGrow * 2f) * unit));
+            float hp = Whole((barsBottom + PageGrow * 2f) * unit);
+            PlaceOnGrid(statusRect, -PageGrow * unit, -PageGrow * unit, Whole((geo.Width + PageGrow * 2f) * unit), hp);
             ScopeCanvas g = statusCanvas;
             g.Furniture = allow.Furniture;
             g.Open = true;
-            g.Begin(pal, unit, Whole((hS + PageGrow * 2f) * unit), pixel, HudType.BoardBoost);
+            g.Begin(pal, unit, hp, pixel, HudType.BoardBoost);
             g.Origin(PageGrow, PageGrow);
-            g.Raise(ScopeLayout.Lift(true));
-            try { sys.Paint(g, new PagePaint(w, body, true, ScopeLayout.SafeTop(true), now, units)); }
-            catch (Exception e) { ReportOnce(sys, e); }
             g.Raise(0f);
-            PaintHeader(g, sys, sys.Title, null, w, flashOn);
-            if (hasMission) PaintMissionStatus(g, w);
-            g.Brackets(-3f, 14f, w + 6f, hS - 11f, 10f, Dim);
+            try { sys.PaintInfo(g, geo.Info, now, units); }
+            catch (Exception e) { ReportOnce(sys, e); }
             g.End();
             statusVector.Commit();
         }
 
-        private void PaintMissionStatus(ScopeCanvas g, float width)
+        /// <summary>
+        /// The mission rows at the top of the spine (<see cref="BoardGeometry.Mission"/>, 50 high): the MSN shelf with the timer at its right, then the mission's name and phase (no phase while it reads IN PROGRESS), then the
+        /// score or the detail. Lean drops the caption and the rule; every row keeps its y.
+        /// </summary>
+        private void PaintMissionStatus(ScopeCanvas g, in BoardRect r)
         {
             MissionDashboardStatus m = missionStatus;
-            ScopeTone tone = m.Ready ? Ink : Amber;
-            float top = ScopeLayout.Compact + 7f;
-            g.Text(m.Name, 4f, top, tone, HudType.Label, bold: true);
-            g.FitText(m.Phase, width - 4f, top, width - 150f, tone, HudType.Label, HudType.Label, ScopeAlign.Right);
-            float room = width - 8f;
+            float x = r.X, w = r.W, right = x + w, cy = r.Y + 6f, ya = r.Y + 23f, yb = r.Y + 41f;
+            g.CaptionShelf(x, r.Y, w, "MSN");
             if (m.HasTimer)
             {
                 int seconds = Mathf.Max(0, Mathf.CeilToInt(m.RemainingSeconds));
-                g.Text(ScopeStr.Cat(seconds < 600 ? "0" : "", seconds / 60, seconds % 60 < 10 ? ":0" : ":", seconds % 60, null),
-                    width - 4f, top + 16f, tone, HudType.Label, ScopeAlign.Right, true);
-                room -= 82f;
+                float tw = g.Text(ScopeStr.Cat(seconds < 600 ? "0" : "", seconds / 60, seconds % 60 < 10 ? ":0" : ":", seconds % 60, null), right, cy, m.Ready ? Hi : Amber, HudType.Label, ScopeAlign.Right, true);
+                g.Text("LEFT", right - tw - 4f, cy, Dim, HudType.Label, ScopeAlign.Right);
             }
-            if (m.HasScores) g.FitText(ScopeStr.Cat("BDF ", m.Score0, " : ", m.Score1, " PALA"), 4f, top + 16f, room, tone, HudType.Label, HudType.Label);
-            else g.FitText(m.Detail, 4f, top + 16f, room, tone, HudType.Label, HudType.Label);
+
+            // Row A: the name, and the phase in its tone at the right.
+            float pw = 0f;
+            if (m.Phase != "IN PROGRESS" && !string.IsNullOrEmpty(m.Phase)) pw = g.FitText(m.Phase, right, ya, w * 0.5f, m.Ready ? Ink : Amber, HudType.Label, HudType.Label, ScopeAlign.Right, true);
+            g.FitText(m.Name, x, ya, w - pw - (pw > 0f ? 12f : 0f), Ink, HudType.Body, HudType.Label);
+
+            // Row B: the score, or the detail.
+            if (m.HasScores)
+            {
+                float bx = x + g.Text("BDF", x, yb, Dim, HudType.Label) + 4f;
+                bx += g.Text(ScopeStr.Int(m.Score0), bx, yb, Ink, HudType.Label, ScopeAlign.Left, true) + 4f;
+                bx += g.Text(":", bx, yb, Dim, HudType.Label) + 4f;
+                bx += g.Text(ScopeStr.Int(m.Score1), bx, yb, Ink, HudType.Label, ScopeAlign.Left, true) + 4f;
+                g.Text("PALA", bx, yb, Dim, HudType.Label);
+            }
+            else g.FitText(m.Detail, x, yb, w, Ink, HudType.Label, HudType.Label);
         }
     }
 }

@@ -93,34 +93,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new ScopeRect(Mathf.Round(align == ScopeAlign.Right ? x - w : align == ScopeAlign.Center ? x - w / 2f : x), Mathf.Round(y - h / 2f), w, h);
         }
 
-        /// <summary>A result stamp (HIT / MISS / DEFEATED), centred on (x, y): the bold word inside four corner brackets (LAYOUT.md 9 rule 4). Never turned: <paramref name="angle"/> is no longer used.</summary>
+        /// <summary>A result stamp (HIT / MISS / DEFEATED), centred on (x, y): the bold word alone (no corner brackets: user 2026-11-17). Never turned: <paramref name="angle"/> is no longer used.</summary>
         public void Stamp(ReadOnlySpan<char> s, float x, float y, ScopeTone tone = Ink, float size = 14f, float angle = 0f, float alpha = 1f)
         {
             float w = Mathf.Round(TextW(s, size) + 14f), h = size + 8f;
-            Brackets(x - w / 2f, y - h / 2f, w, h, 5f, tone, alpha);
             Text(s, x, y + 1f, tone, size, ScopeAlign.Center, true, alpha);
         }
 
-        /// <summary>An outlined fill bar: <paramref name="frac"/> of its inside filled (or lit in <paramref name="segs"/> segments). Add marks with <see cref="BarTick"/>.</summary>
+        /// <summary>The one bar token: no outline, a FAINT track with <paramref name="frac"/> filled in <paramref name="tone"/> (or lit in <paramref name="segs"/> segments). On a row middle m it sits at y = round(m) - 1, h 3. Add marks with <see cref="BarTick"/>.</summary>
         public void Bar(float x, float y, float w, float h, float frac, ScopeTone tone = Ink, int segs = 0)
         {
             frac = Scalar.Clamp01(frac);
-            float iw = w - 4f, ih = h - 4f;
-            Box(x, y, w, h, Dim, 0.85f);
             if (segs > 0)
             {
-                float sw = (iw - (segs - 1)) / segs;
-                int lit = (int)Mathf.Round(frac * segs);
-                for (int i = 0; i < segs; i++)
-                    Fill(Mathf.Round(x + 2f + i * (sw + 1f)), y + 2f, Math.Max(1f, Mathf.Round(sw)), ih, i < lit ? tone : Faint, i < lit ? 1f : 0.7f);
+                float sw = (w - (segs - 1)) / segs; int lit = (int)Mathf.Round(frac * segs);
+                for (int i = 0; i < segs; i++) Fill(Mathf.Round(x + i * (sw + 1f)), y, Math.Max(1f, Mathf.Round(sw)), h, i < lit ? tone : Faint);
+                return;
             }
-            else Fill(x + 2f, y + 2f, Mathf.Round(iw * frac), ih, tone);
+            float fw = Mathf.Round(w * frac);
+            if (fw < w) Fill(x + fw, y, w - fw, h, Faint);
+            if (fw > 0f) Fill(x, y, fw, h, tone);
         }
 
         /// <summary>A threshold tick across a <see cref="Bar"/> at 0..1 <paramref name="at"/>, optionally labelled above or below.</summary>
         public void BarTick(float x, float y, float w, float h, float at, ScopeTone tone = Amber, ReadOnlySpan<char> label = default, bool up = false, ScopeAlign align = ScopeAlign.Center)
         {
-            float tx = Mathf.Round(x + 2f + (w - 4f) * Scalar.Clamp01(at));
+            float tx = Mathf.Round(x + w * Scalar.Clamp01(at));
             Line(tx, y - 3f, tx, y + h + 3f, tone);
             if (!label.IsEmpty) Text(label, tx, up ? y - 11f : y + h + 11f, tone, 12f, align);
         }

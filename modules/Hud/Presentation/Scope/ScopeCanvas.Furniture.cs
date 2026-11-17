@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     internal sealed partial class ScopeCanvas
     {
         /// <summary>
-        /// A block's caption shelf (LAYOUT.md 3.1): a DIM hairline 6 under the block's top (<paramref name="y"/>), from <paramref name="x"/> across <paramref name="w"/>, interrupted 4 units clear on both sides by the
-        /// <paramref name="caption"/> (12 regular, at x + 12) and by the <paramref name="flag"/> when there is one (right-aligned to x + w - 12); it ends in a 4 x 4 node centred on (x + w, y + 6) and a 45 degree stub up and to the right.
+        /// A block's caption shelf (LAYOUT.md 3.1): a DIM hairline 6 under the block's top (<paramref name="y"/>), from <paramref name="x"/> across <paramref name="w"/>, under the
+        /// <paramref name="caption"/> (12 bold DIM at x) and the <paramref name="flag"/> (right-aligned to x + w). One hairline, no ornaments: the MFD section head.
         /// Draws nothing when <see cref="Furniture"/> is off (the Lean and Minimal levels). The words are constants (strings: nothing is built per paint).
         /// </summary>
         public void CaptionShelf(float x, float y, float w, string caption, string flag = null) => Shelf(x, y, w, caption, flag, Dim, 1f);
@@ -19,67 +19,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>A <see cref="CaptionShelf"/> with no flag in <paramref name="tone"/> at <paramref name="alpha"/> (a cue of the CUE stack, a tone brighter at its first instant and fading at its end).</summary>
         public void FadingShelf(float x, float y, float w, string caption, ScopeTone tone, float alpha) => Shelf(x, y, w, caption, null, tone, alpha);
 
+        /// <summary>Where every section head's hairline runs, under its words (they are centred 6 under the block's top): the stores captions' rule.</summary>
+        public const float RuleDy = 14f;
+
         private void Shelf(float x, float y, float w, string caption, string flag, ScopeTone tone, float alpha)
         {
             if (!Furniture) return;
-            const float Inset = 12f, Clear = 4f;
-            bool hasFlag = !string.IsNullOrEmpty(flag);
-            float cy = y + 6f, end = x + w, captionRight = x + Inset + TextW(caption), flagLeft = hasFlag ? end - Inset - TextW(flag) : end + Clear;
-            Line(x, cy, x + Inset - Clear, cy, tone, alpha);
-            ShelfWord(caption, x + Inset, cy, ScopeAlign.Left, tone, alpha);
-            if (captionRight + Clear < flagLeft - Clear) Line(captionRight + Clear, cy, flagLeft - Clear, cy, tone, alpha);
-            if (hasFlag)
-            {
-                ShelfWord(flag, end - Inset, cy, ScopeAlign.Right, tone, alpha);
-                Line(end - Inset + Clear, cy, end, cy, tone, alpha);
-            }
-            Terminal(end, cy, tone, alpha);
+            float cy = y + 6f;
+            ShelfWord(caption, x, cy, ScopeAlign.Left, tone, alpha, true);      // one caption family with PageShelf's title and the stores captions: 12 bold DIM
+            if (!string.IsNullOrEmpty(flag)) ShelfWord(flag, x + w, cy, ScopeAlign.Right, tone, alpha, false);
+            Line(x, y + RuleDy, x + w, y + RuleDy, tone, alpha);
         }
 
-        /// <summary>A shelf's caption. A DIM word keeps its alpha at its readable floor (<see cref="Text"/>), which a fade must go under: it fades as INK at DIM's own alpha, as DL EVT LOG's rows do.</summary>
-        private void ShelfWord(string s, float x, float cy, ScopeAlign align, ScopeTone tone, float alpha)
+        /// <summary>A shelf's caption. DIM is an opaque tone, so a fade is just its alpha.</summary>
+        private void ShelfWord(string s, float x, float cy, ScopeAlign align, ScopeTone tone, float alpha, bool bold)
         {
-            if (tone == Dim && alpha < 1f) Text(s, x, cy, Ink, 12f, align, false, alpha * ScopePalette.DimAlpha);
-            else Text(s, x, cy, tone, 12f, align, false, alpha);
-        }
-
-        /// <summary>The end of a shelf: a 4 x 4 DIM node centred on (<paramref name="x"/>, <paramref name="cy"/>) and a 6 unit 45 degree stub up and to the right, whose tip lands 8 units on.</summary>
-        private void Terminal(float x, float cy, ScopeTone tone = Dim, float alpha = 1f)
-        {
-            Fill(x - 2f, cy - 2f, 4f, 4f, tone, alpha);
-            Line(x + 2f, cy - 2f, x + 8f, cy - 8f, tone, alpha);
+            Text(s, x, cy, tone, 12f, align, bold, alpha);
         }
 
         /// <summary>
-        /// The page's header (LAYOUT.md 3.5): a caption shelf like <see cref="CaptionShelf"/>, 8 shorter than the page (node and stub, the tip on its edge). A 4 x 4 BRIGHT square on the start of the hairline, the
-        /// <paramref name="title"/> as its caption (12 bold BRIGHT at x + 12) and the <paramref name="headline"/> its right-hand caption (right-aligned to x + w - 20, in <paramref name="tone"/>, <paramref name="size"/> and
-        /// <paramref name="bold"/>). Without <see cref="Furniture"/> (Lean, Minimal) there is no shelf and no title: the headline alone, right-aligned to x + w - 4.
+        /// The page's header (LAYOUT.md 3.5): the <paramref name="title"/> (12 bold DIM at x) and the <paramref name="headline"/> right-aligned to x + w (in <paramref name="tone"/>, <paramref name="size"/>,
+        /// <paramref name="bold"/>) over one DIM hairline, as <see cref="CaptionShelf"/>. Without <see cref="Furniture"/> (Lean, Minimal) the headline alone, right-aligned to x + w; the caller draws a Lean title.
         /// </summary>
         public void PageShelf(float x, float y, float w, ReadOnlySpan<char> title, ReadOnlySpan<char> headline, ScopeTone tone, float size, bool bold, float alpha)
         {
             float cy = y + 6f;
             if (!Furniture)
             {
-                if (!headline.IsEmpty) Text(headline, x + w - 4f, cy, tone, size, ScopeAlign.Right, bold, alpha);
+                if (!headline.IsEmpty) Text(headline, x + w, cy, tone, size, ScopeAlign.Right, bold, alpha);
                 return;
             }
-            float end = x + w - 8f, cur = x, titleW = (float)Math.Ceiling(TextW(title)), headW = (float)Math.Ceiling(TextW(headline, size));
-            if (!title.IsEmpty)
-            {
-                Line(cur, cy, x + 8f, cy, Dim);
-                Text(title, x + 12f, cy, Hi, 12f, ScopeAlign.Left, true);
-                cur = x + 12f + titleW + 4f;
-            }
-            if (!headline.IsEmpty)
-            {
-                float gap = end - 12f - headW - 4f;
-                if (gap > cur) Line(cur, cy, gap, cy, Dim);
-                Text(headline, end - 12f, cy, tone, size, ScopeAlign.Right, bold, alpha);
-                cur = end - 8f;
-            }
-            if (end > cur) Line(cur, cy, end, cy, Dim);
-            Marker(x, cy, 4f, Hi, true);
-            Terminal(end, cy);
+            if (!title.IsEmpty) Text(title, x, cy, Dim, 12f, ScopeAlign.Left, true);
+            if (!headline.IsEmpty) Text(headline, x + w, cy, tone, size, ScopeAlign.Right, bold, alpha);
+            Line(x, y + RuleDy, x + w, y + RuleDy, Dim);
         }
 
         /// <summary>

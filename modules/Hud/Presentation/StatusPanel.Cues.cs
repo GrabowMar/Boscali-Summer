@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int signature = CueLog.Signature(clock, level, charge, cueShown, shown) * 31 + (int)(Mathf.Clamp01(Options.Shade) * 100f);
             Vector2 canvasSize = canvasRect.rect.size;
             signature = signature * 31 + Mathf.RoundToInt(LeftHudStack.CueTop);
-            noticeOn = noticeHas && Options.ShowTicker;
+            noticeOn = noticeHas && Options.ShowTicker && !(rwrOpen && (noticeLine.Channel == "rwr" || noticeLine.Channel == "missile"));      // ponytail: the RWR scope in a slot says it itself; a quieter notice behind a folded one waits (add a Peek filter if seen)
             signature = signature * 31 + NoticeSignature();
             signature = signature * 31 + (routeLive ? 1 : 0);      // the NOTICE line yields to a ROUTE face (decided at this present, before this paint)
             if (charge != cueCharge || signature != cueSig || canvasSize != seenCueCanvas || (tick && (shown > 0 || noticeOn)))
@@ -222,32 +222,33 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// The notice as one caption-shelf line at (<paramref name="x"/>, <paramref name="y"/>), <paramref name="w"/> wide: the shelf with NOTICE, then a tone tick, the words in bold in the same tone and the repeat count in bold at the
-        /// right end (the board's old ticker row, moved). A sticky warning pulses. Lean and Minimal have no shelf: the tick and the words start at the left edge.
+        /// The notice as one caption-shelf line at (<paramref name="x"/>, <paramref name="y"/>), <paramref name="w"/> wide: the caption NOTICE (Dim, bold, no hairline: it is one line), then a tone tick, the words in the same tone (bold from a caution up) and the repeat count in bold after them. A sticky
+        /// warning pulses. Lean and Minimal have no caption: the tick sits at x + 3 and the words at x + 12.
         /// </summary>
         private void PaintNotice(ScopeCanvas g, float x, float y, float w, bool furniture)
         {
             TickerLine line = noticeLine;
             ScopeTone tone = SystemsMath.ToneOf(line.Tone);      // info is already full INK
             bool dip = line.Tone == HudTone.Warning && !NoticeFlashOn();
-            float cy = y + 6f, shelfW = furniture ? Mathf.Ceil(CueLayout.TextInset + ScopeCanvas.TextW("NOTICE") + 20f) : 0f;
-            if (furniture) g.CaptionShelf(x, y, shelfW, "NOTICE");
-            float tx = furniture ? x + shelfW + 12f : x, room = x + w - tx - 10f;
-            g.ToneTick(tx, y, tone, dip ? 0.55f : 1f);
+            float cy = y + 6f, capW = furniture ? Mathf.Ceil(ScopeCanvas.TextW("NOTICE", HudType.Label)) : 0f;
+            bool bold = line.Tone != HudTone.Info;      // the words are bold from a caution up
+            if (furniture) g.Text("NOTICE", x, cy, Dim, HudType.Label, ScopeAlign.Left, true);      // one line, so no hairline: the caption is the shelf
+            float tx = furniture ? x + capW + 21f : x + 12f, room = x + w - tx - 4f;
+            g.ToneTick(tx - 9f, cy - 6f, tone, dip ? 0.8f : 1f);      // the column's tick, 3 x 12, 9 before the words
             if (tickerCount != null)
             {
                 // The count stands one gap after the words, not at the zone's edge (a short line would leave it adrift).
                 string words = TickerWords(line);
-                float countW = ScopeCanvas.TextW(tickerCount), wordsRoom = room - countW - 10f, wordsW = Mathf.Min(ScopeCanvas.TextW(words), wordsRoom);
-                g.Text(tickerCount, tx + 10f + wordsW + 10f, cy, tone, HudType.Body, ScopeAlign.Left, true);
+                float countW = ScopeCanvas.TextW(tickerCount, HudType.Label), wordsRoom = room - countW - 10f, wordsW = Mathf.Min(ScopeCanvas.TextW(words, HudType.Body), wordsRoom);
+                g.Text(tickerCount, tx + wordsW + 10f, cy, tone, HudType.Label, ScopeAlign.Left, true);
                 room = wordsRoom;
             }
-            g.FitText(TickerWords(line), tx + 10f, cy, room, tone, HudType.Body, HudType.Label, ScopeAlign.Left, true, dip ? 0.8f : 1f);
+            g.FitText(TickerWords(line), tx, cy, room, tone, HudType.Body, HudType.Label, ScopeAlign.Left, bold, dip ? 0.8f : 1f);
         }
 
         /// <summary>
-        /// One cue with its slot's top at <paramref name="y"/>: the shelf with the class word, the bracket halves, the underline and the message as far as it has decoded, each as the cue's age says. The shelf is DIM (INK in
-        /// the first 0.12 s), the brackets and underline DIM (or the cue's AMBER / RED), the words in the cue's tone; a tone brighter for the first 0.12 s; everything at the fade's alpha (<paramref name="alpha"/>; a cue at 0 draws
+        /// One cue with its slot's top at <paramref name="y"/>: the bracket halves while it moves (the column's tick at hold) and the message as far as it has decoded, each as the cue's age says. The
+        /// brackets and the tick are DIM (or the cue's AMBER / RED), the words in the cue's tone; a tone brighter for the first 0.12 s; everything at the fade's alpha (<paramref name="alpha"/>; a cue at 0 draws
         /// nothing). Returns how far right its ink reaches at rest, design units.
         /// </summary>
         private float DrawCue(ScopeCanvas g, int place, Cue cue, float y, float clock, bool furniture, out float alpha)
@@ -256,24 +257,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             alpha = CueTimeline.Alpha(age, life);
             if (alpha <= 0f) return 0f;
             bool flash = CueTimeline.Flash(age);
-            ScopeTone words = CueTimeline.ToneOf(cue.Severity), line = cue.Severity == CueSeverity.Normal ? Dim : words, shelf = Dim;
-            if (flash) { words = CueTimeline.Raise(words); line = CueTimeline.Raise(line); shelf = CueTimeline.Raise(shelf); }
+            ScopeTone words = CueTimeline.ToneOf(cue.Severity), line = cue.Severity == CueSeverity.Normal ? Dim : words;
+            if (flash) { words = CueTimeline.Raise(words); line = CueTimeline.Raise(line); }
+            float size = cue.Severity == CueSeverity.Alert ? cue.Size : Math.Min(cue.Size, HudType.Body);      // the alert keeps its size; the rest sit at BODY so 44 characters fit
+            bool bold = cue.Severity != CueSeverity.Normal;
             int length = CueDecode.Fill(cueChars, cue.Text, age, cue.Seed);
-            float textW = ScopeCanvas.TextW(cue.Text.AsSpan(0, length), cue.Size), x = CueLayout.Left, tx = x + CueLayout.TextInset, lift = furniture ? 0f : CueLayout.BareLift;
+            float textW = ScopeCanvas.TextW(cue.Text.AsSpan(0, length), size), x = CueLayout.Left, tx = x + CueLayout.TextInset, lift = furniture ? 0f : CueLayout.BareLift;
             float row = y + CueLayout.MessageRow - lift, under = y + CueLayout.UnderlineRow - lift, barTop = y + CueLayout.BracketTop - lift, barBottom = y + CueLayout.BracketBottom - lift;
             float hugL = tx - CueLayout.HugGap, hugR = tx + textW + CueLayout.HugGap, offset = CueTimeline.BracketOffset(age, life), lBar = hugL - offset, rBar = hugR + offset;
             string word = CueWords.Of(cue.Class);
             float shelfW = CueLayout.ShelfWidth(word.Length);
 
-            // Two bracket halves: a bar with an arm at each end, pointing at the words.
-            g.Line(lBar, barTop, lBar, barBottom, line, alpha);
-            g.Line(lBar, barTop, lBar + CueLayout.Arm, barTop, line, alpha);
-            g.Line(lBar, barBottom, lBar + CueLayout.Arm, barBottom, line, alpha);
-            g.Line(rBar, barTop, rBar, barBottom, line, alpha);
-            g.Line(rBar, barTop, rBar - CueLayout.Arm, barTop, line, alpha);
-            g.Line(rBar, barBottom, rBar - CueLayout.Arm, barBottom, line, alpha);
-            CueTimeline.Underline(age, life, out float ulFrom, out float ulTo);
-            g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, cue.Size, ScopeAlign.Left, false, alpha);
+            if (age < CueTimeline.ShowSeconds || offset > 0f)
+            {
+                // The brackets are the motion only: two bracket halves, a bar with an arm at each end, snapping in on the words and spreading out again at the fade.
+                g.Line(lBar, barTop, lBar, barBottom, line, alpha);
+                g.Line(lBar, barTop, lBar + CueLayout.Arm, barTop, line, alpha);
+                g.Line(lBar, barBottom, lBar + CueLayout.Arm, barBottom, line, alpha);
+                g.Line(rBar, barTop, rBar, barBottom, line, alpha);
+                g.Line(rBar, barTop, rBar - CueLayout.Arm, barTop, line, alpha);
+                g.Line(rBar, barBottom, rBar - CueLayout.Arm, barBottom, line, alpha);
+            }
+            else g.ToneTick(x + 3f, row - 6f, line, alpha);      // at hold: the column's tick, the words 12 in
+            g.Text(new ReadOnlySpan<char>(cueChars, 0, length), tx, row, words, size, ScopeAlign.Left, bold, alpha);
             cueSpots[place] = new CueSpot { Cue = cue, Y = y, TextX = tx, TextW = textW, LeftBar = lBar, RightBar = rBar, Alpha = alpha, Locked = CueTimeline.Locked(age, cue.Text.Length) };
             return Math.Max(hugR, furniture ? x + shelfW + 8f : 0f);
         }

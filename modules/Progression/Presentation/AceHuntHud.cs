@@ -17,10 +17,11 @@ namespace BoscaliSummer.Modules.Progression.Presentation
     /// Passive local threat display for an ace hunt; all encounter state comes from the squad host. It lives in the top-centre slot (<see cref="TopCentre"/>) under the native HUD canvas, in the HUD's own face and the
     /// standard's sizes and colours, in the grammar of the WARNING line it yields to (2026-11-16, concept A).
     /// <list type="bullet">
-    /// <item>Card (the slot, for <see cref="CardS"/> when the hunt starts, only while no warning line is up): two rows inside four corner ticks. Row 1: "ENEMY ACE" (LABEL, WARNING, tracked, three onset blinks), the callsign
-    /// (EMPHASIS, INK-HI, typed on) and its skill at the right (VALUE, CAUTION). Row 2 (BODY): who flies with it, its compass bearing and range, the HEAT. The ace's portrait stands at the left, 40 px high.</item>
-    /// <item>The rest of the hunt is the ACE mark on the heading tape (Hud's <c>TapeHud</c>); there is no strip.</item>
-    /// <item>Marker on the ace's aircraft (host and solo; a client has no position for it): a diamond with its callsign and range, or a double chevron at the screen's edge.</item>
+    /// <item>Card (the slot, for <see cref="CardS"/> when the hunt starts, only while no warning line is up): two rows on an amber wash (0.05) with a 3 px amber class bar, the same chrome as the WARNING line
+    /// (no brackets). Row 1: "ENEMY ACE" (LABEL, bold, CAUTION amber, three onset blinks), the callsign (EMPHASIS, bold, INK-HI, typed on) and its skill at the right (LABEL, bold, INK). Row 2 (BODY): who flies with
+    /// it and its range ("TALON 01 · 3/4 · 12KM"). The ace's portrait stands at the left, 40 px high.</item>
+    /// <item>The rest of the hunt is the ACE mark on the heading tape (Hud's <c>TapeHud</c>), the pointer when the ace is off the screen; there is no strip and no edge marker.</item>
+    /// <item>Marker on the ace's aircraft while it is on the screen (host and solo; a client has no position for it): a diamond with its callsign and range.</item>
     /// </list>
     /// </summary>
     internal sealed class AceHuntHud : MonoBehaviour, ISceneService
@@ -43,9 +44,9 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// <summary>The card's words' widths (set when the text changes) and the widest its content has been this hunt (the box never shrinks and jitters with a digit).</summary>
         private float headerW, callsignW, skillW, lineW, stickyContent, lastK;
         private bool aceHave;
-        private int lineKey = int.MinValue, heatKey = int.MinValue;
+        private int lineKey = int.MinValue;
         private string portraitKey, flight = "";
-        private int shownHuntId = -1, distanceKey = int.MinValue, markerKey = int.MinValue, bearing = -1, heatPercent = -1;
+        private int shownHuntId = -1, distanceKey = int.MinValue, markerKey = int.MinValue;
         private bool shown;
         private EnemyWingView shownWing;
         private float introducedAt, nextRefresh;
@@ -143,7 +144,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             // A rebuilt card writes everything again (the old canvas took the texts and pictures with it).
             shown = false;
             portraitKey = null;
-            distanceKey = markerKey = lineKey = heatKey = int.MinValue;
+            distanceKey = markerKey = lineKey = int.MinValue;
 
             // Card: a holder the size of the box (placed and sized every frame), the ticks' mesh in a zero-size child so its strokes' origin is the card's centre, the portrait and the five words.
             card = Holder(root, "Ace Card", 0f, 0f, TopCentre.Width, TopCentre.CardHeight);
@@ -151,10 +152,10 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             cardGroup.blocksRaycasts = false;
             cardLines = AvVector.Create(Holder(card, "Lines", 0f, 0f, 0f, 0f), "Lines", 16);
             portrait = ImageBox(card, 0f, 0f, PortraitSize);
-            header = Label(card, "ENEMY ACE", TopCentre.LabelPt, HudStep.Label, Tone.Warning, false);
+            header = Label(card, "ENEMY ACE", TopCentre.LabelPt, HudStep.Label, Tone.Caution, false, true);
             headerW = header.GetPreferredValues(header.text).x;
             callsign = Label(card, "", TopCentre.NamePt, HudStep.Emphasis, Tone.Bright, false);
-            skillText = Label(card, "", TopCentre.ValuePt, HudStep.Value, Tone.Caution, true);
+            skillText = Label(card, "", TopCentre.LabelPt, HudStep.Label, Tone.Ink, true, true);
             lineText = Label(card, "", TopCentre.DetailPt, HudStep.Body, Tone.Ink, false);
             lineText.overflowMode = TextOverflowModes.Ellipsis;
 
@@ -174,6 +175,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
         /// </summary>
         private void Animate(float now)
         {
+            if (TopCentre.LineUp && now - introducedAt < CardS) introducedAt += Time.unscaledDeltaTime;
             float t = now - introducedAt;
             float enter = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t / TopCentre.EnterS));
             float exit = Mathf.Clamp01((t - CardS) / TopCentre.ExitS);
@@ -201,13 +203,14 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             if (portrait.enabled) { portrait.rectTransform.anchoredPosition = new Vector2(left + PortraitSize * 0.5f, 0f); }
             Place(header.rectTransform, textLeft, row1Y, headerW + 8f, TopCentre.LabelPt * 1.5f);
             Place(callsign.rectTransform, textLeft + headerW + TopCentre.WordGap, row1Y, callsignW + 8f, TopCentre.NamePt * 1.5f);
-            Place(skillText.rectTransform, right, row1Y, skillW + 8f, TopCentre.ValuePt * 1.5f);
+            Place(skillText.rectTransform, right, row1Y, skillW + 8f, TopCentre.LabelPt * 1.5f);
             Place(lineText.rectTransform, textLeft, row2Y, right - textLeft, TopCentre.DetailPt * 1.5f);
 
             AvQuadBuffer lines = cardLines.Buffer;
             lines.Clear();
-            Rgba ink = VanillaHudStyle.Colours.Alert.ToRgba();
-            AvStrokes.Bracket(lines, -w * 0.5f, -h * 0.5f, w, h, TopCentre.Arm, TopCentre.Stroke, ink.WithAlpha(HudInk.LineMid));
+            Rgba ink = VanillaHudStyle.Colours.Warning.ToRgba();
+            AvStrokes.Fill(lines, -w * 0.5f, -h * 0.5f, w, h, ink.WithAlpha(0.05f));      // a calm amber wash and the class bar: the warning line's chrome, no brackets
+            AvStrokes.Fill(lines, -w * 0.5f, -h * 0.5f, 3f, h, ink);
             cardLines.Commit();
         }
 
@@ -227,9 +230,13 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             Aircraft ace = null, me = null;
             string handle = null;
             bool have = cam != null && squad != null && squad.TryAce(out ace, out handle) && GameManager.GetLocalAircraft(out me) && me != null;
-            if (marker.gameObject.activeSelf != have) marker.gameObject.SetActive(have);
             aceHave = have;
-            if (!have) { bearing = -1; WriteLine(-1); return; }
+            if (!have)
+            {
+                if (marker.gameObject.activeSelf) marker.gameObject.SetActive(false);
+                WriteLine(false);
+                return;
+            }
             float metres = Vector3.Distance(ace.transform.position, me.transform.position);
             AvUnits units = PlayerSettings.unitSystem == PlayerSettings.UnitSystem.Metric ? AvUnits.Metric : AvUnits.Imperial;
             int key = (int)(metres / 100f) * 2 + (units == AvUnits.Imperial ? 1 : 0);
@@ -238,71 +245,50 @@ namespace BoscaliSummer.Modules.Progression.Presentation
                 distanceKey = key;
                 distance = new string(scratch, 0, AvUnitTable.DistanceReading(scratch, 0, metres, units)).ToUpperInvariant();
             }
-            // The card's second row: the ace's compass bearing (the number the tape shows under its ACE mark), its range and the HEAT.
-            Vector3 to = ace.transform.position - me.transform.position;
-            bearing = Mathf.RoundToInt((Mathf.Atan2(to.x, to.z) * Mathf.Rad2Deg + 360f) % 360f) % 360;
-            float heat = squad.Heat;
-            heatPercent = float.IsNaN(heat) ? -1 : Mathf.RoundToInt(Mathf.Clamp01(heat) * 100f);
-            WriteLine(bearing * 100003 + distanceKey);
+            WriteLine(true);      // the card's second row: the flight and the range
             Paint(cam, ace.transform.position, handle, screenW, metres <= CloseM);
         }
 
-        /// <summary>The card's second row, written only when the flight, the bearing, the range or the heat changed.</summary>
-        private void WriteLine(int positionKey)
+        /// <summary>The card's second row, written only when the flight or the range changed (<paramref name="known"/> false: the ace's position is not known, so no range).</summary>
+        private void WriteLine(bool known)
         {
-            int key = positionKey * 131 + heatPercent;
+            int key = known ? distanceKey : -1;
             if (key == lineKey) return;
             lineKey = key;
-            string text = AceHuntHudCopy.Line(flight, positionKey < 0 ? -1 : bearing, distance, heatPercent);
+            string text = AceHuntHudCopy.Line(flight, known ? distance : null);
             lineText.text = text;
             lineW = text.Length > 0 ? lineText.GetPreferredValues(text).x : 0f;
         }
 
-        /// <summary>The marker in the root's units (1080 high, centre origin): a breathing diamond on the ace with its words, or a double chevron at the edge pointing the way.</summary>
+        /// <summary>The marker in the root's units (1080 high, centre origin): a breathing diamond on the ace with its words while it is on the screen; off the screen nothing (the tape's ACE mark points the way).</summary>
         private void Paint(Camera cam, Vector3 world, string handle, float screenW, bool close)
         {
             float k = 1080f / Mathf.Max(1f, Screen.height), hw = screenW * 0.5f, hh = 540f, margin = 60f;
             Vector3 local = cam.transform.InverseTransformPoint(world), s = cam.WorldToScreenPoint(world);
             float x = (s.x - Screen.width * 0.5f) * k, y = (s.y - Screen.height * 0.5f) * k;
             bool onScreen = local.z > 0f && Mathf.Abs(x) < hw - margin && Mathf.Abs(y) < hh - margin;
+            if (marker.gameObject.activeSelf != onScreen) marker.gameObject.SetActive(onScreen);
+            if (!onScreen) return;
             var white = new Rgba(1f, 1f, 1f, 1f);
             AvQuadBuffer b = markerLines.Buffer;
             b.Clear();
+            float r = AvFxDriver.ReducedMotion ? 16f : 16f * (1f + 0.1f * Mathf.Sin(Time.unscaledTime * 2f * Mathf.PI));      // a slow 1 Hz breath, not a blink
+            AvStrokes.Diamond(b, x, y, r, TopCentre.Stroke, white);
+            AvStrokes.Diamond(b, x, y, r + 6f, TopCentre.Stroke, white.WithAlpha(close ? HudInk.LineMid : HudInk.LineLow));
             RectTransform label = markerLabel.rectTransform;
-            if (onScreen)
-            {
-                float r = AvFxDriver.ReducedMotion ? 16f : 16f * (1f + 0.1f * Mathf.Sin(Time.unscaledTime * 2f * Mathf.PI));      // a slow 1 Hz breath, not a blink
-                AvStrokes.Diamond(b, x, y, r, TopCentre.Stroke, white);
-                AvStrokes.Diamond(b, x, y, r + 6f, TopCentre.Stroke, white.WithAlpha(close ? HudInk.LineMid : HudInk.LineLow));
-                label.pivot = new Vector2(0f, 0.5f);
-                label.anchoredPosition = new Vector2(x + r + 14f, y);
-                Words(1, handle, TextAlignmentOptions.MidlineLeft);
-            }
-            else
-            {
-                // Ahead but off the screen: the way from the centre; behind: the way to turn (dead astern reads six o'clock).
-                float angle = local.z > 0f ? Mathf.Atan2(y, x) : local.x * local.x + local.y * local.y > 1e-6f ? Mathf.Atan2(local.y, local.x) : -Mathf.PI * 0.5f;
-                float cos = Mathf.Cos(angle), sin = Mathf.Sin(angle), ex = cos * (hw - 80f), ey = sin * (hh - 80f), deg = angle * Mathf.Rad2Deg;
-                // The ace's own shape at the edge (its diamond, with one pointer out): the THREAT RING's double chevrons mean a missile.
-                AvStrokes.Diamond(b, ex, ey, 9f, TopCentre.Stroke, white);
-                AvStrokes.Chevron(b, ex + cos * 16f, ey + sin * 16f, 12f, deg, TopCentre.ChevronStroke, white);
-                // The words stand inside the chevron, their near edge at the point (as the THREAT RING's labels do).
-                label.pivot = new Vector2(cos > 0.35f ? 1f : cos < -0.35f ? 0f : 0.5f, 0.5f + 0.5f * sin);
-                label.anchoredPosition = new Vector2(ex - cos * 24f, ey - sin * 24f);
-                Words(2 + (cos > 0.35f ? 1 : cos < -0.35f ? 2 : 0), null,
-                    cos > 0.35f ? TextAlignmentOptions.MidlineRight : cos < -0.35f ? TextAlignmentOptions.MidlineLeft : TextAlignmentOptions.Center);
-            }
+            label.pivot = new Vector2(0f, 0.5f);
+            label.anchoredPosition = new Vector2(x + r + 14f, y);
+            Words(handle);
             markerLines.Commit();
         }
 
-        /// <summary>The marker's words ("ACE  FLINT  4.2KM" on the ace, "ACE 12KM" at the edge), built and written only when the mode, its side or the range shown changed.</summary>
-        private void Words(int mode, string handle, TextAlignmentOptions align)
+        /// <summary>The marker's words ("ACE  FLINT  4.2KM"), built and written only when the range shown or the hunt changed.</summary>
+        private void Words(string handle)
         {
-            int key = mode * 1000003 + distanceKey + shownHuntId * 7919;
+            int key = distanceKey + shownHuntId * 7919;
             if (key == markerKey) return;
             markerKey = key;
-            markerLabel.alignment = align;
-            markerLabel.text = mode == 1 ? "ACE  " + (handle ?? "").ToUpperInvariant() + "  " + distance : "ACE " + distance;
+            markerLabel.text = "ACE  " + (handle ?? "").ToUpperInvariant() + "  " + distance;
         }
 
         // ---- Building blocks: everything centre-anchored in its parent, y up, in the slot's reference pixels ----
@@ -317,8 +303,8 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             return rect;
         }
 
-        /// <summary>A word of the card: its step's size and tracking, bold from VALUE up, anchored at its left edge (or its right, <paramref name="rightAligned"/>); the card places it every frame.</summary>
-        private TMP_Text Label(RectTransform parent, string text, float size, HudStep step, Tone tone, bool rightAligned)
+        /// <summary>A word of the card: its step's size and tracking, bold from VALUE up (or when <paramref name="bold"/>), anchored at its left edge (or its right, <paramref name="rightAligned"/>); the card places it every frame.</summary>
+        private TMP_Text Label(RectTransform parent, string text, float size, HudStep step, Tone tone, bool rightAligned, bool bold = false)
         {
             TextMeshProUGUI label = HudText.Make(parent, "Label", font, fontMaterial, rightAligned ? TextAlignmentOptions.MidlineRight : TextAlignmentOptions.MidlineLeft, size, TextOverflowModes.Ellipsis);
             RectTransform rect = label.rectTransform;
@@ -328,7 +314,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             label.text = text;
             label.richText = false;
             label.characterSpacing = HudType.Tracking(step);
-            if (HudType.Bold(step)) label.fontStyle |= FontStyles.Bold;
+            if (HudType.Bold(step, bold)) label.fontStyle |= FontStyles.Bold;
             Tint(label, tone);
             return label;
         }
@@ -391,7 +377,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             tinted.Clear();
             portraitKey = null;
             shownHuntId = -1;
-            distanceKey = markerKey = lineKey = heatKey = int.MinValue;
+            distanceKey = markerKey = lineKey = int.MinValue;
             TopCentre.CardUp = false;
             aceHave = false;
             shown = false;

@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
         {
             bool locked = t.SinceLock < LockHold;
             lamps[0] = new Lamp { Legend = "LOCK", Present = true, State = locked ? LampState.Warning : LampState.Dark, Flash = locked && t.SinceLock < LockFlash };
-            lamps[1] = new Lamp { Legend = "SPKE", Present = true, State = t.SinceSpike < SpikeHold ? LampState.Caution : LampState.Dark };
+            lamps[1] = new Lamp { Legend = "SPK", Present = true, State = t.SinceSpike < SpikeHold ? LampState.Caution : LampState.Dark };
             lamps[2] = new Lamp
             {
                 Legend = t.Missiles > 1 ? "MSL " + Math.Min(t.Missiles, 9) : "MSL", Present = true,

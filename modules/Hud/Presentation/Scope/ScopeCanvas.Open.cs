@@ -32,7 +32,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (fill == InkFill.Chip)
             {
                 Chip(x, y, w, h, tone);
-                Brackets(x, y, w, h, 4f, tone);
             }
             return fill == InkFill.Draw;
         }
@@ -46,7 +45,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             InkBox box = PageInk.Box(w, h, tone, fill, fillAlpha, chamfered, out float arm, out bool chip);
             if (box == InkBox.Draw) return false;
             if (chip) Chip(x, y, w, h, fill);
-            if (box == InkBox.Brackets) Brackets(x, y, w, h, arm, tone, alpha, Math.Max(lw, 1f));
+            if (box == InkBox.Brackets) Box(x, y, w, h, tone, alpha, Math.Max(lw, 1f));      // a plain hairline outline: corner brackets were cut (user 2026-11-17)
             return true;
         }
 

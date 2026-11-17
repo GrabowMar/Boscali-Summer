@@ -3,18 +3,21 @@ using BoscaliSummer.Core.Contracts;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
-    /// <summary>The WING page's rules (HUD v8), pure: the heading-up plot's scale and rim clamp, the state words and tones, the roster layout, the formation skeleton, the order glyph's scale, label placement.</summary>
+    /// <summary>The WING page's rules (HUD v8), pure: the heading-up plot's scale and rim clamp, the state words and tones, the roster layout, the formation skeleton, label placement.</summary>
     internal static class WingBoardMath
     {
         /// <summary>The plot: centre and radius in pixels, and the metres its rim stands for (350 m is the half ring).</summary>
-        public const float PlotX = 170f, PlotY = 106f, PlotR = 64f, RimM = 700f;
+        public const float PlotX = 72f, PlotY = 106f, PlotR = 64f, RimM = 700f;
         /// <summary>A wingman further than this many pixels from the centre sits on the rim (a little inside it) with a range tag.</summary>
         public const float ClampR = PlotR - 8f;
         /// <summary>Slot error beyond which a formation member reads as out of its slot, and below which a tether is not drawn.</summary>
         public const float TetherM = 30f, TetherFarM = 120f;
-        /// <summary>The roster's block: first row's top, a full row's height and the step between full rows, and the room the rows may use (the WING panel is <see cref="ScopeLayout.WingH"/> high: two full rows, or three compact ones).</summary>
-        public const float RowsTop = 34f, FullRowH = 62f, FullStep = 66f, RowsRoom = 140f, RowGap = 3f, CompactMinH = 34f, FullTaskMinH = 56f;
-        public const int MaxRows = 3, FullRows = 2;
+        /// <summary>
+        /// The roster right of the plot (refit 5.3): its left edge and width, the first block's line A (a middle, painter units), the step between blocks and line B under line A. At most <see cref="MaxRows"/> blocks; the rest
+        /// are counted under the plot.
+        /// </summary>
+        public const float RosterX = 152f, RosterW = 288f, BlockTop = 48f, BlockPitch = 48f, LinePitch = 18f;
+        public const int MaxRows = 3;
 
         public static float Scale => PlotR / RimM;
 
@@ -71,22 +74,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return n;
         }
 
-        /// <summary>How many rows to draw, how tall, how far apart, and whether a row has its task line (one or two wingmen).</summary>
-        public static void Rows(int count, out int shown, out float rowH, out float step, out bool taskLine)
-        {
-            shown = Math.Min(Math.Max(count, 0), MaxRows);
-            if (shown <= FullRows)
-            {
-                rowH = FullRowH; step = FullStep; taskLine = true;
-                return;
-            }
-            rowH = (float)Math.Floor((RowsRoom - RowGap * (shown - 1)) / shown);
-            if (rowH > FullRowH) rowH = FullRowH;
-            if (rowH < CompactMinH) rowH = CompactMinH;
-            step = rowH + RowGap;
-            taskLine = rowH >= FullTaskMinH;
-        }
-
         /// <summary>Formation skeleton: each slot hangs from the nearest of the lead and the slots nearer the lead than it (a finger four reads lead-2, lead-3, 3-4).
         /// <paramref name="parent"/>[i] is the slot index it hangs from, -1 for the lead.</summary>
         public static void Skeleton(float[] sx, float[] sy, int n, int[] parent)
@@ -104,14 +91,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
                     if (d < best) { best = d; parent[i] = j; }
                 }
             }
-        }
-
-        /// <summary>Metres to glyph pixels for the order pictogram: the formation fits an 18 x 15 px field either side of and behind the lead.</summary>
-        public static float GlyphScale(float[] sx, float[] sy, int n)
-        {
-            float mx = 1f, my = 1f;
-            for (int i = 0; i < n; i++) { mx = Math.Max(mx, Math.Abs(sx[i])); my = Math.Max(my, Math.Abs(sy[i])); }
-            return Math.Min(18f / mx, 15f / my);
         }
     }
 

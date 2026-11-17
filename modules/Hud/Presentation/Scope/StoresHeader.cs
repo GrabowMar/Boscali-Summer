@@ -6,12 +6,11 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
     /// <summary>
-    /// The stores side of the TAC BOARD (prototype: <c>takeover/stores.js</c>; LAYOUT.md 3.1 to 3.3), drawn as three separate blocks into the rectangles <see cref="ScopeLayout"/> gives them: HERO (the selected weapon: the rounds,
-    /// the arm word, its name and class, its picture, the station rail), PWR BUS (the capacitor as a row of cells) and EXPENDABLES (one row per countermeasure in cycle order, the selected one with the caret, each level a bar). Each has a caption shelf, drawn only while
-    /// the board has its furniture (<see cref="ScopeCanvas.Furniture"/>). Fed by <see cref="StoresScope"/> (Hud's own provider over the aircraft); a block with no data is not there, and <see cref="WeaponDrawn"/> /
+    /// The stores side of the TAC BOARD (prototype: <c>takeover/stores.js</c>; LAYOUT.md 3.1 to 3.3), drawn as cells of the one bar into the rectangles <see cref="ScopeLayout"/> gives them: WPN (the selected weapon: the rounds,
+    /// the arm word, its name and class, its picture, the station rail, the lock pips) and CM (one tile per countermeasure in cycle order), plus SYS's capacitor row (R1 of the SYS cell). Fed by <see cref="StoresScope"/> (Hud's own provider over the aircraft); a block with no data is not there, and <see cref="WeaponDrawn"/> /
     /// <see cref="CmDrawn"/> / <see cref="CapDrawn"/> say which native box it replaced (the board shows the native one again otherwise). The weapon's and the jammer's pictures are the game's own sprites (<see cref="StoreIcons"/>: baked into an
     /// alpha mask): a sprite cannot be drawn through the stroke canvas, so the header writes where each goes into <see cref="Art"/> and the board puts an image there (StatusPanel.Stores.cs); without a picture HERO draws the class glyph.
-    /// Painting allocates nothing in a steady frame; the class is partial: <c>StoresHeader.Hero.cs</c>, <c>StoresHeader.Pwr.cs</c> and <c>StoresHeader.Exp.cs</c> hold the blocks.
+    /// Painting allocates nothing in a steady frame; the class is partial: <c>StoresHeader.Hero.cs</c> and <c>StoresHeader.Exp.cs</c> hold the blocks.
     /// </summary>
     internal sealed partial class StoresHeader
     {
@@ -22,8 +21,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly float[] cmUntil = new float[HudCm.MaxStations];
         /// <summary>The capacitor's last read, and the last shot it fell by: how much, when, and the share it fell from (the just-spent cells).</summary>
         private float capLast, capLastAt, shotKj, shotAt = float.NegativeInfinity, shotFrom;
-        // Set by Paint for the block painters.
-        private bool stack;
 
         /// <summary>The pictures the last <see cref="Paint"/> wants drawn: the weapon's (lit share, then the spent share of a magazine) and the jammer's. An unused slot has icon 0.</summary>
         public readonly ArtSlot[] Art = new ArtSlot[ArtSlots];
@@ -73,54 +70,35 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// Paint the blocks that exist into their rectangles. The legacy declutter parameter is ignored; the full HUD is always used.
+        /// Paint the blocks that exist into their rectangles: WPN, CM (dispensers) and SYS's capacitor row, the last only while the stores are shown (else the native capacitor bar stays). The legacy declutter parameter is ignored.
         /// </summary>
-        public void Paint(ScopeCanvas g, in BoardGeometry geo, bool stackLayout, int declutterLevel, float clock, bool flashOn)
+        public void Paint(ScopeCanvas g, in BoardGeometry geo, bool stackLayout, int declutterLevel, float clock, bool flashOn, bool storesShown)
         {
             WeaponDrawn = CmDrawn = CapDrawn = false;
             for (int i = 0; i < Art.Length; i++) Art[i] = default;
             bool beat = false;
             if (!live) { Beat = false; return; }
             now = clock;
-            stack = stackLayout;
-            if (HasWeapon && geo.Hero.Present)
+            if (HasWeapon && geo.Wpn.Present)
             {
-                PaintHero(g, geo.Hero);
+                PaintHero(g, geo.Wpn, flashOn);
                 WeaponDrawn = true;
+                beat |= d.InRange;      // the IN RNG call box pulses
             }
-            if (HasCap && geo.Pwr.Present)
+            if (HasCm && geo.Cm.Present)
             {
-                beat |= PaintPwr(g, geo.Pwr);
-                CapDrawn = true;
-            }
-            if (HasCm && geo.Exp.Present)
-            {
-                beat |= PaintExp(g, geo.Exp, flashOn);
+                beat |= PaintExp(g, geo.Cm, flashOn);
                 CmDrawn = true;
+            }
+            if (HasCap && geo.Sys.Present && storesShown)
+            {
+                beat |= PaintPower(g, geo.Sys);
+                CapDrawn = true;
             }
             Beat = beat;
         }
 
         // ------------------------------------------------------------------------------------------------ shared
-
-        /// <summary>
-        /// A caption shelf whose flag has two tones (HERO's "HMD SYM  DCL n": the first words furniture, the level data, LAYOUT.md 3.1). The same geometry as <see cref="ScopeCanvas.CaptionShelf"/>: a hairline 6 under the block's top
-        /// interrupted 4 clear by the caption (at x + 12) and by the flag (right-aligned to x + w - 12), ending in a node and a 45 degree stub. Nothing without furniture.
-        /// </summary>
-        private static void Shelf(ScopeCanvas g, float x, float y, float w, string caption, string flag, string level)
-        {
-            if (!g.Furniture) return;
-            const float Inset = 12f, Clear = 4f;
-            float cy = y + StoresLayout.ShelfY, end = x + w, captionRight = x + Inset + ScopeCanvas.TextW(caption), levelW = ScopeCanvas.TextW(level), flagLeft = end - Inset - levelW - ScopeCanvas.TextW(flag);
-            g.Line(x, cy, x + Inset - Clear, cy, Dim);
-            g.Text(caption, x + Inset, cy, Dim);
-            g.Line(captionRight + Clear, cy, flagLeft - Clear, cy, Dim);
-            g.Text(flag, flagLeft, cy, Dim);
-            g.Text(level, end - Inset, cy, Ink, 12f, ScopeAlign.Right);
-            g.Line(end - Inset + Clear, cy, end, cy, Dim);
-            g.Fill(end - 2f, cy - 2f, 4f, 4f, Dim);
-            g.Line(end + 2f, cy - 2f, end + 8f, cy - 8f, Dim);
-        }
 
         private static int Put(Span<char> buf, int n, ReadOnlySpan<char> s)
         {

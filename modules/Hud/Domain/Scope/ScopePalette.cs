@@ -5,7 +5,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// The scope's colour tokens, pure. Ink, caution (amber) and warning (red) are the player's HUD theme; hi and dim are
-    /// derived from the ink (hi = ink toward white, dim = the ink at <see cref="DimAlpha"/>, furniture only), so a
+    /// derived from the ink (hi = ink toward white, dim = the ink 0.22 toward the edge colour, opaque, furniture only), so a
     /// different HUD theme recolours the whole board. Faint is dim (LAYOUT.md 1: there is no fourth ink level; the name stays for the painters that still say it).
     /// Plate and bg are near-black: there is no plate to draw them on, so only text that sits on a chip and the shade use them.
     /// </summary>
@@ -13,10 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public static readonly Rgba PlateColor = new Rgba(0.043f, 0.110f, 0.157f), BgColor = new Rgba(0.020f, 0.051f, 0.078f);
 
-        /// <summary>LAYOUT.md 1: DIM is the ink at 0.80 over whatever is behind (there is no plate; 0.70 until 2026-11-15, when the backdrop went and dim words faded on bright sky); DIM text never drops under 0.89 of it.</summary>
-        public const float DimAlpha = HudInk.DimAlpha;
-
-        /// <summary>How far toward white BRIGHT is lifted from the ink (LAYOUT.md 1: INK 127, 223, 154 is BRIGHT 215, 255, 228, about 0.7 of the way): a lit word reads a clear step above data.</summary>
+        /// <summary>How far toward white BRIGHT is lifted from the ink (LAYOUT.md 1: about 0.8 of the way: INK 97,255,153 to BRIGHT 223,255,235): a lit word reads a clear step above data.</summary>
         public const float HiLift = HudInk.HiLift;
 
         private readonly Rgba ink, hi, dim, amber, red;
@@ -30,7 +27,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
             dim = HudInk.Dim(this.ink);
         }
 
-        /// <summary>The token's colour at <paramref name="alpha"/> (a token that has an alpha of its own, dim, is multiplied by it).</summary>
+        /// <summary>The token's colour at <paramref name="alpha"/> (every token is opaque).</summary>
         public Rgba Of(ScopeTone tone, float alpha = 1f)
         {
             Rgba c;

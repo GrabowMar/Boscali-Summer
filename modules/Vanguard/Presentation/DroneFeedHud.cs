@@ -30,7 +30,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private readonly TMP_Text[] cells = new TMP_Text[3];
         private readonly int[] cellKeys = { int.MinValue, int.MinValue, int.MinValue };
         private string lastCallsign, lastWord, state;
-        private float nameW, stateW, drawnNameW, drawnStateW;
         private DroneFeedView feed;
         private float lostFlashUntil, cardH;
         private bool wasLost;
@@ -85,21 +84,17 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 lastWord = word;
                 state = word.Length > 0 ? callsign + " · " + word : callsign;
                 AvText.Set(stateText, state);
-                stateW = state.Length > 0 ? stateText.GetPreferredValues(state).x : 0f;
             }
-            if (nameW <= 0f) nameW = nameText.GetPreferredValues(nameText.text).x;
-            nameText.color = ink;
+            nameText.color = VanillaHudStyle.InkDim;
             stateText.color = tone;
             Strip(v, ink);
             Color frameInk = flash ? theme.Alert : ink;
-            if (frameInk != lastInk || nameW != drawnNameW || stateW != drawnStateW)
+            if (frameInk != lastInk)
             {
                 lastInk = frameInk;
-                drawnNameW = nameW;
-                drawnStateW = stateW;
                 AvQuadBuffer b = chrome.Buffer;
                 b.Clear();
-                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba(), nameW, stateW);
+                FeedCorner.Frame(b, 0f, 0f, FeedCorner.Width, cardH, frameInk.ToRgba());
                 chrome.Commit();
             }
         }
@@ -130,7 +125,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             cardH = FeedCorner.Header + feedH;
             card = AvLay.Child((RectTransform)root.transform, "Card");
             card.anchorMin = card.anchorMax = card.pivot = new Vector2(1f, 0f);
-            card.anchoredPosition = new Vector2(-Margin, Margin);
+            card.anchoredPosition = new Vector2(-HudZones.Margin, Margin);
             card.sizeDelta = new Vector2(w, cardH);
             feed = new DroneFeedView(card, "Feed", 10f);
             // The picture takes what the shelf above and the data strip below leave (the card keeps its total height: the missile card stands on it).
@@ -138,7 +133,6 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             chrome = AvVector.Create(card, "Chrome", 64);
             lastInk = Color.clear;
             state = null;
-            nameW = 0f;
             nameText = Word("Name", FeedCorner.ShelfText, 150f, TextAlignmentOptions.MidlineLeft);
             nameText.text = "UAV FEED";
             nameText.fontStyle = FontStyles.Bold;

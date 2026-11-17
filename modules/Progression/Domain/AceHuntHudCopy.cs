@@ -15,18 +15,13 @@ namespace BoscaliSummer.Modules.Progression.Domain
         }
 
         /// <summary>
-        /// The card's second row: "TALON 01 · 3/4 · 034° 12KM · HEAT 40%". <paramref name="bearingDeg"/> is the ace's compass bearing (what the tape shows under its ACE mark), -1 when its position is not
-        /// known (a client has none); <paramref name="range"/> its distance already formatted ("12KM"); <paramref name="heatPercent"/> -1 when there is no heat. Unknown parts are left out, never invented.
+        /// The card's second row: "TALON 01 · 3/4 · 12KM". <paramref name="range"/> is the ace's distance already formatted ("12KM"), null when its position is not known (a client has none; the bearing is
+        /// the tape's, the heat the SYSTEMS strip's). Unknown parts are left out, never invented.
         /// </summary>
-        public static string Line(string flight, int bearingDeg, string range, int heatPercent)
+        public static string Line(string flight, string range)
         {
             string line = flight ?? "";
-            if (bearingDeg >= 0)
-            {
-                int b = bearingDeg % 360;
-                line += (line.Length > 0 ? " · " : "") + (b < 100 ? "0" : "") + (b < 10 ? "0" : "") + b + "°" + (string.IsNullOrEmpty(range) ? "" : " " + range);
-            }
-            if (heatPercent >= 0) line += (line.Length > 0 ? " · " : "") + "HEAT " + heatPercent + "%";
+            if (!string.IsNullOrEmpty(range)) line += (line.Length > 0 ? " · " : "") + range;
             return line;
         }
     }

@@ -190,7 +190,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
 
         private static ColorTheme Theme => ThemeManager.Active != null ? ThemeManager.Active.ColorTheme : null;
         private static Color Ink => Theme != null ? VanillaHudStyle.Ink : AvTheme.Accent;
-        private static Color InkDim => Ink.WithAlpha(HudInk.DimAlpha);
+        private static Color InkDim => VanillaHudStyle.InkDim;
         private static Color Caution => Theme != null ? Theme.Warning : AvTheme.Warning;
         private static Color Danger => Theme != null ? Theme.Alert : AvTheme.Alert;
 

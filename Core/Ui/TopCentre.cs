@@ -4,7 +4,7 @@ namespace BoscaliSummer.Core.Ui
 {
     /// <summary>
     /// The top-centre lane (2026-11-16, concept A): ONE slot in the gap above the game's heading tape, shared by the slim WARNING line (Hud: MISSILE, PULL UP, FIRE, ENGINE OUT, LOCKED, BINGO FUEL) and the ace's
-    /// two-row card (Progression, for a few seconds when a hunt starts, only while no warning line is up). A single row inside four small corner ticks: no box, no plate. Both are drawn under the native HUD canvas
+    /// two-row card (Progression, for a few seconds when a hunt starts, only while no warning line is up). A single row with a class bar (no wash) (the warning line) or inside four small corner ticks (the ace card): no box, no plate. Both are drawn under the native HUD canvas
     /// on the reticle's axis in reference pixels of a 1080-high screen (the owners scale their root by screen height / 1080), and both step sideways, never up or down, to keep clear of the TAC BOARD's box
     /// (<see cref="LaneShift"/>). The threat bearings are not here: they hang on the tape itself. Pure: the test project links it.
     /// </summary>
@@ -13,7 +13,7 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>The lane's width: at 16:9 with the TAC BOARD at its default size it fits between the board and the screen's centre line with <see cref="Gap"/> to spare. A line with long text grows to <see cref="MaxWidth"/> and steps aside.</summary>
         public const float Width = 312f, MaxWidth = 400f, Gap = 12f;
         /// <summary>The slot: the ticks' top (reference y, down from the screen's top), the warning line's box height and the ace card's. The heading tape's numbers start about 232 down in the cockpit.</summary>
-        public const float LineTop = 144f, LineHeight = 48f, CardHeight = 66f;
+        public const float LineTop = 144f, LineHeight = 40f, CardHeight = 66f;
         /// <summary>The row inside the ticks: its inset from the box edge, the row's height (an EMPHASIS line) and the gap between words.</summary>
         public const float Pad = 10f, RowTop = 8f, RowHeight = 28f, WordGap = 12f, CallGap = 16f;
         /// <summary>How far the lane rises in the external views (the third-person HDG box stands about 200 down).</summary>
@@ -26,7 +26,7 @@ namespace BoscaliSummer.Core.Ui
         public static bool LineUp;
 
         // The look: strokes and tick arms, then the sizes the standard names.
-        public const float Stroke = HudStroke.Standard, Arm = 6f, ChevronStroke = HudStroke.Heavy;
+        public const float Stroke = HudStroke.Standard, Arm = 6f;
         public const float NamePt = HudType.Emphasis, DetailPt = HudType.Body, LabelPt = HudType.Label, ValuePt = HudType.Value;
 
         // Motion: the onset blink is three blinks at 3 Hz and nothing in the layer flashes faster.

@@ -10,8 +10,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// <summary>
     /// WING (prototype: <c>pages/wing.js</c>): the player's wing against the player. One dominant shape, a heading-up formation plot (you at the centre, the rim 700 m): slot
     /// diamonds at the formation offsets, each wingman's chevron at its REAL relative position with a thin tether to its slot (who is out of slot, by how much), wingmen past
-    /// the rim clamped onto it with a range tag, engaging wingmen with a dashed ray to a target diamond on the rim, a missile guiding on a wingman with a line to it. Right: one
-    /// row per wingman (state word, fuel and ammunition bars, a task line) and the order acknowledgements. Top-left: the order (FORM / ENGAGE) with a pictogram of the formation.
+    /// the rim clamped onto it with a range tag, engaging wingmen with a dashed ray to a target diamond on the rim, a missile guiding on a wingman with a red line to it. Right: one
+    /// unboxed block per wingman (chevron, callsign, fuel and ammunition bars, state word; the task line under it). Top-left: the formation's name. The order is the headline (refit 5.3: one home per fact).
     /// Feed: <see cref="WingBoardScope"/> (the Wing module's provider: the live wing on the host and solo, the snapshot mirror on a client). Shown whenever the
     /// player has wingmen; the headline says what matters most (a hit, a defence, WINCH, ENGAGE, how many are out of slot, IN SLOT). Events (hit, a missile on a wingman, winchester, an order acknowledged) go to the ticker once.
     /// </summary>
@@ -19,7 +19,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     {
         /// <summary>A fresh hit reads DAMAGED on its row this long.</summary>
         private const float HoldSeconds = 8f;
-        private const float RowX = 244f, RowW = 192f, InSlotFilledM = 40f;
+        private const float InSlotFilledM = 40f;
         private const int Cap = 8, TrailLen = 6, LabelCap = 24, LabelChars = 28;
 
         private WingBoardScope d;
@@ -53,8 +53,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private int headlineKey = -1;
         private ScopeTone headlineTone = Dim;
         private bool headlineFlash;
-        private int fuelKey = int.MinValue, ammoKey = int.MinValue;
-        private string fuelText = "", fuelSub = "", ammoText = "", ammoSub = "";
+        private int fuelKey = int.MinValue;
+        private string fuelText = "", fuelSub = "";
 
         public override ScopePage Id => ScopePage.Wing;
 
@@ -177,19 +177,16 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public override int Gauges(GaugeSpec[] into)
         {
             if (d.Count <= 0 || d.Members == null) return 0;
-            int n = 0, count = Math.Min(d.Count, Cap), low = 0, armed = 0;
-            float minFuel = 2f, sumAmmo = 0f;
-            for (int i = 0; i < count; i++)
-            {
-                WingBoardMember m = d.Members[i];
-                if (m.Fuel < minFuel) { minFuel = m.Fuel; low = i; }
-                sumAmmo += m.Ammo;
-                if (m.Ammo > 0f) armed++;
-            }
+            int n = 0, count = Math.Min(d.Count, Cap);
             if (d.HasAutopilot)
             {
                 into[n++] = new GaugeSpec { Id = "ap", Label = "AUTOPILOT", Kind = GaugeKind.Mode, Text = d.ApText, Sub = d.ApSub, Value = d.ApProgress, Tone = Ink };
             }
+            if (count <= WingBoardMath.MaxRows) return n;      // every wingman has a roster block: its bars are the fuel's home
+            // WING FUEL: the lowest of the wingmen the roster has no room for.
+            int low = WingBoardMath.MaxRows;
+            float minFuel = 2f;
+            for (int i = WingBoardMath.MaxRows; i < count; i++) if (d.Members[i].Fuel < minFuel) { minFuel = d.Members[i].Fuel; low = i; }
             WingBoardMember lowest = d.Members[low];
             int fk = (int)Math.Round(minFuel * 100f) * 100 + lowest.Number * 3 + (lowest.Bingo ? 1 : lowest.Joker ? 2 : 0);
             if (fk != fuelKey)
@@ -200,15 +197,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             ScopeTone fuelTone = lowest.Bingo || minFuel < 0.25f ? Amber : Ink;
             into[n++] = new GaugeSpec { Id = "wfuel", Label = "WING FUEL", Kind = GaugeKind.Bar, Value = minFuel, Text = fuelText, Sub = fuelSub, Tone = fuelTone };
-            float avg = sumAmmo / count;
-            int ak = (int)Math.Round(avg * 100f) * 100 + armed * 10 + count;
-            if (ak != ammoKey)
-            {
-                ammoKey = ak;
-                ammoText = ScopeStr.Pct((int)Math.Round(avg * 100f));
-                ammoSub = "OF " + count + " AC";
-            }
-            into[n++] = new GaugeSpec { Id = "waam", Label = "WING AMMO", Kind = GaugeKind.Ring, Value = avg, Inner = ScopeStr.Int(armed), Text = ammoText, Sub = ammoSub, Tone = armed < count ? Amber : Ink };
             return n;
         }
 
@@ -225,7 +213,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             labels = 0;
             placer.Reset();
             Plot(g, p.Now, n);
-            Order(g, p.Now, n);
+            if (d.Shape != null) g.FitText(d.Shape, 0f, 34f, WingBoardMath.RosterX - 8f, Dim, HudType.Label, HudType.Label);      // the formation's name; its geometry is the plot
             Roster(g, p.Now, n);
             Flush(g);
         }
@@ -277,7 +265,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 var text = new ReadOnlySpan<char>(labelText, i * LabelChars, labelLen[i]);
                 float w = ScopeCanvas.TextW(text, 12f), x0 = labelAlign[i] == ScopeAlign.Right ? labelX[i] - w : labelAlign[i] == ScopeAlign.Center ? labelX[i] - w / 2f : labelX[i];
                 float y = placer.Place(x0, x0 + w, labelY[i]);
-                g.Fill(Mathf.Round(x0) - 2f, Mathf.Round(y) - 8f, (float)Math.Ceiling(w) + 4f, 16f, Bg, 0.85f);
                 g.Text(text, labelX[i], y, labelTone[i], 12f, labelAlign[i], labelBold[i]);
             }
         }
@@ -292,7 +279,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Line(Px, Py - R, Px, Py + R, Faint, 1f, 1f, 2f, 4f);
             g.Line(Px - R, Py, Px + R, Py, Faint, 1f, 1f, 2f, 4f);
             g.Ring(Px, Py, R / 2f, Faint, 1f, 1f, Ink, 0f, 3f, 3f);
-            g.Ring(Px, Py, R, Dim, 0.85f);
+            g.Ring(Px, Py, R, Faint);
             for (int a = 0; a < 360; a += 30)
             {
                 ScopeCanvas.Polar(a, R, out float ox, out float oy);
@@ -300,8 +287,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Line(Px + ox, Py + oy, Px + ix, Py + iy, Dim);
             }
             bool imperial = units == AvUnits.Imperial;
-            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM / 2f), null), Px + 4f, Py + R / 2f + 8f, Dim, 12f, ScopeAlign.Left, false, 0.8f);
-            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), Px + 4f, Py + R - 8f, Dim, 12f, ScopeAlign.Left, false, 0.8f);
+            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM / 2f), null), Px + 4f, Py + R / 2f + 8f, Dim, 12f, ScopeAlign.Left);
+            g.Text(ScopeStr.Cat("", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), Px + 4f, Py + R - 8f, Dim, 12f, ScopeAlign.Left);
 
             // Formation skeleton and slots (a client has none: the snapshot does not carry the shape).
             int slots = 0;
@@ -346,8 +333,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Line(ax, ay, sx, sy, voluntary || m.SlotErrM < WingBoardMath.TetherFarM ? Dim : Amber, voluntary ? 0.55f : 0.9f, 1f, 2f, 3f, t * 4f);
             }
 
-            // Engage rays and the target diamonds on the rim.
-            int tag = 0;
+            // Engage rays and the target diamonds on the rim (the target's name and range are the task line's).
             for (int i = 0; i < n; i++)
             {
                 WingBoardMember m = d.Members[i];
@@ -358,16 +344,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Line(ax, ay, tx, ty, Hi, 0.85f, 1f, 5f, 3f, -t * 16f);
                 g.Diamond(tx, ty, 5f, Hi, false);
                 g.Ring(tx, ty, 9f + 2f * ScopeCanvas.Pulse(t, 2f), Hi, 0.4f);
-                if (tag < 2)
-                {
-                    float ly = 41f + tag * 17f;
-                    ReadOnlySpan<char> range = ScopeStr.Distance(null, m.TargetRangeM, units, 10);
-                    float dw = ScopeCanvas.TextW(range, 12f);
-                    g.Text(range, 238f, ly, Hi, 12f, ScopeAlign.Right);
-                    float nw = g.FitText(m.TargetName ?? "", 238f - dw - ScopeText.DesignAdvance * 12f, ly, 90f, Hi, 12f, 12f, ScopeAlign.Right);
-                    g.Line(238f - dw - nw - 12f, ly, tx, ty, Dim, 0.6f, 1f, 2f, 3f);
-                    tag++;
-                }
             }
 
             // A missile guiding on a wingman.
@@ -380,8 +356,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Line(ax, ay, bx, by, Red, 0.7f, 1f, 4f, 3f, -t * 14f);
                 if (rim) g.Tri(ax, ay, WingBoardMath.BearingDeg(m.ThreatX, m.ThreatY) + 180f, 5f, Red);
                 else g.Chevron(ax, ay, (float)(Math.Atan2(bx - ax, -(by - ay)) * 180.0 / Math.PI), 5f, Red, true);
-                if (!ReferenceEquals(seekerFor[i], m.ThreatSeeker)) { seekerFor[i] = m.ThreatSeeker; seekerPre[i] = (m.ThreatSeeker ?? "MSL") + " "; }
-                Label(ScopeStr.Cat(seekerPre[i], (int)Math.Round(m.ThreatTtiS), "S"), ax + (ax > Px ? -8f : 8f), ay + 14f, Red, true, ax > Px ? ScopeAlign.Right : ScopeAlign.Left);
             }
 
             // The wingmen.
@@ -406,89 +380,62 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                             g.Fill(Mathf.Round(ax + qx), Mathf.Round(ay + qy), 2f, 2f, Amber, 1f - u);
                         }
                     if (m.State == WingState.Defend) g.Ring(ax, ay, 11f + 2f * ScopeCanvas.Pulse(t, 3f), Amber, 0.7f);
-                    Label(ScopeStr.Cat("#", m.Number, null), ax + (ax > Px ? 9f : -9f), ay - 10f, tone, true, ax > Px ? ScopeAlign.Left : ScopeAlign.Right);
+                    Label(ScopeStr.Cat("#", m.Number, null), ax + (ax > Px ? 9f : -9f), ay - 10f, tone, tone == Amber, ax > Px ? ScopeAlign.Left : ScopeAlign.Right);
                 }
                 else
                 {
                     g.Tri(ax, ay, WingBoardMath.BearingDeg(m.X, m.Y), 6f, tone, !hollow);
                     float dist = (float)Math.Sqrt(m.X * m.X + m.Y * m.Y);
-                    int l = Begin(Mathf.Clamp(ax, 40f, 208f), ay + (ay < Py ? 14f : -14f), tone, true, ScopeAlign.Center);
+                    int l = Begin(Mathf.Clamp(ax, Px - R + 30f, Px + R - 30f), ay + (ay < Py ? 14f : -14f), tone, tone == Amber, ScopeAlign.Center);
                     Append(l, ScopeStr.Cat("#", m.Number, " "));
                     Append(l, ScopeStr.Distance(null, dist, units, 10));
                 }
             }
 
             // You.
-            g.Jet(Px, Py, 0f, 9f, Ink, true);
-            g.Ring(Px, Py, 14f, Ink, 0.35f);
-            Label(ScopeStr.Cat("RNG ", Scale(WingBoardMath.RimM), imperial ? " FT" : " M"), 8f, Py + R - 4f, Dim, false, ScopeAlign.Left);
+            g.Jet(Px, Py, 0f, 9f, Ink, true, 0.07f);
         }
 
         /// <summary>A plot distance in the player's units, rounded to 50 (700 m is 700, 2300 ft).</summary>
         private int Scale(float metres) => (int)(Math.Round(AvUnitTable.Altitude(metres, units) / 50f) * 50f);
 
-        // ---------------------------------------------------------------- the order block
-
-        private void Order(ScopeCanvas g, float t, int n)
-        {
-            bool engage = d.Engaged;
-            float s = 0f;
-            int slots = 0;
-            for (int i = 0; i < n; i++) if (d.Members[i].HasSlot) { slotX[slots] = d.Members[i].SlotX; slotY[slots] = d.Members[i].SlotY; slots++; }
-            if (slots > 0) s = WingBoardMath.GlyphScale(slotX, slotY, slots);
-            if (slots > 0)
-            {
-                float lx = 4f + 8f + 11f, ly = 33f + 2f;
-                g.Diamond(lx, ly, 3f, Hi, true);
-                for (int i = 0; i < n; i++)
-                {
-                    WingBoardMember m = d.Members[i];
-                    if (!m.HasSlot) continue;
-                    float px = lx + m.SlotX * s, py = ly - m.SlotY * s;
-                    bool arrow = engage && m.State == WingState.Engage;
-                    if (arrow) g.Tri(px, py - (6f * ScopeCanvas.Pulse(t, 1.5f) + 1f), 0f, 3.2f, Hi);
-                    else g.Diamond(px, py, 3f, Ink, false);
-                }
-            }
-            g.Text(engage ? "ENGAGE" : "FORM", 44f, 40f, Hi, 12f, ScopeAlign.Left, true);
-            if (d.Shape != null) g.FitText(d.Shape, 44f, 56f, 84f, Dim);
-        }
-
-        // ---------------------------------------------------------------- roster and acknowledgements
+        // ---------------------------------------------------------------- the roster
 
         private void Roster(ScopeCanvas g, float t, int n)
         {
-            WingBoardMath.Rows(n, out int shown, out float rowH, out float step, out bool task);
-            for (int i = 0; i < shown; i++) Row(g, d.Members[i], i, RowX, WingBoardMath.RowsTop + i * step, rowH, task, t);
-            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " MORE"), RowX + RowW - 4f, WingBoardMath.RowsTop + WingBoardMath.RowsRoom + 12f, Dim, 12f, ScopeAlign.Right);
+            int shown = Math.Min(n, WingBoardMath.MaxRows);
+            for (int i = 0; i < shown; i++) Block(g, d.Members[i], i, WingBoardMath.BlockTop + i * WingBoardMath.BlockPitch, t);
+            if (n > shown) g.Text(ScopeStr.Cat("+", n - shown, " AC"), 0f, 172f, Dim, HudType.Label);
         }
 
-        private void Row(ScopeCanvas g, in WingBoardMember m, int index, float x, float y, float h, bool taskLine, float t)
+        /// <summary>
+        /// A wingman's block, no box (refit 5.3): line A at <paramref name="a"/> the chevron, the callsign, the fuel bar (with its quarter tick) and the ammunition bar, the state word at the right; line B what is short
+        /// (BINGO, JOKER, a low figure) and the task line.
+        /// </summary>
+        private void Block(ScopeCanvas g, in WingBoardMember m, int index, float a, float t)
         {
+            const float X = WingBoardMath.RosterX, W = WingBoardMath.RosterW;
             WingState st = Shown(index, m);
             ScopeTone tone = WingBoardMath.ToneOf(st);
-            bool sev = tone == Amber, flash = st == WingState.Damaged && (int)(t * 3f) % 2 == 0;
-            g.Box(x, y, RowW, h, sev ? Amber : Dim, sev ? 1f : 0.8f, 1f, Amber, sev ? (flash ? 0.28f : 0.1f) : 0f, chamTL: 6f);
-            g.Chevron(x + 13f, y + 14f, m.HeadingDeg > 90f || m.HeadingDeg < -90f ? 180f : 0f, 5f, m.Damaged && tone == Ink ? Amber : tone, !WingBoardMath.Hollow(st), 1f);
-            string word = WingBoardMath.Word(st);
-            float wordW = ScopeCanvas.TextW(word, 12f) + 6f;
-            g.FitText(m.Name ?? "", x + 24f, y + 13f, RowW - 24f - 8f - wordW, Hi, 12f, 12f, ScopeAlign.Left, true);
-            ScopeTone wordTone = tone == Ink ? (st == WingState.Engage ? Hi : Ink) : tone;
-            g.Text(word, x + RowW - 8f, y + 13f, wordTone, 12f, ScopeAlign.Right, st != WingState.Form, st == WingState.Rtb ? 0.85f : 1f);
-
-            float by = y + (taskLine ? 26f : Math.Max(20f, Math.Min(26f, h - 18f)));
+            bool caution = tone == Amber, engage = st == WingState.Engage;
+            g.Chevron(X + 8f, a, m.HeadingDeg > 90f || m.HeadingDeg < -90f ? 180f : 0f, 5f, m.Damaged && tone == Ink ? Amber : tone, !WingBoardMath.Hollow(st), 1f);
+            g.FitText(m.Name ?? "", X + 22f, a, 110f, Ink, HudType.Body, HudType.Label);
             bool low = m.Fuel < 0.25f || m.Bingo || m.Joker;
-            ScopeTone fuelTone = low ? Amber : Ink, ammoTone = m.Ammo <= 0f ? Amber : Ink;
-            g.Text("F", x + 8f, by + 5f, Dim);
-            g.Bar(x + 17f, by, 36f, 10f, m.Fuel, fuelTone, 8);
-            g.BarTick(x + 17f, by, 36f, 10f, 0.25f, m.Fuel < 0.25f ? Amber : Dim);        // the quarter mark every caution below it is read against
-            if (m.Bingo) g.Text("BINGO", x + 58f, by + 5f, Amber, 12f, ScopeAlign.Left, true);
-            else g.Text(ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x + 58f, by + 5f, low ? Amber : Hi, 12f, ScopeAlign.Left, low);
-            g.Text("A", x + 92f, by + 5f, Dim);
-            g.Bar(x + 101f, by, 36f, 10f, m.Ammo, ammoTone, 4);
-            if (ammoTone == Amber) g.Text("WINCH", x + 142f, by + 5f, Amber, 12f, ScopeAlign.Left, true);
-            else g.Text(ScopeStr.Pct((int)Math.Round(m.Ammo * 100f)), x + 142f, by + 5f, Hi);
-            if (taskLine) TaskLine(g, m, st, index, x + 8f, y + 49f, RowW - 14f, sev ? Amber : Dim);
+            g.Bar(X + 142f, a - 1f, 48f, 3f, m.Fuel, low ? Amber : Ink, 8);
+            g.BarTick(X + 142f, a - 1f, 48f, 3f, 0.25f, m.Fuel < 0.25f ? Amber : Dim);        // the quarter mark every caution below it is read against
+            g.Bar(X + 198f, a - 1f, 24f, 3f, m.Ammo, m.Ammo <= 0f ? Amber : Ink, 4);
+            ScopeTone wordTone = caution ? Amber : engage ? Hi : st == WingState.Join ? Ink : Dim;
+            float wordAlpha = st == WingState.Damaged && (int)(t * 6f) % 2 == 1 ? 0.55f : 1f;
+            g.Text(WingBoardMath.Word(st), X + W, a, wordTone, HudType.Label, ScopeAlign.Right, caution || engage, wordAlpha);
+
+            float b = a + WingBoardMath.LinePitch, x = X + 22f, w = W - 22f;
+            if (low)
+            {
+                float fw = g.Text(m.Bingo ? "BINGO" : m.Joker ? "JOKER" : ScopeStr.Pct((int)Math.Round(m.Fuel * 100f)), x, b, Amber, HudType.Label, ScopeAlign.Left, true) + 8f;
+                x += fw;
+                w -= fw;
+            }
+            TaskLine(g, m, st, index, x, b, w, caution || engage ? Ink : Dim);
         }
 
         /// <summary>The row's third line: what the wingman is doing, from what is known of it.</summary>
@@ -529,7 +476,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     {
                         if (!ReferenceEquals(replyFor[index], m.ThreatReply)) { replyFor[index] = m.ThreatReply; replyPost[index] = "S - " + (m.ThreatReply ?? "EVADE"); }
                         if (!ReferenceEquals(seekerFor[index], m.ThreatSeeker)) { seekerFor[index] = m.ThreatSeeker; seekerPre[index] = (m.ThreatSeeker ?? "MSL") + " "; }
-                        g.FitText(ScopeStr.Cat(seekerPre[index], (int)Math.Round(m.ThreatTtiS), replyPost[index]), x, y, w, tone);
+                        g.FitText(ScopeStr.Cat(seekerPre[index], (int)Math.Ceiling(m.ThreatTtiS), replyPost[index]), x, y, w, tone);
                     }
                     else g.Text("MISSILE - DEFENDING", x, y, tone);
                     break;

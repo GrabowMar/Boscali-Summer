@@ -9,8 +9,8 @@ using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The stores side of the board: the weapon (HERO), the capacitor (PWR BUS) and the countermeasures (EXPENDABLES), drawn by StoresHeader into their rectangles. What it has to say to the board: which of the three blocks
-    // exist (BoardBlocks.Hero / Pwr / Exp from the header's flags), the surface the header paints on, the images that carry the game's own line art (a sprite cannot go through the stroke canvas: it is baked into the
+    // The stores side of the board: the bar's WPN and CM cells and the SYS cell's capacitor row, drawn by StoresHeader into their rectangles. What it has to say to the board: which of the two cells
+    // exist (BoardBlocks.Hero / Exp from the header's flags), the surface the header paints on, the images that carry the game's own line art (a sprite cannot go through the stroke canvas: it is baked into the
     // mod's alpha mask, StoreIcons), and which native boxes it stands in for (TickNatives). Nothing here touches the wing side.
     internal sealed partial class StatusPanel
     {
@@ -59,7 +59,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// </summary>
         private void PaintStores(in ScopePalette pal, in BoardGeometry geo, bool flashOn)
         {
-            float bottom = Math.Max(geo.Hero.Present ? geo.Hero.Bottom : 0f, Math.Max(geo.Pwr.Present ? geo.Pwr.Bottom : 0f, geo.Exp.Present ? geo.Exp.Bottom : 0f));
+            // The surface spans the box's width from its top down to the lowest stores block: WPN, CM and the SYS cell's capacitor row (STACK's line B).
+            float bottom = Math.Max(geo.Wpn.Present ? geo.Wpn.Bottom : 0f, geo.Cm.Present ? geo.Cm.Bottom : 0f);
+            if (header.HasCap && geo.Sys.Present) bottom = Math.Max(bottom, geo.Sys.Bottom);
             if (bottom <= 0f) { Show(storesRect, false); ClearHeader(); return; }
             Show(storesRect, true);
             float height = Whole(bottom * unit);
@@ -69,7 +71,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Begin(pal, unit, height, pixel, HudType.BoardBoost);
             try
             {
-                header.Paint(g, geo, boardStack, (int)Options.Declutter, now, flashOn);
+                header.Paint(g, geo, boardStack, (int)Options.Declutter, now, flashOn, allow.ShowStores);
                 headerFault = false;
             }
             catch (Exception e)

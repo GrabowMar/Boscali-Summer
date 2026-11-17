@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private string headlineText = "";
         private int headlineKey = -1;
-        private ScopeTone headlineTone = Hi;
+        private ScopeTone headlineTone = Dim;
         private bool headlineFlash;
         private int gaugeKey = int.MinValue;
         private AvUnits gaugeUnits = (AvUnits)(-1);
@@ -89,11 +89,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         internal static float ClosureIn(float mps, AvUnits u) => u == AvUnits.Imperial ? mps * 1.94384f : mps;
 
-        internal static string ClosureUnitOf(AvUnits u) => u == AvUnits.Imperial ? " KT" : " M/S";
+        internal static string ClosureUnitOf(AvUnits u) => u == AvUnits.Imperial ? "KT" : "M/S";
 
         internal static int LengthIn(float m, AvUnits u) => (int)Math.Round(AvUnitTable.Altitude(m, u));
 
-        internal static string LengthUnitOf(AvUnits u) => u == AvUnits.Imperial ? " FT" : " M";
+        internal static string LengthUnitOf(AvUnits u) => u == AvUnits.Imperial ? "FT" : "M";
 
         private float Err => DockMath.ErrM(d.RelX, d.RelY);
 
@@ -161,29 +161,21 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private float Closure(float mps) => ClosureIn(mps, units);
 
-        private string ClosureUnit() => ClosureUnitOf(units);
+        private string ClosureUnit() => units == AvUnits.Imperial ? " KT" : " M/S";
 
         private int Len(float m) => LengthIn(m, units);
 
-        private string LenUnit() => LengthUnitOf(units);
+        private string LenUnit() => units == AvUnits.Imperial ? " FT" : " M";
 
         private void UpdateHeadline()
         {
             int key;
             string text = null;      // built only when the key changes (this runs at 10 Hz): a steady figure builds nothing
-            ScopeTone tone = Hi;
+            ScopeTone tone = Dim;      // the ROUTE card's status (refit 5.4): a caution, else the phase word
             bool flash = false;
             if (TooFast) { key = 1; text = "TOO FAST"; tone = Amber; flash = true; }
-            else if (d.Phase == DockPhase.Served) { key = 2; text = "SERVED"; }
-            else if (d.Phase == DockPhase.Transfer) { int p = (int)Math.Round(d.Fuel * 100f); key = (d.ServiceZone ? 4000 : 3000) + p; text = d.ServiceZone ? d.JobName ?? "SERVICE" : key != headlineKey ? "FUEL " + p + "%" : null; }
-            else if (d.Phase == DockPhase.Engage) { key = 4; text = d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE"; }
-            else
-            {
-                int v = Len(d.RangeM);
-                key = 10000 + v + (units == AvUnits.Imperial ? 5000 : 0);
-                if (key != headlineKey) text = v + LenUnit();
-                tone = Edge || Bad ? Amber : Hi;
-            }
+            else if (Bad) { key = 2; text = "OFF CENTRE"; tone = Amber; }
+            else { key = 10 + (int)d.Phase; text = Words[(int)d.Phase]; }
             if (key != headlineKey || (text != null && text != headlineText)) { headlineKey = key; headlineText = text ?? headlineText; }
             headlineTone = tone;
             headlineFlash = flash;
@@ -434,8 +426,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Text("CLOSURE", X0, 154f, Dim);
             float cv = Closure(c);
             g.Text(ScopeStr.Cat("", cv, cv < 10f ? 1 : 0, ClosureUnit()), X0 + W, 154f, fast ? Amber : Hi, 12f, ScopeAlign.Right, true);
-            g.Bar(X0, 164f, W, 10f, DockMath.ClosureFill(c, d.MaxClosingMps), fast ? Amber : Ink);
-            g.BarTick(X0, 164f, W, 10f, DockMath.LimitTick, c >= 0.733f * d.MaxClosingMps ? Amber : Dim, ScopeStr.Cat("MAX ", (int)Math.Round(Closure(d.MaxClosingMps)), null));
+            g.Bar(X0, 164f, W, 3f, DockMath.ClosureFill(c, d.MaxClosingMps), fast ? Amber : Ink);
+            g.BarTick(X0, 164f, W, 3f, DockMath.LimitTick, c >= 0.733f * d.MaxClosingMps ? Amber : Dim, ScopeStr.Cat("MAX ", (int)Math.Round(Closure(d.MaxClosingMps)), null));
             if (fast) { g.Tri(X0 + 5f, 186f, 180f, 4f, Amber); g.Text("AFT", X0 + 14f, 186f, Amber, 12f, ScopeAlign.Left, true); }
 
             // The prompt panel.
@@ -455,7 +447,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 g.PlateTag(d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE", cx, py + 22f, Hi, 16f, ScopeAlign.Center, 8f, flash ? 0.55f : 1f);
                 if (d.ServiceZone) g.Text(d.Docked ? "TENDER INBOUND" : "FLY FORMATION", cx, py + 46f, Dim, 12f, ScopeAlign.Center);
-                else if (ttc > 0f) g.Text(ScopeStr.Cat("CONTACT IN ", Math.Max(1, (int)Math.Round(ttc)), " S"), cx, py + 46f, Dim, 12f, ScopeAlign.Center);
+                else if (ttc > 0f) g.Text(ScopeStr.Cat("CONTACT IN ", Math.Max(1, (int)Math.Round(ttc)), "S"), cx, py + 46f, Dim, 12f, ScopeAlign.Center);
                 else g.Text(d.Docked ? "DOCKING" : "BRAKE TO DOCK", cx, py + 46f, Dim, 12f, ScopeAlign.Center);
                 if (DockMath.Inside(err, cone)) { g.Check(X0 + 18f, py + 62f, 9f, Ink, 1f, 1.5f); g.Text("ALIGNED", X0 + 30f, py + 62f, Ink); }
                 else { g.Cross(X0 + 18f, py + 62f, 8f, Amber, 1f, 1.5f); g.Text("OFF LINE", X0 + 30f, py + 62f, Amber, 12f, ScopeAlign.Left, true); }
@@ -514,7 +506,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             g.Text(label, x, 13f, Dim);
             float bx = x + 40f, bw = 112f;
-            g.Bar(bx, 7f, bw, 12f, frac, done ? Hi : Ink, segs);
+            g.Bar(bx, 7f, bw, 3f, frac, done ? Hi : Ink, segs);
             if (xfer)
             {
                 float u = (t * 1.5f) % 1f, sx = bx + 2f + (bw - 4f) * Math.Max(0f, Math.Min(1f, frac)) - 3f;

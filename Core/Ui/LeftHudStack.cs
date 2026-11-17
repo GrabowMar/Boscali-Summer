@@ -7,7 +7,7 @@ namespace BoscaliSummer.Core.Ui
     /// <summary>Shared screen-space metrics and occupied edges for the local log, radio and cue column, in 1080p design units.</summary>
     internal static class LeftHudStack
     {
-        public const float Left = 12f, Width = HudZones.WideLog, Inset = 12f, HeaderSize = HudType.Label, BodySize = HudType.Value;
+        public const float Left = HudZones.Margin, Width = HudZones.WideLog, Inset = 12f, HeaderSize = HudType.Label, BodySize = HudType.Body;
         public static float LogBottom, CommsBottom, MissionBottom;
         /// <summary>The game's own feed box is on screen (the mod's log is not standing in, e.g. in free camera): its bottom edge in screen pixels from the top, else 0.</summary>
         public static float NativeFeedBottomPx;

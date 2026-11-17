@@ -5,13 +5,11 @@ namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
     /// The SYSTEMS page's feed (Hud's own; read through <see cref="ScopeFeeds"/> like every page's): the airframe's damage zones, the fuel
-    /// state with its BINGO / JOKER marks and the way home, the wind and whether the aircraft is in cloud (the countermeasure stations are the
+    /// state with its BINGO / JOKER marks, the wind, the clock, the sky and whether the aircraft is in cloud (the countermeasure stations are the
     /// stores header's). Always live while there is an aircraft.
     /// </summary>
     internal struct SystemsScope
     {
-        /// <summary>The airframe is a helicopter (rotor disc and tail boom silhouette) rather than a fixed wing.</summary>
-        public bool Rotary;
         public DamageState Damage;
         public FuelState Fuel;
         /// <summary>The nose's compass heading, degrees: the wind dial turns with it.</summary>
@@ -19,6 +17,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>Wind the air is coming FROM (compass degrees) and its speed; <see cref="HasWind"/> false: the weather module has no reading.</summary>
         public bool HasWind;
         public float WindFromDeg, WindMps;
+        /// <summary>The gust as an increment over the mean wind (m/s), turbulence 0..1 and the air temperature (C); only meaningful while <see cref="HasWind"/>.</summary>
+        public float GustMps, Turb01, TempC;
+        /// <summary>The local time of day in hours (NaN: no level), the sky cover 0..1 with its base (m) and the rain 0..1; the sky ones read while <see cref="HasCloud"/>.</summary>
+        public float TodH, Cover, CloudBaseM, Rain01;
         /// <summary>The aircraft is between a cloud deck's base and top (<see cref="HasCloud"/> false: no weather sample).</summary>
         public bool HasCloud, InCloud;
         /// <summary>The mission clock in seconds, under the wind (2026-10-21, moved here from NAV DATA); negative or NaN: none.</summary>

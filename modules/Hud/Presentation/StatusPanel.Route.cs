@@ -9,7 +9,7 @@ using static BoscaliSummer.Core.Contracts.ScopeTone;
 
 namespace BoscaliSummer.Modules.Hud.Presentation
 {
-    // The ROUTE slot (HUD zones, 2026-11-16): the left column's 281 x 133 face under the NOTICE line, showing the first live of APPROACH, DOCK, CARGO, OBJECTIVE (ScopePick.Route) as a compact caption shelf and five rows. It reads what the four
+    // The ROUTE slot (HUD zones, 2026-11-16): the left column's 281 x 133 face under the NOTICE line, showing the first live of APPROACH, DOCK, CARGO, OBJECTIVE (ScopePick.Route) as a compact card: the page header's shelf (its caption, and the page's headline as the status), four rows and a bar line. It reads what the four
     // full pages read (ScopeFeeds, the pages' own number formats and rules) and draws none of their plots: APPROACH has a small ILS cross, DOCK a small funnel dial, OBJECTIVE a small bearing dial, CARGO none. The board shows none
     // of the four (2026-11-16): this face is ROUTE. The pages stay polled every present, with the board on or off (Present / PollRoutePages), so the slot sees them live either way. It lives in the cue tree's gate (HUD up, corners on, not suppressed), has its own root, follows the sway and redraws only when
     // the numbers it shows, its place or the canvas moved (a signature, checked at the 10 Hz tick). Rows with no source in the scope (DOCK FLOW, CARGO OBJ, OBJECTIVE ETA) are not drawn.
@@ -31,10 +31,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private float routeTop;
         private Vector2 routeCanvasSeen;
         private int routeSig;
-        // The caption shelf's flag, rebuilt only when what it says changes.
-        private string routeFlag, routeFlagTag;
-        private int routeFlagKey = -1;
-        private ScopePage routeFlagFace;
 
         /// <summary>The offline check reads these: the face drawn (when one is up), and where its top fell.</summary>
         internal bool RouteDrawn => routeDrawn;
@@ -127,9 +123,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             else if (routeFace == ScopePage.Cargo) { ok = ScopeFeeds.TryRead(out cargo) && CargoManifestRules.Present(cargo); sig = ok ? CargoSig(cargo) : 0; }
             else { ok = ScopeFeeds.TryRead(out objective) && objective.Id != 0; sig = ok ? ObjectiveSig(objective) : 0; }
             if (!ok) { HideRoute(); return; }
-            sig = unchecked(((sig * 31 + (int)routeFace) * 31 + (int)routeUnits) * 31 + (furniture ? 1 : 0));
+            // The shelf's status is the face's page headline (refit 5.4); its beat counts while it flashes (and on DOCK's ENGAGE, whose call box pulses).
+            ScopeHeadline hl = HeadlineOf(pages[(int)routeFace]);
+            int beat = (int)(Time.unscaledTime * FlashHz * 2f) & 1;
+            bool beats = hl.Flash && (hl.Tone == Amber || hl.Tone == Red) || routeFace == ScopePage.Dock && dock.Phase == DockPhase.Engage;
+            sig = unchecked(((((sig * 31 + (int)routeFace) * 31 + (int)routeUnits) * 31 + (furniture ? 1 : 0)) * 31 + (hl.Text?.GetHashCode() ?? 0)) * 31 + (int)hl.Tone * 4 + (beats ? beat + 1 : 0));
             if (!moved && sig == routeSig) return;
-            if (routeFaceDrawn != routeFace) routeFlagKey = -1;      // a face switch starts the flag over
             routeSig = sig;
 
             float canvasW = canvasRect.rect.width, canvasH = canvasRect.rect.height;
@@ -139,8 +138,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             g.Furniture = furniture;
             g.Begin(Palette(), baseUnit, Whole(canvasH), pixel);
             g.Origin(zone.X, top);      // everything below is in the slot's own units (RouteLayout)
+            HeaderShelf(g, RouteLayout.W, RouteCaption(routeFace), hl.Text, hl.Tone, hl.Flash, beat == 0);
             if (routeFace == ScopePage.Approach) PaintApproach(g, approach);
-            else if (routeFace == ScopePage.Dock) PaintDock(g, dock);
+            else if (routeFace == ScopePage.Dock) PaintDock(g, dock, beat);
             else if (routeFace == ScopePage.Cargo) PaintCargo(g, cargo);
             else PaintObjective(g, objective);
             g.End();
@@ -160,39 +160,50 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             routeCanvas = null;
             routeDrawn = routeLive = false;
             routeSig = 0;
-            routeFlag = routeFlagTag = null;
-            routeFlagKey = -1;
         }
 
         // ------------------------------------------------------------------------------------------------ shared parts
 
         private const float RowMid = RouteLayout.RowH * 0.5f;
 
-        /// <summary>A row: the label in full ink at the left, the value (14 bold) and its unit (full ink) at the right edge of <paramref name="r"/>. The value is a scratch span: it is drawn by this very call.</summary>
-        private static void RouteRow(ScopeCanvas g, in BoardRect r, string label, ReadOnlySpan<char> value, string unit, ScopeTone tone)
-        {
-            float y = r.Y + RowMid, x = r.Right;
-            if (!string.IsNullOrEmpty(unit)) x -= g.Text(unit, r.Right, y, Ink, 12f, ScopeAlign.Right);
-            g.Text(label, r.X, y, Ink);
-            g.Text(value, x, y, tone, 14f, ScopeAlign.Right, true);
-        }
+        /// <summary>The card's caption (refit 5.4, design call D6): what the shelf says before the page's headline.</summary>
+        private static string RouteCaption(ScopePage face) => face == ScopePage.Approach ? "APP" : face == ScopePage.Dock ? "DOCK" : face == ScopePage.Cargo ? "DROP" : "OBJ";
 
         /// <summary>
-        /// The caption shelf's flag of <paramref name="face"/>, built only when its inputs change (a face of its own key space): DOCK "TANKER · WORD" (<paramref name="a"/> cut to 14, <paramref name="b"/>), CARGO "WORD · n/m",
-        /// OBJECTIVE "PH n/m" (<paramref name="n"/>, <paramref name="m"/>). Nothing is built before the key test.
+        /// A row: the label (LABEL DIM) at the left of <paramref name="r"/>, the value (BODY bold in <paramref name="tone"/>) and its unit (LABEL DIM, 4 after it) at the right edge. The value and the unit may be scratch spans:
+        /// they are drawn by this very call.
         /// </summary>
-        private string RouteFlagOf(ScopePage face, int key, string a, string b, int n, int m)
+        private static void RouteRow(ScopeCanvas g, in BoardRect r, string label, ReadOnlySpan<char> value, ReadOnlySpan<char> unit, ScopeTone tone)
         {
-            if (routeFlagFace != face || routeFlagKey != key || !string.Equals(routeFlagTag, a))
-            {
-                routeFlagFace = face;
-                routeFlagKey = key;
-                routeFlagTag = a;
-                if (face == ScopePage.Objective) routeFlag = "PH " + n + "/" + m;
-                else if (face == ScopePage.Cargo) routeFlag = a + " · " + n + "/" + m;
-                else routeFlag = (a.Length > 14 ? a.Substring(0, 13) + "…" : a) + " · " + b;      // a long tanker name: the shelf has room for about 26 characters
-            }
-            return routeFlag;
+            float y = r.Y + RowMid, x = r.Right;
+            if (!unit.IsEmpty) x -= g.Text(unit, r.Right, y, Dim, HudType.Label, ScopeAlign.Right) + 4f;
+            g.Text(label, r.X, y, Dim, HudType.Label);
+            g.Text(value, x, y, tone, HudType.Body, ScopeAlign.Right, true);
+        }
+
+        /// <summary>A <see cref="RouteRow"/> of a distance in the player's units, its figure and its unit apart.</summary>
+        private static void RouteDistance(ScopeCanvas g, in BoardRect r, string label, float metres, AvUnits u, ScopeTone tone)
+        {
+            ReadOnlySpan<char> s = ScopeStr.Distance("", metres, u, 8);
+            int k = Figure(s);
+            RouteRow(g, r, label, s.Slice(0, k), s.Slice(k), tone);
+        }
+
+        /// <summary>How many leading characters of <paramref name="s"/> are its figure (digits, '.', ',' and '-'): the rest is its unit.</summary>
+        private static int Figure(ReadOnlySpan<char> s)
+        {
+            int k = 0;
+            while (k < s.Length && (char.IsDigit(s[k]) || s[k] == '.' || s[k] == ',' || s[k] == '-')) k++;
+            return k;
+        }
+
+        /// <summary>The card's one hero figure: <paramref name="s"/>'s figure EMPHASIS bold in <paramref name="tone"/> at (<paramref name="x"/>, middle <paramref name="y"/>), its unit LABEL DIM 4 after it. Returns the width.</summary>
+        private static float Hero(ScopeCanvas g, float x, float y, ReadOnlySpan<char> s, ScopeTone tone)
+        {
+            int k = Figure(s);
+            float w = g.Text(s.Slice(0, k), x, y, tone, HudType.Emphasis, ScopeAlign.Left, true);
+            if (k < s.Length) w += 4f + g.Text(s.Slice(k), x + w + 4f, y, Dim, HudType.Label);
+            return w;
         }
 
         // ------------------------------------------------------------------------------------------------ APPROACH
@@ -215,20 +226,19 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         }
 
         /// <summary>
-        /// APPROACH, mostly a picture: the ILS cross at the left, and beside it the runway (or pad), the distance to the threshold over a bar that fills as it closes (from 10 km; a pad from 2 km: the INTERCEPT stage's
-        /// own scale) and the sink rate. The shelf's flag is the stage (INTERCEPT, GLIDE, FLARE, ROLLOUT; a pad's APPROACH, DESCENT, TOUCHDOWN).
+        /// APPROACH, mostly a picture: the ILS cross at the left, and beside it the runway (or pad), the distance to the threshold (the hero), the sink rate, and a bar that fills as the distance closes (from 10 km; a pad
+        /// from 2 km: the INTERCEPT stage's own scale). The shelf's status is the page's headline (GEAR, FAST, a deviation, else the stage).
         /// </summary>
         private void PaintApproach(ScopeCanvas g, in ApproachScope d)
         {
             AvUnits u = routeUnits;
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "APPROACH", ApproachWords.Of(d.Stage, d.Pad));
             ApproachCross(g, d);
-            BoardRect r0 = RouteLayout.RowBesideDial(0), r3 = RouteLayout.RowBesideDial(3);
-            g.FitText(d.Runway ?? d.Field ?? (d.Pad ? "PAD" : "RUNWAY"), r0.X, r0.Y + RowMid, r0.W, Hi, 14f, 12f, ScopeAlign.Left, true);
-            g.Text(ScopeStr.Distance("", d.DistanceM, u, 8), r0.X, RouteLayout.RowBesideDial(1).Y + RouteLayout.RowH, Hi, 22f, ScopeAlign.Left, true);
-            g.Bar(r3.X, r3.Y + 5f, r3.W, 10f, ApproachMath.StageProgress(ApproachStage.Intercept, d.Pad, d.DistanceM, 0f, 0f, 0f, 0f), Ink, 10);
+            BoardRect r0 = RouteLayout.RowBesideDial(0);
+            g.FitText(d.Runway ?? d.Field ?? (d.Pad ? "PAD" : "RUNWAY"), r0.X, r0.Y + RowMid, r0.W, Ink, HudType.Body, HudType.Label);
+            Hero(g, r0.X, RouteLayout.RowBesideDial(1).Y + RowMid, ScopeStr.Distance("", d.DistanceM, u, 8), Hi);
             bool imperial = u == AvUnits.Imperial;
-            RouteRow(g, RouteLayout.RowBesideDial(4), "SINK", ScopeStr.Cat("", AvUnitTable.Climb(d.SinkMps, u), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", d.SinkMps > ApproachMath.SinkCautionMps ? Amber : Hi);
+            RouteRow(g, RouteLayout.RowBesideDial(2), "SINK", ScopeStr.Cat("", AvUnitTable.Climb(d.SinkMps, u), imperial ? 0 : 1, null), imperial ? "FPM" : "M/S", d.SinkMps > ApproachMath.SinkCautionMps ? Amber : Ink);
+            g.Bar(r0.X, RouteLayout.BarY, r0.W, 3f, ApproachMath.StageProgress(ApproachStage.Intercept, d.Pad, d.DistanceM, 0f, 0f, 0f, 0f), Ink);
         }
 
         /// <summary>
@@ -238,9 +248,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static void ApproachCross(ScopeCanvas g, in ApproachScope d)
         {
             const float R = 52f;
-            float cx = RouteLayout.Dial * 0.5f, cy = RouteLayout.RowsTop + RouteLayout.Dial * 0.5f;
-            g.Line(cx - R, cy, cx + R, cy, Dim);
-            g.Line(cx, cy - R, cx, cy + R, Dim);
+            float cx = RouteLayout.Dial * 0.5f, cy = RouteLayout.DialTop + RouteLayout.Dial * 0.5f;
+            g.Line(cx - R, cy, cx + R, cy, Faint);
+            g.Line(cx, cy - R, cx, cy + R, Faint);
             for (int k = -2; k <= 2; k++)
             {
                 if (k == 0) continue;
@@ -267,39 +277,55 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             unchecked
             {
-                int h = (int)d.Phase;
+                int h = (int)d.Phase * 2 + (d.ServiceZone ? 1 : 0);
                 h = h * 31 + (int)Math.Round(d.RangeM * 3.3f);
                 h = h * 31 + (int)Math.Round(DockPage.ConeOf(d) * 3.3f);
                 h = h * 31 + (int)Math.Round(d.ClosureMps * 20f);
                 h = h * 31 + (int)Math.Round(d.RelX * 4f);
                 h = h * 31 + (int)Math.Round(d.RelY * 4f);
+                h = h * 31 + (int)Math.Round(d.Fuel * 100f);
                 h = h * 31 + (DockPage.OutOfFunnel(d) ? 1 : 0) + (DockPage.TooFastOf(d) ? 2 : 0);
                 return h * 31 + (d.Tanker?.GetHashCode() ?? 0);
             }
         }
 
-        /// <summary>DOCK: the funnel dial at the left, RANGE, FUNNEL, CLOSING and OFFSET beside it (FLOW has no source in <see cref="DockScope"/>).</summary>
-        private void PaintDock(ScopeCanvas g, in DockScope d)
+        /// <summary>
+        /// DOCK: the funnel dial at the left (the funnel's one home), and beside it the tanker, the range (the hero; the fuel taken while it transfers), CLOSING and OFFSET. On ENGAGE the last row is the call to hold, an
+        /// outline pulsing on <paramref name="beat"/> (refit C6); while it transfers a bar fills toward the target (FLOW has no source in <see cref="DockScope"/>).
+        /// </summary>
+        private void PaintDock(ScopeCanvas g, in DockScope d, int beat)
         {
             AvUnits u = routeUnits;
-            string word = DockPage.Words[(int)d.Phase];
-            string tanker = d.Tanker ?? "SKYWELL";
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "DOCK", RouteFlagOf(ScopePage.Dock, (int)d.Phase, tanker, word, 0, 0));
-            bool bad = DockPage.OutOfFunnel(d), fast = DockPage.TooFastOf(d);
+            bool bad = DockPage.OutOfFunnel(d), fast = DockPage.TooFastOf(d), fuel = d.Phase == DockPhase.Transfer || d.Phase == DockPhase.Served;
             DockDial(g, d, bad);
-            float cone = DockPage.ConeOf(d), cv = DockPage.ClosureIn(d.ClosureMps, u);
+            float cv = DockPage.ClosureIn(d.ClosureMps, u);
             string len = DockPage.LengthUnitOf(u);
-            RouteRow(g, RouteLayout.RowBesideDial(0), "RANGE", ScopeStr.Int(DockPage.LengthIn(d.RangeM, u)), len, Hi);
-            RouteRow(g, RouteLayout.RowBesideDial(1), "FUNNEL", ScopeStr.Int(DockPage.LengthIn(cone, u)), len, bad ? Amber : Ink);
-            RouteRow(g, RouteLayout.RowBesideDial(2), "CLOSING", ScopeStr.Cat("", cv, cv < 10f ? 1 : 0, null), DockPage.ClosureUnitOf(u), fast ? Amber : Hi);
-            RouteRow(g, RouteLayout.RowBesideDial(3), "OFFSET", ScopeStr.Cat(d.RelX < 0f ? "L" : "R", Math.Abs(DockPage.LengthIn(d.RelX, u)), d.RelY < 0f ? " D" : " U", Math.Abs(DockPage.LengthIn(d.RelY, u)), null), len, bad ? Amber : Ink);
+            BoardRect r0 = RouteLayout.RowBesideDial(0), r3 = RouteLayout.RowBesideDial(3);
+            g.FitText(d.Tanker ?? "SKYWELL", r0.X, r0.Y + RowMid, r0.W, Ink, HudType.Body, HudType.Label);
+            float hy = RouteLayout.RowBesideDial(1).Y + RowMid;
+            if (fuel) Hero(g, r0.X, hy, ScopeStr.Pct((int)Math.Round(d.Fuel * 100f)), Hi);
+            else Hero(g, r0.X, hy, ScopeStr.Cat("", DockPage.LengthIn(d.RangeM, u), len), Hi);
+            RouteRow(g, RouteLayout.RowBesideDial(2), "CLOSING", ScopeStr.Cat("", cv, cv < 10f ? 1 : 0, null), DockPage.ClosureUnitOf(u), fast ? Amber : Ink);
+            if (d.Phase == DockPhase.Engage)
+            {
+                // The call box (refit C6): an outline in HI pulsing on the beat, no fill.
+                string call = d.ServiceZone ? "HOLD STEADY" : "HOLD BRAKE";
+                float cw = g.Text(call, r3.X + 5f, r3.Y + RowMid, Hi, HudType.Value, ScopeAlign.Left, true);
+                g.Box(r3.X, r3.Y + RowMid - 13f, cw + 10f, 26f, Hi, beat == 0 ? 1f : 0.4f);
+            }
+            else RouteRow(g, r3, "OFFSET", ScopeStr.Cat(d.RelX < 0f ? "L" : "R", Math.Abs(DockPage.LengthIn(d.RelX, u)), d.RelY < 0f ? " D" : " U", Math.Abs(DockPage.LengthIn(d.RelY, u)), null), len, bad ? Amber : Ink);
+            if (fuel)
+            {
+                g.Bar(r0.X, RouteLayout.BarY, r0.W, 3f, d.Fuel, Hi);
+                g.BarTick(r0.X, RouteLayout.BarY, r0.W, 3f, d.FuelTarget, Dim);
+            }
         }
 
         /// <summary>The dial: the metre rings' outer bound, the funnel ring at the page's scale, the contact point and the probe (the page's bullseye at half size, no silhouette, no directors).</summary>
         private static void DockDial(ScopeCanvas g, in DockScope d, bool bad)
         {
             const float R = 50f, S = R / DockMath.BullseyeR;
-            float cx = RouteLayout.Dial * 0.5f, cy = RouteLayout.RowsTop + RouteLayout.Dial * 0.5f;
+            float cx = RouteLayout.Dial * 0.5f, cy = RouteLayout.DialTop + RouteLayout.Dial * 0.5f;
             g.Ring(cx, cy, R, Dim, 0.85f);
             g.Line(cx - R, cy, cx + R, cy, Faint, 1f, 1f, 2f, 4f);
             g.Line(cx, cy - R, cx, cy + R, Faint, 1f, 1f, 2f, 4f);
@@ -313,7 +339,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (off) g.Ring(cx + dx, cy + dy, 3f, Amber); else g.Ring(cx + dx, cy + dy, 3f, dn, 1f, 1f, dn, 1f);
         }
 
-        // ------------------------------------------------------------------------------------------------ CARGO
+        // ------------------------------------------------------------------------------------------------ CARGO (DROP)
 
         private static int CargoSig(in CargoScope d)
         {
@@ -323,43 +349,41 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return unchecked(((((((flags * 31 + (int)d.Kind) * 31 + d.Ammo) * 31 + d.Max) * 31 + window) * 31 + (int)(d.DistanceM / 5f)) * 31 + (int)Math.Round(d.BearingDeg)) * 31 + (int)(d.ReachM / 10f));
         }
 
-        /// <summary>CARGO: the light with its hold time (or why it holds), the distance numeral with its steer word, REACH (OBJ has no source in <see cref="CargoScope"/>).</summary>
+        /// <summary>DROP, full width (glyphs at 8, words at 22): the light with what holds the drop and the seconds until the zone comes into reach, the distance (the hero) with its steer, REACH while known, and the load.</summary>
         private void PaintCargo(ScopeCanvas g, in CargoScope d)
         {
+            const float TextX = 22f, W = RouteLayout.W;
             AvUnits u = routeUnits;
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "CARGO", RouteFlagOf(ScopePage.Cargo, ((int)d.Kind * 1000 + d.Ammo) * 1000 + d.Max, CargoManifestRules.KindWord(d.Kind), null, d.Ammo, d.Max));
-            // Row 0: the jump light, and the seconds until the zone comes into reach, or what holds the drop.
-            BoardRect r0 = RouteLayout.Row(0);
-            float y = r0.Y + RowMid;
+            // Row 0: the jump light, the hint, and the seconds until the zone comes into reach (or that it is not closing).
+            float y = RouteLayout.Row(0).Y + RowMid;
             CargoLight light = CargoManifestRules.Light(d);
-            ScopeTone tone = light == CargoLight.Green ? Hi : light == CargoLight.Amber ? Amber : Red;
-            g.Ring(8f, y, 6f, tone, 1f, 1.5f, tone, 0.9f);
-            string lightWord = CargoManifestRules.LightWord(light);
-            float wordW = g.Text(lightWord, 20f, y, tone, 14f, ScopeAlign.Left, true);
+            ScopeTone lt = light == CargoLight.Green ? Hi : light == CargoLight.Amber ? Amber : Red;
+            g.Ring(8f, y, 6f, lt, 1f, 1.5f, lt, 0.9f);
             bool cleared = CargoManifestRules.LoadCheck(d) == CargoCheck.Pass && CargoManifestRules.SafetyCheck(d) == CargoCheck.Pass;
-            float t = CargoManifestRules.WindowSeconds(d);
-            if (cleared && t > 0f && float.IsPositiveInfinity(t)) g.Text("NOT CLOSING", RouteLayout.W, y, Amber, 12f, ScopeAlign.Right);
-            else if (cleared && t > 0f) g.Text(OpsScopeWords.Clock(t), RouteLayout.W, y, Hi, 16f, ScopeAlign.Right, true);
-            else g.FitText(CargoManifestRules.Hint(d), RouteLayout.W, y, RouteLayout.W - 20f - wordW - 8f, light == CargoLight.Green ? Ink : tone, 12f, 12f, ScopeAlign.Right);
+            float t = CargoManifestRules.WindowSeconds(d), rw = 0f;
+            if (cleared && t > 0f && float.IsPositiveInfinity(t)) rw = g.Text("NOT CLOSING", W, y, Amber, HudType.Label, ScopeAlign.Right, true);
+            else if (cleared && t > 0f) rw = g.Text(OpsScopeWords.Clock(t), W, y, Hi, HudType.Value, ScopeAlign.Right, true);
+            g.FitText(CargoManifestRules.Hint(d), TextX, y, W - TextX - rw - (rw > 0f ? 8f : 0f), Ink, HudType.Body, HudType.Label);
 
-            // Rows 1 and 2: the distance numeral and the steer word.
-            float ny = RouteLayout.Row(1).Y + RouteLayout.RowH;
+            // Row 1: the distance and the steer to the zone.
             if (d.HasZone)
             {
-                bool inside = CargoManifestRules.InRange(d);
-                g.Text(ScopeStr.Distance("", d.DistanceM, u, 8), 0f, ny, inside ? Hi : Ink, 22f, ScopeAlign.Left, true);
+                float ny = RouteLayout.Row(1).Y + RowMid;
+                Hero(g, 0f, ny, ScopeStr.Distance("", d.DistanceM, u, 8), CargoManifestRules.InRange(d) ? Hi : Ink);
                 int off = (int)Math.Round(Math.Abs(d.BearingDeg));
-                if (off <= 3) g.Text("ON THE NOSE", RouteLayout.W, ny, inside ? Hi : Ink, 14f, ScopeAlign.Right, true);
-                else g.Text(ScopeStr.Cat(d.BearingDeg > 0f ? "STEER R " : "STEER L ", off, "°"), RouteLayout.W, ny, off > 90 ? Amber : Ink, 14f, ScopeAlign.Right, true);
+                ScopeTone st = off > 90 ? Amber : Ink;
+                float dw = g.Text(ScopeStr.Cat("", off, "°"), W, ny, st, HudType.Body, ScopeAlign.Right, true);
+                g.Chevron(W - dw - 10f, ny, d.BearingDeg, 5f, st, true);
             }
-            else if (!d.UsesLandingZone || !d.ZoneAvailable) g.Text("NATIVE AIM", 0f, ny, Ink, 14f, ScopeAlign.Left, true);
-            else g.Text("SET DROP ZONE", 0f, ny, Amber, 14f, ScopeAlign.Left, true);
 
-            // Row 3: how far a release from here reaches.
-            BoardRect r3 = RouteLayout.Row(3);
-            if (d.HasZone && d.HasReach) RouteRow(g, r3, "REACH", ScopeStr.Distance("", d.ReachM, u, 8), null, CargoManifestRules.InRange(d) ? Hi : Ink);
-            else RouteRow(g, r3, "REACH", "--", null, Dim);
+            // Row 2: how far a release from here reaches, while it is known.
+            if (d.HasZone && d.HasReach) RouteDistance(g, Gutter(RouteLayout.Row(2), TextX), "REACH", d.ReachM, u, CargoManifestRules.InRange(d) ? Hi : Ink);
+
+            // Row 3: the load.
+            RouteRow(g, Gutter(RouteLayout.Row(3), TextX), CargoManifestRules.KindWord(d.Kind), ScopeStr.Cat("", d.Ammo, "/", d.Max, null), default, Ink);
         }
+
+        private static BoardRect Gutter(in BoardRect r, float x) => new BoardRect(r.X + x, r.Y, r.W - x, r.H);
 
         // ------------------------------------------------------------------------------------------------ OBJECTIVE
 
@@ -389,20 +413,22 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 (int)Math.Round(ObjectiveMath.Relative(ObjectiveMath.Bearing(d.X - d.OwnX, d.Z - d.OwnZ), d.OwnHeading) / 3f)) * 31 + (int)Math.Ceiling(d.Left)) * 31 + (int)(d.Radius / 10f)) * 31 + threat);
         }
 
-        /// <summary>OBJECTIVE: the contract's title, the distance numeral with the deadline and a small bearing dial, the nearest air-defence ring, the zone and what the hold needs (the deadline stands in for ETA: the scope has no travel time).</summary>
+        /// <summary>
+        /// OBJECTIVE: the contract's title, the distance (the hero) with the deadline and a small bearing dial (its ring is the in-zone home), the nearest known air-defence ring, the zone and the hold's progress (a bar on the
+        /// bar line). What keeps the hold from counting is the shelf's status (the page's headline). The deadline stands in for ETA: the scope has no travel time.
+        /// </summary>
         private void PaintObjective(ScopeCanvas g, in ObjectiveScope d)
         {
+            const float W = RouteLayout.W, DialX = W - 20f;
             AvUnits u = routeUnits;
-            g.CaptionShelf(0f, 0f, RouteLayout.W, "OBJECTIVE", d.PhaseCount > 0 ? RouteFlagOf(ScopePage.Objective, d.Current * 1024 + d.PhaseCount, null, null, d.Current + 1, d.PhaseCount) : null);
-            g.FitText(d.Title, 0f, RouteLayout.Row(0).Y + RowMid, RouteLayout.W, Hi, 14f, 12f, ScopeAlign.Left, true);
+            g.FitText(d.Title, 0f, RouteLayout.Row(0).Y + RowMid, W - 44f, Ink, HudType.Body, HudType.Label);
 
-            // Rows 1 and 2: the distance to the zone's edge (its centre once inside), the deadline and the bearing dial.
-            float ny = RouteLayout.Row(1).Y + RouteLayout.RowH, own = ObjectiveMath.Distance(d.OwnX, d.OwnZ, d.X, d.Z);
+            // Row 1: the distance to the zone's edge (its centre once inside), the deadline and the bearing dial.
+            float ny = RouteLayout.Row(1).Y + RowMid, own = ObjectiveMath.Distance(d.OwnX, d.OwnZ, d.X, d.Z);
             bool inZone = own <= d.Radius;
-            const float DialX = RouteLayout.W - 20f;
             if (d.HasMarker)
             {
-                g.Text(ScopeStr.Distance("", inZone ? own : own - d.Radius, u, 8), 0f, ny, Hi, 22f, ScopeAlign.Left, true);
+                Hero(g, 0f, ny, ScopeStr.Distance("", inZone ? own : own - d.Radius, u, 8), Hi);
                 float rel = ObjectiveMath.Relative(ObjectiveMath.Bearing(d.X - d.OwnX, d.Z - d.OwnZ), d.OwnHeading);
                 g.Ring(DialX, ny, 15f, Faint);
                 g.Line(DialX, ny - 17f, DialX, ny - 13f, Dim);
@@ -412,40 +438,32 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Ring(DialX, ny, 2f, Ink, 1f, 1f, Ink, 1f);
                 if (inZone) g.Ring(DialX, ny, 19f, Hi, 0.7f);
             }
-            else g.Text(ObjectiveMath.LineWord(ObjectiveLine.ContactLost), 0f, ny, Amber, 16f, ScopeAlign.Left, true);
             if (d.Total > 0f && d.Left > 0f)
             {
                 float rx = DialX - 24f;
                 bool low = ObjectiveMath.DeadlineLow(d.Left);
-                float cw = g.Text(OpsScopeWords.Clock(d.Left), rx, ny, low ? Amber : Hi, 16f, ScopeAlign.Right, true);
-                g.Text("DUE", rx - cw - 6f, ny, Ink, 12f, ScopeAlign.Right);
+                float cw = g.Text(OpsScopeWords.Clock(d.Left), rx, ny, low ? Amber : Hi, HudType.Value, ScopeAlign.Right, true);
+                g.Text("DUE", rx - cw - 4f, ny, Dim, HudType.Label, ScopeAlign.Right);
             }
 
-            // Row 3: the nearest ring and whether the pilot stands in its reach.
-            BoardRect r3 = RouteLayout.Row(3);
-            float y3 = r3.Y + RowMid;
+            // Row 2: the nearest known ring and how far it is (AMBER inside its reach).
             int ring = NearestRing(d);
-            if (ring < 0)
-            {
-                g.Text("AIR DEF", 0f, y3, Ink);
-                g.Text("NONE KNOWN", RouteLayout.W, y3, Ink, 12f, ScopeAlign.Right);
-            }
-            else
+            if (ring >= 0)
             {
                 SamExposure e = ObjectiveMath.Expose(d.Rings[ring], d.OwnX, d.OwnZ, d.OwnAgl);
-                g.Text(ObjectiveMath.Kind(d.Rings[ring].Kind), 0f, y3, Ink);
-                g.Text(e.Inside ? "EXPOSED" : "MASKED", 72f, y3, e.Inside ? Amber : Ink, 12f, ScopeAlign.Left, e.Inside);
-                g.Text(ScopeStr.Distance("", e.DistanceM, u, 8), RouteLayout.W, y3, e.Inside ? Amber : Ink, 12f, ScopeAlign.Right);
+                RouteDistance(g, RouteLayout.Row(2), ObjectiveMath.Kind(d.Rings[ring].Kind), e.DistanceM, u, e.Inside ? Amber : Ink);
             }
 
-            // Row 4: the zone's radius, and what keeps the hold from counting (or the phase's progress).
-            float y4 = RouteLayout.Row(4).Y + RowMid;
-            float zw = g.Text(ScopeStr.Distance("ZONE R", d.Radius, u, 14), 0f, y4, Ink);
-            ObjectiveLine line = ObjectiveMath.Line(d);
-            string word = ObjectiveMath.LineWord(line);
-            if (word != null && line != ObjectiveLine.ContactLost) g.FitText(word, RouteLayout.W, y4, RouteLayout.W - zw - 12f, Amber, 12f, 12f, ScopeAlign.Right, true);
-            else if (line == ObjectiveLine.Progress) g.Text(ScopeStr.Pct((int)Math.Round(ObjectiveMath.Progress(d) * 100f)), RouteLayout.W, y4, Ink, 12f, ScopeAlign.Right);
-            else if (inZone && d.HasMarker) g.Text("IN ZONE", RouteLayout.W, y4, Hi, 12f, ScopeAlign.Right, true);
+            // Row 3: the zone's radius, and the hold's progress (its bar on the bar line).
+            float y3 = RouteLayout.Row(3).Y + RowMid;
+            float zw = g.Text("ZONE", 0f, y3, Dim, HudType.Label);
+            g.Text(ScopeStr.Distance("", d.Radius, u, 8), zw + 6f, y3, Ink, HudType.Body);
+            if (ObjectiveMath.Line(d) == ObjectiveLine.Progress)
+            {
+                float progress = ObjectiveMath.Progress(d);
+                g.Text(ScopeStr.Pct((int)Math.Round(progress * 100f)), W, y3, Ink, HudType.Body, ScopeAlign.Right, true);
+                g.Bar(0f, RouteLayout.BarY, W, 3f, progress, Hi);
+            }
         }
     }
 }

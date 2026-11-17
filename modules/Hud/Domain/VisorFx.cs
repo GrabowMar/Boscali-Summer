@@ -409,7 +409,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 float hv = Clamp01((DegradeLevel - 0.65f) / 0.25f);      // heavy: dropouts, ghosts, corrupted words
                 if (hv > 0f)
                 {
-                    split = Math.Max(split, (1f + 3f * hv) * (Hash(s * 2 + b) < 0.75f ? 1f : 0f) * env);
+                    split = Math.Max(split, (1f + 1.5f * hv) * (Hash(s * 2 + b) < 0.5f ? 1f : 0f) * env);
                     drop = Math.Max(drop, (0.06f + 0.24f * hv * Hash(s * 29 + b)) * env);
                     floor = Math.Min(floor, calm ? 0.5f : 0.1f);
                     Scramble = hv > 0.3f && u < dur * 0.7f;
@@ -440,7 +440,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 BarPos = Clock * 0.17f - (float)Math.Floor(Clock * 0.17f);
                 BarJitter = 3f + 9f * j;
                 fine = Math.Max(fine, 0.35f + 0.65f * j);
-                split = Math.Max(split, (2f + 1.5f * Hash(slot / 2 + 3)) * Clamp01(j * 2f));
+                split = Math.Max(split, (1f + 1.5f * Hash(slot / 2 + 3)) * Clamp01(j * 2f));
                 if (Hash(slot * 3 + 1) < 0.35f) roll = Sign(Hash(slot + 9)) * (j > 0.5f ? 2f : 1f);
                 float cycle = Clock / 3.1f - (float)Math.Floor(Clock / 3.1f);
                 if (cycle < 0.04f) AddBand(ref nb, 0.15f + 0.7f * Hash((int)(Clock / 3.1f) * 7 + 1), 0.05f, Sign(Hash((int)(Clock / 3.1f))) * 7f * j, 1f);

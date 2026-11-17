@@ -3,36 +3,29 @@ using System;
 namespace BoscaliSummer.Modules.Hud.Domain
 {
     /// <summary>
-    /// The two segmented arcs round the reticle (2026-11-16, the approved mockup's <c>arcs(d)</c>), pure: fuel on the left, throttle on the right, each 22 segments over 29 degrees. Angles are
+    /// The two arcs round the reticle (2026-11-16, the approved mockup's <c>arcs(d)</c>; one continuous stroke since 2026-11-17), pure: fuel on the left, throttle on the right, each over 29 degrees. Angles are
     /// degrees counter-clockwise from the arc's own axis (the direction from the reticle to the middle of the game's arc: left for fuel, right for throttle), so the same numbers serve both
     /// arcs and a rolled or moved HUD only turns the frame. Fuel runs the other way round (full at the clockwise end, the top of the left arc); throttle fills counter-clockwise (up the right arc).
     /// </summary>
     internal static class FlightArcs
     {
         public const int Segments = 22;
-        public const float SpanDeg = 29f, HalfSpanDeg = SpanDeg * 0.5f, GapFraction = 0.006f;
+        public const float SpanDeg = 29f, HalfSpanDeg = SpanDeg * 0.5f;
         /// <summary>The game's own arcs sweep their pointer 28 (fuel) and 26 (throttle) degrees: half of it is what the middle of an arc's rectangle sits off the circle (<see cref="RadiusFromRect"/>).</summary>
         public const float FuelNativeHalfDeg = 14f, ThrottleNativeHalfDeg = 13f;
         /// <summary>The afterburner detent tick of the throttle arc is the game's own (its boundary pivot turns <c>(start + 0.01) * 26 - 13</c> degrees).</summary>
         public const float ThrottleNativeSweepDeg = 26f;
-        /// <summary>The segment width lit and unlit (px at 1080 high), and the unlit alpha.</summary>
-        public const float LitWidth = 8f, UnlitWidth = 5f, UnlitAlpha = 0.4f;
+        /// <summary>The stroke core lit and unlit (px at 1080 high), the soft edge each side fades over, the unlit track's alpha, and the angle step of the polygon that draws the curve
+        /// (1 degree on a ~320 px circle is a 5.6 px chord, 0.01 px off the true circle: no visible facet).</summary>
+        public const float LitWidth = 2.5f, UnlitWidth = 1f, Feather = 1f, UnlitAlpha = 0.35f, StepDeg = 1f;
 
-        /// <summary>How many segments are lit at <paramref name="fraction"/> (0..1): a segment is lit when its middle is at or below the fraction, so 0 is none and 1 is all.</summary>
+        /// <summary>How many segments are lit (the sim probe's 22-step count of the fill; the arc itself is drawn continuous) at <paramref name="fraction"/> (0..1): a segment is lit when its middle is at or below the fraction, so 0 is none and 1 is all.</summary>
         public static int Lit(float fraction)
         {
             if (!(fraction > 0f)) return 0;
             if (fraction >= 1f) return Segments;
             int n = (int)Math.Floor(fraction * Segments - 0.5f) + 1;
             return n < 0 ? 0 : n > Segments ? Segments : n;
-        }
-
-        /// <summary>Where segment <paramref name="i"/> (0 = empty end) starts and ends, in the arc's own angle; <paramref name="reversed"/> for fuel (the empty end is the counter-clockwise one).</summary>
-        public static void Segment(int i, bool reversed, out float a0, out float a1)
-        {
-            float t0 = (float)i / Segments + GapFraction, t1 = (float)(i + 1) / Segments - GapFraction;
-            a0 = At(t0, reversed);
-            a1 = At(t1, reversed);
         }
 
         /// <summary>The angle of fill fraction <paramref name="fraction"/> (clamped to 0..1) along the arc.</summary>

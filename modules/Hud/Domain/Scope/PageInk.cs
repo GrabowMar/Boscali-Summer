@@ -24,8 +24,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         private static bool Dark(ScopeTone t) => t == ScopeTone.Bg || t == ScopeTone.Plate;
 
-        /// <summary>The tone's own opacity times the alpha asked for (DIM is the ink at 0.70).</summary>
-        private static float Strength(ScopeTone t, float alpha) => alpha * (t == ScopeTone.Dim || t == ScopeTone.Faint ? ScopePalette.DimAlpha : 1f);
+        /// <summary>How strong a fill is: the alpha asked for (every tone is opaque).</summary>
+        private static float Strength(ScopeTone t, float alpha) => alpha;
 
         /// <summary>Rules 1 and 2 for a <paramref name="w"/> x <paramref name="h"/> rectangle: a dark plate is dropped, so is a ground tint or a vignette (at most 0.45 strong and 40 x 40 or more); a solid one (over 0.85, 14 x 12 or more) is a chip.</summary>
         public static InkFill Fill(float w, float h, ScopeTone tone, float alpha)

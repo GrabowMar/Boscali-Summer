@@ -21,6 +21,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private const float OX = 220f;
         /// <summary>The aircraft's y on the plan: 16 above the body's foot (258 on a full page; the FIRES panel is shorter).</summary>
         private float OY = 258f;
+        /// <summary>The right edge a tag may reach: the page's width less 2 (was a fixed 438 for a 440 page).</summary>
+        private float xMax = 438f;
         private const int Cap = 8, Chips = 7;
 
         private ShotScope d;
@@ -34,9 +36,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly int[] seenId = new int[Cap], pitSaid = new int[Cap];
         private readonly ShotState[] resultState = new ShotState[ShotLedger.Capacity];
         private string headlineText = "";
-        private int headlineKey = -1, impactKey = int.MinValue, hitsKey = int.MinValue, targetKey = int.MinValue;
+        private int headlineKey = -1, hitsKey = int.MinValue, targetKey = int.MinValue, leadTarget = -1;
+        private bool leadOff;
         private ScopeTone headlineTone = Hi;
-        private string impactInner, impactWord, hitsText, hitsSub, tgtText, tgtSub;
+        private string hitsText, tgtText, tgtSub;
+        private readonly float[] hitTicks = new float[ShotLedger.Capacity];
 
         public override ScopePage Id => ScopePage.Shot;
 
@@ -86,8 +90,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ShotCell c = d.Cells[k];
                 if (k >= resultState.Length) break;
                 bool resolved = c.State == ShotState.Hit || c.State == ShotState.Miss || c.State == ShotState.Defeated;
-                if (resolved && c.AgeS < 1f && resultState[k] != c.State)
-                    env.Notice?.Invoke("shot", c.State == ShotState.Hit ? HudTone.Info : HudTone.Caution, c.Name + (c.State == ShotState.Hit ? " - HIT" : c.State == ShotState.Defeated ? " - DEFEATED" : " - MISS"), null);
+                if (resolved && c.AgeS < 1f && resultState[k] != c.State && c.State != ShotState.Miss)
+                    env.Notice?.Invoke("shot", c.State == ShotState.Hit ? HudTone.Info : HudTone.Caution, c.Name + (c.State == ShotState.Hit ? " - HIT" : " - DEFEATED"), null);
                 resultState[k] = c.State;
             }
         }
@@ -113,7 +117,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (lead >= 0)
             {
                 ShotMissile m = d.Missiles[lead];
-                if (!float.IsNaN(m.TtiS)) { key = 1000 + (int)Math.Ceiling(m.TtiS); if (key != headlineKey) text = ScopeStr.Cat("", (int)Math.Ceiling(m.TtiS), " S").ToString(); }
+                if (!float.IsNaN(m.TtiS)) { key = 1000 + (int)Math.Ceiling(m.TtiS); if (key != headlineKey) text = ScopeStr.Cat("", (int)Math.Ceiling(m.TtiS), "S").ToString(); }
                 else { key = 5000 + (int)m.Phase; if (key != headlineKey) text = ShotMath.PhaseWord(m.Phase); }
             }
             else
@@ -131,18 +135,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         public override ScopeHeadline Headline() => live ? new ScopeHeadline { Text = headlineText, Tone = headlineTone } : default;
 
-        /// <summary>The lead shot's flight (seconds to impact in the ring, its phase and weapon beside it), how the last shots ended, and the lead shot's target as a needle. The weapon and its rounds are the stores header's.</summary>
+        /// <summary>How the last shots ended, and the lead shot's target as a needle only while it is off the plan. The seconds to impact are the headline's and the strip's; the weapon and its rounds are the stores header's.</summary>
         public override int Gauges(GaugeSpec[] into)
         {
             if (!live) return 0;
             int n = 0;
-            if (lead >= 0)
-            {
-                ShotMissile m = d.Missiles[lead];
-                int s = float.IsNaN(m.TtiS) ? -1 : (int)Math.Ceiling(Math.Max(0f, m.TtiS)), key = (int)m.Phase * 10000 + m.Id * 100 + Math.Min(s, 99);
-                if (key != impactKey) { impactKey = key; impactInner = s < 0 ? "--" : ScopeStr.Int(s); impactWord = ShotMath.PhaseWord(m.Phase); }
-                into[n++] = new GaugeSpec { Id = "lead", Label = "IMPACT", Kind = GaugeKind.Ring, Value = m.Progress, Inner = impactInner, Text = impactWord, Sub = m.Short, Tone = Ink };
-            }
             int hits = 0, shots = 0;
             for (int i = 0; i < d.CellCount; i++)
             {
@@ -153,10 +150,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (shots > 0)
             {
                 int key = hits * 100 + shots;
-                if (key != hitsKey) { hitsKey = key; hitsText = ScopeStr.Cat("", hits, "/", shots, null).ToString(); hitsSub = ScopeStr.Cat("LAST ", shots, null).ToString(); }
-                into[n++] = new GaugeSpec { Id = "hits", Label = "HITS", Kind = GaugeKind.Bar, Value = (float)hits / shots, Text = hitsText, Sub = hitsSub, Tone = Ink };
+                if (key != hitsKey)
+                {
+                    hitsKey = key; hitsText = ScopeStr.Cat("", hits, "/", shots, null).ToString();
+                    for (int t = 1; t < shots && t <= hitTicks.Length; t++) hitTicks[t - 1] = (float)t / shots;      // one notch between shots
+                }
+                into[n++] = new GaugeSpec { Id = "hits", Label = "HITS", Kind = GaugeKind.Bar, Value = (float)hits / shots, Text = hitsText, Tone = Ink, Ticks = hitTicks, TickCount = Math.Min(shots - 1, hitTicks.Length), TickTone = Bg };
             }
-            if (d.HasLead)
+            if (d.HasLead && leadOff)
             {
                 int key = d.LeadName.GetHashCode() * 31 + (int)(d.LeadRangeM / 100f) + (units == AvUnits.Imperial ? 1 : 0);
                 if (key != targetKey) { targetKey = key; tgtText = d.LeadName; tgtSub = ScopeStr.Distance("", d.LeadRangeM, units, 7).ToString(); }
@@ -176,19 +177,20 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             lead = ShotMath.Lead(d.Missiles, d.MissileCount);
             scale.Update(d.NeedKm, now);
             OY = p.H - 16f;
+            xMax = p.W - 2f;
             float k = (OY - 36f) / scale.Km;
             keep.Clear();
+            keep.Add(OX - 12f, OY - 12f, 24f, 24f);      // own ship first: the target names placed below dodge it too (they were placed before it)
+            leadTarget = lead >= 0 ? d.Missiles[lead].Target : -1;
+            leadOff = false;
             Grid(g, k);
             for (int i = 0; i < d.TargetCount; i++) Target(g, i, k);
             for (int i = 0; i < d.MissileCount; i++) if (i != lead) Shot(g, i, k);
             if (lead >= 0) Shot(g, lead, k);
             g.Jet(OX, OY, 0f, 9f, Ink, true);
-            keep.Add(OX - 12f, OY - 12f, 24f, 24f);
             for (int i = 0; i < d.MissileCount; i++) if (!d.Missiles[i].Ghost) TtiRing(g, i, k);
             for (int i = 0; i < d.MissileCount; i++) Tags(g, i, k, p.H - 4f);
             for (int i = 0; i < d.ResultCount; i++) Result(g, d.Results[i], k, p.H);
-            g.Text(ScopeStr.Cat("AUTO ", (int)Math.Round(scale.Km), " KM"), 435f, 41f, Dim, 12f, ScopeAlign.Right);
-            g.Text("PLAN  HDG UP", 435f, 56f, Faint, 12f, ScopeAlign.Right);
         }
 
         /// <summary>A global place on the plan: pixels from the aircraft's pose.</summary>
@@ -201,17 +203,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         private void Grid(ScopeCanvas g, float k)
         {
-            int rings = ShotMath.RingValues(scale.Km, k, 400f, ringKm);
+            int rings = ShotMath.RingValues(scale.Km, k, OY - 28f, ringKm);
             int shown = (int)Math.Round(scale.Km);
             for (int i = 0; i < rings; i++)
             {
                 float v = ringKm[i], r = v * k;
-                bool far = v >= 20f, current = Math.Abs(v - shown) < 0.5f;
-                g.Ring(OX, OY, r, far ? Dim : Faint, far ? 0.8f : 1f, 1f, Ink, 0f, far ? 0f : 4f, far ? 0f : 3f);
-                if (OY - r > 44f)
+                bool current = Math.Abs(v - shown) < 0.5f;
+                g.Ring(OX, OY, r, current ? Dim : Faint);
+                if (OY - r > 30f)
                 {
                     ReadOnlySpan<char> label = current ? ScopeStr.Cat("", (int)v, "KM") : v == Math.Floor(v) ? ScopeStr.Cat("", (int)v, null) : ScopeStr.Cat("", v, 1, null);
-                    g.Text(label, OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right, current);
+                    g.Text(label, OX - 4f, OY - r + 1f, current ? Ink : Dim, 12f, ScopeAlign.Right);
                     float lw = Mathf.Round(ScopeCanvas.TextW(label));
                     keep.Add(OX - 4f - lw - 2f, OY - r - 8f, lw + 4f, 16f);      // a ring's label is a keep-out: the target tags and the missile tags dodge it (LAYOUT.md 9: it was under them)
                 }
@@ -229,7 +231,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             ShotTarget t = d.Targets[i];
             Plan(t.Pos, k, out float x, out float y);
-            if (x < -10f || x > 450f || y < 28f) return;          // off the plan: the gauge's needle says where
+            if (x < -10f || x > 450f || y < 28f) { if (i == leadTarget) leadOff = true; return; }          // off the plan: the gauge's needle says where
             ScopeTone tone = t.Hot ? Hi : Ink;
             if (t.Air) g.Diamond(x, y, 5f, tone, false);
             else g.Box(Mathf.Round(x - 4f), Mathf.Round(y - 4f), 9f, 9f, tone);
@@ -244,7 +246,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!t.Hot)
             {
                 float w = Mathf.Round(ScopeCanvas.TextW(t.Name, 12f)) + 4f;
-                keep.Place(LabelSpots.Shot, x, y, w, 17f, default, 2f, 438f, 32f, OY + 12f, out float lx, out float ly);
+                keep.Place(LabelSpots.Shot, x, y, w, 17f, default, 2f, xMax, 32f, OY + 12f, out float lx, out float ly);
                 g.Text(t.Name, lx + 2f, ly + 9f, Dim, 12f);
             }
         }
@@ -295,9 +297,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     ReadOnlySpan<char> lab = ScopeStr.Distance("", m.RangeM, units, 8);
                     float lx = (mx + tx) / 2f, ly = (my + ty) / 2f, tw = Mathf.Round(ScopeCanvas.TextW(lab, 12f)) + 6f;
-                    g.Fill(Mathf.Round(lx - tw / 2f), Mathf.Round(ly - 8f), tw, 16f, Bg, 0.85f);
-                    g.Text(lab, lx, ly + 1f, Dim, 12f, ScopeAlign.Center);
-                    keep.Add(lx - tw / 2f, ly - 8f, tw, 16f);
+                    g.Text(lab, lx, ly - 9f, Dim, 12f, ScopeAlign.Center);
+                    keep.Add(lx - tw / 2f, ly - 17f, tw, 16f);
                 }
             }
             if (m.Phase == ShotPhase.Boost)
@@ -338,40 +339,52 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (isLead && m.TtiS < 3.2f) g.Ring(x, y, r + 2f, Hi, 0.4f + 0.5f * ScopeCanvas.Pulse(now, 3f));
         }
 
-        /// <summary>Tags last, so they can dodge everything: seconds and phase over the target's name at the target, the weapon's name (and A) at the weapon when it is far from us.</summary>
+        /// <summary>Tags last, so they can dodge everything: the phase word over the target's name at the target (the seconds are the headline's and the strip's), the weapon's name (and A) at the weapon when it is far from us.</summary>
         private void Tags(ScopeCanvas g, int i, float k, float yMax)
         {
             ShotMissile m = d.Missiles[i];
             if (m.Ghost) return;
             bool isLead = i == lead;
             Plan(m.Pos, k, out float mx, out float my);
-            if (m.HasAim)
+            if (m.HasAim && OwnsTargetTag(i))
             {
                 Plan(m.Aim, k, out float tx, out float ty);
                 segs[0] = mx; segs[1] = my; segs[2] = tx; segs[3] = ty;
                 string name = m.Target >= 0 ? d.Targets[m.Target].Name : "";
                 string label = PhaseLabel(m);
-                int left = float.IsNaN(m.TtiS) ? -1 : (int)Math.Ceiling(Math.Max(0f, m.TtiS));
-                float size = isLead ? 14f : 12f;
-                ReadOnlySpan<char> num = left >= 0 ? ScopeStr.Cat("", left, "S") : "--";
-                float pw = Mathf.Round(ScopeCanvas.TextW(num, size) + 8f), lw = Mathf.Round(ScopeCanvas.TextW(label, 12f)), nw = Mathf.Round(ScopeCanvas.TextW(name, 12f));
-                float w = Math.Max(pw + 6f + lw, nw) + 6f, h = 35f;
-                keep.Place(LabelSpots.Shot, tx, ty, w, h, new ReadOnlySpan<float>(segs, 0, 4), 2f, 438f, 32f, yMax, out float x, out float y);
-                g.Fill(x, y, w, h, Bg, 0.8f);
-                g.PlateTag(num, x + 3f, y + 10f, isLead ? Hi : Ink, size, ScopeAlign.Left);
+                float lw = Mathf.Round(ScopeCanvas.TextW(label, 12f)), nw = Mathf.Round(ScopeCanvas.TextW(name, 12f));
+                float w = Math.Max(lw, nw) + 6f, h = 30f;
+                keep.Place(LabelSpots.Shot, tx, ty, w, h, new ReadOnlySpan<float>(segs, 0, 4), 2f, xMax, 32f, yMax, out float x, out float y);
                 bool seeker = m.Phase == ShotPhase.Active || m.Phase == ShotPhase.Term;
-                g.Text(label, x + 3f + pw + 5f, y + 10f, seeker ? Hi : Dim, 12f, ScopeAlign.Left, seeker);
-                g.Text(name, x + 3f, y + 27f, Dim);
+                g.Text(label, x + 3f, y + 8f, seeker ? Hi : Dim, 12f, ScopeAlign.Left, seeker);
+                g.Text(name, x + 3f, y + 22f, isLead ? Ink : Dim);
             }
             float dx = mx - OX, dy = my - OY;
             if (Mathf.Sqrt(dx * dx + dy * dy) > 46f)
             {
                 bool a = m.Arh && m.Pitbull;
                 float w = Mathf.Round(ScopeCanvas.TextW(m.Short, 12f)) + 4f + (a ? 18f : 0f), h = 17f;
-                keep.Place(LabelSpots.Shot, mx, my, w, h, default, 2f, 438f, 32f, yMax, out float x, out float y);
+                keep.Place(LabelSpots.Shot, mx, my, w, h, default, 2f, xMax, 32f, yMax, out float x, out float y);
                 g.Text(m.Short, x + 2f, y + h / 2f + 1f, Ink, 12f, ScopeAlign.Left, false, 0.9f);
                 if (a) g.PlateTag("A", x + w - 15f, y + h / 2f, Hi, 12f, ScopeAlign.Left, 3f);
             }
+        }
+
+        /// <summary>
+        /// One tag per target: of the missiles aimed at the same target, the lead owns it (else the first). Two missiles on one target stacked two "BOOST FS-20 VORTEX" tags on top of each other in game.
+        /// </summary>
+        private bool OwnsTargetTag(int i)
+        {
+            ShotMissile m = d.Missiles[i];
+            if (m.Target < 0) return true;
+            for (int j = 0; j < d.MissileCount; j++)
+            {
+                if (j == i) continue;
+                ShotMissile o = d.Missiles[j];
+                if (o.Ghost || !o.HasAim || o.Target != m.Target) continue;
+                if (j == lead || (i != lead && j < i)) return false;
+            }
+            return true;
         }
 
         private static string PhaseLabel(in ShotMissile m) => ShotMath.PhaseWord(m.Phase);
@@ -402,43 +415,49 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Ring(x, y, 8f + 14f * ScopeCanvas.EaseOut(u), Amber, (1f - u) * fade);
             }
             else if (r.State == ShotState.Miss) g.Cross(x, y, 7f, Dim, fade, 1f);
-            float above = y > 80f ? -26f : 26f;
+            // the stamp is a placed label: on the short FIRES plan the clamped stamp landed on the own-ship glyph and the ring numerals
             string word = r.State == ShotState.Defeated ? "DEFEATED" : r.State == ShotState.Miss ? "MISS" : "HIT";
-            g.Stamp(word, Mathf.Clamp(x, 56f, 384f), Mathf.Clamp(y + above, 44f, h - 24f), tone, 14f, r.State == ShotState.Defeated ? -4f : 0f, fade);
+            float sw = Mathf.Round(ScopeCanvas.TextW(word, 14f) + 14f), sh = 22f;      // the Stamp's own bracket box
+            keep.Place(LabelSpots.Shot, x, y, sw, sh, default, 2f, xMax, 32f, h - 2f, out float lx, out float ly);
+            g.Stamp(word, lx + sw / 2f, ly + sh / 2f, tone, 14f, r.State == ShotState.Defeated ? -4f : 0f, fade);
         }
 
         // ------------------------------------------------------------------------------------------------ strip: the SHOT TIMELINE
 
         /// <summary>
-        /// LAYOUT.md 12.3: the newest seven shots at a pitch of 62 from x 8, no boxes: the glyph (centre x + 4.5), the name of at most five characters 13 in and, in flight, a progress line under it. Only the lead shot's
-        /// chip is bracketed (four BRIGHT brackets arm 4 at x - 4, 0, 60 x 22); a shot not yet born shows a dim "--".
+        /// The newest seven shots (only the ones that exist) at a pitch of 62 from x 8, no boxes: the glyph (centre x + 4.5), 13 in the name of at most five characters (only where the weapon changes) or, in flight, the seconds to go, and under it a
+        /// 3 high journey track filled as the shot closes. The lead shot is Hi, the others Ink; a result is a glyph and a name with no track.
         /// </summary>
         public override void PaintStrip(ScopeCanvas g, in PagePaint p)
         {
             if (!live) return;
             int first = Math.Max(0, d.CellCount - Chips), leadId = lead >= 0 ? d.Missiles[lead].Id : -1;
             Span<char> name = stackalloc char[ShotMath.ChipChars];
-            for (int i = 0; i < Chips; i++)
+            for (int i = 0; i < Chips && first + i < d.CellCount; i++)
             {
                 float x = 8f + i * 62f, cy = 11f;
-                if (first + i >= d.CellCount)
-                {
-                    g.Text("--", x + 26f, cy + 1f, Dim, 12f, ScopeAlign.Center);
-                    continue;
-                }
                 ShotCell c = d.Cells[first + i];
-                bool fly = c.State == ShotState.InFlight;
-                if (fly && c.Id == leadId) g.Brackets(x - 4f, 0f, 60f, 22f, 4f, Hi);
-                Glyph(g, x + 4.5f, cy, c.State, fly);
-                g.Text(name.Slice(0, ShotMath.ChipName(c.Name, name)), x + 13f, cy + 1f, fly ? Hi : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, ScopeAlign.Left, fly);
-                if (fly) g.Fill(x + 1f, 19f, Mathf.Round(51f * Mathf.Clamp01(c.Frac)), 2f, Hi);
+                bool fly = c.State == ShotState.InFlight, isLead = fly && c.Id == leadId;
+                Glyph(g, x + 4.5f, cy, c.State, fly, isLead ? Hi : Ink);
+                // the chain reads by shape: a name only where the weapon changes, in flight the seconds to go instead of it
+                float tti = fly ? TtiOf(c.Id) : float.NaN;
+                if (!float.IsNaN(tti)) g.Text(ScopeStr.Cat("", (int)Math.Ceiling(tti), "S"), x + 13f, cy + 1f, isLead ? Hi : Ink, 12f, ScopeAlign.Left);
+                else if (i == 0 || fly || c.Name != d.Cells[first + i - 1].Name)
+                    g.Text(name.Slice(0, ShotMath.ChipName(c.Name, name)), x + 13f, cy + 1f, fly ? (isLead ? Hi : Ink) : c.State == ShotState.Defeated ? Amber : c.State == ShotState.Miss ? Dim : Ink, 12f, ScopeAlign.Left);
+                if (fly) g.Bar(x + 1f, 18f, 51f, 3f, c.Frac, isLead ? Hi : Ink);      // the track: the shot's journey, filled as it closes
             }
         }
 
-        /// <summary>HIT: a filled diamond with a cross cut out; MISS: a hollow dim diamond; DEFEATED: a hollow amber diamond struck through; in flight: an arrowhead.</summary>
-        private static void Glyph(ScopeCanvas g, float x, float y, ShotState st, bool fly)
+        private float TtiOf(int id)
         {
-            if (fly) { g.Chevron(x, y + 1f, 0f, 5f, Hi, true); return; }
+            for (int i = 0; i < d.MissileCount; i++) if (d.Missiles[i].Id == id) return d.Missiles[i].TtiS;
+            return float.NaN;
+        }
+
+        /// <summary>HIT: a filled diamond with a cross cut out; MISS: a hollow dim diamond; DEFEATED: a hollow amber diamond struck through; in flight: an arrowhead.</summary>
+        private static void Glyph(ScopeCanvas g, float x, float y, ShotState st, bool fly, ScopeTone flyTone)
+        {
+            if (fly) { g.Chevron(x, y + 1f, 0f, 5f, flyTone, true); return; }
             if (st == ShotState.Hit) { g.Diamond(x, y, 4.5f, Hi, true); g.Cross(x, y, 4f, Bg); }
             else if (st == ShotState.Defeated) { g.Diamond(x, y, 4.5f, Amber, false); g.Line(x - 3f, y + 3f, x + 3f, y - 3f, Amber); }
             else g.Diamond(x, y, 4.5f, Dim, false);

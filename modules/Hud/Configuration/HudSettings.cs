@@ -73,6 +73,14 @@ namespace BoscaliSummer.Modules.Hud.Configuration
                 if (System.Math.Abs(Shade.Value - 0.45f) < 0.001f) Shade.Value = d.Shade;
                 noBackdrop.Value = 1;
             }
+            // 2026-11-17 the frosted-glass default (0.4) was tried and cut again (user: "the shadows suck"): a file still holding that untouched 0.4 goes back to 0, once.
+            ConfigEntry<int> frost = config.Bind(section, "ShadowOffShade", 0,
+                new ConfigDescription("Internal marker, leave as it is: 1 once a Shade left at the brief frosted default (0.4) has moved back to 0.", new AcceptableValueRange<int>(0, 1)));
+            if (frost.Value < 1)
+            {
+                if (System.Math.Abs(Shade.Value - 0.4f) < 0.001f) Shade.Value = d.Shade;
+                frost.Value = 1;
+            }
 
             Declutter = config.Bind(section, "Declutter", d.Declutter,
                 "Retired. The HUD always shows all enabled detail; saved Lean and Minimal values read as Full.");

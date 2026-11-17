@@ -39,7 +39,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
         /// Set any of the TAC BOARD's options through the settings contract (<see cref="ITacBoardSettings"/>, the same door the SET console and the C menu use) so ONE sim run can try several looks, and return every option as it
         /// now stands. The names are the contract's, in any case (enabled, layout, scale, offsetX, offsetY, opacity, shade, declutter, scopeMode, sway, corners, showLamps, showSystemsStrip, showGauges, showTicker, pageThreat,
         /// pageShot, pageMissileCam, pageApproach, pageWing, pageStrike, pageDock, pageObjective, pageSystems, threatHoldSeconds, pageMinSeconds); an enum is given by name (wide, stack, full, lean, minimal, auto, off). A name that is
-        /// none of them fails the call, so a typo cannot waste a run. IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
+        /// none of them fails the call, so a typo cannot waste a run, and so does a value the option does not take (a retired one: Declutter is always Full, ScopeMode Manual reads as Auto on the board). IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
         /// disk is never written by this hook and the pilot's saved options come back with the next start. <c>restore</c> true first puts every option back to what it was at the first call of the run (the pilot's own values).
         /// The board takes a change on its next 10 Hz tick: wait before a capture.
         /// </summary>
@@ -69,7 +69,13 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     PropertyInfo option = properties[i];
                     if (Bool(args, "restore")) option.SetValue(options, pilotOptions[i]);
                     object given = args != null ? FindIgnoringCase(args, option.Name) : null;
-                    if (given != null) option.SetValue(options, OptionValue(option.PropertyType, given));
+                    if (given == null) continue;
+                    object wanted = OptionValue(option.PropertyType, given);
+                    option.SetValue(options, wanted);
+                    // A retired value (Declutter Lean/Minimal, ArPath, ArDomes) or one out of range is not taken: fail rather than capture a look that never applied.
+                    object now = option.GetValue(options);
+                    if (!Equals(now, wanted))
+                        return Failure("HudAutomation", "Configure", "option '" + option.Name + "' did not take " + given + " (reads " + now + "): retired or out of range");
                 }
             }
             catch (Exception e) { return Failure("HudAutomation", "Configure", "could not set an option: " + e.Message); }
@@ -471,6 +477,61 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return result;
         }
 
+        /// <summary>
+        /// Select the first loaded anti-air missile station and designate the <c>count</c> (default 2) nearest enemy aircraft inside <c>range</c> (default 30000 m), then report what the WPN cell reads: the
+        /// designated targets, salvo and IN RNG, computed as <see cref="StoresFeed"/> does (tests/ingame/hud-bar.json). Call it twice about a second apart: the first sights the targets, the second designates them.
+        /// </summary>
+        public static Dictionary<string, object> Lock(Dictionary<string, object> args)
+        {
+            if (!Guard(out Dictionary<string, object> failure)) return failure;
+            if (!GameManager.GetLocalAircraft(out Aircraft a) || a == null || a.disabled)
+                return Failure("HudAutomation", "Lock", "no live local aircraft");
+            WeaponStation station = null;
+            if (a.weaponStations != null)
+                foreach (WeaponStation s in a.weaponStations)
+                {
+                    WeaponInfo w = s != null ? s.WeaponInfo : null;
+                    if (w == null || !w.missile || w.effectiveness.antiAir < w.effectiveness.antiSurface || s.Ammo <= 0) continue;
+                    station = s;
+                    break;
+                }
+            if (station == null)
+                return Failure("HudAutomation", "Lock", "no loaded anti-air missile station");
+            CombatHUD hud = SceneSingleton<CombatHUD>.i;
+            if (hud == null || hud.aircraft != a)
+                return Failure("HudAutomation", "Lock", "the combat HUD is not attached to the local aircraft");
+            if (a.weaponManager.currentWeaponStation != station) a.SetActiveStation(station.Number);
+            int count = (int)Number(args, "count", 2f);
+            float range = Number(args, "range", 30000f);
+            var picked = new List<Unit>(hud.GetTargetList());
+            // Keep the designated tracks fresh and only fill the list up to count: a repeat call must not add a farther target (it pushed the WPN cell OUT OF RANGE).
+            foreach (Unit held in picked)
+                if (held != null) a.NetworkHQ.RpcUpdateTrackingInfo(held.persistentID);
+            for (int k = picked.Count; k < count; k++)
+            {
+                Unit target = NearestEnemy(a, range, picked);
+                if (target == null) break;
+                picked.Add(target);
+                // A sighting keeps the track "accurate" for 4 s and spawns the HUD marker SelectUnit needs (the second call designates).
+                a.NetworkHQ.RpcUpdateTrackingInfo(target.persistentID);
+                if (!hud.GetTargetList().Contains(target)) hud.SelectUnit(target);
+            }
+            int targets = a.weaponManager.GetTargetList()?.Count ?? 0;
+            var result = new Dictionary<string, object>
+            {
+                { "ok", true },
+                { "weapon", station.WeaponInfo.shortName ?? station.WeaponInfo.weaponName ?? "MSL" },
+                { "targets", targets },
+                { "salvo", StoresFeed.Salvo(station.WeaponInfo) },
+                { "in_range", StoresFeed.InRange(station.SafetyIsOn(a), targets, hud) },
+            };
+            Debug.Log("[HudAutomation] Lock: " + Describe(result));
+            return result;
+        }
+
+        /// <summary><see cref="Lock"/>'s IN RNG alone, for a <c>wait_until {call, truthy}</c> (tests/ingame/hud-bar.json): each poll re-sights the targets, the capture waits until the shot is really on.</summary>
+        public static bool LockedInRange(Dictionary<string, object> args) => Lock(args).TryGetValue("in_range", out object v) && v is bool b && b;
+
         /// <summary>Tracker snapshot: preview lines exactly as the HUD publishes them.</summary>
         public static Dictionary<string, object> Missiles(Dictionary<string, object> args)
         {
@@ -628,7 +689,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             return count;
         }
 
-        private static Unit NearestEnemy(Aircraft own, float maxM)
+        private static Unit NearestEnemy(Aircraft own, float maxM, List<Unit> skip = null)
         {
             Unit best = null;
             float bestSqr = maxM * maxM;
@@ -639,6 +700,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             {
                 if (!(all[i] is Aircraft a) || a == null || a.disabled || a == own) continue;
                 if (a.NetworkHQ == null || own.NetworkHQ == null || a.NetworkHQ == own.NetworkHQ) continue;
+                if (skip != null && skip.Contains(a)) continue;
                 float d = (a.transform.position - p).sqrMagnitude;
                 if (d < bestSqr) { bestSqr = d; best = a; }
             }

@@ -497,7 +497,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         case 4: countermeasures.Read(hudAircraft, frame); break;
                         case 5: fuelWatch.Read(hudAircraft, frame); break;
                         case 6: damageWatch.Read(hudAircraft, frame); break;
-                        case 7: systemsFeed.Update(hudAircraft, frame, damageWatch.Rotary); break;
+                        case 7: systemsFeed.Update(hudAircraft, frame); break;
                         case 8: storesFeed.Update(hudAircraft, frame, combat); break;
                         case 10: cargoFeed.Update(hudAircraft); break;
                         default:
@@ -656,7 +656,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (filter != null && filter.HasAutoHover()) s.AutoHover = a.IsAutoHoverEnabled();
             if (a.radar != null) s.RadarEmitting = a.radar.activated;
             if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) { s.NightVision = nvg; s.NvgLegend = BoscaliSummer.Core.Game.NightVisionLink.Legend; }
-            s.EngineRunning = a.Ignition;
             return s;
         }
 

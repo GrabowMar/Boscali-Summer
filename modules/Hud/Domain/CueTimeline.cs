@@ -7,8 +7,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
     /// <summary>
     /// The life of one cue as a function of its age, pure (so a render at any frame rate, or at a fixed age, draws the same). SHOW (0 to 0.32 s): the two bracket halves snap in from <see cref="BracketRun"/> outside over 0.14 s, the
-    /// message decodes, the underline draws, the whole cue is a tone brighter for the first 0.12 s. HOLD: steady until the game's own time is up (at least <see cref="CueLog.MinLife"/>). FADE (the last 0.35 s): the underline retracts,
-    /// the brackets spread out again, and the words break up in five equal steps of alpha (<see cref="Steps"/>), a flicker and not a smooth fade.
+    /// message decodes, the whole cue is a tone brighter for the first 0.12 s. HOLD: steady (the column's 3 x 12 tick in place of the brackets) until the game's own time is up (at least <see cref="CueLog.MinLife"/>). FADE (the last 0.35 s): the
+    /// brackets spread out again, and the words break up in five equal steps of alpha (<see cref="Steps"/>), a flicker and not a smooth fade.
     /// </summary>
     internal static class CueTimeline
     {
@@ -61,16 +61,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             return Math.Min(length, (int)((age + 0.002f) / per));      // 2 ms of slack: the game's clock is a float of hundreds of seconds, a few tenths of a millisecond coarse, and the last character is locked AT 0.3 s
         }
 
-        /// <summary>
-        /// The underline as fractions of the width, left to right: it draws from the left over the show (ease-out), is whole through the hold, and retracts to the right over the fade (its left end runs to the right end).
-        /// </summary>
-        public static void Underline(float age, float life, out float from, out float to)
-        {
-            if (age >= life - FadeSeconds) { float t = FadeT(age, life); from = t * t; to = 1f; return; }
-            from = 0f;
-            to = age >= ShowSeconds ? 1f : EaseOut(age / ShowSeconds);
-        }
-
         /// <summary>The alpha of the cue's words and furniture: 1 until the fade, then the five steps, 0 once the game's time is up.</summary>
         public static float Alpha(float age, float life)
         {
@@ -110,8 +100,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
         }
 
-        /// <summary>The words' tone: BRIGHT, a caution AMBER, an alert RED.</summary>
-        public static ScopeTone ToneOf(CueSeverity severity) => severity == CueSeverity.Alert ? ScopeTone.Red : severity == CueSeverity.Caution ? ScopeTone.Amber : ScopeTone.Hi;
+        /// <summary>The words' tone: INK, a caution AMBER, an alert RED.</summary>
+        public static ScopeTone ToneOf(CueSeverity severity) => severity == CueSeverity.Alert ? ScopeTone.Red : severity == CueSeverity.Caution ? ScopeTone.Amber : ScopeTone.Ink;
     }
 
     /// <summary>The decode, pure: each character first shows a glyph from A-Z 0-9 and locks to the real one left to right; a space never scrambles. The glyph is a fixed hash of (the cue's seed, the place, the tick), so a render at a given age is always the same.</summary>

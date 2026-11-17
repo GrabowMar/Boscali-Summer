@@ -20,12 +20,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// rules from <see cref="HudCues"/>; this class only builds/positions widgets and writes
     /// text on change, through a reused buffer -- a string is allocated only the tick a
     /// displayed value actually changes.
-    /// Look (2026-10-07, base-game aligned; not configurable): bare HUD-ink numbers in the native
-    /// weapon label font framed by thin corner brackets, thin tick scales for throttle and fuel,
-    /// and for the target card corner brackets over the feed with a soft shade behind its header (the visor look: no slab, no closed outline,
-    /// the "TGT" tag an open tag) -- the same symbology language as the native flight HUD, no plates. Cues light brackets and text like annunciators: SPD on
-    /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP in alert
-    /// colour), the fuel scale on low fuel. HDG adds the compass point; the card shows range and closure.
+    /// Look (2026-11-17 refit, the board's ONE BAR grammar): a Dim bold caption over a Dim hairline rule (none on HDG) and the value as a bare INK-HI EMPHASIS figure, a 3 px bar for throttle and fuel on a Faint
+    /// track, and for the feed cards the shared FeedCorner chrome (a rule over the picture, 6-long brackets) -- no plates, no corner brackets, no flashing. A cue only turns the CAPTION amber and steady: SPD on
+    /// over-G, ALT on low ground (radar altitude replaces its caption under 300 m; PULL UP), the fuel bar on low fuel (never red). HDG adds the compass point; the card shows range and closure.
     /// Legibility (2026-10-10; 2026-10-13 nothing behind the boxes, by the user's ruling: bare ink): captions at
     /// 12-13 pt, the whole cluster scaled by the player's own HUD text size (the layout runs in a virtual screen of
     /// screen / scale and the root is scaled back up), AoA in the SPD caption row, the real load factor against the airframe's
@@ -62,13 +59,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The target's aspect angle (<see cref="TargetReadout.Aspect"/>; NaN = none) for the TARGET CAM's data strip. Set by the board before <see cref="Present"/>.</summary>
         public float CardAspectDeg = float.NaN;
-        /// <summary>The picture already carries the game's own tac-screen text (the cockpit): the card then draws no name of its own on it. Set by the board before <see cref="Present"/>.</summary>
+        /// <summary>The picture already carries the game's own tac-screen text (the cockpit). Kept for the board's write; the card draws no name of its own on the picture any more (the name is on the shelf).</summary>
         public bool CardNativeText = true;
 
         private bool builtActive, flightShown;
         private AvVector symbols;
         private int lastSymbols;
-        private const float Bracket = 9f, Stroke = 1.5f;
         private float lastScale = 1f;
 
         private struct Box
@@ -95,14 +91,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             public RectTransform Root;
             public TextMeshProUGUI Name;         // the shelf's word at the left (TARGET CAM / MISSILE CAM)
             public TextMeshProUGUI State;         // the shelf's word at the right (what it looks at, its state)
-            public TextMeshProUGUI PicName;       // on the picture, top left (target name, external views only)
             public TextMeshProUGUI Count;         // on the picture, bottom left (the missile's countdown)
             public TextMeshProUGUI Note;          // on the picture, bottom right (SIGNAL LOST)
             public TextMeshProUGUI[] Cells;       // the data strip's three cells: left, centre, right
             public RawImage Feed;
             public bool Active;
-            public string LastState, LastPicName, LastNote, LastCode, StateText;
-            public float NameW, StateW, StripPt, LastPicW, LastPicH, LastTexAspect;      // LastPicW / H start at -1 (set in BuildTargetCard)
+            public string LastState, LastNote, LastCode, StateText;
+            public float StripPt, LastPicW, LastPicH, LastTexAspect;      // LastPicW / H start at -1 (set in BuildTargetCard)
             public int LastCount;
             public int[] CellKey;
             /// <summary>What the mesh draws over the picture (a lock bracket): part of the chrome signature.</summary>
@@ -200,21 +195,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             TextMeshProUGUI captionText = null, captionRight = null;
             if (hasSub)
             {
-                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, HudType.Body,
+                captionText = Label(rect, "Caption", TextAlignmentOptions.TopLeft, HudType.Label,
                     new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
-                captionText.characterSpacing = 6f;
+                captionText.characterSpacing = HudType.Tracking(HudStep.Label);
                 captionText.text = caption;
-                captionRight = Label(rect, "CaptionRight", TextAlignmentOptions.TopRight, HudType.Body,
+                captionText.fontStyle = FontStyles.Bold;      // LABEL 12 bold Dim: the shelf caption
+                captionRight = Label(rect, "CaptionRight", TextAlignmentOptions.TopRight, HudType.Label,
                     new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(7f, -19f), new Vector2(-7f, -4f));
             }
 
             // Caption owns the top 16 px; the value sits between it and the sub-line (mono faces run wide).
             TextMeshProUGUI value = Label(rect, "Value", TextAlignmentOptions.Center, HudType.Emphasis,
                 new Vector2(0f, hasSub ? 0.3f : 0f), new Vector2(1f, 1f), Vector2.zero, new Vector2(0f, hasSub ? -17f : 0f));
+            value.fontStyle = FontStyles.Bold;      // EMPHASIS bold, always INK-HI
 
-            TextMeshProUGUI sub = Label(rect, "SubLine", TextAlignmentOptions.Center, HudType.Body,
+            TextMeshProUGUI sub = Label(rect, "SubLine", TextAlignmentOptions.Center, HudType.Label,
                 Vector2.zero, new Vector2(1f, 0.34f), new Vector2(0f, 3f), Vector2.zero);
-            sub.gameObject.SetActive(hasSub);
+            sub.gameObject.SetActive(hasSub);      // LABEL regular Ink
 
             RectTransform track = null;
             Image bar = null;
@@ -258,8 +255,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             RectTransform rect = (RectTransform)cardObject.transform;
             rect.SetParent(root, false);
             rect.pivot = new Vector2(0.5f, 0.5f);
-            // Feed stack (2026-11-16 visor look): no plate. The MSL, TGT and UAV cards share one chrome in the HUD's own ink (FeedCorner.Frame, drawn in PaintSymbols): a caption shelf
-            // like the board's, the picture in a faint frame with corner ticks, and a one-line data strip under it. The line art over the picture is drawn there too.
+            // Feed stack (2026-11-17 refit): no plate. The MSL, TGT and UAV cards share one chrome in the HUD's own ink (FeedCorner.Frame, drawn in PaintSymbols): a Dim caption shelf
+            // over one rule across the picture's top, brackets round it, and a one-line data strip under it. The line art over the picture is drawn there too.
 
             var feedObject = new GameObject("Feed", typeof(RectTransform), typeof(RawImage));
             RectTransform feedRect = (RectTransform)feedObject.transform;
@@ -271,17 +268,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             RawImage feed = feedObject.GetComponent<RawImage>();
             feed.raycastTarget = false;
 
-            // On the picture: the target's name (top left), the missile's countdown (bottom left), SIGNAL LOST (bottom right).
-            TextMeshProUGUI picName = Label(feedRect, "PicName", TextAlignmentOptions.TopLeft, HudType.Label,
-                new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(8f, -19f), new Vector2(-8f, -5f));
-            picName.fontStyle = FontStyles.Bold;
+            // On the picture: the missile's countdown (bottom left), SIGNAL LOST (bottom right). The target's name lives on the shelf.
             TextMeshProUGUI count = Label(feedRect, "Count", TextAlignmentOptions.BottomLeft, HudType.Emphasis,
                 new Vector2(0f, 0f), new Vector2(0.6f, 0f), new Vector2(8f, 5f), new Vector2(0f, 32f));
             count.fontStyle = FontStyles.Bold;
             TextMeshProUGUI note = Label(feedRect, "Note", TextAlignmentOptions.BottomRight, HudType.Label,
                 new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(6f, 5f), new Vector2(-8f, 21f));
 
-            // The shelf: the name after the lead rule, the state word at the right end (the rules between them are FeedCorner.Frame's).
+            // The shelf: the Dim caption at the left, the state word at the right end (the rule under them is FeedCorner.Frame's).
             TextMeshProUGUI title = HudText.Make(rect, "Name", font, fontMaterial, TextAlignmentOptions.MidlineLeft, 12f);
             title.rectTransform.anchorMin = title.rectTransform.anchorMax = title.rectTransform.pivot = new Vector2(0f, 1f);
             title.rectTransform.anchoredPosition = new Vector2(FeedCorner.ShelfText, 0f);
@@ -308,7 +302,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cardObject.SetActive(false);
             return new TargetCardWidgets
             {
-                Root = rect, Name = title, State = state, PicName = picName, Count = count, Note = note, Cells = cells, CellKey = keys,
+                Root = rect, Name = title, State = state, Count = count, Note = note, Cells = cells, CellKey = keys,
                 Feed = feed, Active = false, StripPt = HudType.Label, LastCount = -2, LastPicW = -1f, LastPicH = -1f
             };
         }
@@ -358,11 +352,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ColorTheme theme = ThemeManager.Active.ColorTheme;
             Color ink = VanillaHudStyle.Ink;
             Color caution = theme.Warning;
-            Color alert = theme.Alert;
 
             Color? spdLit = null, altLit = null;
             Color fuelColor = ink;
-            bool pullUpFlash = false;
             if (active)
             {
                 RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
@@ -376,15 +368,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 bool overG = float.IsFinite(f.G) && Mathf.Abs(f.G) >= BoscaliSummer.Core.Math.FlightLoad.CautionAt(f.GLimit);
                 TerrainCue terrain = HudCues.Terrain(f.RadarAltM, f.ClimbMps);
                 HudTone fuelTone = FuelEndurance.Tone(f.Fuel, f.FuelBingo, f.FuelJoker);
-                fuelColor = fuelTone == HudTone.Warning ? alert : fuelTone == HudTone.Caution ? caution : ink;
+                fuelColor = fuelTone == HudTone.Info ? ink : caution;      // amber from caution up: the third-person cluster never turns red
                 spdLit = overG ? caution : (Color?)null;
-                altLit = terrain == TerrainCue.PullUp ? alert : terrain == TerrainCue.Low ? caution : (Color?)null;
+                altLit = terrain == TerrainCue.PullUp || terrain == TerrainCue.Low ? caution : (Color?)null;
                 Style(spd, ink, spdLit);
                 Style(alt, ink, altLit);
                 Style(hdg, ink, null);
                 Fill(ref spd, Mathf.Clamp01(f.Throttle), ink, "THR ");
                 Fill(ref alt, Mathf.Clamp01(f.Fuel), fuelColor, FuelText.Legend(f.FuelBingo, f.FuelJoker, fuelTone) + " ");
-                pullUpFlash = terrain == TerrainCue.PullUp && (int)(Time.unscaledTime * 4f) % 2 == 0;
 
                 WriteSpeedCaption(overG);
                 WriteSpeed(f.SpeedMps, units);
@@ -403,8 +394,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The cards' words first (their widths set where the shelf rules stop), then the mesh over them.
             PresentTargetCard(cameraTexture, cameraCode, rangeM, closureMps, targetRect, ink, units);
             PresentMissileCard(missileRect, ink, units);
-            PaintSymbols(screenW, screenH, ink, alert, spdLit, altLit, fuelColor, cameraTexture != null ? targetRect : default, pullUpFlash,
-                f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
+            PaintSymbols(screenW, screenH, ink, cameraTexture != null ? targetRect : default, f.BankDeg, f.SlipDeg, active, missileFeed != null ? missileRect : default);
         }
 
         /// <summary>The UAV card's box (<see cref="FeedCorner.Uav"/>, screen pixels on its own canvas) in the layout's units; no size while it is down.</summary>
@@ -416,15 +406,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return new RectF((px.center.x - Screen.width * 0.5f) * kx, (px.center.y - Screen.height * 0.5f) * ky, px.width * kx, px.height * ky);
         }
 
-        private static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
-        /// <summary>Normal: ink. Lit: value, caption and sub-line in <paramref name="lit"/> (brackets light in PaintSymbols).</summary>
+        /// <summary>The value is always INK-HI and the sub-line and the caption's right end Ink; the caption is Dim, or <paramref name="lit"/> (amber, steady) while a cue holds: state goes on the caption only.</summary>
         private static void Style(Box box, Color ink, Color? lit)
         {
-            box.Value.color = lit.HasValue ? lit.Value : ink;
-            if (box.Caption != null) box.Caption.color = lit.HasValue ? lit.Value : WithAlpha(ink, HudInk.DimAlpha);
-            if (box.CaptionRight != null) box.CaptionRight.color = lit.HasValue ? lit.Value : ink;
-            box.SubLine.color = lit.HasValue ? lit.Value : ink;
+            box.Value.color = VanillaHudStyle.InkHi;
+            if (box.Caption != null) box.Caption.color = lit ?? VanillaHudStyle.InkDim;
+            if (box.CaptionRight != null) box.CaptionRight.color = ink;
+            box.SubLine.color = ink;
         }
 
         private void Fill(ref Box box, float amount, Color color, string prefix)
@@ -441,19 +430,17 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             box.LastBar = key;
         }
 
-        /// <summary>Brackets round each box, tick scales for the bars, the card's outline and its tag box.
-        /// Rebuilt only when the layout or a lit state changes.</summary>
+        /// <summary>A Dim rule under the SPD and ALT captions, Faint tracks for the bars, the cards' chrome and the line art over their pictures.
+        /// Rebuilt only when the layout changes.</summary>
         /// <param name="targetCard">The target card's box, no size while it is down; <paramref name="missileCard"/> the same for the missile card.</param>
-        private void PaintSymbols(float screenW, float screenH, Color ink, Color alert, Color? spdLit, Color? altLit, Color fuel,
-            RectF targetCard, bool flash, float bankDeg, float slipDeg, bool flight, RectF missileCard)
+        private void PaintSymbols(float screenW, float screenH, Color ink, RectF targetCard, float bankDeg, float slipDeg, bool flight, RectF missileCard)
         {
             // Bank in 2 degree steps and slip in whole degrees: finer motion is not visible and would rebuild the mesh every tick in a turn.
-            int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(spdLit) * 5 + Code(altLit) * 3 + Code(fuel) + Code(ink) * 17 +
-                Mathf.RoundToInt(targetCard.CenterY + targetCard.Height) * 11 + (flash ? 13 : 0) + (flight ? 19 : 0) +
+            int key = (int)screenW * 7919 + (int)screenH * 31 + (int)(lastScale * 100f) * 977 + Code(ink) * 17 +
+                Mathf.RoundToInt(targetCard.CenterY + targetCard.Height) * 11 + (flight ? 19 : 0) +
                 Mathf.RoundToInt(missileCard.CenterX * 3f + missileCard.CenterY + missileCard.Height) * 23 + Mathf.RoundToInt(bankDeg / 2f) * 104729 + Mathf.RoundToInt(slipDeg) * 7 +
                 Mathf.RoundToInt(avoid.CenterX) * 15485863 + Mathf.RoundToInt(avoid.CenterY) * 32452843 + Mathf.RoundToInt(avoid.Width) * 49979687 + Mathf.RoundToInt(avoid.Height) * 67867967;
-            // The cards' chrome: where the shelf rules stop (the words' widths) and whether the lock bracket is drawn.
-            key += (Mathf.RoundToInt(card.NameW) * 3 + Mathf.RoundToInt(card.StateW) * 5 + (card.Locked ? 7 : 0) + Mathf.RoundToInt(missile.NameW) * 11 + Mathf.RoundToInt(missile.StateW) * 13) * 104723;
+            key += (card.Locked ? 7 : 0) * 104723;      // whether the lock bracket is drawn
             if (key == lastSymbols) return;
             lastSymbols = key;
 
@@ -463,40 +450,39 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             {
                 RectF spdRect = ThirdPersonHudLayout.SpeedBox(screenW, screenH, avoid);
                 RectF altRect = ThirdPersonHudLayout.AltitudeBox(screenW, screenH, avoid);
-                Brackets(b, spdRect, (spdLit ?? ink).ToRgba());
-                Brackets(b, altRect, (flash ? Color.clear : altLit ?? ink).ToRgba());
-                Brackets(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), ink.ToRgba().WithAlpha(HudInk.LineMid));
+                CaptionRule(b, spdRect, ink.ToRgba());
+                CaptionRule(b, altRect, ink.ToRgba());
                 Scale(b, ThirdPersonHudLayout.SideBar(spdRect, outwardIsLeft: true), ink.ToRgba());
-                Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), fuel.ToRgba());
+                Scale(b, ThirdPersonHudLayout.SideBar(altRect, outwardIsLeft: false), ink.ToRgba());
                 BankAndSlip(b, ThirdPersonHudLayout.HeadingBox(screenW, screenH, avoid), bankDeg, slipDeg, ink.ToRgba());
             }
             if (targetCard.Height > 0f)
             {
-                FeedCorner.Frame(b, targetCard.Left, targetCard.Bottom, targetCard.Right, targetCard.Top, ink.ToRgba(), card.NameW, card.StateW);
-                TargetArt(b, targetCard, card.Locked, ink.ToRgba(), alert.ToRgba());
+                FeedCorner.Frame(b, targetCard.Left, targetCard.Bottom, targetCard.Right, targetCard.Top, ink.ToRgba());
+                TargetArt(b, targetCard, card.Locked, ink.ToRgba(), VanillaHudStyle.InkHi.ToRgba());
             }
             if (missileCard.Height > 0f)
             {
-                FeedCorner.Frame(b, missileCard.Left, missileCard.Bottom, missileCard.Right, missileCard.Top, ink.ToRgba(), missile.NameW, missile.StateW);
+                FeedCorner.Frame(b, missileCard.Left, missileCard.Bottom, missileCard.Right, missileCard.Top, ink.ToRgba());
                 SeekerArt(b, missileCard, ink.ToRgba());
             }
             BufferGuard.Check(b, "third-person cluster");
             symbols.Commit();
         }
 
-        /// <summary>What the TARGET CAM draws over its picture: range-crosshair ticks, and while a target is locked a red lock bracket round it (the pod keeps the target centred). The text on the picture is the game's own in the cockpit.</summary>
-        private static void TargetArt(AvQuadBuffer b, RectF r, bool locked, Rgba ink, Rgba alert)
+        /// <summary>What the TARGET CAM draws over its picture: range-crosshair ticks, and while a target is locked a Hi lock bracket round it (a selection: red means they lock us; the pod keeps the target centred). The text on the picture is the game's own in the cockpit.</summary>
+        private static void TargetArt(AvQuadBuffer b, RectF r, bool locked, Rgba ink, Rgba hi)
         {
             float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, h = pt - pb, cx = r.CenterX, cy = (pb + pt) * 0.5f;
             Rgba tick = ink.WithAlpha(HudInk.LineMid);
-            AvStrokes.Line(b, cx, pt - 6f, cx, pt - 16f, 1.5f, tick);
-            AvStrokes.Line(b, cx, pb + 6f, cx, pb + 16f, 1.5f, tick);
+            AvStrokes.Line(b, cx, pt - 6f, cx, pt - 16f, HudStroke.Hairline, tick);
+            AvStrokes.Line(b, cx, pb + 6f, cx, pb + 16f, HudStroke.Hairline, tick);
             float side = r.Width * 0.2f;
-            AvStrokes.Line(b, r.Left + side, cy, r.Left + side + 10f, cy, 1.5f, tick);
-            AvStrokes.Line(b, r.Right - side, cy, r.Right - side - 10f, cy, 1.5f, tick);
+            AvStrokes.Line(b, r.Left + side, cy, r.Left + side + 10f, cy, HudStroke.Hairline, tick);
+            AvStrokes.Line(b, r.Right - side, cy, r.Right - side - 10f, cy, HudStroke.Hairline, tick);
             if (!locked) return;
             float bw = h * 0.8f, bh = h * 0.6f;
-            AvStrokes.Bracket(b, cx - bw * 0.5f, cy - bh * 0.5f, bw, bh, 10f, 1.5f, alert);
+            AvStrokes.Bracket(b, cx - bw * 0.5f, cy - bh * 0.5f, bw, bh, 10f, HudStroke.Standard, hi);
         }
 
         /// <summary>What the MISSILE CAM draws over its picture: the seeker reticle, a dashed circle with a cross of ticks and a centre dot (the countdown is text, bottom left).</summary>
@@ -505,10 +491,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float pb = FeedCorner.PictureBottom(r.Bottom), pt = r.Top - ThirdPersonHudLayout.TargetCardHeaderHeight, rad = (pt - pb) * 0.34f, cx = r.CenterX, cy = (pb + pt) * 0.5f;
             AvStrokes.DashedRing(b, cx, cy, rad, 28, 0.55f, 2f, ink);
             Rgba tick = ink;
-            AvStrokes.Line(b, cx, cy + rad - 10f, cx, cy + rad + 6f, 1.5f, tick);
-            AvStrokes.Line(b, cx, cy - rad + 10f, cx, cy - rad - 6f, 1.5f, tick);
-            AvStrokes.Line(b, cx - rad + 10f, cy, cx - rad - 6f, cy, 1.5f, tick);
-            AvStrokes.Line(b, cx + rad - 10f, cy, cx + rad + 6f, cy, 1.5f, tick);
+            AvStrokes.Line(b, cx, cy + rad - 10f, cx, cy + rad + 6f, HudStroke.Hairline, tick);
+            AvStrokes.Line(b, cx, cy - rad + 10f, cx, cy - rad - 6f, HudStroke.Hairline, tick);
+            AvStrokes.Line(b, cx - rad + 10f, cy, cx - rad - 6f, cy, HudStroke.Hairline, tick);
+            AvStrokes.Line(b, cx + rad - 10f, cy, cx + rad + 6f, cy, HudStroke.Hairline, tick);
             AvStrokes.Fill(b, cx - 1.5f, cy - 1.5f, 3f, 3f, ink);
         }
 
@@ -547,23 +533,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             return (p.r << 24) | (p.g << 16) | (p.b << 8) | p.a;
         }
 
-        /// <summary>The native HUD's corner-bracket frame: open sides, short arms top and bottom.</summary>
-        private static void Brackets(AvQuadBuffer b, RectF r, Rgba c)
-        {
-            float l = r.Left, rt = r.Right, t = r.Top, bt = r.Bottom;
-            AvStrokes.Line(b, l, bt, l, t, Stroke, c);
-            AvStrokes.Line(b, l, t, l + Bracket, t, Stroke, c);
-            AvStrokes.Line(b, l, bt, l + Bracket, bt, Stroke, c);
-            AvStrokes.Line(b, rt, bt, rt, t, Stroke, c);
-            AvStrokes.Line(b, rt, t, rt - Bracket, t, Stroke, c);
-            AvStrokes.Line(b, rt, bt, rt - Bracket, bt, Stroke, c);
-        }
+        /// <summary>The one Dim hairline under a box's caption, from the box's left + 7 to its right - 7: it replaces the corner brackets.</summary>
+        private static void CaptionRule(AvQuadBuffer b, RectF r, Rgba c) =>
+            AvStrokes.Line(b, r.Left + 7f, r.Top - 19.5f, r.Right - 7f, r.Top - 19.5f, HudStroke.Hairline, c.WithAlpha(HudInk.LineMid));
 
-        /// <summary>A thin vertical scale: spine plus five ticks; the live fill is the bar image over it.</summary>
+        /// <summary>A vertical bar: a 3 wide Faint track plus five ticks; the live fill is the bar image over it (3 wide, in its tone).</summary>
         private static void Scale(AvQuadBuffer b, RectF r, Rgba c)
         {
             Rgba dim = c.WithAlpha(HudInk.LineLow);
-            AvStrokes.Line(b, r.CenterX, r.Bottom, r.CenterX, r.Top, 1f, dim);
+            AvStrokes.Fill(b, r.CenterX - 1.5f, r.Bottom, 3f, r.Height, dim);
             for (int i = 0; i <= 4; i++)
             {
                 float y = r.Bottom + r.Height * i / 4f;
@@ -693,7 +671,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void PresentTargetCard(Texture cameraTexture, string code, float rangeM, float closureMps,
             RectF rect, Color ink, AvUnits units)
         {
-            // Locked = the board read a target (a range): its name and "· LOCK" on the shelf, the lock bracket on the picture. The state word is rebuilt only when the code or the lock changed.
+            // Locked = the board read a target (a range): its name and "· LOCK" on the shelf (the one place the name appears), the lock bracket on the picture. The state word is rebuilt only when the code or the lock changed.
             bool locked = float.IsFinite(rangeM);
             if (card.StateText == null || !ReferenceEquals(card.LastCode, code) || card.Locked != locked)
             {
@@ -701,16 +679,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 card.LastCode = code;
                 card.Locked = locked;
             }
-            if (!PresentCard(ref card, rect, cameraTexture, card.StateText, ink, ink)) return;
-
-            // The game's own tac-screen text already names the target in the cockpit; in the external views the picture carries no text, so the card names it.
-            string picName = locked && !CardNativeText && code != null ? code : "";
-            if (card.LastPicName != picName)
-            {
-                card.PicName.text = picName;
-                card.LastPicName = picName;
-            }
-            card.PicName.color = ink;
+            if (!PresentCard(ref card, rect, cameraTexture, card.StateText, ink, locked ? VanillaHudStyle.InkHi : VanillaHudStyle.InkDim)) return;
 
             // RNG, CLS (closing positive), ASP (the target's aspect: 0 tail-on, 180 head-on, R or L of its tail): a cell with no truthful value is blank.
             if (Changed(ref card, 0, locked ? Mathf.RoundToInt(rangeM / 100f) : int.MinValue))
@@ -742,11 +711,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
         }
 
-        /// <summary>The missile feed card: the weapon's name on the shelf, the countdown on the picture, RNG / CLS / T under it, SIGNAL LOST over the held last picture.</summary>
+        /// <summary>The missile feed card: the weapon's name on the shelf (ink, lost or not), the countdown on the picture, RNG at the left and CLS at the right under it, SIGNAL LOST (the one alert word) over the held last picture.</summary>
         private void PresentMissileCard(RectF rect, Color ink, AvUnits units)
         {
             Color alert = ThemeManager.Active.ColorTheme.Alert;
-            if (!PresentCard(ref missile, rect, missileFeed, missileName, ink, missileLost ? alert : ink)) return;
+            if (!PresentCard(ref missile, rect, missileFeed, missileName, ink, ink)) return;
             string note = missileLost ? "SIGNAL LOST" : "";
             if (missile.LastNote != note)
             {
@@ -755,9 +724,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             missile.Note.color = alert;
 
-            // The countdown: time to impact, big on the picture, "T-06S" like the mockup; nothing while the weapon is not closing (or lost).
+            // The countdown: time to impact, big on the picture, "T-06S"; nothing while the weapon is not closing (or lost).
             bool tti = !missileLost && float.IsFinite(missileTtiS);
-            int seconds = tti ? Mathf.Clamp(Mathf.RoundToInt(missileTtiS), 0, 999) : -1;
+            int seconds = tti ? Mathf.Clamp(Mathf.CeilToInt(missileTtiS), 0, 999) : -1;
             if (missile.LastCount != seconds)
             {
                 int len = 0;
@@ -777,7 +746,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (Changed(ref missile, 0, ranged ? Mathf.RoundToInt(missileRangeM / 100f) : int.MinValue))
                 Cell(ref missile, 0, ranged ? AvUnitTable.DistanceReading(buf, CellStart("RNG"), missileRangeM, units) : 0);
             bool closing = float.IsFinite(missileClosureMps);
-            if (Changed(ref missile, 1, closing ? Mathf.RoundToInt(AvUnitTable.Speed(missileClosureMps, units) / 5f) : int.MinValue))
+            if (Changed(ref missile, 2, closing ? Mathf.RoundToInt(AvUnitTable.Speed(missileClosureMps, units) / 5f) : int.MinValue))
             {
                 int len = 0;
                 if (closing)
@@ -785,19 +754,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     len = CellStart("CLS");
                     buf[len++] = missileClosureMps >= 0f ? '+' : '-';
                     len = AvUnitTable.SpeedReading(buf, len, Mathf.Abs(missileClosureMps), units);
-                }
-                Cell(ref missile, 1, len);
-            }
-            if (Changed(ref missile, 2, tti ? seconds : int.MinValue))
-            {
-                int len = 0;
-                if (tti)
-                {
-                    len = CellStart("T");
-                    buf[len++] = '-';
-                    if (seconds < 10) buf[len++] = '0';
-                    len = AvNumFormat.Write(buf, len, seconds, 0);
-                    buf[len++] = 'S';
                 }
                 Cell(ref missile, 2, len);
             }
@@ -823,7 +779,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private void Cell(ref TargetCardWidgets c, int i, int len) =>
             c.Cells[i].text = len > 0 ? new string(buf, 0, len) : "";
 
-        /// <summary>What every feed card shares: shown while there is a picture, placed, its feed fitted, the shelf's words written on change, the strip's size and colour kept. False while hidden.</summary>
+        /// <summary>What every feed card shares: shown while there is a picture, placed, its feed fitted, the shelf's words written on change (the caption InkDim, the state in <paramref name="tone"/>), the strip's size and colour kept. False while hidden.</summary>
         private bool PresentCard(ref TargetCardWidgets c, RectF rect, Texture feed, string state, Color ink, Color tone)
         {
             bool show = feed != null;
@@ -838,13 +794,11 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (!ReferenceEquals(c.Feed.texture, feed)) c.Feed.texture = feed;
             FitPicture(ref c, rect, feed);
 
-            if (c.NameW <= 0f) c.NameW = Measure(c.Name, c.Name.text);
-            c.Name.color = ink;
+            c.Name.color = VanillaHudStyle.InkDim;
             state ??= "--";
             if (c.LastState != state)
             {
                 c.State.text = state;
-                c.StateW = Measure(c.State, state);
                 c.LastState = state;
             }
             c.State.color = tone;
@@ -871,9 +825,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             float pa = h > 1f ? w / h : ta;
             c.Feed.uvRect = pa > ta ? new Rect(0f, (1f - ta / pa) * 0.5f, 1f, ta / pa) : new Rect((1f - pa / ta) * 0.5f, 0f, pa / ta, 1f);
         }
-
-        /// <summary>The text's width (a shelf word's, for the rule that runs up to it), measured when the words change.</summary>
-        private static float Measure(TextMeshProUGUI t, string s) => t.font != null && !string.IsNullOrEmpty(s) ? t.GetPreferredValues(s).x : (s?.Length ?? 0) * 7.5f;
 
         /// <summary>Take the cluster out of view without destroying it. Idempotent.</summary>
         public void Hide()

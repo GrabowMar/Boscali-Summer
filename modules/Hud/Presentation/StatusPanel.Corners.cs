@@ -254,14 +254,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             Show(cornerShade, true);
         }
 
-        /// <summary>TAC MAP: four DIM brackets round the plate, the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
+        /// <summary>TAC MAP (no corner brackets: user 2026-11-17): the caption shelf inside their lower left, and a small north tick with its "N" where the turning map's north meets the frame.</summary>
         private static void DrawMapFurniture(ScopeCanvas g, in CornerFurniture f, in CornerLayout.MapNorth north)
         {
-            if (f.Present) g.Brackets(f.X0, f.Y0, f.X1 - f.X0, f.Y1 - f.Y0, f.Arm, Dim);
             g.CaptionShelf(f.ShelfX, f.ShelfY, f.ShelfW, "TAC MAP");
             if (!north.Present) return;
             g.Line(north.X, north.Y, north.InX, north.InY, Dim);
-            g.Text("N", north.LabelX, north.LabelY, Ink, 12f, ScopeAlign.Center, true);
+            g.Text("N", north.LabelX, north.LabelY, Dim, 12f, ScopeAlign.Center, true);
         }
 
         private void DestroyCorners()

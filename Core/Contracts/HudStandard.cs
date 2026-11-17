@@ -56,19 +56,23 @@ namespace BoscaliSummer.Core.Contracts
 
     /// <summary>
     /// THE COLOUR ROLES of the visor. INK is the game's own HUD colour (<c>ColorTheme.AllClear</c>, the colour the native heading tape, ladder and gauges are drawn in); INK-HI is the ink lifted <see cref="HiLift"/> toward
-    /// white; INK-DIM the ink at <see cref="DimAlpha"/>; CAUTION the theme's amber, WARNING its red. INFO (allied, radio, navigation) is INK-HI: the game's palette has no cool tone in the HUD theme and the mod
+    /// white; INK-DIM the ink <see cref="DimDarken"/> toward the edge colour, opaque; CAUTION/WARNING are the theme's amber/red through <see cref="Caution"/>/<see cref="Warning"/>. INK, CAUTION and WARNING are
+    /// lifted toward white until their relative luminance reaches a floor (<see cref="FloorY"/>), so a dark custom theme still clears the rim. INFO (allied, radio, navigation) is INK-HI: the game's palette has no cool tone in the HUD theme and the mod
     /// ships none. TEXT EDGE is the one dark rim of every glyph. Line art takes the three alpha steps of <see cref="Lines"/>.
     /// </summary>
     internal static class HudInk
     {
-        /// <summary>How far toward white INK-HI is (LAYOUT.md 1) and the alpha of INK-DIM: decided by capture on bright cloud and dark terrain (0.8 stays legible on both with the text edge).</summary>
-        public const float HiLift = 0.70f, DimAlpha = 0.80f;
+        /// <summary>How far toward white INK-HI is (LAYOUT.md 1), and how far INK-DIM is darkened toward the edge colour: a tone, not an alpha (an alpha also thins the rim). INK/DIM is about 1.6:1 in luminance.</summary>
+        public const float HiLift = 0.80f, DimDarken = 0.22f;
+
+        /// <summary>The relative-luminance floors of INK, CAUTION and WARNING (<see cref="FloorY"/>). The default theme sits above all three (INK 0.764, AMBER 0.548, RED 0.234).</summary>
+        public const float InkFloorY = 0.45f, CautionFloorY = 0.45f, WarningFloorY = 0.22f;
 
         /// <summary>The line alphas: full, mid (rules, ticks, frames) and low (leaders, grids). Nothing else.</summary>
         public const float LineFull = 1f, LineMid = 0.7f, LineLow = 0.4f;
 
-        /// <summary>The text edge: a dark green rim (2, 16, 10) at 0.82, the same on every glyph.</summary>
-        public static readonly Rgba TextEdge = new Rgba(2f / 255f, 16f / 255f, 10f / 255f, 0.82f);
+        /// <summary>The text edge: a dark green rim (2, 16, 10) at 0.92, the same on every glyph.</summary>
+        public static readonly Rgba TextEdge = new Rgba(2f / 255f, 16f / 255f, 10f / 255f, 0.92f);
 
         /// <summary>
         /// The game draws its own HUD (tape, ladder, gauges) in the theme's all-clear colour on an ADDITIVE material, so on sky the light of the sky is added to it: the default (0, 1, 0) reads as a pale mint (measured 96, 248, 152
@@ -76,14 +80,29 @@ namespace BoscaliSummer.Core.Contracts
         /// </summary>
         public static readonly Rgba SkyWash = new Rgba(0.38f, 0f, 0.60f);
 
-        /// <summary>INK: the game's HUD colour as it looks on sky (<see cref="SkyWash"/> added), opaque.</summary>
-        public static Rgba Ink(Rgba game) => new Rgba(Clamp(game.R + SkyWash.R), Clamp(game.G + SkyWash.G), Clamp(game.B + SkyWash.B));
+        /// <summary>INK: the game's HUD colour as it looks on sky (<see cref="SkyWash"/> added), opaque, floored at <see cref="InkFloorY"/>.</summary>
+        public static Rgba Ink(Rgba game) => FloorY(new Rgba(Clamp(game.R + SkyWash.R), Clamp(game.G + SkyWash.G), Clamp(game.B + SkyWash.B)), InkFloorY);
 
         private static float Clamp(float v) => v > 1f ? 1f : v;
 
         public static Rgba Hi(Rgba ink) => Mix(ink.WithAlpha(1f), new Rgba(1f, 1f, 1f), HiLift);
 
-        public static Rgba Dim(Rgba ink) => ink.WithAlpha(DimAlpha);
+        /// <summary>INK-DIM: the ink <see cref="DimDarken"/> toward the edge colour, opaque (a tone, so its rim stays as dark as INK's).</summary>
+        public static Rgba Dim(Rgba ink) => Mix(ink.WithAlpha(1f), new Rgba(TextEdge.R, TextEdge.G, TextEdge.B), DimDarken);
+
+        /// <summary>CAUTION: the theme's amber half way to orange (1, 0.43, 0), so it parts from INK-HI in luminance; floored at <see cref="CautionFloorY"/>.</summary>
+        public static Rgba Caution(Rgba game) => FloorY(Mix(game.WithAlpha(1f), new Rgba(1f, 0.43f, 0f), 0.5f), CautionFloorY);
+
+        /// <summary>WARNING: the theme's red lifted 0.18 toward white (its face clears the rim 4.5:1), floored at <see cref="WarningFloorY"/>.</summary>
+        public static Rgba Warning(Rgba game) => FloorY(Mix(game.WithAlpha(1f), new Rgba(1f, 1f, 1f), 0.18f), WarningFloorY);
+
+        /// <summary><paramref name="c"/> lifted toward white in 0.05 steps until its relative luminance is at least <paramref name="y"/>. Allocation free; a colour already bright enough never enters the loop.</summary>
+        public static Rgba FloorY(Rgba c, float y)
+        {
+            Rgba o = c;
+            for (float k = 0.05f; o.RelativeLuminance < y && k <= 1.0001f; k += 0.05f) o = Mix(c, new Rgba(1f, 1f, 1f), k);
+            return o;
+        }
 
         /// <summary>The line alpha step nearest to <paramref name="alpha"/>: 1, 0.7 or 0.4. A fade (under 0.3) passes through unsnapped.</summary>
         public static float Line(float alpha)
@@ -93,15 +112,8 @@ namespace BoscaliSummer.Core.Contracts
             return alpha >= 0.3f ? LineLow : alpha;
         }
 
-        /// <summary>A text alpha: full or INK-DIM's. Under 0.5 it is a fade and passes through.</summary>
-        public static float Text(float alpha)
-        {
-            if (alpha >= 0.95f) return 1f;
-            return alpha >= 0.5f ? DimAlpha : alpha;
-        }
-
-        /// <summary>A lamp: lit is the role colour at full, unlit the ink at the low line alpha (still a readable word).</summary>
-        public static float Lamp(bool lit) => lit ? LineFull : LineLow;
+        /// <summary>A text alpha: DIM is a tone now, so 0.5 and up is full; under 0.5 it is a fade and passes through.</summary>
+        public static float Text(float alpha) => alpha >= 0.5f ? 1f : alpha;
 
         private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
     }

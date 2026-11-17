@@ -7,8 +7,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     internal static class GaugeRow
     {
         public const int Slots = 4;
-        /// <summary>A gauge is its glyph (6 radius, 21 with the clearance), its label, <see cref="WordGap"/>, its value and, while there is room, <see cref="SubGap"/> and its sub-word.</summary>
-        public const float GlyphW = 21f, WordGap = 6f, SubGap = 8f;
+        /// <summary>A gauge is its glyph (6 radius about x + 8; the words start at x + <see cref="GlyphW"/>), its label, <see cref="WordGap"/>, its value and, while there is room, <see cref="SubGap"/> and its sub-word.</summary>
+        public const float GlyphW = 22f, WordGap = 6f, SubGap = 8f;
 
         /// <summary>The width of one gauge from the widths of its words (each rounded up); no sub-word when <paramref name="sub"/> is 0.</summary>
         public static float Width(float label, float value, float sub) =>

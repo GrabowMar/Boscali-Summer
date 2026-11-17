@@ -51,7 +51,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private readonly PageSurface[] pageSurfaces = new PageSurface[ScopeLayout.MaxSlots];
         private TMP_FontAsset font;
         private Material fontMaterial;
-        private Image nativeSafety;
         private NativeCorner corner;
         /// <summary>Canvas units per design unit: <see cref="baseUnit"/> is the screen's (what the margins and the offsets are in), <see cref="unit"/> that times the pilot's Scale (what the board itself is in).</summary>
         private float unit = 1f, baseUnit = 1f;
@@ -112,7 +111,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rootCanvas = canvas != null ? canvas.rootCanvas : null;
             canvasRect = rootCanvas != null ? rootCanvas.transform as RectTransform : null;
 
-            nativeSafety = safety;
             font = nameLabel != null ? nameLabel.font : null;
             if (font == null) font = AvType.Face(AvFace.Mono);
             fontMaterial = BoscaliSummer.Core.Game.VanillaHudStyle.Glow(nameLabel != null ? nameLabel.fontSharedMaterial : null);
@@ -315,7 +313,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             shellText = pageText = overlayText = storesText = statusText = null;
             shellCanvas = pageCanvas = overlayCanvas = frameCanvas = storesCanvas = statusCanvas = null;
             Array.Clear(pageSurfaces, 0, pageSurfaces.Length);
-            nativeSafety = null;
             StoreIcons.Clear();      // the baked pictures are this scene's
             DestroyShade();
             DestroyBoard();

@@ -87,7 +87,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             logLit = 0f;
             for (int i = 0; i < logCount; i++)
             {
-                widest = Math.Max(widest, logRows[i].Line.Chars + (logRows[i].Line.Truncated ? 2 : 0));
+                widest = Math.Max(widest, logRows[i].Line.Chars + (logRows[i].Line.Truncated ? 2 : 0) + (logRows[i].Repeat > 1 ? 4 : 0));
                 logLit = Math.Max(logLit, logRows[i].Alpha(clock));
             }
             logPlan = EventLogLayout.Plan(boxLeft, boxTop, logCount, widest, level, columnWidth);
@@ -100,13 +100,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (logPlan.Present)
             {
                 g.CaptionShelf(logPlan.Left, logPlan.Top, logPlan.Width, "DL EVT LOG");
-                if (logPlan.Furniture) g.Line(logPlan.Left + 1f, logPlan.SpineTop, logPlan.Left + 1f, logPlan.SpineBottom, Dim);
                 for (int i = 0; i < logCount; i++) DrawEventRow(g, logPlan, logRows[i], logPlan.RowY(i), clock);
             }
             g.End();
             logVector.Commit();
             return true;
         }
+
+        /// <summary>The class's tone: crashes RED, combat reports (kill, demolition) AMBER, interceptions, captures and radio INK, the rest (info, network) DIM.</summary>
+        private static ScopeTone ClassTone(EventClass c)
+        {
+            switch (c)
+            {
+                case EventClass.Crash: return Red;
+                case EventClass.Kill:
+                case EventClass.Demo: return Amber;
+                case EventClass.Intcp:
+                case EventClass.Capt:
+                case EventClass.Comm: return Ink;
+                default: return Dim;
+            }
+        }
+
+        private static readonly string[] RepeatWords = { "", "", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9+" };
 
         /// <summary>
         /// One row at <paramref name="cy"/>: the spine's tick, the stamp, the class word and the line, each as much of it as the wipe has reached (cells counted over the whole row, left to right) and all of it at the row's fade.
@@ -121,10 +137,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             int budget = wipe >= 1f ? int.MaxValue : (int)Math.Ceiling(wipe * total);
             if (p.Furniture)
             {
-                g.Line(p.Left + 1f, cy, p.Left + 1f + EventLogLayout.SpineTick, cy, Dim, alpha);
-                Reveal(g, row.Stamp, p.StampX, cy, Dim, alpha, ref budget, HudType.Label);
+                Reveal(g, row.Stamp, p.StampX, cy, Dim, alpha, ref budget, HudType.Label, false);
             }
-            Reveal(g, word, p.ClassX, cy, Dim, alpha, ref budget, HudType.Label);
+            // The class as a colour first: the column's 3 x 12 tick at the row's left edge in the class's tone (a column of ticks reads as a scale down the block), and the word, bold, in the same tone.
+            ScopeTone classTone = ClassTone(line.Class);
+            g.ToneTick(p.Left + 3f, cy - 6f, classTone, alpha);
+            Reveal(g, word, p.ClassX, cy, classTone, alpha, ref budget, HudType.Label, true);
             float x = p.LineX;
             foreach (EventSpan span in line.Spans)
             {
@@ -135,25 +153,24 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     x += EventLogLayout.LineAdvance;
                     budget--;
                 }
-                ScopeTone tone = span.Role == EventRole.Verb && !bright && !span.Own ? Ink : Hi;
-                float emphasis = 1f;
-                x = Reveal(g, span.Text, x, cy, tone, alpha * emphasis, ref budget, HudType.Body);
+                ScopeTone tone = bright || span.Own ? Hi : span.Role == EventRole.Verb ? Dim : Ink;
+                x = Reveal(g, span.Text, x, cy, tone, alpha, ref budget, HudType.Body, false);
             }
-            if (line.Truncated && budget > 0) Reveal(g, "+", x + EventLogLayout.LineAdvance, cy, Dim, alpha, ref budget, HudType.Body);
+            if (line.Truncated && budget > 0) Reveal(g, "+", x + EventLogLayout.LineAdvance, cy, Dim, alpha, ref budget, HudType.Body, false);
+            if (row.Repeat > 1 && budget > 0) Reveal(g, RepeatWords[Math.Min(row.Repeat, RepeatWords.Length - 1)], x + EventLogLayout.LineAdvance * (line.Truncated ? 3f : 1f), cy, Ink, alpha, ref budget, HudType.Label, true);
         }
 
         /// <summary>
         /// The first <paramref name="budget"/> characters of <paramref name="s"/> at (<paramref name="x"/>, <paramref name="cy"/>); returns where the next word goes. A DIM word fades as INK at DIM's own alpha: <c>ScopeCanvas.Text</c>
         /// keeps a DIM word's alpha at its readable floor, which a fade must go under.
         /// </summary>
-        private static float Reveal(ScopeCanvas g, string s, float x, float cy, ScopeTone tone, float alpha, ref int budget, float size)
+        private static float Reveal(ScopeCanvas g, string s, float x, float cy, ScopeTone tone, float alpha, ref int budget, float size, bool bold)
         {
             int take = Math.Min(s.Length, budget);
             if (take <= 0 || alpha <= 0f) return x;
             budget -= take;
             ReadOnlySpan<char> shown = s.AsSpan(0, take);
-            if (tone == Dim && alpha < 1f) g.Text(shown, x, cy, Ink, size, ScopeAlign.Left, false, alpha * ScopePalette.DimAlpha);
-            else g.Text(shown, x, cy, tone, size, ScopeAlign.Left, false, alpha);
+            g.Text(shown, x, cy, tone, size, ScopeAlign.Left, bold, alpha);
             return x + ScopeCanvas.TextW(shown, size);
         }
 
