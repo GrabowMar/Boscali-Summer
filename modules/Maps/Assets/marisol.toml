@@ -1,11 +1,11 @@
 id = "marisol"
 name = "Marisol Shoals"
 seed = 7
-islands = 15
-max_island_m = 3000
-atolls = 3
-caldera = 1
+cell = 20
+islands = 12
+max_island_m = 3500
+land_fraction = 0.02
+peak = 420
 stacks = 40
-sandbars = 6
 strips = 2
 latitude = 8

@@ -59,7 +59,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 network.NetworkObjects = identities.ToArray();
                 settings.NetworkMap = network;
                 int scenery = Plant(root.transform.Find("Props"), entry);
-                Plugin.Logger?.LogInfo("[Maps] Built " + manifest.displayName + ": " + chunks + " terrain chunks, " + identities.Count +
+                Plugin.Logger?.LogInfo("[Maps] Built " + manifest.displayName + ": " + chunks + " terrain tiles, " + identities.Count +
                     " airstrips, " + (settings.SeaLanes != null ? settings.SeaLanes.RoadNetwork.roads.Count : 0) + " sea lane legs, " + scenery + " trees and rocks.");
                 return settings;
             }
@@ -227,45 +227,38 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             }
             byte[] bytes = list.bytes;
             var random = new System.Random(entry.Manifest.id.Length * 7919 + bytes.Length);
-            var perIsland = new List<CombineInstance>[entry.Manifest.islands.Length];
+            // One merged mesh per 2.56 km square of the map: near enough to cull by, few enough to draw cheaply.
+            const float Square = 2560f;
+            var squares = new Dictionary<Vector2Int, List<CombineInstance>>();
             int planted = 0;
             for (int at = 0; at + 16 <= bytes.Length; at += 16)
             {
                 var position = new Vector3(BitConverter.ToSingle(bytes, at), BitConverter.ToSingle(bytes, at + 4), BitConverter.ToSingle(bytes, at + 8));
                 int kind = Mathf.RoundToInt(BitConverter.ToSingle(bytes, at + 12));
-                int island = Nearest(entry.Manifest.islands, position);
-                if (island < 0 || !shapes.TryGetValue(kind, out List<MeshFilter> of) || of.Count == 0) continue;
-                MapManifest.Island home = entry.Manifest.islands[island];
+                if (!shapes.TryGetValue(kind, out List<MeshFilter> of) || of.Count == 0) continue;
+                var square = new Vector2Int(Mathf.FloorToInt(position.x / Square), Mathf.FloorToInt(position.z / Square));
+                if (!squares.TryGetValue(square, out List<CombineInstance> here)) squares[square] = here = new List<CombineInstance>();
                 float scale = .8f + (float)random.NextDouble() * .5f;
-                (perIsland[island] ?? (perIsland[island] = new List<CombineInstance>())).Add(new CombineInstance
+                here.Add(new CombineInstance
                 {
                     mesh = of[random.Next(of.Count)].sharedMesh,
-                    transform = Matrix4x4.TRS(position - new Vector3(home.cx, 0f, home.cz), Quaternion.Euler(0f, (float)random.NextDouble() * 360f, 0f), Vector3.one * scale),
+                    transform = Matrix4x4.TRS(position - Origin(square, Square), Quaternion.Euler(0f, (float)random.NextDouble() * 360f, 0f), Vector3.one * scale),
                 });
                 planted++;
             }
-            for (int island = 0; island < perIsland.Length; island++)
+            foreach (KeyValuePair<Vector2Int, List<CombineInstance>> square in squares)
             {
-                if (perIsland[island] == null) continue;
-                var go = new GameObject("scenery" + island);
+                var go = new GameObject("scenery_" + square.Key.x + "_" + square.Key.y);
                 go.transform.SetParent(props, false);
-                go.transform.localPosition = new Vector3(entry.Manifest.islands[island].cx, 0f, entry.Manifest.islands[island].cz);
+                go.transform.localPosition = Origin(square.Key, Square);
                 var mesh = new Mesh { name = go.name, indexFormat = IndexFormat.UInt32, hideFlags = HideFlags.DontUnloadUnusedAsset };
-                mesh.CombineMeshes(perIsland[island].ToArray(), true, true);
+                mesh.CombineMeshes(square.Value.ToArray(), true, true);
                 go.AddComponent<MeshFilter>().sharedMesh = mesh;
                 go.AddComponent<MeshRenderer>().sharedMaterial = material;
             }
             return planted;
         }
 
-        private static int Nearest(MapManifest.Island[] islands, Vector3 position)
-        {
-            for (int i = 0; i < islands.Length; i++)
-            {
-                float reach = islands[i].res * islands[i].cell * .5f;
-                if (Mathf.Abs(position.x - islands[i].cx) <= reach && Mathf.Abs(position.z - islands[i].cz) <= reach) return i;
-            }
-            return -1;
-        }
+        private static Vector3 Origin(Vector2Int square, float size) => new Vector3((square.x + .5f) * size, 0f, (square.y + .5f) * size);
     }
 }

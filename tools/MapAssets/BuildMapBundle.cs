@@ -13,26 +13,16 @@ using Object = UnityEngine.Object;
 public static class BuildMapBundle
 {
     private const string Dir = "Assets/Map/";
-    private const int Chunk = 128;            // cells per chunk side: 640 m at the generator's 5 m cells
-    private const float KeepAbove = -25f;     // a chunk with nothing above this is left to the sea
     private const long BundleLimit = 40L * 1024 * 1024;
 
-    // deep, shelf, reef, lagoon, beach, scrub, jungle, rock: the generator's layer order
-    private static readonly Color[] Palette =
-    {
-        new Color(.10f, .16f, .20f), new Color(.62f, .60f, .48f), new Color(.45f, .38f, .30f), new Color(.86f, .82f, .66f),
-        new Color(.89f, .82f, .63f), new Color(.44f, .47f, .28f), new Color(.17f, .29f, .13f), new Color(.36f, .33f, .30f),
-    };
-
-    [Serializable] private class IslandInfo { public float cx, cz, radius, cell, peak; public string kind; public int res; }
-    [Serializable] private class StripInfo { public float x, y, z, length; public int heading, island; }
+    [Serializable] private class StripInfo { public float x, y, z, length; public int heading; }
     [Serializable] private class MapInfo
     {
-        public string id, displayName; public float heightFloor, heightSpan; public IslandInfo[] islands; public StripInfo[] strips;
+        public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, islandCount; public StripInfo[] strips;
     }
 
     private static readonly List<Mesh> meshes = new List<Mesh>();
-    private static int chunkCount, triangleCount;
+    private static int chunkCount, landTiles, triangleCount;
 
     public static void Run()
     {
@@ -45,8 +35,8 @@ public static class BuildMapBundle
             AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
             ConfigureScratchPipeline();
             var info = JsonUtility.FromJson<MapInfo>(File.ReadAllText(Path.Combine(source, "map.json")));
-            if (info == null || string.IsNullOrEmpty(info.id) || info.islands == null || info.islands.Length == 0)
-                throw new Exception("map.json has no id or no islands.");
+            if (info == null || string.IsNullOrEmpty(info.id) || info.res <= 0 || info.tile <= 0 || info.res % info.tile != 0 || info.cell <= 0f)
+                throw new Exception("map.json has no id, or no usable res / tile / cell.");
 
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(Dir + "MapSurface.shader");
             if (shader == null || ShaderUtil.ShaderHasError(shader)) throw new Exception("MapSurface shader did not compile.");
@@ -60,13 +50,7 @@ public static class BuildMapBundle
             var airfields = Child(root, "Airfields");
             int trees = (int)(new FileInfo(Path.Combine(source, "trees.bin")).Length / 16);
             BuildPrototypes(props, scenery);
-            for (int n = 0; n < info.islands.Length; n++)
-            {
-                IslandInfo island = info.islands[n];
-                float[] heights = ReadHeights(Path.Combine(source, $"island_{n:00}.r16"), island.res, info);
-                Color32[] colours = Colours(source, n, island.res);
-                BuildIsland(terrain, n, island, heights, colours, ground);
-            }
+            BuildTerrain(terrain, info, ReadHeights(Path.Combine(source, "height.r16"), info), ReadColours(Path.Combine(source, "colour.rgb"), info.res), ground);
             for (int n = 0; n < info.strips.Length; n++) BuildStrip(airfields, n, info.strips[n], paved);
 
             string meshPath = Dir + "MapMeshes.asset";
@@ -90,11 +74,11 @@ public static class BuildMapBundle
                 assetNames = new[] { prefabPath, Dir + "map.json", Dir + "trees.bytes", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image },
             };
             if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
-                BuildAssetBundleOptions.ChunkBasedCompression | BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null)
+                BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null) // LZMA: a height field packs far smaller than with LZ4
                 throw new Exception("Map bundle build returned no manifest.");
             long bytes = new FileInfo("BundleOutput/" + info.id + ".bsmap").Length;
             if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 40 MiB: " + bytes + " bytes.");
-            File.WriteAllText("result.txt", $"PASS: {info.displayName}: {info.islands.Length} islands, {chunkCount} terrain chunks, " +
+            File.WriteAllText("result.txt", $"PASS: {info.displayName}: {info.islandCount} islands, {chunkCount} terrain tiles ({landTiles} with land), " +
                 $"{triangleCount} triangles, {trees} scenery items, {info.strips.Length} strips; bundle {bytes} bytes.");
             EditorApplication.Exit(0);
         }
@@ -191,84 +175,71 @@ public static class BuildMapBundle
 
     // ---- source files ----------------------------------------------------------------------------------------------
 
-    private static float[] ReadHeights(string path, int res, MapInfo info)
+    /// <summary>The whole map's heights in metres, row 0 south: 16-bit samples over heightFloor .. heightFloor + heightSpan.</summary>
+    private static float[] ReadHeights(string path, MapInfo info)
     {
         byte[] raw = File.ReadAllBytes(path);
-        if (raw.Length != res * res * 2) throw new Exception(Path.GetFileName(path) + " is not " + res + " x " + res + " 16-bit samples.");
-        var heights = new float[res * res];
+        if (raw.Length != info.res * info.res * 2) throw new Exception(Path.GetFileName(path) + " is not " + info.res + " x " + info.res + " 16-bit samples.");
+        var heights = new float[info.res * info.res];
         for (int i = 0; i < heights.Length; i++)
             heights[i] = (raw[i * 2] | (raw[i * 2 + 1] << 8)) / 65535f * info.heightSpan + info.heightFloor;
         return heights;
     }
 
-    /// <summary>Vertex colours from the two splat images (layers 0-3 and 4-7). PNG row 0 is the grid's row 0 (south).</summary>
-    private static Color32[] Colours(string source, int n, int res)
+    /// <summary>Vertex colours from the generator's raw RGB picture of the ground and seabed. It is authored as it should
+    /// look on screen (sRGB); the game shades in linear space, so each channel is converted here.</summary>
+    private static Color32[] ReadColours(string path, int res)
     {
-        Color32[] a = LoadPng(Path.Combine(source, $"splat_{n:00}_a.png"), res), b = LoadPng(Path.Combine(source, $"splat_{n:00}_b.png"), res);
+        byte[] raw = File.ReadAllBytes(path);
+        if (raw.Length != res * res * 3) throw new Exception(Path.GetFileName(path) + " is not " + res + " x " + res + " RGB bytes.");
+        var linear = new byte[256];
+        for (int i = 0; i < 256; i++) linear[i] = (byte)Mathf.RoundToInt(Mathf.GammaToLinearSpace(i / 255f) * 255f);
         var colours = new Color32[res * res];
-        for (int z = 0; z < res; z++)
-            for (int x = 0; x < res; x++)
-            {
-                int from = (res - 1 - z) * res + x; // LoadImage keeps the image's bottom row first
-                Color32 p = a[from], q = b[from];
-                float[] w = { p.r, p.g, p.b, p.a, q.r, q.g, q.b, q.a };
-                Color sum = Color.black;
-                float total = 0f;
-                for (int layer = 0; layer < 8; layer++) { sum += Palette[layer] * w[layer]; total += w[layer]; }
-                sum /= Mathf.Max(1f, total);
-                float vary = .92f + .16f * Mathf.PerlinNoise(x * .06f + n * 17f, z * .06f);
-                Color lit = new Color(sum.r * vary, sum.g * vary, sum.b * vary).linear; // authored as seen on screen; the game shades in linear
-                colours[z * res + x] = new Color(lit.r, lit.g, lit.b, 0f);
-            }
+        for (int i = 0; i < colours.Length; i++) colours[i] = new Color32(linear[raw[i * 3]], linear[raw[i * 3 + 1]], linear[raw[i * 3 + 2]], 0);
         return colours;
-    }
-
-    private static Color32[] LoadPng(string path, int res)
-    {
-        var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false, true);
-        if (!texture.LoadImage(File.ReadAllBytes(path)) || texture.width != res || texture.height != res)
-            throw new Exception(Path.GetFileName(path) + " is not a " + res + " x " + res + " image.");
-        Color32[] pixels = texture.GetPixels32();
-        Object.DestroyImmediate(texture);
-        return pixels;
     }
 
     // ---- terrain ---------------------------------------------------------------------------------------------------
 
-    private static void BuildIsland(GameObject parent, int n, IslandInfo island, float[] heights, Color32[] colours, Material material)
+    /// <summary>
+    /// One continuous ground for the whole map, seabed included, cut into square tiles. A tile keeps every sample where
+    /// there is land, every second one over shallows, and far fewer over deep water, where nobody sees or touches it.
+    /// Every tile has a collider, so nothing that sinks falls through the world.
+    /// </summary>
+    private static void BuildTerrain(GameObject parent, MapInfo info, float[] heights, Color32[] colours, Material material)
     {
-        int res = island.res;
-        // Sea stacks are a few cells wide, so they keep every sample; other islands use every second one (10 m).
-        int step = island.kind == "stacks" ? 1 : 2;
-        float keep = island.kind == "stacks" ? 0f : KeepAbove;
-        for (int cz = 0; cz < res - 1; cz += Chunk)
-            for (int cx = 0; cx < res - 1; cx += Chunk)
+        int res = info.res, tile = info.tile;
+        float half = res * info.cell * .5f;
+        for (int z0 = 0; z0 < res; z0 += tile)
+            for (int x0 = 0; x0 < res; x0 += tile)
             {
-                int x1 = Mathf.Min(cx + Chunk, res - 1), z1 = Mathf.Min(cz + Chunk, res - 1);
+                int x1 = Mathf.Min(x0 + tile, res - 1), z1 = Mathf.Min(z0 + tile, res - 1);
                 float top = float.MinValue;
-                for (int z = cz; z <= z1; z++)
-                    for (int x = cx; x <= x1; x++) top = Mathf.Max(top, heights[z * res + x]);
-                if (top <= keep) continue;
-                var go = Child(parent, $"island{n:00}_{cx / Chunk}_{cz / Chunk}");
-                // The chunk's origin is its own south-west corner, in map coordinates: small numbers keep float precision.
-                float half = res * island.cell * .5f;
-                var origin = new Vector3(island.cx - half + (cx + .5f) * island.cell, 0f, island.cz - half + (cz + .5f) * island.cell);
-                go.transform.localPosition = origin;
-                Mesh near = GridMesh(go.name, heights, colours, res, island.cell, cx, cz, x1, z1, step);
-                Mesh far = GridMesh(go.name + "_lod1", heights, colours, res, island.cell, cx, cz, x1, z1, step * 4);
+                for (int z = z0; z <= z1; z++)
+                    for (int x = x0; x <= x1; x++) top = Mathf.Max(top, heights[z * res + x]);
+                int step = top > 0f ? 1 : top > -40f ? 2 : top > -150f ? 8 : 32;
+                var go = Child(parent, $"tile_{x0 / tile}_{z0 / tile}");
+                // A tile's origin is its own south-west sample, in map coordinates: small numbers keep float precision.
+                go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
+                Mesh near = GridMesh(go.name, heights, colours, res, info.cell, x0, z0, x1, z1, step);
                 go.AddComponent<MeshFilter>().sharedMesh = near;
                 var renderer = go.AddComponent<MeshRenderer>();
                 renderer.sharedMaterial = material;
                 go.AddComponent<MeshCollider>().sharedMesh = near;
+                chunkCount++;
+                triangleCount += near.triangles.Length / 3;
+                if (step != 1)
+                {
+                    renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    continue;
+                }
+                landTiles++;
                 var low = Child(go, "lod1");
-                low.AddComponent<MeshFilter>().sharedMesh = far;
+                low.AddComponent<MeshFilter>().sharedMesh = GridMesh(go.name + "_lod1", heights, colours, res, info.cell, x0, z0, x1, z1, 4);
                 var lowRenderer = low.AddComponent<MeshRenderer>();
                 lowRenderer.sharedMaterial = material;
                 lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
-                var group = go.AddComponent<LODGroup>();
-                group.SetLODs(new[] { new LOD(.12f, new Renderer[] { renderer }), new LOD(.0005f, new Renderer[] { lowRenderer }) });
-                chunkCount++;
-                triangleCount += near.triangles.Length / 3;
+                go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(.1f, new Renderer[] { renderer }), new LOD(.0005f, new Renderer[] { lowRenderer }) });
             }
     }
 

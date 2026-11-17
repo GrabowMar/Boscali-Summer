@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Source,
     [string]$Unity = $(if ($env:NOMOD_UNITY) { $env:NOMOD_UNITY } else { 'C:/Program Files/Unity/Hub/Editor/2022.3.62f3/Editor/Unity.exe' }),
     [string]$ProjectDirectory,
-    [int]$TimeoutSeconds = 1500
+    [int]$TimeoutSeconds = 1700
 )
 # Bakes the folder `nomod map gen` wrote into modules/Maps/Assets/<id>.bsmap (meshes, colliders, textures, no game types),
 # and puts the relief heightfield and chart where the Command module embeds them.

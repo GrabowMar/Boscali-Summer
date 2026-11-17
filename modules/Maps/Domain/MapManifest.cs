@@ -14,12 +14,10 @@ namespace BoscaliSummer.Modules.Maps.Domain
         public float sizeX, sizeY, latitude;
         public int gridX, gridY, offsetX, offsetY;
         public Pose camera = new Pose();
-        public Island[] islands = new Island[0];
         public Strip[] strips = new Strip[0];
         public Lane[] lanes = new Lane[0];
 
         [Serializable] internal sealed class Pose { public float x, y, z, pitch, yaw, roll; }
-        [Serializable] internal sealed class Island { public float cx, cz, radius, cell; public int res; public string kind; }
         [Serializable] internal sealed class Strip { public float x, y, z, length; public int heading; }
         /// <summary>One sea lane: x0, z0, x1, z1, ... in map metres.</summary>
         [Serializable] internal sealed class Lane { public float[] points = new float[0]; }
