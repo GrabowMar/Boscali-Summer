@@ -29,7 +29,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
         private const float LumaR = 0.2126f, LumaG = 0.7152f, LumaB = 0.0722f;
 
         private readonly Sharpening sharpening = new Sharpening();
-        private readonly AgxTonemapping agx = new AgxTonemapping();
+        private readonly CinematicAssets cinematicAssets = new CinematicAssets();
         private readonly CinematicPost cinematic = new CinematicPost();
         private readonly CameraPostQuality postQuality = new CameraPostQuality();
         private EffectsSettings settings;
@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             sharpening.Restore();
             postQuality.Restore();
             cinematic.Release();
-            agx.Restore();
+            cinematicAssets.Dispose();
             Teardown();
         }
 
@@ -70,7 +70,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             postQuality.Dispose();
             sharpening.Restore();
             cinematic.Release();
-            agx.Dispose();
+            cinematicAssets.Dispose();
             Teardown();
         }
 
@@ -79,7 +79,6 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             state["grade"] = holder != null;
             state["lut"] = lut != null ? lut.width + "x" + lut.height : "none";
             sharpening.Describe(state);
-            agx.Describe(state);
             cinematic.Describe(state);
             postQuality.Describe(state);
         }
@@ -105,10 +104,8 @@ namespace BoscaliSummer.Modules.Effects.Runtime
             CameraStateManager cameras = SceneSingleton<CameraStateManager>.i;
             postQuality.Apply(level != null && cameras != null ? cameras.mainCamera : null,
                 settings.Dithering.Value, settings.EdgeSmoothing.Value, logger);
-            agx.Apply(settings.AgxEnabled.Value && level != null && level.PostProcessing != null,
-                settings.AgxLook.Value, cameras != null ? cameras.mainCamera : null, logger);
             cinematic.Apply(settings.Cinematic, level, transform, cameras != null ? cameras.mainCamera : null,
-                settings.Cinematic.Enabled.Value ? agx.GetShader("Hidden/Boscali/CinematicStreak", logger) : null,
+                settings.Cinematic.Enabled.Value ? cinematicAssets.Streak(logger) : null,
                 renderTuning?.OptimizeCinematicStreaks == true);
             if (!on || level == null || level.PostProcessing == null)
             {

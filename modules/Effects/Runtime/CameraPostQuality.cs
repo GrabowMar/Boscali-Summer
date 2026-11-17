@@ -32,7 +32,7 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 Restore();
                 return;
             }
-            Camera owner = AgxTonemapping.PostCamera(main);
+            Camera owner = PostCamera(main);
             if (owner == null || !owner.isActiveAndEnabled ||
                 !owner.TryGetComponent(out UniversalAdditionalCameraData post) || !post.renderPostProcessing)
             {
@@ -84,6 +84,23 @@ namespace BoscaliSummer.Modules.Effects.Runtime
                 data.antialiasingQuality = AntialiasingQuality.High;
             }
             else RestoreSmaa();
+        }
+
+        // Nuclear Option grades world and cockpit on the last active post-processing overlay.
+        internal static Camera PostCamera(Camera camera)
+        {
+            if (camera == null || !camera.TryGetComponent(out UniversalAdditionalCameraData data) || data.renderType != CameraRenderType.Base)
+                return camera;
+            List<Camera> stack = data.cameraStack;
+            if (stack == null) return camera;
+            for (int i = stack.Count - 1; i >= 0; i--)
+            {
+                Camera overlay = stack[i];
+                if (overlay != null && overlay.isActiveAndEnabled &&
+                    overlay.TryGetComponent(out UniversalAdditionalCameraData post) && post.renderPostProcessing)
+                    return overlay;
+            }
+            return camera;
         }
 
         internal void Restore()

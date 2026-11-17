@@ -120,7 +120,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 - **Layered skies** with volumetric cloud, in-cloud whiteout, rain on the canopy and thunder.
 - **Fronts, cells and storms** that drive the day's weather.
 - **MET OFFICE:** the host's weather console. Pin a sky, hold the weather, run a set-piece. Clients read along.
-- **Cinematic colour grading:** **SET > WORLD > COLOUR GRADE** offers an optional **CINEMATIC** look inspired by BF4: cool shadows, light bloom, horizontal lens streaks and subtle grain. It starts off, applies live and preserves automatic exposure and G-LOC. The optional developer AgX LUTs are excluded from player builds pending redistribution permission.
+- **Cinematic colour grading:** **SET > WORLD > COLOUR GRADE** offers an optional **CINEMATIC** look inspired by BF4: cool shadows, light bloom, horizontal lens streaks and subtle grain. It starts off, applies live and preserves automatic exposure and G-LOC.
 - **Image quality:** **SKY DITHER** reduces sky/fog colour banding. **EDGE SMOOTHING > SMAA** adds optional edge smoothing and works with RCAS sharpening; **GAME** restores native anti-aliasing. Missing shader or texture resources leave the game settings in place.
 
 </td>
@@ -513,7 +513,6 @@ Boscali Summer's own code is released under the [MIT licence](LICENSE). Versions
 - **Tabler Icons** (MIT) and the **Barlow Condensed**, **JetBrains Mono** and **Rajdhani** fonts (SIL OFL), in `AvionicsUi/Assets/LICENSES`;
 - **[RainyGlassShader](https://github.com/toadstorm/RainyGlassShader)** by toadstorm (LGPL-2.1), the source of the canopy rain, in `modules/Weather/Assets/Source`;
 - the cloud noise by Anthony Ibrahim (MIT), in `modules/Weather/Visuals`;
-- **Developer-only AgX:** [AgX Tonemapping Unity](https://github.com/meenphie/AgX-Tonemapping-Unity) LUTs by meenphie are excluded from player builds and release source archives pending explicit redistribution permission. [Provenance](modules/Effects/Assets/PROVENANCE.txt) records their source and terms;
 - sound effects and voice clips, listed in the `LICENSES.txt` files under `Core/Fx/Sfx`, `modules/Immersion/Assets/Voice` and `modules/Spooktober/Assets/Sfx`;
 - the creature model, from the [Free Creature Rig Project](https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project) on CGTrader.
 

@@ -30,9 +30,6 @@ Included components:
 Kaiju artwork credit: Free Creature Rig Project, supplied from
 https://www.cgtrader.com/free-3d-models/character/fantasy-character/free-creature-rig-project
 
-The upstream AgX LUT textures are development-only and excluded from this
-public release. Their provenance does not grant redistribution permission.
-
 The following source notices are reproduced in full.
 
 ======================================================================

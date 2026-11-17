@@ -9,8 +9,6 @@ public static class StreakParityCheck
     {
         if (material.passCount != 4 || !material.shader.isSupported)
             throw new Exception("Built streak shader did not retain four supported passes");
-        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-skipAgxRenderCheck") >= 0)
-            return "streak parity skipped; built shader retains four supported passes";
         var edgeShader = UnityEditor.AssetDatabase.LoadAssetAtPath<Shader>("Assets/Editor/StreakParity.shader");
         if (edgeShader == null || UnityEditor.ShaderUtil.ShaderHasError(edgeShader))
             throw new Exception("MSAA coverage fixture shader failed compilation");

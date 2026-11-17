@@ -6,8 +6,6 @@ namespace BoscaliSummer.Modules.Effects.Configuration
     internal sealed class EffectsSettings
     {
         public ConfigEntry<bool> Enabled { get; }
-        public ConfigEntry<bool> AgxEnabled { get; }
-        public ConfigEntry<AgxLook> AgxLook { get; }
         public ConfigEntry<bool> Dithering { get; }
         public ConfigEntry<EdgeSmoothing> EdgeSmoothing { get; }
         public CinematicSettings Cinematic { get; }
@@ -26,10 +24,6 @@ namespace BoscaliSummer.Modules.Effects.Configuration
                 "Reduce banding in sky and fog gradients with native blue-noise dithering. Independent of colour grade; restores the game's setting when off. Requires retained game shader/noise resources.");
             EdgeSmoothing = config.Bind("Effects", "EdgeSmoothing", Domain.EdgeSmoothing.Game,
                 "Game: keep native anti-aliasing. Smaa: use high-quality SMAA on the world/cockpit camera stack. Adds GPU work; applies live and restores native settings when switched back to Game.");
-            AgxEnabled = config.Bind("Effects", "AgxEnabled", true,
-                "AgX HDR tonemapping on the world/cockpit picture. Independent of Enabled; preserves automatic exposure and G-LOC. Night vision and sensor feeds keep their own look. Applies live.");
-            AgxLook = config.Bind("Effects", "AgxLook", Domain.AgxLook.Base,
-                "AgX look: Base (neutral), Punchy (more contrast), Hue (richer colour).");
             Enabled = config.Bind("Effects", "Enabled", false,
                 "Client-only display grade: contrast, saturation, white balance, an optional LUT file and sharpening. Applies live.");
             Contrast = config.Bind("Effects", "Contrast", 8f, "Contrast, -100 to 100. 0 leaves the game's own.");

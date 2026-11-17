@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Removed legacy AgX tonemapping and its development assets. Cinematic colour grading, light streaks,
+  sky dithering and optional SMAA remain available.
+
 ## 0.2.14 — Helltaker Update
 
 **Public alpha for players.** Hell's Army is single-player only. Multiplayer remains experimental;

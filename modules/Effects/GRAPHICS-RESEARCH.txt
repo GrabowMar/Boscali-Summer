@@ -1,20 +1,11 @@
-Graphical improvement candidates — 2026-11-15
+Graphical improvement candidates — 2026-11-15 (feature inventory updated 2026-11-17)
 ============================================
 Target: Nuclear Option 0.34.3, Unity 2022.3, URP 14.0.12; a BepInEx mod
 of an already-built game. Package Manager installation alone cannot add
 renderer features or recover shader variants stripped from that game.
 
-Implemented in this change
+Current implemented effects
 --------------------------
-meenphie's AgX LUTs: BASE, PUNCHY, HUE; independent live toggle, default on.
-Compose the native linear HDR grading LUT before output, after native grading.
-The actual game world and cockpit cameras do not enable post-processing;
-postProcessingRenderer is their final post-processing overlay. Follow that
-owner so the combined frame is graded once. Exposure and G-LOC stay native.
-Night vision, sensor cameras, LDR targets and HDR display output bypass AgX.
-https://github.com/meenphie/AgX-Tonemapping-Unity
-Exact source revision and missing licence: Assets/PROVENANCE.txt.
-
 Optional BF4-inspired cinematic preset, default off: cool shadows, restrained
 warm highlights, deeper shadow contrast, exposure-relative bloom, horizontal
 HDR light streaks, subtle vignette and custom grain. Strength and LIGHT GLOW
@@ -23,6 +14,11 @@ The streak pass runs on the world base camera before the final overlay's post.
 The native URP volume runs below night vision, and it never owns exposure or
 the saturation parameter used by G-LOC. Built-in RCAS sharpening and display
 .cube loading were already present and are reused.
+
+The streak shader is original project source, compiled alone into cinematic.bundle.
+Rebuild with tools/Build-CinematicAssets.ps1; the builder checks both visual
+behaviour and 18 GPU parity cases using the shader reloaded from that bundle.
+Source provenance and the supported passes are recorded in Assets/PROVENANCE.txt.
 
 Further controls
 ----------------

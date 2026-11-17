@@ -189,11 +189,9 @@
   </ItemGroup>
 
 
-  <ItemGroup Label="AgX tonemapping">
-    <!-- Third-party LUT redistribution terms are unresolved. Player builds use only our streak shader. -->
-    <EmbeddedResource Include="modules\Effects\Assets\agx.bundle" LogicalName="BoscaliSummer.Effects.agx.bundle" Condition="'$(PublicRelease)' != 'true' And Exists('modules\Effects\Assets\agx.bundle')" />
+  <ItemGroup Label="Cinematic effects">
     <EmbeddedResource Include="modules\Effects\Assets\cinematic.bundle" LogicalName="BoscaliSummer.Effects.cinematic.bundle" />
-    <EmbeddedResource Include="modules\Effects\Assets\PROVENANCE.txt" LogicalName="BoscaliSummer.Effects.AgxProvenance.txt" />
+    <EmbeddedResource Include="modules\Effects\Assets\PROVENANCE.txt" LogicalName="BoscaliSummer.Effects.Provenance.txt" />
   </ItemGroup>
 
   <ItemGroup Label="Weather shader bundle">
