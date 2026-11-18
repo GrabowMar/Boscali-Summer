@@ -492,6 +492,8 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 | `AvionicsUi/` | The cockpit and console UI toolkit, including its `.avss` display themes |
 | `assets/` | The bundled mission and equipment assets |
 
+Asset builders, offline tests and sandbox scenarios live in [nomodkit](https://github.com/GrabowMar/nomodkit/tree/main/mods/boscalisummer). Run `nomod test` or `nomod sim ls` from this checkout.
+
 Inside a module, `Domain/` holds logic that doesn't depend on the game, alongside `Runtime/`, `Presentation/`, `Networking/`, `Configuration/` and `Patches/` (Harmony patches).
 
 </details>

@@ -55,7 +55,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Domain
     }
 
     /// <summary>
-    /// A structure's model, read from a .seamodel file written by modules/SeaStructures/Assets/Source/sealib.py (the
+    /// A structure's model, read from a .seamodel file written by nomodkit's mods/boscalisummer/tools/SeaStructures/sealib.py (the
     /// format is described there, in <c>_write</c>): palette, sections with hit boxes and pieces, hardpoints.
     /// </summary>
     internal sealed class SeaLayout

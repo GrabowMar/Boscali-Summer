@@ -1,5 +1,7 @@
 Battlefield voice library
 
+The authoring scripts referenced as `tools/` below live in nomodkit under `mods/boscalisummer/tools/`. Run them from the Boscali Summer checkout.
+
 The 2026-11-17 ensemble replaces every former shipped chatter recording. Nine roles, 90 exact scripts, four acting takes per script: 360 speech clips. No runtime API or network generation.
 
 `production.json` owns the ordered scripts, acting direction, event priority, voice identity and cast. `voices.tsv` is the compact transcript index. `generations.json` records the ElevenLabs model/generation IDs. The production flow is https://elevenlabs.io/app/flows/sN7Ssaxaz6p4JaCeQH2P .
