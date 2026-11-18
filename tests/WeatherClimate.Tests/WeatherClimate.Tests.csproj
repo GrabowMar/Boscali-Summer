@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Climate-aware weather, pure units (map builder v2, sections 6 and 7): a standalone runner in the WingPure.Tests pattern,
+       because the main unit-test project does not compile against these branch heads. Run: dotnet run (from this folder). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\modules\Weather\Domain\*.cs" LinkBase="Weather" />
+    <Compile Include="..\..\Core\Math\*.cs" LinkBase="Math" />
+    <Compile Include="..\..\Core\Contracts\MapClimate.cs" Link="Contracts\MapClimate.cs" />
+    <Compile Include="..\..\Core\Contracts\IWeatherView.cs" Link="Contracts\IWeatherView.cs" />
+    <Compile Include="..\..\AvionicsUi\Pure\AvNum.cs" Link="Avionics\AvNum.cs" />
+    <Compile Include="..\..\AvionicsUi\Pure\AvNumFormat.cs" Link="Avionics\AvNumFormat.cs" />
+  </ItemGroup>
+</Project>

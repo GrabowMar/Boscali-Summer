@@ -1,0 +1,27 @@
+{
+  "name": "weather-climate",
+  "description": "Climate-aware weather on the mod's arctic map (map builder v2, section 6). The weather is not forced: the map's own mission opens at conditions 0.60 with a 350 m base, the arctic climate remaps the class (never Storm), the key carries climate 3, and the air at the viewer is below freezing.",
+  "mission": "Hvitsund Fjords",
+  "mods": ["boscalisummer"],
+  "timeout_s": 300,
+  "ops": [
+    {"op": "spawn", "id": "lead", "type": "CI-22 Cricket", "at": {"map": [0, 0]}, "altitude": 1500, "speed": 110, "heading": 0},
+    {"op": "fly", "id": "lead", "program": [{"level": 90}]},
+    {"op": "observe", "follow": "lead"},
+    {"op": "wait", "seconds": 25},
+    {"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Readout", "store": "air"},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_above", "path": "air.captured", "min": 0.5},
+    {"check": "result_below", "path": "air.viewTemperatureC", "max": -0.01},
+    {"check": "result_below", "path": "air.keyClass", "max": 5.5},
+    {"check": "result_equals", "path": "air.keyClimate", "value": 3},
+    {"check": "result_equals", "path": "air.mapClimate", "value": 3},
+    {"check": "result_above", "path": "air.protocol", "min": 8.5},
+    {"check": "result_below", "path": "air.lightningStrikes", "max": 0.5},
+    {"check": "log_match", "pattern": "\\[Weather\\] captured: .*, base 350 m .*climate 3 \\(arctic\\)"},
+    {"check": "log_match", "pattern": "Exception", "max": 0}
+  ]
+}
