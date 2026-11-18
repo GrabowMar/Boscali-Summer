@@ -219,10 +219,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     Move(saved.ServicePoints, move);
                     Move(saved.VerticalLandingPoints, move);
                 }
-                // The vanilla strip's own mesh is only the aprons and decals of its home field (its runway is part of that
-                // map's ground), so it is hidden and the map's baked runway slab stays.
-                foreach (Renderer part in copy.GetComponentsInChildren<Renderer>(true)) part.enabled = false;
-                foreach (Collider part in copy.GetComponentsInChildren<Collider>(true)) part.enabled = false;
+                // The vanilla strip's own mesh is the aprons, taxiways and decals of its home field (its runway is part of
+                // that map's ground): it is shown, on the map's flat pad, beside the baked runway slab.
                 foreach (Collider paved in pad.GetComponentsInChildren<Collider>(true)) paved.gameObject.layer = PhysicsLayers.Statics;
                 identities.Add(copy.GetComponent<NetworkIdentity>());
                 float room = Mathf.Max(strip.length + 300f, strip.padLength);
