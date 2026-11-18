@@ -2,41 +2,28 @@
 
 ## 0.2.15 — Territorial Expansion 1/2
 
-**Early version, still rough.** This is the first half of the Territorial Expansion update, released early. The new maps
-and the systems around them are unfinished: expect missing polish, visual glitches and bugs. Multiplayer remains
-experimental; all players need the same mod version, and a client with another build of the hosted map is turned away.
-Back up saves and configuration before updating.
+**Early version, still rough.** This is the first half of the Territorial Expansion update, out early so you can
+fly the new maps now. Expect missing polish, visual glitches and bugs; part 2 finishes the job. Multiplayer remains
+experimental; all players should use the same mod version.
 
-- **The mod's own maps.** Four new maps join Heartland and Ignus Archipelago: the **Marisol Islands** (island groups),
-  **Ashkara** (a desert island with the ruin of the Helios Array), **Hvitsund** (fjords, glacier ice and Polaris Station)
-  and **Tassara** (a bare desert). They carry towns built from the game's own city blocks, roads, rivers, bridges,
-  airstrips and landmarks, and use the game's terrain, grass and forest.
-- **Game modes on the new maps.** One picker tab lists them; WarBox, Naval War, King of the Hill and Slippery Slope run
-  on the mod's maps, and Fuzzball and Heavyweight are played on Tassara.
-- **Map climate.** Each map sets its own temperature, haze and snow, and the weather tape leans toward it.
-- **Visor:** the TAC BOARD is remade as one bar (WPN, CM, SYS, INFO) with a refit HUD and a new colour scheme.
-- **SA-74N blast remade as a 74-megaton thermonuclear burst.** The light now follows the real double pulse: a flash, a dip,
-  then a swell to full brightness near six seconds and heat that lasts most of a minute. The fireball cools from white through
-  orange into dark rolling cells with fire in the cracks; a white condensation dome races out behind the shock, an ice cap and a
-  bell of mist form on the rising head, and the stem is a broad column. Over the sea the blast lifts pale spray instead of brown
-  dirt. The mushroom stays for 25 minutes, sheds dark curtains of fallout, then sinks and spreads until it is gone at 40 minutes;
-  ash starts falling after a few minutes and the sky darkens from then on. By minute 35 the map is a cold, near-night storm
-  world for the rest of the mission: the land around the burst is charred black, with fires and columns of black smoke.
-  The emergency calls now come through alarms, static, fire and collapsing buildings, with dead static between them and a
-  dying carrier before the long silence. The whole map stays contaminated: the Geiger counter never stops and the picture
-  carries grain, colour fringing and bursts of sensor hits that get worse toward the crater.
-- **Forest fires look hotter and cost less.** The ground under a burning stand glows with embers that cool for a couple of minutes
-  after the flames die. Trees now burn away under the last flare-up instead of vanishing after the fire is already out, and the
-  embers thin out rather than blink off. Flames more than 9 km away are no longer simulated (their smoke still shows to 15 km).
-- **Cutscenes are prerendered now.** The in-game cutscene system is gone: the `shot`, `picture` and `cut` script statements, the boards,
-  the surveillance feed and the CUTSCENES setting. Scripts play a video instead (`video "file.mp4"`, Space skips); Twelve Miles Out
-  opens with its intro as a two-minute film made from game footage. The shot camera became a development tool scripted and filmed by nomodkit (no console, hotkeys,
-  script inbox or settings) and is left out of public builds.
-- Removed legacy AgX tonemapping and its development assets. Cinematic colour grading, light streaks,
-  sky dithering and optional SMAA remain available.
+- **Four new maps.** The mod now brings its own theatres next to Heartland and Ignus Archipelago:
+  the **Marisol Islands** (scattered island groups), **Ashkara** (a desert island around the ruin of the Helios Array),
+  **Hvitsund** (fjords, glacier ice and Polaris Station) and **Tassara** (open desert).
+- **Lived-in ground:** towns, roads, rivers, bridges, airstrips and landmarks such as a castle, an oil platform and
+  an abandoned concrete plant, all dressed in the game's own terrain, grass and forest.
+- **Game modes everywhere:** WarBox, Naval War, King of the Hill and Slippery Slope run on the new maps, from one
+  picker tab. Fuzzball and Heavyweight move to Tassara.
+- **Climate per map:** each map has its own temperature, haze and snow, and the weather leans toward it.
+- **SA-74N remade:** a 74-megaton burst with a double-pulse flash, a mushroom that stands for 25 minutes, fallout,
+  ash and a dark, contaminated map for the rest of the mission.
+- **Visor:** the TAC BOARD is now one bar (WPN, CM, SYS, INFO) with a refit HUD and a new colour scheme.
+- **World and fixes:** forest fires leave glowing embers and cost less, Twelve Miles Out opens with a prerendered
+  intro film, and a round of stability fixes.
+- **Multiplayer:** a client whose build of the hosted map differs is turned away with a reason.
 
 **Install:** extract `BoscaliSummer-0.2.15.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
 with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
+Back up saves and configuration before updating.
 
 [Source for this release](https://github.com/GrabowMar/Boscali-Summer/tree/v0.2.15-alpha), including adapted weather shader source and build helpers. Third-party licence notices are in the ZIP and embedded in the DLL.
 
