@@ -29,6 +29,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             int count = SceneryRecord.Count(bytes);
             if (count == 0) return 0;
             KitManifest kit = MapKitCatalog.Manifest;
+            MapKitCatalog.Dress();
             string[] names = entry.Manifest.kinds ?? new string[0];
             var kinds = new KitManifest.Kind[names.Length];
             var unknown = new List<string>();
