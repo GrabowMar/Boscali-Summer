@@ -35,12 +35,16 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
         private const string OwnPrefix = "BoscaliSummer.Command.";
 
         /// <summary>A map the mod ships itself (modules/Maps): its chart sprite is <c>bs_&lt;id&gt;_map</c> and the bake embeds
-        /// the matching heightfield and chart. Those maps are open sea, so they take the Archipelago's sea styling.</summary>
+        /// the matching heightfield and chart. One that is mostly open sea takes the Archipelago's sea styling.</summary>
         private static bool OwnMap(string name) => name != null && name.StartsWith("bs_", StringComparison.Ordinal) &&
             name.EndsWith("_map", StringComparison.Ordinal) &&
             typeof(MfdTerrainRelief).Assembly.GetManifestResourceInfo(OwnPrefix + name + ".bmap") != null;
 
-        private static bool SeaStyle => mapAssetName == NavalMap || OwnMap(mapAssetName);
+        /// <summary>Set when the loaded heightfield is an own map with under 15 % of its samples above the sea (an island
+        /// chain); a mountain or fjord map of ours keeps the land styling.</summary>
+        private static bool ownSeaStyle;
+        private const float OwnSeaLandShare = .15f;
+        private static bool SeaStyle => mapAssetName == NavalMap || ownSeaStyle;
         private const int Samples = 513;
         private const int TileCells = 128;
         private const int TerrainLayer = 31;
@@ -748,7 +752,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                             return Unavailable("Terrain asset header invalid; using the native map.");
                         heights = new float[Samples * Samples];
                         land = new bool[heights.Length];
-                        int landCount = 0;
+                        int landCount = 0, dryCount = 0;
                         for (int i = 0; i < heights.Length; i++)
                         {
                             ushort encoded = input.ReadUInt16();
@@ -757,9 +761,13 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                             highestModelPoint = Mathf.Max(highestModelPoint,
                                 (heights[i] - seaLevel) * VerticalScale * ModelWidth / 81920f);
                             if (land[i]) landCount++;
+                            if (land[i] && heights[i] > 0f) dryCount++;
                         }
-                        // An open-sea map has little land by design (Marisol Shoals: about 1,500 samples).
-                        if (landCount < (SeaStyle ? 256 : 1024)) return Unavailable("Terrain asset has too little land.");
+                        // The mod's own maps carry their seabed in the heightfield, so their land share is counted above
+                        // the water; an island chain (Marisol Islands) has little land by design.
+                        bool own = OwnMap(mapAssetName);
+                        ownSeaStyle = own && dryCount < OwnSeaLandShare * heights.Length;
+                        if (landCount < (own || mapAssetName == NavalMap ? 256 : 1024)) return Unavailable("Terrain asset has too little land.");
                         ReliefHoles.FillRaised(heights, land, Samples, seaLevel, CutOutRimRise);
                         dryLand = new bool[land.Length];
                         for (int i = 0; i < dryLand.Length; i++)

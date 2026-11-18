@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using BoscaliSummer.Modules.Maps.Domain;
 using Cysharp.Threading.Tasks;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -13,8 +14,9 @@ namespace BoscaliSummer.Modules.Maps.Runtime
 {
     /// <summary>
     /// One empty mission per map in the game's mission list ("Boscali Summer Maps"), made from the game's own default
-    /// mission with the map swapped. It gives a new map something to fly on before anyone has authored a mission for it,
-    /// and gives <c>-mission "Marisol Shoals"</c> (dedicated servers, sims) something to host.
+    /// mission with the map swapped and the map's own weather (cloud cover, cloud base, wind) written in. It gives a new
+    /// map something to fly on before anyone has authored a mission for it, and gives <c>-mission "Korvath Range"</c>
+    /// (dedicated servers, sims) something to host. A mission somebody authors on the map keeps its own weather.
     /// </summary>
     internal sealed class MapMissions
     {
@@ -59,7 +61,17 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     map["Type"] = 1; // GameWorldPrefab
                     map["Path"] = entry.Manifest.prefabName;
                     if (root["missionSettings"] is JObject settings)
-                        settings["description"] = entry.Manifest.displayName + ": open sea and small islands. An empty mission; build your own in the mission editor.";
+                        settings["description"] = string.IsNullOrEmpty(entry.Manifest.description)
+                            ? entry.Manifest.displayName + ". An empty mission; build your own in the mission editor." : entry.Manifest.description;
+                    // The map's own weather: these three saved fields become LevelInfo.conditions, cloudHeight and windSpeed.
+                    MapManifest.MissionWeather weather = entry.Manifest.mission;
+                    if (weather != null)
+                    {
+                        if (!(root["environment"] is JObject environment)) root["environment"] = environment = new JObject();
+                        environment["weatherIntensity"] = Mathf.Clamp01(weather.conditions);
+                        environment["cloudAltitude"] = weather.cloudBaseM;
+                        environment["windSpeed"] = ((float?)environment["windSpeed"] ?? 0f) * weather.windScale;
+                    }
                     json = root.ToString(Formatting.None);
                     return true;
                 }

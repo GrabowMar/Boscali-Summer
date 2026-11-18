@@ -38,7 +38,8 @@ namespace BoscaliSummer.Modules.Maps.Patches
         }
     }
 
-    /// <summary>Once the game has put a map in the scene, a mod map gets the game's grass, trees and blast scars.</summary>
+    /// <summary>Once the game has put a map in the scene, a mod map is noted as the live one (its climate is served from
+    /// then on) and gets the game's grass, trees and blast scars.</summary>
     [HarmonyPatch(typeof(LevelInfo), nameof(LevelInfo.ApplyMapSettings))]
     internal static class MapGroundPatch
     {
@@ -84,7 +85,7 @@ namespace BoscaliSummer.Modules.Maps.Patches
     }
 
     /// <summary>The <c>-mission</c> launch argument looks only in the game's own mission groups; a map's display name
-    /// ("Marisol Shoals") launches that map's empty mission. Every other name is left to the game.</summary>
+    /// ("Marisol Islands") launches that map's empty mission. Every other name is left to the game.</summary>
     [HarmonyPatch(typeof(CommandLineArgParser), nameof(CommandLineArgParser.LoadMission))]
     internal static class MapLaunchPatch
     {
