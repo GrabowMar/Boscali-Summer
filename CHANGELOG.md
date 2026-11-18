@@ -1,7 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.2.15 — Territorial Expansion 1/2
 
+**Early version, still rough.** This is the first half of the Territorial Expansion update, released early. The new maps
+and the systems around them are unfinished: expect missing polish, visual glitches and bugs. Multiplayer remains
+experimental; all players need the same mod version, and a client with another build of the hosted map is turned away.
+Back up saves and configuration before updating.
+
+- **The mod's own maps.** Four new maps join Heartland and Ignus Archipelago: the **Marisol Islands** (island groups),
+  **Ashkara** (a desert island with the ruin of the Helios Array), **Hvitsund** (fjords, glacier ice and Polaris Station)
+  and **Tassara** (a bare desert). They carry towns built from the game's own city blocks, roads, rivers, bridges,
+  airstrips and landmarks, and use the game's terrain, grass and forest.
+- **Game modes on the new maps.** One picker tab lists them; WarBox, Naval War, King of the Hill and Slippery Slope run
+  on the mod's maps, and Fuzzball and Heavyweight are played on Tassara.
+- **Map climate.** Each map sets its own temperature, haze and snow, and the weather tape leans toward it.
+- **Visor:** the TAC BOARD is remade as one bar (WPN, CM, SYS, INFO) with a refit HUD and a new colour scheme.
 - **SA-74N blast remade as a 74-megaton thermonuclear burst.** The light now follows the real double pulse: a flash, a dip,
   then a swell to full brightness near six seconds and heat that lasts most of a minute. The fireball cools from white through
   orange into dark rolling cells with fire in the cracks; a white condensation dome races out behind the shock, an ice cap and a
@@ -21,6 +34,11 @@
   script inbox or settings) and is left out of public builds.
 - Removed legacy AgX tonemapping and its development assets. Cinematic colour grading, light streaks,
   sky dithering and optional SMAA remain available.
+
+**Install:** extract `BoscaliSummer-0.2.15.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
+with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.
+
+[Source for this release](https://github.com/GrabowMar/Boscali-Summer/tree/v0.2.15-alpha), including adapted weather shader source and build helpers. Third-party licence notices are in the ZIP and embedded in the DLL.
 
 ## 0.2.14 — Helltaker Update
 

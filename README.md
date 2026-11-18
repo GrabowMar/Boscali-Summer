@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.14-alpha"><img src="https://img.shields.io/badge/release-0.2.14_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.14 alpha"></a>
+  <a href="https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.15-alpha"><img src="https://img.shields.io/badge/release-0.2.15_alpha-f0b56e?style=flat-square&labelColor=0b1b23" alt="Release 0.2.15 alpha"></a>
   <img src="https://img.shields.io/badge/status-alpha-8fb4b8?style=flat-square&labelColor=0b1b23" alt="Status: alpha">
   <img src="https://img.shields.io/badge/Nuclear_Option-0.34.6-7fd6cf?style=flat-square&labelColor=0b1b23" alt="Nuclear Option 0.34.6">
   <a href="https://github.com/BepInEx/BepInEx/releases"><img src="https://img.shields.io/badge/BepInEx-5.4.23%2B-7fd6cf?style=flat-square&labelColor=0b1b23" alt="BepInEx 5.4.23 or newer"></a>
@@ -40,7 +40,9 @@ Start with **Twelve Miles Out** in the mission picker's **Boscali Summer** group
 - **Fuzzball** — airborne team combat with equal plane access and no ground war. First to 75 kills, or the higher score at 20 minutes.
 - **Heavyweight** — cargo delivery against interception. Deliver crates for points, then teams swap roles on the same routes. Highest total wins.
 
-New in **0.2.14** (the *Helltaker Update*): **Hell's Army**. Summon the invasion from **MISC > SPOOKTOBER** (single-player only), fight its ground and air waves, then dive through the ground rift into Hell and destroy three guarded rift anchors to close it. Hell can capture airbases and spread volcanic corruption; closing the rift restores what it took.
+New in **0.2.15** (*Territorial Expansion 1/2*, an early and still rough build): the mod's **own maps**. Marisol Islands, Ashkara, Hvitsund and Tassara come with towns, roads, airstrips and game modes of their own.
+
+Since **0.2.14** (the *Helltaker Update*): **Hell's Army**. Summon the invasion from **MISC > SPOOKTOBER** (single-player only), fight its ground and air waves, then dive through the ground rift into Hell and destroy three guarded rift anchors to close it. Hell can capture airbases and spread volcanic corruption; closing the rift restores what it took.
 
 Ordinary missions run the mod too: a prompt on the map screen asks which systems run in them — **FULL EXPERIENCE**, **IMMERSION ONLY** (cockpit, HUD, wing, radio and comms; the mission stays as its author made it) or your own mix, picked system by system on the prompt's list. It can remember the answer per mission, or stop asking.
 
@@ -185,7 +187,7 @@ Run other visual mods? **SET > COMPAT** shares the sky with **NoAtmoFX** and spl
 **Then:**
 
 1. Install BepInEx into the game folder, start the game once so it creates its folders, and close it.
-2. Download **`BoscaliSummer-0.2.14.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.14-alpha) and extract it into the game folder. You should end up with:
+2. Download **`BoscaliSummer-0.2.15.zip`** from the [release page](https://github.com/GrabowMar/Boscali-Summer/releases/tag/v0.2.15-alpha) and extract it into the game folder. You should end up with:
 
    ```text
    Nuclear Option/BepInEx/plugins/BoscaliSummer/BoscaliSummer.dll
