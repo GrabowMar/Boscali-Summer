@@ -104,6 +104,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Skin(material, entry, skin.Key, skin.Value);
             foreach (MeshRenderer renderer in terrain.GetComponentsInChildren<MeshRenderer>(true))
             {
+                if (renderer.name == "ice") continue; // the bake's ice skin, drawn over the ground with its own shader
                 renderer.sharedMaterial = material;
                 renderer.renderingLayerMask |= 3; // the layers scorch marks and craters are drawn on
             }

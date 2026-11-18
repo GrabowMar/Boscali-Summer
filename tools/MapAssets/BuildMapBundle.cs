@@ -47,6 +47,12 @@ public static class BuildMapBundle
             if (shader == null || ShaderUtil.ShaderHasError(shader)) throw new Exception("MapSurface shader did not compile.");
             Material ground = NewMaterial(shader, "MapGround", 0f, 2f, .35f);
             Material paved = NewMaterial(shader, "MapPaved", 0f, 2f, .12f);
+            var iceShader = AssetDatabase.LoadAssetAtPath<Shader>(Dir + "MapIce.shader");
+            if (iceShader == null || ShaderUtil.ShaderHasError(iceShader)) throw new Exception("MapIce shader did not compile.");
+            iceMaterial = new Material(iceShader) { name = "MapIce" };
+            AssetDatabase.CreateAsset(iceMaterial, Dir + "MapIce.mat");
+            string icePath = Path.Combine(source, "ice.r8");
+            groundIce = File.Exists(icePath) ? File.ReadAllBytes(icePath) : null;
 
             var root = new GameObject("MapRoot");
             var terrain = Child(root, "Terrain");
@@ -289,7 +295,8 @@ public static class BuildMapBundle
         var linear = new byte[256];
         for (int i = 0; i < 256; i++) linear[i] = (byte)Mathf.RoundToInt(Mathf.GammaToLinearSpace(i / 255f) * 255f);
         var colours = new Color32[res * res];
-        for (int i = 0; i < colours.Length; i++) colours[i] = new Color32(linear[raw[i * 3]], linear[raw[i * 3 + 1]], linear[raw[i * 3 + 2]], 0);
+        bool icy = groundIce != null && groundIce.Length == res * res;   // alpha: how much ice lies on the sample
+        for (int i = 0; i < colours.Length; i++) colours[i] = new Color32(linear[raw[i * 3]], linear[raw[i * 3 + 1]], linear[raw[i * 3 + 2]], icy ? groundIce[i] : (byte)0);
         return colours;
     }
 
@@ -352,6 +359,7 @@ public static class BuildMapBundle
         go.AddComponent<MeshCollider>().sharedMesh = near;
         chunkCount++;
         triangleCount += near.triangles.Length / 3;
+        Renderer ice = IceSkin(go, near, x0, z0, x1, z1);
         if (step != 1)
         {
             renderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -363,7 +371,9 @@ public static class BuildMapBundle
         var lowRenderer = low.AddComponent<MeshRenderer>();
         lowRenderer.sharedMaterial = material;
         lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
-        go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(.1f, new Renderer[] { renderer }), new LOD(.0005f, new Renderer[] { lowRenderer }) });
+        Renderer lowIce = ice != null ? IceSkin(low, low.GetComponent<MeshFilter>().sharedMesh, x0, z0, x1, z1) : null;
+        go.AddComponent<LODGroup>().SetLODs(new[] { new LOD(.1f, ice != null ? new[] { renderer, ice } : new Renderer[] { renderer }),
+            new LOD(.0005f, lowIce != null ? new Renderer[] { lowRenderer, lowIce } : new Renderer[] { lowRenderer }) });
     }
 
     // The ground being cut into pieces: set once by BuildTerrain, read by every mesh.
@@ -373,6 +383,24 @@ public static class BuildMapBundle
     private static float groundCell;
     private static StripInfo[] groundPads;
     private static float landStride = .5f;
+    private static Material iceMaterial;
+    private static byte[] groundIce;
+
+    /// <summary>A second renderer on the same mesh, for the ice shader, where the piece has any ice on it.</summary>
+    private static Renderer IceSkin(GameObject on, Mesh mesh, int x0, int z0, int x1, int z1)
+    {
+        if (groundIce == null || groundIce.Length != groundRes * groundRes) return null;
+        bool any = false;
+        for (int z = z0; z <= z1 && !any; z += 2)
+            for (int x = x0; x <= x1 && !any; x += 2) any = groundIce[z * groundRes + x] > 100;
+        if (!any) return null;
+        var skin = Child(on, "ice");
+        skin.AddComponent<MeshFilter>().sharedMesh = mesh;
+        var renderer = skin.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = iceMaterial;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        return renderer;
+    }
 
     /// <summary>The generator's height between its samples.</summary>
     private static float Base(float fx, float fz)

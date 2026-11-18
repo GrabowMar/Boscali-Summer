@@ -221,7 +221,9 @@ public static class MapKitShapes
         new Kind("iceberg", 5, 180, "l", true, false, 28f, 60f),
         new Kind("iceberg_tabular", 3, 80, "l", true, false, 180f, 230f),
         new Kind("hut", 3, 60, "m", true, false, 5f, 8f),
-        new Kind("railgun", 3, 90, "l", true, false, 44f, 130f),   // one gun of a ruined superweapon: standing, fallen, a stump
+        new Kind("railgun", 3, 90, "l", true, false, 44f, 130f),
+        new Kind("station_module", 3, 130, "l", true, false, 40f, 46f),   // one raised block of a polar research station
+        new Kind("tunnel_portal", 1, 60, "l", true, false, 24f, 34f),      // a blast door into the hillside   // one gun of a ruined superweapon: standing, fallen, a stump
         new Kind("hangar_shelter", 2, 140, "l", true, false, 28f, 34f),
         new Kind("control_tower", 1, 120, "l", true, false, 13f, 16f),
         new Kind("windsock", 1, 40, "s", false, true, 5.5f, 7f),
@@ -263,6 +265,8 @@ public static class MapKitShapes
             case "iceberg_tabular": IcebergTabular(b, random); break;
             case "hut": Hut(b, variant); break;
             case "railgun": Railgun(b, variant); break;
+            case "station_module": StationModule(b, variant); break;
+            case "tunnel_portal": TunnelPortal(b); break;
             case "hangar_shelter": HangarShelter(shape, variant); break;
             case "control_tower": ControlTower(b); break;
             case "windsock": Windsock(b); break;
@@ -889,6 +893,36 @@ public static class MapKitShapes
             b.Box(V(0, 12f, 4f) + along * 9f, V(3.4f, 0, 0), up * 2.6f, along * 9f, burnt);
         }
         b.Gradient(0, .85f, 1.03f);
+    }
+
+    /// <summary>A block of a polar station, 40 m along x, raised on legs so the snow blows under it: red, blue or white.</summary>
+    private static void StationModule(MapMeshBuilder b, int variant)
+    {
+        Color hull = variant == 0 ? Rgb(178, 54, 44) : variant == 1 ? Rgb(44, 96, 152) : Rgb(228, 230, 234), glass = Rgb(40, 62, 80), steel = Rgb(84, 88, 94);
+        b.Box(V(0, 7.5f, 0), V(20f, 3.5f, 5.5f), hull, 0f, true);
+        b.Box(V(0, 11.3f, 0), V(18.5f, .3f, 4.2f), Mul(hull, .82f));                          // the roof deck
+        b.Box(V(0, 8.2f, 5.56f), V(17f, .8f, .06f), glass);                                    // window bands
+        b.Box(V(0, 8.2f, -5.56f), V(17f, .8f, .06f), glass);
+        foreach (float x in new[] { -16f, 0f, 16f })
+            foreach (float z in new[] { -4f, 4f })
+                b.Box(V(x, 2f, z), V(.5f, 2f, .5f), steel);                                    // legs
+        b.Box(V(22f, 7f, 0), V(2.2f, 1.6f, 1.6f), steel);                                      // the link to the next block
+        if (variant == 2) b.Box(V(-8f, 13.4f, 0), V(2.4f, 1.8f, 2.4f), Rgb(236, 238, 240));   // a small dome housing
+        b.Gradient(0, .86f, 1.03f);
+    }
+
+    /// <summary>A tunnel mouth, +z out of the hill: a concrete frame with wing walls round a recessed steel door.</summary>
+    private static void TunnelPortal(MapMeshBuilder b)
+    {
+        Color concrete = Rgb(128, 126, 120), door = Rgb(58, 62, 68), stripe = Rgb(196, 160, 40);
+        b.Box(V(-9.5f, 5f, -3f), V(1.5f, 5f, 6f), concrete);
+        b.Box(V(9.5f, 5f, -3f), V(1.5f, 5f, 6f), concrete);
+        b.Box(V(0, 10.8f, -3f), V(11f, 1.2f, 6f), concrete);
+        b.Box(V(0, 4.8f, -5f), V(8f, 4.8f, .4f), door);
+        b.Box(V(0, 9.2f, -4.5f), V(8f, .35f, .1f), stripe);
+        b.Box(V(-15f, 3f, 1f), V(4.5f, 3f, .8f), Mul(concrete, .92f), 28f);                    // wing walls
+        b.Box(V(15f, 3f, 1f), V(4.5f, 3f, .8f), Mul(concrete, .92f), -28f);
+        b.Gradient(0, .84f, 1.03f);
     }
 
     private static void Lighthouse(MapMeshBuilder b, int variant)

@@ -32,7 +32,7 @@ if (-not (Test-Path -LiteralPath $manifestPath) -or (Get-Content -LiteralPath $m
     Set-Content -LiteralPath $manifestPath -Value $manifest -Encoding UTF8
 }
 Set-Content -LiteralPath (Join-Path $ProjectDirectory 'ProjectSettings/ProjectVersion.txt') -Value 'm_EditorVersion: 2022.3.62f3' -Encoding UTF8
-Copy-Input (Join-Path $repoDirectory 'modules/Maps/Assets/Source/MapSurface.shader') (Join-Path $mapAssets 'MapSurface.shader')
+foreach ($shader in 'MapSurface.shader', 'MapIce.shader') { Copy-Input (Join-Path $repoDirectory "modules/Maps/Assets/Source/$shader") (Join-Path $mapAssets $shader) }
 foreach ($script in 'BuildMapBundle.cs', 'MapKitShapes.cs') { Copy-Input (Join-Path $PSScriptRoot "MapAssets/$script") (Join-Path $ProjectDirectory "Assets/Editor/$script") }
 
 $method = 'BuildMapBundle.RunKit'
