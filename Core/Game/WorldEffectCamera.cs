@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace BoscaliSummer.Core.Fx
+namespace BoscaliSummer.Core.Game
 {
     internal static class WorldEffectCamera
     {

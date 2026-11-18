@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Modules.Spooktober.Kaiju.Domain;
 using UnityEngine;
 

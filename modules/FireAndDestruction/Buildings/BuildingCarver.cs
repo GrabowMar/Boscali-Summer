@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using BoscaliSummer.Core.Fx;
+using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Math;
 using UnityEngine;
