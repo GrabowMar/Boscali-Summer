@@ -61,27 +61,42 @@ modules/Events/Assets/Source/
 decompiled_src/
 /custom gui.png
 
-# Agent and tooling state; publish only the two maintained nomod skills and MCP configuration.
-.agents/*
-!.agents/skills/
-.agents/skills/*
-!.agents/skills/nomodkit/
-!.agents/skills/boscali-nomod/
-.agents/skills/nomodkit/*
-.agents/skills/boscali-nomod/*
-!.agents/skills/nomodkit/SKILL.md
-!.agents/skills/boscali-nomod/SKILL.md
-.codex/*
-!.codex/config.toml
+# Local coding assistants, instructions and session state
+.agents/
+.codex/
+.codex-remote-attachments/
 .superpowers/
 .claude/
+.claude.json
+.gemini/
 .opencode/
+opencode.json
+opencode.jsonc
 .cursor/
 .cursorrules
+.aider.*
+.continue/
+.windsurf/
+.windsurfrules
+.clinerules
+.roo/
+.mcp.json
+.github/copilot-instructions.md
+.github/agents/
+.github/instructions/
+.github/prompts/
+.github/skills/
+AGENTS.md
+AGENTS.override.md
+CLAUDE.md
+GEMINI.md
+llms.txt
+llms-full.txt
+
+# Local tooling state
 .nomodkit/
 .paw-work/
 .appdata/
-.codex-remote-attachments/
 
 # CI workflows are maintained outside the repo
 .github/workflows/

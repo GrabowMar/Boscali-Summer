@@ -21,12 +21,9 @@ dotnet build BoscaliSummer.sln -c Release -p:GameDir="C:\Program Files (x86)\Ste
 - The plugin lands in `bin/Release/netstandard2.1/BoscaliSummer.dll`. Copy it to `BepInEx/plugins/BoscaliSummer/` in a test install of the game, not your everyday install.
 - NuGet restore is deliberately offline (`NuGet.Config` clears every source), because the project has no package dependencies. Please keep it that way.
 
-## Agent tools and nomodkit
+## Testing with nomodkit
 
-Install [nomodkit](https://github.com/GrabowMar/nomodkit) locally and put `nomod` on PATH. This repository's
-`.codex/config.toml` starts its MCP server with `nomod mcp`; `.agents/skills/nomodkit` documents the commands and
-`.agents/skills/boscali-nomod` covers this mod's test hooks and evidence requirements. No machine-specific paths
-are stored in that configuration. After changing MCP configuration, start a new Codex session to load it.
+Install [nomodkit](https://github.com/GrabowMar/nomodkit) locally and put `nomod` on PATH.
 
 The plugin builds from this repository with the game assemblies installed. Asset builders, offline tests and
 sandbox scenarios live in nomodkit under `mods/boscalisummer/`. Run `nomod test` from the mod checkout
