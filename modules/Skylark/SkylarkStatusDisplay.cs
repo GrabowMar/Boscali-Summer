@@ -69,18 +69,15 @@ namespace BoscaliSummer.Modules.Skylark
         private static Sprite LoadSprite(string name, bool required)
         {
             if (sprites.TryGetValue(name, out Sprite cached) && cached != null) return cached;
-            string path = "assets/skylarkreview/textures/" + name.ToLowerInvariant() + ".png";
-            foreach (AssetBundle bundle in AssetBundle.GetAllLoadedAssetBundles())
+            Texture2D texture = SkylarkTemplate.LoadTexture(name.ToLowerInvariant() + ".png");
+            if (texture == null)
             {
-                if (!bundle.Contains(path)) continue;
-                Texture2D texture = bundle.LoadAsset<Texture2D>(path);
-                Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
-                sprite.name = name; sprite.hideFlags = HideFlags.DontUnloadUnusedAsset;
-                sprites[name] = sprite;
-                return sprite;
+                if (required) throw new InvalidOperationException("Skylark status artwork is missing: " + name);
+                return null;
             }
-            if (required) throw new InvalidOperationException("Skylark status artwork is missing: " + path);
-            return null;
+            Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
+            sprite.name = name; sprite.hideFlags = HideFlags.DontUnloadUnusedAsset;
+            return sprites[name] = sprite;
         }
 
         internal static object Inspect(Aircraft aircraft)

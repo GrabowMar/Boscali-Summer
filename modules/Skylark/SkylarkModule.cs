@@ -1,6 +1,5 @@
 using System;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Modules;
@@ -54,14 +53,5 @@ namespace BoscaliSummer.Modules.Skylark
     internal static class SkylarkPrefabPatch
     {
         private static void Prefix() => SkylarkTemplate.Ensure(GameAccess.EncyclopediaOrNull);
-        private static void Postfix(NetworkManagerNuclearOption __instance)
-        {
-            try
-            {
-                if (SkylarkTemplate.Definition != null)
-                    __instance.ClientObjectManager.RegisterPrefab(SkylarkTemplate.Definition.unitPrefab.GetComponent<Mirage.NetworkIdentity>());
-            }
-            catch (Exception e) { PatchGuard.Report("Skylark.RegisterPrefabs", e); }
-        }
     }
 }

@@ -73,6 +73,7 @@ Items marked 🧩 need [Blueprinter](https://github.com/nikkorap/NOBlueprinter-R
 
 ### ✈️ Your wing
 
+- 🧩 **VS-4 Skylark.** Blueprinter loads this flyable four-fan VTOL from the Boscali Summer asset pack.
 - **Wingmen who listen.** Recruit them, pick their loadouts and formations, and give orders from the **WMC** page or the **C** ring.
 - **Careers.** Pilots earn grades and perks as the squadron progresses.
 - **Your colours.** Build a squadron crest from 48 marks and fly it on the tail fins.
@@ -393,7 +394,7 @@ Rarely. The mod is in [maintenance mode](#maintenance-mode): no roadmap and no s
 <summary><b>Do I need Blueprinter?</b></summary>
 <br>
 
-No. Without it, everything marked 🧩 is missing (VANGUARD and HALO jumps) and the rest of the mod works as usual.
+Blueprinter is optional. Install it to use the VS-4 Skylark, VANGUARD and HALO jumps. These features are marked 🧩.
 
 </details>
 

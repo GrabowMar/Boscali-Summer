@@ -40,9 +40,6 @@ TestResults/
 # ---------------------------------------------------------------------------------------------
 /assets/**
 !/assets/BoscaliSummer.nobp
-!/assets/SkylarkVTOL/
-!/assets/SkylarkVTOL/Unity/
-!/assets/SkylarkVTOL/Unity/skylark.bundle
 *.blend
 *.blend1
 modules/Vanguard/Assets/Models/

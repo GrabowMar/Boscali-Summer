@@ -303,14 +303,15 @@ namespace BoscaliSummer.Modules.Skylark
         public static string Report()
         {
             AircraftDefinition def = SkylarkTemplate.Definition;
-            if (def == null) return JsonConvert.SerializeObject(new { registered = false, error = SkylarkTemplate.LastError });
+            if (def == null) return JsonConvert.SerializeObject(new { registered = false, artBundle = SkylarkTemplate.ArtBundle, error = SkylarkTemplate.LastError });
             Aircraft aircraft = def.unitPrefab.GetComponent<Aircraft>();
             var stores = aircraft.weaponManager.hardpointSets.SelectMany(s => s.weaponOptions).Where(m => m != null).Distinct()
                 .Select(m => new { key = m.jsonKey, name = m.mountName, mass = m.mass, ammo = m.ammo,
                     bounds = Bounds(SkylarkTemplate.LocalBounds(m.prefab.transform, m.prefab.GetComponentsInChildren<Renderer>(true))) });
             return JsonConvert.SerializeObject(new
             {
-                registered = true, key = def.jsonKey, sets = aircraft.weaponManager.hardpointSets.Length, loadouts = def.aircraftParameters.loadouts.Count,
+                registered = true, key = def.jsonKey, artBundle = SkylarkTemplate.ArtBundle,
+                sets = aircraft.weaponManager.hardpointSets.Length, loadouts = def.aircraftParameters.loadouts.Count,
                 scale = SkylarkTemplate.Scale, spawnOffset = def.spawnOffset.y, index = ((INetworkDefinition)def).LookupIndex,
                 prefabHash = aircraft.GetComponent<Mirage.NetworkIdentity>().PrefabHash,
                 mass = def.mass, fuel = aircraft.GetComponentsInChildren<FuelTank>(true).Sum(t => t.FuelCapacity),

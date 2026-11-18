@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
-using BoscaliSummer.Core.Util;
 using BoscaliSummer.Core.Game;
 using HarmonyLib;
 using Mirage;
@@ -17,6 +16,8 @@ namespace BoscaliSummer.Modules.Skylark
     {
         internal const string Key = "BS_Skylark";
         internal const int PrefabHash = 0x42534B31;
+        private const string PackRoot = "assets/blueprinter/mods/boscalisummer/";
+        private const string ArtRoot = PackRoot + "skylark/";
         internal const float EmptyMass = 3100f, FuelCapacity = 1000f, MaxThrust = 62000f;
         // Fan arm length (Duct_FL to Duct_RL) of the first art generation: every authored size below scales with measured/reference.
         private const float ReferenceArm = 5.7611f;
@@ -27,6 +28,9 @@ namespace BoscaliSummer.Modules.Skylark
         private static GameObject holder;
         private static AssetBundle bundle;
         private static bool building, failed;
+
+        internal static string ArtBundle => bundle != null ? bundle.name : null;
+        internal static Texture2D LoadTexture(string filename) => bundle.LoadAsset<Texture2D>(ArtRoot + "textures/" + filename);
 
         internal static T Get<T>(object o, string field) => (T)AccessTools.Field(o.GetType(), field).GetValue(o);
         internal static void Set(object o, string field, object value) => AccessTools.Field(o.GetType(), field).SetValue(o, value);
@@ -46,12 +50,22 @@ namespace BoscaliSummer.Modules.Skylark
         internal static void Ensure(Encyclopedia encyclopedia)
         {
             if (building || failed || encyclopedia == null || Encyclopedia.Lookup == null || encyclopedia.IndexLookup == null) return;
-            if (Definition == null && GameAccess.NetworkManagerOrNull == null) return;
             if (Encyclopedia.Lookup.ContainsKey(Key)) return;
+            var manager = GameAccess.NetworkManagerOrNull;
+            if (manager == null || manager.ClientObjectManager == null) return;
             building = true;
             try
             {
-                if (Definition == null) Definition = Build(encyclopedia);
+                if (Definition == null)
+                {
+                    // Blueprinter indexes the feeder from its selected pack after duplicate-version selection and patching.
+                    // Waiting for that exact definition keeps our network indices after Blueprinter's on every peer.
+                    if (!Encyclopedia.Lookup.TryGetValue("BS_ContainerFeeder", out var feeder)) return;
+                    bundle = AssetBundle.GetAllLoadedAssetBundles().FirstOrDefault(pack => pack.name == "boscalisummer"
+                        && pack.LoadAsset<ShipDefinition>(PackRoot + "cargoship/bs_containerfeeder.asset") == feeder);
+                    if (bundle == null) return;
+                    Definition = Build(encyclopedia);
+                }
                 if (!encyclopedia.aircraft.Contains(Definition)) encyclopedia.aircraft.Add(Definition);
                 ((INetworkDefinition)Definition).LookupIndex = encyclopedia.IndexLookup.Count;
                 encyclopedia.IndexLookup.Add(Definition);
@@ -63,6 +77,8 @@ namespace BoscaliSummer.Modules.Skylark
                 encyclopedia.IndexLookup.Add(turret);
                 Encyclopedia.WeaponLookup.Add(SkylarkWeapons.TurretKey, turret);
                 Definition.mass = Definition.unitPrefab.GetComponentsInChildren<UnitPart>(true).Sum(p => p.mass);
+                // The pack can finish after the game's initial RegisterPrefabs pass.
+                manager.ClientObjectManager.RegisterPrefab(Definition.unitPrefab.GetComponent<NetworkIdentity>());
                 Debug.Log("[Skylark] Registered " + Key + " native four-fan VTOL, empty mass " + Definition.mass + " kg, art scale " + Scale.ToString("0.000") + ", ground offset " + Definition.spawnOffset.y.ToString("0.000") + " m, " + Definition.unitPrefab.GetComponent<Aircraft>().weaponManager.hardpointSets.Length + " stations");
             }
             catch (Exception e)
@@ -77,11 +93,8 @@ namespace BoscaliSummer.Modules.Skylark
         private static AircraftDefinition Build(Encyclopedia encyclopedia)
         {
             AircraftDefinition donor = encyclopedia.aircraft.First(d => d.jsonKey == "VTOLTrainer1");
-            byte[] bytes = EmbeddedResources.ReadAll(typeof(SkylarkTemplate).Assembly, "BoscaliSummer.SkylarkAssets.bundle", 128 * 1024 * 1024);
-            if (bytes == null) throw new InvalidOperationException("Skylark art bundle is not embedded in this build.");
-            bundle = AssetBundle.LoadFromMemory(bytes);
-            GameObject art = bundle.LoadAsset<GameObject>("assets/skylarkreview/bs_skylark.prefab");
-            if (art == null) throw new InvalidOperationException("BS_Skylark prefab is absent from its bundle.");
+            GameObject art = bundle.LoadAsset<GameObject>(ArtRoot + "bs_skylark.prefab");
+            if (art == null) throw new InvalidOperationException("The Boscali Summer Blueprinter pack has no usable BS_Skylark prefab.");
             holder = new GameObject("SkylarkTemplates");
             holder.SetActive(false);
             Object.DontDestroyOnLoad(holder);

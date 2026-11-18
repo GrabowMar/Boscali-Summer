@@ -126,7 +126,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Blueprinter bundle">
-    <!-- All Blueprinter content (Vanguard weapons, HALO mount, container feeder) in one pack, built by
+    <!-- All Blueprinter content (Vanguard weapons, HALO mount, container feeder and Skylark art) in one pack, built by
          tools/Compile-BlueprinterAssets.ps1; Blueprinter loads any *.nobp resource. -->
     <EmbeddedResource Include="assets\BoscaliSummer.nobp" Condition="Exists('assets\BoscaliSummer.nobp')">
       <LogicalName>BoscaliSummer.Assets.nobp</LogicalName>
@@ -141,12 +141,6 @@
     <ItemGroup><MapBundle Include="modules\Maps\Assets\*.bsmap" /></ItemGroup>
     <Warning Condition="'@(MapBundle)' == ''" Text="No map bundle in modules\Maps\Assets: this build ships without Marisol Shoals. Run nomod map gen and nomod map bake." />
   </Target>
-  <ItemGroup Label="Skylark aircraft artwork">
-    <EmbeddedResource Include="assets\SkylarkVTOL\Unity\skylark.bundle" Condition="Exists('assets\SkylarkVTOL\Unity\skylark.bundle')">
-      <LogicalName>BoscaliSummer.SkylarkAssets.bundle</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
-
   <ItemGroup Label="SA-74N bomb artwork">
     <EmbeddedResource Include="modules\Vanguard\Assets\sa74-mushroom.bundle" Condition="Exists('modules\Vanguard\Assets\sa74-mushroom.bundle')">
       <LogicalName>BoscaliSummer.Vanguard.sa74-mushroom.bundle</LogicalName>

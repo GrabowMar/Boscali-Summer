@@ -41,8 +41,8 @@ namespace BoscaliSummer.Modules.Skylark
                     .SelectMany(r => r.sharedMaterials).FirstOrDefault(m => m != null && m.shader.name == NativeShader);
                 if (donor == null) throw new InvalidOperationException("Native AircraftSkin material is unavailable on the donor.");
                 nativeSkin = new Material(donor) { name = SkinName + "_Native", hideFlags = HideFlags.DontUnloadUnusedAsset };
-                damageBase = BundledTexture("bs_skylark_skin_dmg_b.png");
-                damageNormal = BundledTexture("bs_skylark_skin_dmg_n.png") ?? normal;
+                damageBase = SkylarkTemplate.LoadTexture("bs_skylark_skin_dmg_b.png");
+                damageNormal = SkylarkTemplate.LoadTexture("bs_skylark_skin_dmg_n.png") ?? normal;
                 DamageSource = damageBase != null ? "Skylark authored damage atlas" : "Skylark base atlas GPU fallback";
                 if (damageBase == null) damageBase = FallbackDamage(color);
                 nativeSkin.SetTexture("_Basecolor", color);
@@ -76,14 +76,6 @@ namespace BoscaliSummer.Modules.Skylark
             Texture texture = source.HasProperty(imported) ? source.GetTexture(imported) : source.GetTexture(native);
             if (texture == null) throw new InvalidOperationException("Skylark skin is missing " + imported + ".");
             return texture;
-        }
-
-        private static Texture BundledTexture(string filename)
-        {
-            string path = "assets/skylarkreview/textures/" + filename;
-            foreach (AssetBundle bundle in AssetBundle.GetAllLoadedAssetBundles())
-                if (bundle.Contains(path)) return bundle.LoadAsset<Texture2D>(path);
-            return null;
         }
 
         private static Texture2D FallbackDamage(Texture original)
