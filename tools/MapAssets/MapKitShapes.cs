@@ -221,11 +221,6 @@ public static class MapKitShapes
         new Kind("iceberg", 5, 180, "l", true, false, 28f, 60f),
         new Kind("iceberg_tabular", 3, 80, "l", true, false, 180f, 230f),
         new Kind("hut", 3, 60, "m", true, false, 5f, 8f),
-        new Kind("house", 5, 90, "m", true, false, 9f, 14f),
-        new Kind("barn", 2, 60, "m", true, false, 18f, 20f),
-        new Kind("warehouse", 2, 40, "m", true, false, 28f, 34f),
-        new Kind("church", 1, 90, "l", true, false, 18f, 24f),
-        new Kind("block", 2, 40, "l", true, false, 28f, 34f),   // stands in when the game has no city block to lend
         new Kind("hangar_shelter", 2, 140, "l", true, false, 28f, 34f),
         new Kind("control_tower", 1, 120, "l", true, false, 13f, 16f),
         new Kind("windsock", 1, 40, "s", false, true, 5.5f, 7f),
@@ -266,11 +261,6 @@ public static class MapKitShapes
             case "iceberg": Iceberg(b, random, variant); break;
             case "iceberg_tabular": IcebergTabular(b, random); break;
             case "hut": Hut(b, variant); break;
-            case "house": House(b, variant); break;
-            case "barn": Barn(b, variant); break;
-            case "warehouse":
-            case "block": Warehouse(b, variant); break;
-            case "church": Church(b); break;
             case "hangar_shelter": HangarShelter(shape, variant); break;
             case "control_tower": ControlTower(b); break;
             case "windsock": Windsock(b); break;
@@ -865,69 +855,6 @@ public static class MapKitShapes
         b.Gradient(0, .7f, 1.03f); // the piles go dark toward the water
         shape.Collision = new MapMeshBuilder();
         shape.Collision.Box(V(0f, -5.9f, 0f), V(3f, 8.1f, 30f), Color.white, 0f, true);
-    }
-
-    /// <summary>A gabled building: 2 X long along x, 2 Z deep, its front (door, windows) on +z. Storeys follow the eave height.</summary>
-    private static void Gabled(MapMeshBuilder b, float X, float Z, float eave, float ridge, Color wall, Color roof, Color door, float doorHalf, float doorTop, bool windows)
-    {
-        Color glass = Rgb(58, 82, 98);
-        Vector3 inside = V(0f, 1f, 0f);
-        b.FaceAway(wall, inside, V(-X, 0, Z), V(-X, eave, Z), V(X, eave, Z), V(X, 0, Z));
-        b.FaceAway(wall, inside, V(X, 0, -Z), V(X, eave, -Z), V(-X, eave, -Z), V(-X, 0, -Z));
-        b.FaceAway(Mul(wall, .94f), inside, V(X, 0, Z), V(X, eave, Z), V(X, ridge, 0), V(X, eave, -Z), V(X, 0, -Z));
-        b.FaceAway(Mul(wall, .94f), inside, V(-X, 0, -Z), V(-X, eave, -Z), V(-X, ridge, 0), V(-X, eave, Z), V(-X, 0, Z));
-        const float Over = .4f;
-        float drop = Over * (ridge - eave) / Z, out_ = X + .35f;
-        b.FaceAway(roof, inside, V(-out_, eave - drop, Z + Over), V(-out_, ridge + .04f, 0), V(out_, ridge + .04f, 0), V(out_, eave - drop, Z + Over));
-        b.FaceAway(Mul(roof, .9f), inside, V(out_, eave - drop, -Z - Over), V(out_, ridge + .04f, 0), V(-out_, ridge + .04f, 0), V(-out_, eave - drop, -Z - Over));
-        float f = Z + .04f;
-        b.FaceAway(door, inside, V(-doorHalf, 0, f), V(-doorHalf, doorTop, f), V(doorHalf, doorTop, f), V(doorHalf, 0, f));
-        if (!windows) return;
-        for (float sill = 1f; sill + 1.2f < eave; sill += 2.6f)
-            for (float x = doorHalf + 1.1f; x + 1.2f < X; x += 2.1f)
-                foreach (float side in new[] { -1f, 1f })
-                {
-                    if (sill > 1f && x == doorHalf + 1.1f && side < 0f) b.FaceAway(glass, inside, V(-.5f, sill, f), V(-.5f, sill + .9f, f), V(.5f, sill + .9f, f), V(.5f, sill, f));
-                    float a = side * x, c = side * (x + 1f);
-                    b.FaceAway(glass, inside, V(Mathf.Min(a, c), sill, f), V(Mathf.Min(a, c), sill + .9f, f), V(Mathf.Max(a, c), sill + .9f, f), V(Mathf.Max(a, c), sill, f));
-                }
-    }
-
-    private static void House(MapMeshBuilder b, int variant)
-    {
-        // half length, half depth, eave, ridge; wall; roof
-        float[][] size = { new[] { 5f, 3.5f, 2.8f, 4.6f }, new[] { 6f, 4f, 5.4f, 7.4f }, new[] { 4.5f, 3.2f, 2.7f, 4.3f }, new[] { 6.5f, 3.6f, 2.9f, 4.8f }, new[] { 5f, 4f, 5.2f, 7f } };
-        Color[] wall = { Rgb(226, 214, 186), Rgb(232, 232, 226), Rgb(122, 92, 64), Rgb(224, 204, 150), Rgb(150, 78, 60) };
-        Color[] roof = { Rgb(150, 66, 48), Rgb(62, 64, 70), Rgb(96, 94, 90), Rgb(168, 92, 62), Rgb(70, 62, 60) };
-        float[] s = size[variant % 5];
-        Gabled(b, s[0], s[1], s[2], s[3], wall[variant % 5], roof[variant % 5], Rgb(84, 60, 44), .5f, 2f, true);
-        b.Box(V(s[0] * .5f, s[3] - .2f, -s[1] * .4f), V(.3f, .8f, .3f), Rgb(120, 96, 86));   // chimney
-        b.Gradient(0, .84f, 1.03f);
-    }
-
-    private static void Barn(MapMeshBuilder b, int variant)
-    {
-        Gabled(b, 9f, 5.5f, 4f, 7.2f, variant == 0 ? Rgb(150, 48, 40) : Rgb(128, 110, 88), variant == 0 ? Rgb(132, 136, 138) : Rgb(90, 84, 78), Rgb(226, 222, 210), 1.8f, 3.4f, false);
-        b.Gradient(0, .84f, 1.03f);
-    }
-
-    private static void Warehouse(MapMeshBuilder b, int variant)
-    {
-        Color shell = variant == 0 ? Rgb(148, 154, 158) : Rgb(96, 122, 140);
-        b.Box(V(0, 3f, 0), V(15f, 3f, 9f), shell);
-        b.Box(V(0, 6.15f, 0), V(15.3f, .15f, 9.3f), Mul(shell, 1.12f));
-        foreach (float x in new[] { -8f, 0f, 8f })
-            b.FaceAway(Rgb(64, 66, 70), V(0, 3f, 0), V(x - 2.2f, 0, 9.04f), V(x - 2.2f, 4.2f, 9.04f), V(x + 2.2f, 4.2f, 9.04f), V(x + 2.2f, 0, 9.04f));
-        b.Gradient(0, .86f, 1.02f);
-    }
-
-    private static void Church(MapMeshBuilder b)
-    {
-        Color wall = Rgb(234, 232, 224), roof = Rgb(66, 68, 76);
-        Gabled(b, 8f, 4.2f, 5f, 8.6f, wall, roof, Rgb(92, 62, 44), .9f, 2.8f, true);
-        b.Box(V(-9.6f, 6.5f, 0), V(1.9f, 6.5f, 1.9f), wall);
-        b.Cone(roof, new[] { V(-11.7f, 13f, -2.1f), V(-7.5f, 13f, -2.1f), V(-7.5f, 13f, 2.1f), V(-11.7f, 13f, 2.1f) }, V(-9.6f, 19f, 0));
-        b.Gradient(0, .84f, 1.03f);
     }
 
     private static void Lighthouse(MapMeshBuilder b, int variant)

@@ -9,15 +9,15 @@ using Object = UnityEngine.Object;
 namespace BoscaliSummer.Modules.Maps.Runtime
 {
     /// <summary>
-    /// The downtown of a mod map's larger towns is built from the game's own map buildings, which are whole city blocks
-    /// (suburb, residential and commercial blocks, mid-rises): they are copied onto the "block" lots of the map's
-    /// scenery list under one <see cref="MapBuildingSet"/>, so they take damage, collapse and stay in step between host
-    /// and clients like the buildings of a shipped map. Nothing of the game's art is in the mod: the shapes are looked
-    /// up in the running game. When the game has none, the scenery kit's plain hall stands on the lot instead.
+    /// The towns of a mod map are built from the game's own map buildings, which are whole city blocks: a "suburb" lot
+    /// of the map's scenery list gets one of the low blocks of houses, a "block" lot (a town's centre) one of the taller
+    /// ones. They are copied under one <see cref="MapBuildingSet"/>, so they take damage, collapse and stay in step
+    /// between host and clients like the buildings of a shipped map. Nothing of the game's art is in the mod: the
+    /// shapes are looked up in the running game. When the game has none, the scenery kit's own shapes stand on the lots.
     /// </summary>
     internal static class MapTowns
     {
-        private sealed class Shape { public GameObject Template; public float Footprint, Height; }
+        private sealed class Shape { public GameObject Template; public bool Deep; }
 
         private static readonly List<Shape> low = new List<Shape>(), mid = new List<Shape>();
         private static Transform set;
@@ -30,26 +30,25 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             mid.Clear();
             MapBuildingSet[] donors = manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab))
                 .SelectMany(m => m.Prefab.GetComponentsInChildren<MapBuildingSet>(true)).ToArray();
-            var shapes = new Dictionary<string, Shape>();
-            foreach (MapBuilding building in donors.SelectMany(d => d.GetComponentsInChildren<MapBuilding>(true)))
+            var seen = new HashSet<string>();
+            int all = 0;
+            foreach (MapBuilding building in donors.SelectMany(d => d.GetComponentsInChildren<MapBuilding>(true)).OrderBy(b => b.name, StringComparer.Ordinal))
             {
                 string name = building.name.Split('(')[0].Trim();
-                if (shapes.ContainsKey(name)) continue;
                 Renderer[] parts = building.GetComponentsInChildren<Renderer>(true);
-                if (parts.Length == 0) continue;
+                if (!seen.Add(name) || parts.Length == 0) continue;
+                all++;
                 Bounds bounds = parts[0].bounds;
                 foreach (Renderer part in parts) bounds.Encapsulate(part.bounds);
-                shapes[name] = new Shape { Template = building.gameObject, Footprint = Mathf.Max(bounds.size.x, bounds.size.z), Height = bounds.size.y };
+                Vector3 size = building.transform.InverseTransformVector(bounds.size); // the block in its own frame: x across, z deep
+                float across = Mathf.Abs(size.x), deep = Mathf.Abs(size.z), footprint = Mathf.Max(across, deep);
+                // A lot is about 100 m along its street. Low blocks are suburbs and housing; the taller ones are a town's centre.
+                if (footprint < 45f || footprint > 100f || bounds.size.y > 70f || name.IndexOf("unique", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                (bounds.size.y <= 25f ? low : mid).Add(new Shape { Template = building.gameObject, Deep = deep > across });
             }
             MapBuildingSet donor = donors.Where(d => d.GetComponent<NetworkIdentity>() != null).OrderBy(d => d.transform.childCount).FirstOrDefault();
-            if (donor == null || shapes.Count == 0) return null;
-
-            // A lot is about 110 m square. Low blocks are suburbs and housing; the taller ones are a town's centre.
-            foreach (KeyValuePair<string, Shape> shape in shapes.OrderBy(s => s.Key, StringComparer.Ordinal))
-                if (shape.Value.Footprint >= 45f && shape.Value.Footprint <= 100f && shape.Value.Height <= 70f && shape.Key.IndexOf("unique", StringComparison.OrdinalIgnoreCase) < 0)
-                    (shape.Value.Height <= 25f ? low : mid).Add(shape.Value);
-            Plugin.Logger?.LogInfo("[Maps] City blocks from the game: " + low.Count + " low, " + mid.Count + " taller, of " + shapes.Count + " map buildings.");
-            if (low.Count + mid.Count == 0) return null;
+            Plugin.Logger?.LogInfo("[Maps] City blocks from the game: " + low.Count + " low, " + mid.Count + " taller, of " + all + " map buildings.");
+            if (donor == null || low.Count + mid.Count == 0) return null;
 
             GameObject copy = Object.Instantiate(donor.gameObject, root);
             copy.name = "Towns";
@@ -61,17 +60,40 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             return copy.GetComponent<NetworkIdentity>();
         }
 
-        /// <summary>Puts one of the game's buildings on a lot; false when this kind is not a town building or the game
-        /// has no shape of its size, and the scenery kit should place its own.</summary>
+        /// <summary>The scenery kinds that are town lots, filled here and never by the scenery kit.</summary>
+        public static bool Handles(string kind) => kind == "block" || kind == "suburb";
+
+        /// <summary>The game's own road surfaces on the map's baked roads: road_2lane on a paved road, asphalt on a town
+        /// street, road_dirt on a track. A road keeps the bake's plain colours when the game has no such material.</summary>
+        public static int DressRoads(Transform roads, MapSettingsManager manager)
+        {
+            if (roads == null) return 0;
+            var looks = new Dictionary<string, string> { { "paved", "road_2lane" }, { "street", "asphalt" }, { "dirt", "road_dirt" } };
+            var found = new Dictionary<string, Material>();
+            foreach (Renderer part in manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab)).SelectMany(m => m.Prefab.GetComponentsInChildren<MeshRenderer>(true)))
+                if (part.sharedMaterial != null && looks.ContainsValue(part.sharedMaterial.name) && !found.ContainsKey(part.sharedMaterial.name))
+                    found[part.sharedMaterial.name] = part.sharedMaterial;
+            int dressed = 0;
+            foreach (MeshRenderer road in roads.GetComponentsInChildren<MeshRenderer>(true))
+                if (looks.TryGetValue(road.name.Split('_')[0], out string wanted) && found.TryGetValue(wanted, out Material material))
+                {
+                    road.sharedMaterial = material;
+                    dressed++;
+                }
+            return dressed;
+        }
+
+        /// <summary>Puts one of the game's blocks on a lot, its long side along the street; false when this kind is not a
+        /// town lot or the game has no block for it, and the scenery kit should place its own.</summary>
         public static bool Place(string kind, Vector3 position, float yaw, int pick)
         {
-            if (set == null || kind != "block") return false;
-            int roll = Math.Abs(pick * 7919 + Mathf.RoundToInt(position.x));
-            List<Shape> shapes = mid.Count > 0 && (low.Count == 0 || roll % 5 < 2) ? mid : low;
-            Shape shape = shapes[roll / 5 % shapes.Count];
+            if (!Handles(kind)) return false;
+            List<Shape> shapes = kind == "suburb" ? low : mid.Count > 0 ? mid : low;
+            if (set == null || shapes.Count == 0) return true; // the lot stays empty: the mod has no town buildings of its own
+            Shape shape = shapes[Math.Abs(pick * 7919 + Mathf.RoundToInt(position.x)) % shapes.Count];
             GameObject building = Object.Instantiate(shape.Template, set);
             building.transform.localPosition = position;
-            building.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
+            building.transform.localRotation = Quaternion.Euler(0f, yaw + (shape.Deep ? 90f : 0f), 0f);
             building.SetActive(true);
             return true;
         }

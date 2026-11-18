@@ -475,12 +475,13 @@ public static class BuildMapBundle
     {
         public readonly List<Vector3> Vertices = new List<Vector3>(), Normals = new List<Vector3>();
         public readonly List<Color32> Colours = new List<Color32>();
+        public readonly List<Vector2> Uvs = new List<Vector2>();
         public readonly List<int> Triangles = new List<int>();
 
         public int Add(Vector3 p, Vector3 normal, Color colour, float sway)
         {
             Color lit = new Color(colour.r, colour.g, colour.b).linear;
-            Vertices.Add(p); Normals.Add(normal); Colours.Add(new Color(lit.r, lit.g, lit.b, sway));
+            Vertices.Add(p); Normals.Add(normal); Colours.Add(new Color(lit.r, lit.g, lit.b, sway)); Uvs.Add(Vector2.zero);
             return Vertices.Count - 1;
         }
 
@@ -507,7 +508,7 @@ public static class BuildMapBundle
     private static void BuildRoads(GameObject parent, MapInfo info, RoadInfo[] roads, Material material)
     {
         float half = info.res * info.cell * .5f;
-        float[] across = { -1f, -.8f, 0f, .8f, 1f };
+        float[] across = { -1f, -.8f, 0f, .8f, 1f };   // the road's edges, lanes and middle
         int n = 0;
         foreach (RoadInfo road in roads ?? new RoadInfo[0])
         {
@@ -515,6 +516,10 @@ public static class BuildMapBundle
             if (count < 2) continue;
             bool hard = road.kind == "paved", water = road.kind == "river";
             float width = road.width > 0f ? road.width : hard ? 4.5f : 2.6f;   // half the road's width
+            // The game's road textures run along v: one picture of road_2lane and road_dirt is 4 road widths long, of asphalt 8.
+            string look = water ? "river" : !hard ? "dirt" : road.width > 0f ? "street" : "paved";
+            float run = 0f, tile = look == "street" ? 8f : 4f;
+            Vector2 last = new Vector2(road.points[0], road.points[2]);
             Color edge = hard ? new Color(.34f, .33f, .30f) : new Color(.42f, .36f, .26f), lane = hard ? new Color(.20f, .20f, .21f) : new Color(.30f, .24f, .17f),
                 mid = hard ? new Color(.27f, .27f, .27f) : new Color(.46f, .39f, .28f);
             if (water) { edge = new Color(.34f, .40f, .36f); lane = new Color(.10f, .24f, .30f); mid = new Color(.07f, .19f, .27f); }
@@ -532,6 +537,8 @@ public static class BuildMapBundle
                     Vector2 at = Curve(p0, p1, p2, p3, t), ahead = Curve(p0, p1, p2, p3, Mathf.Min(1f, t + .05f)) - Curve(p0, p1, p2, p3, Mathf.Max(0f, t - .05f));
                     Vector2 side = new Vector2(ahead.y, -ahead.x).normalized;
                     int first = b.Vertices.Count;
+                    run += (at - last).magnitude;
+                    last = at;
                     if (road.widths != null && road.widths.Length == count) width = Mathf.Lerp(road.widths[i], road.widths[i + 1], t);
                     // A river lies level from bank to bank at its middle's height, a little under a road that crosses it.
                     float level = Surface((at.x + half) / info.cell - .5f, (at.y + half) / info.cell - .5f) + .18f;
@@ -540,19 +547,22 @@ public static class BuildMapBundle
                         Vector2 q = at + side * (across[c] * width);
                         float y = water ? level : Surface((q.x + half) / info.cell - .5f, (q.y + half) / info.cell - .5f) + .3f;
                         b.Add(new Vector3(q.x - origin.x, y, q.y - origin.y), Vector3.up, c == 0 || c == 4 ? edge : c == 2 ? mid : lane, 0f);
+                        b.Uvs[b.Uvs.Count - 1] = new Vector2((across[c] + 1f) * .5f, run / (2f * width * tile));
                     }
                     if (previous >= 0)
                         for (int c = 0; c < 4; c++) b.Quad(previous + c, first + c, first + c + 1, previous + c + 1);
                     previous = first;
                 }
             }
-            var go = Child(parent, (water ? "river_" : "road_") + n++);
+            var go = Child(parent, look + "_" + n++);
             go.transform.localPosition = new Vector3(origin.x, 0f, origin.y);
             var mesh = new Mesh { name = go.name, indexFormat = IndexFormat.UInt32 };
             mesh.SetVertices(b.Vertices);
             mesh.SetNormals(b.Normals);
             mesh.SetColors(b.Colours);
+            mesh.SetUVs(0, b.Uvs);
             mesh.SetTriangles(b.Triangles, 0);
+            mesh.RecalculateTangents();
             go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;

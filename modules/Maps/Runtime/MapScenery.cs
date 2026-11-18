@@ -33,7 +33,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             var kinds = new KitManifest.Kind[names.Length];
             var unknown = new List<string>();
             for (int k = 0; k < names.Length; k++)
-                if ((kinds[k] = kit.Find(names[k])) == null || kinds[k].variants <= 0)
+                if (MapTowns.Handles(names[k])) kinds[k] = null;
+                else if ((kinds[k] = kit.Find(names[k])) == null || kinds[k].variants <= 0)
                 {
                     kinds[k] = null;
                     unknown.Add(names[k]);
