@@ -37,8 +37,8 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
         /// <summary>
         /// Set any of the TAC BOARD's options through the settings contract (<see cref="ITacBoardSettings"/>, the same door the SET console and the C menu use) so ONE sim run can try several looks, and return every option as it
-        /// now stands. The names are the contract's, in any case (enabled, layout, scale, offsetX, offsetY, opacity, shade, declutter, scopeMode, sway, corners, showLamps, showSystemsStrip, showGauges, showTicker, pageThreat,
-        /// pageShot, pageMissileCam, pageApproach, pageWing, pageStrike, pageDock, pageObjective, pageSystems, threatHoldSeconds, pageMinSeconds); an enum is given by name (wide, stack, full, lean, minimal, auto, off). A name that is
+        /// now stands. The names are the contract's, in any case (enabled, layout, scale, shade, declutter, scopeMode, showStores, pageMissileCam, showLamps, showGauges, showTicker, showSystems, sway, corners,
+        /// centreAlerts, arPath, arDomes, arMissiles, arBeacons, hudFx, brow, arcs, boot, reactive, visorSound, textEdge); an enum is given by name (wide, stack, full, auto, off). A name that is
         /// none of them fails the call, so a typo cannot waste a run, and so does a value the option does not take (a retired one: Declutter is always Full, ScopeMode Manual reads as Auto on the board). IN MEMORY ONLY: the contract's setters save the config file on every set, so the file's save-on-set is held off around them and put back; the file on
         /// disk is never written by this hook and the pilot's saved options come back with the next start. <c>restore</c> true first puts every option back to what it was at the first call of the run (the pilot's own values).
         /// The board takes a change on its next 10 Hz tick: wait before a capture.
