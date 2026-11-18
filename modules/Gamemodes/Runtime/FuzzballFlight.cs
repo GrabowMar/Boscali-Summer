@@ -203,10 +203,11 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
         {
             position = default;
             rotation = Quaternion.identity;
-            if (hq?.faction == null ||
-                !FactionRegistry.airbaseLookup.TryGetValue("K92 Highway Strip", out Airbase north) ||
-                !FactionRegistry.airbaseLookup.TryGetValue("Dustbowl Highway Strip", out Airbase south) ||
-                north == null || south == null || north.center == null || south.center == null) return false;
+            // the arena lies between two airfields: on Heartland, and on the mod's desert
+            Airbase north = null, south = null;
+            foreach (string[] pair in new[] { new[] { "K92 Highway Strip", "Dustbowl Highway Strip" }, new[] { "Tassara Strip 1", "Tassara Strip 2" } })
+                if (FactionRegistry.airbaseLookup.TryGetValue(pair[0], out north) && FactionRegistry.airbaseLookup.TryGetValue(pair[1], out south)) break;
+            if (hq?.faction == null || north == null || south == null || north.center == null || south.center == null) return false;
             bool boscali = hq.faction.factionName == "Boscali";
             if (!boscali && hq.faction.factionName != "Primeva") return false;
             Vector3 center = (north.center.position + south.center.position) * 0.5f;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using BepInEx.Logging;
 using BoscaliSummer.Modules.Gamemodes.Domain;
@@ -10,14 +11,19 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Gamemodes.Runtime
 {
-    /// <summary>Additional native picker entries, built from the player's installed mission without editing it.</summary>
+    /// <summary>
+    /// Additional native picker entries, built from the player's installed missions without editing them: WarBox on each
+    /// shipped map.
+    /// Fuzzball (airborne team deathmatch) and Heavyweight (cargo run and interception) are no longer built here from
+    /// Escalation: they are played on the mod's desert map, whose missions the Maps module lists ("Tassara - Fuzzball").
+    /// This module still runs both matches. TODO: more maps of their own.
+    /// </summary>
     internal sealed class GamemodeMissions
     {
         private readonly Group group;
         private readonly MissionGroup[] groups;
         private readonly ManualLogSource log;
-        private readonly Dictionary<GameModeKind, string> built = new Dictionary<GameModeKind, string>();
-        private string cachedBase;
+        private readonly Dictionary<string, KeyValuePair<string, string>> built = new Dictionary<string, KeyValuePair<string, string>>(StringComparer.OrdinalIgnoreCase);
 
         internal GamemodeMissions(ManualLogSource logger)
         {
@@ -28,43 +34,61 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
 
         internal IReadOnlyList<MissionGroup> Groups() => groups;
 
+        /// <summary>The picker label of one of this group's missions.</summary>
+        internal string Label(MissionKey key)
+        {
+            int n = ReferenceEquals(key.Group, group) ? GamemodeMissionBuilder.WarBoxOf(key.Key) : -1;
+            return n < 0 ? null : "WARBOX / " + GamemodeMissionBuilder.WarBoxes[n].Map;
+        }
+
         internal Mission Launch(string id)
         {
-            GameModeKind mode = GamemodeMissionBuilder.FromId(id);
-            if (mode == GameModeKind.None) return null;
+            int n = GamemodeMissionBuilder.WarBoxOf(id);
+            if (n < 0)
+            {
+                // Fuzzball and Heavyweight live on the desert map: its mission is in the mod's one picker group.
+                GameModeKind kind = GamemodeMissionBuilder.FromId(id);
+                if (kind == GameModeKind.None) return null;
+                MissionGroup.Init();
+                MissionGroup all = MissionGroup.MissionSelectGroups.FirstOrDefault(g => g != null && g.Name == "Boscali Summer");
+                string why = "the mod's mission list is not there";
+                if (all != null && MissionSaveLoad.TryLoad(new MissionKey("Tassara - " + GamemodeMissionBuilder.Title(kind), all), out Mission desert, out why)) return desert;
+                log?.LogWarning("[Gamemodes] Could not load " + id + " on Tassara: " + why);
+                return null;
+            }
             MissionGroup.Init();
-            if (MissionSaveLoad.TryLoad(new MissionKey(GamemodeMissionBuilder.Title(mode), group), out Mission mission, out string error))
+            if (MissionSaveLoad.TryLoad(new MissionKey(GamemodeMissionBuilder.WarBoxes[n].Key, group), out Mission mission, out string error))
                 return mission;
             log?.LogWarning("[Gamemodes] Could not load " + id + ": " + error);
             return null;
         }
 
-        private bool TryBuild(GameModeKind mode, out string json)
+        private bool TryBuild(string key, out string json)
         {
             json = null;
-            if (mode == GameModeKind.None) return false;
+            int n = GamemodeMissionBuilder.WarBoxOf(key);
+            if (n < 0) return false;
+            string baseName = GamemodeMissionBuilder.WarBoxes[n].Base;
             MissionGroup source = MissionGroup.BuiltIn;
-            if (source == null || !source.TryGetJson(new MissionKey(GamemodeMissionBuilder.BaseMission, source), out string original) ||
-                string.IsNullOrEmpty(original))
+            if (source == null || !source.TryGetJson(new MissionKey(baseName, source), out string original) || string.IsNullOrEmpty(original))
             {
-                log?.LogWarning("[Gamemodes] The installed Escalation mission is unavailable.");
+                log?.LogWarning("[Gamemodes] The installed " + baseName + " mission is unavailable.");
                 return false;
             }
-            if (!string.Equals(cachedBase, original, StringComparison.Ordinal))
+            if (built.TryGetValue(key, out KeyValuePair<string, string> cached) && string.Equals(cached.Key, original, StringComparison.Ordinal))
             {
-                cachedBase = original;
-                built.Clear();
+                json = cached.Value;
+                return true;
             }
-            if (built.TryGetValue(mode, out json)) return true;
             try
             {
-                json = GamemodeMissionBuilder.Apply(original, mode);
-                built[mode] = json;
+                json = GamemodeMissionBuilder.Apply(original, GameModeKind.WarBox, baseName);
+                built[key] = new KeyValuePair<string, string>(original, json);
                 return true;
             }
             catch (Exception error) when (error is JsonException || error is InvalidOperationException || error is OverflowException)
             {
-                log?.LogWarning("[Gamemodes] Could not build " + GamemodeMissionBuilder.Title(mode) + ": " + error.Message);
+                log?.LogWarning("[Gamemodes] Could not build " + key + ": " + error.Message);
                 return false;
             }
         }
@@ -77,7 +101,7 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             internal Group(GamemodeMissions owner) : base("Boscali Summer Gamemodes")
             {
                 this.owner = owner;
-                keys = new[] { new MissionKey("WarBox", this), new MissionKey("Fuzzball", this), new MissionKey("Heavyweight", this) };
+                keys = GamemodeMissionBuilder.WarBoxes.Select(w => new MissionKey(w.Key, this)).ToArray();
             }
 
             public override IEnumerable<MissionKey> GetMissions() => keys;
@@ -85,11 +109,14 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             public override bool TryGetJson(MissionKey key, out string json)
             {
                 json = null;
-                return ReferenceEquals(key.Group, this) && owner.TryBuild(GamemodeMissionBuilder.FromId(key.Key), out json);
+                return ReferenceEquals(key.Group, this) && owner.TryBuild(key.Key, out json);
             }
 
-            public override UniTask<Sprite> GetPreview(string key, CancellationToken token = default) =>
-                MissionGroup.BuiltIn != null ? MissionGroup.BuiltIn.GetPreview(GamemodeMissionBuilder.BaseMission, token) : UniTask.FromResult<Sprite>(null);
+            public override UniTask<Sprite> GetPreview(string key, CancellationToken token = default)
+            {
+                int n = GamemodeMissionBuilder.WarBoxOf(key);
+                return n >= 0 && MissionGroup.BuiltIn != null ? MissionGroup.BuiltIn.GetPreview(GamemodeMissionBuilder.WarBoxes[n].Base, token) : UniTask.FromResult<Sprite>(null);
+            }
         }
     }
 }

@@ -7,6 +7,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// The METAR-style line of the ENV screen (spec 8.4), derived only from the active layers at a point: each layer's cover to
     /// oktas (under 0.05 none, under 0.19 FEW, under 0.44 SCT, under 0.81 BKN, else OVC) and its base in hundreds of feet, lowest
     /// first, then the weather (-RA, RA, +RA by rate; TS where lightning is active). No hand-written string per sky.
+    /// On a map with a climate the precipitation reads SN at freezing surface air and the line ends with the temperature group ("M09/M12").
     /// </summary>
     internal static class WeatherMetar
     {
@@ -49,9 +50,11 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Group(p.MidCover, p.MidBase);
             Group(p.HighCover, p.HighBase);
             if (text.Length == 0) text.Append("SKC");
+            bool climate = WeatherClimate.Local != null;
             string rain = Rain(p.RainRate);
-            if (rain.Length > 0) text.Append(' ').Append(rain);
+            if (rain.Length > 0) text.Append(' ').Append(climate && WeatherClimate.Snow(p.Temperature) >= 0.5f ? rain.Replace("RA", "SN") : rain);
             if (p.LightningRate > 0.05f) text.Append(" TS");
+            if (climate) text.Append(' ').Append(WeatherClimate.MetarDegrees(p.Temperature)).Append('/').Append(WeatherClimate.MetarDegrees(p.Dewpoint));
             return text.ToString();
         }
     }

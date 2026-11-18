@@ -74,11 +74,12 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// or null when it is not current: the glass then falls back to a fog-coloured body.</summary>
         internal void SetScene(Texture sceneTexture) => scene = sceneTexture;
 
-        internal void SetColdMoisture(float temperatureC, float deposition, float dt)
+        /// <param name="snowfall">Falling snow at the glass, 0..1 (0 on a vanilla map): it rimes the canopy to the frost ceiling at once, however little below freezing the air is.</param>
+        internal void SetColdMoisture(float temperatureC, float deposition, float dt, float snowfall = 0f)
         {
             float step = Mathf.Clamp(dt, 0f, 0.1f);
             recentLiquid = Mathf.Max(Mathf.Clamp01(deposition), Mathf.MoveTowards(recentLiquid, 0f, step / 90f));
-            float target = AtmosphericSurfaceMath.ColdTarget(temperatureC, recentLiquid);
+            float target = Mathf.Max(AtmosphericSurfaceMath.ColdTarget(temperatureC, recentLiquid), 0.35f * Mathf.Clamp01(snowfall * 2.5f));
             frost = Mathf.MoveTowards(frost, target, step / (target > frost ? 45f : 90f));
         }
 

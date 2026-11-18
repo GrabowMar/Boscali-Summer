@@ -4,7 +4,7 @@ using Mirage;
 namespace BoscaliSummer.Modules.Weather.Networking
 {
     /// <summary>
-    /// Periodic host-to-client weather broadcast: the whole weather key (protocol 8), the native targets that
+    /// Periodic host-to-client weather broadcast: the whole weather key (protocol 9), the native targets that
     /// preload a late joiner, and the host's mission clock for the adoption check. Field order is the wire order
     /// and is pinned by the PatchProbe; keep the Mirage identity and bump <see cref="WeatherNet.ProtocolVersion"/>
     /// whenever the meaning or serialisation changes.
@@ -47,6 +47,8 @@ namespace BoscaliSummer.Modules.Weather.Networking
         public float FieldSetOriginSquall;
         public float FieldSetOriginSupercell;
         public float FieldSetOriginCell;
+        /// <summary>The map's climate id (WeatherClimate), 0 on a vanilla map.</summary>
+        public byte FieldClimate;
     }
 
     /// <summary>The one place the flat message and <see cref="WeatherKeyWire.Fields"/> are mapped to each other.</summary>
@@ -59,7 +61,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
             Epoch = m.FieldEpoch, Offset = m.FieldOffset, SystemSpeed = m.FieldSystemSpeed, Dynamic = m.FieldDynamic,
             Sets = m.FieldSets, HasAnchor = m.FieldHasAnchor, AnchorX = m.FieldAnchorX, AnchorZ = m.FieldAnchorZ,
             SetOriginSquall = m.FieldSetOriginSquall, SetOriginSupercell = m.FieldSetOriginSupercell,
-            SetOriginCell = m.FieldSetOriginCell,
+            SetOriginCell = m.FieldSetOriginCell, Climate = m.FieldClimate,
         };
 
         public static void Write(ref WeatherSyncMessage m, in WeatherKeyWire.Fields f)
@@ -82,6 +84,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
             m.FieldSetOriginSquall = f.SetOriginSquall;
             m.FieldSetOriginSupercell = f.SetOriginSupercell;
             m.FieldSetOriginCell = f.SetOriginCell;
+            m.FieldClimate = f.Climate;
         }
     }
 }

@@ -21,6 +21,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             public byte Sets;
             public bool HasAnchor;
             public float AnchorX, AnchorZ, SetOriginSquall, SetOriginSupercell, SetOriginCell;
+            public byte Climate;
         }
 
         public static Fields FromKey(WeatherKey key) => new Fields
@@ -30,13 +31,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             Epoch = key.Epoch, Offset = key.Offset, SystemSpeed = key.SystemSpeed, Dynamic = key.Dynamic,
             Sets = key.Sets, HasAnchor = key.HasAnchor, AnchorX = key.AnchorX, AnchorZ = key.AnchorZ,
             SetOriginSquall = key.SetOriginSquall, SetOriginSupercell = key.SetOriginSupercell,
-            SetOriginCell = key.SetOriginCell,
+            SetOriginCell = key.SetOriginCell, Climate = key.Climate,
         };
 
         /// <summary>
         /// Builds the key a peer holds. <c>Story</c>, <c>SkyPin</c> and <c>MissionClass</c> pass 255 through; any other
         /// value must be below its table count, else it falls back to auto/none and <paramref name="warn"/> is told
-        /// (the caller logs once). Never a clamp to Count-1: that turned 255 into Storm.
+        /// (the caller logs once). Never a clamp to Count-1: that turned 255 into Storm. A climate this build does not know is no climate (the key cleans it).
         /// </summary>
         public static WeatherKey ToKey(in Fields f, Action<string> warn = null)
         {
@@ -45,7 +46,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             byte missionClass = Sentinel(f.MissionClass, WeatherKey.ClassCount, "mission class", warn);
             return new WeatherKey(f.Seed, f.Epoch, f.Dynamic, missionClass, f.Sets, f.LayoutSalt, f.HasAnchor,
                 f.AnchorX, f.AnchorZ, story, skyPin, f.OpeningBase, f.HeadingDeg, f.Offset, f.SystemSpeed,
-                f.SetOriginSquall, f.SetOriginSupercell, f.SetOriginCell);
+                f.SetOriginSquall, f.SetOriginSupercell, f.SetOriginCell, f.Climate);
         }
 
         /// <summary>A held key needs no clock check. A moving key is adopted only with a local clock that agrees with

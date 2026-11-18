@@ -87,6 +87,8 @@
     <Reference Include="Mirage"><HintPath>$(ManagedDir)\Mirage.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Mirage.SocketLayer"><HintPath>$(ManagedDir)\Mirage.SocketLayer.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UniTask"><HintPath>$(ManagedDir)\UniTask.dll</HintPath><Private>false</Private></Reference>
+    <!-- MissionKey's full constructor (a key with its own display name) takes a Steam workshop id. -->
+    <Reference Include="com.rlabrecque.steamworks.net"><HintPath>$(ManagedDir)\com.rlabrecque.steamworks.net.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Rewired_Core"><HintPath>$(ManagedDir)\Rewired_Core.dll</HintPath><Private>false</Private></Reference>
   </ItemGroup>
 
@@ -137,13 +139,16 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup Label="Custom maps">
-    <!-- One bundle per map, written by `nomod map gen` + `nomod map bake` (tools/Build-MapBundle.ps1). The Maps module
-         lists every BoscaliSummer.Maps.*.bsmap resource. -->
-    <EmbeddedResource Include="modules\Maps\Assets\*.bsmap" LogicalName="BoscaliSummer.Maps.%(Filename).bsmap" />
+    <!-- Per map, written by `nomod map gen` + `nomod map bake` (tools/Build-MapBundle.ps1): the bundle <id>.bsmap, its
+         sidecar <id>.map.json (the manifest plus the bundle's hash) and the preview <id>.card.png. The Maps module lists
+         every BoscaliSummer.Maps.*.map.json resource and opens a bundle only when its map is played; a loose
+         <plugin folder>\Maps\<id>.bsmap wins over the embedded one. mapkit.bskit is the shared scenery kit (`nomod map kit`). -->
+    <EmbeddedResource Include="modules\Maps\Assets\*.bsmap;modules\Maps\Assets\*.map.json;modules\Maps\Assets\*.modes.json;modules\Maps\Assets\*.card.png;modules\Maps\Assets\*.bskit" LogicalName="BoscaliSummer.Maps.%(Filename)%(Extension)" />
   </ItemGroup>
   <Target Name="WarnWhenNoMapBundle" BeforeTargets="CoreCompile">
-    <ItemGroup><MapBundle Include="modules\Maps\Assets\*.bsmap" /></ItemGroup>
-    <Warning Condition="'@(MapBundle)' == ''" Text="No map bundle in modules\Maps\Assets: this build ships without Marisol Shoals. Run nomod map gen and nomod map bake." />
+    <ItemGroup><MapSidecar Include="modules\Maps\Assets\*.map.json" /></ItemGroup>
+    <Warning Condition="'@(MapSidecar)' == ''" Text="No baked map in modules\Maps\Assets: this build ships without the mod's own maps. Run nomod map gen and nomod map bake." />
+    <Warning Condition="!Exists('modules\Maps\Assets\mapkit.bskit')" Text="No modules\Maps\Assets\mapkit.bskit: this build ships without the scenery kit. Run nomod map kit." />
   </Target>
   <ItemGroup Label="SA-74N bomb artwork">
     <EmbeddedResource Include="modules\Vanguard\Assets\sa74-mushroom.bundle" Condition="Exists('modules\Vanguard\Assets\sa74-mushroom.bundle')">

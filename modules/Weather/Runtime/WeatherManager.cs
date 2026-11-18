@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private FlightEnvironmentSnapshot environmentSnapshot;
         private int environmentGeneration = 1;
         private float viewDensity, viewPrecipitation, viewCondensation;
-        private float viewTemperature = 15f, viewDewpoint = 6f;
+        private float viewTemperature = 15f, viewDewpoint = 6f, viewSnow;
         private float viewTransmission = 1f;
         private float publishedMissionTime = -1f;
 
@@ -410,8 +410,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 // The key is built once per scene (RestoreNativeWeather leaves it alone, so toggling Enabled keeps it).
                 uint seed = ResolveSeed();
                 missionSeed = unchecked((int)seed);
-                fieldKey = PlaceOpening(NewFieldKey(missionTime, settings.TapeMoves.Value,
-                    (byte)StateTable.FromConditions(baselineConditions), seed));
+                // A map with a climate (map builder v2, 6.2): the mission's class stays the centre of a biased pick, the climate's set pieces may join, and the key carries the
+                // climate so every peer generates the same biased tape. A vanilla map has climate 0 and takes none of this.
+                byte climate = isManualOverride ? WeatherClimate.None : WeatherClimate.Id(WeatherClimate.Local);
+                WeatherKey fresh = NewFieldKey(missionTime, settings.TapeMoves.Value,
+                    WeatherClimate.RemapClass(climate, (byte)StateTable.FromConditions(baselineConditions), seed), seed, climate);
+                if (climate != WeatherClimate.None) fresh = fresh.WithSets((byte)(fresh.Sets | WeatherClimate.Sets(climate, seed)));
+                fieldKey = PlaceOpening(fresh);
                 fieldReady = true;
                 lastBroadcastTime = -999f; // the first broadcast is the next gated frame, never from in here
                 network?.ArmResends();
@@ -422,7 +427,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     fieldKey.HeadingDeg.ToString("0") + " deg, theater " + fieldSpan.x.ToString("0") + " x " +
                     fieldSpan.y.ToString("0") + " m, offset " + fieldKey.Offset.ToString("0") +
                     " m, T1 n/a, Tm n/a (slice 5), dynamic " + fieldKey.Dynamic + ", speed " +
-                    fieldKey.SystemSpeed.ToString("0.0") + " m/s, map " + map);
+                    fieldKey.SystemSpeed.ToString("0.0") + " m/s, map " + map +
+                    (climate != WeatherClimate.None ? ", climate " + climate + " (" + WeatherClimate.Local.profile + "), sea level " +
+                        WeatherClimate.Local.seaLevelTempC.ToString("0") + " C, sets " + fieldKey.Sets : ""));
             }
             else if (!server && pendingSync.TryTake(out WeatherSyncMessage held))
             {
@@ -483,6 +490,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private void Update()
         {
             LevelInfo level = LevelInfo.i;
+            // The loaded map's climate, null on a vanilla map: read here once a frame, on the main thread, for the capture below and for every field and effect.
+            WeatherClimate.Local = level != null ? MapClimate.Current() : null;
             TryPrewarmShaders();
             if (level == null) { environmentSnapshot = default; TeardownRainSystems(); return; }
 
@@ -620,7 +629,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                     view, wetTerrain ? EffectiveRainIntensity() : 0f, Time.deltaTime,
                     wetTerrain ? Field : null, weatherTime, wetTerrain ? forcedRainIntensity : null,
                     wetTerrain, detailTerrain, detailTerrain ? SurfaceShaderBundle.Terrain : null,
-                    detailTerrain ? SurfaceShaderBundle.Detail : null);
+                    detailTerrain ? SurfaceShaderBundle.Detail : null,
+                    WeatherClimate.Local != null && Field != null ? localWeather.Temperature : (float?)null);
             }
             else terrainRain.Reset();
             if (!liveWeather) atmosphere.Restore();
@@ -686,6 +696,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 cloudPosition.y, viewDensity, forcedRainIntensity);
             viewTemperature = airPoint.Temperature - Mathf.Max(0f, cloudPosition.y) * 0.0065f;
             viewDewpoint = Mathf.Min(viewTemperature, airPoint.Dewpoint - Mathf.Max(0f, cloudPosition.y) * 0.002f);
+            // On a map with a climate the precipitation at the viewer turns to snow below about 1 C (0 on a vanilla map, where every factor below is then exactly 1).
+            float snow = WeatherClimate.SnowNow(viewTemperature);
+            viewSnow = snow;
             rainIntensity = airMass.Rain;
             rainIntensity = Mathf.Clamp01(rainIntensity * RainVisualMath.GustFactor(missionTime, missionSeed));
             float incomingRain = rainIntensity;
@@ -761,7 +774,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             visualIntensity *= rainExposure;
             viewPrecipitation = rainIntensity;
             viewCondensation = cloudMoisture * rainExposure;
-            float glassMoisture = Mathf.Max(rainIntensity, viewCondensation);
+            // Snow does not bead on the glass: only the liquid share wets it, the rest feeds the frost.
+            float liquidRain = rainIntensity * (1f - snow);
+            float glassMoisture = Mathf.Max(liquidRain, viewCondensation);
 
             // Haze first: everything below reads the fog colour it produces.
             float viewHeight = currentCam.transform.position.GlobalY();
@@ -769,7 +784,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 atmosphere.Apply(RainVisualsEnabled
                     ? rainIntensity : 0f, underwaterView, cloudShade, LevelInfo.i != null ? LevelInfo.i.sun : null,
                     LevelInfo.i != null && LevelInfo.i.moon != null ? LevelInfo.i.moon.intensity : 0f,
-                    DarkNightsEnabled, viewHeight);
+                    DarkNightsEnabled, viewHeight, WeatherClimate.Local != null ? WeatherClimate.Local.hazeScale : 1f);
             else atmosphere.Restore();
             // From very high up: the curved Earth past the far plane, and cloud layers that stop at its horizon.
             HighAltitudeSky.Publish(viewHeight, LevelInfo.i != null ? LevelInfo.i.sun : null);
@@ -792,7 +807,8 @@ namespace BoscaliSummer.Modules.Weather.Runtime
 
             // Storms remain visible/audible from dry air; they do not depend on a rain emitter.
             bool bolts = settings.LightningEnabled.Value && !SkyYielded, thunder = settings.RainAudioEnabled.Value && !SkyYielded;
-            if (bolts || thunder)
+            // A climate with no storms (the arctic) has no lightning either, whatever cell the tape still holds.
+            if ((bolts || thunder) && WeatherClimate.Storms(WeatherClimate.Id(WeatherClimate.Local)))
                 lightning.Tick(Field, missionTime, cloudPosition, currentCam,
                     settings.ReducedFlashes.Value || !bolts,
                     thunder, isCockpit);
@@ -828,12 +844,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             {
                 rainEmitter.SetTint(RenderSettings.fogColor);
                 rainEmitter.UpdateRain(isCockpit ? airVel : Vector3.zero, currentWind, visualIntensity, currentCam,
-                    settings != null ? settings.RainDensity.Value : 1f, 1f, lightLevel, cloudMist);
+                    settings != null ? settings.RainDensity.Value : 1f, 1f, lightLevel, cloudMist, snow);
             }
             // Impact sound follows incoming water, independently of optional glass rendering.
             lastAudioCockpit = isCockpit;
             lastAudioSpeed = cameras.followingUnit is Aircraft ? ias : 0f;
-            rainSound?.UpdateAudio(incomingRain, Mathf.Max(cloudMoisture, cloudPunch), glassMoisture, isCockpit,
+            rainSound?.UpdateAudio(incomingRain * (1f - 0.85f * snow), Mathf.Max(cloudMoisture, cloudPunch), glassMoisture, isCockpit,
                 settings.RainAudioEnabled.Value && !underwaterView, cameras.followingUnit is Aircraft ? ias : 0f,
                 heightAboveGround, rainExposure);
             // The sim remains current outside cockpit view, but submits at most 30 blits/s per pane.
@@ -842,12 +858,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             if (!shaderRequested || canopyWetness <= 0.001f) canopyShader.ClearWater();
             else
                 // Cloud droplets feed their own thin-film channel; only falling rain seeds beads.
-                canopyShader.UpdateSim(canopySurfaces, rainIntensity, speedNorm,
+                canopyShader.UpdateSim(canopySurfaces, liquidRain, speedNorm,
                     glassAirflow, Time.deltaTime, viewCondensation,
                     CanopyShaderParams.Evaporation(viewTemperature, viewDewpoint));
             bool shaderDrawn = false;
             if (shaderRequested)
-                canopyShader.SetColdMoisture(viewTemperature, glassMoisture, Time.deltaTime);
+                canopyShader.SetColdMoisture(viewTemperature, glassMoisture, Time.deltaTime, rainIntensity * snow);
             else canopyShader.Detach();
             if (isCockpit && shaderRequested)
             {
@@ -998,6 +1014,9 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 { "viewCondensation", viewCondensation },
                 { "viewTemperatureC", viewTemperature },
                 { "viewDewpointC", viewDewpoint },
+                { "viewSnow", viewSnow },
+                { "keyClimate", fieldKey != null ? (int)fieldKey.Climate : -1 },
+                { "mapClimate", (int)WeatherClimate.Id(WeatherClimate.Local) },
                 { "viewLightTransmission", viewTransmission },
                 { "sunDiscRed", sunDisc.Shown.r },
                 { "sunDiscBlue", sunDisc.Shown.b },
@@ -1056,7 +1075,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             if (!GameAccess.IsServer() || !isManualOverride || !IsCaptured || !RequireClock("fixture tape", out float missionTime)) return false;
             missionSeed = unchecked((int)seed);
-            fieldKey = NewFieldKey(missionTime, dynamic, fieldKey.MissionClass, seed).WithStory(story).WithSkyPin(pin).WithOffset(offsetKm * 1000f);
+            fieldKey = NewFieldKey(missionTime, dynamic, fieldKey.MissionClass, seed, fieldKey.Climate).WithStory(story).WithSkyPin(pin).WithOffset(offsetKm * 1000f);
             nextFieldUpdate = 0f;
             lastForecastSampleTime = -999f;
             BroadcastSync(missionTime);
@@ -1143,7 +1162,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private static WeatherKey PlaceOpening(WeatherKey key) =>
             TapeCuts.Place(key);
 
-        private WeatherKey NewFieldKey(float epoch, bool dynamic, byte missionClass, uint seed)
+        private WeatherKey NewFieldKey(float epoch, bool dynamic, byte missionClass, uint seed, byte climate)
         {
             return new WeatherKey(seed, epoch, dynamic, missionClass,
                 sets: fieldKey?.Sets ?? 0, layoutSalt: fieldKey?.LayoutSalt ?? 0,
@@ -1151,7 +1170,7 @@ namespace BoscaliSummer.Modules.Weather.Runtime
                 anchorX: fieldKey?.AnchorX ?? 0f, anchorZ: fieldKey?.AnchorZ ?? 0f,
                 openingBase: WeatherKey.QuantiseOpeningBase(baselineCloudHeight),
                 headingDeg: WeatherKey.HeadingFromWind(baselineWindVelocity.x, baselineWindVelocity.z, baselineWindSpeed, seed),
-                systemSpeed: TapePace.Speed(settings.Pace.Value, baselineWindSpeed));
+                systemSpeed: TapePace.Speed(settings.Pace.Value, baselineWindSpeed), climate: climate);
         }
 
 

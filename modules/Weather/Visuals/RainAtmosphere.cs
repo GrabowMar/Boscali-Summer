@@ -70,13 +70,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <param name="moon">The game's moon <c>Light.intensity</c> (0 to 0.5), for <paramref name="darkNight"/>.</param>
         /// <param name="darkNight">Darken the night and turn its ambient moonlit blue-grey (<see cref="OvercastLook.NightLight"/>).</param>
         /// <param name="height">The camera's height above the sea (m): above 12 km the fog thins to a column of air (<see cref="HighAir.FogScale"/>).</param>
-        internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null, float moon = 0f, bool darkNight = false, float height = 0f)
+        /// <param name="visibility">The map climate's haze factor on visibility (1 on a vanilla map): 1.6 is crisp arctic air (fog density / 1.6), 0.8 a humid tropical haze.</param>
+        internal void Apply(float rain, bool underwater, float shade = 0f, Light sun = null, float moon = 0f, bool darkNight = false, float height = 0f, float visibility = 1f)
         {
             rain = Mathf.Clamp01(rain);
             shade = Mathf.Clamp01(shade);
             float sunHeight = sun != null ? -sun.transform.forward.y : 1f;
             float thin = HighAir.FogScale(height);
-            if (underwater || (rain <= 0.001f && shade <= 0.001f && sunHeight >= 0f && thin >= 1f)) { Restore(); return; }
+            if (underwater || (rain <= 0.001f && shade <= 0.001f && sunHeight >= 0f && thin >= 1f && visibility == 1f)) { Restore(); return; }
 
             fog.Track(RenderSettings.fogDensity, applied);
             ambient.Track(RenderSettings.ambientIntensity, applied);
@@ -102,7 +103,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // Vanilla's near-opaque storm fog erases the cloud bodies and terrain a pilot
             // must still be able to navigate by. Heavy rain keeps several km of contrast.
             // Forced local showers also need haze when the mission starts with zero fog.
-            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, RainSkyMath.HazeFloor(rain, shade)), 0.00055f) * thin;
+            fog.Written = Mathf.Min(Mathf.Max(fog.Base * LastFogMultiplier, RainSkyMath.HazeFloor(rain, shade)), 0.00055f) * thin / Mathf.Max(0.25f, visibility);
             // Cloud extinction belongs to the ray-marched volume. Applying it to global
             // fog as well erased gaps and local geometry as soon as the camera crossed an edge.
             // Dark nights: ambient, fog and sky dome take one factor, so near terrain, far haze and the sky stay in step at the horizon.

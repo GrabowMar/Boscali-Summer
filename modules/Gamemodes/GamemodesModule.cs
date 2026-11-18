@@ -13,13 +13,14 @@ namespace BoscaliSummer.Modules.Gamemodes
 {
     internal sealed class GamemodesModule : IModule
     {
-        public ModuleMetadata Metadata => new ModuleMetadata("gamemodes", "WarBox, Fuzzball and Heavyweight missions");
+        public ModuleMetadata Metadata => new ModuleMetadata("gamemodes", "WarBox missions; runs Fuzzball and Heavyweight on the desert map");
         public Type[] PatchTypes => [.. GamemodePatches.Types, .. FuzzballFlight.PatchTypes];
 
         public void Install(ModuleContext context)
         {
             var missions = new GamemodeMissions(context.Logger);
             BoscaliMission.ExtraGroups += missions.Groups;
+            BoscaliMission.Labels += missions.Label;
             BoscaliMission.PresetModulesOff = Preset;
             GamemodeLaunchPatch.Resolve = missions.Launch;
             var runtime = context.AddSceneService<GamemodeRuntime>(94);
@@ -31,6 +32,7 @@ namespace BoscaliSummer.Modules.Gamemodes
             context.OnTeardown(() =>
             {
                 BoscaliMission.ExtraGroups -= missions.Groups;
+                BoscaliMission.Labels -= missions.Label;
                 BoscaliMission.PresetModulesOff = null;
                 GamemodeLaunchPatch.Resolve = null;
                 MissionProfile.SetRequiredDisabled(null);

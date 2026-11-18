@@ -7,6 +7,12 @@ Shader "Boscali/MapSurface"
         _Sway ("Wind Sway (m)", Float) = 0
         _Cull ("Cull", Float) = 2
         _Detail ("Detail Contrast", Range(0,1)) = .35
+        [Toggle(_TEXTURED)] _Textured ("Surfaces by vertex alpha", Float) = 0
+        _TexA ("Concrete (alpha 1)", 2D) = "white" {}
+        _TexB ("Sheet metal (alpha 0)", 2D) = "white" {}
+        _TexC ("Gabion (alpha .5)", 2D) = "white" {}
+        _TexTile ("Repeats per metre", Vector) = (.0625, .05, .16, 0)
+        _TexGain ("Brightness to middle grey", Vector) = (1, 1, 1, 0)
     }
     SubShader
     {
@@ -16,7 +22,8 @@ Shader "Boscali/MapSurface"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
         CBUFFER_START(UnityPerMaterial)
-        float _Sway, _Cull, _Detail;
+        float _Sway, _Cull, _Detail, _Textured;
+        float4 _TexTile, _TexGain;
         CBUFFER_END
         float3 SwayedWS(float3 positionOS, half weight)
         {
@@ -37,7 +44,9 @@ Shader "Boscali/MapSurface"
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fog
-            struct Attributes { float3 positionOS : POSITION; float3 normalOS : NORMAL; half4 color : COLOR; };
+            #pragma shader_feature_local _TEXTURED
+            TEXTURE2D(_TexA); TEXTURE2D(_TexB); TEXTURE2D(_TexC); SAMPLER(sampler_TexA);
+            struct Attributes { float3 positionOS : POSITION; float3 normalOS : NORMAL; half4 color : COLOR; float2 uv : TEXCOORD0; };
             struct Varyings
             {
                 float4 positionCS : SV_POSITION;
@@ -46,6 +55,7 @@ Shader "Boscali/MapSurface"
                 float3 positionOS : TEXCOORD2;
                 half4 color : COLOR;
                 float fog : TEXCOORD3;
+                float2 uv : TEXCOORD4;
             };
             Varyings vert(Attributes v)
             {
@@ -55,6 +65,11 @@ Shader "Boscali/MapSurface"
                 o.normalWS = TransformObjectToWorldNormal(v.normalOS);
                 o.positionOS = v.positionOS;
                 o.color = v.color;
+                o.uv = v.uv;
+                #ifdef _TEXTURED
+                o.positionWS = TransformObjectToWorld(v.positionOS); // alpha picks a surface here, it is not sway
+                o.positionCS = TransformWorldToHClip(o.positionWS);
+                #endif
                 o.fog = ComputeFogFactor(o.positionCS.z);
                 return o;
             }
@@ -71,6 +86,12 @@ Shader "Boscali/MapSurface"
                 // Object-space grain at two scales: it stays put when the floating origin shifts the map.
                 half grain = Noise(i.positionOS.xz * .9) * .6 + Noise(i.positionOS.xz * .11) * .4;
                 half3 albedo = i.color.rgb * (1 - _Detail * .5 + _Detail * grain);
+                #ifdef _TEXTURED
+                half3 concrete = SAMPLE_TEXTURE2D(_TexA, sampler_TexA, i.uv * _TexTile.x).rgb * _TexGain.x;
+                half3 metal = SAMPLE_TEXTURE2D(_TexB, sampler_TexA, i.uv * _TexTile.y).rgb * _TexGain.y;
+                half3 gabion = SAMPLE_TEXTURE2D(_TexC, sampler_TexA, i.uv * _TexTile.z).rgb * _TexGain.z;
+                albedo *= i.color.a > .75 ? concrete : i.color.a < .25 ? metal : gabion;
+                #endif
                 Light sun = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
                 half diffuse = saturate(dot(normal, sun.direction));
                 half3 light = max(half3(.03, .035, .04), SampleSH(normal)) + sun.color * (diffuse * sun.distanceAttenuation * sun.shadowAttenuation);

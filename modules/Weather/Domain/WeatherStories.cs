@@ -108,18 +108,24 @@ namespace BoscaliSummer.Modules.Weather.Domain
 
         public static float Weight(int story, WeatherRegimeType cls) => 1f + 4f * Share(story, cls);
 
-        /// <summary>A hashed pick among <paramref name="candidates"/> with the class weights; <paramref name="roll"/> is a uniform [0, 1).</summary>
-        public static int Pick(int[] candidates, WeatherRegimeType cls, float roll)
+        /// <summary>A hashed pick among <paramref name="candidates"/> with the class weights; <paramref name="roll"/> is a uniform [0, 1).
+        /// A <paramref name="climate"/> (<see cref="WeatherClimate"/> id) multiplies each weight by its story bias: a zero removes the story, and when
+        /// it removes them all the pick is High pressure. With no climate every bias is exactly 1, so the pick is the one it always was.</summary>
+        public static int Pick(int[] candidates, WeatherRegimeType cls, float roll, byte climate = 0)
         {
             float total = 0f;
-            foreach (int s in candidates) total += Weight(s, cls);
+            foreach (int s in candidates) total += Weight(s, cls) * WeatherClimate.StoryBias(climate, s);
             float at = roll * total;
+            int last = (int)StoryKind.HighPressure;
             foreach (int s in candidates)
             {
-                at -= Weight(s, cls);
+                float weight = Weight(s, cls) * WeatherClimate.StoryBias(climate, s);
+                if (weight <= 0f) continue;
+                last = s;
+                at -= weight;
                 if (at < 0f) return s;
             }
-            return candidates[candidates.Length - 1];
+            return last;
         }
 
         public static readonly int[] FrontStories = { (int)StoryKind.FrontalSystem, (int)StoryKind.ColdFront, (int)StoryKind.Occluded };

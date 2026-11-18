@@ -16,8 +16,9 @@ namespace BoscaliSummer.Modules.Maps.Runtime
     /// <summary>
     /// Turns a baked map (engine types only) into the inactive template the game instantiates as its map prefab: adds
     /// <see cref="MapSettings"/> and <see cref="NetworkMap"/>, marks the terrain, clones a vanilla airstrip onto each strip
-    /// pad, lays the sea lanes and plants the scenery. Everything game-typed is made here, at load, from today's game
-    /// classes, so a game update cannot leave stale serialized data in the bundle.
+    /// pad, lays the sea lanes and places the scenery. Everything game-typed is made here, at load, from today's game
+    /// classes, so a game update cannot leave stale serialized data in the bundle. One map is live at a time, so every
+    /// map uses the same network prefix.
     /// </summary>
     internal static class MapBuilder
     {
@@ -32,7 +33,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             MapManifest manifest = entry.Manifest;
             try
             {
-                MapSettings donor = manager.Maps.Where(m => m != null && m.Prefab != null).Select(m => m.Prefab).FirstOrDefault();
+                MapSettings donor = manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab)).Select(m => m.Prefab).FirstOrDefault();
                 var asset = entry.Bundle.LoadAsset<GameObject>("MapRoot");
                 if (donor == null || asset == null)
                 {
@@ -55,13 +56,21 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 int chunks = MarkTerrain(root.transform.Find("Terrain"), manager);
                 MapGround.Dress(root.transform.Find("Terrain"), entry, manager);
                 List<NetworkIdentity> identities = BuildAirbases(root.transform.Find("Airfields"), manifest, manager);
+                NetworkIdentity towns = MapTowns.Begin(root.transform, manager);
+                if (towns != null) identities.Add(towns);
+                int strips = identities.Count - (towns != null ? 1 : 0);
                 var network = root.AddComponent<NetworkMap>();
                 network.MapPrefix = MapPrefix;
                 network.NetworkObjects = identities.ToArray();
                 settings.NetworkMap = network;
-                int scenery = Plant(root.transform.Find("Props"), entry);
-                Plugin.Logger?.LogInfo("[Maps] Built " + manifest.displayName + ": " + chunks + " terrain tiles, " + identities.Count +
-                    " airstrips, " + (settings.SeaLanes != null ? settings.SeaLanes.RoadNetwork.roads.Count : 0) + " sea lane legs, " + scenery + " trees and rocks.");
+                int lakes = Water(root.transform.Find("Water"));
+                MapTowns.DressRoads(root.transform.Find("Roads"), manager);
+                MapTowns.DressPlots(root.transform.Find("Plots"), manager);
+                int scenery = MapScenery.Place(root.transform, entry);
+                int buildings = MapTowns.End();
+                Plugin.Logger?.LogInfo("[Maps] Built " + manifest.displayName + ": " + chunks + " terrain tiles, " + strips +
+                    " airstrips, " + (settings.SeaLanes != null ? settings.SeaLanes.RoadNetwork.roads.Count : 0) + " sea lane legs, " + scenery + " scenery items, " + buildings + " of them the game's buildings" +
+                    (lakes > 0 ? ", " + lakes + " lakes" : ""));
                 return settings;
             }
             catch (Exception error)
@@ -69,6 +78,16 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Plugin.Logger?.LogError("[Maps] " + manifest.displayName + " could not be built: " + error);
                 return null;
             }
+        }
+
+        /// <summary>Lake surfaces are looks only (the game's water is the sea plane at 0 m): they cast no shadow, and a
+        /// collider the bake may have left would make a lake solid, so it is switched off.</summary>
+        private static int Water(Transform water)
+        {
+            if (water == null) return 0;
+            foreach (Renderer lake in water.GetComponentsInChildren<Renderer>(true)) lake.shadowCastingMode = ShadowCastingMode.Off;
+            foreach (Collider solid in water.GetComponentsInChildren<Collider>(true)) solid.enabled = false;
+            return water.childCount;
         }
 
         private static void Fill(MapSettings settings, MapEntry entry, MapSettings donor)
@@ -83,7 +102,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             settings.OceanBasecolor = entry.Bundle.LoadAsset<Texture2D>("ocean_color");
             settings.OceanDepthmap = entry.Bundle.LoadAsset<Texture2D>("ocean_depth");
             settings.TerrainColorMap = entry.Bundle.LoadAsset<Texture2D>("colormap");
-            settings.MapImage = entry.Details.MapImage;
+            settings.MapImage = entry.Details.MapImage; // the bundle's chart since MapCatalog opened the bundle
             settings.CameraPositionRotation = new PositionRotation
             {
                 Position = new GlobalPosition(m.camera.x, m.camera.y, m.camera.z),
@@ -95,6 +114,9 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             settings.ReflectionProbePoint = probe.transform;
             musicRef(settings) = musicRef(donor); // the factions' start, tactical and strategic music
             settings.SeaLanes = SeaLanes(m);
+            settings.RoadNetwork = Roads(m);
+            entry.Owned.Add(settings.RoadNetwork);
+            entry.Owned.Add(settings.SeaLanes);
         }
 
         /// <summary>One road per lane leg: the game only joins roads at their end points, so every lane point becomes a node.</summary>
@@ -103,12 +125,31 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             var asset = ScriptableObject.CreateInstance<RoadNetworkSO>();
             asset.hideFlags = HideFlags.DontUnloadUnusedAsset;
             asset.RoadNetwork = new RoadNetwork();
-            foreach (MapManifest.Lane lane in manifest.lanes)
+            foreach (MapManifest.Lane lane in manifest.lanes ?? new MapManifest.Lane[0])
                 for (int i = 0; i + 3 < lane.points.Length; i += 2)
                 {
                     var road = new Road();
                     road.AddPoint(new GlobalPosition(lane.points[i], 0f, lane.points[i + 1]));
                     road.AddPoint(new GlobalPosition(lane.points[i + 2], 0f, lane.points[i + 3]));
+                    road.CalcLength();
+                    asset.RoadNetwork.roads.Add(road);
+                }
+            return asset;
+        }
+
+        /// <summary>The map's roads for the game's ground units: one road per leg, like the sea lanes, so roads join
+        /// wherever they share a point.</summary>
+        private static RoadNetworkSO Roads(MapManifest manifest)
+        {
+            var asset = ScriptableObject.CreateInstance<RoadNetworkSO>();
+            asset.hideFlags = HideFlags.DontUnloadUnusedAsset;
+            asset.RoadNetwork = new RoadNetwork();
+            foreach (MapManifest.Way way in manifest.roads ?? new MapManifest.Way[0])
+                for (int i = 0; way != null && way.points != null && i + 5 < way.points.Length; i += 3)
+                {
+                    var road = new Road();
+                    road.AddPoint(new GlobalPosition(way.points[i], way.points[i + 1], way.points[i + 2]));
+                    road.AddPoint(new GlobalPosition(way.points[i + 3], way.points[i + 4], way.points[i + 5]));
                     road.CalcLength();
                     asset.RoadNetwork.roads.Add(road);
                 }
@@ -123,9 +164,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             if (ground == null) throw new InvalidOperationException("the game's terrain physics material was not found");
             foreach (Transform chunk in terrain)
             {
-                chunk.gameObject.layer = PhysicsLayers.Statics;
-                chunk.GetComponent<MeshCollider>().sharedMaterial = ground;
-                foreach (Transform lod in chunk) lod.gameObject.layer = PhysicsLayers.Statics;
+                foreach (Transform part in chunk.GetComponentsInChildren<Transform>(true)) part.gameObject.layer = PhysicsLayers.Statics;
+                foreach (MeshCollider collider in chunk.GetComponentsInChildren<MeshCollider>(true)) collider.sharedMaterial = ground;
             }
             return terrain.childCount;
         }
@@ -133,11 +173,13 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         /// <summary>
         /// A strip is a copy of a vanilla airstrip (its paved mesh, runway ends, exits, service points and taxi routes),
         /// turned and moved so its runway lies on the map's flattened pad. Hangars come from the mission, as on any map.
+        /// A map has two to four strips; whatever the surface (asphalt, gravel, ice), the baked slab is the runway and
+        /// rolls like a paved one.
         /// </summary>
         private static List<NetworkIdentity> BuildAirbases(Transform airfields, MapManifest manifest, MapSettingsManager manager)
         {
             var identities = new List<NetworkIdentity>();
-            Airbase donor = manager.Maps.Where(m => m != null && m.Prefab != null)
+            Airbase donor = manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab))
                 .SelectMany(m => m.Prefab.GetComponentsInChildren<Airbase>(true))
                 .Where(a => a.runways != null && a.runways.Length == 1 && a.runways[0].Start != null && a.runways[0].End != null)
                 .OrderBy(a => a.name.IndexOf("airstrip", StringComparison.OrdinalIgnoreCase) >= 0 ? 0 : 1)
@@ -172,22 +214,21 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 if (saved != null)
                 {
                     saved.UniqueName = manifest.displayName + " Strip " + (n + 1);
-                    saved.DisplayName = saved.UniqueName;
+                    saved.DisplayName = string.IsNullOrEmpty(strip.name) ? saved.UniqueName : strip.name;
                     saved.faction = "";
                     saved.Tower = "";
                     Move(saved.roads, move);
                     Move(saved.ServicePoints, move);
                     Move(saved.VerticalLandingPoints, move);
                 }
-                // The vanilla strip's own mesh is only the aprons and decals of its home field (its runway is part of that
-                // map's ground), so it is hidden and the map's baked runway slab stays.
-                foreach (Renderer part in copy.GetComponentsInChildren<Renderer>(true)) part.enabled = false;
-                foreach (Collider part in copy.GetComponentsInChildren<Collider>(true)) part.enabled = false;
+                // The vanilla strip's own mesh is the aprons, taxiways and decals of its home field (its runway is part of
+                // that map's ground): it is shown, on the map's flat pad, beside the baked runway slab.
                 foreach (Collider paved in pad.GetComponentsInChildren<Collider>(true)) paved.gameObject.layer = PhysicsLayers.Statics;
                 identities.Add(copy.GetComponent<NetworkIdentity>());
-                if (along.magnitude > strip.length + 320f)
-                    Plugin.Logger?.LogWarning("[Maps] The copied airstrip is " + Mathf.RoundToInt(along.magnitude) + " m long; the pad allows " +
-                        Mathf.RoundToInt(strip.length + 300f) + " m.");
+                float room = Mathf.Max(strip.length + 300f, strip.padLength);
+                if (along.magnitude > room + 20f)
+                    Plugin.Logger?.LogWarning("[Maps] The copied airstrip is " + Mathf.RoundToInt(along.magnitude) + " m long; the " + strip.surface +
+                        " pad of strip " + (n + 1) + " allows " + Mathf.RoundToInt(room) + " m.");
             }
             return identities;
         }
@@ -208,58 +249,5 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             if (points == null) return;
             for (int i = 0; i < points.Count; i++) points[i] = new GlobalPosition(move.MultiplyPoint3x4(points[i].AsVector3()));
         }
-
-        /// <summary>
-        /// Palms, jungle trees and rocks: the bundle has five shapes of each and a list of positions; each island gets
-        /// one merged mesh. Scenery only: no collision, so peers need not agree on it.
-        /// </summary>
-        private static int Plant(Transform props, MapEntry entry)
-        {
-            TextAsset list = entry.Bundle.LoadAsset<TextAsset>("trees");
-            if (props == null || list == null) return 0;
-            var shapes = new Dictionary<int, List<MeshFilter>>();
-            Material material = null;
-            foreach (Transform shape in props)
-            {
-                int kind = shape.name.StartsWith("palm", StringComparison.Ordinal) ? 0 : shape.name.StartsWith("tree", StringComparison.Ordinal) ? 1 : 2;
-                if (!shapes.TryGetValue(kind, out List<MeshFilter> of)) shapes[kind] = of = new List<MeshFilter>();
-                of.Add(shape.GetComponent<MeshFilter>());
-                material = shape.GetComponent<MeshRenderer>().sharedMaterial;
-            }
-            byte[] bytes = list.bytes;
-            var random = new System.Random(entry.Manifest.id.Length * 7919 + bytes.Length);
-            // One merged mesh per 2.56 km square of the map: near enough to cull by, few enough to draw cheaply.
-            const float Square = 2560f;
-            var squares = new Dictionary<Vector2Int, List<CombineInstance>>();
-            int planted = 0;
-            for (int at = 0; at + 16 <= bytes.Length; at += 16)
-            {
-                var position = new Vector3(BitConverter.ToSingle(bytes, at), BitConverter.ToSingle(bytes, at + 4), BitConverter.ToSingle(bytes, at + 8));
-                int kind = Mathf.RoundToInt(BitConverter.ToSingle(bytes, at + 12));
-                if (!shapes.TryGetValue(kind, out List<MeshFilter> of) || of.Count == 0) continue;
-                var square = new Vector2Int(Mathf.FloorToInt(position.x / Square), Mathf.FloorToInt(position.z / Square));
-                if (!squares.TryGetValue(square, out List<CombineInstance> here)) squares[square] = here = new List<CombineInstance>();
-                float scale = .8f + (float)random.NextDouble() * .5f;
-                here.Add(new CombineInstance
-                {
-                    mesh = of[random.Next(of.Count)].sharedMesh,
-                    transform = Matrix4x4.TRS(position - Origin(square, Square), Quaternion.Euler(0f, (float)random.NextDouble() * 360f, 0f), Vector3.one * scale),
-                });
-                planted++;
-            }
-            foreach (KeyValuePair<Vector2Int, List<CombineInstance>> square in squares)
-            {
-                var go = new GameObject("scenery_" + square.Key.x + "_" + square.Key.y);
-                go.transform.SetParent(props, false);
-                go.transform.localPosition = Origin(square.Key, Square);
-                var mesh = new Mesh { name = go.name, indexFormat = IndexFormat.UInt32, hideFlags = HideFlags.DontUnloadUnusedAsset };
-                mesh.CombineMeshes(square.Value.ToArray(), true, true);
-                go.AddComponent<MeshFilter>().sharedMesh = mesh;
-                go.AddComponent<MeshRenderer>().sharedMaterial = material;
-            }
-            return planted;
-        }
-
-        private static Vector3 Origin(Vector2Int square, float size) => new Vector3((square.x + .5f) * size, 0f, (square.y + .5f) * size);
     }
 }

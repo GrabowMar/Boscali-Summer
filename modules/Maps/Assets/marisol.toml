@@ -1,15 +1,237 @@
 id = "marisol"
-name = "Marisol Shoals"
+name = "Marisol Islands"
+biome = "tropical"
 seed = 7
 cell = 20
-islands = 12
-max_island_m = 3500
-sea_ratio = 0.985
-bank = 0.02
-worldgen_size = 1024
-peak = 420
-stacks = 40
-strips = 2
-latitude = 8
-[worldgen]
-tectonicFactor = 1.5
+
+# ---- hand work (nomod map edit / paint / prop)
+
+[[edit]]            # small relief everywhere
+op = "roughen"
+x = 0
+z = 0
+radius = 60000
+amount = 5
+size = 220
+
+[[edit]]            # the northern volcano
+op = "cliff"
+at = "Summit"
+radius = 4500
+amount = 1.0
+
+[[edit]]            # ridges and ravines of the north island
+op = "cliff"
+at = "Marisol Main"
+x = 6500
+z = 500
+radius = 8500
+amount = 0.8
+
+[[edit]]            # and of the south island
+op = "cliff"
+at = "Isla Brava"
+x = 3400
+z = 2500
+radius = 7000
+amount = 0.9
+
+[[edit]]            # terraced hillsides above the largest town
+op = "terrace"
+at = "Puerto Brava"
+x = 1400
+z = 600
+radius = 1500
+amount = 12
+
+[[paint]]
+layer = "grass"
+at = "Puerto Brava"
+x = 1400
+z = 600
+radius = 1400
+amount = 0.7
+
+[[paint]]
+layer = "rock"
+at = "Summit"
+radius = 900
+amount = 0.7
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Alfa"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Alfa"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Alfa"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Bravo"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Bravo"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Bravo"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Charlie"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Charlie"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Charlie"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Delta"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Delta"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Delta"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Echo"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Echo"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Echo"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Foxtrot"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Foxtrot"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Foxtrot"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Golf"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Golf"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Golf"
+radius = 70
+
+[[edit]]            # a trench round the fort
+op = "crater"
+at = "Fort Hotel"
+x = 0
+z = 170
+to = [120, 120, 170, 0, 120, -120, 0, -170, -120, -120, -170, 0, -120, 120, 0, 170]
+radius = 30
+amount = 5
+
+[[paint]]
+layer = "gravel"
+at = "Fort Hotel"
+radius = 230
+amount = 0.8
+
+[[paint]]
+layer = "concrete"
+at = "Fort Hotel"
+radius = 70
+
+[[prop]]            # working boats in the strait
+kind = "boat"
+x = 2000
+z = 2000
+radius = 14000
+count = 16
+sea = true
+
+[[prop]]
+kind = "sea_stack"
+at = "Summit"
+x = -9000
+z = 3000
+radius = 3000
+count = 6
+y = -3
+sea = true

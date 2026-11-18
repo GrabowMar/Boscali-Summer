@@ -7,14 +7,16 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// <summary>The tape identity (spec 3.2) as plain values: everything <see cref="WeatherTape.Generate"/> reads, and nothing else.</summary>
     internal readonly struct TapeInputs
     {
-        public TapeInputs(uint seed, byte story, byte skyPin, byte layoutSalt, byte missionClass, float openingBase, uint id)
-        { Seed = seed; Story = story; SkyPin = skyPin; LayoutSalt = layoutSalt; MissionClass = missionClass; OpeningBase = openingBase; Id = id; }
+        public TapeInputs(uint seed, byte story, byte skyPin, byte layoutSalt, byte missionClass, float openingBase, uint id, byte climate = 0)
+        { Seed = seed; Story = story; SkyPin = skyPin; LayoutSalt = layoutSalt; MissionClass = missionClass; OpeningBase = openingBase; Id = id; Climate = WeatherClimate.Clean(climate); }
 
         public readonly uint Seed, Id;
         public readonly byte Story, SkyPin, LayoutSalt, MissionClass;
+        /// <summary>The map's climate (<see cref="WeatherClimate"/> id), 0 = none: the stories it favours and whether the tape may hold storms.</summary>
+        public readonly byte Climate;
         public readonly float OpeningBase;
 
-        public static TapeInputs From(WeatherKey k) => new TapeInputs(k.Seed, k.Story, k.SkyPin, k.LayoutSalt, k.MissionClass, Quantised(k.OpeningBase), k.TapeId);
+        public static TapeInputs From(WeatherKey k) => new TapeInputs(k.Seed, k.Story, k.SkyPin, k.LayoutSalt, k.MissionClass, Quantised(k.OpeningBase), k.TapeId, k.Climate);
 
         /// <summary>The opening base in the 10 m steps <see cref="WeatherKey.TapeId"/> hashes it in: Generate must read what the identity sees, or two keys with one TapeId (1501 m and 1504 m)
         /// would generate different tapes and the cache would hand each peer whichever came first.</summary>
@@ -166,6 +168,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             bool pinnedSky = inputs.SkyPin < SkyLibrary.Count;
             bool pinnedStory = !pinnedSky && inputs.Story < WeatherStories.Count;
             WeatherRegimeType cls = inputs.MissionClass < WeatherKey.ClassCount ? (WeatherRegimeType)inputs.MissionClass : NoClass(inputs.Seed);
+            // A climate with no storms (the arctic) never opens on one: the remap at capture cannot pick Storm, this covers a class set by hand.
+            byte climate = inputs.Climate;
+            if (cls == WeatherRegimeType.Storm && !WeatherClimate.Storms(climate)) cls = WeatherRegimeType.Overcast;
             tape.OpeningClass = cls;
 
             // A tape has about 70 blocks and 55 segments (at most a few more than 120 and 80): room for them up front, not four or five doublings of each list.
@@ -183,7 +188,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     segments.Add(new SegmentRow { Label = "OPENING", Role = Role.None, Story = -1, FirstBlock = 0 });
                 }
                 int story = pinnedStory ? inputs.Story
-                    : WeatherStories.Pick(cls == WeatherRegimeType.Clear || cls == WeatherRegimeType.Fair ? WeatherStories.FrontStories : WeatherStories.AllStories, cls, U(2));
+                    : WeatherStories.Pick(cls == WeatherRegimeType.Clear || cls == WeatherRegimeType.Fair ? WeatherStories.FrontStories : WeatherStories.AllStories, cls, U(2), climate);
                 tape.OpensWithFront = WeatherStories.Get(story).BearsFront && (pinnedStory || cls == WeatherRegimeType.Clear || cls == WeatherRegimeType.Fair);
                 for (int round = 0; round < 64; round++)
                 {
@@ -193,9 +198,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     if (round > 0 && !pinnedStory)
                     {
                         WeatherRegimeType previous = SkyLibrary.ClassOf(blocks[blocks.Count - 1].Sky);
-                        story = WeatherStories.Pick(WeatherStories.AllStories, previous, U(3, round));
+                        story = WeatherStories.Pick(WeatherStories.AllStories, previous, U(3, round), climate);
                     }
-                    AppendStory(blocks, segments, story, skipFirst: round == 0 && !pinnedStory && WeatherStories.Get(story).Segments[0].OpeningCandidate, round, U);
+                    AppendStory(blocks, segments, story, skipFirst: round == 0 && !pinnedStory && WeatherStories.Get(story).Segments[0].OpeningCandidate, round, U, root, climate);
                 }
                 if (!pinnedStory)
                 {
@@ -206,7 +211,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                     blocks.RemoveRange(keep, blocks.Count - keep);
                     if (run > 2600f) { Block last = blocks[keep - 1]; last.Km -= run - 2600f; blocks[keep - 1] = last; }
                     segments.RemoveAll(r => r.FirstBlock >= keep);
-                    AppendStory(blocks, segments, (int)StoryKind.HighPressure, false, 99, U);
+                    AppendStory(blocks, segments, (int)StoryKind.HighPressure, false, 99, U, root, climate);
                     blocks.Add(new Block { Sky = 7, Km = 60f + 60f * U(4), Segment = segments.Count - 1 });
                 }
             }
@@ -226,9 +231,10 @@ namespace BoscaliSummer.Modules.Weather.Domain
             return WeatherRegimeType.Overcast;
         }
 
-        private static void AppendStory(List<Block> blocks, List<SegmentRow> segments, int story, bool skipFirst, int round, Func<int, int, int, float> u)
+        private static void AppendStory(List<Block> blocks, List<SegmentRow> segments, int story, bool skipFirst, int round, Func<int, int, int, float> u, uint root, byte climate)
         {
             StoryDef def = WeatherStories.Get(story);
+            bool storms = WeatherClimate.Storms(climate);
             for (int j = 0; j < def.Segments.Length; j++)
             {
                 if (j == 0 && skipFirst) continue;
@@ -250,6 +256,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
                         sky = seg.Pool[at];
                     }
                     previous = sky;
+                    // No storms in this climate: the pool's storm sky gives way to an overcast one, picked from the same hash on every peer.
+                    if (!storms && SkyLibrary.ClassOf(sky - 1) == WeatherRegimeType.Storm)
+                        sky = SkyLibrary.PickOpening(WeatherRegimeType.Overcast, Deterministic.Hash((int)root, 20 + round, j * 8 + b, story)) + 1;
                     var block = new Block { Sky = sky - 1, Km = km / n, Segment = row };
                     if (b == 0)
                     {
