@@ -21,6 +21,14 @@ namespace BoscaliSummer.Vanguard
             Sa74Fallout fallout = Sa74Fallout.Instance;
             if (fallout == null) return Failed("SA-74N fallout service unavailable");
             string action = Text(args, "action") ?? "status";
+            if (action == "nativeFront")
+            {
+                float farthest = 0f;
+                foreach (var wave in UnityEngine.Object.FindObjectsOfType<Shockwave>())
+                    if (wave.enabled && wave.GetComponentInParent<Sa74BlastTag>() != null)
+                        farthest = Mathf.Max(farthest, (float)HarmonyLib.AccessTools.Field(typeof(Shockwave), "blastPropagation").GetValue(wave));
+                return new Dictionary<string, object> { ["radius"] = farthest };
+            }
             if (action == "reset")
             {
                 fallout.ResetForScene();
@@ -60,7 +68,8 @@ namespace BoscaliSummer.Vanguard
                 Vector3 aim = at + new Vector3(Number(args, "aimX", 0f), Number(args, "aimHeight", 3500f), Number(args, "aimZ", 0f));
                 camera.SetCameraPosition(eye.ToGlobalPosition(), Quaternion.LookRotation(aim - eye));
                 camera.allowInputs = false;
-                camera.SetDesiredFoV(Number(args, "fov", 65f), 100f);
+                float fov = Number(args, "fov", 65f);
+                camera.SetDesiredFoV(fov, fov);
             }
             if (action == "sample")
             {

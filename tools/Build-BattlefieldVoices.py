@@ -194,7 +194,9 @@ def verify(production: dict, output: Path, report_path: Path, pack_path: Path, t
                 failures.append(f"Unexpected contextual background: {path.name}")
     if set(measured) != keys:
         failures.append("Measured take IDs do not equal the expected production take IDs")
-    stale = {path.resolve() for path in output.rglob("*.mp3")} - expected
+    # Independent productions share the shipped tree; each owns its declared cast folders.
+    stale = {path.resolve() for role in production["cast"]
+             for path in (output / ("boscali-" + role)).glob("*.mp3")} - expected
     if stale:
         failures.append(f"{len(stale)} unexpected/stale MP3 files remain in the shipped voice tree")
     for role, actor in production["cast"].items():

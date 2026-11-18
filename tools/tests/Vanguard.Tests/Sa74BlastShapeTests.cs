@@ -11,12 +11,15 @@ internal static class Sa74BlastShapeTests
         check(Sa74BlastShape.Radius(float.NaN, float.PositiveInfinity) == 75000f, "Invalid map dimensions must not poison physics.");
         check(Sa74BlastShape.Radius(300000f, 100000f) >= 150000f, "Large maps must retain half-map reach.");
         check(Sa74BlastShape.FrontRadius(-5f, radius) == 2100f, "Future effects cannot reverse the front.");
+        check(Sa74BlastShape.FrontRadius(12f, radius) == 21900f, "First front passes 21 km at twelve seconds.");
+        check(Sa74BlastShape.ArrivalSeconds(75000f) > 74f && Sa74BlastShape.ArrivalSeconds(75000f) < 75f,
+            "The minimum map edge receives the pressure hit after about 74 seconds.");
         check(Sa74BlastShape.FrontRadius(120f, radius) > 42000f, "The front must pass the old cloud-clearance cap.");
         check(Sa74BlastShape.FrontRadius(600f, radius) == radius, "The front must stop at its final reach.");
         check(Math.Abs(Sa74BlastShape.FrontRadius(Sa74BlastShape.ArrivalSeconds(radius), radius) - radius) < .1f,
             "Audio, damage and cloud clearance must share one arrival time.");
         float initialized = (float)Math.Pow(Sa74BlastShape.InitializationYield(radius) * 1000000f, .3333f) * 13f;
         check(Math.Abs(initialized - radius) < 2f, "Native initialization must cover the full requested collider/decal reach.");
-        check(Sa74BlastShape.MaximumVisualAge == 600f, "The mushroom volume expires by ten minutes.");
+        check(Sa74BlastShape.MaximumVisualAge == 960f, "The cap stays beyond ten minutes and finishes dispersing at sixteen.");
     }
 }

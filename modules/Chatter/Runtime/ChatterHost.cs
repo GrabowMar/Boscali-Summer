@@ -39,6 +39,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private bool receiverWasOn = true;
         private int aftermathRevision;
         private bool aftermathWasActive;
+        private bool aftermathWasSilent;
 
         public static ChatterHost Instance { get; private set; }
 
@@ -63,7 +64,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         internal static bool Receiving => !ModuleServices.TryGet<IRadioComms>(out var receiver) || receiver.ReceiveMilitary;
         private bool PrepareReceiver()
         {
-            if (!Receiving || RadioAftermath.Active) return false;
+            if (!Receiving || RadioAftermath.Blocking) return false;
             // A callback can arrive in the same frame the receiver is enabled, before Update refreshes its level.
             director.Level = settings?.Radio ?? ChatterLevel.Full;
             return true;
@@ -107,7 +108,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         public bool Scripted(in ChatterAired line)
         {
             // COMMS stands down under the maximised map, so the script's own plate presents the line there.
-            if (!isActiveAndEnabled || Application.isBatchMode || DynamicMap.mapMaximized || RadioAftermath.Active) return false;
+            if (!isActiveAndEnabled || Application.isBatchMode || DynamicMap.mapMaximized || RadioAftermath.Blocking) return false;
             if (strip == null) strip = new ChatterStrip(transform);
             return director.Scripted(Time.time, line);
         }
@@ -147,7 +148,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             nextWorld = 0f;
             receiverWasOn = Receiving;
             aftermathRevision = -1;
-            aftermathWasActive = RadioAftermath.Active;
+            aftermathWasActive = RadioAftermath.Blocking;
+            aftermathWasSilent = false;
         }
 
         private void OnDisable()
@@ -176,13 +178,14 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
         private void Update()
         {
             if (settings == null) return;
+            RadioAftermath.Advance(Time.time);
             voices.Tick();
             bool receive = Receiving;
             if (aftermathRevision != RadioAftermath.Revision)
             {
                 aftermathRevision = RadioAftermath.Revision;
-                bool stop = RadioAftermath.Active || aftermathWasActive;
-                aftermathWasActive = RadioAftermath.Active;
+                bool stop = RadioAftermath.Blocking || aftermathWasActive;
+                aftermathWasActive = RadioAftermath.Blocking;
                 if (stop)
                 {
                     // The strategic strike ends the ordinary command net, including queued critical reports.
@@ -201,9 +204,18 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             voices.Volume(MilitaryVolume);
             ChatterAudio.Volume(MilitaryVolume);
             // Wing's optional exchanges reach the director directly; Off closes that path during the blackout too.
-            director.Level = receive && !RadioAftermath.Active ? settings.Radio : ChatterLevel.Off;
-            if (RadioAftermath.Active)
+            director.Level = receive && !RadioAftermath.Blocking ? settings.Radio : ChatterLevel.Off;
+            bool silent = RadioAftermath.Silent(Time.time);
+            if (silent && !aftermathWasSilent)
             {
+                director.Silence(); voices.Stop(); ChatterAudio.Reset(); strip?.Clear();
+            }
+            aftermathWasSilent = silent;
+            if (RadioAftermath.Blocking)
+            {
+                if (receive && settings.Radio != ChatterLevel.Off && MilitaryVolume > 0f &&
+                    RadioAftermath.TryEmergency(Time.time, !voices.Loading, director.Busy(Time.time), out int stage))
+                    Emergency(stage);
                 if (receive && settings.Radio != ChatterLevel.Off && MilitaryVolume > 0f &&
                     RadioAftermath.TrySurvivor(Time.time, !voices.Loading, director.Busy(Time.time), out int role))
                     Survivor(role);
@@ -271,6 +283,19 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             speaker.Character = character;
             director.Level = settings.Radio;
             try { director.Raise(Time.time, evt, speaker, "survivor:" + RadioAftermath.Revision + ":" + RadioAftermath.SurvivorCalls); }
+            finally { director.Level = ChatterLevel.Off; }
+        }
+
+        private void Emergency(int stage)
+        {
+            string[] events = { "release", "flash", "ground", "wing", "last" };
+            string[] callsigns = { "THEATER COMMAND", "SKYWATCH / FLASH", "GROUND / PANIC", "DAGGER / PANIC", "GROUND / LAST SIGNAL" };
+            ChatterNet net = stage == 1 ? ChatterNet.Awacs : stage == 3 ? ChatterNet.Wing : ChatterNet.Command;
+            ChatterSpeaker speaker = Station(net, callsigns[stage]);
+            speaker.Character = "sa74-emergency";
+            director.Level = settings.Radio;
+            try { director.Raise(Time.time, "command.sa74." + events[stage], speaker,
+                "sa74-emergency:" + RadioAftermath.Revision + ":" + stage); }
             finally { director.Level = ChatterLevel.Off; }
         }
 

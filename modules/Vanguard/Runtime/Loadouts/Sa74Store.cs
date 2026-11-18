@@ -39,9 +39,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         public static readonly Type[] PatchTypes =
         {
-            typeof(Sa74BlockedPatch), typeof(Sa74PrefabsPatch), typeof(Sa74DetonatePatch),
+            typeof(Sa74BlockedPatch), typeof(Sa74PrefabsPatch), typeof(Sa74DetonatePatch), typeof(Sa74ReleasedPatch),
             typeof(Sa74DetonationReplayPatch), typeof(Sa74SavedLoadoutPatch), typeof(Sa74BlastTargetsPatch), typeof(Sa74WinterPatch),
-            typeof(Sa74WeatherWritePatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
+            typeof(Sa74WeatherWritePatch), typeof(Sa74PressureTimingPatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
             typeof(Sa74BuildingRegistrationPatch), typeof(Sa74MapBuildingRegistrationPatch)
         };
 
@@ -319,6 +319,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void Prefix(Missile __instance)
         {
             if (Sa74Store.Is(__instance)) __instance.GetComponent<Sa74Flight>()?.Impact(__instance);
+        }
+    }
+    [HarmonyPatch(typeof(Spawner), nameof(Spawner.SpawnMissile), new[] { typeof(GameObject), typeof(Vector3), typeof(Quaternion), typeof(Vector3), typeof(Unit), typeof(Unit) })]
+    internal static class Sa74ReleasedPatch
+    {
+        private static void Postfix(Missile __result)
+        {
+            if (Sa74Store.Is(__result) && GameAccess.IsServer()) Networking.Sa74Net.Released();
         }
     }
     [HarmonyPatch(typeof(Missile), "UserCode_RpcDetonate_897349600")]

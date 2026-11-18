@@ -1,0 +1,14 @@
+@command.sa74.release emergency
+[*] All stations, break, break! Strategic weapon away! Flashback is in the air. Turn away from the target. Get below cover. Do not look at the flash!
+
+@command.sa74.flash emergency
+[*] Flash! Flash! Nuclear detonation! All aircraft, turn away! The shock front is coming. Get down, get down!
+
+@command.sa74.ground emergency
+[*] Everything is on fire! Get those people inside! Away from the windows! Oh God, the trees are gone! Command, do you read?
+
+@command.sa74.wing emergency
+[*] Skywatch, this is Dagger! I've lost the whole flight! There's nothing on the scope! Somebody answer me!
+
+@command.sa74.last emergency
+[*] We can't see the sun. The roof is coming down! Get back! Command, please, we're still here! We are still...

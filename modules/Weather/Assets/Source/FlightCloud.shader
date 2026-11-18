@@ -2338,7 +2338,7 @@ Shader "Boscali/FlightCloud"
                 // output needs only the nearest relevant depth for the final upsample.
                 float upsampleDepth = _CloudCheckerOn < 0.5 && o.colour.a > 0.97 ?
                     min(eyeDepth, cloudDistance / viewLength) : eyeDepth;
-                o.depth = float4(upsampleDepth, cloudDistance, 0.0, 0.0);
+                o.depth = float4(upsampleDepth, _CloudCheckerOn > 0.5 ? cloudDistance : cloudDistance / viewLength, 0.0, 0.0);
                 return o;
             }
             ENDHLSL

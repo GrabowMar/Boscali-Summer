@@ -25,12 +25,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             internal uint Id;
             internal GlobalPosition Position;
             internal float Started;
+            internal float GroundClearance;
             internal uint Owner;
         }
         internal static Sa74Fallout Instance;
         internal static readonly List<Site> Sites = new List<Site>();
         internal static uint Epoch = 1;
         internal static int Events, NativeBlasts, BlastColliders;
+        internal static int ExposedParts;
         private static readonly AccessTools.FieldRef<Missile, float> BlastYield = AccessTools.FieldRefAccess<Missile, float>("blastYield");
         private static readonly FieldInfo Warhead = AccessTools.Field(typeof(Missile), "warhead");
         private static uint nextId;
@@ -48,6 +50,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private float flashExposure, thermalPulse, winterBlend;
         private float radiationStrength, beforeFog, writtenFog;
         private bool hazeApplied;
+        private Material beforeSkybox, falloutSkybox;
+        private static readonly string[] SkyColours = { "_SkyColor", "_SkyColorAzimuth", "_SkyColorBright", "_SkyColorHorizon" };
+        private readonly Color[] beforeSkyColours = new Color[SkyColours.Length];
         private readonly ParticleSystem.Particle[] snow = new ParticleSystem.Particle[1500];
         private ParticleSystem ash;
         private Material ashMaterial;
@@ -61,7 +66,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal int SnowBudget => snow.Length;
         internal bool SnowEmitting => ash != null && ash.isPlaying && SnowParticles > 0;
         internal float RadiationStrength => radiationStrength;
-        internal float AtmosphereExposure => -winterBlend * .2f;
+        internal float AtmosphereExposure => -winterBlend * .35f;
         internal float RadiationGrain => radiationGrain != null ? radiationGrain.intensity.value : 0f;
 
         private void Awake() => Instance = this;
@@ -87,6 +92,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // ponytail: retain sixteen distinct scars; later blasts still explode and keep winter active.
             // A map-editor archive is the upgrade path if missions ever expend more than sixteen strategic bombs.
             if (Sites.Count < MaxSites) Sites.Add(site);
+            ExposedParts += Sa74Exposure.Apply(position, ShockRadius, new PersistentID { Id = site.Owner });
             Instance.ApplySite(site, true);
             Sa74Net.Broadcast(site);
         }
@@ -111,7 +117,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Sa74Destruction.Observe(site);
             BoscaliSummer.Core.Contracts.RadioAftermath.Observe(Epoch, site.Id, Time.time, Mathf.Max(0f, Time.time - site.Started));
             Vector3 at = site.Position.ToLocalPosition();
-            if (explosion) NativeBlast(at, site.Owner, site.Id);
+            site.GroundClearance = Sa74FalloutTerrain.GroundClearance(at);
+            if (explosion) NativeBlast(at, site.Owner, site.Id, site.GroundClearance);
             else
             {
                 var detailBlasts = SceneSingleton<NuclearOption.Effects.BlastManager>.i;
@@ -123,7 +130,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Presentation.Sa74BlastAudio.Observe(site, explosion);
         }
 
-        private void NativeBlast(Vector3 at, uint owner, uint siteId)
+        private void NativeBlast(Vector3 at, uint owner, uint siteId, float groundClearance)
         {
             Missile donor = null;
             Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
@@ -139,8 +146,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             {
                 // Cargo's contact fuse can penetrate a few centimetres below the water plane.
                 // A strategic surface burst keeps its fireball above water rather than hiding the entire effect.
-                effect = AccessTools.Field(typeof(Missile.Warhead), "terrainEffect")?.GetValue(warhead) as GameObject;
-                if (effect == null) effect = AccessTools.Field(typeof(Missile.Warhead), "airEffect")?.GetValue(warhead) as GameObject;
+                bool surface = groundClearance <= 120f;
+                string preferred = surface ? "terrainEffect" : "airEffect";
+                effect = AccessTools.Field(typeof(Missile.Warhead), preferred)?.GetValue(warhead) as GameObject;
+                if (effect == null) effect = AccessTools.Field(typeof(Missile.Warhead), surface ? "airEffect" : "terrainEffect")?.GetValue(warhead) as GameObject;
             }
             GameObject blast = effect != null ? UnityEngine.Object.Instantiate(effect, Datum.origin) : new GameObject("SA-74N blast");
             if (effect == null) blast.transform.SetParent(Datum.origin, false);
@@ -149,7 +158,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Vector3 visualPosition = at;
             if (waterContact) visualPosition.y = Datum.LocalSeaY + 8f;
             blast.transform.SetPositionAndRotation(visualPosition, Quaternion.LookRotation(Vector3.up));
-            Sa74NativeGround.Prepare(blast, YieldKilotons);
+            Sa74NativeGround.Prepare(blast, YieldKilotons, !waterContact && groundClearance <= 120f);
             // Scale the authored fireball, not the Shockwave's independently world-sized cloud/decal.
             if (donor != null)
             {
@@ -175,6 +184,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             blast.AddComponent<Sa74BlastTag>().SiteId = siteId;
             Shockwave shockwave = blast.GetComponentInChildren<Shockwave>(true);
+            blast.AddComponent<Sa74NativeGroundLifetime>().Initialize(shockwave, siteId);
             if (waterContact && shockwave != null)
             {
                 // Preserve the true damage origin while the visible fireball sits above the contact surface.
@@ -323,6 +333,14 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             volume.sharedProfile = profile;
             bloom = profile.Add<Bloom>();
             bloom.threshold.Override(1.15f); bloom.scatter.Override(.72f);
+            if (RenderSettings.skybox != null)
+            {
+                beforeSkybox = RenderSettings.skybox;
+                falloutSkybox = new Material(beforeSkybox) { name = "SA-74N native ash sky" };
+                for (int i = 0; i < SkyColours.Length; i++)
+                    if (falloutSkybox.HasProperty(SkyColours[i])) beforeSkyColours[i] = falloutSkybox.GetColor(SkyColours[i]);
+                RenderSettings.skybox = falloutSkybox;
+            }
             var lightObject = new GameObject("SA-74N thermal illumination");
             lightObject.transform.SetParent(dressing.transform, false);
             flashLight = lightObject.AddComponent<Light>();
@@ -348,23 +366,25 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             main.customSimulationSpace = Datum.origin;
             var shape = ash.shape; shape.enabled = false;
             var emission = ash.emission; emission.enabled = false;
-            ashTexture = new Texture2D(16, 16, TextureFormat.RGBA32, false);
-            var pixels = new Color[256];
-            for (int y = 0; y < 16; y++) for (int x = 0; x < 16; x++)
+            const int side = 32;
+            ashTexture = new Texture2D(side, side, TextureFormat.RGBA32, true, true)
+            { name = "SA-74N soft ash flakes", wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear };
+            var pixels = new Color[side * side];
+            for (int y = 0; y < side; y++) for (int x = 0; x < side; x++)
             {
-                float r = new Vector2((x - 7.5f) / 7.5f, (y - 7.5f) / 7.5f).magnitude;
-                float edge = 1f + .15f * Mathf.Sin(Mathf.Atan2(y - 7.5f, x - 7.5f) * 5f);
-                pixels[y * 16 + x] = new Color(1f, 1f, 1f, Mathf.Clamp01((edge - r) * 4f));
+                float u = (x + .5f) / side * 2f - 1f, v = (y + .5f) / side * 2f - 1f;
+                float r = new Vector2(u, v).magnitude;
+                float edge = .78f + .09f * Mathf.Sin(Mathf.Atan2(v, u) * 3f + .7f);
+                pixels[y * side + x] = new Color(1f, 1f, 1f, Mathf.Clamp01((edge - r) * 5f));
             }
-            ashTexture.SetPixels(pixels); ashTexture.Apply(false, true);
-            Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit");
-            if (shader != null)
+            ashTexture.SetPixels(pixels); ashTexture.Apply(true, true);
+            Material source = SmokeFx.Puff;
+            if (source != null)
             {
-                ashMaterial = new Material(shader) { name = "SA-74N ash", mainTexture = ashTexture, renderQueue = 3100 };
-                ashMaterial.SetFloat("_Surface", 1f); ashMaterial.SetFloat("_Blend", 0f);
-                ashMaterial.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha); ashMaterial.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-                ashMaterial.SetInt("_ZWrite", 0); ashMaterial.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                ashMaterial.SetTexture("_BaseMap", ashTexture);
+                // Reuse the known-working native particle blend variants; runtime materials do not run Unity's inspector.
+                ashMaterial = new Material(source) { name = "SA-74N ash", renderQueue = 3100 };
+                if (ashMaterial.HasProperty("_BaseMap")) ashMaterial.SetTexture("_BaseMap", ashTexture);
+                if (ashMaterial.HasProperty("_MainTex")) ashMaterial.SetTexture("_MainTex", ashTexture);
                 var renderer = ash.GetComponent<ParticleSystemRenderer>();
                 renderer.sharedMaterial = ashMaterial; renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;
                 renderer.maxParticleSize = .012f;
@@ -430,6 +450,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             writtenFog = Mathf.Lerp(beforeFog, Mathf.Min(beforeFog, .00007f), winterBlend);
             RenderSettings.fogDensity = writtenFog;
             hazeApplied = true;
+            if (falloutSkybox != null && RenderSettings.skybox == falloutSkybox)
+                for (int i = 0; i < SkyColours.Length; i++)
+                {
+                    if (!falloutSkybox.HasProperty(SkyColours[i])) continue;
+                    Color native = beforeSkyColours[i];
+                    float luminance = native.r * .2126f + native.g * .7152f + native.b * .0722f;
+                    Color dirty = new Color(luminance * .83f, luminance * .82f, luminance * .78f, native.a);
+                    falloutSkybox.SetColor(SkyColours[i], Color.Lerp(native, dirty, winterBlend * .86f));
+                }
         }
 
         private void CreateGeiger()
@@ -479,10 +508,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (grade != null)
             {
                 grade.postExposure.Override(flashExposure + AtmosphereExposure);
-                grade.colorFilter.Override(Color.Lerp(Color.white, new Color(.94f, .97f, 1f), winterBlend));
-                grade.contrast.Override(3f * winterBlend);
-                grade.saturation.Override(-24f * winterBlend);
-                balance.temperature.Override(-12f * winterBlend); balance.tint.Override(-1f * winterBlend);
+                grade.colorFilter.Override(Color.Lerp(Color.white, new Color(.94f, .94f, .92f), winterBlend));
+                grade.contrast.Override(4f * winterBlend);
+                grade.saturation.Override(-42f * winterBlend);
+                balance.temperature.Override(-7f * winterBlend); balance.tint.Override(-1f * winterBlend);
                 radiationGrain.intensity.Override(.05f * radiationStrength);
                 bloom.active = illumination > .008f;
                 bloom.intensity.Override(illumination * (thermalPulse > .5f ? 4f : 1.5f));
@@ -511,7 +540,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal Dictionary<string, object> Snapshot() => new Dictionary<string, object>
         {
             { "ok", true }, { "active", Active }, { "events", Events }, { "sites", Sites.Count },
-            { "nativeBlasts", NativeBlasts }, { "blastColliders", BlastColliders },
+            { "nativeBlasts", NativeBlasts }, { "blastColliders", BlastColliders }, { "exposedParts", ExposedParts },
             { "craters", terrain.Scars }, { "terrainChanged", terrain.ChangedCells }, { "terrainRestored", terrain.RestoredCells },
             { "audio", geiger != null && geiger.isPlaying }, { "ash", ash != null && ash.isPlaying },
             { "tint", profile != null }, { "yieldKt", YieldKilotons }, { "epoch", Epoch },
@@ -522,8 +551,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             { "snowParticles", SnowParticles }, { "snowBudget", SnowBudget }, { "snowEmitting", SnowEmitting },
             { "radiationStrength", RadiationStrength }, { "radiationGrain", RadiationGrain }, { "atmosphereExposure", AtmosphereExposure },
             { "cloudHeight", LevelInfo.i != null ? LevelInfo.i.cloudHeight : 0f }, { "fogDensity", RenderSettings.fogDensity },
-            { "destruction", Sa74Destruction.Snapshot() },
+            { "destruction", Sa74Destruction.Snapshot() }, { "terrainSurface", terrain.LastSurface },
+            { "craterCollisionDrop", terrain.CollisionDrop }, { "nativePersistentSoot", terrain.NativeSootMarks },
             { "mushroomReady", Presentation.Sa74Mushroom.Ready }, { "mushroomFrame", Presentation.Sa74Mushroom.RenderedFrame },
+            { "mushroomAfterWeather", Presentation.Sa74Mushroom.CompositedAfterWeather },
             { "mushroomSites", Presentation.Sa74Mushroom.VisibleSites }, { "mushroomWidth", Presentation.Sa74Mushroom.TargetWidth },
             { "mushroomHeight", Presentation.Sa74Mushroom.TargetHeight },
             { "mushroomDispersed", Presentation.Sa74Mushroom.DispersedSites },
@@ -560,6 +591,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (winterCaptured && winterLevel != null) { winterLevel.conditions = beforeConditions; winterLevel.cloudHeight = beforeCloudHeight; }
             if (hazeApplied && Mathf.Approximately(RenderSettings.fogDensity, writtenFog)) RenderSettings.fogDensity = beforeFog;
             hazeApplied = false;
+            if (falloutSkybox != null)
+            {
+                if (RenderSettings.skybox == falloutSkybox) RenderSettings.skybox = beforeSkybox;
+                UnityEngine.Object.Destroy(falloutSkybox);
+            }
+            beforeSkybox = falloutSkybox = null;
             winterCaptured = false; winterLevel = null;
             foreach (GameObject blast in blasts) if (blast != null) UnityEngine.Object.Destroy(blast);
             blasts.Clear();
@@ -572,7 +609,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; flashLight = null;
             ash = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null;
             flashExposure = thermalPulse = winterBlend = radiationStrength = 0f;
-            Sites.Clear(); Events = NativeBlasts = BlastColliders = 0;
+            Sites.Clear(); Events = NativeBlasts = BlastColliders = ExposedParts = 0;
             lastReceivedId = 0;
         }
         private void OnDestroy() { Clear(); if (Instance == this) Instance = null; }
@@ -616,6 +653,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (__exception != null) __instance.enabled = false; // A partial native Start must never tick with its temporary initialization power.
             }
             return __exception;
+        }
+    }
+
+    [HarmonyPatch(typeof(Shockwave), "Update")]
+    internal static class Sa74PressureTimingPatch
+    {
+        private static void Prefix(Shockwave __instance, float ___yieldKilotons, float ___blastTime, ref float ___blastPropagation)
+        {
+            if (___yieldKilotons != Sa74Fallout.YieldKilotons || __instance.GetComponentInParent<Sa74BlastTag>() == null) return;
+            // Stock Update adds 340 * dt before testing the boundary. Let it cross its outer edge and retire normally.
+            ___blastPropagation = Sa74BlastShape.FrontRadius(___blastTime + Time.deltaTime, float.MaxValue) - 340f * Time.deltaTime;
         }
     }
 

@@ -17,6 +17,7 @@
     { "op": "call", "method": "BoscaliSummer.Vanguard.Sa74Automation.Step", "args": { "action": "unfreeze" }, "store": "unfreeze" },
     { "op": "call", "method": "BoscaliSummer.Vanguard.Sa74Automation.Step", "args": { "action": "release", "type": "Tarantula" }, "store": "release" },
     { "op": "wait", "seconds": 5 },
+    { "op": "call", "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Acceptance", "args": { "step": "state" }, "store": "releaseRadio" },
     { "op": "call", "method": "BoscaliSummer.Vanguard.Sa74Automation.Step", "args": { "action": "status", "type": "Tarantula" }, "store": "flight" },
     { "op": "call", "method": "BoscaliSummer.Vanguard.Sa74Automation.Step", "args": { "action": "lookBomb", "distance": 16 }, "store": "lookBomb" },
     { "op": "capture", "name": "sa74n-bomb-in-flight", "hide_ui": true },
@@ -43,11 +44,16 @@
     { "check": "result_above", "path": "loaded.loadedRounds", "min": 1 },
     { "check": "result_above", "path": "loaded.modelRenderers", "min": 1 },
     { "check": "result_above", "path": "flight.flightCount", "min": 1 },
+    { "check": "result_above", "path": "releaseRadio.nuclearDrop", "min": 1 },
+    { "check": "result_equals", "path": "releaseRadio.nuclearBlocking", "value": true },
+    { "check": "result_equals", "path": "releaseRadio.nuclearBlackout", "value": false },
     { "check": "result_equals", "path": "impact.active", "value": true },
     { "check": "result_equals", "path": "impact.events", "value": 1 },
     { "check": "result_equals", "path": "impact.nativeBlasts", "value": 1 },
     { "check": "result_above", "path": "impact.blastColliders", "min": 1 },
-    { "check": "result_above", "path": "impact.terrainChanged", "min": 1 },
+    { "check": "result_equals", "path": "impact.terrainSurface", "value": "water" },
+    { "check": "result_equals", "path": "impact.terrainChanged", "value": 0 },
+    { "check": "result_equals", "path": "impact.nativePersistentSoot", "value": 0 },
     { "check": "result_equals", "path": "winter.active", "value": true },
     { "check": "result_equals", "path": "winter.events", "value": 1 },
     { "check": "result_equals", "path": "winter.audio", "value": true },
@@ -57,6 +63,6 @@
     { "check": "result_equals", "path": "winter.snowEmitting", "value": true },
     { "check": "result_equals", "path": "clean.active", "value": false },
     { "check": "result_equals", "path": "clean.events", "value": 0 },
-    { "check": "result_above", "path": "clean.terrainRestored", "min": 1 }
+    { "check": "result_equals", "path": "clean.terrainRestored", "value": 0 }
   ]
 }

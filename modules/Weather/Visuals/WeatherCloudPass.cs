@@ -21,6 +21,9 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private Action<Camera, Matrix4x4, Matrix4x4> beforeRender;
         private bool reduced, temporal;
         private bool hooked;
+        private static Camera resolvedCamera;
+        private static int resolvedFrame = -1;
+        internal static bool HasResolved(Camera view) => resolvedCamera == view && resolvedFrame == Time.frameCount;
 
         /// <summary>Frame of the last execution on the bound camera.</summary>
         internal int ExecutedFrame { get; private set; } = -1;
@@ -32,7 +35,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal WeatherCloudPass()
         {
-            renderPassEvent = RenderPassEvent.BeforeRenderingTransparents;
+            renderPassEvent = (RenderPassEvent)((int)RenderPassEvent.BeforeRenderingTransparents - 2);
             ConfigureInput(ScriptableRenderPassInput.Depth);
         }
 
@@ -66,6 +69,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         {
             // A resolved cover belongs only to the camera/frame that executes Record below.
             Shader.SetGlobalFloat(CloudLowRes.CoverFrameId, 0f);
+            resolvedCamera = null; resolvedFrame = -1;
             if (rendering == null) return;
             bool excluded = IsWeatherExcluded(rendering);
             if (volume != null) volume.forceRenderingOff = rendering != camera || excluded;
@@ -105,18 +109,22 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             CommandBuffer cmd = CommandBufferPool.Get("Boscali Clouds");
             try
             {
+                cmd.DisableScissorRect();
                 targets.Record(cmd, march, composite, temporal);
                 // URP tracks its own attachments; give the camera its targets back.
                 ScriptableRenderer renderer = renderingData.cameraData.renderer;
                 cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
+                cmd.SetViewport(new Rect(0f, 0f, screen.width, screen.height));
                 context.ExecuteCommandBuffer(cmd);
                 ExecutedFrame = Time.frameCount;
+                resolvedCamera = camera; resolvedFrame = Time.frameCount;
             }
             finally { CommandBufferPool.Release(cmd); }
         }
 
         public void Dispose()
         {
+            if (resolvedCamera == camera) { resolvedCamera = null; resolvedFrame = -1; }
             Shader.SetGlobalFloat(CloudLowRes.CoverFrameId, 0f);
             if (hooked) RenderPipelineManager.beginCameraRendering -= OnBeginCamera;
             hooked = false;

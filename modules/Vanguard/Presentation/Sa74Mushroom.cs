@@ -22,6 +22,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         private static AssetBundle bundle;
         private static Shader shader;
         private static bool loaded;
+        private static Sa74Mushroom instance;
+        private static readonly uint[] renderedSiteIds = new uint[2];
+        private static int renderedSiteCount;
         private readonly Vector4[] sites = new Vector4[2];
         private readonly uint[] siteIds = new uint[2];
         private readonly MushroomPass pass = new MushroomPass();
@@ -48,11 +51,25 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         internal static int NativeSuppressedRenderers { get; private set; }
         internal static int DispersedSites { get; private set; }
         internal static float RemainingSeconds { get; private set; }
+        internal static bool CompositedAfterWeather { get; private set; }
         internal static long TargetBytes => (long)TargetWidth * TargetHeight * 12L;
+        internal static bool DrawsSite(uint siteId)
+        {
+            if (instance == null || RenderedFrame < Time.frameCount - 1) return false;
+            for (int i = 0; i < renderedSiteCount; i++) if (renderedSiteIds[i] == siteId) return true;
+            return false;
+        }
+        private static void MarkRendered()
+        {
+            RenderedFrame = Time.frameCount;
+            renderedSiteCount = instance != null ? VisibleSites : 0;
+            for (int i = 0; i < renderedSiteCount; i++) renderedSiteIds[i] = instance.siteIds[i];
+        }
 
         private void Awake()
         {
             if (Application.isBatchMode) return;
+            instance = this;
             WeatherVolumeDressing.WarmNoise();
             RenderPipelineManager.beginCameraRendering += BeginCamera;
         }
@@ -104,6 +121,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (cameraData == null || cameraData.renderType != CameraRenderType.Base) return;
             NativeCloudFallback(false);
             int count = 0;
+            Vector4 groundClearance = Vector4.zero;
             DispersedSites = 0; RemainingSeconds = 0f;
             // ponytail: two newest concurrent volumes bound fragment work; omitted sites keep their native cloud fallback.
             for (int i = Sa74Fallout.Sites.Count - 1; i >= 0; i--)
@@ -115,6 +133,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 Vector3 at = site.Position.ToLocalPosition();
                 if ((at - camera.transform.position).sqrMagnitude > 250000f * 250000f) continue;
                 siteIds[count] = site.Id;
+                groundClearance[count] = site.GroundClearance;
                 sites[count++] = new Vector4(at.x, Mathf.Max(at.y, Datum.LocalSeaY + 8f), at.z, age);
                 RemainingSeconds = Mathf.Max(RemainingSeconds, Sa74BlastShape.MaximumVisualAge - age);
             }
@@ -128,6 +147,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             NativeCloudFallback(RenderedFrame >= Time.frameCount - 1);
             material.SetInt("_Sa74Count", count);
             material.SetVectorArray("_Sa74Sites", sites);
+            material.SetVector("_Sa74Clearance", groundClearance);
             material.SetFloat("_Sa74ShockRadius", Sa74Fallout.ShockRadius);
             Vector3 sun = RenderSettings.sun != null ? -RenderSettings.sun.transform.forward : new Vector3(.45f, .65f, -.40f).normalized;
             material.SetVector("_Sa74Sun", sun);
@@ -135,6 +155,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             material.SetColor("_Sa74Fog", RenderSettings.fogColor.linear);
             pass.Bind(camera, material);
             cameraData.scriptableRenderer.EnqueuePass(pass);
+            cameraData.scriptableRenderer.EnqueuePass(pass.DeferredComposite);
         }
 
         private void NativeCloudFallback(bool hide, bool retireDispersed = true)
@@ -185,6 +206,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
         private void OnDestroy()
         {
+            if (instance == this) { instance = null; renderedSiteCount = 0; }
             RenderPipelineManager.beginCameraRendering -= BeginCamera;
             NativeCloudFallback(false, false); nativeClouds.Clear();
             NativeFallbackRenderers = NativeSuppressedRenderers = 0;
@@ -204,10 +226,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             private int requestedWidth, requestedHeight;
             private float retryAt;
             private long refusedBytes = -1;
+            private int marchedFrame = -1;
+            private bool deferComposite;
+            internal readonly ScriptableRenderPass DeferredComposite;
             internal MushroomPass()
             {
-                renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
+                // Native transparents stay in front if Weather is disabled, full-size or unavailable.
+                renderPassEvent = (RenderPassEvent)((int)RenderPassEvent.BeforeRenderingTransparents - 1);
                 ConfigureInput(ScriptableRenderPassInput.Depth);
+                DeferredComposite = new CompositePass(this);
             }
             internal void Bind(Camera view, Material shaderMaterial) { camera = view; material = shaderMaterial; }
             private bool Ensure(int width, int height)
@@ -246,21 +273,51 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 CommandBuffer cmd = CommandBufferPool.Get("SA-74N volumetric mushroom");
                 try
                 {
+                    cmd.DisableScissorRect();
                     targets[0] = color; targets[1] = depth;
                     cmd.SetRenderTarget(targets, color);
                     cmd.SetViewport(new Rect(0f, 0f, color.width, color.height));
                     cmd.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3);
-                    ScriptableRenderer renderer = renderingData.cameraData.renderer;
-                    cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
-                    cmd.SetViewport(camera.pixelRect);
-                    cmd.DrawProcedural(Matrix4x4.identity, material, 1, MeshTopology.Triangles, 3);
+                    deferComposite = WeatherCloudPass.HasResolved(camera);
+                    CompositedAfterWeather = deferComposite;
+                    RestoreTarget(cmd, ref renderingData);
+                    if (!deferComposite) cmd.DrawProcedural(Matrix4x4.identity, material, 1, MeshTopology.Triangles, 3);
                     context.ExecuteCommandBuffer(cmd);
-                    RenderedFrame = Time.frameCount;
+                    marchedFrame = Time.frameCount;
+                    if (!deferComposite) MarkRendered();
                 }
                 finally { CommandBufferPool.Release(cmd); }
             }
+            private static void RestoreTarget(CommandBuffer cmd, ref RenderingData renderingData)
+            {
+                ScriptableRenderer renderer = renderingData.cameraData.renderer;
+                cmd.SetRenderTarget(renderer.cameraColorTargetHandle, renderer.cameraDepthTargetHandle);
+                // pixelRect is in display pixels; URP's intermediate may be scaled (DLSS/renderScale).
+                RenderTextureDescriptor descriptor = renderingData.cameraData.cameraTargetDescriptor;
+                cmd.SetViewport(new Rect(0f, 0f, descriptor.width, descriptor.height));
+            }
+            private sealed class CompositePass : ScriptableRenderPass
+            {
+                private readonly MushroomPass owner;
+                internal CompositePass(MushroomPass owner) { this.owner = owner; renderPassEvent = RenderPassEvent.AfterRenderingTransparents; }
+                public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
+                {
+                    if (!owner.deferComposite || owner.marchedFrame != Time.frameCount || owner.camera != renderingData.cameraData.camera || owner.material == null) return;
+                    CommandBuffer cmd = CommandBufferPool.Get("SA-74N weather-ordered composite");
+                    try
+                    {
+                        cmd.DisableScissorRect();
+                        RestoreTarget(cmd, ref renderingData);
+                        cmd.DrawProcedural(Matrix4x4.identity, owner.material, 1, MeshTopology.Triangles, 3);
+                        context.ExecuteCommandBuffer(cmd);
+                        MarkRendered();
+                    }
+                    finally { CommandBufferPool.Release(cmd); }
+                }
+            }
             internal void ReleaseTargets()
             {
+                marchedFrame = -1; deferComposite = false; CompositedAfterWeather = false;
                 if (color != null) { FxRtPool.Disown(color); color.Release(); UnityEngine.Object.Destroy(color); }
                 if (depth != null) { FxRtPool.Disown(depth); depth.Release(); UnityEngine.Object.Destroy(depth); }
                 color = depth = null;

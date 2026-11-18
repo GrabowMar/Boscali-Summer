@@ -10,15 +10,16 @@
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"fixture"},"store":"fixture"},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"detonate"},"store":"blast"},
     {"op":"wait","seconds":1},
-    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":100},"store":"earlyAge"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":25},"store":"earlyAge"},
     {"op":"wait","seconds":2},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"early"},
-    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":200},"store":"distantAge"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":70},"store":"distantAge"},
     {"op":"wait","seconds":10},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"distant"},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"age","seconds":600},"store":"finalAge"},
     {"op":"wait","seconds":15},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"status"},"store":"final"},
+    {"op":"call","method":"BoscaliSummer.Vanguard.Sa74DestructionAutomation.Step","args":{"action":"exposure"},"store":"exposure"},
     {"op":"call","method":"BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step","args":{"action":"reset"}},
     {"op":"wait","seconds":0.1},
     {"op":"end"}
@@ -35,6 +36,8 @@
     {"check":"result_equals","path":"final.nativeForestRemainingCount","value":0},
     {"check":"result_equals","path":"final.verificationPending","value":false},
     {"check":"result_below","path":"final.maxDeathsPerFrame","max":8.01},
-    {"check":"result_equals","path":"final.failures","value":0}
+    {"check":"result_equals","path":"final.failures","value":0},
+    {"check":"result_above","path":"exposure.visibleHitPointsLost","min":0.01},
+    {"check":"result_equals","path":"exposure.shelteredHitPointsLost","value":0}
   ]
 }

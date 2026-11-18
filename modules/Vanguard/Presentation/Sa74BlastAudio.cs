@@ -99,8 +99,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             owner.arrivals.Add(new Arrival { Site = site, LastAge = age });
         }
 
-        internal static float ArrivalSeconds(float distance) => Math.Max(0f,
-            (distance - (float)Math.Pow(Sa74Fallout.YieldKilotons * 1e6, .3333) * .5f) / 340f);
+        internal static float ArrivalSeconds(float distance) => Domain.Sa74BlastShape.ArrivalSeconds(distance);
 
         private void EnsureAudio()
         {

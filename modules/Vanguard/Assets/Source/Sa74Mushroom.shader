@@ -14,10 +14,11 @@ Shader "Boscali/SA74Mushroom"
         #include "UnityCG.cginc"
         sampler3D _Sa74Noise;
         sampler2D _CameraDepthTexture, _Sa74Color, _Sa74Depth;
+        sampler2D _BoscaliCloudCover, _BoscaliCloudLayerDepth;
         float4x4 _Sa74Frustum;
         float3 _Sa74Camera, _Sa74Sun, _Sa74SunColor, _Sa74Fog;
-        float4 _Sa74Sites[2], _Sa74Size;
-        float _Sa74ShockRadius;
+        float4 _Sa74Sites[2], _Sa74Size, _Sa74Clearance;
+        float _Sa74ShockRadius, _BoscaliCloudCoverFrame;
         int _Sa74Count;
         struct Varyings { float4 pos:SV_POSITION; float2 uv:TEXCOORD0; };
         Varyings Vert(uint id:SV_VertexID)
@@ -28,7 +29,12 @@ Shader "Boscali/SA74Mushroom"
             return o;
         }
         float Growth(float age) { return saturate(1.0-exp(-max(age,0.0)/72.0)); }
-        float Dispersion(float age) { return smoothstep(420.0,600.0,age); }
+        float CloudHeight(float age, float grow)
+        {
+            // The young head is entrained through the fireball, then develops its full towering stem.
+            return lerp(8000.0,58000.0,grow)*lerp(.50,1.0,smoothstep(12.0,65.0,age));
+        }
+        float Dispersion(float age) { return smoothstep(600.0,960.0,age); }
         float FlashPulse(float age)
         {
             // Keep the source's two light peaks paired with Domain/Sa74Flash.Pulse.
@@ -40,10 +46,11 @@ Shader "Boscali/SA74Mushroom"
         {
             // Rise precedes lateral spreading: the young head stays round before the mature anvil develops.
             float spread=lerp(.42,1.0,smoothstep(18.0,170.0,age));
-            return lerp(6000.0,48000.0,grow*spread);
+            return lerp(6000.0,48000.0,grow*spread)*lerp(.66,1.0,smoothstep(12.0,65.0,age));
         }
         static float gBroadLod=0.0;
         static float gSmallLod=0.0;
+        static float gGroundClearance=0.0;
         float SceneEye(float2 uv)
         {
             float raw=tex2D(_CameraDepthTexture,uv).r;
@@ -56,14 +63,14 @@ Shader "Boscali/SA74Mushroom"
         }
         float Density(float3 p, float age)
         {
-            if(age<=2.5 || age>=600.0) return 0.0;
+            if(age<=2.5 || age>=960.0) return 0.0;
             float disperse=Dispersion(age);
             // The stabilized head lifts into the atmosphere and spreads along the wind as its coherent mass breaks apart.
             p.xz-=float2(10000.0,3500.0)*disperse;
             p.xz/=float2(1.0+disperse*.85,1.0+disperse*.30);
             p.y-=18000.0*disperse;
             float grow = Growth(age);
-            float height = lerp(8000.0, 58000.0, grow);
+            float height = CloudHeight(age,grow);
             float radius = CapRadius(age,grow);
             float mature=smoothstep(20.0,180.0,age);
             float capY = height * .755, capDepth = height * lerp(.265,.24,mature);
@@ -91,15 +98,18 @@ Shader "Boscali/SA74Mushroom"
             float crown=(1.0-dot(crownQ,crownQ))*.90;
             float2 roll = float2((radial-radius*.64)/(radius*.30),(p.y-(capY-capDepth*.12))/(height*.185));
             float torus = 1.0-dot(roll,roll);
-            float y = saturate(p.y / max(capY, 1.0));
+            float y = saturate((p.y+gGroundClearance) / max(capY+gGroundClearance, 1.0));
             float stemRadius = lerp(1400.0, 6000.0, grow) * (.93 + pow(abs(2.0*y-1.0),1.5)*.28 + pow(y,4.0)*.90);
+            float detached=smoothstep(90.0,180.0,age);
+            float entrainedHeight=p.y+gGroundClearance+(billow-.5)*13000.0;
+            stemRadius*=lerp(1.0,.20+.80*smoothstep(4500.0,18000.0,entrainedHeight),detached);
             float2 sway = float2(sin(p.y/6500.0+age*.006), cos(p.y/9500.0-age*.004)) * grow * 1100.0;
             float stem = (1.0-length(p.xz-sway)/stemRadius) * 1.5;
-            stem = min(stem, (p.y+50.0)/1000.0);
+            stem = min(stem, (p.y+gGroundClearance+50.0)/1000.0);
             stem = min(stem, (capY+capDepth*.6-p.y)/1800.0);
-            float liftOff=smoothstep(90.0,180.0,age)*(1.0-smoothstep(3000.0,11000.0,p.y));
-            stem=lerp(stem,-2.0,max(liftOff,smoothstep(300.0,450.0,age)));
-            float baseSkirt = (1.0-length(float3(p.x/lerp(3500.0,18000.0,grow),p.y/2200.0,p.z/lerp(3500.0,18000.0,grow)))) * .7;
+            float liftOff=detached*(1.0-smoothstep(3000.0,11000.0,entrainedHeight));
+            stem=lerp(stem,-2.0,max(liftOff,smoothstep(600.0,840.0,age)));
+            float baseSkirt = (1.0-length(float3(p.x/lerp(3500.0,18000.0,grow),(p.y+gGroundClearance)/2200.0,p.z/lerp(3500.0,18000.0,grow)))) * .7;
             baseSkirt=lerp(baseSkirt,-2.0,smoothstep(60.0,150.0,age));
             float envelope = max(max(max(cap,crown),torus*.90),max(stem,baseSkirt));
             // Large coherent billows; fine erosion belongs at the boundary rather than perforating the whole head.
@@ -107,7 +117,7 @@ Shader "Boscali/SA74Mushroom"
             float density=saturate(shape*1.65-erosion*.22*(1.0-shape)*(1.0-shape));
             float fragments=smoothstep(disperse*.82,disperse*.82+.18,broad.r*.65+small.r*.35);
             density*=lerp(1.0,fragments,disperse);
-            density *= smoothstep(-80.0,80.0,p.y);
+            density *= smoothstep(-80.0,80.0,p.y+gGroundClearance);
             return density * smoothstep(2.5,28.0,age);
         }
         float4 Fireball(float3 p, float age)
@@ -115,16 +125,16 @@ Shader "Boscali/SA74Mushroom"
             if(age>=65.0) return 0.0;
             float cooling=1.0-smoothstep(30.0,65.0,age);
             float radius=5000.0*(1.0-exp(-(max(age,0.0)+.08)/1.6));
-            float lift=radius*.35+max(age-1.0,0.0)*140.0;
-            float cloudHeight=lerp(8000.0,58000.0,Growth(age));
+            float lift=radius*.35*(1.0-smoothstep(500.0,4000.0,gGroundClearance))+max(age-1.0,0.0)*140.0;
+            float cloudHeight=CloudHeight(age,Growth(age));
             lift=lerp(lift,cloudHeight*.63,smoothstep(8.0,34.0,age));
             float3 relative=p-float3(0.0,lift,0.0);
             float q=length(relative)/max(radius,1.0);
-            if(q>1.45 || p.y< -150.0) return 0.0;
+            if(q>1.45 || p.y+gGroundClearance< -150.0) return 0.0;
             float noise=tex3Dlod(_Sa74Noise,float4((relative+float3(age*32.0,-age*44.0,0.0))/7200.0,max(0.0,gSmallLod-1.0))).r;
             float core=saturate((1.0-q+(noise-.5)*.075)*12.0);
             float halo=exp(-max(q-.94,0.0)*14.0)*.055;
-            float density=(core*3.0+halo)*cooling*smoothstep(-150.0,80.0,p.y);
+            float density=(core*3.0+halo)*cooling*smoothstep(-150.0,80.0,p.y+gGroundClearance);
             float young=1.0-smoothstep(6.0,24.0,age);
             float edge=smoothstep(.45,1.18,q);
             float3 surface=lerp(float3(1.0,.25,.035),float3(1.0,.86,.58),young);
@@ -135,13 +145,24 @@ Shader "Boscali/SA74Mushroom"
             float brilliance=(64.0*exp(-age/12.0)+3.0)*cooling*sourcePulse;
             return float4(color*brilliance,density);
         }
-        float DustFront(float age) { return min(max(75000.0,_Sa74ShockRadius),2100.0+340.0*max(age,0.0)); }
+        float FrontArrival(float distance)
+        {
+            float travel=max(0.0,distance-2100.0), firstLeg=12.0*1650.0;
+            return min(travel,firstLeg)/1650.0+max(0.0,travel-firstLeg)/850.0;
+        }
+        float DustFront(float age)
+        {
+            return min(max(75000.0,_Sa74ShockRadius),2100.0+min(max(age,0.0),12.0)*1650.0+max(age-12.0,0.0)*850.0);
+        }
         float2 GroundDust(float3 p, float age)
         {
+            p.y+=gGroundClearance;
             if(age<=6.0 || age>=360.0 || p.y>2600.0 || p.y< -1500.0) return 0.0;
-            float radial=length(p.xz), front=DustFront(age);
+            float radial=length(p.xz), sphere=DustFront(age);
+            if(sphere<=gGroundClearance) return 0.0;
+            float front=sqrt(max(0.0,sphere*sphere-gGroundClearance*gGroundClearance));
             if(radial>front+4000.0) return 0.0;
-            float arrival=age-max(0.0,(radial-2100.0)/340.0);
+            float arrival=age-FrontArrival(sqrt(radial*radial+gGroundClearance*gGroundClearance));
             float fade=smoothstep(6.0,12.0,age)*(1.0-smoothstep(240.0,360.0,age));
             float2 direction=p.xz/max(radial,1.0);
             float3 flow=float3(p.x-direction.x*age*48.0,p.y*2.2-age*21.0,p.z-direction.y*age*48.0);
@@ -149,8 +170,14 @@ Shader "Boscali/SA74Mushroom"
             float4 fine=tex3Dlod(_Sa74Noise,float4(flow/4500.0+.31,max(0.0,gSmallLod)));
             float billow=coarse.b*.62+fine.b*.38;
             float height=850.0+billow*1350.0;
+            // An airburst first sweeps the surface; it does not instantly recruit a uniform disc of dirt.
+            float airborne=smoothstep(500.0,4000.0,gGroundClearance);
+            float recruitment=smoothstep(6.0,42.0,age-FrontArrival(gGroundClearance));
+            float recruitedPatches=smoothstep(.24,.62,coarse.r*.7+fine.g*.3);
+            float dustRecruitment=lerp(1.0,recruitment*(.15+.85*recruitedPatches),airborne);
+            height*=lerp(1.0,.25+.75*sqrt(recruitment),airborne);
             float ground=smoothstep(-1500.0,-650.0,p.y);
-            float maximumAge=(max(75000.0,_Sa74ShockRadius)-2100.0)/340.0;
+            float maximumAge=FrontArrival(max(75000.0,_Sa74ShockRadius));
             float wall=exp(-pow((radial-front)/1850.0,2.0))*1.65*(1.0-smoothstep(maximumAge+8.0,maximumAge+40.0,age));
             float wake=smoothstep(-2.0,8.0,arrival)*exp(-max(arrival-30.0,0.0)/12.0)*1.05;
             float inner=smoothstep(15.0,55.0,arrival)*.035;
@@ -159,7 +186,7 @@ Shader "Boscali/SA74Mushroom"
             float wakeHeight=1.0-smoothstep(lerp(80.0,height*.20,recent),lerp(350.0,height*.80,recent),p.y);
             float innerHeight=1.0-smoothstep(80.0,450.0,p.y);
             float turbulent=.65+billow*.65+fine.r*.20;
-            float density=(wall*wallHeight+wake*wakeHeight+inner*innerHeight)*turbulent*ground*fade;
+            float density=(wall*wallHeight+wake*wakeHeight+inner*innerHeight)*turbulent*ground*fade*dustRecruitment;
             return float2(density,billow);
         }
         float2 BoxHit(float3 origin, float3 direction, float3 lo, float3 hi)
@@ -186,23 +213,28 @@ Shader "Boscali/SA74Mushroom"
             {
                 if(site>=_Sa74Count) break;
                 float age=_Sa74Sites[site].w;
-                if(age>=600.0) continue;
+                if(age>=960.0) continue;
+                gGroundClearance=max(0.0,_Sa74Clearance[site]);
                 float disperse=Dispersion(age);
                 float grow=Growth(age);
-                float height=lerp(8000.0,58000.0,grow), radius=CapRadius(age,grow)*1.20;
+                float height=CloudHeight(age,grow), radius=CapRadius(age,grow)*1.20;
                 radius=radius*(1.0+disperse*.85)+disperse*10000.0;
+                if(age<65.0) radius=max(radius,7500.0);
                 if(age>6.0 && age<360.0) radius=max(radius,DustFront(age)+4000.0);
                 float3 origin=_Sa74Camera-_Sa74Sites[site].xyz;
-                float2 interval=BoxHit(origin,direction,float3(-radius,-1500.0,-radius),float3(radius,height*1.12+disperse*18000.0,radius));
+                float top=height*1.12+disperse*18000.0;
+                if(age<65.0) top=max(top,height*.63+7500.0);
+                float2 interval=BoxHit(origin,direction,float3(-radius,-gGroundClearance-1500.0,-radius),float3(radius,top,radius));
                 float begin=max(interval.x,0.0), end=min(interval.y,sceneDistance);
                 if(end<=begin) continue;
-                int steps=(int)clamp(ceil((end-begin)/230.0),32.0,age>=420.0?64.0:96.0);
+                int steps=(int)clamp(ceil((end-begin)/230.0),32.0,age>=600.0?64.0:96.0);
                 float stepLength=(end-begin)/steps;
                 gBroadLod=max(0.0,log2(max(1.0,stepLength*64.0/44000.0)));
                 gSmallLod=max(0.0,log2(max(1.0,stepLength*64.0/13000.0)));
                 float jitter=frac(sin(dot(floor(uv*_Sa74Size.xy),float2(12.9898,78.233)))*43758.5453);
                 float distance=begin+stepLength*(.15+jitter*.70);
-                float heat=pow(1.0-smoothstep(20.0,105.0,age),2.0);
+                // The luminous globe supplies the first heat. A separately white-hot cap reads as a detached second explosion.
+                float heat=pow(1.0-smoothstep(20.0,105.0,age),2.0)*smoothstep(12.0,32.0,age);
                 float3 beforeColor=accumulated.rgb;
                 float beforeTransmittance=transmittance;
                 [loop] for(int i=0;i<96;i++)
@@ -216,6 +248,8 @@ Shader "Boscali/SA74Mushroom"
                     float density=cloudDensity+fireball.a+dustDensity;
                     if(density>.002)
                     {
+                        // First visible volume point, in the same eye-space units as Weather's layer depth.
+                        result.depth=min(result.depth,distance/rayLength);
                         float optical=density*stepLength*.00072;
                         float alpha=1.0-exp(-optical);
                         float3 radiance=fireball.rgb*fireball.a;
@@ -235,7 +269,7 @@ Shader "Boscali/SA74Mushroom"
                             float forward=pow(saturate(dot(direction,-_Sa74Sun)),8.0);
                             float condensation=smoothstep(height*.45,height*.94,p.y)*smoothstep(18.0,100.0,age);
                             float3 albedo=lerp(float3(.49,.43,.35),float3(.92,.95,.98),condensation);
-                            float3 skyAmbient=float3(.075,.085,.105)*lerp(.55,1.0,saturate(p.y/height));
+                            float3 skyAmbient=float3(.105,.12,.145)*lerp(.65,1.0,saturate(p.y/height));
                             float3 smoke=albedo*(skyAmbient+_Sa74SunColor*(.035+light*(1.05+forward*2.2)));
                             // Residual incandescence is inside the young head; the outer rolling rim becomes ordinary condensation.
                             float3 hotQ=float3(p.x/(radius*.48),(p.y-height*.605)/(height*.14),p.z/(radius*.48));
@@ -262,17 +296,35 @@ Shader "Boscali/SA74Mushroom"
         }
         float4 Composite(Varyings input):SV_Target
         {
-            float eye=SceneEye(input.uv);
+            // Native camera/Weather targets follow ComputeScreenPos's projection flip.
+            // The two SA74 passes share their own raw fullscreen UV convention.
+            float2 screenUV=input.uv;
+            if(_ProjectionParams.x<0.0) screenUV.y=1.0-screenUV.y;
+            float eye=SceneEye(screenUV);
             float4 sum=0.0;float weight=0.0;
             [unroll] for(int y=-1;y<=1;y+=2)
             [unroll] for(int x=-1;x<=1;x+=2)
             {
                 float2 uv=input.uv+float2(x,y)*_Sa74Size.zw*.45;
                 float depth=tex2D(_Sa74Depth,uv).r;
-                float w=rcp(1.0+abs(depth-eye)/max(2.0,eye*.012));
+                if(depth>eye+max(2.0,eye*.012)) continue;
+                // A layer in front of terrain remains visible; a low-res neighbour behind it is rejected.
+                float w=rcp(1.0+max(depth-eye,0.0)/max(2.0,eye*.012));
                 sum+=tex2D(_Sa74Color,uv)*w;weight+=w;
             }
-            return sum/max(weight,.00001);
+            float4 volume=sum/max(weight,.00001);
+            if(_BoscaliCloudCoverFrame>.5 && volume.a>.0001)
+            {
+                float4 weather=tex2D(_BoscaliCloudCover,screenUV);
+                float cloudEye=tex2D(_BoscaliCloudLayerDepth,screenUV).g;
+                float volumeEye=tex2D(_Sa74Depth,input.uv).r;
+                float separation=max(400.0,min(cloudEye,volumeEye)*.025);
+                float foreground=smoothstep(-separation,separation,volumeEye-cloudEye);
+                // Weather is already in the framebuffer. Preserve its foreground radiance while
+                // attenuating only the new layer behind it; ordinary alpha attenuation darkened it twice.
+                volume.rgb=volume.rgb*(1.0-foreground*weather.a)+foreground*volume.a*weather.rgb;
+            }
+            return volume;
         }
         ENDHLSL
         Pass

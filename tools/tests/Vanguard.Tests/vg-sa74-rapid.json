@@ -201,7 +201,7 @@
     {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
-      "args": { "action": "sample", "seconds": 45, "distance": 18500, "height": 450, "side": -1000, "aimHeight": 1800, "fov": 90 }
+      "args": { "action": "sample", "seconds": 10, "distance": 20500, "height": 450, "side": -1000, "aimHeight": 1800, "fov": 90 }
     },
     { "op": "capture", "name": "06b-close-pressure-wall", "hide_ui": true },
     {
@@ -213,7 +213,7 @@
     {
       "op": "call",
       "method": "BoscaliSummer.Vanguard.Sa74FalloutAutomation.Step",
-      "args": { "action": "sample", "seconds": 70, "distance": 16000, "height": 300, "side": -1000, "aimHeight": 1600, "fov": 95 }
+      "args": { "action": "sample", "seconds": 18, "distance": 23500, "height": 300, "side": -1000, "aimHeight": 1600, "fov": 95 }
     },
     { "op": "capture", "name": "06c-dense-dust-wake", "hide_ui": true },
     {

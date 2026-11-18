@@ -292,11 +292,12 @@ Shader "Boscali/FlightCloudComposite"
             // Depth-tested bilinear history at a target position. Bilinear history must
             // reject foreground neighbours; testing only one depth texel would still let
             // their empty colour bleed through interpolation.
-            float4 HistoryAt(float2 position, float pointDepth, out float weight)
+            float4 HistoryAt(float2 position, float pointDepth, out float weight, out float cloudEye)
             {
                 float2 historyPixel = position * _CloudLowResSize.xy - 0.5;
                 float2 historyBase = floor(historyPixel), fraction = frac(historyPixel);
                 float4 history = 0.0;
+                float cloudSum = 0.0, cloudWeight = 0.0;
                 weight = 0.0;
                 [unroll]
                 for (int y = 0; y <= 1; y++)
@@ -305,15 +306,21 @@ Shader "Boscali/FlightCloudComposite"
                     for (int x = 0; x <= 1; x++)
                     {
                         float2 huv = (historyBase + float2(x, y) + 0.5) * _CloudLowResSize.zw;
-                        float depth = min(tex2Dlod(_CloudHistoryDepth, float4(huv, 0, 0)).r, pointDepth);
+                        float2 depths = tex2Dlod(_CloudHistoryDepth, float4(huv, 0, 0)).rg;
+                        float depth = min(depths.r, pointDepth);
                         float difference = abs(depth - pointDepth) / max(1.0, min(depth, pointDepth));
                         if (difference >= 0.1) continue;
                         float w = (x == 0 ? 1.0 - fraction.x : fraction.x) *
                             (y == 0 ? 1.0 - fraction.y : fraction.y);
-                        history += tex2Dlod(_CloudHistoryTex, float4(huv, 0, 0)) * w;
+                        float4 colour = tex2Dlod(_CloudHistoryTex, float4(huv, 0, 0));
+                        history += colour * w;
+                        float visible = colour.a > 0.002 ? colour.a * w : 0.0;
+                        cloudSum += depths.g * visible;
+                        cloudWeight += visible;
                         weight += w;
                     }
                 }
+                cloudEye = cloudWeight > 1e-5 ? cloudSum / cloudWeight : pointDepth;
                 return weight > 1e-5 ? history / weight : 0.0;
             }
 
@@ -321,9 +328,9 @@ Shader "Boscali/FlightCloudComposite"
             {
                 ResolveOut o;
                 o.colour = colour;
-                // Same RFloat budget: the nearest relevant depth, raw scene depth for
-                // empty or thin rays and cloud depth for rays the cloud closes.
-                o.depth = float4(colour.a > 0.97 ? min(sceneDepth, cloudEye) : sceneDepth, 0, 0, 0);
+                // R keeps the established upsample/reprojection rejection. G is independent:
+                // the actual cloud eye distance even for translucent layers.
+                o.depth = float4(colour.a > 0.97 ? min(sceneDepth, cloudEye) : sceneDepth, cloudEye, 0, 0);
                 return o;
             }
 
@@ -398,9 +405,13 @@ Shader "Boscali/FlightCloudComposite"
                 // history instead of drawing it empty, which blinked the horizon line every checker cycle.
                 if (total <= 1e-5)
                 {
-                    float keptWeight;
-                    float4 kept = historyUsable ? HistoryAt(uv, sceneDepth, keptWeight) : 0.0;
-                    return Resolved(historyUsable && keptWeight > 1e-5 ? kept : 0.0, sceneDepth, sceneDepth);
+                    float keptWeight = 0.0, keptEye = sceneDepth;
+                    float4 kept = 0.0;
+                    if (historyUsable) kept = HistoryAt(uv, sceneDepth, keptWeight, keptEye);
+                    ResolveOut retained = Resolved(keptWeight > 1e-5 ? kept : 0.0, sceneDepth, sceneDepth);
+                    // Preserve the established R edge fallback; G must follow the retained visible colour.
+                    retained.depth.g = keptEye;
+                    return retained;
                 }
                 float distance = distanceWeight > 1e-5 ? distanceSum / distanceWeight : freshData.g;
                 // One marched texel is one dithered sample: on its own it is grain. The nine-sample blend around it is the same sky with the dither averaged out.
@@ -421,8 +432,8 @@ Shader "Boscali/FlightCloudComposite"
                 // clip.w is this cloud point's previous eye depth. A changed terrain distance
                 // behind it cannot invalidate the visible cloud.
                 float pointDepth = upsampled.a > 0.002 ? clip.w : sceneDepth;
-                float historyWeight;
-                float4 history = HistoryAt(previous, pointDepth, historyWeight);
+                float historyWeight, historyEye;
+                float4 history = HistoryAt(previous, pointDepth, historyWeight, historyEye);
                 // Sky streaming out from the point the camera flies toward was hidden behind
                 // the followed aircraft last frame: every frame those texels lost history and
                 // drew single-frame fallback, a fan of radial streaks from the aircraft. Use
@@ -431,7 +442,7 @@ Shader "Boscali/FlightCloudComposite"
                 bool occludedHistory = false;
                 if (historyWeight <= 1e-5)
                 {
-                    history = HistoryAt(uv, pointDepth, historyWeight);
+                    history = HistoryAt(uv, pointDepth, historyWeight, historyEye);
                     occludedHistory = true;
                 }
                 if (historyWeight <= 1e-5) return Resolved(fallback, sceneDepth, cloudDepth);

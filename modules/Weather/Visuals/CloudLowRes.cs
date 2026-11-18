@@ -24,6 +24,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         /// <summary>The colour target as a global: its alpha is the cloud cover over the sky (SunShaftsPass).</summary>
         internal static readonly int CoverId = Shader.PropertyToID("_BoscaliCloudCover");
         internal static readonly int CoverFrameId = Shader.PropertyToID("_BoscaliCloudCoverFrame");
+        internal static readonly int LayerDepthId = Shader.PropertyToID("_BoscaliCloudLayerDepth");
         private static readonly int DepthId = Shader.PropertyToID("_CloudLowResDepth");
         private static readonly int SizeId = Shader.PropertyToID("_CloudLowResSize");
         private static readonly int QuarterSizeId = Shader.PropertyToID("_CloudQuarterSize");
@@ -41,7 +42,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
         private bool allocationRefused;
         private long refusedPoolBytes;
         private float retryAt;
-        internal long TargetBytes => (long)Width * Height * 24L +
+        internal long TargetBytes => (long)Width * Height * 32L +
             (long)((Width + 1) / 2) * ((Height + 1) / 2) * 16L;
 
         internal int Width { get; private set; }
@@ -69,14 +70,14 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 Width = w; Height = h;
                 colour = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds");
                 history = Target(w, h, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds History");
-                // Only the nearest relevant depth survives resolve. Two RFloat targets cost the same
-                // as the old single RGFloat target and allow disocclusion rejection.
-                depth = Target(w, h, RenderTextureFormat.RFloat, FilterMode.Point, "Boscali Clouds Depth");
-                historyDepth = Target(w, h, RenderTextureFormat.RFloat, FilterMode.Point, "Boscali Clouds History Depth");
+                // R retains the silhouette/scene depth used for rejection; G retains the actual cloud
+                // eye distance, including thin cloud, so other volumes can compose behind it.
+                depth = Target(w, h, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Depth");
+                historyDepth = Target(w, h, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds History Depth");
                 quarterColour = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.ARGBHalf, FilterMode.Bilinear, "Boscali Clouds Quarter");
                 quarterData = Target((w + 1) / 2, (h + 1) / 2, RenderTextureFormat.RGFloat, FilterMode.Point, "Boscali Clouds Quarter Depth");
                 HistoryValid = false;
-                if (TargetBytes <= 16L * 1024 * 1024 && Acquire(colour) && Acquire(history) && Acquire(depth) && Acquire(historyDepth) &&
+                if (TargetBytes <= 20L * 1024 * 1024 && Acquire(colour) && Acquire(history) && Acquire(depth) && Acquire(historyDepth) &&
                     Acquire(quarterColour) && Acquire(quarterData))
                 { allocationRefused = false; return true; }
                 Release();
@@ -101,6 +102,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             composite.SetTexture(DepthId, depth);
             // The sun shafts read the cloud cover (alpha) from here; a destroyed target reads as "no clouds".
             cmd.SetGlobalTexture(CoverId, colour);
+            cmd.SetGlobalTexture(LayerDepthId, depth);
             targets[0] = colour;
             targets[1] = depth;
             if (temporal)
@@ -109,6 +111,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 targets[0] = quarterColour;
                 targets[1] = quarterData;
                 cmd.SetRenderTarget(targets, targets[0]);
+                cmd.SetViewport(new Rect(0f, 0f, quarterColour.width, quarterColour.height));
                 cmd.DrawProcedural(Matrix4x4.identity, march, MarchPass, MeshTopology.Triangles, 3);
                 composite.SetTexture(QuarterColourId, quarterColour);
                 composite.SetTexture(QuarterDataId, quarterData);
@@ -117,6 +120,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 targets[0] = colour;
                 targets[1] = depth;
                 cmd.SetRenderTarget(targets, targets[0]);
+                cmd.SetViewport(new Rect(0f, 0f, Width, Height));
                 cmd.DrawProcedural(Matrix4x4.identity, composite, ResolvePass, MeshTopology.Triangles, 3);
                 cmd.CopyTexture(colour, history);
                 cmd.CopyTexture(depth, historyDepth);
@@ -125,6 +129,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             else
             {
                 cmd.SetRenderTarget(targets, targets[0]);
+                cmd.SetViewport(new Rect(0f, 0f, Width, Height));
                 cmd.DrawProcedural(Matrix4x4.identity, march, MarchPass, MeshTopology.Triangles, 3);
                 HistoryValid = false;
             }

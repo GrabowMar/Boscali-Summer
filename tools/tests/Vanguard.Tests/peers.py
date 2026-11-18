@@ -66,6 +66,18 @@ def exercise(base, expected, names, pids, timeout, report):
     check("remote_client_cannot_invoke_host_fixture", rejected)
     denied = call(names[1], "TryClientDetonation")
     check("fallout_detonation_rejects_remote_client", not denied["active"] and denied["events"] == 0)
+    denied_release = call(names[1], "TryClientRelease")
+    check("remote_client_cannot_publish_release", not denied_release["radio"]["blocking"] and denied_release["radio"]["drop"] == 0)
+    call(names[0], "TriggerRelease")
+    pair = wait_pair(names, pids, lambda h, c: h["radio"]["drop"] == c["radio"]["drop"] == 1
+                     and all(s["radio"]["blocking"] and not s["radio"]["active"] for s in (h, c)))
+    history["release"] = pair
+    check("server_release_warning_state_replicates_before_impact", True, peers=pair)
+    time.sleep(3)
+    call(names[1], "ForgetClientState")
+    pair = wait_pair(names, pids, lambda h, c: c["radio"]["drop"] == 1 and c["radio"]["blocking"])
+    history["release_recovery"] = pair
+    check("old_release_snapshot_recovers_without_warning_replay", pair[1]["radio"]["emergencyCalls"] == 0, peers=pair)
     call(names[0], "PrepareDestructionFixture")
     building_pair = wait_pair(names, pids, lambda h, c: h["standing"] and c["standing"]
                              and h["persistentId"] == c["persistentId"] != 0
@@ -83,6 +95,7 @@ def exercise(base, expected, names, pids, timeout, report):
                      and all(s["fallout"] and s["fallout"]["tint"] and s["fallout"]["ash"] for s in (h, c)))
     history["detonation"] = pair
     check("custom_site_epoch_and_effects_replicate", len(pair[0]["sites"]) == 1)
+    check("impact_radio_timing_replicates", all(s["radio"]["active"] and 630 < s["radio"]["silenceRemaining"] <= 648 for s in pair), peers=[s["radio"] for s in pair])
     before = pair[0]["sites"][0]["age"]
     pair = wait_pair(names, pids, lambda h, c: same_sites(h, c) and h["sites"][0]["age"] > before + 6
                      and all(s["fallout"]["winterBlend"] > .01 and s["fallout"]["snowEmitting"]
@@ -98,6 +111,7 @@ def exercise(base, expected, names, pids, timeout, report):
     history["recovery"] = pair
     check("periodic_snapshot_recovers_missed_aftermath", len(pair[1]["sites"]) == 1)
     check("old_snapshot_recovery_does_not_repeat_native_blast", pair[1]["fallout"]["nativeBlasts"] == 0)
+    check("late_impact_snapshot_does_not_replay_panic", pair[1]["radio"]["active"] and pair[1]["radio"]["emergencyCalls"] == 0)
     denied = call(names[1], "TryClientDetonation")
     pair = wait_pair(names, pids, lambda h, c: same_sites(h, c) and h["events"] == 1)
     history["final"] = pair
@@ -107,6 +121,7 @@ def exercise(base, expected, names, pids, timeout, report):
                      and all(s["fallout"] and not s["fallout"]["tint"] and not s["fallout"]["ash"] for s in (h, c)))
     history["reset"] = pair
     check("scene_reset_replicates_and_removes_aftermath", not pair[1]["active"] and len(pair[1]["sites"]) == 0)
+    check("scene_reset_clears_release_and_radio_sequence", all(not s["radio"]["blocking"] and s["radio"]["drop"] == 0 for s in pair))
     report["evidence"]["custom_mod_replication"] = "passed"
     report["ok"] = all(c["ok"] for c in checks)
 

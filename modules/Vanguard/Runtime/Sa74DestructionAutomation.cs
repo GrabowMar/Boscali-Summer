@@ -23,6 +23,7 @@ namespace BoscaliSummer.Vanguard
                 !GameAccess.IsServer() || GameManager.gameState != GameState.SinglePlayer)
                 return Failure("Sa74DestructionAutomation", "Step", "requires a hosted single-player nomodkit scenario");
             string action = Text(args, "action") ?? "status";
+            if (action == "exposure") return Exposure();
             if (action == "fixture") Prepare();
             if (action == "detonate")
             {
@@ -65,6 +66,30 @@ namespace BoscaliSummer.Vanguard
             outside = Spawn(definition, "SA74_DestructionOutside", outsideDistance);
             if (near == null || distant == null || outside == null) throw new InvalidOperationException("Native building spawn failed");
             prepared = true;
+        }
+
+        private static Dictionary<string, object> Exposure()
+        {
+            BuildingDefinition definition = GameAccess.EncyclopediaOrNull.buildings.First(d => d != null && d.unitPrefab != null &&
+                d.unitPrefab.GetComponentInChildren<UnitPart>() != null && d.unitPrefab.GetComponent<Building>() != null);
+            Vector3 eye = origin.ToLocalPosition() + Vector3.up * 7000f;
+            Building SpawnAt(string name, float x) => NetworkSceneSingleton<Spawner>.i.SpawnBuilding(definition.unitPrefab,
+                (eye + Vector3.right * x).ToGlobalPosition(), Quaternion.identity, FactionRegistry.HqFromName("Boscali"), null, name, false, null);
+            var exposed = SpawnAt("SA74_Exposed", 4500f);
+            var sheltered = SpawnAt("SA74_Sheltered", -4500f);
+            var cover = new GameObject("SA74 exposure fixture cover") { layer = PhysicsLayers.Statics };
+            try
+            {
+                cover.transform.position = eye - Vector3.right * 2000f;
+                cover.AddComponent<BoxCollider>().size = new Vector3(50f, 1500f, 1500f);
+                Physics.SyncTransforms();
+                float Health(Building unit) => unit.GetComponentsInChildren<UnitPart>().Sum(p => p.hitPoints);
+                float visibleHealth = Health(exposed), shieldedHealth = Health(sheltered);
+                Sa74Fallout.Detonate(eye, null);
+                return new Dictionary<string, object> { ["visibleHitPointsLost"] = visibleHealth - Health(exposed),
+                    ["shelteredHitPointsLost"] = shieldedHealth - Health(sheltered) };
+            }
+            finally { UnityEngine.Object.Destroy(cover); }
         }
 
         private static Building Spawn(BuildingDefinition definition, string name, float distance)

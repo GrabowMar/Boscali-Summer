@@ -15,6 +15,15 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
     {
         private const int MaximumSites = 2;
         private readonly List<Rig> rigs = new List<Rig>(MaximumSites);
+        private static Sa74Particles instance;
+        private void Awake() => instance = this;
+        internal static bool DrawsPressure(uint siteId)
+        {
+            if (instance == null || !Ready) return false;
+            foreach (Rig rig in instance.rigs)
+                if (rig.Site.Id == siteId && rig.Root != null && rig.Root.activeInHierarchy) return true;
+            return false;
+        }
         private Material condensation, dust, heat, pressure;
         private Texture2D billow;
         private Mesh pressureShell;
@@ -66,7 +75,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             dust.DisableKeyword("_SOFTPARTICLES_ON"); dust.DisableKeyword("_FADING_ON");
             if (dust.HasProperty("_SoftParticlesEnabled")) dust.SetFloat("_SoftParticlesEnabled", 0f);
             if (dust.HasProperty("_CameraFadingEnabled")) dust.SetFloat("_CameraFadingEnabled", 0f);
-            Bind(pressure, billow, new Color(2.6f, 2.75f, 2.9f));
+            Bind(pressure, billow, new Color(1.32f, 1.35f, 1.38f));
             if (heat.HasProperty("_BaseColor")) heat.SetColor("_BaseColor", new Color(3.5f, 2.7f, 1.5f));
             if (heat.HasProperty("_Color")) heat.SetColor("_Color", new Color(3.5f, 2.7f, 1.5f));
             Ready = true;
@@ -82,19 +91,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             OuterRadius = 0f;
             if (Sa74Fallout.Sites.Count == 0) { Clear(); return; }
             if (!Prepare()) return;
+            float retireAge = Mathf.Max(180f, Domain.Sa74BlastShape.ArrivalSeconds(Sa74Fallout.ShockRadius) + 20f);
             int first = Mathf.Max(0, Sa74Fallout.Sites.Count - MaximumSites);
             for (int i = rigs.Count - 1; i >= 0; i--)
             {
                 Rig rig = rigs[i];
                 int index = Sa74Fallout.Sites.IndexOf(rig.Site);
-                if (index >= first && Time.time - rig.Site.Started < 480f) continue;
+                if (index >= first && Time.time - rig.Site.Started < retireAge) continue;
                 if (rig.Root != null) Destroy(rig.Root);
                 rigs.RemoveAt(i);
             }
             for (int i = first; i < Sa74Fallout.Sites.Count; i++)
             {
                 Sa74Fallout.Site site = Sa74Fallout.Sites[i];
-                if (Time.time - site.Started >= 480f || HasRig(site)) continue;
+                if (Time.time - site.Started >= retireAge || HasRig(site)) continue;
                 rigs.Add(Build(site));
             }
             foreach (Rig rig in rigs)
@@ -108,7 +118,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 rig.Root.transform.position = rig.Site.Position.ToLocalPosition();
                 foreach (Layer layer in rig.Layers)
                 {
-                    Pose(layer, rig.Site.Id, origin, age, growth, height, radius);
+                    Pose(layer, rig.Site.Id, origin, age, growth, height, radius, rig.Site.GroundClearance);
                     Systems++;
                     Particles += layer.System.particleCount;
                     if (layer.Kind == Kind.PressureMist || layer.Kind == Kind.PressureShell) PressureParticles += layer.System.particleCount;
@@ -189,16 +199,23 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return layer;
         }
 
-        private static void Pose(Layer layer, uint id, Vector3 origin, float age, float growth, float height, float front)
+        private static void Pose(Layer layer, uint id, Vector3 origin, float age, float growth, float height, float front, float groundClearance)
         {
             int count = 0;
             Vector3 minimum = Vector3.positiveInfinity, maximum = Vector3.negativeInfinity;
             float appear = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(age / 2f));
+            if (layer.GroundHeight != null)
+            {
+                float groundAge = age - Domain.Sa74BlastShape.ArrivalSeconds(groundClearance);
+                if (groundAge <= 0f) { layer.System.SetParticles(layer.Buffer, 0); return; }
+                appear = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(groundAge / 2f));
+                front = Mathf.Sqrt(Mathf.Max(0f, front * front - groundClearance * groundClearance));
+            }
             float disperse = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(75f, 180f, age));
             // Condensation is a transient humidity response behind the pressure boundary, never a luminous permanent torus.
             float condensationFade = Mathf.Exp(-age / 11f) *
                 (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(35f, 55f, age)));
-            float arrival = Mathf.Max(180f, (Sa74Fallout.ShockRadius - 2100f) / 340f);
+            float arrival = Domain.Sa74BlastShape.ArrivalSeconds(Sa74Fallout.ShockRadius);
             float pressureFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(arrival, arrival + 20f, age));
             for (int i = 0; i < layer.Buffer.Length; i++)
             {
@@ -215,14 +232,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         int band = i % 6;
                         angle = (i / 6f) * (Mathf.PI * 2f / 80f) + a * .022f;
                         angle += (b - .5f) * .055f;
-                        float elevation = .025f + band * .105f + (c - .5f) * .065f;
+                        float elevation = (groundClearance > 120f ? -.35f + band * .18f : .025f + band * .105f) + (c - .5f) * .065f;
                         float ripple = Mathf.Sin(angle * 13f + age * .075f) * 140f + Mathf.Sin(angle * 29f) * 70f;
                         float radius = front - 180f - b * 420f + ripple;
                         float radial = Mathf.Cos(elevation) * radius;
                         position = Ring(angle, radial, Mathf.Sin(elevation) * radius);
-                        size = Mathf.Max(650f, radial * .105f) * (.86f + a * .28f);
+                        size = Mathf.Max(650f, radial * .075f) * (.65f + a * .70f);
                         float patch = .35f + .65f * Mathf.SmoothStep(0f, 1f, .5f + .5f * Mathf.Sin(angle * 5f + band));
-                        color = new Color(.88f, .93f, .96f, (.055f * pressureFade + .24f * condensationFade) * patch * appear);
+                        color = new Color(.91f, .91f, .89f, (.05f * pressureFade + .18f * condensationFade) * patch * appear);
                         break;
                     }
                     case Kind.PressureShell:
@@ -230,7 +247,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         // One continuous curved front bridges the billows. Its UV alpha feathers the bottom and top of the shell.
                         position = Vector3.zero;
                         size = front;
-                        color = new Color(.90f, .95f, 1f, .32f * pressureFade * appear);
+                        color = new Color(.93f, .96f, 1f, .20f * pressureFade * appear);
                         break;
                     }
                     case Kind.Condensation:
@@ -410,10 +427,14 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 for (int sector = 0; sector <= sectors; sector++)
                 {
                     float t = row / (float)rows, angle = sector * Mathf.PI * 2f / sectors;
-                    float elevation = .008f + t * .35f;
+                    // Break the silhouette into rolling banks, keeping the lower lip continuous.
+                    float edge = 1f + .16f * Mathf.Sin(angle * 7f) + .09f * Mathf.Sin(angle * 13f + .9f);
+                    // A thin broken condensation lip rides above the dense dust wake.
+                    // A broad luminous mesh here reads as a solid dome in the lateral view.
+                    float elevation = (t - .18f) * .105f * edge + .007f * Mathf.Sin(angle * 8f);
                     int index = row * (sectors + 1) + sector;
                     vertices[index] = Ring(angle, Mathf.Cos(elevation), Mathf.Sin(elevation));
-                    uv[index] = new Vector2(.5f, t);
+                    uv[index] = new Vector2(.5f + .25f * Mathf.Sin(angle * 9f + t * 3f), t);
                 }
             int triangle = 0;
             for (int row = 0; row < rows; row++)
@@ -474,6 +495,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         }
         private void OnDestroy()
         {
+            if (instance == this) instance = null;
             Clear();
             if (condensation != null) Destroy(condensation);
             if (dust != null) Destroy(dust);

@@ -1,12 +1,14 @@
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using NuclearOption.Effects;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
-    /// <summary>Bounded height patches plus a conforming, persistent glass/scorch field. No map assets are saved.</summary>
+    /// <summary>Bounded native terrain/physics edits and native textured soot. No map assets are saved.</summary>
     internal sealed class Sa74FalloutTerrain
     {
         private sealed class Patch
@@ -17,7 +19,6 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         }
         private readonly List<Patch> patches = new List<Patch>();
         private readonly List<GameObject> scars = new List<GameObject>();
-        private readonly List<Mesh> meshes = new List<Mesh>();
         private sealed class MeshPatch
         {
             internal MeshFilter Filter;
@@ -25,15 +26,69 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             internal Mesh Before, Written;
         }
         private readonly List<MeshPatch> meshPatches = new List<MeshPatch>();
-        private Material glass;
+        private static readonly FieldInfo HeightEntries = AccessTools.Field(typeof(TerrainHeightMap), "allEntries");
+        private static readonly MethodInfo UnregisterHeight = AccessTools.Method(typeof(TerrainHeightMap), "UnregisterInternal");
+        private static readonly MethodInfo RegisterHeight = AccessTools.Method(typeof(TerrainHeightMap), "RegisterInternal", new[] { typeof(TerrainHeightMap.RenderFilter) });
         private int meshChangedCells;
-        internal int Scars => scars.Count;
+        private int strikes;
+        internal int Scars => strikes;
         internal int ChangedCells { get; private set; }
         internal int RestoredCells { get; private set; }
+        internal float CenterBefore { get; private set; }
+        internal float CenterAfter { get; private set; }
+        internal string LastSurface { get; private set; } = "none";
+        internal int NativeSootMarks => scars.Count;
+        internal float CollisionDrop => CenterBefore - CenterAfter;
+
+        internal static bool TryGroundBurst(Vector3 center, out Vector3 ground)
+        {
+            ground = center;
+            if (center.y <= Datum.LocalSeaY + 1f) return false;
+            TerrainHeightMap heightMap = Object.FindObjectOfType<TerrainHeightMap>();
+            RaycastHit[] hits = Physics.RaycastAll(center + Vector3.up * 150f, Vector3.down, 1000f,
+                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
+            float nearest = float.MaxValue;
+            foreach (RaycastHit hit in hits)
+            {
+                if (hit.point.y <= Datum.LocalSeaY + .2f || Mathf.Abs(center.y - hit.point.y) > 120f) continue;
+                if (!IsGround(hit.collider, heightMap) || hit.distance >= nearest) continue;
+                nearest = hit.distance; ground = hit.point;
+            }
+            return nearest != float.MaxValue;
+        }
+
+        internal static float GroundClearance(Vector3 center)
+        {
+            float surface = Datum.LocalSeaY;
+            TerrainHeightMap heightMap = Object.FindObjectOfType<TerrainHeightMap>();
+            foreach (RaycastHit hit in Physics.RaycastAll(center + Vector3.up * 2f, Vector3.down, 20000f,
+                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
+                if (hit.point.y <= center.y + 1f && hit.point.y > surface && IsGround(hit.collider, heightMap)) surface = hit.point.y;
+            return Mathf.Max(0f, center.y - surface);
+        }
+
+        private static bool IsGround(Collider collider, TerrainHeightMap heightMap)
+        {
+            if (collider is TerrainCollider || (GameAssets.i != null && GameAssets.i.terrainMaterial != null &&
+                collider.sharedMaterial == GameAssets.i.terrainMaterial)) return true;
+            if (heightMap?.terrainPhysicMaterials != null)
+                foreach (PhysicMaterial material in heightMap.terrainPhysicMaterials)
+                    if (material != null && material == collider.sharedMaterial) return true;
+            return false;
+        }
 
         internal void Scar(Vector3 center, float radius)
         {
-            if (scars.Count >= Sa74Fallout.MaxSites) return;
+            if (strikes >= Sa74Fallout.MaxSites) return;
+            if (!TryGroundBurst(center, out Vector3 ground))
+            {
+                LastSurface = center.y <= Datum.LocalSeaY + 1f ? "water" : "air";
+                return;
+            }
+            LastSurface = "ground";
+            strikes++;
+            center = ground;
+            CenterBefore = ground.y;
             // A true ground burst excavates a bowl and raised ejecta rim on native Unity Terrains.
             foreach (Terrain terrain in Terrain.activeTerrains)
             {
@@ -61,9 +116,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                         float dz = (z + row) * data.size.z / (resolution - 1) - local.z;
                         float distance = Mathf.Sqrt(dx * dx + dz * dz) / radius;
                         if (distance >= 1f) continue;
-                        float bowl = -170f * Mathf.Pow(Mathf.Clamp01(1f - distance / .82f), 1.6f);
-                        float rim = 32f * Mathf.Exp(-Mathf.Pow((distance - .80f) / .105f, 2f)) * Mathf.SmoothStep(0f, 1f, (1f - distance) * 8f);
-                        after[row, col] = Mathf.Clamp01(before[row, col] + (bowl + rim) / data.size.y);
+                        float original = terrain.transform.position.y + before[row, col] * data.size.y;
+                        after[row, col] = Mathf.Clamp01((CraterSurface(original, center.y, distance) - terrain.transform.position.y) / data.size.y);
                         if (Mathf.Abs(after[row, col] - before[row, col]) > .000001f) ChangedCells++;
                     }
                 patches.Add(new Patch { Data = data, X = x, Z = z, Before = before, Written = after });
@@ -71,7 +125,19 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 data.SyncHeightmap();
             }
             ExcavateMeshes(center, radius);
+            Physics.SyncTransforms();
+            CenterAfter = center.y;
+            if (Physics.Raycast(center + Vector3.up * 20f, Vector3.down, out RaycastHit floor, 1000f,
+                PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore)) CenterAfter = floor.point.y;
             MakeScorch(center, radius * 2.5f);
+        }
+
+        private static float CraterSurface(float original, float ground, float distance)
+        {
+            float bowl = -260f * Mathf.Pow(Mathf.Clamp01(1f - distance / .82f), 1.35f);
+            float rim = 55f * Mathf.Exp(-Mathf.Pow((distance - .80f) / .10f, 2f));
+            float blend = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.86f, 1f, distance));
+            return Mathf.Lerp(original, ground + bowl + rim, blend);
         }
 
         private void ExcavateMeshes(Vector3 center, float radius)
@@ -99,6 +165,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 Mesh written = Deform(before, renderer.transform);
                 if (written == null) continue;
                 filter.sharedMesh = written;
+                RefreshHeightMap(renderer);
                 meshPatches.Add(new MeshPatch { Filter = filter, Before = before, Written = written });
             }
             foreach (MeshCollider collider in Object.FindObjectsOfType<MeshCollider>())
@@ -129,9 +196,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     float dx = world.x - center.x, dz = world.z - center.z;
                     float distance = Mathf.Sqrt(dx * dx + dz * dz) / radius;
                     if (distance >= 1f || Mathf.Abs(world.y - center.y) > 600f) continue;
-                    float bowl = -170f * Mathf.Pow(Mathf.Clamp01(1f - distance / .82f), 1.6f);
-                    float rim = 32f * Mathf.Exp(-Mathf.Pow((distance - .80f) / .105f, 2f)) * Mathf.SmoothStep(0f, 1f, (1f - distance) * 8f);
-                    world.y += bowl + rim;
+                    world.y = CraterSurface(world.y, center.y, distance);
                     points[i] = transform.InverseTransformPoint(world);
                     changed++;
                 }
@@ -144,6 +209,20 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 vertexBudget -= source.vertexCount;
                 return copy;
             }
+        }
+
+        private static void RefreshHeightMap(MeshRenderer renderer)
+        {
+            TerrainHeightMap heightMap = Object.FindObjectOfType<TerrainHeightMap>();
+            if (heightMap == null || renderer == null || !(HeightEntries.GetValue(heightMap) is List<TerrainHeightMap.Entry> entries)) return;
+            TerrainHeightMap.Entry found = null;
+            foreach (TerrainHeightMap.Entry entry in entries)
+                if (entry.renderer == renderer) { found = entry; break; }
+            if (found == null) return;
+            // Entry.mesh is cached, not read from MeshFilter during a bake. Refresh it without adding an external registration.
+            UnregisterHeight.Invoke(heightMap, new object[] { renderer });
+            RegisterHeight.Invoke(heightMap, new object[] { new TerrainHeightMap.RenderFilter(renderer, found.submeshFilter, found.type) });
+            heightMap.SetDirty();
         }
 
         /// <summary>Game map meshes discard their CPU data. Read only the touched tile's existing GPU buffers once.</summary>
@@ -193,52 +272,18 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
         private void MakeScorch(Vector3 center, float radius)
         {
-            const int sectors = 64, rings = 12;
-            var vertices = new Vector3[(sectors + 1) * (rings + 1)];
-            var colors = new Color[vertices.Length];
-            var triangles = new int[sectors * rings * 6];
-            for (int ring = 0; ring <= rings; ring++)
-                for (int sector = 0; sector <= sectors; sector++)
-                {
-                    float t = ring / (float)rings, angle = sector / (float)sectors * Mathf.PI * 2f;
-                    float scallop = 1f + .025f * Mathf.Sin(angle * 13f) + .018f * Mathf.Cos(angle * 7f);
-                    Vector3 point = center + new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (t * radius * scallop);
-                    float ground = Datum.LocalSeaY - 2f;
-                    if (Physics.Raycast(point + Vector3.up * 3000f, Vector3.down, out RaycastHit hit, 7000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore))
-                        ground = hit.point.y;
-                    vertices[ring * (sectors + 1) + sector] = new Vector3(point.x - center.x, ground + 1.5f - center.y, point.z - center.z);
-                    float hot = Mathf.Clamp01(1f - t * 3f);
-                    Color color = Color.Lerp(new Color(.023f, .025f, .022f), new Color(.095f, .052f, .025f), hot);
-                    color.a = Mathf.SmoothStep(.88f, 0f, Mathf.InverseLerp(.65f, 1f, t));
-                    colors[ring * (sectors + 1) + sector] = color;
-                }
-            int index = 0;
-            for (int ring = 0; ring < rings; ring++)
-                for (int sector = 0; sector < sectors; sector++)
-                {
-                    int a = ring * (sectors + 1) + sector, b = a + sectors + 1;
-                    triangles[index++] = a; triangles[index++] = b; triangles[index++] = a + 1;
-                    triangles[index++] = a + 1; triangles[index++] = b; triangles[index++] = b + 1;
-                }
-            var mesh = new Mesh { name = "SA-74N fused ground", vertices = vertices, colors = colors, triangles = triangles };
-            mesh.RecalculateNormals(); mesh.RecalculateBounds(); meshes.Add(mesh);
-            if (glass == null)
-            {
-                Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit");
-                if (shader != null)
-                {
-                    glass = new Material(shader) { name = "SA-74N scorched glass", renderQueue = 2990 };
-                    glass.SetColor("_BaseColor", Color.white); glass.SetColor("_Color", Color.white);
-                    glass.SetFloat("_Surface", 1f); glass.SetInt("_ZWrite", 0);
-                    glass.SetInt("_SrcBlend", (int)BlendMode.SrcAlpha); glass.SetInt("_DstBlend", (int)BlendMode.OneMinusSrcAlpha);
-                    glass.SetInt("_Cull", (int)CullMode.Off); glass.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-                }
-            }
-            var root = new GameObject("SA-74N permanent glass/scorch field");
-            root.transform.SetParent(Datum.origin, false); root.transform.position = center;
-            root.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var renderer = root.AddComponent<MeshRenderer>(); renderer.sharedMaterial = glass;
-            renderer.shadowCastingMode = ShadowCastingMode.Off; renderer.receiveShadows = false;
+            GameObject prefab = GameAssets.i != null ? GameAssets.i.scorchMarkDecal : null;
+            if (prefab == null || Sa74NativeGround.SootMaterial == null) return;
+            GameObject root = Object.Instantiate(prefab, Datum.origin, false);
+            root.name = "SA-74N persistent native soot";
+            root.transform.SetPositionAndRotation(center, Quaternion.LookRotation(Vector3.up));
+            DecalProjector projector = root.GetComponent<DecalProjector>();
+            if (projector == null) { Object.Destroy(root); return; }
+            projector.material = Sa74NativeGround.SootMaterial;
+            projector.size = new Vector3(radius * 2f, radius * 2f, 1600f);
+            projector.drawDistance = 45000f;
+            projector.fadeScale = .25f;
+            projector.fadeFactor = 1f;
             scars.Add(root);
         }
 
@@ -249,7 +294,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             for (int i = meshPatches.Count - 1; i >= 0; i--)
             {
                 MeshPatch patch = meshPatches[i];
-                if (patch.Filter != null && patch.Filter.sharedMesh == patch.Written) patch.Filter.sharedMesh = patch.Before;
+                if (patch.Filter != null && patch.Filter.sharedMesh == patch.Written)
+                {
+                    patch.Filter.sharedMesh = patch.Before;
+                    RefreshHeightMap(patch.Filter.GetComponent<MeshRenderer>());
+                }
                 if (patch.Collider != null && patch.Collider.sharedMesh == patch.Written) patch.Collider.sharedMesh = patch.Before;
             }
             var destroyed = new HashSet<Mesh>();
@@ -278,10 +327,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             patches.Clear(); ChangedCells = 0;
             foreach (GameObject scar in scars) if (scar != null) Object.Destroy(scar);
-            foreach (Mesh mesh in meshes) if (mesh != null) Object.Destroy(mesh);
-            scars.Clear(); meshes.Clear();
-            if (glass != null) Object.Destroy(glass);
-            glass = null;
+            scars.Clear();
+            strikes = 0;
+            CenterBefore = CenterAfter = 0f; LastSurface = "none";
         }
     }
 }

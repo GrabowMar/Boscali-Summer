@@ -110,6 +110,10 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     break;
                 case "reset": host.Director.Reset(17); break;
                 case "nuclear": RadioAftermath.Observe(1, 1, Time.time, 0f); break;
+                case "nuclearrelease": RadioAftermath.Release(1, 1, Time.time, 0f); break;
+                case "nuclearlate": RadioAftermath.Reset(); RadioAftermath.Observe(1, 1, Time.time, 120f); break;
+                case "nuclearsilence": RadioAftermath.Reset(); RadioAftermath.Observe(1, 1, Time.time, RadioAftermath.PanicSeconds + 1f); break;
+                case "nuclearsurvivor": RadioAftermath.Reset(); RadioAftermath.Observe(1, 1, Time.time, RadioAftermath.PanicSeconds + RadioAftermath.SilenceSeconds + 1f); break;
                 case "nuclearreset": RadioAftermath.Reset(); break;
                 case "direct":
                     second = host.Director.Say(Time.time, Speaker("command", "COMMAND"), key + ":direct", "Direct normal traffic must be silent.", ChatterPriority.Emergency);
@@ -161,6 +165,11 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                 ["voiced"] = host.Voices?.Voiced ?? 0, ["sounding"] = host.Voices?.Sounding ?? false,
                 ["fxSounding"] = ChatterAudio.Sounding,
                 ["nuclearBlackout"] = RadioAftermath.Active,
+                ["nuclearDrop"] = RadioAftermath.Drop,
+                ["nuclearBlocking"] = RadioAftermath.Blocking,
+                ["nuclearSilence"] = RadioAftermath.Silent(Time.time),
+                ["nuclearEmergencyCalls"] = RadioAftermath.EmergencyCalls,
+                ["nuclearSilenceUntil"] = RadioAftermath.SilenceUntil,
                 ["level"] = host.Director.Level.ToString(),
                 ["survivors"] = RadioAftermath.SurvivorCalls,
                 ["nextSurvivor"] = RadioAftermath.NextSurvivorAt,

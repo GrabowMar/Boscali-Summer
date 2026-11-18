@@ -337,8 +337,9 @@ B[*]: Night second.
 
     var problems = new List<string>();
     using var production = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "modules", "Chatter", "Assets", "Voices", "production.json")));
+    using var nuclearProduction = System.Text.Json.JsonDocument.Parse(File.ReadAllText(Path.Combine(dir, "modules", "Chatter", "Assets", "Voices", "production-sa74.json")));
     var recordedEvents = new HashSet<string>();
-    foreach (var line in production.RootElement.GetProperty("lines").EnumerateArray())
+    foreach (var line in production.RootElement.GetProperty("lines").EnumerateArray().Concat(nuclearProduction.RootElement.GetProperty("lines").EnumerateArray()))
     {
         string evt = line.GetProperty("event").GetString(), id = line.GetProperty("id").GetString(), text = line.GetProperty("text").GetString();
         recordedEvents.Add(evt);
@@ -451,7 +452,7 @@ B[*]: Night second.
         .Where(f => !Path.GetFileNameWithoutExtension(f).Split('_', '-').Any(lineIds.Contains)).ToList();
     Check(orphans.Count == 0, orphans.Count + " voice clips name no line: " + string.Join(", ", orphans.Take(5)));
     var recordedIds = new HashSet<string>(recordings.SelectMany(f => Path.GetFileNameWithoutExtension(f).Split('_', '-')));
-    foreach (var line in production.RootElement.GetProperty("lines").EnumerateArray())
+    foreach (var line in production.RootElement.GetProperty("lines").EnumerateArray().Concat(nuclearProduction.RootElement.GetProperty("lines").EnumerateArray()))
         Check(recordedIds.Contains(line.GetProperty("id").GetString()), "every produced subtitle has a playable recording: " + line.GetProperty("id").GetString());
 
     // Every exchange is reachable with the six personas airborne: run rounds until each was heard.
@@ -522,7 +523,11 @@ RadioAftermath.Reset();
 Check(!RadioAftermath.Active, "aftermath reset is inactive");
 RadioAftermath.Observe(2, 1, 100f, 0f);
 Check(RadioAftermath.Active && RadioAftermath.StartedAt == 100f, "actual strike activates aftermath");
-Check(RadioAftermath.NextSurvivorAt >= 118f && RadioAftermath.NextSurvivorAt <= 130f, "first survivor delayed 18 to 30 seconds");
+Check(RadioAftermath.NextSurvivorAt == 748f, "survivors wait for48s panic and ten minutes silence");
+Check(!RadioAftermath.Silent(147.99f) && RadioAftermath.Silent(148f) && RadioAftermath.Silent(747.99f) && !RadioAftermath.Silent(748f), "exact ten minute silent interval");
+for (int n = 0; n < 4; n++)
+    Check(RadioAftermath.TryEmergency(100f + n * 10f, true, false, out int stage) && stage == n + 1, "fresh impact has four ordered panic calls");
+Check(!RadioAftermath.TryEmergency(140f, true, false, out _) && !RadioAftermath.TryEmergency(200f, true, false, out _), "panic is finite and cannot speak during silence");
 float survivorAt = RadioAftermath.NextSurvivorAt;
 int nuclearRevision = RadioAftermath.Revision;
 RadioAftermath.Observe(2, 1, 120f, 20f);
@@ -538,7 +543,35 @@ for (int n = 0; n < 20; n++)
 }
 RadioAftermath.Reset();
 RadioAftermath.Observe(3, 10, 500f, 400f);
-Check(RadioAftermath.Active && RadioAftermath.StartedAt == 100f && RadioAftermath.NextSurvivorAt >= 518f, "late join inherits blackout without old voice replay");
+Check(RadioAftermath.Active && RadioAftermath.StartedAt == 100f && RadioAftermath.NextSurvivorAt == 748f &&
+    !RadioAftermath.TryEmergency(500f, true, false, out _), "late join inherits remaining silence without old voice replay");
+RadioAftermath.Reset();
+RadioAftermath.Release(4, 1, 10f, 0f);
+Check(!RadioAftermath.Active && RadioAftermath.Blocking, "actual drop reserves emergency net before impact");
+Check(!RadioAftermath.TryEmergency(10f, false, false, out _) && RadioAftermath.EmergencyCalls == 0, "voice loading preserves fresh warning");
+Check(RadioAftermath.TryEmergency(11f, true, false, out int warningStage) && warningStage == 0, "drop warning airs once");
+int releaseRevision = RadioAftermath.Revision;
+RadioAftermath.Release(4, 1, 15f, 5f);
+Check(RadioAftermath.Revision == releaseRevision && !RadioAftermath.TryEmergency(15f, true, false, out _), "release snapshot cannot replay warning");
+RadioAftermath.Advance(190f);
+Check(!RadioAftermath.Blocking, "a dud release cannot silence ordinary radio forever");
+RadioAftermath.Reset();
+RadioAftermath.Release(5, 2, 100f, 10f);
+Check(RadioAftermath.Blocking && !RadioAftermath.TryEmergency(100f, true, false, out _), "late join during descent skips old drop warning");
+RadioAftermath.Observe(5, 1, 101f, 0f);
+Check(RadioAftermath.TryEmergency(101f, true, false, out int firstPanic) && firstPanic == 1, "fresh impact after late descent still starts panic");
+RadioAftermath.Release(5, 3, 102f, 0f);
+Check(!RadioAftermath.TryEmergency(102f, true, false, out _), "late release cannot replace impact with a drop warning");
+RadioAftermath.Release(5, 4, 201f, 0f);
+Check(!RadioAftermath.TryEmergency(201f, true, false, out _), "a second drop preserves the first strike's hard silence");
+RadioAftermath.Release(5, 5, 750f, 0f);
+Check(RadioAftermath.TryEmergency(750f, true, false, out int repeatWarning) && repeatWarning == 0,
+    "a new bomb warns again after the prior ten minute silence");
+RadioAftermath.Release(5, 5, 753f, 3f);
+Check(!RadioAftermath.TryEmergency(753f, true, false, out _), "repeated drop warning still deduplicates its heartbeat");
+RadioAftermath.Observe(5, 2, 755f, 0f);
+Check(RadioAftermath.TryEmergency(755f, true, false, out int repeatPanic) && repeatPanic == 1 && RadioAftermath.SilenceUntil == 1403f,
+    "a fresh second impact restarts panic and its own ten minute silence");
 RadioAftermath.Reset();
 Check(!RadioAftermath.TrySurvivor(10000f, true, false, out _) && RadioAftermath.SurvivorCalls == 0, "mission reset clears survivor schedule");
 

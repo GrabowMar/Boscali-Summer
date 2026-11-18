@@ -145,7 +145,9 @@ def stencil(text, y, z, size, side, mat):
     world=ob.matrix_world.copy()
     for vertex in ob.data.vertices:
         p=world@vertex.co
-        p.x=side*(math.sqrt(max(.01,1.5**2-p.z**2))+.003)
+        # Large glyph faces span a chord of the curved shell. Leave clearance for the
+        # middle of each face as well as its vertices, so letter strokes stay intact.
+        p.x=side*(math.sqrt(max(.01,1.5**2-p.z**2))+(0.019 if size>.2 else .004))
         vertex.co=p
     ob.matrix_world=Matrix.Identity(4)
     ob.data.materials.append(mat)
@@ -217,8 +219,16 @@ def build():
             a=j*math.tau/16
             radial=(math.cos(a),0,math.sin(a))
             cylinder("Flush collar fastener",(radial[0]*1.517,y,radial[2]*1.517),.018,.015,steel,radial,10)
-    # Small flush black nose cap modernises the historical silhouette.
-    lathe("Nose instrument cap",[(4.155,.21),(4.19,.13),(4.205,.001)],dark,64)
+    # Follow the existing dome so the graphite cap and its narrow seam are visible at glancing angles.
+    lathe("Graphite nose cover",[(4.104,.49),(4.123,.45),(4.156,.34),(4.19,.19),(4.207,.001)],dark,64)
+    lathe("Rolled nose cover edge",[(4.099,.502),(4.105,.491),(4.111,.483)],steel,64,capped=False)
+    # Recessed-looking inspection plate framed by the rolled edge of the tail cover.
+    cylinder("Tail inspection plate",(0,-4.214,0),.375,.022,dark,(0,-1,0),48)
+    for j in range(6):
+        a=(j+.5)*math.tau/6
+        cylinder("Tail plate fastener",(.33*math.cos(a),-4.232,.33*math.sin(a)),.027,.014,steel,(0,-1,0),10)
+    for z in [-.060,0,.060]:
+        box("Tail inspection emboss",(0,-4.231,z),(.19 if z else .28,.016,.021),steel,.005)
 
 
 def write_string(f,text):

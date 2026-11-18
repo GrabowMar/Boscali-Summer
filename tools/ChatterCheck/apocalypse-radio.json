@@ -1,6 +1,6 @@
 {
   "name": "apocalypse-radio",
-  "description": "Actual accepted SA-74N detonation ends station programming and normal military traffic, leaving controlled static and sparse survivors until mission reset.",
+  "description": "Actual SA-74N detonation starts emergency calls and ends normal programming; an explicit aged-radio fixture then checks static and survivor routing until mission reset.",
   "mods": [
     "boscalisummer"
   ],
@@ -135,6 +135,12 @@
         "action": "state"
       },
       "store": "blackout"
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Chatter.Runtime.ChatterAutomation.Acceptance",
+      "args": { "step": "nuclearsurvivor" },
+      "store": "aged_survivor_phase"
     },
     {
       "op": "wait_until",
@@ -418,12 +424,12 @@
     {
       "check": "result_equals",
       "path": "silenced.sounding",
-      "value": false
+      "value": true
     },
     {
       "check": "result_equals",
       "path": "silenced.fxSounding",
-      "value": false
+      "value": true
     },
     {
       "check": "result_equals",

@@ -2,6 +2,7 @@
 using System;
 using System.Linq;
 using BoscaliSummer.Core.Game;
+using BoscaliSummer.Core.Contracts;
 using Newtonsoft.Json;
 using NuclearOption.Networking;
 using UnityEngine;
@@ -58,8 +59,29 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     position = new[] { s.Position.AsVector3().x, s.Position.AsVector3().y, s.Position.AsVector3().z },
                     age = Time.time - s.Started
                 }).ToArray(),
-                fallout = Sa74Fallout.Instance?.Snapshot()
+                fallout = Sa74Fallout.Instance?.Snapshot(),
+                radio = new
+                {
+                    active = RadioAftermath.Active, blocking = RadioAftermath.Blocking, drop = RadioAftermath.Drop,
+                    emergencyCalls = RadioAftermath.EmergencyCalls, survivors = RadioAftermath.SurvivorCalls,
+                    silent = RadioAftermath.Silent(Time.time), silenceRemaining = Mathf.Max(0f, RadioAftermath.SilenceUntil - Time.time)
+                }
             });
+        }
+
+        public static string TriggerRelease()
+        {
+            RequireHost();
+            Networking.Sa74Net.Released();
+            return Snapshot();
+        }
+
+        public static string TryClientRelease()
+        {
+            RequirePeer();
+            if (Server) throw new InvalidOperationException("Run the release authority probe on the remote client");
+            Networking.Sa74Net.Released();
+            return Snapshot();
         }
 
         public static string Trigger()
