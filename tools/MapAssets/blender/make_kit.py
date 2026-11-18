@@ -153,234 +153,315 @@ class B:
 # ---- the shapes: fn(b, variant); (kind, variants, solid, draw range) -----------------------------------------------
 
 def railgun(b, v):
-    """One gun of the Helios Array: a 190 m rail accelerator on a heavy turret. 0 standing, 1 its barrel broken off
-    and lying ahead of it, 2 a gutted mount."""
-    # the platform: an octagonal apron with a dark kerb, a parapet and four ways in
-    b.cyl((0, 0, 0), 45, 2.6, CONCRETE_D, 8, r2=43.5, rot=(0, 0, 22.5))
-    b.cyl((0, 0, 2.6), 42.5, 2.2, CONCRETE, 8, r2=41, rot=(0, 0, 22.5))
+    """One gun of the Helios Array: a 190 m rail accelerator in a cast-concrete emplacement. 0 standing,
+    1 its barrel broken off and lying ahead, 2 a gutted mount."""
+    # the plinth: stepped cast concrete, each set-back throwing a deep shadow
+    b.cyl((0, 0, 0), 46, 1.8, CONCRETE_D, 8, r2=45, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 1.8), 43, 2.0, CONCRETE, 8, r2=42, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 3.8), 38, 1.4, CONCRETE_D, 8, r2=36, rot=(0, 0, 22.5))
     if b.mid:
-        for k in range(8):
+        for k in range(8):                                                 # radial buttresses, battered
+            a = k * math.pi / 4 + math.pi / 8
+            b.box((36 * math.sin(a), 36 * math.cos(a), 4.6), (5.2, 9, 2.4), CONCRETE, (0, 0, -math.degrees(a)), 0.7)
+        for k in range(8):                                                 # the parapet, cast in long segments
             if k in (0, 4):
                 continue
             a = k * math.pi / 4 + math.pi / 8
-            b.box((39.2 * math.sin(a), 39.2 * math.cos(a), 5.6), (15.2, 0.9, 1.8), PANEL_D, (0, 0, -math.degrees(a)), bevel=0.2)
-        for k in range(4):
-            a = k * math.pi / 2 + math.pi / 4
-            b.box((30 * math.sin(a), 30 * math.cos(a), 3.0), (9, 2.2, 2.2), CONCRETE_D, (0, 0, -math.degrees(a)))
-    # the barbette: a wide steel drum with a dark ring race and one red band
-    b.cyl((0, 0, 4.8), 34, 8, PANEL, 20)
-    b.cyl((0, 0, 4.8), 34.8, 0.8, PANEL_D, 20)
+            b.box((37.5 * math.sin(a), 37.5 * math.cos(a), 6.4), (13.5, 1.7, 2.6), CONCRETE, (0, 0, -math.degrees(a)))
+            if b.fine:
+                b.box((37.5 * math.sin(a), 37.5 * math.cos(a), 7.6), (13.4, 1.75, 0.08), CONCRETE_D, (0, 0, -math.degrees(a)))
+    b.box((0, 42, 1.2), (7, 6, 1.2), CONCRETE_D)                           # the ramp up
+    b.box((0, 36, 2.6), (5, 1, 0.6), BLACK)
+    # the barbette is a concrete collar with a steel race, not a steel drum
+    b.cyl((0, 0, 5.2), 33, 8.2, CONCRETE, 16)
     if b.mid:
-        b.cyl((0, 0, 7.8), 34.7, 0.5, RED, 20)
-        b.cyl((0, 0, 11.4), 34.5, 1.4, PANEL_D, 20)
-    zt = 12.8
-    if v == 2:                                                             # the gutted mount
-        b.box((0, -6, zt + 9), (18, 24, 9), HULL, taper=0.94, bevel=0.4)
-        b.box((0, 8, zt + 9), (12, 4, 7.5), BLACK)                         # the hole where the rails were
-        b.box((6, 4, zt + 17), (13, 7, 0.5), RUST, (14, 0, -28))           # a plate torn off the roof
-        b.rock((-3, 6, zt + 13), 8, BLACK, 4, (1.3, 1, 0.7))
+        b.cyl((0, 0, 5.2), 33.6, 0.7, CONCRETE_D, 16)
+        b.cyl((0, 0, 12.7), 34, 0.7, CONCRETE_D, 16)
+    b.cyl((0, 0, 13.4), 31, 0.9, STEEL, 16)                                # the turret race
+    if b.mid:
+        for j in range(7):                                                 # water runs down the concrete
+            a = 0.6 + j * 1.9
+            b.box((33.25 * math.sin(a), 33.25 * math.cos(a), 8.6), (0.5, 0.12, 3.2), RUST, (0, 0, -math.degrees(a)))
+    zt = 14.3
+    # the emplacement's workings: a service shed, a transformer and a rail gantry
+    if b.mid:
+        b.box((-31, 20, 6.4), (9, 6, 3.6), CONCRETE_D, (0, 0, 20), bevel=0.3)
+        b.box((-31, 26.1, 5.8), (5, 0.1, 2.2), BLACK, (0, 0, 20))
+        b.box((31, -16, 6.0), (3.2, 2.4, 2.4), PANEL_D, (0, 0, -8), bevel=0.2)
+        b.box((-14, 30, 4.2), (1.0, 9, 0.2), BLACK, (0, 0, 28))            # the cable trench
         for side in (-1, 1):
-            tall = (16, 24)[side > 0]
-            b.box((side * 22, -1, zt + tall / 2), (4.4, 14, tall / 2), PANEL, taper=0.88, bevel=0.4)
-            if b.mid:
-                b.box((side * 22, -1, zt + tall), (4.6, 8, 0.5), RUST, (8 if side < 0 else -12, 0, 6))
-        for k in range(4 if b.mid else 2):                                # what is left of the yoke
+            b.box((side * 9, -36, 12), (0.8, 0.8, 6.4), CONCRETE_D)
+        b.box((0, -36, 18.4), (10, 1.0, 0.8), CONCRETE_D)
+        b.beam((0, -36, 18), (0, -30, 8), 0.3, RUST, 4)
+    if b.fine:
+        for k in range(3):                                                 # rubble at the pad edge
+            a = 1.1 + k * 0.7
+            b.rock((41 * math.sin(a), 41 * math.cos(a), 1.4), 2.2, BASALT, 20 + k, (1.3, 1, 0.5), 0.3, 1)
+        b.beam((24, 34, 4), (12, 42, 4), 0.12, IRON, 4)                    # a fallen light mast
+        b.box((20, 34, 4.2), (1.2, 1.2, 0.3), PANEL_D, (0, 0, 18))
+    # two monolithic concrete pylons carry the trunnions; the gun house turns between them
+    tall = 66 if v == 0 else (54 if v == 1 else 30)
+    for side in (-1, 1):
+        hh = tall * (0.70 if v == 1 and side > 0 else 1)
+        b.box((side * 32, -2, 4.8 + hh / 2), (7, 10, hh / 2), CONCRETE, (0, 0, 0), 0.86, 0.5)
+        if b.mid:
+            b.box((side * 32, -2, 4.8 + hh), (7.8, 10.8, 1.4), CONCRETE_D)
+            b.box((side * 32, -2, 4.8 + hh * 0.55), (7.3, 10.3, 0.5), CONCRETE_D)
+        if b.fine:
+            for j in range(3):
+                b.box((side * 32 + 6.8, -6 + j * 4.6, 4.8 + hh * 0.55), (0.1, 0.4, hh * 0.36), RUST)
+            b.box((side * 32, 7.9, 4.8 + hh * 0.42), (4.2, 0.2, 3.2), CONCRETE_D)   # a spalled panel
+    if v < 2:
+        b.box((0, -2, 4.8 + tall - 1.2), (34, 5, 2.0), CONCRETE_D)          # the lintel between them
+        if b.mid:
+            for side in (-1, 1):
+                b.cyl((side * 24.6, -2, 44), 3.8, 0.9, IRON, 10, rot=(0, 90, 0))
+        if b.fine:
+            b.beam((0, -2, 4.8 + tall - 2), (0, -2, 4.8 + tall - 14), 0.25, RUST, 4)
+    if v == 2:                                                             # the gutted mount
+        b.box((0, -6, zt + 12), (18, 24, 12), HULL, taper=0.94, bevel=0.4)
+        b.box((0, 8, zt + 12), (12, 4, 10), BLACK)
+        b.box((6, 4, zt + 20), (13, 7, 0.5), RUST, (14, 0, -28))
+        b.rock((-3, 6, zt + 16), 8, BLACK, 4, (1.3, 1, 0.7))
+        for k in range(4 if b.mid else 2):
             a = k * 1.6
             b.beam((8 * math.sin(a), -6 + 6 * math.cos(a), zt + 6), (16 * math.sin(a), -18 + 12 * math.cos(a), zt + 22 + 5 * (k % 2)), 0.8, IRON, 4)
         b.rock((14, -8, zt + 8), 7, BLACK, 3, (1.4, 1, 0.6))
         if b.mid:
-            b.box((-10, 6, zt + 2), (6, 2.4, 2.4), RUST, (0, 0, 34))       # a rail section thrown clear
+            b.box((-10, 6, zt + 2), (6, 2.4, 2.4), RUST, (0, 0, 34))
         return
-    # the turret house: a big welded box with a sloped roof and the yoke that carries the rails
-    b.box((0, -6, zt + 16), (20, 26, 16), HULL, taper=0.93, bevel=0.5)
-    b.box((0, -10, zt + 32.2), (17.5, 22, 0.5), PANEL_D)
+    # the turret house: a welded, riveted box with plate seams and rust
+    b.box((0, -6, zt + 16), (21, 27, 16), HULL, taper=0.92, bevel=0.5)
+    b.box((0, -8, zt + 32.3), (19, 24, 0.6), PANEL_D)
     if b.mid:
-        b.box((0, -19, zt + 33.2), (7, 5, 1.1), PANEL_D)
+        for j in range(3):
+            b.box((0, -28 + j * 12, zt + 16), (21.05, 0.12, 0.22), PANEL_D)
         for side in (-1, 1):
-            b.box((side * 15.5, -1, zt + 16), (0.35, 9, 10), PANEL_D)      # the side doors' seams
-        b.box((0, -32, zt + 13), (18, 0.4, 12), PANEL_D)                   # the rear panel break
-    tall = 38 if v == 0 else 28
-    for side in (-1, 1):
-        b.box((side * 23, -1, zt + tall / 2), (4.6, 15, tall / 2), PANEL, taper=0.88, bevel=0.5)
-        if b.mid:
-            b.box((side * 27.9, -1, zt + tall * 0.55), (0.4, 10, tall * 0.35), PANEL_D)
-    b.box((0, -1, zt + tall - 1.5), (28, 3.6, 2.4), PANEL_D)               # the yoke's cross beam
+            b.box((side * 15.5, -1, zt + 15), (0.15, 9, 11), PANEL_D)
+        b.box((0, -33.2, zt + 10), (18, 0.4, 13), PANEL_D)
+        b.box((12, 8, zt + 26), (6, 3, 0.4), RUST, (0, 14, 18))            # a panel peeled off the roof
     # the accelerator: two rails in a cage, its collars and its muzzle
-    pitch, length, y0 = (31, 190, 0) if v == 0 else (9, 74, 0)
-    m = Matrix.Translation((0, y0, 40)) @ turn((pitch, 0, 0))
+    pitch, length, y0 = (30, 190, 0) if v == 0 else (12, 74, 0)
+    m = Matrix.Translation((0, y0, 44)) @ turn((pitch, 0, 0))
 
     def part(c, half, col, bevel=0.0):
         b.box(tuple(m @ Vector(c)), half, col, (pitch, 0, 0), bevel=bevel)
 
     if b.mid:
         for side in (-1, 1):
-            part((side * 6.5, length / 2, 0), (2.6, length / 2, 4.0), PANEL)
-        part((0, length / 2, 5.3), (8.0, length / 2, 1.3), PANEL_D)
-        part((0, length / 2, -5.3), (8.0, length / 2, 1.3), PANEL_D)
-        part((0, length / 2 - 1, 0), (3.4, length / 2 - 1, 3.2), BLACK)     # the dark bore
-        part((0, 22, -7.6), (11, 22, 3.4), HULL)                           # the accelerator cradle
+            part((side * 7.5, length / 2, 0), (3.2, length / 2, 4.6), PANEL)
+        part((0, length / 2, 6.1), (9.6, length / 2, 1.5), PANEL_D)
+        part((0, length / 2, -6.1), (9.6, length / 2, 1.5), PANEL_D)
+        part((0, length / 2 - 1, 0), (4.0, length / 2 - 1, 3.8), BLACK)
+        part((0, 24, -9.0), (13, 24, 4.2), HULL)
         if v == 0:
             for k in range(int(length // 20)):
-                part((0, 14 + k * 20, 0), (10.4, 1.4, 7.4), PANEL_D)       # stiffening collars
+                part((0, 14 + k * 20, 0), (12.5, 1.6, 8.6), RUST if k in (2, 5, 6, 10) else PANEL_D)
     else:
-        part((0, length / 2, 0), (10.4, length / 2, 6.6), PANEL_D)
+        part((0, length / 2, 0), (12.5, length / 2, 7.6), RUST if v else PANEL_D)
     if v == 0:
-        part((0, length + 2, 0), (12, 4.5, 8.5), IRON, 0.3)
-        part((0, length + 6.4, 0), (7.2, 0.4, 5.0), BLACK)
+        part((0, length + 2, 0), (14, 5, 10), IRON, 0.3)
+        part((0, length + 7.0, 0), (8.4, 0.4, 6.0), BLACK)
         if b.fine:
-            part((0, length - 9, 0), (9.6, 3, 6.4), PANEL_D)
-            part((11.4, length * 0.45, 5.6), (1.2, length * 0.42, 0.18), PANEL)     # catwalk
-            for z in (6.9, 7.7):
-                b.beam(tuple(m @ Vector((11.4, 6, z))), tuple(m @ Vector((11.4, length * 0.9, z))), 0.09, IRON, 3)
-    else:                                                                  # the rest of the barrel, where it fell
-        g = Matrix.Translation((15, 142, 7.0)) @ turn((1.5, 0, -18))
+            part((0, length - 9, 0), (11.2, 3, 7.4), PANEL_D)
+            part((13.6, length * 0.45, 6.6), (1.2, length * 0.42, 0.18), PANEL)
+            for z in (7.9, 8.7):
+                b.beam(tuple(m @ Vector((13.6, 6, z))), tuple(m @ Vector((13.6, length * 0.9, z))), 0.09, IRON, 3)
+    else:
+        g = Matrix.Translation((15, 142, 8.2)) @ turn((1.5, 0, -18))
 
         def fall(c, half, col):
             b.box(tuple(g @ Vector(c)), half, col, (1.5, 0, -18))
 
         if b.mid:
             for side in (-1, 1):
-                fall((side * 6.5, 0, 0), (2.6, 52, 4.0), PANEL if side < 0 else RUST)
-            fall((0, 0, 5.3), (8.0, 52, 1.3), PANEL_D)
-            fall((0, 0, -5.3), (8.0, 52, 1.3), PANEL_D)
-            fall((0, 0, 0), (3.4, 51, 3.2), BLACK)
+                fall((side * 7.5, 0, 0), (3.2, 52, 4.6), PANEL if side < 0 else RUST)
+            fall((0, 0, 6.1), (9.6, 52, 1.5), PANEL_D)
+            fall((0, 0, -6.1), (9.6, 52, 1.5), PANEL_D)
+            fall((0, 0, 0), (4.0, 51, 3.8), BLACK)
             for k in range(4):
-                fall((0, -40 + k * 26, 0), (10.4, 1.4, 7.4), PANEL_D)
+                fall((0, -40 + k * 26, 0), (12.5, 1.6, 8.6), RUST if k % 2 else PANEL_D)
         else:
-            fall((0, 0, 0), (10.4, 52, 6.6), RUST)
+            fall((0, 0, 0), (12.5, 52, 7.6), RUST)
         b.rock((4, 86, 1.2), 7, BLACK, 5, (1.7, 1, 0.35))
         if b.mid:
             b.box((2, 92, 5.5), (1.0, 6, 0.6), IRON, (0, 0, -18))
     if b.mid:
         for side in (-1, 1):
-            b.beam((side * 9, -2, zt + 28), tuple(m @ Vector((side * 4, 16, -5))), 1.6, IRON, 6)   # elevating rams
-        b.box((0, -38, zt + 4), (8, 6, 5), IRON)                            # the counterweight
+            b.beam((side * 9, -2, zt + 28), tuple(m @ Vector((side * 4, 16, -5))), 1.6, IRON, 6)
+        b.box((0, -38, zt + 4), (8, 6, 5), IRON)
     if b.fine:
         b.box((0, -44, 2.5), (6, 4, 2.5), CONCRETE_D)
-        b.box((0, -34, zt + 18), (2.5, 8, 1.2), PANEL_D)                    # the cable run off the back
+        b.box((0, -34, zt + 18), (2.5, 8, 1.2), PANEL_D)
         for side in (-1, 1):
-            b.box((side * 24.5, 8, zt + tall - 4), (0.3, 2.0, 1.0), RED)    # warning boards
-
-
+            b.box((side * 24.5, 8, zt + tall - 4), (0.3, 2.0, 1.0), RED)
 def helios_core(b, v):
-    """The Helios citadel: a stepped keep under the ring that focused the array, half of it brought down. 240 m."""
+    """The Helios citadel: a hardened 1980s concrete plant under a broken focusing ring, long abandoned."""
     standing = (1, 1, 0, 1, 0, 1)
-    if b.lod == 2:                                                        # the same mass, in 250 triangles
-        b.cyl((0, 0, 0), 110, 10, CONCRETE, 8, r2=102, rot=(0, 0, 22.5))
-        b.cyl((0, 0, 10), 72, 26, CONCRETE, 6, r2=68)
-        b.cyl((0, 0, 36), 62, 24, HULL, 6, r2=57)
-        b.cyl((0, 0, 60), 50, 20, PANEL_D, 6, r2=44)
+    if b.lod == 2:                                                        # the same mass, in under 300 triangles
+        b.cyl((0, 0, 0), 110, 6, CONCRETE, 8, r2=105, rot=(0, 0, 22.5))
+        b.cyl((0, 0, 6), 96, 4, CONCRETE_D, 8, r2=92, rot=(0, 0, 22.5))
+        b.box((0, 0, 25), (62, 52, 12.5), CONCRETE, taper=0.94)
+        b.box((0, -2, 48), (50, 41, 10.5), CONCRETE, taper=0.96)
+        b.box((0, 1, 67), (34, 27, 8.5), CONCRETE)
+        b.cyl((36, -18, 76), 6.5, 34, CONCRETE_D, 6)
         for k in range(6):
             a = k * math.pi / 3 + 0.2
-            x, y = 92 * math.sin(a), 92 * math.cos(a)
-            tall = 120 if standing[k] else (34, 22)[k % 2]
-            b.box((x, y, 10 + tall / 2), (5.5, 5.5, tall / 2), PANEL, (2 * (k % 3 - 1), 0, -math.degrees(a)), 0.72)
+            x, y = 94 * math.sin(a), 94 * math.cos(a)
+            tall = 118 if standing[k] else (34, 22)[k % 2]
+            b.box((x, y, 12.5 + tall / 2), (6, 7, tall / 2), CONCRETE, (0, 0, -math.degrees(a)), 0.74)
         for k in (0, 2, 6, 10):
             a = k * math.pi / 6 + 0.2
-            b.box((92 * math.sin(a), 92 * math.cos(a), 130), (20.5, 3.6, 3.0), HULL, (0, 0, -math.degrees(a)))
-        for x, y in ((72, 72), (-72, 72), (-72, -72), (72, -72)):
-            b.beam((x, y, 10), (x, y, 44), 10, CONCRETE, 4)
+            b.box((94 * math.sin(a), 94 * math.cos(a), 130), (21, 4, 3.4), CONCRETE_D, (0, 0, -math.degrees(a)))
         b.beam((0, 0, 82), (4, 0, 144), 2.2, IRON, 4)
         return
-    # the terrace: two octagonal steps, its radial buttresses and the gate
-    b.cyl((0, 0, 0), 110, 6, CONCRETE_D, 8, r2=106, rot=(0, 0, 22.5))
-    b.cyl((0, 0, 6), 96, 4, CONCRETE, 8, r2=92, rot=(0, 0, 22.5))
+    # the terrace: three cast steps, one corner collapsed into rubble
+    b.cyl((0, 0, 0), 110, 5.0, CONCRETE, 8, r2=105, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 5.0), 100, 4.0, CONCRETE_D, 8, r2=96, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 9.0), 88, 3.5, CONCRETE, 8, r2=85, rot=(0, 0, 22.5))
     if b.mid:
-        for k in range(8):
+        for k in range(8):                                                 # a low parapet, two gaps in it
             a = k * math.pi / 4 + math.pi / 8
-            b.box((101 * math.sin(a), 101 * math.cos(a), 3.4), (12, 5, 3.4), CONCRETE_D, (0, 0, -math.degrees(a)))
-        for k in range(4):
-            a = k * math.pi / 2 + math.pi / 4
-            b.box((74 * math.sin(a), 74 * math.cos(a), 6.5), (9, 16, 1.2), PANEL_D, (0, 0, -math.degrees(a)))
-    b.box((0, 104, 3.2), (12, 16, 3.2), CONCRETE, bevel=0.4)             # the gate ramp
-    b.box((0, 88, 12), (10, 3.2, 8), PANEL_D, bevel=0.4)
-    b.box((0, 91.2, 9.5), (7, 0.3, 6), BLACK)
-    # the keep: three octagonal tiers, a dark window band, corner buttresses and the breach
-    b.cyl((0, 0, 10), 72, 26, CONCRETE, 8, r2=68)
-    b.cyl((0, 0, 36), 62, 24, HULL, 8, r2=57)
-    b.cyl((0, 0, 60), 50, 20, CONCRETE, 8, r2=44)
-    b.cyl((0, 0, 80), 44, 2.4, PANEL_D, 8)
+            if math.cos(a) > 0.8 or k == 5:
+                continue
+            b.box((104 * math.sin(a), 104 * math.cos(a), 14.6), (15, 2.2, 2.2), CONCRETE_D, (0, 0, -math.degrees(a)))
+    for k in range(6):                                                     # the stair to the gate
+        hh = 2.1 * (k + 1)
+        b.box((0, 88 + k * 3.4, hh / 2), (13, 2.2, hh / 2), CONCRETE_D)
+    b.rock((74, -52, 11), 20, BASALT, 23, (1.4, 1.0, 0.45), 0.35, 2)       # the collapsed corner
     if b.mid:
-        b.cyl((0, 0, 38), 62.4, 3.0, IRON, 8, r2=61.5)
-        for k in range(4):
-            a = k * math.pi / 2 + math.pi / 4
-            b.box((69 * math.sin(a), 69 * math.cos(a), 45), (3.8, 3.8, 35), PANEL_D, (0, 0, -math.degrees(a)), 0.9, 0.4)
+        b.rock((60, -66, 14), 9, CONCRETE_D, 24, (1.5, 1.0, 0.7))
+    # the blockhouse: three set-back rectangles, battered walls, a deep blast door
+    b.box((0, 0, 25), (62, 52, 12.5), CONCRETE, (0, 0, 0), 0.94)
+    b.box((0, -2, 48), (50, 41, 10.5), CONCRETE, (0, 0, 0), 0.96)
+    b.box((0, 1, 67), (34, 27, 8.5), CONCRETE)
+    b.box((0, 1, 76), (32, 25, 0.8), CONCRETE_D)
+    if b.mid:
+        for sx in (-1, 1):                                                 # the corner buttresses
+            for sy in (-1, 1):
+                b.box((sx * 58, sy * 48, 31), (5, 5, 18.5), CONCRETE, (0, 0, 0), 0.9)
+        b.box((0, 52.6, 21), (11, 0.6, 8), BLACK)                         # the blast-door recess
+        b.box((0, 56, 30.5), (14, 3.2, 1.0), CONCRETE_D)                  # its canopy
+        b.box((-5.5, 53.2, 20), (6.5, 0.5, 7), IRON, (0, 0, 0), 0.98)     # one leaf, part open
+        b.box((7, 53.4, 20), (3.2, 0.4, 7), IRON)
+        b.box((0, 61, 1.7), (16, 7, 1.7), CONCRETE_D)                     # the loading dock
+        b.box((0, 66, 3.3), (10, 2, 0.6), CONCRETE_D)
     if b.fine:
-        for k in range(8):
-            a = k * math.pi / 4 + math.pi / 8
-            for r, z, h in ((71.2, 24, 7), (49.2, 68, 6)):
-                b.box((r * math.sin(a), r * math.cos(a), z), (6.5, 0.3, h), BLACK, (0, 0, -math.degrees(a)))
-    b.rock((-52, 28, 54), 26, BLACK, 9, (1.2, 1, 0.85))                   # where the keep was holed
+        for z in (24, 31, 45, 64):                                         # slots on the long faces
+            for j in range(6):
+                b.box((-25 + j * 10, 52.3 + (0.3 if z != 45 else 0), z), (2.0, 0.3, 2.2), BLACK)
+                b.box((-25 + j * 10, -52.3, z), (2.0, 0.3, 2.2), BLACK)
+        for j in range(4):                                                 # and the ends
+            b.box((62.3, -18 + j * 12, 30), (0.3, 2.0, 2.2), BLACK)
+            b.box((-62.3, -18 + j * 12, 30), (0.3, 2.0, 2.2), BLACK)
+    if b.mid:
+        for k in range(16):                                                # rust bleeding from the joints
+            xx = -54 + (k * 37) % 108
+            b.box((xx, 52.1, 22 + (k * 7) % 28), (0.5, 0.12, 4 + k % 5), RUST)
+            b.box((xx, -52.1, 30 + (k * 5) % 22), (0.5, 0.12, 3 + k % 4), RUST)
+        for k in range(8):                                                 # spalled patches
+            b.box((-40 + (k * 23) % 80, 52.2, 25 + (k * 11) % 40), (2.6, 0.14, 1.4), CONCRETE_D)
+    # the breach: a corner torn open, floor slabs and rebar showing
+    b.rock((-52, 40, 46), 24, BLACK, 9, (1.3, 1, 1.0))
     if b.mid:
         for k in range(4):
-            b.beam((-68 + 10 * k, 20 + 6 * (k % 2), 40), (-38 + 7 * k, 30 + 5 * (k % 2), 72), 0.8, IRON, 4)
-    # the emitter mast, leaning, its focusing head dead
-    b.truss((0, 0, 82), (4, 0, 144), 4.6, IRON, 8)
+            b.box((-48 + k * 7, 40 - k * 3, 36 + k * 5), (8, 5, 0.5), CONCRETE_D, (0, 18, -12 + k * 6))
+        for k in range(5):
+            b.beam((-50 + k * 6, 36, 50 + (k % 2) * 8), (-26 + k * 4, 44, 64 + (k % 2) * 6), 0.35, RUST, 4)
+    # the roof plant: an exhaust stack, a vent house and a service crane
+    b.cyl((36, -18, 76), 6.5, 34, CONCRETE_D, 10, r2=4.5)
+    if b.mid:
+        b.cyl((36, -18, 110), 5.0, 1.2, IRON, 10)
+        b.box((-20, 8, 79), (12, 9, 3.5), CONCRETE_D, bevel=0.3)
+        for k in range(3):
+            b.cyl((-26 + k * 6, 8, 82), 1.2, 1.6, IRON, 6)
+        for x in (-30, -10):
+            b.box((x, -18, 84), (1.2, 1.2, 8), CONCRETE_D)
+        b.box((-20, -18, 92), (12, 1.6, 1.0), RUST)
+        b.beam((-20, -18, 92), (-20, -10, 80), 0.3, RUST, 4)
+    # a service shed, a fuel tank and a transformer yard on the terrace
+    if b.mid:
+        b.box((-68, 44, 15.5), (14, 7, 2.8), CONCRETE_D, bevel=0.3)
+        b.box((-68, 51.2, 14.5), (4, 0.1, 2.0), BLACK)
+        b.cyl((72, 46, 12.5), 7, 10, PANEL, 12, r2=6.6)
+        b.cyl((72, 46, 22.6), 6.6, 0.8, CONCRETE_D, 12)
+        b.cyl((72, 46, 12.5), 9, 1.2, CONCRETE_D, 12)
+        for x in (-58, -48, -38):
+            b.box((x, -64, 16), (4, 3, 3), PANEL_D, bevel=0.2)
+            b.beam((x, -64, 19), (x, -64, 25), 0.25, IRON, 4)
+            b.beam((x - 1, -64, 24), (x + 1, -64, 24), 0.12, STEEL, 4)
+    # the mast, leaning, its focusing head dead
+    b.truss((0, 0, 87), (4, 0, 144), 4.6, IRON, 8)
     if b.mid:
         b.cyl((4, 0, 144), 7.5, 2.6, PANEL_D, 10)
         for k in range(3):
             a = k * 2.1 + 0.4
             b.beam((4 + 5 * math.sin(a), 5 * math.cos(a), 146), (4 + 12 * math.sin(a), 12 * math.cos(a), 149 + 3 * (k % 2)), 0.5, IRON, 4)
-        b.cyl((0, 0, 88), 6.8, 2.2, PANEL_D, 8)
-    # the six pylons that carried the ring, two of them down
+        b.cyl((0, 0, 92), 6.8, 2.2, PANEL_D, 8)
+    # the six concrete piers; two down, one leaning
     for k in range(6):
         a = k * math.pi / 3 + 0.2
-        x, y = 92 * math.sin(a), 92 * math.cos(a)
-        tall = 120 if standing[k] else (34, 22)[k % 2]
-        b.box((x, y, 10 + tall / 2), (6.5, 6.5, tall / 2), PANEL, (2 * (k % 3 - 1), 0, -math.degrees(a)), 0.72, 0.8)
+        x, y = 94 * math.sin(a), 94 * math.cos(a)
+        tall = 118 if standing[k] else (34, 22)[k % 2]
+        lean = 7 if k == 1 else 0
+        b.box((x, y, 12.5 + tall / 2), (6, 7, tall / 2), CONCRETE, (lean, 0, -math.degrees(a)), 0.74)
         if b.mid:
-            b.box((x, y, 10 + tall), (7.6, 7.6, 1.1), PANEL_D, (2 * (k % 3 - 1), 0, -math.degrees(a)))
-            b.box((x, y, 10 + tall * 0.55), (6.9, 6.9, 1.0), PANEL_D, (2 * (k % 3 - 1), 0, -math.degrees(a)))
+            b.box((x * 1.01, y * 1.01, 12.5 + tall), (6.8, 7.8, 1.4), CONCRETE_D, (lean, 0, -math.degrees(a)))
+            b.box((x, y, 12.5 + tall * 0.55), (6.3, 7.3, 0.45), CONCRETE_D, (lean, 0, -math.degrees(a)))
+        if b.fine and standing[k]:
+            for j in range(2):
+                b.box((x + 5.4 * math.sin(a + math.pi / 2 + j * 0.3), y + 5.4 * math.cos(a + math.pi / 2 + j * 0.3), 12.5 + tall * 0.5), (0.4, 0.1, tall * 0.35), RUST, (0, 0, -math.degrees(a)))
+            for j in range(4):                                             # cross bracing
+                b.beam((x + 5 * math.sin(a), y + 5 * math.cos(a), 20 + j * 26), (x - 5 * math.sin(a), y - 5 * math.cos(a), 33 + j * 26), 0.25, IRON, 4)
         if not standing[k] and b.mid:
-            b.rock((x * 1.12, y * 1.12, 11), 9, DARK, k, (1.5, 1.1, 0.5))
-    # what is left of the ring, and two segments down on the terrace
-    for k in range(12):
-        if k in (3, 4, 5, 8, 9):
-            continue
+            b.rock((x * 1.12, y * 1.12, 13), 9, DARK, k, (1.5, 1.1, 0.5))
+    # the ring: four segments still up, one hanging, one on the roof, one on the terrace
+    for k in (0, 2, 6, 10):
         a = k * math.pi / 6 + 0.2
-        tilt = 8 if k in (2, 6) else 0
-        b.box((92 * math.sin(a), 92 * math.cos(a), 130), (20.5, 3.8, 3.2), HULL if k % 2 else PANEL_D, (0, tilt, -math.degrees(a)), bevel=0.5)
+        b.box((94 * math.sin(a), 94 * math.cos(a), 130), (21, 4.0, 3.4), CONCRETE_D, (0, 0, -math.degrees(a)), bevel=0.4)
         if b.mid:
-            b.box((92 * math.sin(a), 92 * math.cos(a), 132.8), (20.5, 2.9, 0.4), IRON, (0, tilt, -math.degrees(a)))
-    b.box((60, -96, 13), (20.5, 3.8, 3.2), RUST, (6, 12, 40))
-    b.box((-98, -30, 13), (20.5, 3.8, 3.2), RUST, (4, -8, 100))
-    # four cooling stacks; one brought down
+            b.box((94 * math.sin(a), 94 * math.cos(a), 133.1), (21, 3.1, 0.35), RUST, (0, 0, -math.degrees(a)))
+    if b.mid:
+        a = 7 * math.pi / 6 + 0.2                                             # one hanging off its pier
+        b.box((94 * math.sin(a), 94 * math.cos(a), 120), (21, 4.0, 3.4), CONCRETE_D, (0, 46, -math.degrees(a)))
+    b.box((12, -16, 78), (21, 4.0, 3.4), CONCRETE_D, (0, 14, 62))            # one down on the roof
+    b.box((58, -90, 17), (21, 4.0, 3.4), RUST, (6, 12, 40))                   # one on the terrace
+    # four concrete cooling stacks; one brought down
     for k, (x, y) in enumerate(((72, 72), (-72, 72), (-72, -72), (72, -72))):
         tall = 34 if k != 2 else 13
-        b.cyl((x, y, 10), 13, tall, CONCRETE, 14, r2=9.5 if k != 2 else 12)
+        b.cyl((x, y, 12.5), 13, tall, CONCRETE, 14, r2=9.5 if k != 2 else 12)
         if b.mid:
-            b.cyl((x, y, 9 + tall), 10.2, 1.4, IRON, 14)
-            b.cyl((x, y, 18), 13.5, 1.2, CONCRETE_D, 14)
+            b.cyl((x, y, 11 + tall), 10.2, 1.4, IRON, 14)
+            b.cyl((x, y, 20), 13.5, 1.2, CONCRETE_D, 14)
     if b.fine:
-        for k in range(12):
-            a, r = k * 2.1, 66 + (k * 37) % 20
-            b.box((r * math.sin(a), r * math.cos(a), 11 + k % 3), (3 + k % 3, 0.5, 0.16), RUST, (k * 31 % 60, k * 17 % 40, k * 47 % 180))
-        b.box((0, 91.7, 1.2), (8, 0.4, 1.2), BLACK)
+        for k in range(14):                                                # rubble and rusted plate
+            a, r = k * 2.1, 62 + (k * 37) % 22
+            b.box((r * math.sin(a), r * math.cos(a), 14 + k % 3), (3 + k % 3, 0.5, 0.16), RUST if k % 3 else CONCRETE_D, (k * 31 % 60, k * 17 % 40, k * 47 % 180))
+        b.box((0, 88.4, 1.2), (8, 0.4, 1.2), BLACK)
 
 
 def capacitor(b, v):
     """A power relay mast of the array, 58 m: 0 standing, 1 thrown down."""
-    b.box((0, 0, 1.4), (9.5, 9.5, 1.4), CONCRETE, bevel=0.3)
-    if b.mid:
-        b.box((0, 0, 3.0), (7.4, 7.4, 0.2), CONCRETE_D)
-    m = Matrix.Translation((0, 0, 2.8 if v == 0 else 3.4)) @ turn((0, 0, 0) if v == 0 else (0, 91, 25))
+    b.cyl((0, 0, 0), 9.5, 2.0, CONCRETE_D, 8, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 2.0), 7.8, 1.6, CONCRETE, 8, rot=(0, 0, 22.5))
+    m = Matrix.Translation((0, 0, 3.6 if v == 0 else 4.2)) @ turn((0, 0, 0) if v == 0 else (0, 91, 25))
     lean = (0, 0, 0) if v == 0 else (0, 91, 25)
     at = lambda z, x=0.0, y=0.0: tuple(m @ Vector((x, y, z)))             # noqa: E731
-    b.cyl(at(0), 2.7, 50, PANEL, 10, r2=1.5, rot=lean)
+    b.cyl(at(0), 2.4, 46, CONCRETE, 8, r2=1.5, rot=lean)
     if b.mid:
-        b.cyl(at(0.5), 2.85, 0.5, RED, 10, rot=lean)
+        b.cyl(at(0.4), 2.55, 0.4, RED, 8, rot=lean)
         for k in range(3):
-            z, arm = 14 + k * 12, 7.6 - k * 0.9
-            b.box(at(z), (arm, 0.7, 0.9), PANEL_D, lean)
-            b.box(at(z), (0.7, arm, 0.9), PANEL_D, lean)
+            z, arm = 16 + k * 12, 7.5 - k * 0.8
+            b.box(at(z), (arm, 0.6, 0.7), RUST, lean)
+            b.box(at(z), (0.6, arm, 0.7), RUST, lean)
             for sx, sy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
                 b.cyl(at(z - 1.0, sx * arm, sy * arm), 0.45, 2.0, IRON, 6, rot=lean)
-        b.box((7.5, 4.5, 4.0 if v == 0 else 1.8), (2.4, 1.6, 2.4), HULL, (0, 0 if v == 0 else 28, 0), bevel=0.2)
-        b.box((7.5, 4.5, 6.6 if v == 0 else 2.6), (2.0, 1.3, 0.2), PANEL_D, (0, 0 if v == 0 else 28, 0))
-    b.cyl(at(50), 1.9, 0.6, IRON, 10, rot=lean)
-    b.cyl(at(50.6), 1.3, 0.5, STEEL, 10, rot=lean)
-    b.cyl(at(51.1), 1.7, 0.4, IRON, 10, rot=lean)
-    b.cyl(at(51.5), 0.5, 8, IRON, 6, rot=lean)
+        b.box((8.5, 4.5, 3.8 if v == 0 else 1.7), (2.4, 1.6, 2.4), HULL, (0, 0 if v == 0 else 28, 0), bevel=0.2)
+        b.box((8.5, 4.5, 6.4 if v == 0 else 2.5), (2.0, 1.3, 0.2), PANEL_D, (0, 0 if v == 0 else 28, 0))
+    b.cyl(at(46), 1.8, 0.5, STEEL, 8, rot=lean)
+    b.cyl(at(46.5), 1.2, 0.5, IRON, 8, rot=lean)
+    b.cyl(at(47.0), 1.5, 0.4, STEEL, 8, rot=lean)
+    b.cyl(at(47.4), 0.4, 8, IRON, 6, rot=lean)
     if v == 1:
         b.beam((12, -8, 2), (16, -11, 16), 0.5, IRON, 4)                   # an arm that stayed up
         b.rock((14, -10, 0.8), 3, BASALT, 7, (1.3, 1, 0.6))
@@ -538,7 +619,7 @@ def oil_rig(b, v):
 
 
 def debris(b, v):
-    """Wreckage: torn plates, a bent beam and rubble, 8 to 16 m."""
+    """Wreckage: concrete, torn plate, a bent beam and rubble, 8 to 16 m."""
     plate = (5.0, 3.6, 5.6)[v]
     for k in range((5, 4, 6)[v] if b.mid else 3):
         a, r = k * 2.1 + v, 1.4 + (k * 53 % 40) / 12
@@ -550,9 +631,8 @@ def debris(b, v):
         else:
             b.beam((x - 2.5, y, 0.2), (x + 2.5, y - 1.5, 3.4 + k % 2), 0.35, IRON, 4)
     if b.mid:
+        b.box((0, -2, 0.5), (2.6, 1.6, 0.5), CONCRETE_D, (0, 14, 22))       # a broken concrete slab
         b.cyl((0, -2, 0.5), 1.4, 3.2, IRON, 7, rot=(90, 0, 25))
-
-
 def station_hub(b, v):
     """The core of Polaris Station: a low dome on a raised deck, its airlocks and its mast."""
     b.cyl((0, 0, 9), 44, 2.6, PANEL_D, 8, rot=(0, 0, 22.5))
@@ -665,68 +745,96 @@ def tunnel_portal(b, v):
         b.box((17, 3, 15.6), (1.2, 0.6, 0.6), WHITE)                      # a flood light
 def radar_tower(b, v):
     """A search radar on a lattice tower, 38 m."""
-    b.box((0, 0, 0.6), (6, 6, 0.6), CONCRETE)
-    b.truss((0, 0, 1.2), (0, 0, 28), 5, STEEL, 6)
-    b.box((0, 0, 28.6), (4.5, 4.5, 0.6), IRON)
-    b.cyl((0, 0, 29.2), 1.2, 3, STEEL, 8)
-    b.box((0, 0, 34.5), (9, 0.5, 3), OLIVE, (0, 0, 25), bevel=0.2)        # the antenna
+    b.box((0, 0, 0.7), (6, 6, 0.7), CONCRETE)
+    b.truss((0, 0, 1.4), (0, 0, 28), 5, STEEL, 6)
+    b.box((0, 0, 28.6), (4.8, 4.8, 0.7), IRON)
+    b.cyl((0, 0, 29.3), 1.4, 3.2, STEEL, 8)
+    b.box((0, -0.6, 35.6), (9, 0.6, 3.6), OLIVE, (12, 0, 0), 0.94, 0.2)   # the array
     if b.mid:
-        b.box((0, 1.2, 34.5), (8.4, 0.15, 2.5), DARK, (0, 0, 25))
-        b.box((7, -5, 2.6), (3.2, 2.2, 1.4), OLIVE, bevel=0.2)            # the cabin
+        b.box((0, 0.2, 35.7), (8.2, 0.15, 3.1), DARK, (12, 0, 0))
+        b.box((0.5, -6.2, 2.9), (3.4, 2.4, 1.5), OLIVE, bevel=0.2)        # the cabin
+        b.box((0.5, -8.65, 3.1), (0.8, 0.1, 0.5), BLACK)
+        b.box((0, 0, 31.2), (5.2, 0.3, 0.3), STEEL, (0, 0, 46))
     if b.fine:
-        b.beam((7, -5, 4), (7, -5, 8.5), 0.08, BLACK, 3)
+        b.beam((0.5, -6.2, 4.4), (0.5, -6.2, 9.0), 0.08, BLACK, 3)
+        b.cyl((-4.4, 3.0, 31.0), 1.4, 0.7, STEEL, 10, rot=(30, 0, -30))   # a small dish
         for k in range(4):
             a = k * math.pi / 2 + 0.78
-            b.beam((6 * math.sin(a), 6 * math.cos(a), 29.2), (6 * math.sin(a), 6 * math.cos(a), 30.4), 0.1, YELLOW, 3)
+            b.beam((6 * math.sin(a), 6 * math.cos(a), 29.3), (6 * math.sin(a), 6 * math.cos(a), 30.6), 0.1, IRON, 3)
 
 
 def bunker(b, v):
     """Concrete in the ground: 0 a pillbox with one embrasure, 1 a command bunker with a blast wall and a mast."""
     if v == 0:
-        b.cyl((0, 0, 0), 5.5, 3.2, CONCRETE, 10, r2=5)
-        b.cyl((0, 0, 3.2), 5, 0.7, DARK, 10, r2=3.6)
-        b.box((0, 4.9, 2), (1.8, 0.5, 0.35), BLACK)
-        b.rock((-5, -2, 0.4), 3.2, SANDBAG, 2, (1.5, 1, 0.5))
+        b.cyl((0, 0, 0), 6.2, 2.0, CONCRETE, 6, r2=5.6, rot=(0, 0, 30))
+        b.cyl((0, 0, 2.0), 5.6, 1.6, CONCRETE, 6, r2=4.9, rot=(0, 0, 30))
+        b.cyl((0, 0, 3.6), 4.9, 0.5, CONCRETE_D, 6, rot=(0, 0, 30))
+        if b.mid:
+            b.box((0, 4.6, 2.6), (2.2, 0.5, 0.45), BLACK)                  # the embrasure
+            b.box((0, -5.2, 1.5), (1.4, 0.3, 1.5), IRON)                   # the rear door
+        b.rock((-5.5, -2, 0.5), 3.4, SANDBAG, 2, (1.5, 1, 0.55))
         return
-    b.box((0, 0, 2.2), (9, 6, 2.2), CONCRETE, taper=0.86, bevel=0.4)
-    b.box((0, 0, 4.7), (7.4, 4.6, 0.3), DARK)
-    b.box((0, 6, 1.7), (1.3, 0.3, 1.5), IRON)
-    b.box((5, 9, 1.6), (4, 0.6, 1.6), DARK, (0, 0, 12))
+    b.box((0, 0, 3.0), (9, 6, 3.0), CONCRETE, taper=0.88, bevel=0.4)
+    b.box((0, 0, 6.2), (7.2, 4.5, 0.4), CONCRETE_D)
+    b.box((0, 6, 2.0), (1.4, 0.3, 1.8), IRON)                             # the door
+    b.box((0, 10, 1.4), (6, 1.2, 1.4), CONCRETE, taper=0.92, bevel=0.3)   # the blast wall
+    b.box((5.5, 9, 1.9), (4.4, 0.7, 1.9), CONCRETE_D, (0, 0, 12))
     if b.mid:
-        b.box((-4, 5.9, 3), (1.6, 0.2, 0.3), BLACK)
-        b.truss((-6, -3, 5), (-6, -3, 16), 0.9, STEEL, 4)
-        b.cyl((5, -2, 5), 1.1, 1.2, STEEL, 8)
+        b.box((-4.5, 5.9, 4.2), (1.8, 0.2, 0.35), BLACK)
+        b.box((5, -2, 6.4), (1.2, 1.2, 1.2), PANEL_D)                     # a vent
+        b.truss((-6.5, -3, 6.6), (-6.5, -3, 17), 0.9, STEEL, 4)
+        b.box((-6.5, -3, 18), (0.16, 0.16, 1.6), IRON)
+        b.cyl((6.5, -4, 6.4), 1.0, 1.4, STEEL, 8)
+    if b.fine:
+        b.box((0, 6.15, 3.3), (1.2, 0.1, 0.3), RED)
 
 
 def revetment(b, v):
-    """A horseshoe of earth-filled barriers round a launcher pad, 34 m, open toward +y."""
-    b.box((0, 0, 0.12), (10, 10, 0.12), CONCRETE)
+    """A horseshoe of earth-filled barriers round a pad, 34 m, open toward +y."""
+    b.box((0, 0, 0.14), (10, 10, 0.14), CONCRETE)
     for k in range(9):
         a = math.radians(-160 + k * 40)
         x, y = 15 * math.sin(a), -15 * math.cos(a) * 0.9
-        b.box((x, y, 1.8), (5.6, 1.6, 1.8), SANDBAG, (0, 0, math.degrees(a)), 0.75, 0.25)
+        b.box((x, y, 1.5), (5.8, 1.5, 1.5), SAND_D if k % 2 else SANDBAG, (0, 0, math.degrees(a)), 0.86, 0.2)
+        if b.mid:
+            b.box((x, y, 3.1), (5.6, 1.3, 0.15), tuple(int(c * 0.72) for c in SANDBAG), (0, 0, math.degrees(a)))
     if b.mid:
-        b.box((0, -2, 1.3), (1.6, 3.4, 1.1), OLIVE, bevel=0.2)            # a launcher's bed
-        b.box((0, -1, 3.2), (1.3, 3, 0.8), OLIVE, (22, 0, 0))
+        b.box((0, -16, 1.0), (11, 1.4, 1.0), CONCRETE, taper=0.9)          # the back blast wall
+        b.box((9, 2, 1.3), (2.2, 3.4, 1.3), PANEL_D, bevel=0.2)            # the ready shelter
+        b.box((9, 5.5, 1.3), (1.4, 0.12, 0.9), BLACK)
     if b.fine:
-        b.box((8, 6, 0.8), (1.2, 1.2, 0.8), OLIVE)
-        b.box((-9, 7, 0.5), (0.9, 1.4, 0.5), WOOD)
+        for k in (-1, 0, 1):
+            b.box((k * 5, 9, 0.5), (0.5, 0.5, 0.5), RED)
+        b.box((0, 10, 0.9), (0.1, 3, 0.1), IRON)
 
 
 def gun_emplacement(b, v):
     """A coastal gun in a concrete pit: the barrel looks out along +y."""
-    b.cyl((0, 0, 0), 11, 2.4, CONCRETE, 16, r2=10)
-    b.cyl((0, 0, 2.4), 6, 0.6, DARK, 14)
-    b.box((0, 0.5, 4.6), (3.6, 4.4, 1.7), OLIVE, taper=0.8, bevel=0.3)
-    b.cyl((0, 4, 5), 0.55, 15, IRON, 8, r2=0.4, rot=(-78, 0, 0))
+    b.cyl((0, 0, 0), 12, 1.2, CONCRETE_D, 16)
+    b.cyl((0, 0, 1.2), 11, 0.6, CONCRETE, 16)
     if b.mid:
-        b.cyl((0, 18.6, 8.1), 0.7, 1.5, IRON, 8, rot=(-78, 0, 0))
-        b.box((-13, -6, 1.5), (3.5, 5, 1.5), CONCRETE, taper=0.85)        # the magazine
-        b.box((-13, -0.9, 1.2), (1, 0.2, 1.1), IRON)
+        for k in range(12):
+            if k in (0, 1, 11):
+                continue
+            a = k * math.pi / 6
+            b.box((11.6 * math.sin(a), 11.6 * math.cos(a), 2.6), (4.0, 0.6, 1.4), CONCRETE, (0, 0, -math.degrees(a)))
+    b.box((0, -2, 4.4), (6, 5, 3.2), CONCRETE, taper=0.92, bevel=0.4)     # the casemate
+    if b.mid:
+        b.box((0, 2.9, 4.2), (3.2, 0.4, 2.2), BLACK)                      # the embrasure
+        b.box((0, -2, 7.9), (4.2, 4.2, 0.4), CONCRETE_D)
+        b.box((0, 0, 8.6), (1.6, 1.2, 1.0), OLIVE)                        # the rangefinder
+        b.box((0, 1.1, 8.7), (0.6, 0.3, 0.3), BLACK)
+        b.box((0, -6.5, 4.8), (1, 0.2, 1.4), IRON)
+    b.cyl((0, 2, 4.6), 0.6, 18, IRON, 8, r2=0.45, rot=(-86, 0, 0))
+    if b.mid:
+        b.cyl((0, 17.9, 5.8), 0.75, 1.8, IRON, 8, rot=(-86, 0, 0))
+        b.box((-13, -6, 2.4), (4, 5, 2.4), CONCRETE, taper=0.88, bevel=0.3)   # the magazine
+        b.box((-13, -0.9, 1.6), (1.2, 0.2, 1.6), IRON)
     if b.fine:
         for k in range(7):
-            a = math.radians(-60 + k * 20)
-            b.rock((12.5 * math.sin(a), 12.5 * math.cos(a), 0.5), 1.3, SANDBAG, k, (1.4, 1, 0.6), 0.15, 1)
+            a = math.radians(-50 + k * 16)
+            b.rock((13.4 * math.sin(a), 13.4 * math.cos(a), 0.6), 1.4, SANDBAG, k, (1.4, 1, 0.6), 0.15, 1)
+        b.box((0, -2.1, 6.1), (6.05, 0.12, 0.35), RED)
 
 
 def water_tower(b, v):
@@ -900,35 +1008,48 @@ def boat(b, v):
 
 def landing_craft(b, v):
     """A landing craft driven onto a beach, 24 m, ramp toward +y: 0 whole, ramp down; 1 burnt out and broken-backed."""
-    col = OLIVE if v == 0 else RUST
+    col = OLIVE if v == 0 else (96, 82, 64)
     tilt = (0, 0, 0) if v == 0 else (0, 9, 0)
-    b.box((0, 0, 0.5), (3.8, 11, 0.5), col, tilt)
+    b.box((0, 0, 1.5), (3.9, 12, 1.5), col, tilt)
+    for q in b.bm.verts:                                                  # a pointed bow and a narrower keel
+        if q.co.y > 11.5:
+            q.co.x *= 0.3
+            q.co.y += 1.4
+        if q.co.z < 0.2:
+            q.co.x *= 0.72
+    b.box((0, 0, 3.0), (3.7, 11.8, 0.25), (78, 80, 74) if v == 0 else BLACK, tilt)
     for side in (-1, 1):
-        b.box((side * 3.6, 0, 2.2), (0.3, 11, 1.4), col, tilt, bevel=0.1)
-    b.box((0, -8.6, 3.2), (3.2, 2, 1.5), (72, 78, 60) if v == 0 else BLACK, tilt, bevel=0.2)
-    b.box((0, 12.6, 1.1), (3.3, 2, 0.14), IRON, (-24 if v == 0 else -70, 0, 0))   # the ramp
+        b.box((side * 3.6, 0, 3.4), (0.25, 12, 1.3), col, tilt, bevel=0.1)
+        if b.fine:
+            for k in range(6):
+                b.box((side * 3.75, -8 + k * 4, 4.7), (0.08, 0.08, 0.5), IRON, tilt)
+    b.box((0, -8.8, 3.4), (3.0, 2.2, 1.6), (70, 76, 60) if v == 0 else BLACK, tilt, bevel=0.2)
     if b.mid:
-        b.box((0, -8.6, 5), (1.4, 1.2, 0.5), col, tilt)
-        b.beam((1, -9, 5.4), (1, -9, 8.4), 0.06, BLACK, 3)
+        b.box((0, -10.9, 3.6), (2.4, 0.1, 0.6), GLASS, tilt)
+        b.box((0, 12.6, 1.1), (3.3, 2.4, 0.14), IRON, (-24 if v == 0 else -70, 0, 0))
+        b.beam((1.2, -9.2, 5.0), (1.2, -9.2, 8.2), 0.06, BLACK, 3)
+    if b.fine:
+        b.cyl((2.4, 8.5, 3.6), 0.9, 1.0, OLIVE, 8)                        # a bow gun tub
+        b.beam((2.4, 8.5, 4.2), (2.4, 9.5, 5.4), 0.08, IRON, 4)
     if v == 1:
-        b.rock((1.5, 3, 0.6), 2.6, BLACK, 4, (1.3, 1.6, 0.4))
-        b.box((-2, 5, 2.4), (1.6, 0.12, 1.2), RUST, (40, 20, 30))
+        b.rock((1.5, 3, 0.7), 2.6, BLACK, 4, (1.3, 1.6, 0.4))
+        b.box((-2, 5, 2.6), (1.6, 0.12, 1.2), RUST, (40, 20, 30))
 
 
 def tank_trap(b, v):
     """A line of steel hedgehogs and a run of wire posts, 14 m."""
-    for k in range(4 if b.mid else 2):
-        c = Vector((k * 3.6 - 5.4 if b.mid else k * 7 - 3.5, (k % 2) * 1.6 - 0.8, 0.75))
+    count = 4 if b.mid else 2
+    for k in range(count):
+        c = Vector((k * 3.8 - 5.7, (k % 2) * 1.6 - 0.8, 0.8))
         for d in ((1, 0.2, 0.9), (-0.9, 0.5, 0.8), (0.1, -1, 0.85)):
-            d = Vector(d).normalized() * 1.25
-            b.box(tuple(c), (0.11, 0.11, 1.3), RUST, tuple(math.degrees(x) for x in d.to_track_quat('Z', 'Y').to_euler()))
+            d = Vector(d).normalized() * 1.2
+            b.box(tuple(c), (0.13, 0.13, 1.3), RUST, tuple(math.degrees(x) for x in d.to_track_quat('Z', 'Y').to_euler()))
     if b.fine:
+        b.box((6.5, -1.5, 0.6), (1.2, 2.0, 0.6), CONCRETE_D)              # a concrete block
         for k in range(6):
-            b.beam((k * 2.8 - 7, -3, 0), (k * 2.8 - 7, -3, 1.3), 0.05, WOOD, 3)
+            b.beam((k * 2.8 - 7, -3, 0), (k * 2.8 - 7, -3, 1.4), 0.05, WOOD, 3)
         b.beam((-7, -3, 1.1), (7, -3, 1.1), 0.025, IRON, 3)
         b.beam((-7, -3, 0.6), (7, -3, 0.6), 0.025, IRON, 3)
-
-
 def drill_rig(b, v):
     """An ice-core drilling derrick, 38 m, with its winch house and pipe rack."""
     b.box((0, 0, 0.6), (8, 8, 0.6), CONCRETE_D)
@@ -1049,14 +1170,18 @@ def cypress(b, v):
 
 def radar_dome(b, v):
     """A radome on its drum, 18 m."""
-    b.cyl((0, 0, 0), 6.2, 5, CONCRETE, 16)
-    b.ball((0, 0, 9.5), 7.6, WHITE, 18)
+    b.cyl((0, 0, 0), 6.4, 0.6, CONCRETE_D, 16)
+    b.cyl((0, 0, 0.6), 6.0, 5.2, PANEL, 16)
+    b.cyl((0, 0, 5.8), 6.2, 0.5, PANEL_D, 16)
+    b.ball((0, 0, 6.3), 7.8, WHITE, 18, (1, 1, 0.92))
     if b.mid:
-        b.cyl((0, 0, 5), 6.6, 0.5, DARK, 16)
-        b.box((0, 6.3, 1.4), (1, 0.15, 1.4), IRON)
+        b.cyl((0, 0, 9.2), 7.85, 0.3, (150, 152, 150), 18)                # the seam
+        b.box((0, 6.05, 2.6), (1.1, 0.15, 1.6), IRON)                     # the door
+        b.box((0, 6.2, 2.7), (0.9, 0.06, 0.5), BLACK)
     if b.fine:
-        b.box((7.4, 0, 2.5), (0.9, 1.5, 0.12), STEEL, (0, -45, 0))
-        b.cyl((-3, -3, 5), 0.5, 1, STEEL, 6)
+        b.box((7.2, 1.5, 2.2), (0.9, 1.5, 0.14), STEEL, (0, -45, 0))      # a louvre
+        b.beam((0, 0, 13.6), (0, 0, 16.4), 0.06, IRON, 3)                 # the lightning rod
+        b.box((-3, -4, 2.0), (0.8, 0.8, 0.8), STEEL)
 
 
 SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
