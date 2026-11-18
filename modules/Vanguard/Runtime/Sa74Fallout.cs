@@ -673,10 +673,4 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void Prefix(LevelInfo __instance) => Sa74Fallout.Winter(__instance);
     }
 
-    /// <summary>Weather owns the final native write. Apply the strategic override at that seam, in every update phase.</summary>
-    [HarmonyPatch(typeof(BoscaliSummer.Modules.Weather.Runtime.WeatherManager), "ApplyNative")]
-    internal static class Sa74WeatherWritePatch
-    {
-        private static void Postfix(LevelInfo level) => Sa74Fallout.Winter(level);
-    }
 }

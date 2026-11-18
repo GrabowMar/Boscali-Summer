@@ -86,7 +86,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             try
             {
                 // Set in the command buffer, so they apply to this face's draw only: the main camera sets its own before its march.
-                cmd.SetGlobalMatrix(FrustumId, CloudVolumeUniforms.FrustumRays(inverseView, renderingData.cameraData.GetProjectionMatrix().inverse));
+                cmd.SetGlobalMatrix(FrustumId, VolumeFrustum.Rays(inverseView, renderingData.cameraData.GetProjectionMatrix().inverse));
                 cmd.SetGlobalVector(CameraPosId, inverseView.GetColumn(3));
                 cmd.DrawProcedural(Matrix4x4.identity, probe, passIndex, MeshTopology.Triangles, 3);
                 context.ExecuteCommandBuffer(cmd);

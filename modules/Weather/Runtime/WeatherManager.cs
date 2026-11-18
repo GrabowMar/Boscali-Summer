@@ -1343,6 +1343,12 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         /// lands the sky, fog and light on this frame instead of on the next 3 s refresh.</summary>
         private void ApplyNative(LevelInfo level, bool force, bool skybox = true)
         {
+            WriteNative(level, force, skybox);
+            if (ModuleServices.TryGet(out NativeWeatherOverride apply)) apply(level);
+        }
+
+        private void WriteNative(LevelInfo level, bool force, bool skybox)
+        {
             if (!baselineCaptured) return;
             level.conditions = Mathf.Min(NativeWeather.ConditionsCap, currentConditions);   // the eased value is capped already; the min keeps a stray write from opening vanilla's grey-and-no-sun gate
             level.cloudHeight = currentCloudHeight;

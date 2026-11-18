@@ -9,6 +9,19 @@ using System.Collections.Generic;
 
 namespace BoscaliSummer.Modules.Weather.Visuals
 {
+    internal sealed class CloudVolumeView : ICloudVolumeView
+    {
+        public byte[] GetNoise(out int size)
+        {
+            WeatherVolumeDressing.WarmNoise();
+            size = WeatherVolumeDressing.NoiseSize;
+            byte[] data = WeatherVolumeDressing.NoiseData;
+            return data != null && data.Length == WeatherVolumeDressing.NoiseTexels * 4 ? data : null;
+        }
+
+        public bool HasResolved(Camera camera) => WeatherCloudPass.HasResolved(camera);
+    }
+
     /// <summary>One world-anchored volume. Small 2D maps from WeatherField control the
     /// front, cell and cumulus density: a 256-square near map over the flight domain and a
     /// coarse far map (the level of detail beyond the mission area) out to the horizon. The

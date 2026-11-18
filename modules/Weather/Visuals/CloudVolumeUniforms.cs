@@ -1,3 +1,4 @@
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Modules.Weather.Domain;
 using UnityEngine;
 
@@ -276,19 +277,6 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             material.SetFloat(FarSpanId, farHalf * 2f);
         }
 
-        /// <summary>World rays through the four corners of a view, one per row (bottom-left, bottom-right, top-left, top-right), each of unit length along the camera axis.</summary>
-        internal static Matrix4x4 FrustumRays(Matrix4x4 inverseView, Matrix4x4 inverseProjection)
-        {
-            var m = new Matrix4x4();
-            for (int i = 0; i < 4; i++)
-            {
-                Vector3 corner = inverseProjection.MultiplyPoint(new Vector3((i & 1) == 0 ? -1f : 1f,
-                    i < 2 ? -1f : 1f, -1f));
-                m.SetRow(i, inverseView.MultiplyVector(corner / -corner.z));
-            }
-            return m;
-        }
-
         internal bool ApplyView(Camera camera, Vector3 globalPosition, Matrix4x4 view,
             Matrix4x4 projection, Material material = null)
         {
@@ -296,7 +284,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             // scale, which Unity's camera matrix ignores, and misses overridden views.
             Matrix4x4 inverseView = view.inverse, inverseProjection = projection.inverse;
             Transform t = camera.transform;
-            Matrix4x4 m = FrustumRays(inverseView, inverseProjection);
+            Matrix4x4 m = VolumeFrustum.Rays(inverseView, inverseProjection);
             Vector3 origin = inverseView.GetColumn(3);
             Vector3 forward = inverseView.MultiplyVector(Vector3.back).normalized;
             Quaternion rotation = Quaternion.LookRotation(forward, inverseView.GetColumn(1));

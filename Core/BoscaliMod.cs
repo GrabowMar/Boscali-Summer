@@ -76,9 +76,12 @@ namespace BoscaliSummer.Core
             runtimeRoot.hideFlags = HideFlags.HideAndDontSave;
             UnityEngine.Object.DontDestroyOnLoad(runtimeRoot);
             sceneLifecycle = runtimeRoot.AddComponent<SceneLifecycle>();
-            // Pilot reflection needs native glass even when dynamic Weather is disabled.
+            // Glass reflections and cloud noise also serve effects when dynamic Weather is disabled.
             if (!Application.isBatchMode)
+            {
                 services.Add<ICanopyGlassView>(new BoscaliSummer.Modules.Weather.Visuals.CanopyGlassView());
+                services.Add<ICloudVolumeView>(new BoscaliSummer.Modules.Weather.Visuals.CloudVolumeView());
+            }
             ModuleServices.Active = services;
             MissionProfile.Changed += OnMissionProfileChanged;
             MissionProfile.Preparing += ResetForMission;

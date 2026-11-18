@@ -8,7 +8,6 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Vanguard.Domain;
 using BoscaliSummer.Modules.Vanguard.Runtime;
-using BoscaliSummer.Modules.Weather.Visuals;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
@@ -70,7 +69,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
         {
             if (Application.isBatchMode) return;
             instance = this;
-            WeatherVolumeDressing.WarmNoise();
+            if (ModuleServices.TryGet(out ICloudVolumeView clouds)) clouds.GetNoise(out _);
             RenderPipelineManager.beginCameraRendering += BeginCamera;
         }
 
@@ -88,9 +87,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (shader == null || !shader.isSupported) return false;
             if (noise == null)
             {
-                byte[] data = WeatherVolumeDressing.NoiseData;
-                if (data == null || data.Length != WeatherVolumeDressing.NoiseTexels * 4) return false;
-                noise = new Texture3D(WeatherVolumeDressing.NoiseSize, WeatherVolumeDressing.NoiseSize, WeatherVolumeDressing.NoiseSize,
+                if (!ModuleServices.TryGet(out ICloudVolumeView clouds)) return false;
+                byte[] data = clouds.GetNoise(out int size);
+                if (data == null) return false;
+                noise = new Texture3D(size, size, size,
                     TextureFormat.RGBA32, true) { name = "SA-74N shared cloud billows", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear };
                 noise.SetPixelData(data, 0);
                 noise.Apply(true, true);
@@ -268,7 +268,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (!Ensure(descriptor.width, descriptor.height)) return;
                 Matrix4x4 inverseView = camera.worldToCameraMatrix.inverse;
                 Matrix4x4 inverseProjection = renderingData.cameraData.GetProjectionMatrix().inverse;
-                material.SetMatrix("_Sa74Frustum", CloudVolumeUniforms.FrustumRays(inverseView, inverseProjection));
+                material.SetMatrix("_Sa74Frustum", VolumeFrustum.Rays(inverseView, inverseProjection));
                 material.SetVector("_Sa74Camera", inverseView.GetColumn(3));
                 CommandBuffer cmd = CommandBufferPool.Get("SA-74N volumetric mushroom");
                 try
@@ -278,7 +278,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     cmd.SetRenderTarget(targets, color);
                     cmd.SetViewport(new Rect(0f, 0f, color.width, color.height));
                     cmd.DrawProcedural(Matrix4x4.identity, material, 0, MeshTopology.Triangles, 3);
-                    deferComposite = WeatherCloudPass.HasResolved(camera);
+                    deferComposite = ModuleServices.TryGet(out ICloudVolumeView clouds) && clouds.HasResolved(camera);
                     CompositedAfterWeather = deferComposite;
                     RestoreTarget(cmd, ref renderingData);
                     if (!deferComposite) cmd.DrawProcedural(Matrix4x4.identity, material, 1, MeshTopology.Triangles, 3);

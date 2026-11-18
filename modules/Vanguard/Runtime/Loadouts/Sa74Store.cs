@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using BoscaliSummer.Core.Contracts;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
@@ -41,7 +42,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         {
             typeof(Sa74BlockedPatch), typeof(Sa74PrefabsPatch), typeof(Sa74DetonatePatch), typeof(Sa74ReleasedPatch),
             typeof(Sa74DetonationReplayPatch), typeof(Sa74SavedLoadoutPatch), typeof(Sa74BlastTargetsPatch), typeof(Sa74WinterPatch),
-            typeof(Sa74WeatherWritePatch), typeof(Sa74PressureTimingPatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
+            typeof(Sa74PressureTimingPatch), typeof(Presentation.Sa74NativeBlastAudioPatch),
             typeof(Sa74BuildingRegistrationPatch), typeof(Sa74MapBuildingRegistrationPatch)
         };
 
@@ -56,6 +57,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             RuntimeStores.Add(recipe);
             context.AddSceneService<Sa74CargoService>(61);
             context.AddSceneService<Sa74Fallout>(62);
+            context.AddService<NativeWeatherOverride>(Sa74Fallout.Winter);
             context.AddSceneService<Networking.Sa74Net>(62);
             context.AddSceneService<Sa74CloudClearance>(63);
             context.AddSceneService<Presentation.Sa74Mushroom>(63);
