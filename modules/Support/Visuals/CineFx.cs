@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
 {
     /// <summary>
     /// The shared kit behind the rod, EMP and flare effects: procedural billowy smoke / glow / ring textures, the four particle materials built on them, a layer builder with
-    /// sane defaults and the little world helpers (wind, daylight, camera, origin-safe positions). Every layer is a Local-space particle system under a root that hangs on
+    /// sane defaults and the little world helpers (wind, daylight, origin-safe positions). Every layer is a Local-space particle system under a root that hangs on
     /// <c>Datum.origin</c>, so a floating-origin shift carries the whole effect along; callers emit with <see cref="ToSim"/> positions. Nothing here allocates per frame.
     /// </summary>
     internal static class CineFx
@@ -248,27 +248,6 @@ namespace BoscaliSummer.Modules.Support.Visuals
         {
             LevelInfo level = NetworkSceneSingleton<LevelInfo>.i;
             return level != null ? Mathf.InverseLerp(0.03f, 0.35f, level.GetAmbientLight()) : 1f;
-        }
-
-        public static Camera Cam()
-        {
-            var csm = SceneSingleton<CameraStateManager>.i;
-            return csm != null && csm.mainCamera != null ? csm.mainCamera : Camera.main;
-        }
-
-        public static float CameraDistance(Vector3 world)
-        {
-            Camera c = Cam();
-            return c != null ? Vector3.Distance(c.transform.position, world) : 2000f;
-        }
-
-        /// <summary>Camera shake scaled by range: strong inside a few km, nothing past <paramref name="reach"/>.</summary>
-        public static void Shake(Vector3 world, float reach, float strength)
-        {
-            var csm = SceneSingleton<CameraStateManager>.i;
-            if (csm == null) return;
-            float k = Mathf.Clamp01(1f - CameraDistance(world) / reach);
-            if (k > 0.02f) csm.ShakeCamera(Mathf.Lerp(0.2f, 3.4f, k * k) * strength, Mathf.Lerp(0.3f, 4.2f, k) * strength);
         }
 
         // ---- recorded audio ----------------------------------------------------------------------------------------------

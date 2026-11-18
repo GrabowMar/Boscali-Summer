@@ -1,5 +1,6 @@
 using System;
 using BoscaliSummer.Core.Contracts;
+using BoscaliSummer.Core.Math;
 
 namespace BoscaliSummer.Modules.Hud.Domain
 {
@@ -96,7 +97,12 @@ namespace BoscaliSummer.Modules.Hud.Domain
                 count--;
             }
             float start = count > 0 ? CueTimeline.StartOf(arrival, ring[count - 1].Arrival, ring[count - 1].Start) : arrival;
-            var cue = new Cue { Source = source, Class = cls, Severity = severity, Text = text, Size = size, Arrival = arrival, Start = start, Life = CueTimeline.LifeOf(seconds), Serial = ++serial, Seed = CueText.Seed(text) };
+            var cue = new Cue
+            {
+                Source = source, Class = cls, Severity = severity, Text = text, Size = size,
+                Arrival = arrival, Start = start, Life = CueTimeline.LifeOf(seconds), Serial = ++serial,
+                Seed = unchecked((int)Deterministic.HashString(text))
+            };
             ring[count++] = cue;
             return cue;
         }

@@ -154,7 +154,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             last = p; haveLast = true;
             // the last seconds: the ground starts to tremble under a rod you can hear coming
             float agl = p.y - Datum.LocalSeaY;
-            if (agl < 2500f) CineFx.Shake(p, 12000f, 0.25f * (1f - agl / 2500f));
+            if (agl < 2500f) WorldEffectCamera.Shake(p, 12000f, 0.25f * (1f - agl / 2500f));
         }
 
         private void OnDestroy()
@@ -173,7 +173,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
 
         private void UpdateAudio()
         {
-            Camera listener = CineFx.Cam();
+            Camera listener = WorldEffectCamera.Main;
             var mixer = SoundManager.i != null ? SoundManager.i.EffectsMixer : null;
             if (audioSource == null || whine == null || mixer == null || listener == null ||
                 (listener.transform.position - transform.position).sqrMagnitude >= audioSource.maxDistance * audioSource.maxDistance)
@@ -385,7 +385,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             flashLight.enabled = true; glowLight.enabled = true;
             flashLight.transform.position = ground + Vector3.up * 30f;
             glowLight.transform.position = ground + Vector3.up * 60f;
-            float dist = CineFx.CameraDistance(ground);
+            float dist = WorldEffectCamera.DistanceTo(ground);
             shakeAt = Mathf.Min(dist / 1800f, 4f); shakeStrength = s;
             if (boom == null) boom = SfxClips.Get("rod-impact");
             audioSource.clip = boom; audioSource.transform.position = ground;
@@ -482,7 +482,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
             if (shakeStrength > 0f && age >= shakeAt)
             {
                 float k = (age - shakeAt) / 3f;
-                if (k < 1f) CineFx.Shake(ground, 40000f, (1f - k) * (1f - k) * shakeStrength); // a STARFALL rod shakes at its own scale
+                if (k < 1f) WorldEffectCamera.Shake(ground, 40000f, (1f - k) * (1f - k) * shakeStrength); // a STARFALL rod shakes at its own scale
                 else shakeStrength = 0f;
             }
             float shade = Mathf.Lerp(0.38f, 1f, day);

@@ -101,17 +101,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
             }
             return CueClass.Sys;
         }
-
-        /// <summary>A stable number from the words (FNV-1a): what the decode's glyphs are seeded from, so the same message scrambles the same way in every render.</summary>
-        public static int Seed(string text)
-        {
-            unchecked
-            {
-                uint h = 2166136261u;
-                for (int i = 0; i < text.Length; i++) h = (h ^ text[i]) * 16777619u;
-                return (int)h;
-            }
-        }
     }
 
     /// <summary>

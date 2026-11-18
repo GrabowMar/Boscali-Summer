@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using BoscaliSummer.Core.Math;
 using UnityEngine;
 
 namespace BoscaliSummer.Garrisons
@@ -105,7 +106,7 @@ namespace BoscaliSummer.Garrisons
             root.transform.SetParent(transform, false);
             var definition = building.definition as BuildingDefinition;
             float pit = Mathf.Max(2.3f, Mathf.Max(definition?.width ?? 4f, definition?.length ?? 4f) * 0.5f + 0.4f);
-            uint seed = Hash(building.NetworkUniqueName);
+            uint seed = Deterministic.HashString(building.NetworkUniqueName);
 
             var bags = new Geometry();
             var hardware = new Geometry();
@@ -343,13 +344,6 @@ namespace BoscaliSummer.Garrisons
                     center.y = 0.14f + course * 0.26f;
                     bags.AddBag(center, BagSize, yaw);
                 }
-        }
-
-        private static uint Hash(string text)
-        {
-            uint h = 2166136261;
-            if (text != null) for (int i = 0; i < text.Length; i++) h = (h ^ text[i]) * 16777619;
-            return h;
         }
 
         private static float Noise(uint seed, int x, int z)

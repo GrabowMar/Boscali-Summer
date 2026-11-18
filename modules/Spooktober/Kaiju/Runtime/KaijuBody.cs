@@ -246,7 +246,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
                 string state = KaijuRig.State(Action);
                 if (Action == shownAction) animator.Play(state, 0, 0f); // same attack again: restart it
                 else animator.CrossFadeInFixedTime(state, Action == KaijuAction.Death ? 0.3f : 0.6f);
-                if (Action == KaijuAction.Death || Action == KaijuAction.Roar) Shake(Chest, 30000f, 1.6f);
+                if (Action == KaijuAction.Death || Action == KaijuAction.Roar) WorldEffectCamera.Shake(Chest, 30000f, 1.6f);
                 Sound(Action);
                 shownAction = Action;
                 shownStart = ActionStart;
@@ -420,7 +420,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
                 foreach (GameObject hull in torso) Destroy(hull.GetComponent<KaijuHeartHide>());
             ParticleFx.Spawn("ops-rod-impact", at, Quaternion.LookRotation(at - Chest), 1.6f);
             ParticleFx.Spawn("fx-fuel-fireball", at, Quaternion.identity, 4f);
-            Shake(at, 15000f, 1f);
+            WorldEffectCamera.Shake(at, 15000f, 1f);
         }
 
         /// <summary>Walk-cycle footfalls at each foot's landing ground: dust, a ground shake, and (host) <see cref="OnStomp"/> crush damage.</summary>
@@ -440,7 +440,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
                     if (!(walkPhase < phase ? walkPhase < at && at <= phase : at > walkPhase || at <= phase)) continue;
                     Vector3 foot = footGround[i];
                     ParticleFx.Spawn("fx-collapse-dust", foot, Quaternion.identity, 8f);
-                    Shake(foot, 20000f, 0.8f);
+                    WorldEffectCamera.Shake(foot, 20000f, 0.8f);
                     OnStomp?.Invoke(foot);
                     Step(foot);
                 }
@@ -479,7 +479,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
                 {
                     nextBeamFx = Time.time + 0.18f;
                     ParticleFx.Spawn("fx-fuel-fireball", hit.point, Quaternion.identity, 3f);
-                    Shake(hit.point, 6000f, 0.5f);
+                    WorldEffectCamera.Shake(hit.point, 6000f, 0.5f);
                 }
             }
 
@@ -606,16 +606,6 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
             NodeIds.Clear(); // one kaiju per peer
             if (coreMat != null) Destroy(coreMat);
             if (glowMat != null) Destroy(glowMat);
-        }
-
-        // Local copies of Support's CineFx.Shake and Vanguard's LanceFxPlayer.MakeAdditive: a module may not import a sibling.
-        private static void Shake(Vector3 world, float reach, float strength)
-        {
-            var csm = SceneSingleton<CameraStateManager>.i;
-            if (csm == null) return;
-            Camera c = csm.mainCamera != null ? csm.mainCamera : Camera.main;
-            float k = Mathf.Clamp01(1f - (c != null ? Vector3.Distance(c.transform.position, world) : 2000f) / reach);
-            if (k > 0.02f) csm.ShakeCamera(Mathf.Lerp(0.2f, 3.4f, k * k) * strength, Mathf.Lerp(0.3f, 4.2f, k) * strength);
         }
 
         private static void MakeAdditive(Material m)

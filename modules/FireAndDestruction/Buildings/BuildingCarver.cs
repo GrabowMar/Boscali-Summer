@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Math;
 using UnityEngine;
@@ -258,7 +259,7 @@ namespace BoscaliSummer.Fire
             BuildMound(owner);
             if (!show) { owner.MoundBorn = -100f; owner.Mound.transform.localScale = Vector3.one; RevealWreck(owner); }
             // The groan: a rumble through the airframe while the sections shudder (no extra pieces: zero added cost).
-            else Shake(Datum.origin.TransformPoint(owner.Bounds.center), ShakeReach(owner), 0.3f);
+            else WorldEffectCamera.Shake(Datum.origin.TransformPoint(owner.Bounds.center), ShakeReach(owner), 0.3f);
             // Pockets of fire smoulder in the heap; late-join replays stay cold.
             if (animate)
                 for (int i = 0, n = height > 28f ? 3 : 2; i < n; i++)
@@ -469,16 +470,6 @@ namespace BoscaliSummer.Fire
         }
 
         private static float ShakeReach(Owner owner) => 600f + 25f * (owner.Bounds.max.y - owner.Ground);
-
-        // Local copy of Support's CineFx.Shake: a module may not import a sibling.
-        private static void Shake(Vector3 world, float reach, float strength)
-        {
-            var csm = SceneSingleton<CameraStateManager>.i;
-            if (csm == null) return;
-            Camera c = csm.mainCamera != null ? csm.mainCamera : Camera.main;
-            float k = Mathf.Clamp01(1f - (c != null ? Vector3.Distance(c.transform.position, world) : 2000f) / reach);
-            if (k > 0.02f) csm.ShakeCamera(Mathf.Lerp(0.2f, 3.4f, k * k) * strength, Mathf.Lerp(0.3f, 4.2f, k) * strength);
-        }
 
         /// <summary>Near: the carved copy draws. Far, still standing: the native LOD renderers stand in.</summary>
         private static void Show(Owner owner, bool near)
@@ -930,7 +921,7 @@ namespace BoscaliSummer.Fire
                     Vector3 at = t.localPosition; at.y = ground;
                     RuinAftermathManager.Instance?.LandingDust(Datum.origin.TransformPoint(at).ToGlobalPosition());
                     // The first mass to hit the street is felt, once per building.
-                    if (!piece.Owner.Thudded) { piece.Owner.Thudded = true; Shake(Datum.origin.TransformPoint(at), ShakeReach(piece.Owner), 0.7f); }
+                    if (!piece.Owner.Thudded) { piece.Owner.Thudded = true; WorldEffectCamera.Shake(Datum.origin.TransformPoint(at), ShakeReach(piece.Owner), 0.7f); }
                     // The section shatters on impact and throws rubble across the street (after this loop).
                     sprays.Add((piece.Owner, at + Vector3.up * 1.5f, (piece.Outward + Vector3.up * 0.2f).normalized, Mathf.Clamp(piece.Radius * 0.6f, 0.5f, 1.4f)));
                 }

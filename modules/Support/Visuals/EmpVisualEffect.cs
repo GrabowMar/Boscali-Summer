@@ -208,7 +208,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 }
             }
 
-            Camera cam = CineFx.Cam();
+            Camera cam = WorldEffectCamera.Main;
             float heard = 0f;
             if (cam != null)
             {
@@ -247,7 +247,7 @@ namespace BoscaliSummer.Modules.Support.Visuals
                 if (age > flickerUntil[i]) flickers[i].enabled = false;
                 else flickers[i].intensity = Random.value > 0.35f ? Random.Range(2f, 6f) : 0f;
             }
-            Camera cam = CineFx.Cam();
+            Camera cam = WorldEffectCamera.Main;
             if (cam == null) return;
             Vector3 b = burst.ToLocalPosition();
             float fade = 1f - Smooth(Life - 12f, Life, age);
