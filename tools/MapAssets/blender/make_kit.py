@@ -389,119 +389,150 @@ def capacitor(b, v):
 def castle(b, v):
     """A stone fortress on its crag, 90 m across: 0 kept up, 1 a ruin."""
     ruin = v == 1
-    dark, roof = tuple(int(c * 0.78) for c in STONE), (124, 78, 62)
-    b.rock((0, 0, -3), 54, (118, 110, 98), 31, (1, 1, 0.24), 0.16, 2)
-    z0, half = 8.0, 34.0
-    for k in range(4):
+    stone, dark = STONE, tuple(int(c * 0.84) for c in STONE)
+    roof = (116, 78, 62)
+    b.rock((0, 0, -4), 52, (122, 114, 102), 31, (1.05, 1, 0.26), 0.16, 2)
+    z0, half, wall = 7.0, 32.0, 10.0
+    for k in range(4):                                                     # the curtain wall and its square towers
         cx, cy = ((1, 1), (-1, 1), (-1, -1), (1, -1))[k]
         nx, ny = ((1, 1), (-1, 1), (-1, -1), (1, -1))[(k + 1) % 4]
-        tall = 11 if not ruin else (7, 3.5, 9, 0)[k]
+        tall = wall if not ruin else (wall, 4, wall - 2, 0)[k]
         if tall:
             along_x = cy == ny
-            b.box(((cx + nx) / 2 * half, (cy + ny) / 2 * half, z0 + tall / 2), (half if along_x else 1.7, 1.7 if along_x else half, tall / 2), STONE)
-            for j in range(-5, 6) if b.fine and not ruin else ():           # the battlements
-                b.box(((cx + nx) / 2 * half + (j * 5.6 if along_x else 0), (cy + ny) / 2 * half + (0 if along_x else j * 5.6), z0 + tall + 0.7), (1.5, 1.5, 0.7), STONE)
-        up = 18 if not ruin else (12, 7, 15, 5)[k]
-        b.cyl((cx * half, cy * half, z0 - 1), 6.6, up, STONE, 12)
-        if not ruin:
-            b.cyl((cx * half, cy * half, z0 - 1 + up), 7.4, 1.8, dark, 12)
-            if b.mid:
-                b.cyl((cx * half, cy * half, z0 + 0.8 + up), 7.2, 8, roof, 12, r2=0.3)
-        elif b.mid:
-            b.rock((cx * half * 1.1, cy * half * 0.9, z0), 5, dark, k + 3, (1.4, 1, 0.5))
-    b.box((0, half, z0 + (7 if not ruin else 4)), (6.5, 3.2, 7 if not ruin else 4), STONE, bevel=0.3)   # the gatehouse
-    b.box((0, half + 3.3, z0 + 3), (2.6, 0.2, 3), BLACK)
-    keep = 15 if not ruin else 8
-    b.box((-8, -7, z0 + keep), (9.5, 9.5, keep), STONE, taper=0.94 if not ruin else 0.8, bevel=0.4)
+            b.box(((cx + nx) / 2 * half, (cy + ny) / 2 * half, z0 + tall / 2), (half if along_x else 1.8, 1.8 if along_x else half, tall / 2), stone)
+            if b.mid and not ruin:
+                for j in range(-5, 6, 1 if b.fine else 2):
+                    b.box(((cx + nx) / 2 * half + (j * 5.8 if along_x else 0), (cy + ny) / 2 * half + (0 if along_x else j * 5.8), z0 + tall + 0.8), (1.6, 1.6, 0.8), stone)
+        tw = 14.0 if not ruin else (10, 5, 12, 4)[k]
+        b.box((cx * half, cy * half, z0 + tw / 2), (4.6, 4.6, tw / 2), stone, taper=0.95, bevel=0.3)
+        if not ruin and b.fine:
+            b.cyl((cx * half, cy * half, z0 + tw), 3.4, 4.2, stone, 8)
+    b.box((0, half, z0 + 7), (7, 4, 7), stone, bevel=0.3)                  # the gatehouse
+    b.box((0, half + 4.1, z0 + 3.2), (2.8, 0.2, 3.2), BLACK)
+    if b.mid:
+        for side in (-1, 1):
+            b.box((side * 8.5, half + 1, z0 + 9), (2.2, 2.2, 2.4), stone)  # its flanking turrets
+    keep = 30 if not ruin else 14
+    b.box((-8, -7, z0 + keep / 2), (9.5, 9.5, keep / 2), stone, taper=0.94 if not ruin else 0.8, bevel=0.4)
     if not ruin:
-        b.box((-8, -7, z0 + 2 * keep + 0.9), (10, 10, 0.9), dark)
-        b.box((13, 6, z0 + 4), (8, 5.5, 4), STONE)                         # the hall
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                b.box((-8 + sx * 8.63, -7 + sy * 8.63, z0 + keep + 2.2), (1.6, 1.6, 2.2), stone, bevel=0.2)
+        b.box((13, 6, z0 + 4), (8, 5.5, 4), stone)                         # the hall
         for side in (-1, 1):
             b.box((13, 6 + side * 2.9, z0 + 9.4), (8.3, 3.6, 0.25), roof, (-side * 32, 0, 0))
         if b.fine:
-            b.beam((-8, -7, z0 + 31), (-8, -7, z0 + 39), 0.12, IRON, 3)
-            b.box((-6.6, -7, z0 + 37.6), (1.4, 0.05, 0.9), RED)
+            b.beam((-8, -7, z0 + keep + 4), (-8, -7, z0 + keep + 12), 0.12, IRON, 3)
+            b.box((-6.6, -7, z0 + keep + 10.6), (1.4, 0.05, 0.9), RED)
             for j in range(-1, 2):
-                b.box((-8 + j * 5, 2.55, z0 + 20), (0.5, 0.06, 1.3), BLACK)
+                b.box((-8 + j * 5, 2.55, z0 + keep * 0.55), (0.5, 0.06, 1.3), BLACK)
     else:
-        b.rock((-4, -2, z0 + 15), 7, dark, 12, (1.3, 1.1, 0.7))
+        b.rock((-4, -2, z0 + 12), 8, dark, 12, (1.3, 1.1, 0.7))
         b.rock((14, 8, z0), 8, dark, 14, (1.5, 1, 0.4))
+        b.rock((-24, 18, z0), 5, dark, 15, (1.4, 1, 0.5))
 
 
 def ruins(b, v):
     """Old stones: 0 a temple's colonnade on its platform, 1 a run of broken arches, 2 the stump of a round tower."""
-    pale = (186, 176, 156)
+    pale = (176, 166, 146)
     worn = tuple(int(c * 0.82) for c in pale)
     if v == 0:
-        b.box((0, 0, 0.9), (23, 13, 0.9), worn)
-        b.box((0, 0, 2.1), (21, 11, 0.4), pale)
+        b.box((0, 0, 1.0), (23, 13, 1.0), worn)
+        b.box((0, 0, 2.4), (21, 11, 0.5), pale)
         heights = (9, 9, 4, 9, 6.5, 9, 2.5, 9, 9, 3.5, 7, 9, 9, 5)
         for k, tall in enumerate(heights):
             x, y = -18 + (k % 7) * 6, -8 + (k // 7) * 16
-            b.cyl((x, y, 2.5), 1.15, tall, pale, 10, r2=1.0)
+            b.cyl((x, y, 2.9), 1.3, tall, pale, 10, r2=1.1)
             if tall == 9 and b.mid:
-                b.box((x, y, 11.9), (1.5, 1.5, 0.4), worn)
-        for x0, x1, y in ((-18, -12, -8), (12, 18, -8), (0, 6, 8)):          # lintels still up
-            b.box(((x0 + x1) / 2, y, 12.9), (4.4, 1.3, 0.7), pale)
+                b.box((x, y, 12.4), (1.7, 1.7, 0.4), worn)
+        for x0, x1, y in ((-18, -12, -8), (12, 18, -8), (0, 6, 8)):
+            b.box(((x0 + x1) / 2, y, 13.5), (4.5, 1.4, 0.8), pale)
         if b.mid:
-            b.cyl((4, -15, 1.1), 1.1, 5, pale, 10, rot=(90, 0, 70))           # fallen drums
-            b.cyl((-9, 16, 1.1), 1.1, 3.4, pale, 10, rot=(90, 0, 20))
-            b.box((10, 2, 2.9), (3.6, 1.2, 0.6), worn, (0, 8, 35))
+            b.cyl((4, -15, 1.3), 1.2, 5, pale, 10, rot=(90, 0, 70))
+            b.cyl((-9, 16, 1.3), 1.2, 3.4, pale, 10, rot=(90, 0, 20))
+            b.box((10, 2, 3.2), (3.6, 1.2, 0.6), worn, (0, 8, 35))
     elif v == 1:
         for k in range(6):
             tall = (12, 12, 12, 7, 12, 4)[k]
-            b.box((k * 11 - 27.5, 0, tall / 2), (1.9, 2.4, tall / 2), pale, taper=0.9)
+            b.box((k * 11 - 27.5, 0, tall / 2), (2.1, 2.6, tall / 2), pale, taper=0.9)
             if k < 5 and tall == 12 and (12, 12, 12, 7, 12, 4)[k + 1] == 12:
-                b.box((k * 11 - 22, 0, 13.3), (5.6, 2.2, 1.3), worn)          # the span and the channel it carried
+                b.box((k * 11 - 22, 0, 13.6), (5.6, 2.4, 1.4), worn)
                 if b.mid:
-                    b.box((k * 11 - 22, 0, 10.6), (3.6, 2.1, 1.4), pale, taper=0.4)
+                    b.box((k * 11 - 22, 0, 10.7), (3.6, 2.3, 1.5), pale, taper=0.4)
         if b.mid:
-            b.rock((8, 3, 0.8), 3.6, worn, 6, (1.5, 1, 0.5))
-            b.rock((28, -2, 0.8), 3, worn, 8, (1.3, 1, 0.6))
+            b.rock((8, 3, 1.0), 3.6, worn, 6, (1.5, 1, 0.5))
+            b.rock((28, -2, 1.0), 3, worn, 8, (1.3, 1, 0.6))
     else:
-        b.cyl((0, 0, 0), 7.5, 13, pale, 12, r2=6.6)
-        b.cyl((0, 0, 13), 5.2, 0.4, BLACK, 12)
-        b.rock((2.6, 1.5, 13), 4.6, worn, 5, (1.2, 1, 1.1))
-        b.box((13, -2, 2.2), (6, 1.1, 2.2), pale, (0, 0, 20), 0.8)
+        b.cyl((0, 0, 0), 7.5, 13.5, pale, 12, r2=6.6)
+        b.cyl((0, 0, 13.5), 5.2, 0.4, BLACK, 12)
+        b.rock((2.6, 1.5, 13.5), 4.6, worn, 5, (1.2, 1, 1.1))
+        b.box((13, -2, 2.4), (6, 1.2, 2.4), pale, (0, 0, 20), 0.8)
         if b.mid:
-            b.box((-11, 6, 1.4), (4, 1.1, 1.4), worn, (0, 0, -35), 0.8)
-            b.rock((9, 8, 0.8), 3.2, worn, 9, (1.4, 1, 0.5))
+            b.box((-11, 6, 1.6), (4, 1.2, 1.6), worn, (0, 0, -35), 0.8)
+            b.rock((9, 8, 1.0), 3.2, worn, 9, (1.4, 1, 0.5))
 
 
 def oil_rig(b, v):
     """An offshore platform standing in the sea, 70 m across, main deck 34 m up; its legs go 40 m under the water."""
     for x in (-24, 24):
         for y in (-20, 20):
-            b.cyl((x, y, -40), 3.4, 66, YELLOW, 10)
+            b.cyl((x, y, -40), 3.4, 66, STEEL, 10)
+            if b.mid:
+                b.cyl((x, y, -2), 3.6, 4, RUST, 10)                        # the waterline
     if b.mid:
         for x in (-24, 24):
-            b.beam((x, -20, 2), (x, 20, 22), 1.0, YELLOW, 4)
-            b.beam((x, 20, 2), (x, -20, 22), 1.0, YELLOW, 4)
+            b.beam((x, -20, 2), (x, 20, 22), 1.0, IRON, 4)
+            b.beam((x, 20, 2), (x, -20, 22), 1.0, IRON, 4)
         for y in (-20, 20):
-            b.beam((-24, y, 2), (24, y, 22), 1.0, YELLOW, 4)
+            b.beam((-24, y, 2), (24, y, 22), 1.0, IRON, 4)
         b.cyl((10, 4, -40), 1.3, 68, IRON, 6)                                 # the riser
     b.box((0, 0, 28), (33, 27, 2.6), PANEL_D, bevel=0.4)                      # cellar deck
     b.box((0, 0, 34), (30, 24, 0.8), HULL)
+    if b.mid:
+        for y in (-24, 24):                                                   # the deck's edge wall
+            b.box((0, y, 35.4), (30, 0.2, 1.4), PANEL_D)
+        b.box((-17, -20.3, 42), (9, 0.1, 1), GLASS)
     b.box((-17, -8, 41), (11, 12, 6.2), WHITE, bevel=0.5)                     # quarters
     b.box((-17, -8, 48), (9, 10, 0.9), PANEL_D)
-    b.cyl((-42, -14, 46), 13, 0.9, GREEN, 8, rot=(0, 0, 22.5))                # helideck
+    if b.fine:
+        for k in range(4):
+            b.box((-17, -19.9, 39 + k * 2.2), (8, 0.08, 0.5), GLASS)
+            b.box((-5.9, -8 + (k - 1.5) * 4, 41), (0.08, 1.0, 1.1), GLASS)
+    b.cyl((-42, -14, 46), 13, 0.9, OLIVE, 8, rot=(0, 0, 22.5))                # helideck
+    if b.mid:
+        b.cyl((-42, -14, 46.9), 9, 0.06, OLIVE, 8, rot=(0, 0, 22.5))
+    if b.fine:
+        b.cyl((-42, -14, 46.95), 8.0, 0.05, WHITE, 8, rot=(0, 0, 22.5))
+        b.box((-42, -14, 47.0), (0.6, 4.0, 0.04), OLIVE)
+        b.box((-42, -14, 47.0), (3.0, 0.6, 0.04), OLIVE)
     b.beam((-30, -14, 30), (-42, -14, 46), 0.8, PANEL_D, 4)
+    if b.mid:
+        b.beam((-32, -6, 35), (-42, -10, 45.5), 0.9, PANEL_D, 4)
+        for k in range(5):
+            b.cyl((-12 + k * 6, 20, 36), 0.5, 34, STEEL, 6, rot=(0, 90, 0))      # the pipe rack
+        b.box((0, 18, 38.5), (2.2, 2.2, 4.5), PANEL)                            # the stair tower
+    if b.fine:
+        b.cyl((-6, -22, 36), 1.2, 6, RED, 8, rot=(0, 90, 0))                    # a lifeboat
     b.truss((10, 4, 35), (10, 4, 80), 8, PANEL, 7)                            # derrick
     b.box((10, 4, 81), (3, 3, 1), IRON)
     b.cyl((23, -18, 35), 2, 11, PANEL, 8)                                     # crane
-    b.truss((23, -18, 46), (52, -32, 62), 2.6, YELLOW, 6)
+    b.truss((23, -18, 46), (52, -32, 62), 2.6, PANEL_D, 6)
     b.truss((27, 20, 36), (70, 46, 58), 3, PANEL_D, 8)                        # flare boom
-    b.cyl((70, 46, 57), 1.1, 5, ORANGE, 6)
-    b.box((4, -14, 37.6), (7, 5, 2.8), PANEL, bevel=0.3)
-    b.box((22, 6, 37), (5, 8, 2.2), HULL, bevel=0.3)
-    if b.mid:
-        for k in range(3):
-            b.cyl((-6 + k * 5.4, 16, 37), 2.2, 13, WHITE, 10, rot=(0, 90, 0))
-        b.box((-17, -20.3, 42), (9, 0.1, 1), GLASS)
-        b.cyl((-42, -14, 46.9), 9, 0.06, YELLOW, 8, rot=(0, 0, 22.5))
+    b.cyl((70, 46, 57), 1.1, 5, IRON, 6)
     if b.fine:
-        b.box((0, 27.2, 35.6), (30, 0.1, 0.6), PANEL_D)
-        b.box((0, -24.2, 35.6), (30, 0.1, 0.6), PANEL_D)
+        b.cyl((70, 46, 61), 0.45, 1.2, RED, 6)
+    b.box((4, -14, 37.6), (7, 5, 2.8), PANEL, bevel=0.3)
+    b.box((0, 10, 39), (6, 4, 4.5), HULL, bevel=0.4)                          # the turbine hall
+    if b.mid:
+        b.box((0, 10, 43.7), (5.4, 3.5, 0.4), PANEL_D)
+        b.box((0, 13.6, 40), (4.6, 0.1, 1.4), GLASS)
+    b.box((22, 6, 37), (5, 8, 2.2), HULL, bevel=0.3)
+    b.cyl((-5, 18, 35), 3.2, 26, PANEL_D, 10)                                 # the exhaust stack
+    if b.mid:
+        b.cyl((-5, 18, 61), 3.4, 1.4, IRON, 10)
+        for k in range(3):
+            b.cyl((-6 + k * 5.4, 16, 37), 2.2, 13, PANEL, 10, rot=(0, 90, 0))
+    if b.fine:
         b.beam((23, -18, 46), (23, -18, 52), 0.3, IRON, 4)
         b.beam((-17, -8, 49), (-17, -8, 60), 0.15, IRON, 3)
 
@@ -699,25 +730,31 @@ def gun_emplacement(b, v):
 
 
 def water_tower(b, v):
-    """A town's water tower: 0 a tank on legs, 26 m; 1 a concrete mushroom, 34 m."""
+    """A town's water tower: 0 a steel tank on legs, 26 m; 1 a concrete mushroom, 34 m."""
     if v == 0:
         for k in range(4):
             a = k * math.pi / 2 + 0.78
-            b.beam((5.5 * math.sin(a), 5.5 * math.cos(a), 0), (3.6 * math.sin(a), 3.6 * math.cos(a), 17), 0.3, STEEL, 4)
+            b.beam((5.5 * math.sin(a), 5.5 * math.cos(a), 0), (3.6 * math.sin(a), 3.6 * math.cos(a), 17), 0.32, STEEL, 4)
             if b.mid:
                 b.beam((5.5 * math.sin(a), 5.5 * math.cos(a), 0), (3.9 * math.sin(a + 1.57), 3.9 * math.cos(a + 1.57), 14), 0.12, STEEL, 3)
-        b.cyl((0, 0, 17), 5, 6, WHITE, 14)
-        b.cyl((0, 0, 23), 5, 2.4, RUST, 14, r2=0.4)
+        b.cyl((0, 0, 17), 5, 0.5, STEEL, 14)
+        b.cyl((0, 0, 17.5), 5.4, 5.6, WHITE, 14)
+        b.cyl((0, 0, 23.1), 5.4, 1.2, PANEL_D, 14)
+        b.cyl((0, 0, 24.3), 5.4, 1.4, (128, 92, 72), 14, r2=0.3)
         b.cyl((0, 0, 0), 0.5, 17, IRON, 6)
         if b.fine:
-            b.cyl((0, 0, 19.6), 5.06, 0.7, BLUE, 14)
+            b.cyl((0, 0, 20.2), 5.46, 0.6, RED, 14)
+            b.beam((3.8, 4.2, 0), (3.8, 4.2, 22), 0.12, IRON, 3)
         return
-    b.cyl((0, 0, 0), 3.2, 22, CONCRETE, 12, r2=2.6)
+    b.cyl((0, 0, 0), 3.4, 22, CONCRETE, 12, r2=2.6)
     b.cyl((0, 0, 22), 2.8, 6, CONCRETE, 16, r2=9)
-    b.cyl((0, 0, 28), 9, 4.5, WHITE, 16)
-    b.cyl((0, 0, 32.5), 9, 1.4, DARK, 16, r2=7)
+    b.cyl((0, 0, 28), 9, 4.8, CONCRETE, 16)
+    b.cyl((0, 0, 32.8), 9, 1.6, CONCRETE_D, 16, r2=7.2)
+    if b.mid:
+        b.cyl((0, 0, 27.8), 9.2, 0.5, RED, 16)
+        b.cyl((0, 0, 33.6), 7.4, 0.5, DARK, 16)
     if b.fine:
-        b.truss((0, 0, 34), (0, 0, 42), 0.8, RED, 3)
+        b.truss((0, 0, 34), (0, 0, 42), 0.8, IRON, 3)
 
 
 def pylon(b, v):
@@ -740,19 +777,17 @@ def pylon(b, v):
 
 def wind_turbine(b, v):
     """A wind turbine, 80 m to the hub, 45 m blades; the rotor faces +y."""
-    b.cyl((0, 0, 0), 2.4, 80, WHITE, 12, r2=1.3)
-    b.box((0, -1.5, 81.5), (1.8, 5, 1.8), WHITE, bevel=0.5)
-    b.cyl((0, 3.5, 81.5), 1.5, 2.6, WHITE, 8, r2=0.3, rot=(-90, 0, 0))
+    b.cyl((0, 0, 0), 3.2, 1.0, CONCRETE_D, 12)
+    b.cyl((0, 0, 1.0), 2.4, 79, WHITE, 12, r2=1.2)
+    b.box((0, -1.8, 81.5), (1.9, 5.6, 1.8), WHITE, bevel=0.5)                 # the nacelle
+    b.cyl((0, 3.6, 81.5), 1.4, 2.8, WHITE, 8, r2=0.3, rot=(-90, 0, 0))
     for k in range(3):
         a = math.radians(20 + k * 120)
-        tip = Vector((45 * math.sin(a), 4.6, 81.5 + 45 * math.cos(a)))
-        mid = Vector((0, 4.6, 81.5)) + (tip - Vector((0, 4.6, 81.5))) * 0.5
-        b.box(tuple(mid), (1.5, 0.25, 22.5), WHITE, (0, math.degrees(a), 0), 0.25)
+        mid = Vector((22.5 * math.sin(a), 4.8, 81.5 + 22.5 * math.cos(a)))
+        b.box(tuple(mid), (1.35, 0.22, 22.5), WHITE, (0, math.degrees(a), 0), 0.34)
     if b.fine:
-        b.cyl((0, 0, 0), 3.4, 0.8, CONCRETE, 12)
-        b.cyl((0, 0, 30), 2.05, 1.2, RED, 12)
-
-
+        b.box((0, 3.0, 79.2), (1.2, 1.4, 0.5), PANEL_D)
+        b.cyl((0, 0, 10), 2.35, 0.7, RED, 12)
 def crane(b, v):
     """A harbour gantry crane, 48 m, its boom out over the water toward +y."""
     for x in (-9, 9):
@@ -963,35 +998,37 @@ def chapel(b, v):
     if v == 0:
         b.box((0, 0, 4), (5, 11, 4), WHITE)
         for side in (-1, 1):
-            b.box((side * 2.9, 0, 9.6), (3.6, 11.3, 0.22), (150, 70, 52), (0, side * 38, 0))
+            b.box((side * 2.9, 0, 9.6), (3.6, 11.3, 0.22), (124, 80, 62), (0, side * 38, 0))
         b.box((0, 0, 8.7), (4.95, 10.9, 1.9), WHITE, taper=0.1)
-        b.box((0, 13.5, 8), (2.6, 2.6, 8), WHITE)
-        b.cyl((0, 13.5, 16), 3.4, 7, (150, 70, 52), 4, r2=0.1, rot=(0, 0, 45))
+        b.box((0, 13.5, 8), (2.9, 2.9, 8), WHITE)
+        b.box((0, 13.5, 16.4), (3.3, 3.3, 0.4), (86, 84, 80))
+        b.box((0, 13.5, 18.2), (3.4, 3.4, 1.6), (124, 80, 62), taper=0.12)
         if b.mid:
-            b.box((0, 16.15, 12.6), (1, 0.06, 1.4), BLACK)
-            b.box((0, 16.15, 2), (1.1, 0.08, 2), WOOD)
+            b.box((0, 16.4, 12.6), (1, 0.06, 1.4), BLACK)
+            b.box((0, 16.4, 2), (1.1, 0.08, 2), WOOD)
             for k in range(-2, 3):
                 b.box((5.03, k * 3.6, 4.6), (0.05, 0.6, 1.5), GLASS)
                 b.box((-5.03, k * 3.6, 4.6), (0.05, 0.6, 1.5), GLASS)
         if b.fine:
-            b.beam((0, 13.5, 23), (0, 13.5, 26), 0.08, IRON, 3)
-            b.beam((-0.8, 13.5, 25), (0.8, 13.5, 25), 0.08, IRON, 3)
+            b.beam((0, 13.5, 19.8), (0, 13.5, 22.6), 0.08, IRON, 3)
+            b.beam((-0.8, 13.5, 21.6), (0.8, 13.5, 21.6), 0.08, IRON, 3)
+            b.box((0, 14.5, 0.2), (7, 3.5, 0.2), CONCRETE_D)
         return
-    stone = (222, 208, 178)
-    b.box((0, 0, 4.5), (10, 10, 4.5), stone, bevel=0.3)
-    b.cyl((0, 0, 9), 6.5, 2.2, stone, 16)
-    b.ball((0, 0, 11.2), 6.3, (84, 140, 150), 16, (1, 1, 1.05), dome=True)
-    b.cyl((13, 9, 0), 1.7, 24, stone, 10, r2=1.4)
-    b.cyl((13, 9, 19), 2.5, 1, stone, 10)
-    b.cyl((13, 9, 24), 1.6, 5, (84, 140, 150), 10, r2=0.05)
+    stone = (196, 184, 162)
+    b.box((0, 0, 4.8), (10, 10, 4.8), stone, bevel=0.3)
+    b.cyl((0, 0, 9.6), 6.8, 2.0, stone, 16)
+    b.ball((0, 0, 11.6), 6.6, (78, 84, 88), 16, (1, 1, 1.05), dome=True)
+    b.cyl((13, 9, 0), 1.8, 24, stone, 10, r2=1.4)
+    b.cyl((13, 9, 19), 2.6, 1.0, stone, 10)
+    b.cyl((13, 9, 24), 1.7, 4.6, stone, 10, r2=1.2)
     if b.mid:
-        b.box((0, 10.05, 3), (1.6, 0.1, 3), WOOD)
+        b.box((0, 10.05, 3.2), (1.6, 0.1, 3.2), WOOD)
         for k in (-1, 1):
-            b.ball((k * 7.4, 7.4, 9), 2.2, (84, 140, 150), 10, dome=True)
-            b.box((k * 5.5, 10.05, 5), (0.8, 0.06, 1.6), GLASS)
+            b.ball((k * 7.4, 7.4, 9.2), 2.2, (78, 84, 88), 10, dome=True)
+            b.box((k * 5.5, 10.05, 5.2), (0.8, 0.06, 1.6), GLASS)
     if b.fine:
-        b.beam((0, 0, 17.6), (0, 0, 20), 0.1, YELLOW, 3)
-        b.box((0, 14, 0.2), (10, 4, 0.2), stone)
+        b.beam((0, 0, 18.0), (0, 0, 20.4), 0.1, IRON, 3)
+        b.box((0, 14, 0.2), (10, 4, 0.2), CONCRETE_D)
 
 
 def shrub(b, v):
