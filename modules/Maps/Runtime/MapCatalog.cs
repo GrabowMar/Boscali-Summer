@@ -21,8 +21,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
     internal sealed class MapMode
     {
         public string name = "";
-        public Dictionary<string, string> sides;
-        public JObject mission, bote;
+        public Dictionary<string, string> sides = null;
+        public JObject mission = null, bote = null;
     }
 
     internal sealed class MapEntry

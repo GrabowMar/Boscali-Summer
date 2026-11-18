@@ -4,7 +4,7 @@ namespace BoscaliSummer.Core.Contracts
     internal sealed class ClimateProfile
     {
         public string profile = "";           // "tropical" | "alpine" | "arctic"
-        public byte id;                        // 1 tropical, 2 alpine, 3 arctic
+        public byte id = 0;                   // 1 tropical, 2 alpine, 3 arctic
         public float seaLevelTempC = 21f, diurnalC = 5f, hazeScale = 1f;
     }
 

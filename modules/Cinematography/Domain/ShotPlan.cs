@@ -30,7 +30,7 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
     {
         internal const int KeyLimit = 64;
         [DataMember] public int version = 1;
-        [DataMember] public string id;
+        [DataMember] public string id = null;
         [DataMember] public float duration = 10;
         [DataMember] public bool smooth;
         [DataMember] public bool spline;
