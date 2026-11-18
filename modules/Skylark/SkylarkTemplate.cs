@@ -16,8 +16,7 @@ namespace BoscaliSummer.Modules.Skylark
     {
         internal const string Key = "BS_Skylark";
         internal const int PrefabHash = 0x42534B31;
-        private const string PackRoot = "assets/blueprinter/mods/boscalisummer/";
-        private const string ArtRoot = PackRoot + "skylark/";
+        private const string ArtRoot = "assets/blueprinter/mods/boscalisummer/skylark/";
         internal const float EmptyMass = 3100f, FuelCapacity = 1000f, MaxThrust = 62000f;
         // Fan arm length (Duct_FL to Duct_RL) of the first art generation: every authored size below scales with measured/reference.
         private const float ReferenceArm = 5.7611f;
@@ -47,23 +46,16 @@ namespace BoscaliSummer.Modules.Skylark
             "Exhaust_Shutter_L", "Exhaust_Shutter_R", "C2_Mast", "Strobe_Top", "Strobe_Bottom"
         };
 
-        internal static void Ensure(Encyclopedia encyclopedia)
+        internal static void Register(Encyclopedia encyclopedia, AssetBundle pack = null)
         {
             if (building || failed || encyclopedia == null || Encyclopedia.Lookup == null || encyclopedia.IndexLookup == null) return;
             if (Encyclopedia.Lookup.ContainsKey(Key)) return;
-            var manager = GameAccess.NetworkManagerOrNull;
-            if (manager == null || manager.ClientObjectManager == null) return;
             building = true;
             try
             {
                 if (Definition == null)
                 {
-                    // Blueprinter indexes the feeder from its selected pack after duplicate-version selection and patching.
-                    // Waiting for that exact definition keeps our network indices after Blueprinter's on every peer.
-                    if (!Encyclopedia.Lookup.TryGetValue("BS_ContainerFeeder", out var feeder)) return;
-                    bundle = AssetBundle.GetAllLoadedAssetBundles().FirstOrDefault(pack => pack.name == "boscalisummer"
-                        && pack.LoadAsset<ShipDefinition>(PackRoot + "cargoship/bs_containerfeeder.asset") == feeder);
-                    if (bundle == null) return;
+                    bundle = pack;
                     Definition = Build(encyclopedia);
                 }
                 if (!encyclopedia.aircraft.Contains(Definition)) encyclopedia.aircraft.Add(Definition);
@@ -77,8 +69,10 @@ namespace BoscaliSummer.Modules.Skylark
                 encyclopedia.IndexLookup.Add(turret);
                 Encyclopedia.WeaponLookup.Add(SkylarkWeapons.TurretKey, turret);
                 Definition.mass = Definition.unitPrefab.GetComponentsInChildren<UnitPart>(true).Sum(p => p.mass);
-                // The pack can finish after the game's initial RegisterPrefabs pass.
-                manager.ClientObjectManager.RegisterPrefab(Definition.unitPrefab.GetComponent<NetworkIdentity>());
+                // An existing client may already have indexed its prefabs. A later client indexes encyclopedia.aircraft itself.
+                var manager = GameAccess.NetworkManagerOrNull;
+                if (manager != null && manager.ClientObjectManager != null)
+                    manager.ClientObjectManager.RegisterPrefab(Definition.unitPrefab.GetComponent<NetworkIdentity>());
                 Debug.Log("[Skylark] Registered " + Key + " native four-fan VTOL, empty mass " + Definition.mass + " kg, art scale " + Scale.ToString("0.000") + ", ground offset " + Definition.spawnOffset.y.ToString("0.000") + " m, " + Definition.unitPrefab.GetComponent<Aircraft>().weaponManager.hardpointSets.Length + " stations");
             }
             catch (Exception e)
@@ -172,7 +166,7 @@ namespace BoscaliSummer.Modules.Skylark
             SkylarkLights.Refit(aircraft, nodes);
             SkylarkCockpit.Refit(aircraft, nodes);
             RefitSensors(aircraft, nodes);
-            SkylarkWeapons.Refit(aircraft, p, nodes, holder.transform);
+            SkylarkWeapons.Refit(aircraft, p, nodes, holder.transform, encyclopedia.weaponMounts);
             go.AddComponent<SkylarkAnimation>().Configure(nodes);
             go.AddComponent<SkylarkDrive>().Configure(nodes);
             go.AddComponent<SkylarkFlightMode>();

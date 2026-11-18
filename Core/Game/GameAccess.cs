@@ -13,6 +13,7 @@ namespace BoscaliSummer.Core.Game
         private static FieldInfo mapBuildingHitPoints;
         private static ResourcesAsyncLoader<NetworkManagerNuclearOption> networkLoader;
         private static ResourcesAsyncLoader<Encyclopedia> encyclopediaLoader;
+        private static ResourcesAsyncLoader<GameAssets> assetsLoader;
         private static AccessTools.FieldRef<MapBuilding, float> mapBuildingHitPointsRef;
         private static FieldInfo mapBuildingSetBuildings;
         private static AccessTools.FieldRef<VirtualMFD, List<Button>> leftMfdButtonsRef;
@@ -55,6 +56,7 @@ namespace BoscaliSummer.Core.Game
                 encyclopediaLoader = AccessTools.Field(typeof(Encyclopedia), "loader")?.GetValue(null)
                     as ResourcesAsyncLoader<Encyclopedia>;
                 if (encyclopediaLoader == null) Plugin.Logger?.LogWarning("Native encyclopedia preload access unavailable.");
+                assetsLoader = AccessTools.Field(typeof(GameAssets), "loader")?.GetValue(null) as ResourcesAsyncLoader<GameAssets>;
             }
             catch (Exception e)
             {
@@ -341,6 +343,8 @@ namespace BoscaliSummer.Core.Game
 
         public static Encyclopedia EncyclopediaOrNull =>
             encyclopediaLoader != null && encyclopediaLoader.IsLoaded ? Encyclopedia.i : null;
+
+        public static GameAssets GameAssetsOrNull => assetsLoader != null && assetsLoader.IsLoaded ? GameAssets.i : null;
 
         /// <summary>The local player's faction HQ, only once it has a faction assigned.</summary>
         public static bool TryGetLocalFaction(out FactionHQ hq)

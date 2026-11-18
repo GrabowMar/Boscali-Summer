@@ -1,10 +1,10 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Reflection;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Game;
-using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Modules;
 using HarmonyLib;
-using NuclearOption.Networking;
 using UnityEngine;
 
 namespace BoscaliSummer.Modules.Skylark
@@ -12,10 +12,9 @@ namespace BoscaliSummer.Modules.Skylark
     internal sealed class SkylarkModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("skylark", "VS-4 Skylark");
-        public Type[] PatchTypes => new[] { typeof(SkylarkEncyclopediaPatch), typeof(SkylarkPrefabPatch), typeof(SkylarkLiveryPatch), typeof(SkylarkAeroInitializePatch), typeof(SkylarkNozzleGaugePatch), typeof(SkylarkHangarAvailabilityPatch), typeof(SkylarkSilentRunningPatch), typeof(SkylarkBatteryFuelPatch), typeof(SkylarkGearSelfContactPatch), typeof(SkylarkCoilsDryPatch) };
+        public Type[] PatchTypes => new[] { typeof(SkylarkEncyclopediaPatch), typeof(SkylarkBlueprinterPatch), typeof(SkylarkLiveryPatch), typeof(SkylarkAeroInitializePatch), typeof(SkylarkNozzleGaugePatch), typeof(SkylarkHangarAvailabilityPatch), typeof(SkylarkSilentRunningPatch), typeof(SkylarkBatteryFuelPatch), typeof(SkylarkGearSelfContactPatch), typeof(SkylarkCoilsDryPatch) };
         public void Install(ModuleContext context)
         {
-            context.AddSceneService<SkylarkService>(79);
             context.AddService<ISkylarkControl>(context.AddSceneService<SkylarkControl>(80));
             context.AddSceneService<SkylarkNet>(81);
             ScopeGauges.Register("drive", SkylarkDrive.ReadGauge);
@@ -25,15 +24,24 @@ namespace BoscaliSummer.Modules.Skylark
         }
     }
 
-    internal sealed class SkylarkService : MonoBehaviour, ISceneService
+    // Register against the exact pack Blueprinter accepted, on the same call that establishes its network indices.
+    [HarmonyPatch]
+    internal static class SkylarkBlueprinterPatch
     {
-        private float nextCheck;
-        public void ResetForScene() => nextCheck = 0f;
-        private void Update()
+        private static readonly Type Entry = AccessTools.TypeByName("Blueprinter.LoadedBundle");
+        private static readonly FieldInfo Asset = Entry?.GetField("AssetBundle");
+        private static MethodBase TargetMethod() => Entry?.Assembly.GetType("Blueprinter.Ops.EncyclopediaLoader")?.GetMethod("Load",
+            new[] { typeof(Encyclopedia), typeof(IReadOnlyList<>).MakeGenericType(Entry) });
+        private static bool Prepare() => Asset?.FieldType == typeof(AssetBundle) && TargetMethod() != null;
+
+        private static void Postfix(Encyclopedia __0, IEnumerable __1)
         {
-            if (Time.unscaledTime < nextCheck) return;
-            nextCheck = Time.unscaledTime + 2f;
-            SkylarkTemplate.Ensure(GameAccess.EncyclopediaOrNull);
+            foreach (object entry in __1)
+                if (Asset.GetValue(entry) is AssetBundle pack && pack != null && pack.name == "boscalisummer")
+                {
+                    SkylarkTemplate.Register(__0, pack);
+                    return;
+                }
         }
     }
 
@@ -46,12 +54,9 @@ namespace BoscaliSummer.Modules.Skylark
             __instance.aircraft.RemoveAll(d => d != null && d.jsonKey == SkylarkTemplate.Key);
             __instance.weaponMounts.RemoveAll(m => m != null && m.jsonKey == SkylarkWeapons.TurretKey);
         }
-        private static void Postfix(Encyclopedia __instance) => SkylarkTemplate.Ensure(__instance);
-    }
-
-    [HarmonyPatch(typeof(NetworkManagerNuclearOption), "RegisterPrefabs")]
-    internal static class SkylarkPrefabPatch
-    {
-        private static void Prefix() => SkylarkTemplate.Ensure(GameAccess.EncyclopediaOrNull);
+        private static void Postfix(Encyclopedia __instance)
+        {
+            if (SkylarkTemplate.Definition != null) SkylarkTemplate.Register(__instance);
+        }
     }
 }

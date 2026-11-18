@@ -57,16 +57,16 @@ namespace BoscaliSummer.Modules.Skylark
         internal static Turret FindTurret(Aircraft aircraft) =>
             aircraft.weaponStations.Count > 0 && aircraft.weaponStations[0].Weapons.Count > 0 ? aircraft.weaponStations[0].Weapons[0].GetComponentInParent<Turret>(true) : null;
 
-        private static WeaponMount Find(string key)
+        internal static void Refit(Aircraft aircraft, AircraftParameters parameters, Dictionary<string, Transform> nodes, Transform holder, List<WeaponMount> mounts)
         {
-            WeaponMount mount = Encyclopedia.i.weaponMounts.FirstOrDefault(m => m != null && (m.jsonKey == key || m.name == key));
-            if (mount == null) Debug.LogWarning("[Skylark] weapon mount absent, option skipped: " + key);
-            return mount;
-        }
+            WeaponMount Find(string key)
+            {
+                WeaponMount mount = mounts.FirstOrDefault(m => m != null && (m.jsonKey == key || m.name == key));
+                if (mount == null) Debug.LogWarning("[Skylark] weapon mount absent, option skipped: " + key);
+                return mount;
+            }
 
-        internal static void Refit(Aircraft aircraft, AircraftParameters parameters, Dictionary<string, Transform> nodes, Transform holder)
-        {
-            TurretMount = BuildTurret(holder, nodes);
+            TurretMount = BuildTurret(holder, nodes, Find(TurretDonor));
             int[] present = Enumerable.Range(0, Anchors.Length).Where(i => nodes.ContainsKey(Anchors[i])).ToArray();
             if (present.Length < Anchors.Length) Debug.Log("[Skylark] stations without art anchors, not offered: " + string.Join(", ", Enumerable.Range(0, Anchors.Length).Except(present).Select(i => Names[i])));
             var sets = new HardpointSet[present.Length];
@@ -104,9 +104,10 @@ namespace BoscaliSummer.Modules.Skylark
         private const float Muzzle = 1600f, Pierce = 340f, Blast = .02f, Visibility = 600f, Spread = .04f;
         internal const int Rounds = 300;
 
-        private static WeaponMount BuildTurret(Transform holder, Dictionary<string, Transform> nodes)
+        private static WeaponMount BuildTurret(Transform holder, Dictionary<string, Transform> nodes, WeaponMount donor)
         {
-            WeaponMount mount = Object.Instantiate(Find(TurretDonor) ?? throw new InvalidOperationException("Turret donor mount is absent: " + TurretDonor));
+            if (donor == null) throw new InvalidOperationException("Turret donor mount is absent: " + TurretDonor);
+            WeaponMount mount = Object.Instantiate(donor);
             mount.name = TurretKey;
             mount.jsonKey = TurretKey;
             // The donor is vehicle or event content: a clone inheriting that is refused by every HQ and loadout check.

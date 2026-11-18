@@ -33,9 +33,11 @@ namespace BoscaliSummer.Modules.SeaStructures
         private static void Prefix(Encyclopedia __instance) =>
             __instance.ships.RemoveAll(d => d != null && (d.jsonKey == "BS_OilRig" || d.jsonKey == "BS_SeaFort"));
 
-        private static void Postfix()
+        [HarmonyBefore("com.nikkorap.blueprinter")]
+        private static void Postfix(Encyclopedia __instance)
         {
-            try { SeaTemplates.EnsureDefinitions(); }
+            // These slots must precede Blueprinter's entries on both fast-loading and normal peers.
+            try { SeaTemplates.EnsureDefinitions(__instance); }
             catch (Exception e) { PatchGuard.Report("SeaStructures.Definitions", e); }
         }
     }

@@ -37,7 +37,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             return kind == SeaKind.SeaFort ? length <= 44f && width <= 20f : length * length + width * width <= 25f * 25f;
         }
 
-        internal static void Configure(GameObject template, SeaLayout layout, ShipDefinition donor, Transform pad, UnitPart deckPart)
+        internal static void Configure(Encyclopedia encyclopedia, GameObject template, SeaLayout layout, ShipDefinition donor, Transform pad, UnitPart deckPart)
         {
             Ship ship = template.GetComponent<Ship>();
             Airbase airbase = template.GetComponent<Airbase>();
@@ -58,7 +58,6 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             definition.shipInfo = new ShipInfo { mass = definition.mass, topSpeed = 0f };
             definition.mapOrient = false;
             definition.unitPrefab = template;
-            if (GameAssets.i != null && GameAssets.i.hangarSprite_helipad != null) definition.mapIcon = GameAssets.i.hangarSprite_helipad;
             ship.definition = definition;
 
             SeaSection padSection = Array.Find(layout.Sections, s => s.Pad);
@@ -87,7 +86,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             settings.Disabled = false;
 
             var aircraft = new List<AircraftDefinition>();
-            foreach (AircraftDefinition candidate in Encyclopedia.i.aircraft)
+            foreach (AircraftDefinition candidate in encyclopedia.aircraft)
                 if (Fits(layout.Kind, candidate)) aircraft.Add(candidate);
             aircraft.Sort((a, b) => string.CompareOrdinal(a.jsonKey, b.jsonKey));
             if (aircraft.Count == 0) throw new InvalidOperationException(layout.Key + " has no compatible vertical aircraft.");
@@ -101,10 +100,9 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             Lights.SetValue(hangar, Array.Empty<HangarLighting>());
         }
 
-        internal static void RegisterDefinitions(GameObject[] templates)
+        internal static void RegisterDefinitions(Encyclopedia encyclopedia, GameObject[] templates)
         {
-            Encyclopedia encyclopedia = GameAccess.EncyclopediaOrNull;
-            if (encyclopedia == null || Encyclopedia.Lookup == null || encyclopedia.IndexLookup == null) return;
+            if (Encyclopedia.Lookup == null || encyclopedia.IndexLookup == null) return;
             string categoryKey = PlatformType.ToString();
             Encyclopedia.UnitType category = encyclopedia.shipTypes.Find(t => t.typeName == categoryKey);
             if (category == null)
@@ -112,7 +110,8 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 category = new Encyclopedia.UnitType { typeName = categoryKey };
                 encyclopedia.shipTypes.Add(category);
             }
-            if (GameAssets.i != null) category.typeSprite = GameAssets.i.hangarSprite_helipad;
+            GameAssets assets = GameAccess.GameAssetsOrNull;
+            if (assets != null) category.typeSprite = assets.hangarSprite_helipad;
             // Same fixed order on every peer, following the existing Skylark/runtime-store network-definition registry pattern.
             foreach (GameObject template in templates)
             {

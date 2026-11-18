@@ -184,7 +184,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
     /// their own models, and the hull is pinned in place. Everything that matters in a fight stays the game's own: weapons,
     /// fire control, per-part damage, sections breaking off, flooding and sinking, and their replication. Every peer builds
     /// the same clone and registers it under a fixed prefab hash, so the host's spawn messages resolve on clients. The
-    /// clone keeps the donor's definition (definitions go over the network by Encyclopedia index).
+    /// clone has its own definition (definitions go over the network by Encyclopedia index).
     /// </summary>
     internal static class SeaTemplates
     {
@@ -205,17 +205,11 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
 
         public static GameObject Of(SeaKind kind)
         {
-            Ensure();
+            EnsureDefinitions(GameAccess.EncyclopediaOrNull);
             return Templates[(int)kind];
         }
 
         public static string Donor(SeaKind kind) => DonorKeys[(int)kind];
-
-        internal static void EnsureDefinitions()
-        {
-            Ensure();
-            if (tried) SeaFacility.RegisterDefinitions(Templates);
-        }
 
         /// <summary>Register both prefabs with this peer's client (cheap to call often). <paramref name="force"/>
         /// re-registers after the game rebuilt its own prefab table.</summary>
@@ -224,7 +218,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             NetworkManagerNuclearOption manager = GameAccess.NetworkManagerOrNull;
             ClientObjectManager objects = manager != null ? manager.ClientObjectManager : null;
             if (objects == null) return;
-            EnsureDefinitions();
+            EnsureDefinitions(GameAccess.EncyclopediaOrNull);
             if (!tried) return;
             if (objects == registeredWith && !force) return;
             foreach (GameObject template in Templates)
@@ -232,9 +226,15 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             registeredWith = objects;
         }
 
-        private static void Ensure()
+        internal static void EnsureDefinitions(Encyclopedia encyclopedia)
         {
-            if (tried || GameAccess.EncyclopediaOrNull == null) return;
+            if (encyclopedia == null) return;
+            if (!tried) Build(encyclopedia);
+            SeaFacility.RegisterDefinitions(encyclopedia, Templates);
+        }
+
+        private static void Build(Encyclopedia encyclopedia)
+        {
             tried = true;
             SeaArt.Bind();
             holder = new GameObject("SeaStructureTemplates");
@@ -245,11 +245,11 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 try
                 {
                     // A donor with a hull part for most sections, so each breaks off on its own; any armed ship failing that.
-                    ShipDefinition donor = Pick(kind == SeaKind.SeaFort, 10) ?? Pick(kind == SeaKind.SeaFort, 6);
+                    ShipDefinition donor = Pick(encyclopedia.ships, kind == SeaKind.SeaFort, 10) ?? Pick(encyclopedia.ships, kind == SeaKind.SeaFort, 6);
                     if (donor == null) { Debug.LogWarning("[SeaStructures] no warship to refit as " + kind); continue; }
                     SeaLayout layout = SeaLayouts.Of(kind);
                     if (layout == null) { Debug.LogWarning("[SeaStructures] the model of " + kind + " is not embedded; run modules/SeaStructures/Assets/Source"); continue; }
-                    Templates[(int)kind] = Refit(layout, donor, Hashes[(int)kind]);
+                    Templates[(int)kind] = Refit(encyclopedia, layout, donor, Hashes[(int)kind]);
                     DonorKeys[(int)kind] = donor.jsonKey;
                 }
                 catch (Exception error) { Debug.LogError("[SeaStructures] refit " + kind + ": " + error); }
@@ -257,11 +257,11 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
         }
 
         /// <summary>The fort takes the frigate (else the most heavily armed escort); the rig the most lightly armed ship.</summary>
-        private static ShipDefinition Pick(bool fort, int minParts)
+        private static ShipDefinition Pick(List<ShipDefinition> ships, bool fort, int minParts)
         {
             ShipDefinition best = null;
             int bestScore = int.MaxValue;
-            foreach (ShipDefinition def in Encyclopedia.i.ships)
+            foreach (ShipDefinition def in ships)
             {
                 GameObject p = def != null ? def.unitPrefab : null;
                 if (p == null || p.GetComponent<Ship>() == null || p.GetComponent<ShipPart>() == null) continue;
@@ -275,7 +275,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             return best;
         }
 
-        private static GameObject Refit(SeaLayout layout, ShipDefinition donor, int hash)
+        private static GameObject Refit(Encyclopedia encyclopedia, SeaLayout layout, ShipDefinition donor, int hash)
         {
             GameObject go = UnityEngine.Object.Instantiate(donor.unitPrefab, holder.transform);
             go.name = layout.Key;
@@ -495,7 +495,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
             Rigidbody body = go.GetComponent<Rigidbody>();
             if (body != null) body.constraints = RigidbodyConstraints.FreezeAll;
             int padIndex = Array.FindIndex(layout.Sections, s => s.Pad);
-            SeaFacility.Configure(go, layout, donor, node[padIndex], assigned[padIndex] ?? node[padIndex].GetComponent<UnitPart>());
+            SeaFacility.Configure(encyclopedia, go, layout, donor, node[padIndex], assigned[padIndex] ?? node[padIndex].GetComponent<UnitPart>());
             go.AddComponent<SeaStructure>().Kind = (int)layout.Kind;
             go.GetComponent<NetworkIdentity>().PrefabHash = hash;
 
