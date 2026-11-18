@@ -14,6 +14,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
     internal sealed class ProceduralRainEmitter : MonoBehaviour, IClientEffect
     {
         private const float RainTerminalVelocity = 9.0f; // m/s
+        private const float SnowTerminalVelocity = 2.0f, SnowLength = 0.15f, SnowDensity = 1.6f;
 
         private ParticleSystem ps;
         private ParticleSystemRenderer psRenderer;
@@ -125,8 +126,10 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         public void UpdateRain(
             Vector3 aircraftVelocity, Vector3 worldWind, float rainIntensity, Camera currentCam,
-            float density = 1f, float gust = 1f, float lightLevel = 1f, float cloudMist = 0f)
+            float density = 1f, float gust = 1f, float lightLevel = 1f, float cloudMist = 0f, float snow = 0f)
         {
+            // Below freezing (a map with a climate) the same particles become flakes: slow, short, white and denser; the wind still carries them.
+            snow = Mathf.Clamp01(snow);
             // Inside cloud the same streaks become fine mist: hanging droplets (no fall), paler
             // and fainter than rain, so speed reads inside an otherwise featureless murk.
             float mist = Mathf.Clamp01(cloudMist) * 0.55f;
@@ -151,7 +154,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             positioned = true;
 
             // Calculate apparent relative wind velocity: V_rel = (V_wind - 9j) - V_aircraft
-            Vector3 rainWorldVelocity = worldWind - (Vector3.up * RainTerminalVelocity * (1f - mistShare));
+            Vector3 rainWorldVelocity = worldWind - (Vector3.up * Mathf.Lerp(RainTerminalVelocity, SnowTerminalVelocity, snow) * (1f - mistShare));
             Vector3 apparentVelocity = rainWorldVelocity - aircraftVelocity;
             float apparentSpeed = apparentVelocity.magnitude;
             ApparentSpeedNow = apparentSpeed;
@@ -184,7 +187,8 @@ namespace BoscaliSummer.Modules.Weather.Visuals
             RainVisualMath.ViewCoverage(targetCamera.fieldOfView, targetCamera.aspect, out float width, out float height);
             var shape = ps.shape;
             shape.scale = new Vector3(width, height, 0.2f);
-            psRenderer.velocityScale = Mathf.Min(1f / 120f, 0.85f / Mathf.Max(1f, apparentSpeed + 1.2f));
+            psRenderer.velocityScale = Mathf.Min(1f / 120f, 0.85f / Mathf.Max(1f, apparentSpeed + 1.2f)) * Mathf.Lerp(1f, SnowLength, snow);
+            psRenderer.lengthScale = Mathf.Lerp(2f, 1f, snow); // a still flake is round, a still drop is a short dash
 
             // Speed and lifetime matching to keep active particle count bounded
             var main = ps.main;
@@ -198,13 +202,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                 out float r, out float g, out float b);
             float pale = 0.45f * mistShare * Mathf.Clamp01(lightLevel);
             r = Mathf.Lerp(r, 0.9f, pale); g = Mathf.Lerp(g, 0.92f, pale); b = Mathf.Lerp(b, 0.95f, pale);
+            float white = Mathf.Clamp(lightLevel, 0.04f, 1f);
+            r = Mathf.Lerp(r, 0.96f * white, snow); g = Mathf.Lerp(g, 0.97f * white, snow); b = Mathf.Lerp(b, white, snow);
             main.startColor = new ParticleSystem.MinMaxGradient(
                 new Color(r, g, b, alpha * 0.75f), new Color(r, g, b, alpha));
 
             // Emission rate preserves spatial particle density across speeds, clamped so
             // density and gusts can never overflow the particle budget.
             var emission = ps.emission;
-            float rate = RainVisualMath.EmissionRate(apparentSpeed, rainIntensity, density, gust);
+            float rate = RainVisualMath.EmissionRate(apparentSpeed, rainIntensity, density * Mathf.Lerp(1f, SnowDensity, snow), gust);
             int budget = Mathf.Max(64, Mathf.RoundToInt(
                 RainVisualMath.MaxParticles * FxBus.Scales.Particles));
             emission.rateOverTime = RainVisualMath.ClampRateToBudget(rate, lifetime, budget);

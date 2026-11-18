@@ -83,7 +83,7 @@ namespace BoscaliSummer.Modules.Weather.Visuals
 
         internal void Update(Transform mapRoot, Camera camera, float rain, float deltaTime,
             WeatherField field = null, float missionTime = 0f, float? forcedRain = null,
-            bool wetEnabled = true, bool detailEnabled = false, Shader detailShader = null, Texture detailTexture = null)
+            bool wetEnabled = true, bool detailEnabled = false, Shader detailShader = null, Texture detailTexture = null, float? seaLevelC = null)
         {
             DetailDrawCount = 0;
             DetailTriangleCount = 0;
@@ -199,12 +199,15 @@ namespace BoscaliSummer.Modules.Weather.Visuals
                     }
                     wetness = Mathf.Max(wetness, s.Wet);
                 }
-                float surfaceWet = field != null ? s.Wet : wetness;
+                // A map with a climate: ground above the freezing level takes snow, not water, so the wet look fades out with the surface's altitude (6.5 C per km).
+                float liquid = seaLevelC.HasValue
+                    ? 1f - WeatherClimate.Snow(seaLevelC.Value - 0.0065f * Mathf.Max(0f, s.Renderer.bounds.center.GlobalY())) : 1f;
+                float surfaceWet = (field != null ? s.Wet : wetness) * liquid;
                 if (surfaceWet <= 0.001f) continue;
                 if (s.Indices > indexBudget) continue;
                 indexBudget -= s.Indices;
                 properties.SetFloat(WetnessId, surfaceWet);
-                properties.SetFloat(RainId, field != null ? s.LastRain : Mathf.Clamp01(rain));
+                properties.SetFloat(RainId, (field != null ? s.LastRain : Mathf.Clamp01(rain)) * liquid);
                 Graphics.DrawMesh(s.Mesh, s.Renderer.localToWorldMatrix, material,
                     s.Renderer.gameObject.layer, camera, s.Slot, properties,
                     ShadowCastingMode.Off, false, null, LightProbeUsage.Off);

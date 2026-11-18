@@ -119,6 +119,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
         private bool haveLattice;
         /// <summary>The diurnal swing of the temperature at this Build's hour of day: the same for every sample, so the sine is taken once.</summary>
         private float diurnal;
+        /// <summary>The map's climate as this Build read it (<see cref="WeatherClimate.Local"/>): sea-level shift in C, visibility factor, and whether its storms carry lightning. 0, 1, true on a vanilla map.</summary>
+        private float climateShift, climateHaze = 1f;
+        private bool climateStorms = true;
         /// <summary>The unit vector of <see cref="PrevailingHeading"/>: what a sample away from any front's veer starts its wind from.</summary>
         private float prevailingX, prevailingZ;
         /// <summary>Scenery storms outside the theater; see <see cref="Superstructures"/>.</summary>
@@ -155,7 +158,12 @@ namespace BoscaliSummer.Modules.Weather.Domain
             if (noiseXform == null || noiseXform.LayoutSeed != key.LayoutSeed) noiseXform = new NoiseXform(key.LayoutSeed);
             float d = moving ? (float)key.OffsetAt(time) : key.Offset;
             frame = tape.Frame(key.HeadingDeg, d, noiseXform);
-            diurnal = 5f * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
+            // Client-local air (map builder v2, 6.2): a map with a climate moves the sea-level temperature, the diurnal swing and the haze. With none the values are 0, 5 and 1, so nothing moves by a bit.
+            BoscaliSummer.Core.Contracts.ClimateProfile climate = WeatherClimate.Local;
+            climateShift = climate != null ? climate.seaLevelTempC - WeatherClimate.ReferenceSeaLevelC : 0f;
+            climateHaze = climate != null ? climate.hazeScale : 1f;
+            climateStorms = WeatherClimate.Storms(WeatherClimate.Id(climate));
+            diurnal = (climate != null ? climate.diurnalC : WeatherClimate.DefaultDiurnalC) * (float)Math.Sin((HourOfDay - 9f) / 24f * 2f * Math.PI);
             tapeMarkers = tape.Markers;
             ResetLattice();
             PrevailingHeading = key.DownwindHeading; // the mission wind's heading, set once at capture
@@ -354,7 +362,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SkySummary.RainLayer(cellRain, stratiform, point.LowCover, point.MidCover * local.OpacityMid, point.CloudBase, point.LowTop, point.MidBase, point.MidTop,
                 out point.RainBase, out point.RainTop);
 
-            float haze = Math.Max(local.Haze * HazeScale, 0.5f);
+            float haze = Math.Max(local.Haze * HazeScale * climateHaze, 0.5f);
             // A dry point (rain exactly 0) skips the call: Math.Pow(0, 0.66) is exactly 0.
             float extinction = 3.912f / haze + 0.25f * (rain == 0f ? 0f : (float)Math.Pow(rain, 0.66));
             point.VisibilityKm = Scalar.Clamp(3.912f / extinction, 0.3f, 50f);
@@ -365,13 +373,13 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float outflow = (float)Math.Sqrt(outX * outX + outZ * outZ);
             point.Turbulence = Scalar.Clamp01(turbulence);
             point.Gust = 0.35f * windSpeed * point.Turbulence + outflow + markerGust;
-            point.LightningRate = lightning;
+            point.LightningRate = climateStorms ? lightning : 0f;
             point.CoreDepth = Scalar.Clamp01(core);
             point.Hail = hail;
 
             point.Qnh = local.Qnh - qnhDip + (patch - 0.5f) * 2f;
 
-            point.Temperature = local.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain);
+            point.Temperature = local.Temperature + diurnal - 4f * WeatherMath.Smoothstep(0f, 15f, rain) + climateShift;
             float humid = Scalar.Clamp01(point.LowCover * 0.6f + WeatherMath.Smoothstep(0f, 5f, rain) * 0.6f);
             point.Dewpoint = point.Temperature - Scalar.Lerp(9f, 0.5f, humid);
             return point;
