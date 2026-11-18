@@ -14,7 +14,7 @@ namespace BoscaliSummer.Modules.Maps.Domain
     internal sealed class MapManifest
     {
         public const float SupportedSize = 81920f;
-        private static readonly string[] Biomes = { "tropical", "alpine", "arctic" };
+        private static readonly string[] Biomes = { "tropical", "desert", "alpine", "arctic" };
 
         public string id, displayName, prefabName, workshopTag, hash, generator, biome, description;
         /// <summary>First 8 hex digits (lower case) of the bundle's SHA-256, and its length; spliced in by the bake.</summary>
@@ -124,7 +124,7 @@ namespace BoscaliSummer.Modules.Maps.Domain
                 return "size is " + sizeX + " x " + sizeY + "; only " + SupportedSize + " x " + SupportedSize + " is supported";
             if (gridX <= 0 || gridY <= 0 || !GridFits(offsetX, sizeX, gridX) || !GridFits(offsetY, sizeY, gridY))
                 return "the grid (" + gridX + " x " + gridY + ", offset " + offsetX + ", " + offsetY + ") does not cover the map";
-            if (Array.IndexOf(Biomes, biome) < 0) return "biome '" + biome + "' is not tropical, alpine or arctic";
+            if (Array.IndexOf(Biomes, biome) < 0) return "biome '" + biome + "' is not tropical, desert, alpine or arctic";
             foreach (string kind in kinds ?? new string[0])
                 if (string.IsNullOrEmpty(kind)) return "kinds has an empty entry";
             if (strips == null || strips.Length < 2) return "it has fewer than 2 strips";

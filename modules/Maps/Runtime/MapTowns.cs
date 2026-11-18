@@ -65,10 +65,16 @@ namespace BoscaliSummer.Modules.Maps.Runtime
 
         /// <summary>The game's own road surfaces on the map's baked roads: road_2lane on a paved road, asphalt on a town
         /// street, road_dirt on a track. A road keeps the bake's plain colours when the game has no such material.</summary>
-        public static int DressRoads(Transform roads, MapSettingsManager manager)
+        public static int DressRoads(Transform roads, MapSettingsManager manager) =>
+            Dress(roads, manager, new Dictionary<string, string> { { "paved", "road_2lane" }, { "street", "asphalt" }, { "dirt", "road_dirt" } }, false);
+
+        /// <summary>The game's own city-block ground on every town lot; a plot the game has no ground for is hidden.</summary>
+        public static int DressPlots(Transform plots, MapSettingsManager manager) =>
+            Dress(plots, manager, new Dictionary<string, string> { { "plotsuburb", "blocks_suburbs" }, { "plotblock", "blocks_city1" } }, true);
+
+        private static int Dress(Transform roads, MapSettingsManager manager, Dictionary<string, string> looks, bool hideOthers)
         {
             if (roads == null) return 0;
-            var looks = new Dictionary<string, string> { { "paved", "road_2lane" }, { "street", "asphalt" }, { "dirt", "road_dirt" } };
             var found = new Dictionary<string, Material>();
             foreach (Renderer part in manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab)).SelectMany(m => m.Prefab.GetComponentsInChildren<MeshRenderer>(true)))
                 if (part.sharedMaterial != null && looks.ContainsValue(part.sharedMaterial.name) && !found.ContainsKey(part.sharedMaterial.name))
@@ -80,6 +86,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     road.sharedMaterial = material;
                     dressed++;
                 }
+                else if (hideOthers) road.enabled = false;
             return dressed;
         }
 

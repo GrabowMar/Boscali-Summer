@@ -1,6 +1,0 @@
-id = "korvath"
-name = "Korvath Range"
-biome = "alpine"
-seed = 7
-cell = 20
-vertex_budget = 2600000   # 80 m land mesh: at 40 m this map's bundle passes the 80 MiB cap

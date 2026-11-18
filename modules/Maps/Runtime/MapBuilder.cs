@@ -65,6 +65,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 settings.NetworkMap = network;
                 int lakes = Water(root.transform.Find("Water"));
                 MapTowns.DressRoads(root.transform.Find("Roads"), manager);
+                MapTowns.DressPlots(root.transform.Find("Plots"), manager);
                 int scenery = MapScenery.Place(root.transform, entry);
                 int buildings = MapTowns.End();
                 Plugin.Logger?.LogInfo("[Maps] Built " + manifest.displayName + ": " + chunks + " terrain tiles, " + strips +

@@ -17,11 +17,12 @@ public static class BuildMapBundle
 
     [Serializable] private class StripInfo { public float x, y, z, length, width = 40f, padLength = 1500f, padWidth = 300f; public float heading; public string surface = "asphalt"; }
     [Serializable] private class ForestInfo { public string name; }
+    [Serializable] private class LotInfo { public string kind; public float x, z, yaw; }
     [Serializable] private class BridgeInfo { public float x, z, heading, length, width; }
     [Serializable] private class RoadInfo { public string kind; public float width; public float[] points, widths; }
     [Serializable] private class MapInfo
     {
-        public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, vertexBudget; public StripInfo[] strips; public ForestInfo[] forests; public RoadInfo[] roads, rivers; public BridgeInfo[] bridges;
+        public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, vertexBudget; public StripInfo[] strips; public ForestInfo[] forests; public RoadInfo[] roads, rivers; public BridgeInfo[] bridges; public LotInfo[] lots;
     }
 
 
@@ -56,6 +57,7 @@ public static class BuildMapBundle
             var roadsRoot = Child(root, "Roads");
             BuildRoads(roadsRoot, info, info.roads, paved);
             BuildBridges(roadsRoot, info, paved);
+            BuildPlots(Child(root, "Plots"), info, paved);
 
             string meshPath = Dir + "MapMeshes.asset";
             AssetDatabase.CreateAsset(meshes[0], meshPath);
@@ -522,7 +524,7 @@ public static class BuildMapBundle
             Vector2 last = new Vector2(road.points[0], road.points[2]);
             Color edge = hard ? new Color(.34f, .33f, .30f) : new Color(.42f, .36f, .26f), lane = hard ? new Color(.20f, .20f, .21f) : new Color(.30f, .24f, .17f),
                 mid = hard ? new Color(.27f, .27f, .27f) : new Color(.46f, .39f, .28f);
-            if (water) { edge = new Color(.34f, .40f, .36f); lane = new Color(.10f, .24f, .30f); mid = new Color(.07f, .19f, .27f); }
+            if (water) { edge = new Color(.42f, .50f, .44f); lane = new Color(.12f, .30f, .36f); mid = new Color(.05f, .17f, .26f); }
             Func<int, Vector2> point = i => { i = Mathf.Clamp(i, 0, count - 1); return new Vector2(road.points[i * 3], road.points[i * 3 + 2]); };
             Vector2 origin = point(0);
             var b = new Builder();
@@ -541,7 +543,9 @@ public static class BuildMapBundle
                     last = at;
                     if (road.widths != null && road.widths.Length == count) width = Mathf.Lerp(road.widths[i], road.widths[i + 1], t);
                     // A river lies level from bank to bank at its middle's height, a little under a road that crosses it.
-                    float level = Surface((at.x + half) / info.cell - .5f, (at.y + half) / info.cell - .5f) + .18f;
+                    float level = float.MinValue;
+                    foreach (float lane_ in new[] { -.8f, 0f, .8f })
+                        level = Mathf.Max(level, Surface((at.x + side.x * lane_ * width + half) / info.cell - .5f, (at.y + side.y * lane_ * width + half) / info.cell - .5f) + .18f);
                     for (int c = 0; c < 5; c++)
                     {
                         Vector2 q = at + side * (across[c] * width);
@@ -597,6 +601,44 @@ public static class BuildMapBundle
             mesh.SetTriangles(b.Triangles, 0);
             go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
             go.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+    }
+
+    /// <summary>The ground of every town lot: one quad lying on the lot, mapped 0..1, for the game's own city-block ground
+    /// (the mod puts it on at load; a plot is hidden when the game has none).</summary>
+    private static void BuildPlots(GameObject parent, MapInfo info, Material material)
+    {
+        float half = info.res * info.cell * .5f;
+        int n = 0;
+        foreach (LotInfo lot in info.lots ?? new LotInfo[0])
+        {
+            bool dense = lot.kind == "block";
+            float hx = dense ? 56f : 50f, hz = dense ? 38f : 28f, a = lot.yaw * Mathf.Deg2Rad;
+            var b = new Builder();
+            Color ground = dense ? new Color(.42f, .42f, .41f) : new Color(.46f, .50f, .34f);
+            float[,] corners = { { -1, -1 }, { -1, 1 }, { 1, 1 }, { 1, -1 } };
+            for (int k = 0; k < 4; k++)
+            {
+                float lx = corners[k, 0] * hx, lz = corners[k, 1] * hz;
+                float wx = lx * Mathf.Cos(a) + lz * Mathf.Sin(a), wz = -lx * Mathf.Sin(a) + lz * Mathf.Cos(a);
+                float y = Surface((lot.x + wx + half) / info.cell - .5f, (lot.z + wz + half) / info.cell - .5f) + .22f;
+                b.Add(new Vector3(wx, y, wz), Vector3.up, ground, 0f);
+                b.Uvs[b.Uvs.Count - 1] = new Vector2((corners[k, 0] + 1f) * .5f, (corners[k, 1] + 1f) * .5f);
+            }
+            b.Quad(0, 1, 2, 3);
+            var go = Child(parent, (dense ? "plotblock_" : "plotsuburb_") + n++);
+            go.transform.localPosition = new Vector3(lot.x, 0f, lot.z);
+            var mesh = new Mesh { name = go.name };
+            mesh.SetVertices(b.Vertices);
+            mesh.SetNormals(b.Normals);
+            mesh.SetColors(b.Colours);
+            mesh.SetUVs(0, b.Uvs);
+            mesh.SetTriangles(b.Triangles, 0);
+            mesh.RecalculateTangents();
+            go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
         }
     }
 

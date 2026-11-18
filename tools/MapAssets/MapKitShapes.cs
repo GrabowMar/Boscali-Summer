@@ -221,6 +221,7 @@ public static class MapKitShapes
         new Kind("iceberg", 5, 180, "l", true, false, 28f, 60f),
         new Kind("iceberg_tabular", 3, 80, "l", true, false, 180f, 230f),
         new Kind("hut", 3, 60, "m", true, false, 5f, 8f),
+        new Kind("railgun", 3, 90, "l", true, false, 44f, 130f),   // one gun of a ruined superweapon: standing, fallen, a stump
         new Kind("hangar_shelter", 2, 140, "l", true, false, 28f, 34f),
         new Kind("control_tower", 1, 120, "l", true, false, 13f, 16f),
         new Kind("windsock", 1, 40, "s", false, true, 5.5f, 7f),
@@ -261,6 +262,7 @@ public static class MapKitShapes
             case "iceberg": Iceberg(b, random, variant); break;
             case "iceberg_tabular": IcebergTabular(b, random); break;
             case "hut": Hut(b, variant); break;
+            case "railgun": Railgun(b, variant); break;
             case "hangar_shelter": HangarShelter(shape, variant); break;
             case "control_tower": ControlTower(b); break;
             case "windsock": Windsock(b); break;
@@ -855,6 +857,38 @@ public static class MapKitShapes
         b.Gradient(0, .7f, 1.03f); // the piles go dark toward the water
         shape.Collision = new MapMeshBuilder();
         shape.Collision.Box(V(0f, -5.9f, 0f), V(3f, 8.1f, 30f), Color.white, 0f, true);
+    }
+
+    /// <summary>One gun of a ring of giant guns, +z down the barrel: an eight-sided concrete pad, a turret house and a
+    /// barrel 90 m long. Variant 0 still stands; 1 lies broken across its pad; 2 is a burnt stump.</summary>
+    private static void Railgun(MapMeshBuilder b, int variant)
+    {
+        Color steel = Rgb(98, 102, 108), burnt = Rgb(40, 36, 34), concrete = Rgb(136, 132, 124);
+        Color body = variant == 0 ? steel : Mix(steel, burnt, .65f), pad = variant == 0 ? concrete : Mix(concrete, burnt, .4f);
+        b.Box(V(0, 2f, 0), V(22f, 2f, 22f), pad);
+        b.Box(V(0, 2f, 0), V(22f, 2f, 22f), Mul(pad, .96f), 45f);
+        b.Box(V(0, 8.5f, -2f), V(10f, 4.5f, 13f), body);
+        if (variant == 0)
+        {
+            float tilt = 22f * Mathf.Deg2Rad;
+            Vector3 along = V(0, Mathf.Sin(tilt), Mathf.Cos(tilt)), up = V(0, Mathf.Cos(tilt), -Mathf.Sin(tilt));
+            foreach (float x in new[] { -3.2f, 3.2f })
+                b.Box(V(x, 13f, 6f) + along * 45f, V(1.5f, 0, 0), up * 2.4f, along * 45f, x < 0 ? body : Mul(body, .92f));
+            b.Box(V(0, 13f, 6f) + along * 12f, V(5.2f, 0, 0), up * 3.6f, along * 12f, Mul(body, .8f));   // the breech
+        }
+        else if (variant == 1)
+        {
+            b.Box(V(7f, 6.2f, 34f), V(2.6f, 2.2f, 24f), body, 14f);
+            b.Box(V(-11f, 2.4f, 82f), V(2.6f, 2.4f, 17f), burnt, -27f);
+            b.Box(V(-9f, 5.5f, -6f), V(4f, 1.5f, 6f), burnt, 30f);
+        }
+        else
+        {
+            float tilt = 50f * Mathf.Deg2Rad;
+            Vector3 along = V(0, Mathf.Sin(tilt), Mathf.Cos(tilt)), up = V(0, Mathf.Cos(tilt), -Mathf.Sin(tilt));
+            b.Box(V(0, 12f, 4f) + along * 9f, V(3.4f, 0, 0), up * 2.6f, along * 9f, burnt);
+        }
+        b.Gradient(0, .85f, 1.03f);
     }
 
     private static void Lighthouse(MapMeshBuilder b, int variant)
