@@ -14,29 +14,22 @@ namespace BoscaliSummer.Core.Ui
     /// </summary>
     internal sealed class WindowInput
     {
-        private readonly FeedInputLease lease = new FeedInputLease();
         private readonly List<AvHit> hits = new List<AvHit>(160);
         private AvHit hovered;
-        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas;
+        private bool ownsCursorFlag, mouseDisabledByUs, restoreWhenReleased, pauseTouched, pauseWas;
         private float nextHits;
 
         public AvHit Hovered => hovered;
 
         public void Take()
         {
-            ownsCursorFlag = !CursorManager.GetFlag(CursorFlags.SelectionMenu);
-            if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
+            restoreWhenReleased = false; // Reopening while a mouse button is held keeps our input ownership.
+            Keep();
             if (!pauseTouched)
             {
                 pauseTouched = true;
                 pauseWas = GameplayUI.AllowPauseKeybind;
                 GameplayUI.AllowPauseKeybind = false; // Esc closes the window instead of opening the pause menu
-            }
-            Mouse mouse = TryMouse();
-            if (lease.Acquire(mouse != null, mouse != null && mouse.enabled))
-            {
-                mouse.enabled = false;
-                mouseDisabledByUs = true;
             }
             nextHits = 0f;
         }
@@ -53,8 +46,7 @@ namespace BoscaliSummer.Core.Ui
                 ownsCursorFlag = true;
             }
             Mouse mouse = TryMouse();
-            if (mouse == null || !mouse.enabled) return;
-            if (lease.Acquire(true, true) || mouseDisabledByUs)
+            if (mouse != null && mouse.enabled)
             {
                 mouse.enabled = false;
                 mouseDisabledByUs = true;
@@ -64,20 +56,24 @@ namespace BoscaliSummer.Core.Ui
         public void GiveBack()
         {
             ReleaseFlags();
-            if (lease.Release(ButtonsDown())) RestoreMouse();
+            if (mouseDisabledByUs)
+            {
+                restoreWhenReleased = ButtonsDown();
+                if (!restoreWhenReleased) RestoreMouse();
+            }
             WindowPointer.Hover(ref hovered, null);
         }
 
         /// <summary>Every frame, open or not: a mouse still held at close is handed back the moment its buttons are up.</summary>
         public void Tick()
         {
-            if (lease.Tick(ButtonsDown())) RestoreMouse();
+            if (restoreWhenReleased && !ButtonsDown()) RestoreMouse();
         }
 
         /// <summary>Teardown or fault: everything back now, buttons or not.</summary>
         public void Force()
         {
-            if (lease.ForceRelease()) RestoreMouse();
+            if (mouseDisabledByUs) RestoreMouse();
             ReleaseFlags();
             WindowPointer.Hover(ref hovered, null);
         }
@@ -123,59 +119,8 @@ namespace BoscaliSummer.Core.Ui
         private void RestoreMouse()
         {
             Mouse mouse = TryMouse();
-            if (mouse != null) mouse.enabled = lease.RestoreMouseTo;
-            mouseDisabledByUs = false;
-        }
-    }
-
-    /// <summary>
-    /// Who owns the mouse while a full-screen window or feed is open, as a pure state machine the runtime applies to Rewired. The mouse is
-    /// disabled only when it was found enabled and is handed back to exactly that state, and only once its buttons are up, so the
-    /// closing click cannot fire a weapon. The keyboard and joysticks are never touched: flight and weapon bindings stay live in the air.
-    /// </summary>
-    internal sealed class FeedInputLease
-    {
-        private bool mouseTouched, mouseWas, pending;
-
-        public bool Held { get; private set; }
-        /// <summary>The enabled state to give the mouse back; valid after Release/Tick/ForceRelease returned true.</summary>
-        public bool RestoreMouseTo => mouseWas;
-
-        /// <summary>True when the caller must now disable the mouse.</summary>
-        public bool Acquire(bool mouseAvailable, bool mouseEnabled)
-        {
-            Held = true;
-            if (pending) { pending = false; return false; } // reopened before the buttons were up: still ours, still disabled
-            if (mouseTouched) return false;
-            if (!mouseAvailable || !mouseEnabled) return false;
-            mouseTouched = true;
-            mouseWas = true;
-            return true;
-        }
-
-        /// <summary>True when the caller must now re-enable the mouse; false either means nothing to give back or "wait".</summary>
-        public bool Release(bool buttonsDown)
-        {
-            Held = false;
-            if (!mouseTouched) return false;
-            if (buttonsDown) { pending = true; return false; }
-            return Finish();
-        }
-
-        public bool Tick(bool buttonsDown) => pending && !buttonsDown && Finish();
-
-        /// <summary>Teardown, reset or exception: hand the mouse back now, buttons or not.</summary>
-        public bool ForceRelease()
-        {
-            Held = false;
-            return mouseTouched && Finish();
-        }
-
-        private bool Finish()
-        {
-            mouseTouched = false;
-            pending = false;
-            return true;
+            if (mouse != null) mouse.enabled = true;
+            mouseDisabledByUs = restoreWhenReleased = false;
         }
     }
 }

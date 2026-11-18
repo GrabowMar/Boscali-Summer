@@ -24,6 +24,7 @@ TestResults/
 !/tools/tests/Gamemodes.Tests/
 !/tools/tests/Gamemodes.MissionTests/
 !/tools/tests/Spooktober.Tests/
+!/tools/tests/Support.Tests/
 !/tools/tests/Vanguard.Tests/
 
 # ---------------------------------------------------------------------------------------------

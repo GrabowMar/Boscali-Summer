@@ -1,0 +1,41 @@
+{
+  "name": "ops-window-input",
+  "mods": ["boscalisummer"],
+  "timeout_s": 180,
+  "ops": [
+    {"op": "seat", "id": "player", "altitude": 1500, "speed": 180, "heading": 0},
+    {"op": "wait", "seconds": 3},
+    {"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console", "store": "before", "args": {}},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Window", "store": "opened", "args": {"front": 0}},
+    {"op": "wait", "seconds": 1},
+    {"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console", "store": "held", "args": {}},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsGuiAutomation.Gui", "store": "tab", "args": {"do": "press", "label": "CYBER · NETWORK"}},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsGuiAutomation.Gui", "store": "switched", "args": {}},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsGuiAutomation.Gui", "args": {"do": "esc"}},
+    {"op": "wait", "seconds": 2},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsAutomation.Read", "store": "closed", "args": {}},
+    {"op": "call", "method": "BoscaliSummer.Modules.Weather.Runtime.WeatherAutomation.Console", "store": "after", "args": {}},
+    {"op": "call", "method": "BoscaliSummer.Modules.Support.Runtime.OpsGuiAutomation.Gui", "args": {"do": "release"}},
+    {"op": "end"}
+  ],
+  "checks": [
+    {"check": "status_ok"},
+    {"check": "result_equals", "path": "before.mouseEnabled", "value": 1},
+    {"check": "result_equals", "path": "before.keyboardEnabled", "value": 1},
+    {"check": "result_equals", "path": "before.pauseAllowed", "value": 1},
+    {"check": "result_equals", "path": "before.cursorFlag", "value": 0},
+    {"check": "result_equals", "path": "opened.windowOpenN", "value": 1},
+    {"check": "result_equals", "path": "held.mouseEnabled", "value": 0},
+    {"check": "result_equals", "path": "held.keyboardEnabled", "value": 1},
+    {"check": "result_equals", "path": "held.pauseAllowed", "value": 0},
+    {"check": "result_equals", "path": "held.cursorFlag", "value": 1},
+    {"check": "result_equals", "path": "tab.found", "value": 1},
+    {"check": "result_equals", "path": "switched.front", "value": 1},
+    {"check": "result_equals", "path": "closed.windowOpenN", "value": 0},
+    {"check": "result_equals", "path": "after.mouseEnabled", "value": 1},
+    {"check": "result_equals", "path": "after.keyboardEnabled", "value": 1},
+    {"check": "result_equals", "path": "after.pauseAllowed", "value": 1},
+    {"check": "result_equals", "path": "after.cursorFlag", "value": 0}
+  ]
+}
