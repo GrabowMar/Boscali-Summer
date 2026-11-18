@@ -242,7 +242,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if (Input.GetKeyDown(KeyCode.Escape)) { Close(); return; }
                 if (!link.HasAircraft) { Close(); return; } // dead, ejected or in the menu
                 input.Keep();
-                input.Pointer(window.Root);
+                input.Pointer(window.Root, Input.mousePosition, Input.GetMouseButtonDown(0));
                 feed.Paint(link);
                 if (Time.unscaledTime >= nextPaint) Paint();
             }

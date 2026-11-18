@@ -8,7 +8,6 @@ using BoscaliSummer.Core.Services;
 using BoscaliSummer.Core.Ui;
 using NOAvionics;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace BoscaliSummer.Garrisons
 {
@@ -33,21 +32,17 @@ namespace BoscaliSummer.Garrisons
         private float seenX, seenY, seenZ;
         private bool seen;
         private GlobalPosition landing;
-        private GameObject hudRoot, smoke;
-        private RectTransform hudCanvas;
+        private readonly HudMarkerCanvas canvas = new HudMarkerCanvas();
+        private GameObject smoke;
         private LandingZoneMarker hudMarker;
         private string hudCaption = "LZ";
-        // Layer on: the fix sits on a holder inside the HUD layer's Motion root and is placed at its late point (OnPaint); off: the old own canvas, placed in LateUpdate.
-        private bool hudInLayer;
-        private float hudUnit = 1f, lzRange;      // device pixels per canvas unit of the 1080-high grid; the zone's range (m) for the ink ramp
+        private float lzRange;
 
         public void ResetForScene()
         {
             nextRead = 0f;
             Forget();
-            if (hudRoot != null) Destroy(hudRoot);
-            hudRoot = null;
-            hudCanvas = null;
+            canvas.Clear();
             hudMarker = null;
         }
 
@@ -152,69 +147,23 @@ namespace BoscaliSummer.Garrisons
             Camera camera = layer ? view.Cam : SceneSingleton<CameraStateManager>.i != null
                 ? SceneSingleton<CameraStateManager>.i.mainCamera : Camera.main;
             if (camera == null) { hudMarker?.SetVisible(false); return; }
-            if (hudRoot != null && hudInLayer != layer)
+            if (canvas.Root != null && canvas.InLayer != layer) canvas.Clear();
+            if (canvas.Root == null)
             {
-                Destroy(hudRoot);      // the A/B switch moved: rebuild on the other parent
-                hudRoot = null; hudCanvas = null; hudMarker = null;
+                canvas.Create("Boscali Landing Zone HUD", transform, layer);
+                hudMarker = new LandingZoneMarker(canvas.Root, "Landing zone HUD fix", true);
             }
-            if (hudRoot == null) BuildHud(layer);
-            if (layer)
-            {
-                // The holder keeps the 1080-high grid the marker is written in, whatever the HUD canvas scale is.
-                hudUnit = Mathf.Max(0.1f, Screen.height / 1080f);
-                hudCanvas.localScale = Vector3.one * (hudUnit / Mathf.Max(0.01f, view.Scale));
-                hudCanvas.sizeDelta = new Vector2(Screen.width / hudUnit, 1080f);
-            }
+            if (layer) canvas.FitToLayer(view);
 
             Vector3 world = landing.ToLocalPosition();
-            Vector2 point = default;
-            bool projected;
-            if (layer)
-            {
-                projected = view.Project(world, out point);
-                point *= view.Scale / hudUnit;      // HUD canvas units to this block's grid
-            }
-            else
-            {
-                Vector3 screen = camera.WorldToScreenPoint(world);
-                projected = screen.z > 0f && RectTransformUtility.ScreenPointToLocalPointInRectangle(hudCanvas, screen, null, out point);
-            }
+            bool projected = canvas.Project(camera, view, world, out Vector2 point);
             Vector3 direction = camera.transform.InverseTransformPoint(world);
             if (!LandingZoneMarkerMath.Place(point.x, point.y, projected, direction.x, direction.y,
-                hudCanvas.rect.width * .5f - 150f, hudCanvas.rect.height * .5f - 110f,
+                canvas.Root.rect.width * .5f - 150f, canvas.Root.rect.height * .5f - 110f,
                 out float x, out float y, out float bearing, out bool pinned))
             { hudMarker.SetVisible(false); return; }
             Rgba ink = HudInk.Range(VanillaHudStyle.Colours.AllClear.ToRgba(), lzRange);      // desaturates and dims with the zone's distance
             hudMarker.Show(new Vector2(x, y), hudCaption, new Color(ink.R, ink.G, ink.B, ink.A), pinned, bearing);
-        }
-
-        private void BuildHud(bool layer)
-        {
-            hudInLayer = layer;
-            if (layer)
-            {
-                hudRoot = new GameObject("Boscali Landing Zone HUD", typeof(RectTransform));
-                var holder = (RectTransform)hudRoot.transform;
-                holder.SetParent(HudLayer.Motion, false);
-                holder.anchorMin = holder.anchorMax = holder.pivot = new Vector2(0.5f, 0.5f);
-                holder.anchoredPosition = Vector2.zero;
-            }
-            else
-            {
-                hudRoot = new GameObject("Boscali Landing Zone HUD", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
-                hudRoot.transform.SetParent(transform, false);
-                Canvas canvas = hudRoot.GetComponent<Canvas>();
-                canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-                canvas.sortingOrder = 1;
-                CanvasScaler scaler = hudRoot.GetComponent<CanvasScaler>();
-                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-                scaler.referenceResolution = new Vector2(1920f, 1080f);
-                scaler.matchWidthOrHeight = 1f;
-                CanvasGroup group = hudRoot.AddComponent<CanvasGroup>();
-                group.blocksRaycasts = group.interactable = false;
-            }
-            hudCanvas = (RectTransform)hudRoot.transform;
-            hudMarker = new LandingZoneMarker(hudCanvas, "Landing zone HUD fix", true);
         }
 
         /// <summary>One line on the centre box when the window opens or closes, and a repeat of the release line while it stays open.</summary>

@@ -20,6 +20,8 @@ namespace BoscaliSummer.Core.Ui
         private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas;
         private float nextHits;
 
+        public AvHit Hovered => hovered;
+
         public void Take()
         {
             ownsCursorFlag = !CursorManager.GetFlag(CursorFlags.SelectionMenu);
@@ -61,9 +63,9 @@ namespace BoscaliSummer.Core.Ui
 
         public void GiveBack()
         {
-            WindowPointer.Hover(ref hovered, null);
             ReleaseFlags();
             if (lease.Release(ButtonsDown())) RestoreMouse();
+            WindowPointer.Hover(ref hovered, null);
         }
 
         /// <summary>Every frame, open or not: a mouse still held at close is handed back the moment its buttons are up.</summary>
@@ -75,17 +77,16 @@ namespace BoscaliSummer.Core.Ui
         /// <summary>Teardown or fault: everything back now, buttons or not.</summary>
         public void Force()
         {
-            WindowPointer.Hover(ref hovered, null);
             if (lease.ForceRelease()) RestoreMouse();
             ReleaseFlags();
+            WindowPointer.Hover(ref hovered, null);
         }
 
         /// <summary>Hover and left-click for the controls under <paramref name="root"/> while the event system is deaf (the Rewired mouse is off).</summary>
-        public void Pointer(RectTransform root)
+        public void Pointer(RectTransform root, Vector2 mouse, bool clicked)
         {
             Mouse device = TryMouse();
             if (!mouseDisabledByUs && (device == null || device.enabled)) return;
-            Vector2 mouse = Input.mousePosition;
             if (Time.unscaledTime >= nextHits)
             {
                 nextHits = Time.unscaledTime + 0.1f;
@@ -100,7 +101,11 @@ namespace BoscaliSummer.Core.Ui
                     RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
             }
             WindowPointer.Hover(ref hovered, under);
-            if (under != null && Input.GetMouseButtonDown(0)) ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
+            if (under != null && clicked)
+            {
+                ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
+                nextHits = 0f; // A click can reveal new controls before the next periodic refresh.
+            }
         }
 
         private static bool ButtonsDown() => Input.GetMouseButton(0) || Input.GetMouseButton(1) || Input.GetMouseButton(2);

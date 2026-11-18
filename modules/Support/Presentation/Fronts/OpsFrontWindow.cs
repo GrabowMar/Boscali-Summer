@@ -4,10 +4,8 @@ using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.Support.Domain.Fronts;
 using BoscaliSummer.Modules.Support.Presentation.C2;
 using NOAvionics;
-using Rewired;
 using TMPro;
 using UnityEngine;
-using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace BoscaliSummer.Modules.Support.Presentation.Fronts
@@ -42,11 +40,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         private TMP_Text titleText, headRight, stripLeft, stripMid, stripRight;
         private RawImage emblem;
         private Image stripBack;
-        private readonly FeedInputLease lease = new FeedInputLease();
-        private readonly List<AvHit> hits = new List<AvHit>(160);
-        private AvHit hovered;
-        private bool ownsCursorFlag, mouseDisabledByUs, pauseTouched, pauseWas, closing;
-        private float nextHits;
+        private readonly WindowInput input = new WindowInput();
+        private bool closing;
         private FrontRoomView lastView;
 
         public bool IsOpen => window != null && window.Visible;
@@ -242,9 +237,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             try
             {
                 ShowFrame();
-                TakeInput();
+                input.Take();
                 Paint(view);
-                nextHits = 0f;
                 return true;
             }
             catch (Exception e)
@@ -292,9 +286,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             (rooms[(int)Front.Cyber] as NetworkRoom)?.ForgetPick();
             Orbit?.ReleaseDownlink(); // the resolve's small targets go back to the budget
             if (backdrop != null) backdrop.SetActive(false);
-            WindowPointer.Hover(ref hovered, null);
             ReleaseCursor();
-            GiveBackInput();
+            input.GiveBack();
             closing = false;
             Closed?.Invoke();
         }
@@ -303,14 +296,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             try { if (window != null && window.Visible) window.Hide(); }
             catch (Exception) { /* the guard below must run whatever the window did */ }
-            GiveBackInput();
-            if (lease.ForceRelease()) RestoreMouse();
+            input.Force();
         }
 
         private void OnDisable()
         {
-            if (lease.ForceRelease()) RestoreMouse();
-            ReleaseFlags();
+            input.Force();
             ReleaseCursor();
         }
 
@@ -318,14 +309,12 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
         {
             if (window != null && window.Visible) { try { window.Hide(); } catch (Exception) { } }
             if (backdrop != null) Destroy(backdrop);
-            if (lease.ForceRelease()) RestoreMouse();
-            ReleaseFlags();
+            input.Force();
         }
 
         private void Update()
         {
-            // A mouse still held at close is handed back the moment its buttons are up.
-            if (lease.Tick(ButtonsDown())) RestoreMouse();
+            input.Tick();
             if (!IsOpen) return;
             try
             {
@@ -340,9 +329,8 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
                 // No idle close: a pilot flying on the stick (Rewired, not Input) touches nothing for minutes; only Esc, X, death or a faction change closes.
 
                 // With the Rewired mouse off (by us, or already) the event system hears nothing: hit-test our own controls.
-                KeepInput();
-                Mouse device = TryMouse();
-                if (mouseDisabledByUs || (device != null && !device.enabled)) Pointer(mouse);
+                input.Keep();
+                input.Pointer(window.Root, mouse, FrontPointer.Down(0));
                 IFrontRoom room = lastView != null ? rooms[(int)lastView.Front] : null;
                 if (room != null && room.Tick(mouse)) room.Paint(lastView);
                 ClaimCursor(room, mouse);
@@ -356,37 +344,13 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             }
         }
 
-        // ---- Pointer (the Rewired mouse is off, so the window hit-tests its own controls) ------------------------------
-
-        private void Pointer(Vector2 mouse)
-        {
-            if (Time.unscaledTime >= nextHits)
-            {
-                nextHits = Time.unscaledTime + 0.1f;
-                hits.Clear();
-                window.Root.GetComponentsInChildren(false, hits);
-            }
-            AvHit under = null;
-            for (int i = hits.Count - 1; i >= 0; i--) // later children draw on top
-            {
-                AvHit h = hits[i];
-                if (h != null && h.isActiveAndEnabled && h.Interactable &&
-                    RectTransformUtility.RectangleContainsScreenPoint((RectTransform)h.transform, mouse, null)) { under = h; break; }
-            }
-            WindowPointer.Hover(ref hovered, under);
-            if (under != null && FrontPointer.Down(0))
-            {
-                ((IPointerClickHandler)under).OnPointerClick(WindowPointer.Data());
-                nextHits = 0f; // a press often shows or hides controls (a tab, a card's buttons): the next frame hit-tests what is on screen now
-            }
-        }
-
         /// <summary>
         /// The window's cursor (MapCursor leaves a window that holds the mouse alone unless it claims a shape): a control under the pointer gets the arrow, a map
         /// marker the select brackets, the room's map its own glyph (placing reticle while a pick is armed, grab hand on a pan, crosshair).
         /// </summary>
         private void ClaimCursor(IFrontRoom room, Vector2 mouse)
         {
+            AvHit hovered = input.Hovered;
             CursorShape shape = hovered != null ? (lastView != null && hovered.transform.IsChildOf(roomRoots[(int)lastView.Front]) ? CursorShape.Select : CursorShape.None)
                 : room != null ? room.Cursor(mouse) : CursorShape.None;
             if (ModCursor.Base == CursorShape.None) shape = CursorShape.None; // the themed cursor is switched off: the OS arrow everywhere
@@ -399,71 +363,6 @@ namespace BoscaliSummer.Modules.Support.Presentation.Fronts
             if (ModCursor.Window == CursorShape.None) return;
             ModCursor.Window = CursorShape.None;
             ModCursor.Restore();
-        }
-
-        // ---- Input ownership -------------------------------------------------------------------------------------------
-
-        private static bool ButtonsDown() => Input.GetMouseButton(0) || Input.GetMouseButton(1) || Input.GetMouseButton(2);
-
-        private static Mouse TryMouse() => ReInput.isReady && ReInput.controllers != null ? ReInput.controllers.Mouse : null;
-
-        private void TakeInput()
-        {
-            ownsCursorFlag = !CursorManager.GetFlag(CursorFlags.SelectionMenu);
-            if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
-            if (!pauseTouched)
-            {
-                pauseTouched = true;
-                pauseWas = GameplayUI.AllowPauseKeybind;
-                GameplayUI.AllowPauseKeybind = false; // Esc closes the window instead of opening the pause menu
-            }
-            Mouse mouse = TryMouse();
-            if (lease.Acquire(mouse != null, mouse != null && mouse.enabled))
-            {
-                mouse.enabled = false;
-                mouseDisabledByUs = true;
-            }
-        }
-
-        /// <summary>
-        /// Every frame while open: takes back what another overlay handed back under the window (the C-menu, the Met Office or the cinematic console
-        /// held the mouse when the window opened and switched it on again as they closed, leaving the window deaf: no hit test, event system unheard).
-        /// </summary>
-        private void KeepInput()
-        {
-            if (!CursorManager.GetFlag(CursorFlags.SelectionMenu))
-            {
-                CursorManager.SetFlag(CursorFlags.SelectionMenu, true);
-                ownsCursorFlag = true;
-            }
-            Mouse mouse = TryMouse();
-            if (mouse == null || !mouse.enabled) return;
-            if (lease.Acquire(true, true) || mouseDisabledByUs)
-            {
-                mouse.enabled = false;
-                mouseDisabledByUs = true;
-            }
-        }
-
-        private void GiveBackInput()
-        {
-            ReleaseFlags();
-            if (lease.Release(ButtonsDown())) RestoreMouse();
-        }
-
-        private void ReleaseFlags()
-        {
-            if (ownsCursorFlag) CursorManager.SetFlag(CursorFlags.SelectionMenu, false);
-            ownsCursorFlag = false;
-            if (pauseTouched) GameplayUI.AllowPauseKeybind = pauseWas;
-            pauseTouched = false;
-        }
-
-        private void RestoreMouse()
-        {
-            Mouse mouse = TryMouse();
-            if (mouse != null) mouse.enabled = lease.RestoreMouseTo;
-            mouseDisabledByUs = false;
         }
     }
 }
