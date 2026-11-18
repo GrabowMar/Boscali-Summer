@@ -10,7 +10,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
 {
     /// <summary>
-    /// The art (embedded kaiju.bundle, built by tools/Compile-KaijuAssets.ps1) and the hardpoint unit. A hardpoint is the
+    /// The art (embedded kaiju.bundle, built by nomodkit/mods/boscalisummer/tools/Compile-KaijuAssets.ps1) and the hardpoint unit. A hardpoint is the
     /// game's smallest single-part building cloned at runtime, stripped of its looks and given one sphere collider, so
     /// every weak spot is a real lockable, damageable, replicated Unit with no Blueprinter content. Every peer builds the
     /// same clone and registers it under a fixed prefab hash, so the host's spawn messages resolve on clients.
@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Spooktober.Kaiju.Runtime
                 AssetBundle bundle = bytes != null ? AssetBundle.LoadFromMemory(bytes) : null;
                 if (bundle == null)
                 {
-                    Debug.LogWarning("[Kaiju] kaiju.bundle is not embedded; run tools/Compile-KaijuAssets.ps1");
+                    Debug.LogWarning("[Kaiju] kaiju.bundle is not embedded; run nomodkit/mods/boscalisummer/tools/Compile-KaijuAssets.ps1");
                     return false;
                 }
                 foreach (GameObject go in bundle.LoadAllAssets<GameObject>())

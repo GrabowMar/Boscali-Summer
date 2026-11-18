@@ -104,8 +104,8 @@ timing/resource fields only.
 Run the offline checks:
 
 ```powershell
-dotnet run --project tools/tests/Gamemodes.Tests -c Release
-dotnet run --project tools/tests/Gamemodes.MissionTests -c Release
+nomod test Gamemodes.Tests --mod-root .
+nomod test Gamemodes.MissionTests --mod-root .
 ```
 
 The mission-construction runner also accepts an installed Escalation JSON document
@@ -132,12 +132,12 @@ fixtures; the test does not establish piloted flight or forty-minute balance.
 Run those reproducible native checks with nomodkit:
 
 ```powershell
-nomod sim run tools/tests/Gamemodes.Tests/fuzzball.json tools/tests/Gamemodes.Tests/warbox.json --mod-root . --inst gamemodes --mode hidden
-nomod sim run tools/tests/Gamemodes.Tests/play-fuzzball.json --mod-root . --inst gamemodes --mode hidden
-nomod sim run tools/tests/Gamemodes.Tests/play-heavyweight.json tools/tests/Gamemodes.Tests/heavyweight.json --mod-root . --inst gamemodes --mode hidden
+nomod sim run fuzzball warbox --mod-root . --inst gamemodes --mode hidden
+nomod sim run play-fuzzball --mod-root . --inst gamemodes --mode hidden
+nomod sim run play-heavyweight heavyweight --mod-root . --inst gamemodes --mode hidden
 ```
 
-Feature-specific loopback checks are in `tools/tests/Gamemodes.Tests/peers.py`;
+Feature-specific loopback checks are in nomodkit at `mods/boscalisummer/tests/Gamemodes.Tests/peers.py`;
 run with nomodkit's Python environment. Multiplayer is still unverified: the
 initial attempt could not satisfy the toolkit's 11 GB free-memory requirement,
 and its retry stopped at a concurrent checkout compilation error before joining.

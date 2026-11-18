@@ -4,7 +4,7 @@ using UnityEngine;
 
 namespace BoscaliSummer.Modules.Spooktober.Runtime
 {
-    /// <summary>The embedded spooktober.bundle (tools/Compile-SpooktoberAssets.ps1), loaded once. <see cref="RadGhost"/> is null
+    /// <summary>The embedded spooktober.bundle (nomodkit/mods/boscalisummer/tools/Compile-SpooktoberAssets.ps1), loaded once. <see cref="RadGhost"/> is null
     /// when the bundle is missing or the shader is unsupported here (logged once): the rad look is then embers only.</summary>
     internal static class SpookAssets
     {
@@ -73,7 +73,7 @@ namespace BoscaliSummer.Modules.Spooktober.Runtime
                     }
             }
             catch (Exception error) { Debug.LogError("[Spooktober] spooktober.bundle: " + error.Message); }
-            if (radGhost == null) Debug.LogWarning("[Spooktober] Boscali/RadGhost unavailable (tools/Compile-SpooktoberAssets.ps1): rad look is embers only");
+            if (radGhost == null) Debug.LogWarning("[Spooktober] Boscali/RadGhost unavailable (nomodkit/mods/boscalisummer/tools/Compile-SpooktoberAssets.ps1): rad look is embers only");
             if (hellfire == null || hellPortal == null) Debug.LogWarning("[Spooktober] Boscali/Hellfire or HellPortal unavailable: hell look is embers only");
         }
     }

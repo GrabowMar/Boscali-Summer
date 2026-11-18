@@ -16,7 +16,7 @@ the saturation parameter used by G-LOC. Built-in RCAS sharpening and display
 .cube loading were already present and are reused.
 
 The streak shader is original project source, compiled alone into cinematic.bundle.
-Rebuild with tools/Build-CinematicAssets.ps1; the builder checks both visual
+Rebuild with nomodkit/mods/boscalisummer/tools/Build-CinematicAssets.ps1; the builder checks both visual
 behaviour and 18 GPU parity cases using the shader reloaded from that bundle.
 Source provenance and the supported passes are recorded in Assets/PROVENANCE.txt.
 

@@ -28,6 +28,12 @@ Install [nomodkit](https://github.com/GrabowMar/nomodkit) locally and put `nomod
 `.agents/skills/boscali-nomod` covers this mod's test hooks and evidence requirements. No machine-specific paths
 are stored in that configuration. After changing MCP configuration, start a new Codex session to load it.
 
+The plugin builds from this repository with the game assemblies installed. Asset builders, offline tests and
+sandbox scenarios live in nomodkit under `mods/boscalisummer/`. Run `nomod test` from the mod checkout
+and use `nomod sim ls` to find scenarios by name. For standalone asset scripts, run from the mod checkout
+or set `NOMOD_MOD_ROOT` to its path. The development build compiles the cross-module scroll hooks in
+`Dev/Automation/`.
+
 Run commands from the checkout you edited, or pass `--mod-root "<checkout>"` when working in a worktree or using a
 server started in another directory. `test` reports `ModRoot`; `deploy` records `worktree`. Other commands do not
 all report a checkout field, so pass an explicit `--mod-root` when selection is uncertain. Useful starting points are:

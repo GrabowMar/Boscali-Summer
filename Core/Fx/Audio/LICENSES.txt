@@ -5,4 +5,4 @@ The production catalog identifies every current effect. The 83 replacement recor
 
 The other 27 recordings are existing ElevenLabs cockpit/UI/seasonal effects, preserved byte for byte and pinned by SHA-256 in production/catalog.json. Historical source notes are retained in production/legacy-provenance.txt.
 
-Preparation is offline through tools/Build-AudioEffects.py. The game's runtime never calls a generation service. Radio/chatter and Scenario media have separate provenance and inventory records; see README.md.
+Preparation is offline through nomodkit/mods/boscalisummer/tools/Build-AudioEffects.py. The game's runtime never calls a generation service. Radio/chatter and Scenario media have separate provenance and inventory records; see README.md.

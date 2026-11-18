@@ -32,7 +32,7 @@
       "generated": "exec-4c55806a-3faa-4fb7-8a0e-79a3db8f75b0.png",
       "postprocess": {
         "method": "User-authorized local Pillow text correction after built-in image editor rejected the text-only edit",
-        "script": "Source/correct_kaiju_procedure.py",
+        "script": "nomodkit/mods/boscalisummer/tools/Spooktober/correct_kaiju_procedure.py",
         "source": "Source/kaiju-generated.png",
         "replacement": "Break 12 weak points to expose the heart. Then strike the heart. Keep the organism away from airbases.",
         "rule": "modules/Spooktober/Kaiju/Domain/KaijuRules.cs: HeartGuard = 12",

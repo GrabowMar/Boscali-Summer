@@ -28,6 +28,7 @@
     <EmbeddedResource Include="THIRD-PARTY-NOTICES.txt" LogicalName="BoscaliSummer.THIRD-PARTY-NOTICES.txt" />
   </ItemGroup>
 
+  <!-- Asset-builder paths beginning with tools/ below refer to nomodkit/mods/boscalisummer. -->
   <ItemGroup Label="Source roots">
     <Compile Include="Core\**\*.cs" />
     <Compile Include="modules\**\*.cs" Exclude="modules\**\Assets\Editor\**" />
@@ -42,7 +43,7 @@
 
   <!-- Cross-module scenario drivers are development tools, not module dependencies. -->
   <ItemGroup Condition="'$(PublicRelease)' != 'true'">
-    <Compile Include="tools\Automation\ScrollAutomation*.cs" />
+    <Compile Include="Dev\Automation\*.cs" />
   </ItemGroup>
 
   <PropertyGroup>
@@ -238,7 +239,7 @@
     <EmbeddedResource Include="Core\Fx\Assets\particles.bundle" Condition="Exists('Core\Fx\Assets\particles.bundle')">
       <LogicalName>BoscaliSummer.Fx.particles.bundle</LogicalName>
     </EmbeddedResource>
-    <!-- Built in Blender by modules/SeaStructures/Assets/Source/build_rig.py and build_fort.py. Without them no sea structure is built. -->
+    <!-- Built in Blender by tools/SeaStructures/build_rig.py and build_fort.py. Without them no sea structure is built. -->
     <EmbeddedResource Include="modules\SeaStructures\Assets\*.seamodel">
       <LogicalName>BoscaliSummer.Sea.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>

@@ -2,7 +2,7 @@ Radio transport effects
 =======================
 
 radio-keyup-0..3.wav and radio-tail-0..3.wav: ElevenLabs eleven_text_to_sound_v2, generated for this mod on 2026-11-17. Flow sN7Ssaxaz6p4JaCeQH2P; generation IDs in modules/Chatter/Assets/Voices/generations.json.
-Prepared by tools/Build-BattlefieldEffects.py: mono 22050 Hz PCM16, -9 dBFS peak; key-up <=0.55 s, tail <=0.85 s, fades. Runtime gain keeps these quieter than speech.
+Prepared by nomodkit/mods/boscalisummer/tools/Build-BattlefieldEffects.py: mono 22050 Hz PCM16, -9 dBFS peak; key-up <=0.55 s, tail <=0.85 s, fades. Runtime gain keeps these quieter than speech.
 
 nuclear-radio-static.wav: four generated textures from the same flow/model, combined into a 7.85 s seamless loop, -28 dBFS RMS and -13.99 dBFS peak.
 

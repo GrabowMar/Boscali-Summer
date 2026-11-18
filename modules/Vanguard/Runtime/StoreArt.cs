@@ -7,7 +7,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Vanguard.Runtime
 {
     /// <summary>
-    /// Baked art of the five runtime-built stores: the embedded vanguard-stores.bundle (tools/Compile-VanguardStoreArt.ps1,
+    /// Baked art of the five runtime-built stores: the embedded vanguard-stores.bundle (nomodkit/mods/boscalisummer/tools/Compile-VanguardStoreArt.ps1,
     /// generator Assets/Editor/VanguardStoreArtBuilder.cs). Each prefab "&lt;Name&gt;" is the model at its own origin in Unity
     /// space (+Z nose, +Y up; pods' top at y = 0), FBX joint names kept, one LODGroup on the root, MANTA deployed (wings flat).
     /// Visual only and the same on every peer. Loaded once; a missing or broken bundle leaves every caller on its vanilla look.
@@ -100,7 +100,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 AssetBundle bundle = bytes != null ? AssetBundle.LoadFromMemory(bytes) : null;
                 if (bundle == null)
                 {
-                    Debug.LogWarning("[Vanguard] vanguard-stores.bundle is not embedded or unreadable; stores keep their vanilla parts (tools/Compile-VanguardStoreArt.ps1)");
+                    Debug.LogWarning("[Vanguard] vanguard-stores.bundle is not embedded or unreadable; stores keep their vanilla parts (nomodkit/mods/boscalisummer/tools/Compile-VanguardStoreArt.ps1)");
                     return found;
                 }
                 foreach (GameObject go in bundle.LoadAllAssets<GameObject>())

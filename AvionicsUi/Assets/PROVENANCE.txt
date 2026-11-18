@@ -7,8 +7,8 @@ Tabler Icons webfont @tabler/icons-webfont@3.48.0 https://github.com/tabler/tabl
 Technique only (vertex-packed effect parameters, shiny/dissolve/transition): mob-sakai/UIEffect (MIT) -> MIT-UIEffect.txt
 Technique only (line/circle/gradient/outline mesh modifiers): Unity-UI-Extensions (BSD-3-Clause) -> BSD3-UnityUIExtensions.txt
 No source file from UIEffect or Unity-UI-Extensions is copied; any future copied file must name its source path and commit here.
-NOA Icons (the icon face in use since 2026-10-12): original glyphs drawn for this project in tools/Build-AvIcons.py, SVG copies in Icons/, baked into avionics-icons.bundle by tools/Compile-AvionicsIconAssets.ps1. The Tabler face still inside avionics-ui.bundle is no longer shown.
-Bundle built by tools/Compile-AvionicsUiAssets.ps1 with Unity 2022.3.62f3 + com.unity.textmeshpro 3.0.6.
+NOA Icons (the icon face in use since 2026-10-12): original glyphs drawn for this project in nomodkit/mods/boscalisummer/tools/Build-AvIcons.py, SVG copies in Icons/, baked into avionics-icons.bundle by nomodkit/mods/boscalisummer/tools/Compile-AvionicsIconAssets.ps1. The Tabler face still inside avionics-ui.bundle is no longer shown.
+Bundle built by nomodkit/mods/boscalisummer/tools/Compile-AvionicsUiAssets.ps1 with Unity 2022.3.62f3 + com.unity.textmeshpro 3.0.6.
 
 Original generated artwork, OpenAI image generation, 2026-09-29:
 contour-engraving.png: abstract decorative brass contour engraving on charcoal, mostly empty left side. Not geographic data.
@@ -34,11 +34,11 @@ Formation wakes (wmc), swept paired laminations (pilot), interlocking strategic 
 orbital/coverage projections (ops), territorial resource-flow cells (fac), branching information channels (evn), phase
 interference fields (com), imaginary contour valleys (map), offset sensing sectors (tgt), woven adjustment structures (set),
 atmospheric streamlines (env), modulation envelopes (rad), tessellated planes (misc). No literal equipment, text or live data.
-Runtime packing: py -3 tools/Build-ConsoleArt.py (Pillow). Resize to 640x428 greyscale, remove near-black export noise,
+Runtime packing: py -3 nomodkit/mods/boscalisummer/tools/Build-ConsoleArt.py (Pillow). Resize to 640x428 greyscale, remove near-black export noise,
 keep the upper fifth empty and soften the boundaries. Stored as luminance; AvBundle.ConsoleArt turns it into alpha and
 AvConsole tints it per scheme at 0.28 opacity. Passive background in unused page space; no external source artwork or fonts.
 
-BROKEN HELMET visor glitch shaders (2026-11-16), built into avionics-fx.bundle by tools/Compile-AvionicsFxAssets.ps1 (Unity 2022.3.62f3):
+BROKEN HELMET visor glitch shaders (2026-11-16), built into avionics-fx.bundle by nomodkit/mods/boscalisummer/tools/Compile-AvionicsFxAssets.ps1 (Unity 2022.3.62f3):
 Source/NOA_UI_VisorGlitch.shader, NOA_UI_VisorGlitchCore.cginc, NOA_VisorGlitch.cginc: original code written for this project (the UI shader follows the stock UI/Default
   contract: sprite * vertex colour, rect clip, alpha clip, stencil). No third-party source.
 Source/NOA_TMP_VisorGlitchSDF.shader and NOA_TMP_VisorGlitchSDFCore.cginc: MODIFIED COPY of the vertex and pixel stages of "TextMeshPro/Distance Field" (TMP_SDF.shader,

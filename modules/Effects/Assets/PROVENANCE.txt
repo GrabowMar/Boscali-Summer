@@ -13,7 +13,7 @@ Unity 2022.3.62f3. It has no texture assets or third-party LUT dependency.
 Cinematic colour grading uses the game's native URP volume controls; exposure,
 G-LOC and native rendering remain owned by the game.
 
-Rebuild: powershell -File tools/Build-CinematicAssets.ps1
+Rebuild: powershell -File nomodkit/mods/boscalisummer/tools/Build-CinematicAssets.ps1
 Output: modules/Effects/Assets/cinematic.bundle
 The builder runs in an isolated Unity project and reloads the built player
 bundle before testing its four supported passes. Checks are mandatory:
@@ -25,5 +25,5 @@ bundle before testing its four supported passes. Checks are mandatory:
   zero and nonzero strength; plus 1920x1080 at 8x MSAA for each HDR format.
   These check finite output, RGB agreement within two representable steps,
   preserved destination alpha and a visible streak when enabled.
-The fixture shaders in tools/CinematicAssets are Editor tests and are excluded
+The fixture shaders in nomodkit/mods/boscalisummer/tools/CinematicAssets are Editor tests and are excluded
 from cinematic.bundle. Results and measurements stay beside the scratch project.

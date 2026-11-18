@@ -4,6 +4,9 @@ Boscali Summer's own code is covered by the separate MIT LICENSE. The notices
 below retain the copyright, licence texts and attribution supplied with its
 third-party components; those components keep their respective terms.
 
+Current asset build helpers referenced as tools/ live in nomodkit under mods/boscalisummer/tools/.
+https://github.com/GrabowMar/nomodkit/tree/main/mods/boscalisummer/tools
+
 Source for this release, including adapted shader sources and build helpers:
 https://github.com/GrabowMar/Boscali-Summer/tree/v0.2.14-alpha
 The release page supplies a corresponding source download alongside binaries:

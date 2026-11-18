@@ -10,4 +10,4 @@ hell.png: BSC-0666, LEGION form with pale rust classification field.
 Exact current generation prompts are in prompts.json; earlier vintage/corporate prompts are retained in their superseded JSON files.
 All runtime images are 1536x1024 RGBA. Ace and Hell retain their native generated pixels.
 Kaiju has one user-authorized local paragraph correction: expose the heart after 12 broken weak points (KaijuRules.HeartGuard), then target it. The built-in editor rejected the text-only correction; the user explicitly chose local editing.
-Source/kaiju-generated.png retains the unmodified generated source; Source/correct_kaiju_procedure.py reproducibly changes only the procedure paragraph and asserts all other pixels are unchanged. Exact replacement and source rule are also recorded in prompts.json.
+Source/kaiju-generated.png retains the unmodified generated source; nomodkit/mods/boscalisummer/tools/Spooktober/correct_kaiju_procedure.py reproducibly changes only the procedure paragraph and asserts all other pixels are unchanged. Exact replacement and source rule are also recorded in prompts.json.

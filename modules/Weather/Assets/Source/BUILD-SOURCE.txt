@@ -12,7 +12,7 @@ SunDisc.shader, SunShafts.shader, TerrainDetail.shader, TerrainRain.shader.
 Existing Ocean.shader and TerrainDetail.shader match the compiler inputs after
 normalizing CRLF/LF line endings. Their source content was not replaced.
 
-The original compiler helper is restored at tools/Compile-WeatherAssets.ps1.
+The original compiler helper is restored at nomodkit/mods/boscalisummer/tools/Compile-WeatherAssets.ps1.
 Its Unity editor build source is embedded in the script. It uses Unity
 2022.3.62f3 and builds for StandaloneWindows64 with chunk-based compression.
 The historical droplets_mask.tif and rivulets_mask.tif inputs were explicitly
