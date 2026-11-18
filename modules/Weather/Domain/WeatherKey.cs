@@ -8,7 +8,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
     /// Immutable, compared by value, every float already rounded to float32 so all peers hold the same bits.
     ///
     /// <para>Three groups (spec 9.1). The <b>tape identity</b> (<see cref="Seed"/>, <see cref="Story"/>,
-    /// <see cref="SkyPin"/>, <see cref="LayoutSalt"/>, <see cref="MissionClass"/>, <see cref="OpeningBase"/>) is what
+    /// <see cref="SkyPin"/>, <see cref="LayoutSalt"/>, <see cref="MissionClass"/>, <see cref="OpeningBase"/>, <see cref="Climate"/>) is what
     /// <see cref="TapeId"/> hashes; changing it is a cut. The <b>frame</b> (<see cref="HeadingDeg"/>) is set at
     /// capture from the mission wind and never edited. The <b>kinematics</b> (epoch, offset, speed, dynamic, set-pieces)
     /// move the tape without rebuilding it; <see cref="Rebased"/> is the only way to change speed or hold state.</para>
@@ -31,7 +31,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             byte layoutSalt = 0, bool hasAnchor = false, float anchorX = 0f, float anchorZ = 0f,
             byte story = None, byte skyPin = None, float openingBase = 0f, float headingDeg = float.NaN,
             float offset = 0f, float systemSpeed = DefaultSystemSpeed, float setOriginSquall = 0f,
-            float setOriginSupercell = 0f, float setOriginCell = 0f)
+            float setOriginSupercell = 0f, float setOriginCell = 0f, byte climate = 0)
         {
             Seed = seed;
             Story = story;
@@ -53,6 +53,9 @@ namespace BoscaliSummer.Modules.Weather.Domain
             SetOriginCell = Clean(setOriginCell);
             tapeId = Deterministic.Hash((int)Deterministic.Hash((int)seed, story, skyPin, layoutSalt), missionClass,
                 (int)Math.Round(OpeningBase / OpeningBaseStep, MidpointRounding.AwayFromZero), 0x5A9E);
+            // A map with no climate keeps the identity it always had; a climate is another tape of the same seed.
+            Climate = WeatherClimate.Clean(climate);
+            if (Climate != 0) tapeId = Deterministic.Hash((int)tapeId, Climate, 0xC11A);
         }
 
         // ---- tape identity -------------------------------------------------------------------
@@ -62,6 +65,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public byte LayoutSalt { get; }
         public byte MissionClass { get; }
         public float OpeningBase { get; }
+        /// <summary>The climate of the map (a <see cref="WeatherClimate"/> id), 0 on a vanilla map. It biases the stories of the tape and removes its storms, so a client needs only this byte.</summary>
+        public byte Climate { get; }
 
         // ---- frame ---------------------------------------------------------------------------
         /// <summary>Compass direction the wind blows <b>from</b>, [0, 360).</summary>
@@ -113,7 +118,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         public WeatherKey WithOffset(float offset) => Copy(offset: offset);
         /// <summary>Repeats one story for the whole tape (0-4), or hands the choice back to the mission class with <see cref="None"/>. A new tape identity, so a cut.</summary>
         public WeatherKey WithStory(byte story) => new WeatherKey(Seed, Epoch, Dynamic, MissionClass, Sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, SkyPin, OpeningBase,
-            HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
+            HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell, Climate);
 
         /// <summary>
         /// One key edit for a preset (spec 9.3): the tape fields first (story and pin change the tape identity, so this is a cut), then the set-pieces. Scenarios build with it:
@@ -121,7 +126,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
         /// </summary>
         public WeatherKey With(byte story, byte skyPin, byte sets) =>
             new WeatherKey(Seed, Epoch, Dynamic, MissionClass, sets, LayoutSalt, HasAnchor, AnchorX, AnchorZ, story, skyPin, OpeningBase,
-                HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
+                HeadingDeg, Offset, SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell, Climate);
         public WeatherKey WithLayoutSalt(byte salt) => Copy(salt: salt);
         public WeatherKey WithAnchor(float x, float z) => Copy(anchor: true, x: x, z: z);
         public WeatherKey WithoutAnchor() => Copy(anchor: false);
@@ -134,7 +139,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float? systemSpeed = null, byte? skyPin = null) =>
             new WeatherKey(Seed, epoch ?? Epoch, dynamic ?? Dynamic, MissionClass, sets ?? Sets,
                 salt ?? LayoutSalt, anchor ?? HasAnchor, x ?? AnchorX, z ?? AnchorZ, Story, skyPin ?? SkyPin, OpeningBase,
-                HeadingDeg, offset ?? Offset, systemSpeed ?? SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell);
+                HeadingDeg, offset ?? Offset, systemSpeed ?? SystemSpeed, SetOriginSquall, SetOriginSupercell, SetOriginCell, Climate);
 
         // ---- capture helpers -----------------------------------------------------------------
 
@@ -175,7 +180,8 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 Epoch == other.Epoch && Offset == other.Offset && SystemSpeed == other.SystemSpeed &&
                 Dynamic == other.Dynamic && Sets == other.Sets && HasAnchor == other.HasAnchor &&
                 AnchorX == other.AnchorX && AnchorZ == other.AnchorZ && SetOriginSquall == other.SetOriginSquall &&
-                SetOriginSupercell == other.SetOriginSupercell && SetOriginCell == other.SetOriginCell;
+                SetOriginSupercell == other.SetOriginSupercell && SetOriginCell == other.SetOriginCell &&
+                Climate == other.Climate;
         }
 
         public override bool Equals(object obj) => Equals(obj as WeatherKey);
@@ -202,6 +208,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
                 h = h * 31 + SetOriginSquall.GetHashCode();
                 h = h * 31 + SetOriginSupercell.GetHashCode();
                 h = h * 31 + SetOriginCell.GetHashCode();
+                h = h * 31 + Climate;
                 return h;
             }
         }

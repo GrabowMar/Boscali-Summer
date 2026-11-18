@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
     /// </summary>
     internal sealed class WeatherNet : MonoBehaviour
     {
-        public const byte ProtocolVersion = 8;
+        public const byte ProtocolVersion = 9;
 
         private WeatherManager manager;
         private HandlerSlot clientSlot;
@@ -128,6 +128,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 w.WriteSingle(v.FieldSetOriginSquall);
                 w.WriteSingle(v.FieldSetOriginSupercell);
                 w.WriteSingle(v.FieldSetOriginCell);
+                w.WriteByte(v.FieldClimate);
             }),
             (Func<NetworkReader, WeatherSyncMessage>)(r =>
             {
@@ -161,6 +162,7 @@ namespace BoscaliSummer.Modules.Weather.Networking
                 message.FieldSetOriginSquall = r.ReadSingle();
                 message.FieldSetOriginSupercell = r.ReadSingle();
                 message.FieldSetOriginCell = r.ReadSingle();
+                message.FieldClimate = r.ReadByte();
                 return message;
             }));
 

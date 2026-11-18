@@ -41,7 +41,7 @@ namespace BoscaliSummer.Modules.Weather.Domain
             float offset = modelAgeSeconds.HasValue ? basis.SystemSpeed * Scalar.Clamp(Scalar.IsFinite(modelAgeSeconds.Value) ? modelAgeSeconds.Value : 0f, 0f, MaxAgeSeconds) : basis.Offset;
             return new WeatherKey(seed ?? basis.Seed, now, false, (byte)cls, basis.Sets, basis.LayoutSalt, basis.HasAnchor, basis.AnchorX, basis.AnchorZ,
                 WeatherKey.None, FirstSky(cls), opening, basis.HeadingDeg, offset, basis.SystemSpeed,
-                basis.SetOriginSquall, basis.SetOriginSupercell, basis.SetOriginCell);
+                basis.SetOriginSquall, basis.SetOriginSupercell, basis.SetOriginCell, basis.Climate);
         }
     }
 }
