@@ -523,99 +523,115 @@ def debris(b, v):
 
 
 def station_hub(b, v):
-    """The core of Polaris Station: a 70 m dome on a raised ring deck, with its mast."""
-    b.cyl((0, 0, 9), 44, 3, WHITE, 28)
-    b.cyl((0, 0, 12), 36, 8, RED, 28)
-    b.ball((0, 0, 20), 35, WHITE, 28, (1, 1, 0.72), dome=True)
-    for k in range(12):
-        a = k * math.pi / 6
-        b.cyl((40 * math.sin(a), 40 * math.cos(a), 0), 1.3, 9, IRON, 6)
+    """The core of Polaris Station: a low dome on a raised deck, its airlocks and its mast."""
+    b.cyl((0, 0, 9), 44, 2.6, PANEL_D, 8, rot=(0, 0, 22.5))
+    b.cyl((0, 0, 11.6), 42, 1.0, PANEL, 8, rot=(0, 0, 22.5))
+    for k in ((0, 1, 2, 3, 4, 5, 6, 7) if b.mid else (0, 2, 4, 6)):
+        a = k * math.pi / 4 + math.pi / 8
+        x, y = 38 * math.sin(a), 38 * math.cos(a)
+        b.cyl((x, y, 0), 1.6, 9, IRON, 8)
         if b.fine:
-            b.box((40 * math.sin(a), 40 * math.cos(a), 0.3), (2.4, 2.4, 0.3), DARK)
+            b.box((x, y, 0.3), (2.8, 2.8, 0.3), CONCRETE_D)
+    b.cyl((0, 0, 12.6), 34, 5, WHITE, 24)
+    b.ball((0, 0, 17.6), 34, WHITE, 24, (1, 1, 0.62), dome=True)
     if b.mid:
-        b.cyl((0, 0, 14.5), 36.3, 2, GLASS, 28)                          # the window band
-        for k in range(4):
+        b.cyl((0, 0, 13.4), 34.2, 2.4, GLASS, 24)                         # the window band
+        b.cyl((0, 0, 12.4), 35.2, 0.5, RED, 24)                           # one thin red band
+        for k in range(4):                                                # airlocks toward the wings
             a = k * math.pi / 2 + 0.4
-            b.box((46 * math.sin(a), 46 * math.cos(a), 14), (4, 7, 3), BLUE, (0, 0, -math.degrees(a)), bevel=0.4)   # airlocks toward the wings
-    b.truss((0, 0, 44), (0, 0, 78), 3, RED, 7)
-    b.ball((0, 0, 80), 2.2, WHITE, 8)
+            b.box((42 * math.sin(a), 42 * math.cos(a), 15), (5, 7, 3.5), HULL, (0, 0, -math.degrees(a)), bevel=0.4)
+            b.box((46.4 * math.sin(a), 46.4 * math.cos(a), 15), (2.4, 1.6, 2.0), PANEL_D, (0, 0, -math.degrees(a)))
+        b.box((0, 24, 39.5), (7, 6, 4), WHITE, bevel=0.4)                  # the watch cab
+        b.box((0, 29.6, 40.6), (6, 0.2, 1.6), GLASS)
+    b.truss((0, -10, 42), (0, -10, 80), 2.6, PANEL_D, 5)
+    b.ball((0, -10, 81), 1.6, WHITE, 8)
     if b.fine:
-        b.ball((14, -10, 42), 6, WHITE, 12, dome=True)
-        b.cyl((-16, 8, 41), 3.5, 0.6, STEEL, 12, rot=(35, 0, 30))        # a dish on the dome
-        b.beam((-16, 8, 39), (-16, 8, 41.4), 0.4, IRON, 4)
-        for k in range(20):
-            a = k * math.pi / 10
-            b.beam((43.6 * math.sin(a), 43.6 * math.cos(a), 12), (43.6 * math.sin(a), 43.6 * math.cos(a), 13.4), 0.12, YELLOW, 3)
+        b.ball((15, 8, 36.5), 5, PANEL, 10, dome=True)                     # a second, small dome
+        b.cyl((-14, 10, 36.5), 4, 1.2, PANEL_D, 12, rot=(18, 0, 20))
+        b.beam((-14, 10, 34.8), (-14, 10, 36.2), 0.3, IRON, 4)
+        for k in range(8):                                                # the deck's handrail
+            a = k * math.pi / 4
+            x, y = 43.6 * math.sin(a + math.pi / 8), 43.6 * math.cos(a + math.pi / 8)
+            b.box((x, y, 13.4), (16, 0.12, 0.12), IRON, (0, 0, -math.degrees(a) - 22.5))
         b.box((0, 47, 4.5), (2.5, 6, 0.25), STEEL, (38, 0, 0))            # the stair down to the snow
 
 
 def station_module(b, v):
-    """One raised block of a polar station, 40 m along x: red, blue or white."""
-    hull = (RED, BLUE, WHITE)[v]
-    b.box((0, 0, 7.5), (20, 5.5, 3.4), hull, bevel=0.9)
-    b.box((0, 0, 11.1), (18.5, 4.2, 0.3), tuple(int(c * 0.8) for c in hull))
+    """One raised block of a polar station, 40 m along x: a lab, a habitat or a plant module."""
+    hull = (WHITE, (206, 208, 204), (188, 190, 187))[v]                   # weathered whites
+    stripe = (RED, BLUE, OLIVE)[v]                                        # one dull stripe
+    b.box((0, 0, 8.4), (20, 5.2, 3.0), hull, bevel=0.8)
+    b.box((0, 0, 5.4), (19.4, 4.8, 0.6), PANEL_D)                         # the dark underside
+    b.box((0, 0, 11.4), (18.6, 4.0, 0.3), PANEL)                          # the roof deck
     for x in (-16, 0, 16):
-        for y in (-4, 4):
-            b.cyl((x, y, 0), 0.45, 4.3, IRON, 6)
+        for y in (-3.6, 3.6):
+            b.cyl((x, y, 0), 0.5, 5.4, IRON, 6)
             if b.fine:
-                b.box((x, y, 0.2), (1.3, 1.3, 0.2), DARK)
+                b.box((x, y, 0.2), (1.4, 1.4, 0.2), CONCRETE_D)
     if b.mid:
-        for y in (-5.56, 5.56):
-            b.box((0, y, 8.3), (17, 0.08, 0.75), GLASS)
-        b.box((22, 0, 7), (2.2, 1.7, 1.7), STEEL)                         # the link to the next block
+        for y in (-5.24, 5.24):
+            b.box((0, y, 9.2), (17, 0.1, 0.9), GLASS)                     # the window band
+            b.box((0, y, 10.35), (20, 0.12, 0.5), stripe)                 # the stripe round it
+        b.box((21.2, 0, 7.8), (1.4, 1.8, 1.9), PANEL_D)                   # the link to the next block
     if b.fine:
-        b.box((-8, 0, 12.2), (2.2, 1.6, 0.8), STEEL, bevel=0.2)           # vents
-        b.cyl((6, 1, 11.4), 0.5, 2.6, STEEL, 6)
-        b.box((10, -7.2, 3.2), (1.4, 3.2, 0.15), STEEL, (-40, 0, 0))
+        b.box((-9, 0, 12.0), (2.6, 1.8, 0.6), PANEL_D)                    # roof plant
+        b.cyl((4, 1, 11.9), 0.5, 2.8, IRON, 6)
+        b.box((14, -5.34, 8.2), (1.8, 0.12, 2.2), PANEL_D)                # a door
         if v == 2:
-            b.ball((-13, 0, 11.4), 2.6, WHITE, 10, dome=True)
+            b.cyl((11, 0, 11.7), 1.8, 4.0, PANEL, 10)                     # a tank on the roof
 
 
 def dish(b, v):
     """A 26 m tracking dish: 0 looking up the sky, 1 at the horizon."""
     b.cyl((0, 0, 0), 7, 2, CONCRETE, 12)
-    b.cyl((0, 0, 2), 3.2, 12, WHITE, 10, r2=2.4)
+    b.cyl((0, 0, 2), 4.2, 3, CONCRETE_D, 12, r2=3.2)
+    b.box((0, 0, 7), (3.4, 3.4, 2.0), STEEL, bevel=0.3)                   # the azimuth house
     pitch = (-25, -68)[v]
-    m = Matrix.Translation((0, 0, 16)) @ turn((pitch, 0, 0))
+    m = Matrix.Translation((0, 0, 11)) @ turn((pitch, 0, 0))
     at = lambda z, x=0.0, y=0.0: tuple(m @ Vector((x, y, z)))             # noqa: E731
-    b.box(at(-1), (3, 3, 2.4), STEEL, (pitch, 0, 0), bevel=0.3)
+    b.box((0, 0, 0.6), (3.2, 3.2, 2.0), STEEL, (pitch, 0, 0), bevel=0.3)  # the elevation yoke
     n = b.seg(20)
-    v_ = bmesh.ops.create_cone(b.bm, cap_ends=False, segments=n, radius1=2.5, radius2=13, depth=5)["verts"]
-    b._add(v_, WHITE, m @ Matrix.Translation((0, 0, 3.5)), lambda f: True)
-    b.cyl(at(1), 2.5, 0.3, STEEL, n, rot=(pitch, 0, 0))
+    shell = bmesh.ops.create_cone(b.bm, cap_ends=False, segments=n, radius1=2.0, radius2=13, depth=4)["verts"]
+    b._add(shell, WHITE, m @ Matrix.Translation((0, 0, 2)), lambda f: True)
     if b.mid:
-        for k in range(4):
+        b.cyl(at(-0.6), 2.0, 2.0, PANEL, n, rot=(pitch, 0, 0))            # the hub
+        for k in range(4):                                                # the back structure
             a = k * math.pi / 2 + 0.78
-            b.beam(at(5.6, 11 * math.sin(a), 11 * math.cos(a)), at(13), 0.18, IRON, 3)
-        b.cyl(at(12.4), 1, 1.6, IRON, 6, rot=(pitch, 0, 0))
-        b.truss(at(-1.5, 0, -2), at(-6, 0, -7), 2, STEEL, 2)              # counterweight arm
+            b.beam(at(0.4), at(1.4, 12 * math.sin(a), 12 * math.cos(a)), 0.18, PANEL_D, 4)
+        for k in range(3):                                                # the feed tripod
+            a = k * 2.09 + 0.4
+            b.beam(at(9.6, 6 * math.sin(a), 6 * math.cos(a)), at(4.0), 0.16, IRON, 3)
+        b.cyl(at(9.2), 0.9, 1.6, IRON, 6, rot=(pitch, 0, 0))
+        b.truss(at(-1.5, 0, -2), at(-6, 0, -8), 2, STEEL, 2)              # the counterweight arm
+    if b.fine:
+        for k in range(12):                                               # the rim
+            a0 = k * math.pi / 6
+            b.beam(at(4, 13 * math.sin(a0), 13 * math.cos(a0)), at(4, 13 * math.sin(a0 + 0.53), 13 * math.cos(a0 + 0.53)), 0.12, STEEL, 3)
 
 
 def tunnel_portal(b, v):
-    """A way into the base under the rock: a concrete mouth 30 m wide, its blast door half open, air towers above."""
+    """A way into the base under the rock: a concrete mouth 30 m wide, its blast door half open."""
+    b.rock((0, -26, 13), 26, BASALT, 17, (2.2, 0.7, 0.55), 0.4, 2)        # the cliff it enters
     for side in (-1, 1):
-        b.box((side * 12.5, -4, 7), (2.5, 8, 7), CONCRETE, bevel=0.5)
-        b.box((side * 21, 2, 3.5), (6, 1.1, 3.5), DARK, (0, 0, -side * 28), 0.8)   # wing walls
-        if b.mid:
-            b.box((side * 12.5, 4.2, 12.5), (2.6, 0.2, 0.9), YELLOW)
-    b.box((0, -4, 16), (15, 8, 2), CONCRETE, bevel=0.5)
-    b.box((0, -12, 9), (16, 2, 9), DARK)                                  # the back, in the hill
-    b.box((-5.2, -3, 7), (4.8, 0.7, 7), IRON, bevel=0.2)                  # one leaf shut
-    b.box((8.6, -1.6, 7), (1.4, 0.7, 7), IRON)                            # the other run back
-    b.box((4, -10, 6), (6, 0.3, 6), BLACK)                                # the dark inside
+        b.box((side * 12.5, -4, 8), (2.6, 8, 8), CONCRETE, bevel=0.4)
+        b.box((side * 21, 2, 4), (7, 1.2, 4), CONCRETE_D, (0, 0, -side * 28), 0.8)
+    b.box((0, -4, 17.5), (15, 8, 2.5), CONCRETE, bevel=0.4)
+    b.box((0, -12, 9), (16, 2, 9), DARK)
+    b.box((-5.2, -3, 7.5), (4.8, 0.7, 7), IRON, bevel=0.2)                # one leaf shut
+    b.box((8.6, -1.6, 7.5), (1.4, 0.7, 7), IRON)                          # the other run back
+    b.box((4, -10, 6), (6, 0.3, 6), BLACK)
     if b.mid:
-        b.box((-5.2, -2.2, 7), (4.4, 0.1, 0.6), YELLOW)
+        for k in range(5):                                                # the hazard band
+            b.box((-10 + k * 5, 4.2, 0.5), (1.2, 0.6, 0.5), RED)
         for x in (-9, 9):
             b.cyl((x, -8, 18), 2, 5, STEEL, 8)
             b.cyl((x, -8, 23), 2.6, 0.8, IRON, 8)
+        b.box((0, 9, 0.2), (9, 9, 0.2), CONCRETE_D)                       # the apron slab
     if b.fine:
         for k in range(5):
-            b.box((-12 + k * 6, 4.6, 0.25), (0.3, 0.3, 0.25), YELLOW)
-        b.box((0, 9, 0.15), (9, 9, 0.15), DARK)                           # the apron slab
-        b.truss((16.5, 3, 0), (16.5, 3, 15), 1.2, STEEL, 5)
-        b.box((16.5, 3, 15.6), (1.2, 0.6, 0.6), WHITE)                    # a flood light
-
-
+            b.box((12, 4.6, 1.2 + k * 1.1), (0.3, 0.3, 0.3), RED)          # the door's marker lights
+        b.truss((17, 3, 0), (17, 3, 15), 1.2, STEEL, 5)
+        b.box((17, 3, 15.6), (1.2, 0.6, 0.6), WHITE)                      # a flood light
 def radar_tower(b, v):
     """A search radar on a lattice tower, 38 m."""
     b.box((0, 0, 0.6), (6, 6, 0.6), CONCRETE)
@@ -879,39 +895,46 @@ def tank_trap(b, v):
 
 
 def drill_rig(b, v):
-    """An ice-core drilling derrick, 36 m, with its winch house and pipe rack."""
-    b.box((0, 0, 0.5), (8, 8, 0.5), STEEL)
+    """An ice-core drilling derrick, 38 m, with its winch house and pipe rack."""
+    b.box((0, 0, 0.6), (8, 8, 0.6), CONCRETE_D)
     for sx, sy in ((1, 1), (1, -1), (-1, -1), (-1, 1)):
-        b.beam((sx * 5, sy * 5, 1), (sx * 1.2, sy * 1.2, 32), 0.28, RED, 4)
-    b.box((0, 0, 32.6), (2, 2, 0.6), IRON)
-    b.truss((0, 0, 33), (0, 0, 38), 1, RED, 2)
-    b.cyl((0, 0, 1), 0.5, 26, IRON, 6)
-    b.box((-11, 0, 3), (4, 3, 2.5), ORANGE, bevel=0.3)
+        b.box((sx * 5, sy * 5, 18), (0.7, 0.7, 17), PANEL)
+    for z in (4, 10, 16, 22, 28, 34):
+        b.box((0, 0, z), (5.7, 5.7, 0.45), PANEL_D if z % 12 == 4 else HULL)
+    b.box((0, 0, 36.4), (2.4, 2.4, 0.9), IRON)
+    b.cyl((0, 0, 1), 0.5, 34, IRON, 6)
+    b.box((-10, 0, 3.2), (4.5, 3.4, 2.6), HULL, bevel=0.3)
     if b.mid:
-        for k in range(4):
-            z0, z1, s0, s1 = 1 + k * 7.75, 1 + (k + 1) * 7.75, 5 - k * 0.95, 5 - (k + 1) * 0.95
-            for a in range(4):
-                c0, c1 = ((1, 1), (1, -1), (-1, -1), (-1, 1))[a], ((1, 1), (1, -1), (-1, -1), (-1, 1))[(a + 1) % 4]
-                b.beam((c0[0] * s0, c0[1] * s0, z0), (c1[0] * s1, c1[1] * s1, z1), 0.12, RED, 3)
+        b.box((-10, 3.6, 3.4), (3.6, 0.2, 1.4), GLASS)
         for k in range(5):
-            b.cyl((7 + k * 0.7, -9, 0.6), 0.3, 14, STEEL, 5, rot=(-90, 0, 0))
+            b.cyl((7 + k * 0.8, -9, 0.7), 0.3, 14, STEEL, 5, rot=(-90, 0, 0))
+        b.truss((0, 0, 36.8), (0, 0, 42), 1.2, PANEL_D, 2)
     if b.fine:
-        b.cyl((-11, 3.6, 3), 1.4, 1.2, IRON, 10, rot=(-90, 0, 0))
-        b.beam((-11, 4, 4), (0, 0, 32), 0.06, BLACK, 3)
+        b.beam((0, 0, 42), (0, 9, 39), 0.1, IRON, 3)
+        b.box((-10, 0, 5.9), (4.2, 3.0, 0.2), PANEL_D)
 
 
 def antenna_field(b, v):
-    """Nine guyed masts of an antenna array, on a 60 m square."""
+    """Nine masts of an antenna array on a 60 m square, wired together, with their hut."""
     for i in range(3):
         for j in range(3):
             x, y = (i - 1) * 26, (j - 1) * 26
-            b.beam((x, y, 0), (x, y, 22), 0.22, WHITE if (i + j) % 2 else RED, 4)
-            if b.mid:
-                b.beam((x - 2.5, y, 20), (x + 2.5, y, 20), 0.08, STEEL, 3)
+            if not b.fine:
+                b.beam((x, y, 0), (x, y, 22), 0.3, STEEL, 4)
+            else:
+                b.truss((x, y, 0), (x, y, 22), 1.7, STEEL, 4)
             if b.fine:
+                b.box((x, y, 22.2), (0.7, 0.7, 0.2), RED if (i + j) % 3 == 0 else BLACK)
+            if b.fine:
+                b.box((x, y, 11), (2.6, 0.15, 0.9), PANEL_D)              # a dipole
                 for a in range(3):
-                    b.beam((x, y, 18), (x + 8 * math.sin(a * 2.09), y + 8 * math.cos(a * 2.09), 0), 0.03, IRON, 3)
-    b.box((34, 34, 1.6), (3, 2.2, 1.6), ORANGE, bevel=0.2)
+                    b.beam((x, y, 18), (x + 8 * math.sin(a * 2.09), y + 8 * math.cos(a * 2.09), 0), 0.04, IRON, 3)
+    if b.mid:
+        for j in (-1, 0, 1):                                              # the wire antenna
+            b.beam((-26, j * 26, 20), (26, j * 26, 20), 0.05, IRON, 3)
+    if b.fine:
+        b.box((30, 30, 1.4), (2.8, 2.2, 1.4), HULL, bevel=0.2)
+        b.box((31, 30, 2.9), (1.8, 0.1, 0.3), GLASS)
 
 
 def spire(b, v, col, seed):
