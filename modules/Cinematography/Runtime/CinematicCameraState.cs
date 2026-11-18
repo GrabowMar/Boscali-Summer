@@ -23,16 +23,9 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
         private float previousClock, elapsed;
         private ShotPose lastPose;
         private float lastRealtime;
-        private bool wrote, stopping, terminal, finalFrame, seekDiscontinuity;
+        private bool wrote, stopping, terminal, finalFrame;
         private Vector3 writtenVelocity;
         internal bool OwnsCamera { get; private set; }
-        internal bool ManualPaused { get; set; }
-        internal bool Seek(float seconds)
-        {
-            if(!OwnsCamera || terminal || !ShotPlan.Finite(seconds) || seconds<0 || seconds>plan.duration) return false;
-            float now=clock();if(!ShotPlan.Finite(now)) return false;
-            elapsed=seconds;previousClock=now;finalFrame=false;seekDiscontinuity=true;return true;
-        }
 
         internal CinematicCameraState(CameraStateManager cam, ShotPlan shot, Func<float> missionClock,
             Action<float> onFrame, Func<bool> allowed, Func<Vector3, bool> pathClear, Action<string> onFault, Action onComplete,
@@ -96,7 +89,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 if (!permitted()) { Fail("PRODUCTION CONTEXT LOST"); return; }
                 float now = clock();
                 if (!ShotPlan.Finite(now) || now < previousClock) { Fail("MISSION CLOCK CHANGED"); return; }
-                bool paused = Time.timeScale == 0 || ManualPaused;
+                bool paused = Time.timeScale == 0;
                 if (!paused) elapsed += (now - previousClock)*(plan.options?.playbackRate ?? 1);
                 previousClock = now;
                 float time = elapsed;
@@ -109,7 +102,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 float realtime = Time.unscaledTime;
                 // Native camera velocity is metres per real second (free-camera integration and wind audio).
                 // Derive from global positions so rate changes, held moving anchors and origin shifts stay correct.
-                if (wrote && !seekDiscontinuity && ShotPlan.Finite(realtime) && realtime > lastRealtime)
+                if (wrote &&ShotPlan.Finite(realtime) && realtime > lastRealtime)
                 {
                     var velocity = (pose.Position - lastPose.Position) / (realtime - lastRealtime);
                     writtenVelocity = new Vector3(velocity.X, velocity.Y, velocity.Z);
@@ -118,7 +111,7 @@ namespace BoscaliSummer.Modules.Cinematography.Runtime
                 cam.cameraVelocity = writtenVelocity;
                 cam.transform.SetPositionAndRotation(position, Rotation(pose));
                 cam.desiredFOV = cam.mainCamera.fieldOfView = pose.Fov;
-                lastPose = pose; lastRealtime = realtime; wrote = true;seekDiscontinuity=false;
+                lastPose = pose; lastRealtime = realtime; wrote = true;
                 finalFrame = time >= plan.duration;
                 frame(Math.Min(time, plan.duration));
             }

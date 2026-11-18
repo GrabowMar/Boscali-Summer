@@ -6,7 +6,7 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
     internal static class Sa74BlastShape
     {
         public const float MinimumRadius = 75000f, InitialRadius = 2100f;
-        public const float MaximumVisualAge = 960f;
+        public const float MaximumVisualAge = 2400f;
         private const float FirstSeconds = 12f, InitialSpeed = 1650f, OuterSpeed = 850f;
         public static float Radius(float mapWidth, float mapHeight) =>
             Math.Max(MinimumRadius, Math.Max(ValidSpan(mapWidth), ValidSpan(mapHeight)) * .55f);

@@ -142,7 +142,7 @@ namespace BoscaliSummer.Core.Config
                 if (listed.TryGetValue(bound.Key, out hint))
                 {
                 }
-                else if (keybind && section != "Debug" && section != "Cinematography")
+                else if (keybind && section != "Debug")
                 {
                     // One group instead of a dozen sections that hold a key or two each. The
                     // section goes into the name because the keys themselves repeat.

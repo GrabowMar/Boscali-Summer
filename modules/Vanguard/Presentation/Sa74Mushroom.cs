@@ -73,7 +73,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             RenderPipelineManager.beginCameraRendering += BeginCamera;
         }
 
-        private bool Prepare()
+        /// <summary>The bundle's shader; pass 2 rewrites the terrain colour map for the burned land.</summary>
+        internal static Shader BlastShader() { LoadShader(); return shader; }
+        private static void LoadShader()
         {
             if (!loaded)
             {
@@ -84,6 +86,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                     foreach (Shader candidate in bundle.LoadAllAssets<Shader>()) if (candidate.name == "Boscali/SA74Mushroom") shader = candidate;
                 if (shader == null) Debug.LogWarning("[Vanguard] SA-74N volumetric mushroom shader bundle is missing.");
             }
+        }
+
+        private bool Prepare()
+        {
+            LoadShader();
             if (shader == null || !shader.isSupported) return false;
             if (noise == null)
             {
@@ -121,9 +128,10 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             if (cameraData == null || cameraData.renderType != CameraRenderType.Base) return;
             NativeCloudFallback(false);
             int count = 0;
-            Vector4 groundClearance = Vector4.zero;
+            Vector4 groundClearance = Vector4.zero, wet = Vector4.zero;
             DispersedSites = 0; RemainingSeconds = 0f;
-            // ponytail: two newest concurrent volumes bound fragment work; omitted sites keep their native cloud fallback.
+            // ponytail: two newest concurrent volumes bound fragment work; a third burst inside 40 minutes drops the oldest cloud
+            // (its native fallback is long gone by then). Raise the shader's site arrays if that ever matters.
             for (int i = Sa74Fallout.Sites.Count - 1; i >= 0; i--)
             {
                 Sa74Fallout.Site site = Sa74Fallout.Sites[i];
@@ -134,6 +142,8 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 if ((at - camera.transform.position).sqrMagnitude > 250000f * 250000f) continue;
                 siteIds[count] = site.Id;
                 groundClearance[count] = site.GroundClearance;
+                // A burst whose surface is the sea lofts spray and mist, not dirt.
+                wet[count] = at.y - site.GroundClearance <= Datum.LocalSeaY + 1f ? 1f : 0f;
                 sites[count++] = new Vector4(at.x, Mathf.Max(at.y, Datum.LocalSeaY + 8f), at.z, age);
                 RemainingSeconds = Mathf.Max(RemainingSeconds, Sa74BlastShape.MaximumVisualAge - age);
             }
@@ -148,6 +158,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             material.SetInt("_Sa74Count", count);
             material.SetVectorArray("_Sa74Sites", sites);
             material.SetVector("_Sa74Clearance", groundClearance);
+            material.SetVector("_Sa74Wet", wet);
             material.SetFloat("_Sa74ShockRadius", Sa74Fallout.ShockRadius);
             Vector3 sun = RenderSettings.sun != null ? -RenderSettings.sun.transform.forward : new Vector3(.45f, .65f, -.40f).normalized;
             material.SetVector("_Sa74Sun", sun);

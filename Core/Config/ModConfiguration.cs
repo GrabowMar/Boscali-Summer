@@ -23,7 +23,6 @@ using BoscaliSummer.Modules.UrbanCombat.Configuration;
 using BoscaliSummer.Modules.Weather.Configuration;
 using BoscaliSummer.Modules.Wing.Configuration;
 using BoscaliSummer.Core.Diagnostics;
-using BoscaliSummer.Modules.Cinematography.Configuration;
 
 namespace BoscaliSummer.Core.Config
 {
@@ -62,7 +61,6 @@ namespace BoscaliSummer.Core.Config
         public DiagnosticSettings Diagnostics { get; }
         public WeatherSettings Weather { get; }
         public PerformanceSettings Performance { get; }
-        public CinematographySettings Cinematography { get; }
         public BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings Scenario { get; }
         public BoscaliSummer.Modules.Pmc.Configuration.PmcSettings Pmc { get; }
         public BoscaliSummer.Modules.Effects.Configuration.EffectsSettings Effects { get; }
@@ -110,7 +108,6 @@ namespace BoscaliSummer.Core.Config
                 Diagnostics = new DiagnosticSettings(config);
                 Weather = new WeatherSettings(config);
                 Performance = new PerformanceSettings(config);
-                Cinematography = new CinematographySettings(config);
                 Scenario = new BoscaliSummer.Modules.Scenario.Configuration.ScenarioSettings(config);
                 Pmc = new BoscaliSummer.Modules.Pmc.Configuration.PmcSettings(config);
                 Effects = new BoscaliSummer.Modules.Effects.Configuration.EffectsSettings(config);

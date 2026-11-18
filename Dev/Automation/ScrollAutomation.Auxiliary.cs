@@ -18,7 +18,7 @@ namespace BoscaliSummer.Modules.Command.Runtime
 {
     public static partial class ScrollAutomation
     {
-        /// <summary>Sandbox-only auxiliary-window navigation/readback. Never applies a formation, weather, drone order or cinematic edit.</summary>
+        /// <summary>Sandbox-only auxiliary-window navigation/readback. Never applies a formation, weather or drone order.</summary>
         public static Dictionary<string, object> Auxiliary(Dictionary<string, object> args)
         {
             if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("NOMODKIT_SIM_SCENARIO")))
@@ -85,17 +85,6 @@ namespace BoscaliSummer.Modules.Command.Runtime
                         BoscaliSummer.Vanguard.VanguardAutomation.Step(new Dictionary<string, object> { ["action"] = "link", ["do"] = action == "open" ? "terminal" : "close" });
                     owner = Object.FindObjectOfType<Modules.Vanguard.Presentation.DroneTerminalWindow>();
                     if (owner == null) return AuxAbsent(id, action);
-                    break;
-                case "cinematic":
-                    if (action != "read")
-                    {
-                        var result = BoscaliSummer.Cinematics.CinematicAutomation.Step(new Dictionary<string, object>
-                            { ["action"] = "console", ["visible"] = action != "close", ["page"] = Mathf.Clamp(requested, 0, 2) });
-                        if (!result.TryGetValue("ok", out object ok) || !Equals(ok, true)) return result;
-                    }
-                    owner = Object.FindObjectOfType<Modules.Cinematography.Presentation.CinematicConsole>();
-                    if (owner == null) return AuxAbsent(id, action);
-                    page = (int)Field(owner, "currentPage"); pages = new[] { "CAMERA", "TIMING & FX", "EDIT LIST" };
                     break;
                 default: return Failure("ScrollAutomation", "Auxiliary", "unknown auxiliary window");
             }

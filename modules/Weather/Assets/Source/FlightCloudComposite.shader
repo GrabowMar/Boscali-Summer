@@ -469,9 +469,9 @@ Shader "Boscali/FlightCloudComposite"
                 // lightning (in `motion`) still force a prompt refresh.
                 float farCache = smoothstep(45000.0, 120000.0, distance);
                 // Frozen sky: the march dither is fixed per texel, so a texel marched again from the same view returns the same value.
-                // Where the sky is still on screen (under ~1/8 px a frame: any sky at rest, distant cloud in cruise) a fresh texel is
-                // simply kept and the other three hold their history untouched. Blending or clamping toward neighbours marched in a
-                // different checker phase made a 4-frame wobble. Moving sky keeps the clamped blend below.
+                // `rest` holds history for a sky that barely moves on screen; `carried` blends only when motion demands it.
+                // Blending toward neighbours marched in a different checker phase made a 4-frame wobble, so a moving view keeps
+                // the distance-weighted cache below instead of snapping a fresh quarter.
                 float rest = occludedHistory ? 0.0 : 1.0 - saturate(motion * 40.0);
                 float4 carried = lerp(history, boxed, saturate(lerp(0.15, 0.04, farCache) + motion * 3.0) * (1.0 - rest));
                 if (!fresh) return Resolved(lerp(carried, upsampled, motion), sceneDepth, cloudDepth);
@@ -479,11 +479,11 @@ Shader "Boscali/FlightCloudComposite"
                 // converge within a few frames. A fresh texel enters half as its own sample and half as the blend around it,
                 // at most a quarter per visit (distant cloud 3 %).
                 float entry = max(lerp(0.08 + 0.17 * freshVal.a, 0.03, farCache), motion);
-                // A still-on-screen sky is only deterministic while the camera does not translate. In cruise the far march shifts a little every
-                // frame, and snapping each texel to its own march every fourth frame made the deck's edge-on horizon step between two shapes
-                // (2026-10-26, user's recording). Translating, a resting fresh texel averages into its own history (own sample only, no neighbours).
-                float still = 1.0 - saturate(length(_CloudCamDelta.xyz) * 2.0);
-                float restEntry = lerp(lerp(0.25, 0.08, farCache), 1.0, still);
+                // A still camera is handled by the frozen branch above. Under a slow drift the old
+                // 1.0 snap replaced one checker quarter outright, so the four phases alternated the
+                // sky's brightness (4-frame shimmer measured 2026-11-18). Every moving view keeps
+                // the distance-weighted cache instead.
+                float restEntry = lerp(0.25, 0.08, farCache);
                 // 2026-10-18: a moving fresh texel enters as 0.3 its own sample and 0.7 the stratified nine-sample blend (was half and half): its single sample is the grain.
                 return Resolved(lerp(carried, lerp(lerp(freshVal, smooth, 0.7), stableFresh, rest), lerp(entry, restEntry, rest)), sceneDepth, cloudDepth);
             }

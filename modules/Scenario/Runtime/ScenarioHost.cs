@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
@@ -7,7 +6,6 @@ using System.Threading;
 using BepInEx.Logging;
 using BoscaliSummer.Core.Chatter;
 using BoscaliSummer.Core.Contracts;
-using BoscaliSummer.Core.Fx;
 using BoscaliSummer.Core.Game;
 using BoscaliSummer.Core.Lifecycle;
 using BoscaliSummer.Core.Scenario;
@@ -35,9 +33,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private const int MaxEarlyEvents = 256;
 
         private readonly List<KeyValuePair<TriggerKind, string>> early = new List<KeyValuePair<TriggerKind, string>>();
-        private readonly List<StageShot> stageShots = new List<StageShot>();
-        private readonly List<ScenarioCut> playing = new List<ScenarioCut>();
-        private readonly Dictionary<ScenarioPicture, Texture2D> pictures = new Dictionary<ScenarioPicture, Texture2D>();
         private ScenarioLibrary library;
         private ScenarioSettings settings;
         private ManualLogSource log;
@@ -45,29 +40,24 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private ScenarioRunner runner;
         private ScenarioDef script;
         private Mission bound;
-        private ICinematicStage camera;
         private float boundAt, startedAt, changedAt;
-        private bool started, joined, hadAircraft, airborne, cutPlaying, collecting, choosing, ownJoin;
-        private const int MaxPictureBytes = 8 * 1024 * 1024, MaxMusicBytes = 24 * 1024 * 1024;
+        private bool started, joined, hadAircraft, airborne, collecting, choosing, ownJoin;
+        private const int MaxMusicBytes = 24 * 1024 * 1024, MaxVideoBytes = 160 * 1024 * 1024;
         private const float MusicFadeSeconds = 3.5f;
         private AudioSource music;
         private AudioClip musicClip;
-        // Narration: one clip per cut that names a voice, loaded as its cutscene starts and spoken as its shot starts.
+        // Recorded radio lines: one clip per line that names a voice, loaded as the mission starts.
         private readonly Dictionary<string, AudioClip> voiceClips = new Dictionary<string, AudioClip>(StringComparer.Ordinal);
-        private AudioSource voice, radio, effects;
-        // Counts shots: an effect still waiting for its moment when its shot is gone stays silent.
-        private int effectRound;
-        private readonly HashSet<string> effectFiles = new HashSet<string>(StringComparer.Ordinal);
+        private AudioSource radio;
         // Counts missions: a recording that finishes loading after its mission ended is thrown away.
         private int voiceRound;
         private CancellationTokenSource voiceLifetime, musicLoad;
         private float musicVolume, musicFadeFrom = -1f, musicEndsAt;
         private int musicAsked;
-        private int shotsShown, skippedShots;
         private GameplayUI.ActiveCanvas? hidden;
 
 #if !PUBLIC_RELEASE
-        private int linesSaid, cutsPlayed, shotsPlayed, heard;
+        private int linesSaid, heard;
         private int audioRequests;
         private string lastLine = "";
 
@@ -81,10 +71,10 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             return new Dictionary<string, object>
             {
                 ["ok"] = true, ["script"] = script?.Id ?? "", ["started"] = started ? 1 : 0, ["joined"] = joined ? 1 : 0,
-                ["side"] = runner == null ? "" : runner.Side.ToString(), ["airborne"] = airborne ? 1 : 0, ["cut_playing"] = cutPlaying ? 1 : 0,
-                ["cuts_played"] = cutsPlayed, ["shots_played"] = shotsPlayed, ["lines_said"] = linesSaid, ["last_line"] = lastLine,
+                ["side"] = runner == null ? "" : runner.Side.ToString(), ["airborne"] = airborne ? 1 : 0,
+                ["lines_said"] = linesSaid, ["last_line"] = lastLine,
                 ["objective_events"] = heard, ["flags"] = runner == null ? "" : string.Join(",", runner.Flags),
-                ["finished"] = runner != null && runner.Finished ? 1 : 0, ["idle"] = runner != null && runner.Idle ? 1 : 0,
+                ["finished"] = runner != null && runner.Finished ? 1 : 0, ["idle"] = runner != null && runner.Idle ? 1 : 0, ["video_playing"] = view != null && view.VideoPlaying ? 1 : 0,
                 ["music_playing"] = music != null && music.isPlaying ? 1 : 0, ["game_music_muted"] = gameMusicMuted ? 1 : 0,
                 ["flight_controls_enabled"] = GameManager.flightControlsEnabled ? 1 : 0,
                 ["join_menu_open"] = NuclearOption.UI.LeaderboardMenu.IsOpen() ? 1 : 0,
@@ -147,7 +137,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             float now = Time.time;
             if (!started)
             {
-                // The join screen comes up a moment after the mission starts; a cutscene takes the camera from behind it.
+                // The join screen comes up a moment after the mission starts.
                 if (now - boundAt < StartDelaySeconds || SceneSingleton<CameraStateManager>.i == null || SceneSingleton<GameplayUI>.i == null) return;
                 started = true;
                 startedAt = now;
@@ -155,21 +145,16 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             }
             Watch(now);
             // A script that puts the pilot on a side itself keeps the game's join screen out of the way until it has.
-            if (ownJoin && !joined && !cutPlaying) HideGameUi();
+            if (ownJoin && !joined) HideGameUi();
+            if (view.VideoPlaying)
+            {
+                HideGameUi();
+                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape)) view.StopVideo();
+            }
             if (choosing)
             {
                 if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Enlist(ScenarioSide.Bdf);
                 else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) Enlist(ScenarioSide.Pala);
-            }
-            ShowFeed(!cutPlaying);
-            if (cutPlaying)
-            {
-                HideGameUi();
-                if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Escape))
-                {
-                    log?.LogInfo("[Scenario] cutscene skipped by the pilot.");
-                    camera?.Stop();
-                }
             }
             runner.TextSpeed = settings.TextSpeed.Value;
             runner.Tick(now - startedAt);
@@ -222,24 +207,13 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 foreach (ScenarioAction action in beat.Actions)
                 {
                     if (action.Kind == ActionKind.Enlist || action.Kind == ActionKind.Choose) ownJoin = true;
-                    // A clip is unpacked now, not in the middle of the cutscene that shows it.
-                    if (action.Board == "screen" && action.Words != null && action.Words.TryGetValue("clip", out string clip)) Clip(clip);
                     if (action.Voice != null && !voiceClips.ContainsKey(action.Voice))
                     {
                         voiceClips[action.Voice] = null;
                         recordings.Add(action.Voice);
                     }
-                    if (action.Sfx != null)
-                        foreach (string entry in action.Sfx.Split(','))
-                        {
-                            string file = entry.Substring(0, entry.LastIndexOf('@')).Trim();
-                            if (voiceClips.ContainsKey(file)) continue;
-                            voiceClips[file] = null;
-                            effectFiles.Add(file);
-                            recordings.Add(file);
-                        }
                 }
-            // Every recording decodes now, so the first line of a cutscene and a line in a firefight are both ready when they are needed.
+            // Every recording decodes now, so the first line and a line in a firefight are both ready when they are needed.
             if (recordings.Count > 0) LoadVoices(recordings, voiceRound, voiceLifetime.Token).Forget();
             log?.LogInfo("[Scenario] '" + running.Id + "' is running: " + running.Beats.Count + " beat(s).");
             if (running.Contract != ScenarioSide.Any)
@@ -250,10 +224,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         {
             voiceRound++;
             CancelAudio(ref voiceLifetime);
-            if (cutPlaying) camera?.Stop();
-            cutPlaying = false;
             ShowGameUi();
-            ShowFeed(true);
             if (script != null && ModuleServices.TryGet(out IChatter chatter)) chatter.EndScripted();
             runner = null;
             script = null;
@@ -263,22 +234,14 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             fullHealth.Clear();
             ace = null;
             flown = null;
-            camera = null;
             if (view != null) Destroy(view.gameObject);
             view = null;
-            foreach (Texture2D texture in pictures.Values)
-                if (texture != null) Destroy(texture);
-            pictures.Clear();
             StopMusic();
             ReleaseGameMusic();
-            if (voice != null) { voice.Stop(); voice.clip = null; }
             if (radio != null) { radio.Stop(); radio.clip = null; }
-            effectRound++;
-            if (effects != null) effects.Stop();
             foreach (AudioClip clip in voiceClips.Values)
                 if (clip != null) Destroy(clip);
             voiceClips.Clear();
-            effectFiles.Clear();
         }
 
         public void Music(string file, float volume, bool loop)
@@ -308,8 +271,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private float nextQuiet;
 
         /// <summary>
-        /// gamemusic off: everything on the game's music channel stays silent, the game's own tracks and the radio's alike; the script's track and
-        /// narration have no channel and play on.
+        /// gamemusic off: everything on the game's music channel stays silent, the game's own tracks and the radio's alike; the script's track has
+        /// no channel and plays on.
         /// </summary>
         private void QuietGameMusic()
         {
@@ -319,7 +282,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             UnityEngine.Audio.AudioMixerGroup channel = SoundManager.i.MusicMixer;
             foreach (AudioSource source in FindObjectsOfType<AudioSource>())
             {
-                if (source == music || source == voice || source.mute) continue;
+                if (source == music || source.mute) continue;
                 if (source.outputAudioMixerGroup != channel && (MusicManager.i == null || source != GameAccess.GetCurrentMusicSource(MusicManager.i) &&
                     source != GameAccess.GetFadeMusicSource(MusicManager.i))) continue;
                 source.mute = true;
@@ -356,11 +319,11 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         }
 
         /// <summary>The file beside the pilot's scripts, or a built-in track unpacked once into the BepInEx cache (Unity decodes music from a file).</summary>
-        private string MusicFile(string file)
+        private string MusicFile(string file, int limit = MaxMusicBytes)
         {
             string own = Path.Combine(library.Folder, file);
-            if (File.Exists(own)) return new FileInfo(own).Length <= MaxMusicBytes ? own : null;
-            byte[] bytes = EmbeddedResources.ReadAll(typeof(ScenarioHost).Assembly, "BoscaliSummer.Scenario." + file, MaxMusicBytes);
+            if (File.Exists(own)) return new FileInfo(own).Length <= limit ? own : null;
+            byte[] bytes = EmbeddedResources.ReadAll(typeof(ScenarioHost).Assembly, "BoscaliSummer.Scenario." + file, limit);
             if (bytes == null) return null;
             string folder = Path.Combine(BepInEx.Paths.CachePath, "BoscaliSummer");
             string cached = Path.Combine(folder, file);
@@ -370,38 +333,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             return cached;
         }
 
-        /// <summary>A screen board's clip as a file Unity can play (a built-in one is unpacked into the cache once), or null.</summary>
-        private string Clip(string file)
-        {
-            if (file == null) return null;
-            string path = null;
-            try { path = MusicFile(file); }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
-            if (path == null) log?.LogWarning("[Scenario] clip '" + file + "' could not be read.");
-            return path;
-        }
-
-        /// <summary>Speaks a cut's line. A cut without one lets the line before it run on over the cut.</summary>
-        private void Speak(string file)
-        {
-            if (file == null) return;
-            if (voice != null) voice.Stop();
-            if (!voiceClips.TryGetValue(file, out AudioClip clip) || clip == null) return;
-            if (voice == null)
-            {
-                voice = gameObject.AddComponent<AudioSource>();
-                voice.playOnAwake = false;
-                voice.spatialBlend = 0f;
-                voice.priority = 0;
-                voice.ignoreListenerPause = true;
-            }
-            voice.clip = clip;
-            voice.volume = 1f;
-            voice.Play();
-        }
-
-        /// <summary>One recording after another, a frame apart: decoding and the gain pass are main-thread work, and they land in the opening cutscene.</summary>
+        /// <summary>One recording after another, a frame apart: decoding and the gain pass are main-thread work, so they are spread out.</summary>
         private async UniTask LoadVoices(List<string> files, int round, CancellationToken token)
         {
             try
@@ -425,7 +357,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 if (clip == null) return;
                 // The mission ended while the file was loading (another may have started and asked for the same file).
                 if (token.IsCancellationRequested || this == null || runner == null || round != voiceRound || !voiceClips.ContainsKey(file)) return;
-                Level(clip, effectFiles.Contains(file) ? EffectLevel : VoiceLevel);
+                Level(clip, VoiceLevel);
                 voiceClips[file] = clip;
                 clip = null; // the mission now owns the clip
             }
@@ -485,11 +417,11 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             }
         }
 
-        /// <summary>The loudness (RMS) every clip is levelled to as it loads: voices on top, effects under them, the music under both, all steady.</summary>
-        private const float VoiceLevel = 0.17f, EffectLevel = 0.11f, MusicLevel = 0.085f;
+        /// <summary>The loudness (RMS) every clip is levelled to as it loads: voices on top, the music under them, both steady.</summary>
+        private const float VoiceLevel = 0.17f, MusicLevel = 0.085f;
 
         /// <summary>
-        /// Brings a clip to <paramref name="target"/> RMS so lines, effects and the track keep the same balance whatever level each was made at (an
+        /// Brings a clip to <paramref name="target"/> RMS so lines and the track keep the same balance whatever level each was made at (an
         /// AudioSource cannot go past full volume, so quiet clips need their samples raised). Peaks above 0.8 round off through a soft knee instead of
         /// clipping. Main-thread work, once a clip.
         /// </summary>
@@ -589,7 +521,17 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
         // ------------------------------------------------------------------ IScenarioStage
 
-        public bool CutPlaying => cutPlaying || choosing;
+        public bool Waiting => choosing || (view != null && view.VideoPlaying);
+
+        public void Video(string file)
+        {
+            string path = null;
+            try { path = MusicFile(file, MaxVideoBytes); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+            if (path == null) { log?.LogWarning("[Scenario] video '" + file + "' could not be read."); return; }
+            view.PlayVideo(path, why => log?.LogWarning("[Scenario] video '" + file + "': " + why));
+        }
 
         public void Choose()
         {
@@ -651,7 +593,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             NuclearOption.UI.LeaderboardMenu menu = FindObjectOfType<NuclearOption.UI.LeaderboardMenu>();
             if (menu != null) menu.Close();
             else if (SceneSingleton<GameplayUI>.i != null) SceneSingleton<GameplayUI>.i.CloseJoinMenu();
-            // Escape can disable controls while the join canvas is hidden for a cutscene.
+            // Escape can disable controls while the join canvas is hidden.
             // Native CloseJoinMenu does not restore them (only ResumeGame does).
             GameManager.flightControlsEnabled = true;
         }
@@ -678,8 +620,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 Role = cast.Role, Event = "scenario", Text = text, Seconds = seconds, Scripted = true
             };
             ModuleServices.TryGet(out IChatter chatter);
-            // A cutscene may hide the flight HUD; keep its fallback plate there.
-            bool inComms = !CutPlaying && chatter != null && chatter.Scripted(line);
+            // While the pilot chooses a side the flight HUD is hidden; the fallback plate speaks there.
+            bool inComms = !Waiting && chatter != null && chatter.Scripted(line);
             if (inComms) view.HideDialogue();
             else view.Say(cast.Callsign, cast.Role, Tint(net), text, seconds);
 #if !PUBLIC_RELEASE
@@ -699,7 +641,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         {
             if (radio == null)
             {
-                // Its own object: a filter works on every source of the object it is on, and the music and the narrator stay clean.
+                // Its own object: a filter works on every source of the object it is on, and the music stays clean.
                 var holder = new GameObject("ScenarioRadio");
                 holder.transform.SetParent(transform, false);
                 radio = holder.AddComponent<AudioSource>();
@@ -721,99 +663,10 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
         public void Hint(string text, float seconds)
         {
-            // In flight a hint is a task line on the HUD's status cues (amber, under MSN), like the game's own ARMED and DISARMED; in a cutscene, or
-            // without the HUD, it is the plate at the top.
-            if (!CutPlaying && ModuleServices.TryGet(out IHudBoard board) && board != null) board.Notice("task", HudTone.Caution, text);
+            // In flight a hint is a task line on the HUD's status cues (amber, under MSN), like the game's own ARMED and DISARMED; without
+            // the HUD it is the plate at the top.
+            if (!Waiting && ModuleServices.TryGet(out IHudBoard board) && board != null) board.Notice("task", HudTone.Caution, text);
             else view.Hint(text, seconds);
-        }
-
-        public bool Cut(IReadOnlyList<ScenarioCut> cuts)
-        {
-            if (!settings.Cutscenes.Value || !ModuleServices.TryGet(out camera)) return false;
-            stageShots.Clear();
-            playing.Clear();
-            foreach (ScenarioCut cut in cuts)
-            {
-                ScenarioShot shot = cut.Shot;
-                stageShots.Add(new StageShot
-                {
-                    Kind = shot.Kind == ShotKind.OrbitAirbase ? StageShotKind.OrbitAirbase : shot.Kind == ShotKind.OrbitUnit ? StageShotKind.OrbitUnit :
-                        shot.Kind == ShotKind.OrbitPoint ? StageShotKind.OrbitPoint : shot.Kind == ShotKind.Chase ? StageShotKind.Chase : StageShotKind.Fly,
-                    Target = shot.Target, X = shot.X, Y = shot.Y, Z = shot.Z, ToX = shot.ToX, ToY = shot.ToY, ToZ = shot.ToZ,
-                    LookX = shot.LookX, LookY = shot.LookY, LookZ = shot.LookZ, Radius = shot.Radius, Height = shot.Height,
-                    FromDegrees = shot.From, ToDegrees = shot.To, Seconds = shot.Seconds, Fov = shot.Fov, Shake = shot.Shake, Roll = shot.Roll
-                });
-                playing.Add(cut);
-                if (cut.Voice != null && !voiceClips.ContainsKey(cut.Voice))
-                {
-                    voiceClips[cut.Voice] = null;
-                    LoadVoice(cut.Voice, voiceRound, voiceLifetime.Token).Forget();
-                }
-            }
-            // The stage may finish inside Play (every shot blocked): the flags are set first so that end is seen.
-            cutPlaying = true;
-            shotsShown = 0;
-            skippedShots = 0;
-            hidden = null;
-            if (camera.Play(stageShots.ToArray(), ShotStarted, CutEnded) && shotsShown > 0) return true;
-            if (cutPlaying) CutEnded();
-            return false;
-        }
-
-        private void ShotStarted(int index)
-        {
-            if (shotsShown++ == 0)
-            {
-                view.BeginCut();
-#if !PUBLIC_RELEASE
-                cutsPlayed++;
-#endif
-            }
-#if !PUBLIC_RELEASE
-            shotsPlayed++;
-#endif
-            if (index < 0 || index >= playing.Count) return;
-            ScenarioCut cut = playing[index];
-            if (shotsShown + skippedShots <= index)
-            {
-                // The stage starts the shots in order, so a gap is a shot it could not play.
-                log?.LogInfo("[Scenario] " + (index + 1 - shotsShown - skippedShots) + " shot(s) before '" + cut.Shot.Id + "' were skipped: path blocked or target missing.");
-                skippedShots = index + 1 - shotsShown;
-            }
-            Speak(cut.Voice);
-            PlayEffects(cut.Sfx);
-            if (!view.Caption(cut, Picture(cut.Photo), cut.Board == "screen" ? Clip(cut.Word("clip")) : null)) return;
-            AudioClip flip = SfxClips.Get("page-flip");
-            if (flip != null) SoundManager.PlayInterfaceOneShot(flip);
-        }
-
-        /// <summary>A script's picture as a texture, read once a mission: one of the mod's event paintings, or an image file in the scripts folder.</summary>
-        private Texture2D Picture(ScenarioPicture picture)
-        {
-            if (picture == null) return null;
-            if (pictures.TryGetValue(picture, out Texture2D texture)) return texture;
-            try
-            {
-                byte[] bytes = null;
-                if (picture.Poster != null)
-                    bytes = EmbeddedResources.ReadAll(typeof(ScenarioHost).Assembly, "BoscaliSummer.EventsArt." + picture.Poster + ".png", MaxPictureBytes);
-                else
-                {
-                    string file = Path.Combine(library.Folder, picture.File);
-                    if (File.Exists(file) && new FileInfo(file).Length <= MaxPictureBytes) bytes = File.ReadAllBytes(file);
-                }
-                if (bytes != null && bytes.Length > 0)
-                {
-                    texture = new Texture2D(2, 2, TextureFormat.RGBA32, false) { hideFlags = HideFlags.HideAndDontSave, wrapMode = TextureWrapMode.Clamp };
-                    // Kept readable: a front page prints it in black and white.
-                    if (!texture.LoadImage(bytes, false)) { Destroy(texture); texture = null; }
-                }
-            }
-            catch (IOException) { texture = null; }
-            catch (UnauthorizedAccessException) { texture = null; }
-            if (texture == null) log?.LogWarning("[Scenario] picture '" + picture.Id + "' could not be read.");
-            pictures[picture] = texture;
-            return texture;
         }
 
         public void Dip() => view.Dip();
@@ -838,46 +691,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         public void Clock(float hour)
         {
             if (GameAccess.IsServer() && NetworkSceneSingleton<LevelInfo>.i != null) NetworkSceneSingleton<LevelInfo>.i.SetTimeOfDay(hour);
-        }
-
-        /// <summary>A shot's sound effects, each at its moment after the shot starts; the next shot or the end of the cutscene silences the ones still waiting.</summary>
-        private void PlayEffects(string list)
-        {
-            effectRound++;
-            if (list == null) return;
-            if (effects == null)
-            {
-                effects = gameObject.AddComponent<AudioSource>();
-                effects.playOnAwake = false;
-                effects.spatialBlend = 0f;
-                effects.priority = 0;
-                effects.ignoreListenerPause = true;
-            }
-            foreach (string entry in list.Split(','))
-            {
-                int at = entry.LastIndexOf('@');
-                if (at <= 0 || !float.TryParse(entry.Substring(at + 1).Trim(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float seconds)) continue;
-                StartCoroutine(Effect(entry.Substring(0, at).Trim(), seconds, effectRound));
-            }
-        }
-
-        private IEnumerator Effect(string file, float seconds, int round)
-        {
-            if (seconds > 0f) yield return new WaitForSecondsRealtime(seconds);
-            if (round != effectRound || !cutPlaying || effects == null || !voiceClips.TryGetValue(file, out AudioClip clip) || clip == null) yield break;
-            effects.PlayOneShot(clip);
-        }
-
-        private void CutEnded()
-        {
-            cutPlaying = false;
-            effectRound++;
-            if (effects != null) effects.Stop();
-            if (voice != null) voice.Stop();
-            if (shotsShown > 0 && shotsShown < playing.Count)
-                log?.LogInfo("[Scenario] cutscene ended after " + shotsShown + " of " + playing.Count + " shots.");
-            if (shotsShown > 0 && view != null) view.EndCut();
-            ShowGameUi();
         }
 
         public void Remember(string flag)
@@ -979,8 +792,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         // ------------------------------------------------------------------ helpers
 
         /// <summary>
-        /// A cutscene plays with the game's own screens out of the picture. The game shows exactly one of its two canvases at a time, so the one seen switched on
-        /// is the one to give back; it is checked every frame because the join screen may come up while the cutscene runs.
+        /// A script that enlists the pilot itself keeps the game's own screens out of the picture until it has. The game shows exactly one of its two canvases
+        /// at a time, so the one seen switched on is the one to give back; it is checked every frame because the join screen may come up at any moment.
         /// </summary>
         private void HideGameUi()
         {
@@ -988,20 +801,6 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             if (ui == null) return;
             if (ui.menuCanvas != null && ui.menuCanvas.enabled) { ui.menuCanvas.enabled = false; hidden = GameplayUI.ActiveCanvas.Menu; }
             if (ui.gameplayCanvas != null && ui.gameplayCanvas.enabled) { ui.gameplayCanvas.enabled = false; hidden = GameplayUI.ActiveCanvas.Gameplay; }
-        }
-
-        private bool feedHidden;
-
-        /// <summary>The game's kill and message feed sits on its own layer, over a cutscene; it is faded out for the length of one.</summary>
-        private void ShowFeed(bool show)
-        {
-            if (feedHidden == !show) return;
-            MessageUI feed = SceneSingleton<MessageUI>.i;
-            if (feed == null) return;
-            feedHidden = !show;
-            CanvasGroup group = feed.GetComponent<CanvasGroup>();
-            if (group == null) group = feed.gameObject.AddComponent<CanvasGroup>();
-            group.alpha = show ? 1f : 0f;
         }
 
         private void ShowGameUi()

@@ -11,7 +11,7 @@ using UnityEngine;
 namespace BoscaliSummer.Modules.Scenario
 {
     /// <summary>
-    /// Mission scripts (docs/SCENARIOS.md): the scripted missions in the game's mission picker, their dialogue, cutscenes and hints, and campaigns that unlock
+    /// Mission scripts (docs/SCENARIOS.md): the scripted missions in the game's mission picker, their dialogue and hints, and campaigns that unlock
     /// chapter by chapter. Always installed: a script is what puts its mission in the picker, and a mission without one costs this module nothing.
     /// </summary>
     internal sealed class ScenarioModule : IModule
@@ -39,9 +39,6 @@ namespace BoscaliSummer.Modules.Scenario
             });
             // A dedicated server builds and hosts the scripted mission; the story is each player's own screen.
             if (Application.isBatchMode) return;
-            context.AddClientSetting("MISSIONS", "CUTSCENES",
-                "Camera cutscenes in scripted missions. OFF keeps you in the cockpit; the story still plays on the boards.",
-                context.Settings.Scenario.Cutscenes);
             context.AddSceneService<ScenarioHost>(95).Configure(library, missions.ScriptOf, context.Settings.Scenario, context.Logger);
         }
     }

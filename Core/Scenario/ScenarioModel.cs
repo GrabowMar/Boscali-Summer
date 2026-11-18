@@ -51,12 +51,6 @@ namespace BoscaliSummer.Core.Scenario
         public int Line;
     }
 
-    /// <summary>A picture a cutscene can pin up: one of the mod's event paintings, or an image file next to the script.</summary>
-    internal sealed class ScenarioPicture
-    {
-        public string Id, Poster, File;
-    }
-
     internal enum ObjectiveKind : byte { Existing, Wait, Reach, Destroy, Capture, After, Sortie }
 
     internal enum ThenKind : byte { Start, Stop, Finish, Spawn, Message, Victory }
@@ -89,88 +83,29 @@ namespace BoscaliSummer.Core.Scenario
         public int Line;
     }
 
-    internal enum ShotKind : byte { OrbitAirbase, OrbitUnit, OrbitPoint, Fly, Chase }
-
-    /// <summary>One camera move of a cutscene.</summary>
-    internal sealed class ScenarioShot
-    {
-        public string Id, Target;
-        public ShotKind Kind;
-        public float X, Y, Z, ToX, ToY, ToZ, LookX, LookY, LookZ;
-        public float Radius = 1500f, Height = 400f, From, To = 60f, Seconds = 8f, Fov = 45f;
-        /// <summary>Handheld shake 0..1 and a held roll in degrees.</summary>
-        public float Shake, Roll;
-        public int Line;
-    }
-
-    /// <summary>A cut's screen effects (<c>fx=strike,lock</c>), layered over the surveillance feed for that one shot.</summary>
-    [Flags]
-    internal enum CutFx : ushort
-    {
-        None = 0,
-        /// <summary>The feed keeps breaking up: interference bursts and torn words all through the shot.</summary>
-        Glitch = 1,
-        /// <summary>A blast as the shot opens: a white-hot flash and a long burst of interference.</summary>
-        Strike = 2,
-        /// <summary>A tracking box closes on the middle of the picture and locks.</summary>
-        Lock = 4,
-        /// <summary>The feed drops to static for the shot's last second.</summary>
-        Lost = 8,
-        /// <summary>The frame pulses red under a flash-traffic banner.</summary>
-        Alert = 16,
-        /// <summary>Colour grades: sunset gold, steel blue, night-vision green.</summary>
-        Warm = 32, Cold = 64, Night = 128,
-    }
-
     /// <summary>
     /// What starts a beat. <see cref="Destroyed"/>, <see cref="Damaged"/>, <see cref="Near"/>, <see cref="Below"/> and <see cref="Above"/> are watched by the
     /// runner through <see cref="IScenarioWorld"/> and fire when their condition becomes true; <see cref="Down"/> is raised by the host.
     /// </summary>
     internal enum TriggerKind : byte { Start, Join, Spawn, Airborne, Landed, Time, Started, Done, Flag, Destroyed, Damaged, Near, Below, Above, Down }
 
-    internal enum ActionKind : byte { Cut, Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat, Start, Complete, Cancel, Countdown, Ace, Random }
+    internal enum ActionKind : byte { Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat, Start, Complete, Cancel, Countdown, Ace, Random, Video }
 
     internal struct ScenarioAction
     {
         public ActionKind Kind;
-        /// <summary>The shot, the speaker, the flag or the card's title.</summary>
+        /// <summary>The speaker, the flag, the card's title or an ace's unit.</summary>
         public string Name;
         public string Text;
-        /// <summary>A cut's large title, when it has one; <see cref="Text"/> is then the line under it.</summary>
+        /// <summary>An ace's callsign.</summary>
         public string Title;
-        /// <summary>A cut's picture and its place-and-date stamp, when it has them.</summary>
-        public string Photo, Stamp;
-        public CutFx Fx;
-        /// <summary>A cut's board (<c>board=news</c>) and that board's own words (<c>headline=</c>, <c>ticker=</c>...); null for the surveillance feed.</summary>
-        public string Board;
-        public Dictionary<string, string> Words;
-        /// <summary>A cut's narration: an .mp3 or .ogg spoken as the shot starts.</summary>
+        /// <summary>A line's recording: an .mp3 or .ogg spoken with it.</summary>
         public string Voice;
-        /// <summary>A cut's sound effects: <c>file.mp3@seconds</c> entries split by ',', each played that long after the shot starts.</summary>
-        public string Sfx;
         public float Seconds;
         /// <summary>Where a <c>seat</c> puts the pilot: a point, a compass heading and a speed in metres a second.</summary>
         public float X, Y, Z, Heading, Speed;
         /// <summary>The objectives a <c>start</c>, <c>complete</c> or <c>cancel</c> acts on; the flags a <c>random</c> picks one of.</summary>
         public string[] Names;
-    }
-
-    /// <summary>
-    /// One shot of a cutscene with its words: a caption, or a large <see cref="Title"/> with the caption under it; a place-and-date <see cref="Stamp"/>
-    /// typed in the corner; and a <see cref="Photo"/> pinned up like a polaroid, which then joins the timeline of the ones before it.
-    /// </summary>
-    internal struct ScenarioCut
-    {
-        public ScenarioShot Shot;
-        public string Title, Caption, Stamp;
-        public ScenarioPicture Photo;
-        public CutFx Fx;
-        public string Board;
-        public Dictionary<string, string> Words;
-        public string Voice, Sfx;
-
-        /// <summary>One of the board's words, or <paramref name="otherwise"/>.</summary>
-        public string Word(string key, string otherwise = null) => Words != null && Words.TryGetValue(key, out string value) ? value : otherwise;
     }
 
     /// <summary>A piece of the story: when <see cref="Trigger"/> happens for a pilot it is meant for, its actions play in order.</summary>
@@ -222,8 +157,6 @@ namespace BoscaliSummer.Core.Scenario
             return false;
         }
         public readonly Dictionary<string, ScenarioCast> Cast = new Dictionary<string, ScenarioCast>(StringComparer.Ordinal);
-        public readonly Dictionary<string, ScenarioShot> Shots = new Dictionary<string, ScenarioShot>(StringComparer.Ordinal);
-        public readonly Dictionary<string, ScenarioPicture> Pictures = new Dictionary<string, ScenarioPicture>(StringComparer.Ordinal);
         public readonly List<ScenarioUnit> Units = new List<ScenarioUnit>();
         public readonly List<ScenarioCopy> Copies = new List<ScenarioCopy>();
         public readonly List<ScenarioObjective> Objectives = new List<ScenarioObjective>();

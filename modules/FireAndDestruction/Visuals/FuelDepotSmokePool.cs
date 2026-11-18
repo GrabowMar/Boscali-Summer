@@ -44,6 +44,7 @@ namespace BoscaliSummer.Fire
             // Inputs of the constant particle-module block last written by SetPhase; Activate clears the flag.
             internal bool constantsApplied;
             private float appliedSize, appliedLifetime, appliedCluster, appliedBuoyancy;
+            private Vector3 appliedWind;
 
             public void SetForestFootprint(Vector2 halfExtents)
             {
@@ -97,6 +98,9 @@ namespace BoscaliSummer.Fire
                 }
                 bool refresh = !constantsApplied || appliedSize != SizeScale ||
                     appliedLifetime != LifetimeScale || appliedCluster != clusterT || appliedBuoyancy != Buoyancy;
+                // Every module read and write is a native call: the drift is rewritten only when the wind moved.
+                bool windChanged = refresh || Mathf.Abs(wind.x - appliedWind.x) > 0.25f ||
+                    Mathf.Abs(wind.z - appliedWind.z) > 0.25f;
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
                     ParticleSystem system = Systems[i];
@@ -130,13 +134,13 @@ namespace BoscaliSummer.Fire
                         velocity.space = ParticleSystemSimulationSpace.World;
                     }
                     float drift = DriftScale * Mathf.Lerp(0.16f, 0.34f, windStrength / 18f);
-                    ParticleSystem.MinMaxCurve vertical = velocity.y;
-                    if (vertical.mode == ParticleSystemCurveMode.Constant)
+                    ParticleSystem.MinMaxCurve vertical = windChanged ? velocity.y : default;
+                    if (windChanged && vertical.mode == ParticleSystemCurveMode.Constant)
                         velocity.y = new ParticleSystem.MinMaxCurve(vertical.constant, vertical.constant);
                     // The native smoke catalogue has constant linear axes. Equal endpoints
                     // preserve vertical motion while matching our random X/Z curve modes.
                     // Leave any externally authored animated velocity profile intact.
-                    if (vertical.mode == ParticleSystemCurveMode.Constant || vertical.mode == ParticleSystemCurveMode.TwoConstants)
+                    if (windChanged && (vertical.mode == ParticleSystemCurveMode.Constant || vertical.mode == ParticleSystemCurveMode.TwoConstants))
                     {
                         velocity.x = new ParticleSystem.MinMaxCurve(
                             BaseVelocityXMin[i] + wind.x * drift,
@@ -169,6 +173,7 @@ namespace BoscaliSummer.Fire
                     if (!system.isPlaying) system.Play(true);
                 }
                 constantsApplied = true;
+                if (windChanged) appliedWind = wind;
                 appliedSize = SizeScale; appliedLifetime = LifetimeScale;
                 appliedCluster = clusterT; appliedBuoyancy = Buoyancy;
             }
@@ -211,7 +216,7 @@ namespace BoscaliSummer.Fire
             if (!TryResolveTemplate()) return null;
             for (int i = 0; i < visuals.Count; i++)
             {
-                if (!visuals[i].Active)
+                if (Idle(visuals[i]))
                 {
                     Activate(visuals[i], position, halfExtents, profile);
                     return visuals[i];
@@ -229,7 +234,33 @@ namespace BoscaliSummer.Fire
         public void Release(Visual visual)
         {
             if (visual == null || !visual.Active) return;
+            // A hidden plume has nothing to show. A visible one stops emitting and drifts off:
+            // cleared outright, the whole column blinked out when its cell burnt out or two
+            // fronts joined. Idle() retires it once the last particle is gone.
+            if (visual.Sleeping || visual.Root == null || !visual.Root.activeSelf) { visual.Retire(); return; }
+            visual.Active = false;
+            for (int i = 0; i < visual.Systems.Length; i++)
+                if (visual.Systems[i] != null) visual.Systems[i].Stop(true, ParticleSystemStopBehavior.StopEmitting);
+        }
+
+        /// <summary>Free for reuse: released, and its last smoke has faded.</summary>
+        private static bool Idle(Visual visual)
+        {
+            if (visual.Active) return false;
+            if (visual.Root == null || !visual.Root.activeSelf) return true;
+            for (int i = 0; i < visual.Systems.Length; i++)
+                if (visual.Systems[i] != null && visual.Systems[i].particleCount > 0) return false;
             visual.Retire();
+            return true;
+        }
+
+        /// <summary>Keeps one idle plume built: a new one clones the Fuel Depot wreck prefab three times, which should not land in the frame a fire starts or spreads.</summary>
+        public void Warm()
+        {
+            for (int i = 0; i < visuals.Count; i++) if (Idle(visuals[i])) return;
+            if (visuals.Count >= maximumVisuals || !TryResolveTemplate()) return;
+            Visual visual = CreateVisual();
+            if (visual != null) visuals.Add(visual);
         }
 
         public void Clear()

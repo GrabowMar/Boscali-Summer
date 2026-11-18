@@ -31,12 +31,12 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
         internal const int KeyLimit = 64;
         [DataMember] public int version = 1;
         [DataMember] public string id;
-        [DataMember] public string mission;
-        [DataMember] public string scene;
         [DataMember] public float duration = 10;
         [DataMember] public bool smooth;
         [DataMember] public bool spline;
         [DataMember(EmitDefaultValue=false)] public string anchorId;
+        /// <summary>A flyby: its one key is an offset in the actor's heading frame until the clip starts, then the fixed vantage (ShotRigs.Place).</summary>
+        [DataMember(EmitDefaultValue=false)] public bool placeAtStart;
         [DataMember(EmitDefaultValue=false)] public ShotOptions options;
         // All positions are global sea-level coordinates; never persist Unity-local poses.
         [DataMember] public ShotKey[] keys = Array.Empty<ShotKey>();
@@ -58,9 +58,7 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
         {
             error = null;
             if (plan == null || plan.version != 1) error = "Unsupported shot version";
-            else if (!SafeId(plan.id)) error = "Invalid shot ID";
-            else if (string.IsNullOrWhiteSpace(plan.mission) || plan.mission.Length > 256 ||
-                string.IsNullOrWhiteSpace(plan.scene) || plan.scene.Length > 256) error = "Missing mission/scene identity";
+            else if (plan.id != null && !SafeId(plan.id)) error = "Invalid shot ID";
             else if (!Finite(plan.duration) || plan.duration < .5f || plan.duration > 120) error = "Duration must be 0.5–120 seconds";
             else if (plan.keys == null || plan.keys.Length == 0 || plan.keys.Length > KeyLimit) error = "Shot requires 1–64 keys";
             if (error != null) return false;

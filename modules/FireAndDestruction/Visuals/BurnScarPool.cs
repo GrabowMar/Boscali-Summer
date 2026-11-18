@@ -42,7 +42,8 @@ namespace BoscaliSummer.Fire
             }
         }
 
-        public void StampForest(GlobalPosition position, FireFrontCell cell)
+        /// <param name="bornShaderTime">Ignition on the shader clock (Time.time); the ash glows from then and cools after <paramref name="life"/>.</param>
+        public void StampForest(GlobalPosition position, FireFrontCell cell, float bornShaderTime, float life)
         {
             if (GameManager.IsHeadless || cell == null || forestMarks.ContainsKey(cell.Key)) return;
             if (forestMaterial == null && !forestShaderSearched)
@@ -78,6 +79,9 @@ namespace BoscaliSummer.Fire
             var vertices = new Vector3[cell.Count + 1];
             var uv = new Vector2[cell.Count + 1];
             var indices = new int[cell.Count * 3];
+            // Per-mesh burn clock in uv2: no property block, so the cells keep batching.
+            var burn = new Vector2[cell.Count + 1];
+            for (int i = 0; i < burn.Length; i++) burn[i] = new Vector2(bornShaderTime, life);
             Vector3 anchor = position.ToLocalPosition();
             TerrainProbeCache.TryProbe(position, out GlobalPosition centerGround, out _);
             vertices[0] = Vector3.up * (centerGround.ToLocalPosition().y - anchor.y + 0.04f);
@@ -91,7 +95,7 @@ namespace BoscaliSummer.Fire
                 uv[i + 1] = new Vector2(query.x, query.z);
                 indices[i * 3] = 0; indices[i * 3 + 1] = (i + 1) % cell.Count + 1; indices[i * 3 + 2] = i + 1;
             }
-            mesh.Clear(); mesh.vertices = vertices; mesh.uv = uv; mesh.triangles = indices; mesh.RecalculateBounds();
+            mesh.Clear(); mesh.vertices = vertices; mesh.uv = uv; mesh.uv2 = burn; mesh.triangles = indices; mesh.RecalculateBounds();
             renderer.sharedMaterial = forestMaterial; renderer.enabled = true;
             renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             renderer.receiveShadows = false;

@@ -95,6 +95,7 @@ namespace BoscaliSummer.Fire
             private float frontFraction = 1f;
             private bool constantsApplied, appliedForest;
             private float appliedSize, appliedLifetime;
+            private Vector3 appliedWind;
 
             public void SetForestCell(FireFrontCell cell, Vector3 normal)
             {
@@ -226,14 +227,19 @@ namespace BoscaliSummer.Fire
                 // Crown flare-up: the canopy goes up in one last surge just before the cell
                 // collapses to embers, peaking at 30% life left.
                 if (Forest) FlameIntensity *= 1f + 0.55f * Mathf.Clamp01(1f - Mathf.Abs(remainingFraction - 0.3f) / 0.1f);
-                // Embers keep drifting off the ash after the flames die.
-                float smoulder = Forest ? 0.24f * growth * EmissionScale : 0f;
+                // Embers keep drifting off the ash after the flames die, and thin out over the
+                // last seconds so the site does not blink off when it is released.
+                float smoulder = Forest ? 0.24f * growth * EmissionScale * Smooth01(remainingFraction / 0.06f) : 0f;
                 float spread = Mathf.Lerp(FootprintScale * 0.24f, FootprintScale, growth) *
                     (Forest ? ClusterScale : 1f);
 
                 // The size/lifetime block only depends on these; Configure clears the flag on (re)activation.
                 bool refresh = !constantsApplied || appliedForest != Forest ||
                     appliedSize != SizeScale || appliedLifetime != LifetimeScale;
+                // Every module write is a native call: the drift is rewritten only when the wind moved.
+                bool windChanged = refresh || Mathf.Abs(wind.x - appliedWind.x) > 0.25f ||
+                    Mathf.Abs(wind.z - appliedWind.z) > 0.25f;
+                bool cellShape = Cell != null && Forest; // the edge strip mesh: SetFrontEdges owns its scale
                 for (int i = 0; i < Systems.Length && i < BaseRates.Length; i++)
                 {
                     ParticleSystem system = Systems[i];
@@ -273,11 +279,15 @@ namespace BoscaliSummer.Fire
                         FlickerSeed + i * 7.31f, Time.timeSinceLevelLoad * (ember ? 0.45f : 1.1f)) * 0.7f : 1f;
                     emission.rateOverTimeMultiplier = BaseRates[i] * (ember ? Mathf.Max(FlameIntensity, smoulder) : FlameIntensity) *
                         layerPulse * (Cell == null ? 1f : frontFraction) * LodScale * FxBus.Scales.Particles;
-                    ParticleSystem.ShapeModule shape = system.shape;
-                    shape.scale = Cell != null && Forest ? Vector3.one : new Vector3(
-                        BaseShapes[i].x * spread,
-                        BaseShapes[i].y,
-                        BaseShapes[i].z * spread);
+                    if (!cellShape)
+                    {
+                        ParticleSystem.ShapeModule shape = system.shape;
+                        shape.scale = new Vector3(
+                            BaseShapes[i].x * spread,
+                            BaseShapes[i].y,
+                            BaseShapes[i].z * spread);
+                    }
+                    if (!windChanged) continue;
                     ParticleSystem.VelocityOverLifetimeModule velocity = system.velocityOverLifetime;
                     float drift = Forest && ember ? 0.55f : 0.16f;
                     float driftX = (Forest ? Mathf.Clamp(wind.x, -18f, 18f) : wind.x) * drift;
@@ -288,6 +298,7 @@ namespace BoscaliSummer.Fire
                     velocity.z = new ParticleSystem.MinMaxCurve(driftZ, driftZ);
                 }
                 constantsApplied = true;
+                if (windChanged) appliedWind = wind;
                 appliedForest = Forest; appliedSize = SizeScale; appliedLifetime = LifetimeScale;
             }
 
@@ -512,7 +523,7 @@ namespace BoscaliSummer.Fire
 
             ParticleSystem.NoiseModule noise = system.noise;
             noise.enabled = true;
-            noise.quality = ParticleSystemNoiseQuality.Medium;
+            noise.quality = ParticleSystemNoiseQuality.Low;
             noise.strength = 2.6f;
             noise.frequency = 0.46f;
             noise.scrollSpeed = 0.85f;

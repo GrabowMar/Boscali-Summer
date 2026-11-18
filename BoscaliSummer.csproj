@@ -45,6 +45,10 @@
   <ItemGroup Condition="'$(PublicRelease)' != 'true'">
     <Compile Include="Dev\Automation\*.cs" />
   </ItemGroup>
+  <!-- The shot camera is a production tool driven by nomodkit; players do not get it. -->
+  <ItemGroup Condition="'$(PublicRelease)' == 'true'">
+    <Compile Remove="modules\Cinematography\**\*.cs" />
+  </ItemGroup>
 
   <PropertyGroup>
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Nuclear Option</GameDir>
@@ -323,7 +327,7 @@
       <LogicalName>BoscaliSummer.ChatterVoices.%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
     <!-- The built-in mission scripts (docs/SCENARIOS.md); ScenarioLibrary loads every BoscaliSummer.Scenario.*.scenario. -->
-    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg;modules\Scenario\Assets\*.webm">
+    <EmbeddedResource Include="modules\Scenario\Assets\*.scenario;modules\Scenario\Assets\*.mp3;modules\Scenario\Assets\*.ogg;modules\Scenario\Assets\*.mp4">
       <LogicalName>BoscaliSummer.Scenario.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

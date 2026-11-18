@@ -46,8 +46,12 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private WhiteBalance balance;
         private Bloom bloom;
         private FilmGrain radiationGrain;
+        private ChromaticAberration radiationFringe;
+        private Vignette radiationVignette;
+        private float radiationGrainBase;
         private Light flashLight;
-        private float flashExposure, thermalPulse, winterBlend;
+        private float flashExposure, thermalPulse, winterBlend, falloutBlend, darkBlend;
+        private Color beforeFogColor, writtenFogColor;
         private float radiationStrength, beforeFog, writtenFog;
         private bool hazeApplied;
         private Material beforeSkybox, falloutSkybox;
@@ -66,8 +70,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal int SnowBudget => snow.Length;
         internal bool SnowEmitting => ash != null && ash.isPlaying && SnowParticles > 0;
         internal float RadiationStrength => radiationStrength;
-        internal float AtmosphereExposure => -winterBlend * .35f;
-        internal float RadiationGrain => radiationGrain != null ? radiationGrain.intensity.value : 0f;
+        // Smoke fills the sky as the fallout starts and stays for the rest of the mission.
+        internal float AtmosphereExposure => -darkBlend * 1.5f;
+        internal float RadiationGrain => radiationGrain != null ? radiationGrainBase : 0f;
 
         private void Awake() => Instance = this;
         internal static bool Active => Sites.Count != 0;
@@ -252,8 +257,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             }
             unitRadius = Mathf.Max(.01f, unitRadius);
             var size = new AnimationCurve();
-            float[] times = { 0f, .06f, .18f, 1.1f, 4f, 8f, 15f, 28f, 45f, 65f };
-            float[] radii = { 10f, 480f, 1050f, 2450f, 4600f, 5000f, 5300f, 5000f, 3800f, 0f };
+            float[] times = { 0f, .06f, .45f, 2f, 5.8f, 10f, 18f, 30f, 60f, 95f };
+            float[] radii = { 10f, 420f, 1400f, 3640f, 4870f, 5000f, 5300f, 5000f, 3800f, 0f };
             var emission = new AnimationCurve();
             for (int i = 0; i < times.Length; i++)
             {
@@ -295,8 +300,10 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (!Active || Instance == null || level == null) return;
             Instance.CaptureWinter();
             float strength = Instance.WinterStrength();
-            // Above .6 vanilla switches off sunlight and adds near-opaque ground fog. Fallout is an elevated dirty deck, not that storm gate.
-            level.conditions = Mathf.Lerp(Instance.beforeConditions, .6f, strength);
+            // Until the winter starts, the weather keeps evolving: follow it instead of pinning the pre-blast values for ten minutes.
+            if (strength <= 0f) { Instance.beforeConditions = level.conditions; Instance.beforeCloudHeight = level.cloudHeight; return; }
+            // The first-generation aftermath, by request: a full storm sky. Native sunlight goes out above .6 and the land turns to night.
+            level.conditions = Mathf.Lerp(Instance.beforeConditions, .995f, strength);
             level.cloudHeight = Mathf.Lerp(Instance.beforeCloudHeight, 6000f, strength);
         }
 
@@ -327,6 +334,11 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             radiationGrain.texture.Override(FeedCamera.Noise());
             radiationGrain.response.Override(.65f);
             radiationGrain.intensity.Override(0f);
+            radiationFringe = profile.Add<ChromaticAberration>();
+            radiationFringe.intensity.Override(0f);
+            radiationVignette = profile.Add<Vignette>();
+            radiationVignette.color.Override(Color.black); radiationVignette.smoothness.Override(.55f);
+            radiationVignette.intensity.Override(0f);
             volume = dressing.AddComponent<Volume>();
             volume.isGlobal = true;
             volume.priority = .9f; // above display grading, below native night vision
@@ -420,13 +432,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 // Keep flakes outside a cockpit-sized clear bubble; scene depth supplies terrain/building occlusion.
                 if (relative.sqrMagnitude < 49f) continue;
                 float edge = Mathf.Clamp01((1f - Mathf.Max(Mathf.Abs(relative.x), Mathf.Abs(relative.z)) / (width * .5f)) * 5f);
-                float alpha = winterBlend * edge * (.45f + .4f * b);
+                float alpha = falloutBlend * edge * (.45f + .4f * b);
                 if (alpha < .01f) continue;
                 snow[count++] = new ParticleSystem.Particle
                 {
                     position = Datum.origin.InverseTransformPoint(camera.transform.position + relative),
                     startSize = near ? .07f + a * .18f : .24f + a * .32f,
-                    startColor = new Color((.86f + c * .1f) * light, (.89f + c * .08f) * light, (.9f + c * .07f) * light, alpha),
+                    startColor = new Color((.36f + c * .1f) * light, (.34f + c * .09f) * light, (.32f + c * .08f) * light, alpha), // ash, not snow
                     rotation = a * 360f + age * (b - .5f) * 15f,
                     startLifetime = 10000f, remainingLifetime = 10000f, randomSeed = seed + 1u
                 };
@@ -449,6 +461,13 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // Weather's own late haze can still obscure the horizon. Bound extinction without modifying its wind or cloud simulation.
             writtenFog = Mathf.Lerp(beforeFog, Mathf.Min(beforeFog, .00007f), winterBlend);
             RenderSettings.fogDensity = writtenFog;
+            // Distance fades into dark smoke instead of bright haze. Follow whatever colour the weather writes underneath.
+            Color fogNow = RenderSettings.fogColor;
+            if (!hazeApplied || Mathf.Abs(fogNow.r - writtenFogColor.r) + Mathf.Abs(fogNow.g - writtenFogColor.g) + Mathf.Abs(fogNow.b - writtenFogColor.b) > .004f)
+                beforeFogColor = fogNow;
+            float fogLuminance = beforeFogColor.r * .2126f + beforeFogColor.g * .7152f + beforeFogColor.b * .0722f;
+            writtenFogColor = Color.Lerp(beforeFogColor, new Color(fogLuminance * .10f, fogLuminance * .14f, fogLuminance * .16f, beforeFogColor.a), darkBlend * .92f);
+            RenderSettings.fogColor = writtenFogColor;
             hazeApplied = true;
             if (falloutSkybox != null && RenderSettings.skybox == falloutSkybox)
                 for (int i = 0; i < SkyColours.Length; i++)
@@ -456,8 +475,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                     if (!falloutSkybox.HasProperty(SkyColours[i])) continue;
                     Color native = beforeSkyColours[i];
                     float luminance = native.r * .2126f + native.g * .7152f + native.b * .0722f;
-                    Color dirty = new Color(luminance * .83f, luminance * .82f, luminance * .78f, native.a);
-                    falloutSkybox.SetColor(SkyColours[i], Color.Lerp(native, dirty, winterBlend * .86f));
+                    Color dirty = new Color(luminance * .09f, luminance * .14f, luminance * .17f, native.a);
+                    falloutSkybox.SetColor(SkyColours[i], Color.Lerp(native, dirty, darkBlend * .95f));
                 }
         }
 
@@ -502,17 +521,28 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 flashExposure = Mathf.Max(flashExposure, glare * Sa74Flash.GlareGain(age));
             }
             winterBlend = WinterStrength();
-            radiationStrength = winterBlend * Mathf.Pow(Mathf.Clamp01(1f - nearest / ShockRadius), 2f);
+            float oldest = 0f;
+            foreach (Site site in Sites) oldest = Mathf.Max(oldest, Time.time - site.Started);
+            falloutBlend = Sa74Flash.Fallout(oldest);
+            darkBlend = Mathf.Max(.45f * falloutBlend, winterBlend);
+            // The whole map is contaminated for good; it only gets worse toward the crater.
+            radiationStrength = falloutBlend * Mathf.Max(.22f, Mathf.Pow(Mathf.Clamp01(1f - nearest / ShockRadius), 2f));
             AftermathHaze();
             Snowfall(camera, NetworkSceneSingleton<LevelInfo>.i);
             if (grade != null)
             {
                 grade.postExposure.Override(flashExposure + AtmosphereExposure);
-                grade.colorFilter.Override(Color.Lerp(Color.white, new Color(.94f, .94f, .92f), winterBlend));
-                grade.contrast.Override(4f * winterBlend);
-                grade.saturation.Override(-42f * winterBlend);
-                balance.temperature.Override(-7f * winterBlend); balance.tint.Override(-1f * winterBlend);
-                radiationGrain.intensity.Override(.05f * radiationStrength);
+                // The sun is gone behind the smoke: a cold, near-night world drained of colour.
+                grade.colorFilter.Override(Color.Lerp(Color.white, new Color(.62f, .80f, .86f), darkBlend));
+                grade.contrast.Override(14f * darkBlend);
+                grade.saturation.Override(-35f * darkBlend);
+                balance.temperature.Override(-18f * darkBlend); balance.tint.Override(-4f * darkBlend);
+                // Radiation on the sensor: steady grain, with random frames where a burst of hits tears the picture.
+                radiationGrainBase = .05f * radiationStrength;
+                float hit = SnowHash((uint)(Time.unscaledTime * 14f)) > 1f - .07f * radiationStrength ? 1f : 0f;
+                radiationGrain.intensity.Override(radiationGrainBase + .40f * radiationStrength * hit);
+                radiationFringe.intensity.Override(.10f * radiationStrength + .55f * radiationStrength * hit);
+                radiationVignette.intensity.Override(.20f * darkBlend + .10f * radiationStrength);
                 bloom.active = illumination > .008f;
                 bloom.intensity.Override(illumination * (thermalPulse > .5f ? 4f : 1.5f));
             }
@@ -546,7 +576,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             { "tint", profile != null }, { "yieldKt", YieldKilotons }, { "epoch", Epoch },
             { "blastRadiusKm", ShockRadius / 1000f }, { "mapWidth", TheaterFrame.Resolve().x }, { "mapHeight", TheaterFrame.Resolve().y },
             { "conditions", LevelInfo.i != null ? LevelInfo.i.conditions : 0f },
-            { "thermalPulse", thermalPulse }, { "flashExposure", flashExposure }, { "winterBlend", winterBlend },
+            { "thermalPulse", thermalPulse }, { "flashExposure", flashExposure }, { "winterBlend", winterBlend }, { "falloutBlend", falloutBlend }, { "darkBlend", darkBlend }, { "smolderPlumes", Presentation.Sa74Smolder.ActivePlumes },
             { "flashLight", flashLight != null && flashLight.enabled ? flashLight.intensity : 0f },
             { "snowParticles", SnowParticles }, { "snowBudget", SnowBudget }, { "snowEmitting", SnowEmitting },
             { "radiationStrength", RadiationStrength }, { "radiationGrain", RadiationGrain }, { "atmosphereExposure", AtmosphereExposure },
@@ -590,6 +620,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             terrain.Clear();
             if (winterCaptured && winterLevel != null) { winterLevel.conditions = beforeConditions; winterLevel.cloudHeight = beforeCloudHeight; }
             if (hazeApplied && Mathf.Approximately(RenderSettings.fogDensity, writtenFog)) RenderSettings.fogDensity = beforeFog;
+            if (hazeApplied) RenderSettings.fogColor = beforeFogColor;
             hazeApplied = false;
             if (falloutSkybox != null)
             {
@@ -606,9 +637,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (ashMaterial != null) UnityEngine.Object.Destroy(ashMaterial);
             if (ashTexture != null) UnityEngine.Object.Destroy(ashTexture);
             FxVoiceBus.EndLoop("sa74-geiger");
-            dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; flashLight = null;
+            dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; radiationFringe = null; radiationVignette = null; radiationGrainBase = 0f; flashLight = null;
             ash = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null;
-            flashExposure = thermalPulse = winterBlend = radiationStrength = 0f;
+            flashExposure = thermalPulse = winterBlend = falloutBlend = darkBlend = radiationStrength = 0f;
             Sites.Clear(); Events = NativeBlasts = BlastColliders = ExposedParts = 0;
             lastReceivedId = 0;
         }

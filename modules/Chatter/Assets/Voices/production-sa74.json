@@ -74,5 +74,67 @@
         "5x5PS4U3w10yzPTwwyqi"
       ]
     }
+  ],
+  "backgrounds": [
+    {
+      "id": "bed-sa74-release",
+      "events": [
+        "command.sa74.release"
+      ],
+      "prompt": "Command post under alert: master caution tone, warning whoop and radio static. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "takes": 2,
+      "relative_rms_db": -12,
+      "lowpass_hz": 3600,
+      "fade_in_seconds": 0.05,
+      "fade_out_seconds": 0.2
+    },
+    {
+      "id": "bed-sa74-flash",
+      "events": [
+        "command.sa74.flash"
+      ],
+      "prompt": "Electromagnetic pulse on an airborne radar station: bursts of static, cracks, a missile alarm. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "takes": 2,
+      "relative_rms_db": -12,
+      "lowpass_hz": 3600,
+      "fade_in_seconds": 0.05,
+      "fade_out_seconds": 0.2
+    },
+    {
+      "id": "bed-sa74-ground",
+      "events": [
+        "command.sa74.ground"
+      ],
+      "prompt": "The blast arriving on the ground: roar and wind, a building coming down, Geiger crackle. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "takes": 2,
+      "relative_rms_db": -12,
+      "lowpass_hz": 3600,
+      "fade_in_seconds": 0.05,
+      "fade_out_seconds": 0.2
+    },
+    {
+      "id": "bed-sa74-wing",
+      "events": [
+        "command.sa74.wing"
+      ],
+      "prompt": "A damaged cockpit: wind, warning horn, airframe creak, a hull thud, thin static. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "takes": 2,
+      "relative_rms_db": -12,
+      "lowpass_hz": 3600,
+      "fade_in_seconds": 0.05,
+      "fade_out_seconds": 0.2
+    },
+    {
+      "id": "bed-sa74-last",
+      "events": [
+        "command.sa74.last"
+      ],
+      "prompt": "A collapsing shelter: roar, two collapses, thunder, rising static and Geiger crackle. Mixed from the mod's own sound library by sa74_beds (no generation).",
+      "takes": 2,
+      "relative_rms_db": -12,
+      "lowpass_hz": 3600,
+      "fade_in_seconds": 0.05,
+      "fade_out_seconds": 0.2
+    }
   ]
 }

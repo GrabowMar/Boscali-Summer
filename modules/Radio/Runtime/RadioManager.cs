@@ -40,6 +40,8 @@ namespace BoscaliSummer.Modules.Radio.Runtime
         private float nextProgramRefresh, duckUntil, duckGain = 1f;
         private AudioSource aftermathStatic;
         private int aftermathRevision;
+        private int aftermathPhase;
+        private float aftermathGhostAt;
         private readonly Queue<RadioStationTrack> breakQueue = new Queue<RadioStationTrack>();
         private RadioStationTrack segmentTrack, songTrack;
         private int songIndex, breakIndex;
@@ -219,6 +221,10 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             float station = BroadcastEnabled && (receiver.Engaged && !receiver.IsPaused || deck.Engaged && !deck.IsPaused)
                 ? Volume * AudioMixerVolume.GetPref(AudioMixerVolume.Music) : 0f;
             float wanted = RadioAftermath.Active ? Mathf.Max(station, ReceiveMilitary ? MilitaryVolume * .45f : 0f) : 0f;
+            bool silent = RadioAftermath.Silent(Time.time);
+            // In the long silence the dead carrier breathes: it swells, sinks almost to nothing and comes back.
+            if (silent) wanted *= .32f + .26f * Mathf.Sin(Time.time * .19f) + .10f * Mathf.Sin(Time.time * .53f + 1.3f);
+            if (!RadioAftermath.Active) aftermathPhase = 0;
             if (wanted <= 0f)
             {
                 if (aftermathStatic != null) { aftermathStatic.Stop(); aftermathStatic.volume = 0f; }
@@ -237,6 +243,29 @@ namespace BoscaliSummer.Modules.Radio.Runtime
             aftermathStatic.outputAudioMixerGroup = SoundManager.i.InterfaceMixer;
             aftermathStatic.volume = Mathf.MoveTowards(aftermathStatic.volume, wanted * duckGain, Time.unscaledDeltaTime * 4f);
             if (!aftermathStatic.isPlaying) aftermathStatic.Play();
+            // Cues only for a listener who was there: an aged snapshot or late join inherits the phase without replaying them.
+            int phase = silent ? 2 : Time.time < RadioAftermath.SilenceUntil ? 1 : 3;
+            if (phase != aftermathPhase)
+            {
+                float into = Time.time - RadioAftermath.StartedAt;
+                if (phase == 1 && into < 2f) Cue("emp-crack", 1f);
+                if (phase == 2 && into < RadioAftermath.PanicSeconds + 2f) Cue("emp-grid-die", 1f);
+                aftermathPhase = phase;
+                aftermathGhostAt = Time.time + 35f;
+            }
+            if (silent && Time.time >= aftermathGhostAt)
+            {
+                // Something is still keying up out there, but nothing gets through.
+                Cue("emp-crack", .3f);
+                aftermathGhostAt = Time.time + 45f + 40f * Mathf.Abs(Mathf.Sin(Time.time * 12.9898f));
+            }
+        }
+
+        private void Cue(string clipName, float gain)
+        {
+            AudioClip clip = SfxClips.Get(clipName);
+            float level = ReceiveMilitary ? MilitaryVolume : Volume;
+            if (clip != null && aftermathStatic != null && level > 0f) aftermathStatic.PlayOneShot(clip, gain * Mathf.Clamp01(level) / Mathf.Max(.05f, aftermathStatic.volume));
         }
 
         private void PlayStaticReceiver()

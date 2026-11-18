@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- **SA-74N blast remade as a 74-megaton thermonuclear burst.** The light now follows the real double pulse: a flash, a dip,
+  then a swell to full brightness near six seconds and heat that lasts most of a minute. The fireball cools from white through
+  orange into dark rolling cells with fire in the cracks; a white condensation dome races out behind the shock, an ice cap and a
+  bell of mist form on the rising head, and the stem is a broad column. Over the sea the blast lifts pale spray instead of brown
+  dirt. The mushroom stays for 25 minutes, sheds dark curtains of fallout, then sinks and spreads until it is gone at 40 minutes;
+  ash starts falling after a few minutes and the sky darkens from then on. By minute 35 the map is a cold, near-night storm
+  world for the rest of the mission: the land around the burst is charred black, with fires and columns of black smoke.
+  The emergency calls now come through alarms, static, fire and collapsing buildings, with dead static between them and a
+  dying carrier before the long silence. The whole map stays contaminated: the Geiger counter never stops and the picture
+  carries grain, colour fringing and bursts of sensor hits that get worse toward the crater.
+- **Forest fires look hotter and cost less.** The ground under a burning stand glows with embers that cool for a couple of minutes
+  after the flames die. Trees now burn away under the last flare-up instead of vanishing after the fire is already out, and the
+  embers thin out rather than blink off. Flames more than 9 km away are no longer simulated (their smoke still shows to 15 km).
+- **Cutscenes are prerendered now.** The in-game cutscene system is gone: the `shot`, `picture` and `cut` script statements, the boards,
+  the surveillance feed and the CUTSCENES setting. Scripts play a video instead (`video "file.mp4"`, Space skips); Twelve Miles Out
+  opens with its intro as a two-minute film made from game footage. The shot camera became a development tool scripted and filmed by nomodkit (no console, hotkeys,
+  script inbox or settings) and is left out of public builds.
 - Removed legacy AgX tonemapping and its development assets. Cinematic colour grading, light streaks,
   sky dithering and optional SMAA remain available.
 

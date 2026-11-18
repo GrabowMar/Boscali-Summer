@@ -42,7 +42,11 @@ namespace BoscaliSummer.Core.Ui
             bool join = menu != null && menu.gameObject.activeInHierarchy && MenuModeField != null &&
                 (MenuMode)MenuModeField.GetValue(menu) == MenuMode.Join;
             string name = join ? MissionManager.CurrentMission?.Name : BoscaliMission.PendingMission;
-            bool wanted = MissionManager.IsRunning && name != null && Cursor.lockState != CursorLockMode.Locked;
+            // This window stands in for the game's join canvas: when something takes that canvas down (a mission script's video, a script that
+            // enlists the pilot itself), it goes with it.
+            GameplayUI ui = SceneSingleton<GameplayUI>.i;
+            bool taken = join && ui != null && ui.menuCanvas != null && !ui.menuCanvas.enabled;
+            bool wanted = MissionManager.IsRunning && name != null && Cursor.lockState != CursorLockMode.Locked && !taken;
             if (window != null && (!wanted || mission != name || (join && nativeMenu != menu))) Close();
             if (wanted && window == null)
             {

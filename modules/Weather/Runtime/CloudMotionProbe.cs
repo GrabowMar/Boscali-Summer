@@ -17,6 +17,13 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         private static float? origin;
         private int frames, done;
         private float step, tilt;
+        private bool hold;
+        private float drift;
+        private float yaw;
+        private CameraStateManager heldManager;
+        private Camera heldCamera;
+        private GlobalPosition anchor;
+        private Quaternion anchorRotation;
         private string dir;
         private readonly List<Texture2D> shots = new List<Texture2D>();
 
@@ -44,6 +51,20 @@ namespace BoscaliSummer.Modules.Weather.Runtime
             probe.frames = Mathf.Clamp((int)Number(args, "frames", 24f), 2, 60);
             probe.step = Number(args, "step", 2f);
             probe.tilt = Number(args, "tilt", -12f);
+            probe.hold = Bool(args, "hold");
+            probe.drift = Number(args, "drift", 0f);
+            probe.yaw = Number(args, "yaw", 0f);
+            if (probe.hold && cam != null && cam.mainCamera != null)
+            {
+                // A fixed pose instead of a follow camera: a slow drift is the only way to
+                // expose the temporal checker's phase cycle without the aircraft moving the view.
+                cam.SwitchState(cam.freeState);
+                probe.heldManager = cam;
+                probe.heldCamera = cam.mainCamera;
+                probe.anchor = probe.heldCamera.transform.GlobalPosition();
+                probe.anchorRotation = probe.heldCamera.transform.rotation;
+            }
+            else probe.hold = false;
             probe.dir = Path.Combine(Path.GetTempPath(), "nomodkit", "cloud-probe-" + (Text(args, "name") ?? "run"));
             Directory.CreateDirectory(probe.dir);
             probe.StartCoroutine(probe.Capture());
@@ -94,6 +115,17 @@ namespace BoscaliSummer.Modules.Weather.Runtime
         {
             CameraStateManager cam = SceneSingleton<CameraStateManager>.i;
             if (cam == null || done >= frames) return;
+            if (hold)
+            {
+                if (heldManager == null || heldCamera == null) return;
+                Vector3 forward = anchorRotation * Vector3.forward;
+                float travelled = drift * done;
+                Quaternion rotation = anchorRotation * Quaternion.Euler(0f, yaw * done, 0f);
+                heldManager.SetCameraPosition(new GlobalPosition(
+                    anchor.x + forward.x * travelled, anchor.y + forward.y * travelled,
+                    anchor.z + forward.z * travelled), rotation);
+                return;
+            }
             PanField.SetValue(cam.orbitState, (float)PanField.GetValue(cam.orbitState) + step);
             TiltField.SetValue(cam.orbitState, tilt);
         }

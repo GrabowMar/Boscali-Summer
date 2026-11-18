@@ -14,7 +14,6 @@ using BoscaliSummer.Core.Ui;
 using BoscaliSummer.Modules.AirSurvival;
 using BoscaliSummer.Modules.Autopilot;
 using BoscaliSummer.Modules.Command;
-using BoscaliSummer.Modules.Cinematography;
 using BoscaliSummer.Modules.Comms;
 using BoscaliSummer.Modules.DynamicOperations;
 using BoscaliSummer.Modules.Events;
@@ -126,7 +125,7 @@ namespace BoscaliSummer.Core
             var modules = new List<IModule>
             {
                 new MissionProfileModule(),
-                // Mission scripts: the scripted missions in the picker, their dialogue and cutscenes.
+                // Mission scripts: the scripted missions in the picker, their dialogue and hints.
                 // The third side scripted missions can seat the pilot on.
                 new BoscaliSummer.Modules.Pmc.PmcModule(),
                 new BoscaliSummer.Modules.Scenario.ScenarioModule(),
@@ -190,8 +189,10 @@ namespace BoscaliSummer.Core
             modules.Add(new BoscaliSummer.Modules.Maps.MapsModule());
             if (settings.SeaStructures.Enabled.Value) modules.Add(new BoscaliSummer.Modules.SeaStructures.SeaStructuresModule());
             if (settings.Weather.Enabled.Value) modules.Add(new WeatherModule());
-            // Always installed for the cutscene camera mission scripts play; its private production tools keep their own switch.
-            if (!Application.isBatchMode) modules.Add(new CinematographyModule());
+#if !PUBLIC_RELEASE
+            // The camera nomodkit films with: a development tool, idle until a script commands it.
+            if (!Application.isBatchMode) modules.Add(new BoscaliSummer.Modules.Cinematography.CinematographyModule());
+#endif
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             modules.Add(new BoscaliSummer.Modules.Skylark.SkylarkModule());
             return modules.ToArray();

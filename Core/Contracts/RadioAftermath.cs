@@ -53,7 +53,8 @@ namespace BoscaliSummer.Core.Contracts
             }
             if (!Active || now - StartedAt >= PanicSeconds || now < nextPanic || panic >= 4) return false;
             stage = ++panic; EmergencyCalls++;
-            nextPanic = now + 2f;
+            // Each call is followed by a breath of dead static before the next voice breaks through.
+            nextPanic = now + 9f;
             return true;
         }
 

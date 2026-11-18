@@ -14,29 +14,23 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
         [DataMember] public float targetX=0, targetY=0, targetZ=0, referenceDistance = 50;
         [DataMember] public float shakeMeters=0, shakeDegrees=0, rollDegrees=0;
         [DataMember] public int seed=0;
-        [DataMember] public float letterbox=0, fadeIn=0, fadeOut=0;
-        [DataMember] public string title = "";
-        [OnDeserializing] private void Defaults(StreamingContext _) { playbackRate = simulationRate = 1; referenceDistance = 50; frameX=frameY=.5f; title = ""; }
+        [OnDeserializing] private void Defaults(StreamingContext _) { playbackRate = simulationRate = 1; referenceDistance = 50; frameX=frameY=.5f; }
 
         internal static bool Validate(ShotOptions o, float duration, out string error)
         {
             error = null; if (o == null) return true;
             if (!Range(o.playbackRate,.05f,4) || !Range(o.simulationRate,.05f,1) || duration / o.playbackRate > 600)
                 error = "Camera rate 0.05–4, simulation rate 0.05–1; max 600 camera seconds";
-            else if (!Range(o.shakeMeters,0,.75f) || !Range(o.shakeDegrees,0,3) || !Range(o.rollDegrees,-20,20) ||
-                !Range(o.letterbox,0,.2f) || !Range(o.fadeIn,0,duration/2) || !Range(o.fadeOut,0,duration/2)) error = "Effect bounds exceeded";
+            else if (!Range(o.shakeMeters,0,.75f) || !Range(o.shakeDegrees,0,3) || !Range(o.rollDegrees,-20,20)) error = "Effect bounds exceeded";
             else if (!Range(o.targetX,-10000000,10000000) || !Range(o.targetY,-10000000,10000000) ||
                 !Range(o.targetZ,-10000000,10000000) || !Range(o.referenceDistance,.1f,100000)) error = "Invalid focus target/distance";
             else if (o.dollyZoom && !o.lookAtTarget) error = "Dolly zoom requires a focus target";
             else if (o.stabilizeAnchor && o.headingOnlyAnchor) error = "Choose either world-stabilized or heading-only anchor";
             else if (!Range(o.frameX,0,1) || !Range(o.frameY,0,1)) error = "Subject frame coordinates must be 0–1";
             else if (!o.lookAtTarget && (o.frameX!=.5f || o.frameY!=.5f)) error = "Subject framing requires a focus target";
-            else if (o.title != null && (o.title.Length > 128 || o.title.IndexOfAny(new[] { '<','>','\n','\r' }) >= 0)) error = "Title must be plain text, up to 128 characters";
             return error == null;
         }
         private static bool Range(float x, float min, float max) => ShotPlan.Finite(x) && x >= min && x <= max;
-        internal float Fade(float seconds, float duration) => Math.Clamp(Math.Max(fadeIn > 0 ? 1-seconds/fadeIn : 0,
-            fadeOut > 0 ? 1-(duration-seconds)/fadeOut : 0),0,1);
 
         internal ShotPose Apply(ShotPose pose, float seconds, ShotPose? anchor, float aspect=16f/9)
         {

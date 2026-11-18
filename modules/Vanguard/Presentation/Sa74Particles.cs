@@ -55,6 +55,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             internal Sa74Fallout.Site Site;
             internal GameObject Root;
             internal Layer[] Layers;
+            internal bool Wet;
         }
 
         public void ResetForScene() => Clear();
@@ -118,7 +119,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 rig.Root.transform.position = rig.Site.Position.ToLocalPosition();
                 foreach (Layer layer in rig.Layers)
                 {
-                    Pose(layer, rig.Site.Id, origin, age, growth, height, radius, rig.Site.GroundClearance);
+                    Pose(layer, rig.Site.Id, origin, age, growth, height, radius, rig.Site.GroundClearance, rig.Wet);
                     Systems++;
                     Particles += layer.System.particleCount;
                     if (layer.Kind == Kind.PressureMist || layer.Kind == Kind.PressureShell) PressureParticles += layer.System.particleCount;
@@ -141,7 +142,9 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             var root = new GameObject("SA-74N cinematic shock / " + site.Id);
             root.transform.SetParent(Datum.origin, false);
             root.transform.position = site.Position.ToLocalPosition();
-            return new Rig { Site = site, Root = root, Layers = new[]
+            // A burst whose surface is the sea lofts white spray and mist instead of brown dirt (matches Sa74Mushroom).
+            Vector3 at = site.Position.ToLocalPosition();
+            return new Rig { Site = site, Root = root, Wet = at.y - site.GroundClearance <= Datum.LocalSeaY + 1f, Layers = new[]
             {
                 Make(root.transform, Kind.PressureMist, 480, condensation),
                 Make(root.transform, Kind.PressureShell, 1, pressure),
@@ -199,7 +202,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
             return layer;
         }
 
-        private static void Pose(Layer layer, uint id, Vector3 origin, float age, float growth, float height, float front, float groundClearance)
+        private static void Pose(Layer layer, uint id, Vector3 origin, float age, float growth, float height, float front, float groundClearance, bool wet)
         {
             int count = 0;
             Vector3 minimum = Vector3.positiveInfinity, maximum = Vector3.negativeInfinity;
@@ -290,6 +293,7 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         }
                         color = Color.Lerp(new Color(.56f, .43f, .29f), new Color(.39f, .38f, .35f), Mathf.Clamp01(age / 180f));
                         color.a = (band == 0 ? .62f : band == 1 ? .42f : .20f) * appear * disperse;
+                        if (wet) color = new Color(.84f, .87f, .90f, color.a * .40f);
                         break;
                     }
                     case Kind.Ejecta:
@@ -314,18 +318,20 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                         float lifeFade = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(rise * 7f)) *
                             (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.78f, 1f, rise)));
                         angle += age * (.015f + b * .008f) + rise * 4f;
-                        float radial = (1000f + growth * 4700f) * (1f + rise * .25f) + Mathf.Sin(angle * 4f + age * .08f) * 450f;
+                        // Rides the surface of the shader's broad multi-megaton stem.
+                        float radial = (1500f + growth * 9000f) * (1f + rise * .25f) + Mathf.Sin(angle * 4f + age * .08f) * 450f;
                         position = Ring(angle, radial, 250f + rise * height * .46f);
                         size = (1000f + a * 1800f) * (1f + rise * .35f);
                         color = Color.Lerp(new Color(.34f, .29f, .24f), new Color(.36f, .37f, .38f), rise);
                         color.a = .23f * lifeFade * appear * disperse;
+                        if (wet) color = Color.Lerp(color, new Color(.80f, .82f, .84f, color.a), .7f);
                         break;
                     }
                     default:
                     {
                         position = Ring(angle, Mathf.Sqrt(a) * (1500f + growth * 8000f), 200f + b * 550f);
                         size = 3800f + a * 4500f;
-                        color = new Color(.26f, .26f, .27f, .16f * appear * disperse);
+                        color = wet ? new Color(.74f, .76f, .78f, .07f * appear * disperse) : new Color(.26f, .26f, .27f, .16f * appear * disperse);
                         break;
                     }
                 }

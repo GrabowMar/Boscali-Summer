@@ -103,9 +103,9 @@ namespace BoscaliSummer.Core.Scenario
                 string keyword = row.Args[0].Text.ToLowerInvariant();
                 switch (keyword)
                 {
-                    case "cut": case "card": case "say": case "hint": case "wait":
+                    case "card": case "say": case "hint": case "wait":
                     case "flag": case "unflag": case "remember": case "finish":
-                    case "dip": case "sky": case "clock": case "music": case "enlist": case "choose": case "seat":
+                    case "dip": case "video": case "sky": case "clock": case "music": case "enlist": case "choose": case "seat":
                     case "start": case "complete": case "cancel": case "countdown": case "ace": case "random":
                         if (beat == null) error = "'" + keyword + "' belongs under a 'beat'";
                         else error = ReadAction(keyword, row, beat);
@@ -189,16 +189,6 @@ namespace BoscaliSummer.Core.Scenario
                     if (without != null) copy.Without = without.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
                     def.Copies.Add(copy);
                     return null;
-                case "picture":
-                    var picture = new ScenarioPicture { Id = row.Next() };
-                    if (!ScenarioDef.IsId(picture.Id)) return "picture needs an id (lower-case letters, digits, '-')";
-                    if (row.Word("poster")) picture.Poster = row.Next();
-                    else if (row.Word("file")) picture.File = row.Next();
-                    if (!IsFileName(picture.Poster ?? picture.File)) return "picture needs: poster <event picture name>, or file <name.png>";
-                    if (def.Pictures.ContainsKey(picture.Id)) return "picture '" + picture.Id + "' is written twice";
-                    def.Pictures[picture.Id] = picture;
-                    return null;
-                case "shot": return ReadShot(row, def, line);
                 case "objective":
                 case "on":
                     objective = new ScenarioObjective { Line = line };
@@ -348,76 +338,6 @@ namespace BoscaliSummer.Core.Scenario
             return null;
         }
 
-        private static readonly string[] BoardNames = { "feed", "clean", "title", "news", "paper", "map", "sat", "dossier", "chapter", "screen" };
-
-        /// <summary>The words a cut may give its board; each board reads the ones it uses (docs/SCENARIOS.md).</summary>
-        private static readonly string[] BoardWords =
-        {
-            "channel", "kicker", "headline", "sub", "ticker", "tag", "clock", "date", "masthead", "edition", "body", "number", "company", "heading",
-            "mark", "note", "area", "arrows", "retreat", "front", "labels", "marks", "header", "legend", "clip",
-        };
-
-        private static readonly string[] EffectNames = { "glitch", "strike", "lock", "lost", "alert", "warm", "cold", "night" };
-
-        /// <summary>A comma list of effect names, in <see cref="CutFx"/> order.</summary>
-        private static bool Effects(string list, out CutFx fx)
-        {
-            fx = CutFx.None;
-            foreach (string name in list.Split(','))
-            {
-                int index = Array.IndexOf(EffectNames, name.Trim());
-                if (index < 0) return false;
-                fx |= (CutFx)(1 << index);
-            }
-            return true;
-        }
-
-        private static string ReadShot(Row row, ScenarioDef def, int line)
-        {
-            var shot = new ScenarioShot { Id = row.Next(), Line = line };
-            if (!ScenarioDef.IsId(shot.Id)) return "shot needs an id (lower-case letters, digits, '-')";
-            if (row.Word("orbit"))
-            {
-                if (row.Word("airbase")) { shot.Kind = ShotKind.OrbitAirbase; shot.Target = row.Next(); }
-                else if (row.Word("unit")) { shot.Kind = ShotKind.OrbitUnit; shot.Target = row.Next(); }
-                else if (row.Word("at") && row.Number(out shot.X) && row.Number(out shot.Y) && row.Number(out shot.Z)) shot.Kind = ShotKind.OrbitPoint;
-                else return "orbit needs: airbase \"Name\", unit <name> or at <x> <height> <z>";
-                if (shot.Kind != ShotKind.OrbitPoint && string.IsNullOrEmpty(shot.Target)) return "orbit needs the name to circle";
-                if (!row.Opt("radius", ref shot.Radius) || !row.Opt("height", ref shot.Height) || !row.Opt("from", ref shot.From) || !row.Opt("to", ref shot.To))
-                    return "radius, height, from and to are numbers";
-                if (shot.Radius < 20f || shot.Radius > 20000f) return "radius is 20 to 20000 metres";
-            }
-            else if (row.Word("fly"))
-            {
-                shot.Kind = ShotKind.Fly;
-                if (!row.Number(out shot.X) || !row.Number(out shot.Y) || !row.Number(out shot.Z) || !row.Word("to") ||
-                    !row.Number(out shot.ToX) || !row.Number(out shot.ToY) || !row.Number(out shot.ToZ) || !row.Word("look") ||
-                    !row.Number(out shot.LookX) || !row.Number(out shot.LookY) || !row.Number(out shot.LookZ))
-                    return "fly needs: <x> <height> <z> to <x> <height> <z> look <x> <height> <z>";
-            }
-            else if (row.Word("chase"))
-            {
-                // Rides with a unit, in the unit's own frame: X to its right, Y above it, Z ahead of it.
-                shot.Kind = ShotKind.Chase;
-                float back = 30f;
-                shot.Y = 5f;
-                if (!row.Word("unit") || string.IsNullOrEmpty(shot.Target = row.Next())) return "chase needs: unit <name>";
-                if (!row.Opt("back", ref back) || !row.Opt("up", ref shot.Y) || !row.Opt("right", ref shot.X)) return "back, up and right are metres";
-                shot.Z = -back;
-                if (System.Math.Abs(shot.X) + System.Math.Abs(shot.Y) + System.Math.Abs(shot.Z) < 3f) return "a chase camera stands at least 3 metres off its unit";
-            }
-            else return "shot needs a move: orbit, fly or chase";
-            if (!row.Opt("seconds", ref shot.Seconds) || !row.Opt("fov", ref shot.Fov)) return "seconds and fov are numbers";
-            if (shot.Seconds < 1f || shot.Seconds > 60f) return "a shot lasts 1 to 60 seconds";
-            if (shot.Fov < 15f || shot.Fov > 80f) return "fov is 15 to 80 degrees";
-            if (!row.Opt("shake", ref shot.Shake) || !row.Opt("roll", ref shot.Roll)) return "shake and roll are numbers";
-            if (shot.Shake < 0f || shot.Shake > 1f) return "shake is 0 to 1";
-            if (shot.Roll < -20f || shot.Roll > 20f) return "roll is -20 to 20 degrees";
-            if (def.Shots.ContainsKey(shot.Id)) return "shot '" + shot.Id + "' is written twice";
-            def.Shots[shot.Id] = shot;
-            return null;
-        }
-
         private static string ReadBeat(Row row, ScenarioBeat beat)
         {
             beat.Id = row.Next();
@@ -475,40 +395,6 @@ namespace BoscaliSummer.Core.Scenario
             var action = new ScenarioAction();
             switch (keyword)
             {
-                case "cut":
-                    action.Kind = ActionKind.Cut;
-                    action.Name = row.Next();
-                    if (string.IsNullOrEmpty(action.Name)) return "cut needs a shot";
-                    if (row.Quoted(out action.Text) && !Words(action.Text)) return "a caption is up to " + MaxTextChars + " characters";
-                    // Two quoted texts: a large title and the line under it.
-                    if (row.Quoted(out string under))
-                    {
-                        if (!Words(under)) return "a caption is up to " + MaxTextChars + " characters";
-                        action.Title = action.Text;
-                        action.Text = under;
-                    }
-                    action.Photo = row.Opt("photo");
-                    action.Stamp = row.Opt("stamp");
-                    if (action.Stamp != null && action.Stamp.Length > 80) return "a stamp is up to 80 characters";
-                    string fx = row.Opt("fx");
-                    if (fx != null && !Effects(fx, out action.Fx)) return "fx is a list of: " + string.Join(", ", EffectNames);
-                    action.Voice = row.Opt("voice");
-                    if (action.Voice != null && !IsFileName(action.Voice)) return "voice needs a file name (an .mp3 or .ogg beside the script)";
-                    action.Sfx = row.Opt("sfx");
-                    if (action.Sfx != null && !EffectList(action.Sfx)) return "sfx is a list of file.mp3@seconds, split by ','";
-                    action.Board = row.Opt("board");
-                    if (action.Board != null && Array.IndexOf(BoardNames, action.Board) < 0) return "board is one of: " + string.Join(", ", BoardNames);
-                    string clipName = row.Opts.TryGetValue("clip", out string named) ? named : null;
-                    if (action.Board == "screen" && !IsFileName(clipName)) return "a screen board needs clip=<a .webm (VP8) beside the script>";
-                    foreach (string key in BoardWords)
-                    {
-                        string word = row.Opt(key);
-                        if (word == null) continue;
-                        if (!Words(word)) return key + " is up to " + MaxTextChars + " characters";
-                        if (action.Words == null) action.Words = new Dictionary<string, string>(StringComparer.Ordinal);
-                        action.Words[key] = word;
-                    }
-                    break;
                 case "card":
                     action.Kind = ActionKind.Card;
                     action.Seconds = 4f;
@@ -536,6 +422,11 @@ namespace BoscaliSummer.Core.Scenario
                     break;
                 case "finish": action.Kind = ActionKind.Finish; break;
                 case "dip": action.Kind = ActionKind.Dip; break;
+                case "video":
+                    action.Kind = ActionKind.Video;
+                    action.Name = row.Next();
+                    if (string.IsNullOrEmpty(action.Name) || action.Name.IndexOfAny(new[] { '/', '\\', ':' }) >= 0) return "video needs a file name (.mp4 or .webm beside the script)";
+                    break;
                 case "choose": action.Kind = ActionKind.Choose; break;
                 case "seat":
                     action.Kind = ActionKind.Seat;
@@ -564,7 +455,7 @@ namespace BoscaliSummer.Core.Scenario
                     action.Name = row.Next();
                     if (!IsFileName(action.Name)) return "music needs a file name (an .mp3 or .ogg beside the script), or 'stop'";
                     if (!row.Opt("volume", ref action.Seconds) || action.Seconds < 0f || action.Seconds > 1f) return "volume is 0 to 1";
-                    // loop: the track starts again until 'music stop', for a cutscene longer than it.
+                    // loop: the track starts again until 'music stop'.
                     if (row.Word("loop")) action.Text = "loop";
                     break;
                 case "start":
@@ -633,28 +524,11 @@ namespace BoscaliSummer.Core.Scenario
                 {
                     if (action.Kind == ActionKind.Say && !def.Cast.ContainsKey(action.Name))
                         def.Error(beat.Line, "beat '" + beat.Id + "': nobody in the cast is called '" + action.Name + "'");
-                    if (action.Kind == ActionKind.Cut && !def.Shots.ContainsKey(action.Name))
-                        def.Error(beat.Line, "beat '" + beat.Id + "': there is no shot '" + action.Name + "'");
-                    if (action.Kind == ActionKind.Cut && action.Photo != null && !def.Pictures.ContainsKey(action.Photo))
-                        def.Error(beat.Line, "beat '" + beat.Id + "': there is no picture '" + action.Photo + "'");
                 }
             }
         }
 
-        /// <summary>Sound effects of a cut, <c>file.mp3@seconds, other.mp3@2.5</c>: each a file name and a time from 0 to 120 seconds into the shot.</summary>
-        public static bool EffectList(string list)
-        {
-            string[] entries = (list ?? "").Split(',');
-            if (entries.Length == 0 || entries.Length > 24) return false;
-            foreach (string entry in entries)
-            {
-                int at = entry.LastIndexOf('@');
-                if (at <= 0 || !IsFileName(entry.Substring(0, at).Trim()) || !Float(entry.Substring(at + 1).Trim(), out float seconds) || seconds < 0f || seconds > 120f) return false;
-            }
-            return true;
-        }
-
-        /// <summary>A plain file or picture name: no folders, nothing that climbs out of one.</summary>
+        /// <summary>A plain file name: no folders, nothing that climbs out of one.</summary>
         private static bool IsFileName(string name)
         {
             if (string.IsNullOrEmpty(name) || name.Length > 96 || name[0] == '.') return false;

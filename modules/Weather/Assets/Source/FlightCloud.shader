@@ -1861,6 +1861,11 @@ Shader "Boscali/FlightCloud"
             float nearSteps = clamp(floor(_CloudSteps * saturate(nearSpan / 12000.0 + 0.35) * lerp(1.0, 0.68, smoothstep(15000.0, 35000.0, start))), 4.0, 96.0);
             nearSteps = max(nearSteps, floor(24.0 * nearProximity));
             float farSteps = clamp(floor(_CloudFarSteps), 4.0, 96.0);
+            // The far stream's first step (quadratic spacing, n = 0), for the near stream's
+            // last 40 % to filter toward before the switch: a step-length jump at the near
+            // limit changed the noise LOD and thin-layer averaging on one ring
+            // (2026-11-18 distant-cloud LOD flicker).
+            float farStepLength = max(0.0, farSpan) / (farSteps * farSteps);
             float carryEnd = min(finish, 2000.0);
             // Distant segments march from fixed sample positions: the cycling dither moves
             // a far sample by kilometres, and the sky boiled however much history it
@@ -1912,11 +1917,15 @@ Shader "Boscali/FlightCloud"
                 // 2026-10-26 (user: the LOD rings are immersion-breaking): the near march eases into the far one over its last 40 %
                 // instead of switching shape, filtering and lighting on one ring at the near limit.
                 float farBlend = farSeg ? 1.0 : hero ? 0.0 : smoothstep(CLOUD_NEAR_LIMIT * 0.6, CLOUD_NEAR_LIMIT, t);
+                // Filtering must cross the near limit without a step: gFoot drives the 3D-noise
+                // LOD, micro-erosion and hard edges, and gVert the thin-layer average. Both used
+                // the near stream's step until the switch and the far stream's after it.
+                float filterStep = farSeg ? stepLength : lerp(stepLength, farStepLength, farBlend);
                 // 2026-10-26 (user: rougher, higher-res clouds, Ace Combat look): the near march filters its noise to 0.15 of a step (the
                 // stratified dither and the resolve average the rest); at 0.35 cloud 10 km away lost its edge texture to mip 4. Set-pieces
                 // keep 0.35 (their distant samples are fixed, not dithered).
-                gFoot = max(t * _CloudPixelAngle, stepLength * lerp(0.15, 0.35, hero ? 1.0 : farBlend));
-                gVert = farBlend * 0.5 * abs(ray.y) * stepLength;
+                gFoot = max(t * _CloudPixelAngle, filterStep * lerp(0.15, 0.35, hero ? 1.0 : farBlend));
+                gVert = farBlend * 0.5 * abs(ray.y) * filterStep;
                 gHeroOnly = hero;
                 gNoHero = !hero && t >= 2000.0;
                 float d = DensityOrEmpty(world, hero ? 1.0 : 1.2 * farBlend);

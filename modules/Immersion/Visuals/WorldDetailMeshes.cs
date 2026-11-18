@@ -8,44 +8,74 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
     {
         internal const int ShrubWide = 0, ShrubLoose = 1, ShrubTall = 2, Rock = 3, Log = 4, ShrubCount = 3;
 
+        // Pale grass-coloured clumps rooted in the turf: the old dark broadleaf bushes on bare
+        // trunks read as foreign objects against the game's dry grass.
         internal static Mesh[] Build() => new[]
         {
-            Bush(1701, 7, .73f, .83f, .47f, false, "Broadleaf"),
-            Bush(3109, 6, .58f, 1.12f, .43f, true, "Open Brush"),
-            Bush(7919, 8, .46f, 1.32f, .39f, true, "Upright Brush"),
+            Grass(1701, 7, 4, .42f, .72f, "Tussock"),
+            Scrub(3109),
+            Grass(7919, 5, 3, .26f, .98f, "Tall Grass"),
             Stone(), FallenWood()
         };
 
-        private static Mesh Bush(uint seed, int branches, float radius, float height, float leafSize,
-            bool narrowLeaves, string name)
+        private static Mesh Grass(uint seed, int blades, int skirt, float spread, float height, string name)
         {
             var mesh = new Builder();
             var random = new Seed(seed);
-            Vector3 root = new Vector3(0f, .02f, 0f);
-            Vector3 fork = new Vector3(.02f, height * .32f, -.025f);
-            Branch(mesh, root, fork, .034f, .021f, 5, new Color(.68f, .62f, .49f));
-            for (int branch = 0; branch < branches; branch++)
+            for (int blade = 0; blade < blades; blade++)
             {
-                float angle = branch * 2.399963f + random.Range(-.2f, .2f);
-                Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-                Vector3 start = Vector3.Lerp(root, fork, random.Range(.4f, 1f));
-                Vector3 end = outward * radius * random.Range(.65f, 1f) +
-                    Vector3.up * height * random.Range(.57f, 1f);
-                Branch(mesh, start, end, .018f, .004f, 4, new Color(.72f, .68f, .52f));
-                for (int leaf = 0; leaf < 7; leaf++)
-                {
-                    float along = .48f + leaf * .082f;
-                    Vector3 centre = Vector3.Lerp(start, end, along) +
-                        new Vector3(random.Range(-.15f, .15f), random.Range(-.07f, .1f), random.Range(-.15f, .15f));
-                    Vector3 normal = (outward + Vector3.up * random.Range(.65f, 1.6f) +
-                        new Vector3(random.Range(-.6f, .6f), 0f, random.Range(-.6f, .6f))).normalized;
-                    float size = leafSize * random.Range(.72f, 1.15f);
-                    Color tint = Color.Lerp(new Color(.56f, .65f, .48f), new Color(.94f, .98f, .82f),
-                        Mathf.Clamp01(centre.y / height) * .7f + random.Range(0f, .25f));
-                    Leaf(mesh, centre, normal, size, random.Range(-1.1f, 1.1f), narrowLeaves, tint);
-                }
+                Vector3 centre = new Vector3(random.Range(-.25f, .25f), 0f, random.Range(-.25f, .25f)) * spread;
+                Tuft(mesh, ref random, blade * Mathf.PI / blades, centre, height, Vector3.zero);
             }
+            Skirt(mesh, ref random, skirt, spread, height * .55f);
             return mesh.Finish("Boscali " + name);
+        }
+
+        private static Mesh Scrub(uint seed)
+        {
+            const int sprigs = 14;
+            const float radius = .5f, height = .5f;
+            var mesh = new Builder();
+            var random = new Seed(seed);
+            for (int sprig = 0; sprig < sprigs; sprig++)
+            {
+                float angle = sprig * 2.399963f + random.Range(-.2f, .2f);
+                float reach = Mathf.Sqrt((sprig + .5f) / sprigs);
+                Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                // A low mound with no trunk: sprigs sit on a dome that meets the ground at its rim.
+                Vector3 centre = outward * radius * reach +
+                    Vector3.up * height * (1f - reach * reach * .6f) * random.Range(.6f, 1f);
+                Vector3 normal = (outward * reach * 1.2f + Vector3.up +
+                    new Vector3(random.Range(-.35f, .35f), 0f, random.Range(-.35f, .35f))).normalized;
+                float shade = random.Range(.82f, 1f);
+                Leaf(mesh, centre, normal, .44f * random.Range(.75f, 1.15f), random.Range(-3.1f, 3.1f), false,
+                    new Color(shade, shade, shade * .94f));
+            }
+            Skirt(mesh, ref random, 5, radius * .9f, .4f);
+            return mesh.Finish("Boscali Dry Scrub");
+        }
+
+        private static void Skirt(Builder mesh, ref Seed random, int count, float spread, float height)
+        {
+            // Short outward-leaning tufts feather the clump into the surrounding grass.
+            for (int tuft = 0; tuft < count; tuft++)
+            {
+                float angle = (tuft + random.Range(-.25f, .25f)) * Mathf.PI * 2f / count;
+                Vector3 outward = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
+                Tuft(mesh, ref random, angle + Mathf.PI * .5f, outward * spread * random.Range(.7f, 1f), height,
+                    outward * height * .35f);
+            }
+        }
+
+        private static void Tuft(Builder mesh, ref Seed random, float angle, Vector3 centre, float height, Vector3 lean)
+        {
+            angle += random.Range(-.25f, .25f);
+            Vector3 face = new Vector3(-Mathf.Sin(angle), 0f, Mathf.Cos(angle));
+            Vector3 across = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * height * random.Range(.45f, .6f);
+            Vector3 top = Vector3.up * height * random.Range(.8f, 1f) + lean + face * height * random.Range(-.12f, .12f);
+            float shade = random.Range(.84f, 1f);
+            mesh.Card(centre - across, centre + across, centre + across + top, centre - across + top,
+                new Color(.74f * shade, .8f * shade, .66f * shade), new Color(shade, shade, shade * .94f));
         }
 
         private static void Leaf(Builder mesh, Vector3 centre, Vector3 normal, float size, float twist,
@@ -56,7 +86,7 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
             Vector3 up = Vector3.Cross(normal, right).normalized;
             Vector3 across = (right * Mathf.Cos(twist) + up * Mathf.Sin(twist)) * size * .5f;
             Vector3 along = (-right * Mathf.Sin(twist) + up * Mathf.Cos(twist)) * size * .5f;
-            // Two atlas tiles contain many close, irregular leaves on one small branching spray.
+            // Upper atlas tile: a twiggy sprig of small pale leaves. Lower tile: a fan of grass blades.
             float v0 = narrow ? .015625f : .515625f, v1 = narrow ? .484375f : .984375f;
             Vector3 lightingNormal = (normal + Vector3.up * .8f).normalized;
             mesh.Quad(centre - across - along, centre + across - along, centre + across + along,
@@ -95,66 +125,58 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
 
         private static Mesh Stone()
         {
-            const int sides = 10, rings = 5;
+            const int sides = 8, rings = 4;
             var mesh = new Builder();
             var random = new Seed(4591);
-            float[] widths = { .69f, .86f, .82f, .74f, .61f };
-            float[] heights = { .015f, .13f, .39f, .53f, .63f };
-            float[] offsetsX = { -.16f, -.1f, -.03f, .12f, .19f };
-            float[] offsetsZ = { 0f, -.04f, -.04f, .02f, .08f };
-            for (int ring = 0; ring < rings; ring++)
+            // A low faceted fieldstone. WorldDetailDressing sinks it 0.2 m, so the widest ring
+            // is underground and the stone rises out of the turf rather than sitting on it.
+            float[] radii = { 1f, .95f, .72f, .38f };
+            float[] heights = { -.1f, .22f, .42f, .55f };
+            var ring = new Vector3[rings * sides];
+            for (int r = 0; r < rings; r++)
                 for (int side = 0; side < sides; side++)
                 {
-                    float angle = side * Mathf.PI * 2f / sides + .075f * Mathf.Sin(ring * 1.9f + side);
-                    float notch = side == 2 || side == 3 ? .82f : side == 7 ? 1.1f : 1f;
-                    float radius = widths[ring] * random.Range(.92f, 1.06f) * notch;
-                    float cosine = Mathf.Cos(angle), sine = Mathf.Sin(angle);
-                    // Offset shelves and a chipped shoulder break the previous rounded egg silhouette.
-                    Vector3 position = new Vector3(Mathf.Sign(cosine) * Mathf.Pow(Mathf.Abs(cosine), .72f) * radius * 1.15f + offsetsX[ring],
-                        heights[ring] + (ring == 0 || ring == rings - 1 ? 0f : random.Range(-.025f, .025f)),
-                        Mathf.Sign(sine) * Mathf.Pow(Mathf.Abs(sine), .72f) * radius * .68f + offsetsZ[ring]);
-                    // The capped rings need end normals: radial normals can face away from
-                    // a sloping cap triangle even when its geometric winding is outward.
-                    Vector3 normal = ring == 0 ? Vector3.down : ring == rings - 1 ? Vector3.up :
-                        new Vector3(Mathf.Cos(angle), (ring - 1) * .35f, Mathf.Sin(angle)).normalized;
-                    float shade = random.Range(.78f, 1f) * Mathf.Lerp(.65f, 1f, ring / 4f);
-                    mesh.Vertex(position, normal, new Color(shade, shade * .98f, shade * .91f),
-                        new Vector2(.765625f + side / 10f * .21875f, .015625f + ring / 4f * .96875f));
+                    float angle = (side + random.Range(-.3f, .3f)) * Mathf.PI * 2f / sides;
+                    float radius = radii[r] * random.Range(.8f, 1.12f);
+                    ring[r * sides + side] = new Vector3(Mathf.Cos(angle) * radius * .52f + r * .03f,
+                        heights[r] + (r == 0 ? 0f : random.Range(-.04f, .04f)), Mathf.Sin(angle) * radius * .38f);
                 }
-            for (int ring = 0; ring < rings - 1; ring++)
+            Vector3 apex = new Vector3(.1f, .6f, -.03f);
+            for (int r = 0; r < rings - 1; r++)
                 for (int side = 0; side < sides; side++)
                 {
-                    int a = ring * sides + side, b = ring * sides + (side + 1) % sides;
-                    Vector3 outward = new Vector3(Mathf.Cos((side + .5f) * Mathf.PI * 2f / sides),
-                        (ring - 1) * .4f, Mathf.Sin((side + .5f) * Mathf.PI * 2f / sides));
-                    mesh.Triangle(a, b, a + sides, outward);
-                    mesh.Triangle(b, b + sides, a + sides, outward);
+                    Vector3 a = ring[r * sides + side], b = ring[r * sides + (side + 1) % sides];
+                    Vector3 c = ring[(r + 1) * sides + side], d = ring[(r + 1) * sides + (side + 1) % sides];
+                    // Alternating diagonals keep the facets from lining up into bands.
+                    if (((r + side) & 1) == 0) { StoneFacet(mesh, ref random, a, b, c); StoneFacet(mesh, ref random, b, d, c); }
+                    else { StoneFacet(mesh, ref random, a, b, d); StoneFacet(mesh, ref random, a, d, c); }
                 }
-            Vector3 minimum = mesh.Positions[0], maximum = minimum;
-            for (int vertex = 1; vertex < sides * rings; vertex++)
-            {
-                minimum = Vector3.Min(minimum, mesh.Positions[vertex]);
-                maximum = Vector3.Max(maximum, mesh.Positions[vertex]);
-            }
-            float planarScale = .21875f / (maximum.x - minimum.x);
-            float centreZ = (minimum.z + maximum.z) * .5f;
-            // Caps cannot share the side strip's constant-V ring UVs. Duplicate only
-            // these rims and project in X/Z at uniform texel density within the stone tile.
-            for (int cap = 0; cap < 2; cap++)
-                for (int side = 0; side < sides; side++)
-                {
-                    int source = cap * (rings - 1) * sides + side;
-                    Vector3 position = mesh.Positions[source];
-                    mesh.CopyVertex(source, cap == 0 ? Vector3.down : Vector3.up,
-                        new Vector2(.765625f + (position.x - minimum.x) * planarScale,
-                            .5f + (position.z - centreZ) * planarScale));
-                }
-            for (int side = 1; side < sides - 1; side++)
-            {
-                mesh.Triangle(50, 50 + side, 51 + side, Vector3.down);
-                mesh.Triangle(60, 60 + side, 61 + side, Vector3.up);
-            }
-            return mesh.Finish("Boscali Weathered Rock");
+            for (int side = 0; side < sides; side++)
+                StoneFacet(mesh, ref random, ring[(rings - 1) * sides + side],
+                    ring[(rings - 1) * sides + (side + 1) % sides], apex);
+            return mesh.Finish("Boscali Fieldstone");
+        }
+
+        private static void StoneFacet(Builder mesh, ref Seed random, Vector3 a, Vector3 b, Vector3 c)
+        {
+            Vector3 normal = Vector3.Cross(b - a, c - a).normalized;
+            if (Vector3.Dot(normal, (a + b + c) / 3f - new Vector3(0f, .1f, 0f)) < 0f) normal = -normal;
+            float shade = random.Range(.86f, 1f);
+            int first = StoneVertex(mesh, a, normal, shade);
+            StoneVertex(mesh, b, normal, shade); StoneVertex(mesh, c, normal, shade);
+            mesh.Triangle(first, first + 1, first + 2, normal);
+        }
+
+        private static int StoneVertex(Builder mesh, Vector3 position, Vector3 normal, float shade)
+        {
+            // Soil and moss stain at the ground line, clean stone on the crown.
+            Color tint = Color.Lerp(new Color(.6f, .6f, .46f), new Color(1f, .98f, .93f),
+                Mathf.Clamp01((position.y - .15f) / .3f)) * shade;
+            // Half facet, half rounded and lifted toward the sky: a pure facet normal puts a white
+            // plane next to a black one, which reads as folded paper rather than weathered stone.
+            Vector3 rounded = (position - new Vector3(0f, .1f, 0f)).normalized + Vector3.up * .5f;
+            return mesh.Vertex(position, (normal * .5f + rounded.normalized * .5f).normalized, tint,
+                new Vector2(.875f + position.x * .15f, .5f + (position.z + position.y * .7f) * .4f));
         }
 
         private static Mesh FallenWood()
@@ -243,6 +265,20 @@ namespace BoscaliSummer.Modules.Immersion.Visuals
                 if (Vector3.Dot(Vector3.Cross(Positions[b] - Positions[a], Positions[c] - Positions[a]), outward) < 0f)
                 { int swap = b; b = c; c = swap; }
                 triangles.Add(a); triangles.Add(b); triangles.Add(c);
+            }
+
+            /// <summary>Upright grass card on the lower atlas tile; shaded mostly upward like turf.</summary>
+            internal void Card(Vector3 bottomLeft, Vector3 bottomRight, Vector3 topRight, Vector3 topLeft,
+                Color low, Color high)
+            {
+                Vector3 normal = Vector3.Cross(bottomRight - bottomLeft, topLeft - bottomLeft).normalized;
+                if (normal.y < 0f) normal = -normal;
+                Vector3 lighting = (normal + Vector3.up).normalized;
+                int start = Vertex(bottomLeft, lighting, low, new Vector2(.015625f, .015625f));
+                Vertex(bottomRight, lighting, low, new Vector2(.484375f, .015625f));
+                Vertex(topRight, lighting, high, new Vector2(.484375f, .484375f));
+                Vertex(topLeft, lighting, high, new Vector2(.015625f, .484375f));
+                Triangle(start, start + 1, start + 2, lighting); Triangle(start, start + 2, start + 3, lighting);
             }
 
             internal void Quad(Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal, Color tint,

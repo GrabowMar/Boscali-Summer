@@ -32,6 +32,7 @@ namespace BoscaliSummer.Fire
             public float TreeClearBlastRadius;
             public float ScarDiameter;
             public FireFrontCell Cell;
+            public float Born, Life;
         }
 
         private struct VehicleExplosionEvent
@@ -67,6 +68,7 @@ namespace BoscaliSummer.Fire
             public FireFrontCell Cell;
             public int TriedEdges;
             public int JoinedEdges;
+            public bool TreesCleared;
             public bool SmokeOwner = true;
             public GlobalPosition SmokePosition;
             public Vector2 SmokeExtents;
@@ -272,7 +274,7 @@ namespace BoscaliSummer.Fire
             if (!GameManager.IsHeadless && Datum.origin != null && Time.unscaledTime >= nextVisualWarm)
             {
                 nextVisualWarm = Time.unscaledTime + 1f;
-                visualPool.Warm(4);
+                if (!visualPool.Warm(4) && Fire.FiresEnabled.Value) fuelDepotSmokePool.Warm();
             }
             // Burn sites are the expensive path: each one paints the vanilla blast map,
             // queues at most one small tree-clearing blast and stamps a pooled soot decal.
@@ -284,7 +286,9 @@ namespace BoscaliSummer.Fire
             {
                 ScorchMark scorch = scorches.Dequeue();
                 burnMarks |= QueueBurnMark(scorch);
-                if (scorch.Cell != null) burnScars.StampForest(scorch.Position, scorch.Cell);
+                // Shaders run on Time.time; the site clock is time since level load.
+                if (scorch.Cell != null) burnScars.StampForest(scorch.Position, scorch.Cell,
+                    scorch.Born + Time.time - Time.timeSinceLevelLoad, scorch.Life);
                 else if (scorch.ScarDiameter > 0f)
                     burnScars.Stamp(scorch.Position, scorch.ScarDiameter);
             }
@@ -712,6 +716,8 @@ namespace BoscaliSummer.Fire
 
             const float FireCullDistanceSq = 15000f * 15000f;
             const float FireWakeDistanceSq = 14000f * 14000f;
+            const float FlameCullDistanceSq = 9000f * 9000f;
+            const float FlameWakeDistanceSq = 8000f * 8000f;
 
             for (int i = fires.Count - 1; i >= 0; i--)
             {
@@ -719,33 +725,45 @@ namespace BoscaliSummer.Fire
                 if (now >= site.Expires)
                 {
                     DemolishBurnedBuilding(site);
-                    if (site.Forest) QueueCellTreeClear(site);
+                    if (site.Forest && !site.TreesCleared) QueueCellTreeClear(site);
                     visualPool.Release(site.Visual);
                     fuelDepotSmokePool.Release(site.BuildingSmoke);
                     fires.RemoveAt(i);
                     topologyDirty = true;
                     continue;
                 }
+                // The trees go while the crown flare (peak at 30% life left) still covers them:
+                // cleared at burnout they stood green over dying embers and then popped out.
+                if (site.Forest && !site.TreesCleared && site.Expires - now <= Fire.FireLifetime * 0.27f)
+                {
+                    site.TreesCleared = true;
+                    QueueCellTreeClear(site);
+                }
 
                 float distToCamSq = camera != null
                     ? (camPos - site.Position.ToLocalPosition()).sqrMagnitude
                     : 0f;
-                bool isSleeping = site.Visual?.Sleeping == true;
-                bool shouldSleep = camera != null && distToCamSq > (isSleeping ? FireWakeDistanceSq : FireCullDistanceSq);
+                // Flames are metres tall and under a pixel long before the plume is: they stop at 9 km, the smoke at 15 km.
+                bool flameSleep = camera != null && distToCamSq >
+                    (site.Visual?.Sleeping == true ? FlameWakeDistanceSq : FlameCullDistanceSq);
+                bool shouldSleep = camera != null && distToCamSq >
+                    (site.BuildingSmoke?.Sleeping == true ? FireWakeDistanceSq : FireCullDistanceSq);
 
-                site.Visual?.SetSleeping(shouldSleep);
+                site.Visual?.SetSleeping(flameSleep);
                 site.BuildingSmoke?.SetSleeping(shouldSleep);
 
-                if (!shouldSleep)
+                if (!flameSleep && site.Visual != null)
                 {
-                    site.Visual?.SetPosition(site.Position);
-                    site.Visual?.SetClusterScale(site.ClusterScale);
-                    if (site.Visual != null)
-                        site.Visual.LodScale = Mathf.Lerp(1f, 0.35f, Mathf.InverseLerp(1500f, 6000f, Mathf.Sqrt(distToCamSq)));
-                    site.Visual?.SetPhase(
+                    site.Visual.SetPosition(site.Position);
+                    site.Visual.SetClusterScale(site.ClusterScale);
+                    site.Visual.LodScale = Mathf.Lerp(1f, 0.35f, Mathf.InverseLerp(1500f, 6000f, Mathf.Sqrt(distToCamSq)));
+                    site.Visual.SetPhase(
                         Mathf.Max(0f, now - site.Born),
                         Mathf.Clamp01((site.Expires - now) / Fire.FireLifetime),
                         wind);
+                }
+                if (!shouldSleep)
+                {
                     if (site.BuildingSmoke != null)
                     {
                         site.BuildingSmoke.SetPosition(site.Forest ? site.SmokePosition : site.Position);
@@ -787,7 +805,7 @@ namespace BoscaliSummer.Fire
                     }
                     site.NextSmoke = site.BuildingSmoke == null ? now + 2.4f : float.MaxValue;
                 }
-                if (camera == null || site.Visual == null || shouldSleep) continue;
+                if (camera == null || site.Visual == null || flameSleep) continue;
                 float d = distToCamSq;
                 if (d < distA)
                 {
@@ -988,7 +1006,7 @@ namespace BoscaliSummer.Fire
             // Only the shared-edge ash polygon. The native blast map resolves 160 m per texel,
             // so its ash bed blackened every tree in a ~500 m circle round a 28 m cell; trees
             // in the cell itself are cleared at burnout (QueueCellTreeClear).
-            scorches.Enqueue(new ScorchMark { Position = site.Position, Cell = site.Cell });
+            scorches.Enqueue(new ScorchMark { Position = site.Position, Cell = site.Cell, Born = site.Born, Life = site.Expires - site.Born });
         }
 
         private void FindBuildings(

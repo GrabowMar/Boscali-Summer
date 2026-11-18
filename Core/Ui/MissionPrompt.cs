@@ -26,7 +26,6 @@ namespace BoscaliSummer.Core.Ui
             ("immersion", "IMMERSION", "G cues, visor, pilot body", "The pilot's body and senses: G-LOC and grey-out, visor, heartbeat, cockpit voices and night lighting.", AvIcon.Pilot),
             ("effects", "EFFECTS", "Display grade, sharpening", "A colour grade and sharpening pass over the game image.", AvIcon.AdjustmentsHorizontal),
             ("qol", "QUALITY OF LIFE", "Small cockpit conveniences", "Small cockpit conveniences that save a few clicks.", AvIcon.Coffee),
-            ("cinematography", "CINEMATOGRAPHY", "Cinematic shot tools", "Cutscene cameras for scripted missions and private shot tools for trailers.", AvIcon.Camera),
             ("radio", "RADIO", "Cockpit radio stations", "Music and talk stations you tune from the cockpit.", AvIcon.Radio),
             ("chatter", "CHATTER", "Voices on the radio nets", "Voice packs on the radio nets: tower, flight, AWACS and ground calls that react to the fight.", AvIcon.Headset),
             ("comms", "COMMS", "Map pings, polls, team comms", "Map pings, polls and quick team messages; brevity calls follow the caller.", AvIcon.Message2),
@@ -67,7 +66,7 @@ namespace BoscaliSummer.Core.Ui
             ("PILOT CAREER", AvIcon.Star, new[] { "progression", "squad", "dynamic-operations", "player-spawn-priority" }),
             ("BATTLESPACE", AvIcon.Swords, new[] { "urban-combat", "trenches", "fire-and-destruction", "combat", "sea", "air-survival", "vanguard" }),
             ("SKY AND WORLD", AvIcon.Cloud, new[] { "weather", "events" }),
-            ("SPECIALS", AvIcon.Burst, new[] { "spooktober", "ares", "cinematography" }),
+            ("SPECIALS", AvIcon.Burst, new[] { "spooktober", "ares" }),
             ("CORE", AvIcon.ShieldLock, new[] { "hud", "session", "scenario", "pmc", "performance" })
         };
 

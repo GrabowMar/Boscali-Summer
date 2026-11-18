@@ -3,43 +3,46 @@ using System.Numerics;
 
 namespace BoscaliSummer.Modules.Cinematography.Domain
 {
+    /// <summary>The ready-made camera moves. Positions are global (sea-level) metres, or metres from the actor when the shot has one.</summary>
     internal static class ShotRigs
     {
-        internal static ShotSequence Demo(string mission,string scene,string actor)
-        {
-            var follow=Follow("test-follow",mission,scene,actor,new Vector3(-28,8,-38),4);
-            follow.options.realtimeClock=true;follow.options.stabilizeAnchor=true;follow.options.letterbox=.08f;follow.options.fadeIn=.4f;follow.options.title="CAMERA TEST · FOLLOW";
-            var orbit=Orbit("test-orbit",mission,scene,Vector3.Zero,50,10,6,-45,100);orbit.anchorId=actor;
-            orbit.options.realtimeClock=true;orbit.options.stabilizeAnchor=true;orbit.options.simulationRate=.25f;orbit.options.letterbox=.08f;orbit.options.title="CAMERA TEST · ORBIT / WORLD x0.25";
-            var dolly=Follow("test-dolly",mission,scene,actor,new Vector3(-45,10,-55),5);
-            dolly.smooth=true;dolly.keys=new[] {Key(new Vector3(-45,10,-55),Quaternion.Identity,0),
-                Key(new Vector3(-30,8,-42),Quaternion.Identity,2.5f),Key(new Vector3(-18,5,-25),Quaternion.Identity,5)};
-            dolly.options.realtimeClock=true;dolly.options.stabilizeAnchor=true;dolly.options.dollyZoom=true;dolly.options.referenceDistance=60;
-            dolly.options.letterbox=.08f;dolly.options.fadeOut=.5f;dolly.options.title="CAMERA TEST · DOLLY ZOOM";
-            return new ShotSequence {id="simple-cinematic-test",clips=new[] {follow,orbit,dolly}};
-        }
-        internal static ShotPlan Follow(string id,string mission,string scene,string actor,Vector3 offset,float duration) =>
-            new ShotPlan { id=id,mission=mission,scene=scene,anchorId=actor,duration=duration,
+        /// <summary>Rides with the actor at <paramref name="offset"/> (right, up, ahead) and looks at it.</summary>
+        internal static ShotPlan Follow(string actor,Vector3 offset,float duration) =>
+            new ShotPlan { anchorId=actor,duration=duration,
                 options=new ShotOptions { lookAtTarget=true }, keys=new[] { Key(offset,Quaternion.Identity,0) } };
 
-        internal static ShotPlan Track(string id,string mission,string scene,string actor,ShotPose vantage,float duration) =>
-            new ShotPlan { id=id,mission=mission,scene=scene,anchorId=actor,duration=duration,
+        /// <summary>Stands at a fixed global vantage and pans with the actor.</summary>
+        internal static ShotPlan Track(string actor,ShotPose vantage,float duration) =>
+            new ShotPlan { anchorId=actor,duration=duration,
                 options=new ShotOptions { lookAtTarget=true,worldSpacePath=true },
                 keys=new[] { new ShotKey { x=vantage.Position.X,y=vantage.Position.Y,z=vantage.Position.Z,
                     qX=vantage.Rotation.X,qY=vantage.Rotation.Y,qZ=vantage.Rotation.Z,qW=vantage.Rotation.W,fov=vantage.Fov } } };
 
-        internal static ShotPlan Flyby(string id,string mission,string scene,string actor,ShotPose subject,Vector3 offset,float duration)
+        /// <summary>
+        /// Stands at <paramref name="offset"/> in the actor's heading frame and pans as the actor passes. Where that is gets worked out when the clip
+        /// starts (<see cref="Place"/>), so a flyby late in an edit still stands ahead of where the actor then is.
+        /// </summary>
+        internal static ShotPlan Flyby(string actor,Vector3 offset,float duration)
         {
-            // Place once in the actor's heading frame, then pan from that fixed global vantage.
-            var placement=Follow(id,mission,scene,actor,offset,duration);
-            placement.options.headingOnlyAnchor=true;
-            ShotPose vantage=placement.SamplePresentation(0,subject);
-            return Track(id,mission,scene,actor,new ShotPose(vantage.Position,vantage.Rotation,35),duration);
+            var shot=Follow(actor,offset,duration);
+            shot.options.headingOnlyAnchor=true;shot.placeAtStart=true;shot.keys[0].fov=35;
+            return shot;
         }
 
-        internal static ShotPlan Orbit(string id,string mission,string scene,Vector3 center,float radius,float height,float duration,float from,float to)
+        /// <summary>Turns a flyby's offset into its fixed global vantage, from where the actor is now.</summary>
+        internal static void Place(ShotPlan shot,ShotPose subject)
         {
-            var shot = new ShotPlan { id=id,mission=mission,scene=scene,duration=duration,spline=true,
+            ShotPose vantage=shot.SamplePresentation(0,subject);
+            ShotKey key=shot.keys[0];
+            key.x=vantage.Position.X;key.y=vantage.Position.Y;key.z=vantage.Position.Z;
+            key.qX=vantage.Rotation.X;key.qY=vantage.Rotation.Y;key.qZ=vantage.Rotation.Z;key.qW=vantage.Rotation.W;
+            shot.options.headingOnlyAnchor=false;shot.options.worldSpacePath=true;shot.placeAtStart=false;
+        }
+
+        /// <summary>Circles <paramref name="center"/> between two compass bearings.</summary>
+        internal static ShotPlan Orbit(Vector3 center,float radius,float height,float duration,float from,float to)
+        {
+            var shot = new ShotPlan { duration=duration,spline=true,
                 options=new ShotOptions { lookAtTarget=true,targetX=center.X,targetY=center.Y,targetZ=center.Z }, keys=new ShotKey[17] };
             for (int i=0;i<shot.keys.Length;i++)
             {
@@ -49,6 +52,13 @@ namespace BoscaliSummer.Modules.Cinematography.Domain
             }
             return shot;
         }
+
+        /// <summary>Travels in a line from one point to another, looking at a third.</summary>
+        internal static ShotPlan Fly(Vector3 from,Vector3 to,Vector3 look,float duration) =>
+            new ShotPlan { duration=duration,smooth=true,
+                options=new ShotOptions { lookAtTarget=true,targetX=look.X,targetY=look.Y,targetZ=look.Z },
+                keys=new[] { Key(from,ShotOptions.Look(look-from),0),Key(to,ShotOptions.Look(look-to),duration) } };
+
         private static ShotKey Key(Vector3 p,Quaternion q,float time) => new ShotKey
         { x=p.X,y=p.Y,z=p.Z,qX=q.X,qY=q.Y,qZ=q.Z,qW=q.W,time=time };
 

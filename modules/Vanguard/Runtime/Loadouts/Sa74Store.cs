@@ -62,6 +62,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             context.AddSceneService<Sa74CloudClearance>(63);
             context.AddSceneService<Presentation.Sa74Mushroom>(63);
             context.AddSceneService<Presentation.Sa74Particles>(63);
+            context.AddSceneService<Presentation.Sa74Smolder>(63);
             context.AddSceneService<Presentation.Sa74BlastAudio>(64);
             context.AddSceneService<Sa74Destruction>(64);
         }

@@ -7,7 +7,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
 {
     /// <summary>
     /// The script's in-flight pressure: a countdown at the top of the screen (amber, red in its last 30 seconds, blinking in its last 10) and a named enemy's
-    /// health bar at the top right. Both stand aside while a cutscene plays. Built the first time a script asks for one.
+    /// health bar at the top right. Built the first time a script asks for one.
     /// </summary>
     internal sealed partial class ScenarioStageView
     {
@@ -42,7 +42,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         /// <summary>The ace's health share; a negative share (not in the world yet) reads as full.</summary>
         internal void AceHealth(float share) => aceHealth = share < 0f ? 1f : Mathf.Clamp01(share);
 
-        private bool CombatShown => !cut && (clockEnds >= 0f || aceOn);
+        private bool CombatShown => clockEnds >= 0f || aceOn;
 
         private void BuildCombat()
         {
@@ -75,7 +75,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
         private void PaintCombat(float game, float real)
         {
             if (clockBox == null) return;
-            float clockAlpha = !cut && clockEnds >= 0f ? 1f : 0f;
+            float clockAlpha = clockEnds >= 0f ? 1f : 0f;
             float left = Mathf.Max(0f, clockEnds - game);
             Color tone = left < 30f ? AvTheme.Hostile : AvTheme.Warning;
             // The last ten seconds blink twice a second.
@@ -89,7 +89,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
                 clockDigits.text = (tenths / 600).ToString("00") + ":" + (tenths / 10 % 60).ToString("00") + "." + (tenths % 10);
             }
 
-            float aceAlpha = !cut && aceOn ? 1f : 0f;
+            float aceAlpha = aceOn ? 1f : 0f;
             acePlate.color = AvTheme.Ground.WithAlpha(0.72f * aceAlpha);
             aceName.color = AvTheme.Hostile.WithAlpha(aceAlpha);
             aceLine.color = AvTheme.Dim.WithAlpha(aceAlpha);

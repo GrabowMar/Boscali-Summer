@@ -12,14 +12,14 @@ namespace BoscaliSummer.Core.Scenario
         void Card(string title, string text, float seconds);
         void Hint(string text, float seconds);
 
-        /// <summary>Starts a cutscene: the shots in order, each with its words. False when the camera cannot be taken now.</summary>
-        bool Cut(IReadOnlyList<ScenarioCut> cuts);
-
-        /// <summary>A cutscene is on screen; the script waits for it.</summary>
-        bool CutPlaying { get; }
+        /// <summary>The pilot is being asked something (<see cref="Choose"/>); the script waits for the answer.</summary>
+        bool Waiting { get; }
 
         /// <summary>A quick fade through black: it covers whatever changes in the same moment.</summary>
         void Dip();
+
+        /// <summary>Plays a prerendered video over the whole screen; the story waits (<see cref="Waiting"/>) until it ends or the pilot skips it.</summary>
+        void Video(string file);
 
         /// <summary>Host only: holds a set-piece sky for everybody ("storm", "hurricane", "front", "fog", "wave"), or with "clear" lets the weather go on.</summary>
         void Sky(string name);
@@ -30,7 +30,7 @@ namespace BoscaliSummer.Core.Scenario
         /// <summary>Puts the pilot on a side without the game's join screen.</summary>
         void Enlist(ScenarioSide side);
 
-        /// <summary>Asks the pilot which side to fly for, in place of the game's join screen; the story waits (<see cref="CutPlaying"/>) for the answer.</summary>
+        /// <summary>Asks the pilot which side to fly for, in place of the game's join screen; the story waits (<see cref="Waiting"/>) for the answer.</summary>
         void Choose();
 
         /// <summary>Puts the pilot, already on a side, into an aircraft of that name in the air. Host and single player only.</summary>
@@ -86,8 +86,6 @@ namespace BoscaliSummer.Core.Scenario
         private readonly HashSet<string> fired = new HashSet<string>(StringComparer.Ordinal);
         private readonly List<ScenarioBeat> queue = new List<ScenarioBeat>();
         private readonly List<KeyValuePair<TriggerKind, string>> raised = new List<KeyValuePair<TriggerKind, string>>();
-        private readonly Queue<ScenarioCut> spilled = new Queue<ScenarioCut>();
-        private readonly List<ScenarioCut> cuts = new List<ScenarioCut>();
         private ScenarioBeat current;
         private int step;
         private float now, busyUntil, nextWatch, countdownEnds = -1f;
@@ -113,7 +111,7 @@ namespace BoscaliSummer.Core.Scenario
         public bool Finished { get; private set; }
 
         /// <summary>Nothing is playing and nothing waits.</summary>
-        public bool Idle => current == null && queue.Count == 0 && spilled.Count == 0 && raised.Count == 0 && now >= busyUntil && !stage.CutPlaying;
+        public bool Idle => current == null && queue.Count == 0 && raised.Count == 0 && now >= busyUntil && !stage.Waiting;
 
         /// <param name="remembered">Whether the campaign kept a flag from an earlier mission (null: it kept none).</param>
         public ScenarioRunner(ScenarioDef def, IScenarioStage stage, Func<string, bool> remembered = null)
@@ -164,15 +162,8 @@ namespace BoscaliSummer.Core.Scenario
             }
             raised.Clear();
 
-            while (!stage.CutPlaying && now >= busyUntil)
+            while (!stage.Waiting && now >= busyUntil)
             {
-                if (spilled.Count > 0)
-                {
-                    ScenarioCut words = spilled.Dequeue();
-                    Hold(ReadSeconds(words.Title + words.Caption, TextSpeed));
-                    stage.Card(words.Title, words.Caption, busyUntil - now);
-                    continue;
-                }
                 if (current == null)
                 {
                     if (queue.Count == 0) return;
@@ -235,24 +226,11 @@ namespace BoscaliSummer.Core.Scenario
                 case ActionKind.Wait:
                     Hold(action.Seconds);
                     break;
-                case ActionKind.Cut:
-                    cuts.Clear();
-                    // Shots written one after another are one cutscene.
-                    for (step--; step < current.Actions.Count && current.Actions[step].Kind == ActionKind.Cut; step++)
-                    {
-                        ScenarioAction cut = current.Actions[step];
-                        if (!def.Shots.TryGetValue(cut.Name, out ScenarioShot shot)) continue;
-                        ScenarioPicture photo = null;
-                        if (cut.Photo != null) def.Pictures.TryGetValue(cut.Photo, out photo);
-                        cuts.Add(new ScenarioCut { Shot = shot, Title = cut.Title, Caption = cut.Text, Stamp = cut.Stamp, Photo = photo, Fx = cut.Fx, Board = cut.Board, Words = cut.Words, Voice = cut.Voice, Sfx = cut.Sfx });
-                    }
-                    if (cuts.Count == 0 || stage.Cut(cuts)) break;
-                    // No camera (the pilot is flying, or cutscenes are off): the words still get read.
-                    foreach (ScenarioCut words in cuts)
-                        if (!string.IsNullOrEmpty(words.Title) || !string.IsNullOrEmpty(words.Caption)) spilled.Enqueue(words);
-                    break;
                 case ActionKind.Dip:
                     stage.Dip();
+                    break;
+                case ActionKind.Video:
+                    stage.Video(action.Name);
                     break;
                 case ActionKind.Sky:
                     stage.Sky(action.Name);
