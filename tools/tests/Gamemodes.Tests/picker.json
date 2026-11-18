@@ -1,0 +1,48 @@
+{
+  "name": "gamemode-picker",
+  "mission": "WarBox",
+  "mods": [
+    "boscalisummer"
+  ],
+  "timeout_s": 300,
+  "description": "The picker has one Boscali Summer tab, WarBox for every map is in it, and Fuzzball and Heavyweight are there on the desert map.",
+  "ops": [
+    {
+      "op": "wait",
+      "seconds": 15
+    },
+    {
+      "op": "call",
+      "method": "BoscaliSummer.Modules.Maps.Runtime.MapAutomation.Picker",
+      "store": "picker"
+    },
+    {
+      "op": "end"
+    }
+  ],
+  "checks": [
+    {
+      "check": "status_ok"
+    },
+    {
+      "check": "result_equals",
+      "path": "picker.tabs",
+      "value": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Missions: .*WARBOX / Heartland.*WARBOX / Ignus Archipelago",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Missions: .*WARBOX / Marisol Islands",
+      "min": 1
+    },
+    {
+      "check": "log_match",
+      "pattern": "Missions: .*FUZZBALL / Tassara.*HEAVYWEIGHT / Tassara",
+      "min": 1
+    }
+  ]
+}

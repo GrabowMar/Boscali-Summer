@@ -20,9 +20,10 @@ public static class BuildMapBundle
     [Serializable] private class LotInfo { public string kind; public float x, z, yaw; }
     [Serializable] private class BridgeInfo { public float x, z, heading, length, width; }
     [Serializable] private class RoadInfo { public string kind; public float width; public float[] points, widths; }
+    [Serializable] private class LakeInfo { public float level, cell; public float[] runs; }
     [Serializable] private class MapInfo
     {
-        public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, vertexBudget; public StripInfo[] strips; public ForestInfo[] forests; public RoadInfo[] roads, rivers; public BridgeInfo[] bridges; public LotInfo[] lots;
+        public string id, displayName; public float heightFloor, heightSpan, cell; public int res, tile, vertexBudget; public StripInfo[] strips; public ForestInfo[] forests; public RoadInfo[] roads, rivers; public LakeInfo[] lakes; public BridgeInfo[] bridges; public LotInfo[] lots;
     }
 
 
@@ -50,6 +51,17 @@ public static class BuildMapBundle
             var iceShader = AssetDatabase.LoadAssetAtPath<Shader>(Dir + "MapIce.shader");
             if (iceShader == null || ShaderUtil.ShaderHasError(iceShader)) throw new Exception("MapIce shader did not compile.");
             iceMaterial = new Material(iceShader) { name = "MapIce" };
+            foreach (var slot in new[] { ("_IceColor", "ice_base_color", 0), ("_IceMask", "ice_mask", 1), ("_IceNormal", "ice_normal", 2), ("_Noise", "perlin_noise_texture", 1),
+                                         ("_Snow", "snow", 0), ("_SnowNormal", "snow_normal", 2) })   // 0 colour, 1 data, 2 normal map
+            {
+                ImportTexture(Dir + slot.Item2 + ".png", slot.Item3 == 0, false, false, 1024, slot.Item3 == 2);
+                var tiled = (TextureImporter)AssetImporter.GetAtPath(Dir + slot.Item2 + ".png");   // these repeat over the ice
+                tiled.wrapMode = TextureWrapMode.Repeat;
+                tiled.filterMode = FilterMode.Trilinear;
+                tiled.anisoLevel = 4;
+                tiled.SaveAndReimport();
+                iceMaterial.SetTexture(slot.Item1, AssetDatabase.LoadAssetAtPath<Texture2D>(Dir + slot.Item2 + ".png"));
+            }
             AssetDatabase.CreateAsset(iceMaterial, Dir + "MapIce.mat");
             string icePath = Path.Combine(source, "ice.r8");
             groundIce = File.Exists(icePath) ? File.ReadAllBytes(icePath) : null;
@@ -58,8 +70,21 @@ public static class BuildMapBundle
             var terrain = Child(root, "Terrain");
             var airfields = Child(root, "Airfields");
             BuildTerrain(terrain, info, ReadHeights(Path.Combine(source, "height.r16"), info), ReadColours(Path.Combine(source, "colour.rgb"), info.res), ground);
+            BuildFar(root, NewMaterial(shader, "MapFar", 0f, 2f, 0f));
             for (int n = 0; n < info.strips.Length; n++) BuildStrip(airfields, n, info.strips[n], paved);
-            BuildRoads(Child(root, "Water"), info, info.rivers, paved);
+            var waterShader = AssetDatabase.LoadAssetAtPath<Shader>(Dir + "MapWater.shader");
+            if (waterShader == null || ShaderUtil.ShaderHasError(waterShader)) throw new Exception("MapWater shader did not compile.");
+            var riverMaterial = new Material(waterShader) { name = "MapRiver" };
+            AssetDatabase.CreateAsset(riverMaterial, Dir + "MapRiver.mat");
+            var lakeMaterial = new Material(waterShader) { name = "MapLake" };   // still water: a breeze on it, and bluer
+            lakeMaterial.SetFloat("_Flow", .25f);
+            lakeMaterial.SetFloat("_Ripple", 4f);
+            lakeMaterial.SetColor("_Shallow", new Color(.27f, .42f, .37f));
+            lakeMaterial.SetColor("_Deep", new Color(.02f, .10f, .16f));
+            AssetDatabase.CreateAsset(lakeMaterial, Dir + "MapLake.mat");
+            var water = Child(root, "Water");
+            BuildRivers(water, info, riverMaterial);
+            BuildLakes(water, info, lakeMaterial);
             var roadsRoot = Child(root, "Roads");
             BuildRoads(roadsRoot, info, info.roads, paved);
             BuildBridges(roadsRoot, info, paved);
@@ -73,6 +98,21 @@ public static class BuildMapBundle
             PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
             Object.DestroyImmediate(root);
             Validate(prefabPath);
+
+            // Every tree stands on the ground as it is drawn (the generator knows only the smooth height of its cell),
+            // a little sunk so a trunk on a slope has no gap under it.
+            float halfMap = info.res * info.cell * .5f;
+            for (int n = 0; n < (info.forests ?? new ForestInfo[0]).Length; n++)
+            {
+                byte[] trees = File.ReadAllBytes(Dir + "forest_" + n + ".bytes");
+                var at = new float[trees.Length / 4];
+                Buffer.BlockCopy(trees, 0, at, 0, at.Length * 4);
+                for (int k = 0; k + 2 < at.Length; k += 3)
+                    at[k + 1] = Surface((at[k] + halfMap) / info.cell - .5f, (at[k + 2] + halfMap) / info.cell - .5f) - .25f;
+                Buffer.BlockCopy(at, 0, trees, 0, at.Length * 4);
+                File.WriteAllBytes(Dir + "forest_" + n + ".bytes", trees);
+                AssetDatabase.ImportAsset(Dir + "forest_" + n + ".bytes", ImportAssetOptions.ForceUpdate);
+            }
 
             string image = $"bs_{info.id}_map.png";
             ImportTexture(Dir + "ocean_depth.png", false, false, false);
@@ -128,9 +168,11 @@ public static class BuildMapBundle
             var root = new GameObject("MapKit");
             var lines = new List<string>();
             int shapes = 0, kindIndex = 0;
+            var modelled = KitModels(root, still, lines, ref shapes);
             foreach (MapKitShapes.Kind kind in MapKitShapes.Kinds)
             {
                 var random = new System.Random(4242 + kindIndex++);
+                if (modelled.Contains(kind.Name)) continue; // the Blender model replaces the shape made in code
                 float radius = 0f;
                 int most = 0;
                 for (int v = 0; v < kind.Variants; v++)
@@ -165,7 +207,7 @@ public static class BuildMapBundle
             var build = new AssetBundleBuild { assetBundleName = "mapkit.bskit", assetNames = new[] { Dir + "MapKit.prefab", Dir + "kit.json" } };
             if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build }, BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null)
                 throw new Exception("Kit bundle build returned no manifest.");
-            File.WriteAllText("result.txt", $"PASS: scenery kit: {MapKitShapes.Kinds.Length} kinds, {shapes} shapes; bundle {new FileInfo("BundleOutput/mapkit.bskit").Length} bytes.");
+            File.WriteAllText("result.txt", $"PASS: scenery kit: {lines.Count} kinds ({modelled.Count} modelled in Blender), {shapes} shapes; bundle {new FileInfo("BundleOutput/mapkit.bskit").Length} bytes.");
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -174,6 +216,86 @@ public static class BuildMapBundle
             File.WriteAllText("result.txt", "FAIL: " + error);
             EditorApplication.Exit(1);
         }
+    }
+
+    /// <summary>
+    /// The shapes modelled in Blender (tools/MapAssets/blender/make_kit.py wrote kit_models.bytes): each becomes a
+    /// kit_&lt;kind&gt;_&lt;variant&gt; object with children lod0..lod2 under a LODGroup and, when solid, a collider of its
+    /// coarsest level. Returns the kind names.
+    /// </summary>
+    private static HashSet<string> KitModels(GameObject root, Material material, List<string> lines, ref int shapes)
+    {
+        var names = new List<string>();
+        var facts = new Dictionary<string, float[]>(); // variants, triangles, radius, solid, draw
+        if (!File.Exists(Dir + "kit_models.bytes")) return new HashSet<string>();
+        using (var r = new BinaryReader(File.OpenRead(Dir + "kit_models.bytes")))
+        {
+            if (new string(r.ReadChars(4)) != "BSK1") throw new Exception("kit_models.bytes is not a kit model file.");
+            for (int count = r.ReadInt32(); count > 0; count--)
+            {
+                string name = new string(r.ReadChars(r.ReadByte()));
+                bool solid = r.ReadByte() != 0;
+                char draw = (char)r.ReadByte();
+                int levels = r.ReadByte();
+                var go = Child(root, "kit_" + name);
+                var lods = new LOD[levels];
+                Mesh mesh = null;
+                float radius = 0f;
+                int most = 0;
+                for (int level = 0; level < levels; level++)
+                {
+                    int n = r.ReadInt32();
+                    var at = new Vector3[n];
+                    var normals = new Vector3[n];
+                    var colours = new Color[n];
+                    for (int i = 0; i < n; i++)
+                    {
+                        at[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                        normals[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
+                        colours[i] = new Color(Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), 1f);
+                        r.ReadByte();
+                    }
+                    var triangles = new int[r.ReadInt32()];
+                    for (int i = 0; i < triangles.Length; i++) triangles[i] = (int)r.ReadUInt32();
+                    mesh = new Mesh { name = go.name + "_lod" + level, indexFormat = n > 65000 ? IndexFormat.UInt32 : IndexFormat.UInt16 };
+                    mesh.vertices = at;
+                    mesh.normals = normals;
+                    mesh.colors = colours;
+                    mesh.uv = new Vector2[n];
+                    mesh.triangles = triangles;
+                    mesh.RecalculateBounds();
+                    Keep(mesh);
+                    var part = Child(go, "lod" + level);
+                    part.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    var renderer = part.AddComponent<MeshRenderer>();
+                    renderer.sharedMaterial = material;
+                    if (level > 0) renderer.shadowCastingMode = ShadowCastingMode.Off;
+                    lods[level] = new LOD(level == 0 ? .16f : level == 1 ? .045f : .0012f, new Renderer[] { renderer });
+                    if (level == 0)
+                    {
+                        most = triangles.Length / 3;
+                        foreach (Vector3 v in at) radius = Mathf.Max(radius, v.magnitude);
+                    }
+                }
+                go.AddComponent<LODGroup>().SetLODs(lods);
+                if (solid) go.AddComponent<MeshCollider>().sharedMesh = mesh; // the coarsest level, as it stands
+                go.SetActive(false);
+                shapes++;
+                string kind = name.Substring(0, name.LastIndexOf('_'));
+                if (!facts.ContainsKey(kind))
+                {
+                    names.Add(kind);
+                    facts[kind] = new float[] { 0f, 0f, 0f, solid ? 1f : 0f, draw };
+                }
+                facts[kind][0]++;
+                facts[kind][1] = Mathf.Max(facts[kind][1], most);
+                facts[kind][2] = Mathf.Max(facts[kind][2], radius);
+            }
+        }
+        foreach (string kind in names)
+            lines.Add("{\"name\":\"" + kind + "\",\"variants\":" + (int)facts[kind][0] + ",\"triangles\":" + (int)facts[kind][1] + ",\"solid\":" + (facts[kind][3] > 0f ? "true" : "false") +
+                ",\"draw\":\"" + (char)facts[kind][4] + "\",\"radius\":" + facts[kind][2].ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "}");
+        return new HashSet<string>(names);
     }
 
     private static Mesh KitMesh(string name, MapMeshBuilder b, bool drawn)
@@ -318,6 +440,26 @@ public static class BuildMapBundle
                 if (Top(heights, res, x0, z0, Mathf.Min(x0 + tile, res - 1), Mathf.Min(z0 + tile, res - 1)) > 0f) land++;
         landStride = .5f;
         while (landStride < 4f && land * (tile / landStride + 1) * (tile / landStride + 1) > (info.vertexBudget > 0 ? info.vertexBudget : 3300000)) landStride *= 2f;   // near-LOD land vertices in the whole map
+        // Tiles with a river or a lake in them are drawn twice as fine, near and far: a river is a few samples wide,
+        // and the waterline is where the ground crosses its level sheet.
+        wetTiles.Clear();
+        groundTile = tile;
+        float halfMap = res * info.cell * .5f;
+        void Wet(float x, float z, float reach)
+        {
+            for (int tz = Mathf.FloorToInt((z - reach + halfMap) / info.cell / tile); tz <= Mathf.FloorToInt((z + reach + halfMap) / info.cell / tile); tz++)
+                for (int tx = Mathf.FloorToInt((x - reach + halfMap) / info.cell / tile); tx <= Mathf.FloorToInt((x + reach + halfMap) / info.cell / tile); tx++)
+                    wetTiles.Add(tz * 100000L + tx);
+        }
+        if (landStride >= 1f)
+        {
+            foreach (RoadInfo river in info.rivers ?? new RoadInfo[0])
+                for (int i = 0; river.points != null && i < river.points.Length / 3; i++)
+                    Wet(river.points[i * 3], river.points[i * 3 + 2], (river.widths != null && i < river.widths.Length ? river.widths[i] : 40f) * 2.5f);
+            foreach (LakeInfo lake in info.lakes ?? new LakeInfo[0])
+                for (int r = 0; lake.runs != null && r + 2 < lake.runs.Length; r += 3)
+                    for (float x = lake.runs[r]; x <= lake.runs[r + 1]; x += tile * info.cell * .5f) Wet(x, lake.runs[r + 2], 3f * info.cell);
+        }
         // Deep water is drawn and collided in blocks of 8 x 8 tiles: thousands of separate deep tiles cost the game
         // frame time for ground nobody sees. Only blocks that hold shallows or land are cut into tiles.
         for (int bz = 0; bz < res; bz += block)
@@ -337,6 +479,72 @@ public static class BuildMapBundle
             }
     }
 
+    /// <summary>
+    /// The land beyond the map: a coarse skirt five maps across that carries the ground at the map's edge on outward
+    /// (an ice sheet does not stop at a line). It is for the eye from altitude and nothing else: one mesh, a vertex
+    /// every 3.2 km, no collider, no detail, the map's own colours. Where the map's edge is sea it lies under the water,
+    /// and a map with no land on its edge gets none. Its far rim sinks into the sea raggedly.
+    /// </summary>
+    private static void BuildFar(GameObject root, Material material)
+    {
+        const int n = 128;
+        float span = groundRes * groundCell, half = span * .5f, reach = span * 2.5f, cell = 2f * reach / n;
+        bool any = false;
+        for (int i = 0; i < groundRes && !any; i += 8)
+            any = groundHeights[i] > 0f || groundHeights[(groundRes - 1) * groundRes + i] > 0f || groundHeights[i * groundRes] > 0f || groundHeights[i * groundRes + groundRes - 1] > 0f;
+        if (!any) return;
+        var at = new Vector3[(n + 1) * (n + 1)];
+        var tint = new Color[at.Length];
+        var inside = new bool[at.Length];
+        for (int z = 0; z <= n; z++)
+            for (int x = 0; x <= n; x++)
+            {
+                float wx = -reach + x * cell, wz = -reach + z * cell;
+                float fx = (Mathf.Clamp(wx, -half, half) + half) / groundCell - .5f, fz = (Mathf.Clamp(wz, -half, half) + half) / groundCell - .5f;
+                float sum = 0f;
+                Vector3 colour = Vector3.zero;
+                for (int dz = -2; dz <= 2; dz++)   // the edge as a 3 km cell sees it: 25 samples round the nearest point of the map
+                    for (int dx = -2; dx <= 2; dx++)
+                    {
+                        float sx = Mathf.Clamp(fx + dx * 24, 0, groundRes - 1), sz = Mathf.Clamp(fz + dz * 24, 0, groundRes - 1);
+                        sum += Base(sx, sz);
+                        Color32 c = groundColours[Mathf.RoundToInt(sz) * groundRes + Mathf.RoundToInt(sx)];
+                        colour += new Vector3(c.r, c.g, c.b);
+                    }
+                float edge = sum / 25f, away = Mathf.Max(Mathf.Abs(wx), Mathf.Abs(wz)) - half;   // metres outside the map
+                int i = z * (n + 1) + x;
+                inside[i] = away < -cell * .5f;
+                float roll = Mathf.PerlinNoise(wx / 23000f + 31f, wz / 23000f + 17f) - .5f;
+                float height = edge > 0f ? edge * (1f + .25f * roll * Mathf.Clamp01(away / 8000f)) : Mathf.Min(edge, -20f);
+                float rim = Mathf.Clamp01((away - (reach - half) * (.55f + .45f * Mathf.PerlinNoise(wx / 41000f, wz / 41000f))) / 12000f);
+                height = Mathf.Lerp(height, -60f, rim);
+                if (away <= 0f) height -= 30f;   // under the real ground where the two overlap
+                at[i] = new Vector3(wx, height, wz);
+                tint[i] = new Color(colour.x / 6375f, colour.y / 6375f, colour.z / 6375f, 1f);
+            }
+        var triangles = new List<int>();
+        for (int z = 0; z < n; z++)
+            for (int x = 0; x < n; x++)
+            {
+                int a = z * (n + 1) + x, b = a + 1, c = a + n + 1, d = c + 1;
+                if (inside[a] && inside[b] && inside[c] && inside[d]) continue;
+                triangles.AddRange(new[] { a, c, b, b, c, d });
+            }
+        var mesh = new Mesh { name = "far" };
+        mesh.vertices = at;
+        mesh.colors = tint;
+        mesh.uv = new Vector2[at.Length];
+        mesh.triangles = triangles.ToArray();
+        mesh.RecalculateNormals();
+        mesh.RecalculateBounds();
+        var go = Child(root, "Far");
+        go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
+        renderer.receiveShadows = false;
+    }
+
     private static float Top(float[] heights, int res, int x0, int z0, int x1, int z1)
     {
         float top = float.MinValue;
@@ -352,7 +560,8 @@ public static class BuildMapBundle
         var go = Child(parent, name);
         // A piece's origin is its own south-west sample, in map coordinates: small numbers keep float precision.
         go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
-        Mesh near = GridMesh(name, x0, z0, x1, z1, step == 1 ? landStride : step);
+        bool fine = step == 1 && size == groundTile && wetTiles.Contains((z0 / size) * 100000L + x0 / size);
+        Mesh near = GridMesh(name, x0, z0, x1, z1, fine ? landStride * .5f : step == 1 ? landStride : step, fine ? landStride : 0f);
         go.AddComponent<MeshFilter>().sharedMesh = near;
         var renderer = go.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = material;
@@ -367,7 +576,7 @@ public static class BuildMapBundle
         }
         landTiles++;
         var low = Child(go, "lod1");
-        low.AddComponent<MeshFilter>().sharedMesh = GridMesh(name + "_lod1", x0, z0, x1, z1, Mathf.Max(4f, landStride * 4f));
+        low.AddComponent<MeshFilter>().sharedMesh = GridMesh(name + "_lod1", x0, z0, x1, z1, fine ? landStride : Mathf.Max(4f, landStride * 4f));
         var lowRenderer = low.AddComponent<MeshRenderer>();
         lowRenderer.sharedMaterial = material;
         lowRenderer.shadowCastingMode = ShadowCastingMode.Off;
@@ -383,6 +592,8 @@ public static class BuildMapBundle
     private static float groundCell;
     private static StripInfo[] groundPads;
     private static float landStride = .5f;
+    private static int groundTile = 64;
+    private static readonly HashSet<long> wetTiles = new HashSet<long>();
     private static Material iceMaterial;
     private static byte[] groundIce;
 
@@ -427,7 +638,11 @@ public static class BuildMapBundle
         float wx = fx * groundCell, wz = fz * groundCell;
         float relief = (Mathf.PerlinNoise(wx / 41f, wz / 41f) - .5f) + .5f * (Mathf.PerlinNoise(wx / 17f + 31f, wz / 17f + 7f) - .5f) +
             .25f * (Mathf.PerlinNoise(wx / 7f + 3f, wz / 7f + 59f) - .5f);
-        return h + relief * Mathf.Clamp01((h - 1.5f) / 3f) * (.5f + 5f * Mathf.Clamp01(slope / .7f)) * OffPads(wx, wz);
+        // Ribs and gullies on the slopes, broad enough for the thinned mesh to carry (it has a vertex every 20 to
+        // 40 m): none on ground flatter than 7 degrees, where towns, roads, rivers and airfields are.
+        float ribs = 2f * (Mathf.PerlinNoise(wx / 170f + 11f, wz / 170f + 5f) - .5f) + (Mathf.PerlinNoise(wx / 80f + 40f, wz / 80f + 90f) - .5f);
+        float steep = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(.12f, .6f, slope));
+        return h + (relief * (.5f + 5f * Mathf.Clamp01(slope / .7f)) + ribs * 9f * steep) * Mathf.Clamp01((h - 1.5f) / 3f) * OffPads(wx, wz);
     }
 
     /// <summary>0 on a strip's pad and 60 m around it, rising to 1 by 160 m out.</summary>
@@ -449,7 +664,7 @@ public static class BuildMapBundle
     /// where the extra relief goes). It carries what the game's terrain shader may read: normals, tangents and a UV that
     /// is the vertex's place on the whole map, 0..1; and a vertex colour for the mod's own fallback shader.
     /// </summary>
-    private static Mesh GridMesh(string name, int x0, int z0, int x1, int z1, float stride)
+    private static Mesh GridMesh(string name, int x0, int z0, int x1, int z1, float stride, float weld = 0f)
     {
         List<float> xs = Samples(x0, x1, stride), zs = Samples(z0, z1, stride);
         bool detail = stride <= landStride;
@@ -465,6 +680,19 @@ public static class BuildMapBundle
                 float x = xs[i], z = zs[j];
                 int at = j * xs.Count + i;
                 vertices[at] = new Vector3((x - x0) * groundCell, Height(x, z, detail), (z - z0) * groundCell);
+                if (weld > stride)   // a finer piece meets its coarser neighbours along their straight edges
+                {
+                    if (j == 0 || j == zs.Count - 1)
+                    {
+                        float a = x0 + Mathf.Floor((x - x0) / weld) * weld, b = Mathf.Min(a + weld, x1);
+                        if (x > a + .001f && x < b - .001f) vertices[at].y = Mathf.Lerp(Height(a, z, true), Height(b, z, true), (x - a) / (b - a));
+                    }
+                    else if (i == 0 || i == xs.Count - 1)
+                    {
+                        float a = z0 + Mathf.Floor((z - z0) / weld) * weld, b = Mathf.Min(a + weld, z1);
+                        if (z > a + .001f && z < b - .001f) vertices[at].y = Mathf.Lerp(Height(x, a, true), Height(x, b, true), (z - a) / (b - a));
+                    }
+                }
                 float dx = Height(x + reach, z, detail) - Height(x - reach, z, detail), dz = Height(x, z + reach, detail) - Height(x, z - reach, detail);
                 float run = 2f * reach * groundCell;
                 normals[at] = new Vector3(-dx, run, -dz).normalized;
@@ -523,7 +751,8 @@ public static class BuildMapBundle
     /// <summary>The height of the drawn land mesh itself (its triangles, not the smooth field), so a road lies on what is drawn.</summary>
     private static float Surface(float fx, float fz)
     {
-        float s = landStride, gx = Mathf.Floor(fx / s) * s, gz = Mathf.Floor(fz / s) * s, u = (fx - gx) / s, v = (fz - gz) / s;
+        float s = wetTiles.Contains(Mathf.FloorToInt(fz / groundTile) * 100000L + Mathf.FloorToInt(fx / groundTile)) ? landStride * .5f : landStride;
+        float gx = Mathf.Floor(fx / s) * s, gz = Mathf.Floor(fz / s) * s, u = (fx - gx) / s, v = (fz - gz) / s;
         float a = Height(gx, gz, true), b = Height(gx + s, gz, true), c = Height(gx, gz + s, true), d = Height(gx + s, gz + s, true);
         return u + v <= 1f ? a + u * (b - a) + v * (c - a) : d + (1f - u) * (c - d) + (1f - v) * (b - d);
     }
@@ -544,15 +773,14 @@ public static class BuildMapBundle
         {
             int count = road.points != null ? road.points.Length / 3 : 0;
             if (count < 2) continue;
-            bool hard = road.kind == "paved", water = road.kind == "river";
+            bool hard = road.kind == "paved";
             float width = road.width > 0f ? road.width : hard ? 4.5f : 2.6f;   // half the road's width
             // The game's road textures run along v: one picture of road_2lane and road_dirt is 4 road widths long, of asphalt 8.
-            string look = water ? "river" : !hard ? "dirt" : road.width > 0f ? "street" : "paved";
+            string look = !hard ? "dirt" : road.width > 0f ? "street" : "paved";
             float run = 0f, tile = look == "street" ? 8f : 4f;
             Vector2 last = new Vector2(road.points[0], road.points[2]);
             Color edge = hard ? new Color(.34f, .33f, .30f) : new Color(.42f, .36f, .26f), lane = hard ? new Color(.20f, .20f, .21f) : new Color(.30f, .24f, .17f),
                 mid = hard ? new Color(.27f, .27f, .27f) : new Color(.46f, .39f, .28f);
-            if (water) { edge = new Color(.42f, .50f, .44f); lane = new Color(.12f, .30f, .36f); mid = new Color(.05f, .17f, .26f); }
             Func<int, Vector2> point = i => { i = Mathf.Clamp(i, 0, count - 1); return new Vector2(road.points[i * 3], road.points[i * 3 + 2]); };
             Vector2 origin = point(0);
             var b = new Builder();
@@ -570,14 +798,10 @@ public static class BuildMapBundle
                     run += (at - last).magnitude;
                     last = at;
                     if (road.widths != null && road.widths.Length == count) width = Mathf.Lerp(road.widths[i], road.widths[i + 1], t);
-                    // A river lies level from bank to bank at its middle's height, a little under a road that crosses it.
-                    float level = float.MinValue;
-                    foreach (float lane_ in new[] { -.8f, 0f, .8f })
-                        level = Mathf.Max(level, Surface((at.x + side.x * lane_ * width + half) / info.cell - .5f, (at.y + side.y * lane_ * width + half) / info.cell - .5f) + .18f);
                     for (int c = 0; c < 5; c++)
                     {
                         Vector2 q = at + side * (across[c] * width);
-                        float y = water ? level : Surface((q.x + half) / info.cell - .5f, (q.y + half) / info.cell - .5f) + .3f;
+                        float y = Surface((q.x + half) / info.cell - .5f, (q.y + half) / info.cell - .5f) + .3f;
                         b.Add(new Vector3(q.x - origin.x, y, q.y - origin.y), Vector3.up, c == 0 || c == 4 ? edge : c == 2 ? mid : lane, 0f);
                         b.Uvs[b.Uvs.Count - 1] = new Vector2((across[c] + 1f) * .5f, run / (2f * width * tile));
                     }
@@ -600,6 +824,103 @@ public static class BuildMapBundle
             renderer.sharedMaterial = material;
             renderer.shadowCastingMode = ShadowCastingMode.Off;
         }
+    }
+
+    // ---- water --------------------------------------------------------------------------------------------------------
+
+    /// <summary>A river is a level sheet at its own water level (the y of each of its points), from bank to bank and a
+    /// little under both: the generator cut its bed below that level and raised its banks above it, so the ground
+    /// closes the sheet in. Per vertex: red how deep the water is there (0 at the edge, 1 at 2.5 m), green how fast it
+    /// falls (white water), alpha 0 at either end, where the sheet thins out; uv in metres across and along.</summary>
+    private static void BuildRivers(GameObject parent, MapInfo info, Material material)
+    {
+        float half = info.res * info.cell * .5f;
+        float[] across = { -1f, -.72f, -.4f, 0f, .4f, .72f, 1f };
+        int n = 0;
+        foreach (RoadInfo river in info.rivers ?? new RoadInfo[0])
+        {
+            int count = river.points != null ? river.points.Length / 3 : 0;
+            if (count < 4 || river.widths == null || river.widths.Length != count) continue;
+            var origin = new Vector3(river.points[0], 0f, river.points[2]);
+            var vertices = new List<Vector3>();
+            var colours = new List<Color>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int>();
+            float run = 0f;
+            for (int i = 0; i < count; i++)
+            {
+                int a = Mathf.Max(i - 1, 0), b = Mathf.Min(i + 1, count - 1);
+                var at = new Vector2(river.points[i * 3], river.points[i * 3 + 2]);
+                var ahead = new Vector2(river.points[b * 3] - river.points[a * 3], river.points[b * 3 + 2] - river.points[a * 3 + 2]);
+                float length = Mathf.Max(ahead.magnitude, .01f), level = river.points[i * 3 + 1];
+                Vector2 side = new Vector2(ahead.y, -ahead.x) / length;
+                if (i > 0) run += (at - new Vector2(river.points[i * 3 - 3], river.points[i * 3 - 1])).magnitude;
+                float fall = Mathf.Clamp01((river.points[a * 3 + 1] - river.points[b * 3 + 1]) / length * 14f);   // a fall of 7 % is all white water
+                float fade = Mathf.Clamp01(Mathf.Min(i, count - 1 - i) / 4f);
+                for (int c = 0; c < across.Length; c++)
+                {
+                    Vector2 q = at + side * (across[c] * river.widths[i] * 1.35f);
+                    float depth = level - Surface((q.x + half) / info.cell - .5f, (q.y + half) / info.cell - .5f);
+                    vertices.Add(new Vector3(q.x - origin.x, level, q.y - origin.z));
+                    colours.Add(new Color(Mathf.Clamp01(depth / 2.5f), fall, 0f, fade));
+                    uvs.Add(new Vector2((across[c] + 1f) * river.widths[i] * 1.35f, run));
+                }
+                if (i == 0) continue;
+                int first = vertices.Count - across.Length, previous = first - across.Length;
+                for (int c = 0; c < across.Length - 1; c++)
+                    triangles.AddRange(new[] { previous + c, first + c, first + c + 1, previous + c, first + c + 1, previous + c + 1 });
+            }
+            Sheet(parent, "river_" + n++, origin, vertices, colours, uvs, triangles, material);
+        }
+    }
+
+    /// <summary>A lake is a level sheet over the rows of cells the generator found under water, one cell past the
+    /// shore, where its raised bank hides the sheet's edge. Red is the depth again (1 at 6 m); uv is map metres.</summary>
+    private static void BuildLakes(GameObject parent, MapInfo info, Material material)
+    {
+        float half = info.res * info.cell * .5f;
+        int n = 0;
+        foreach (LakeInfo lake in info.lakes ?? new LakeInfo[0])
+        {
+            if (lake.runs == null || lake.runs.Length < 3 || lake.cell <= 0f) continue;
+            var origin = new Vector3(lake.runs[0], 0f, lake.runs[2]);
+            var vertices = new List<Vector3>();
+            var colours = new List<Color>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int>();
+            for (int r = 0; r + 2 < lake.runs.Length; r += 3)
+                for (float x = lake.runs[r]; x < lake.runs[r + 1] - .5f; x += lake.cell)
+                {
+                    int first = vertices.Count;
+                    for (int k = 0; k < 4; k++)   // south-west, south-east, north-east, north-west
+                    {
+                        float px = x + (k == 1 || k == 2 ? lake.cell : 0f), pz = lake.runs[r + 2] + (k >= 2 ? lake.cell : 0f);
+                        float depth = lake.level - Surface((px + half) / info.cell - .5f, (pz + half) / info.cell - .5f);
+                        vertices.Add(new Vector3(px - origin.x, lake.level, pz - origin.z));
+                        colours.Add(new Color(Mathf.Clamp01(depth / 6f), 0f, 0f, 1f));
+                        uvs.Add(new Vector2(px, pz));
+                    }
+                    triangles.AddRange(new[] { first, first + 3, first + 2, first, first + 2, first + 1 });
+                }
+            Sheet(parent, "lake_" + n++, origin, vertices, colours, uvs, triangles, material);
+        }
+    }
+
+    private static void Sheet(GameObject parent, string name, Vector3 origin, List<Vector3> vertices, List<Color> colours, List<Vector2> uvs, List<int> triangles, Material material)
+    {
+        if (triangles.Count == 0) return;
+        var go = Child(parent, name);
+        go.transform.localPosition = origin;
+        var mesh = new Mesh { name = name, indexFormat = IndexFormat.UInt32 };
+        mesh.SetVertices(vertices);
+        mesh.SetColors(colours);
+        mesh.SetUVs(0, uvs);
+        mesh.SetTriangles(triangles, 0);
+        mesh.RecalculateNormals();
+        go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
+        var renderer = go.AddComponent<MeshRenderer>();
+        renderer.sharedMaterial = material;
+        renderer.shadowCastingMode = ShadowCastingMode.Off;
     }
 
     /// <summary>A bridge where a road crosses a river: a concrete deck from bank to bank just over the road, with

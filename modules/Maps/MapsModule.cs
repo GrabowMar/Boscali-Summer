@@ -23,6 +23,7 @@ namespace BoscaliSummer.Modules.Maps
         {
             var missions = new MapMissions();
             BoscaliMission.ExtraGroups += missions.Groups;
+            BoscaliMission.Labels += missions.Label;
             MapLaunchPatch.Resolve = missions.Launch;
             MapBuilds.Catalog = () => string.Join(",", MapCatalog.All.Select(Entry));
             MapBuilds.Hosted = () =>
@@ -38,6 +39,7 @@ namespace BoscaliSummer.Modules.Maps
             context.OnTeardown(() =>
             {
                 BoscaliMission.ExtraGroups -= missions.Groups;
+                BoscaliMission.Labels -= missions.Label;
                 MapLaunchPatch.Resolve = null;
                 MapBuilds.Catalog = MapBuilds.Hosted = () => "";
                 MapClimate.Current = () => null;

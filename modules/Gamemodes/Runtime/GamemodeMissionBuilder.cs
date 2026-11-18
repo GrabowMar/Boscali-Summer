@@ -10,6 +10,22 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
     internal static class GamemodeMissionBuilder
     {
         internal const string BaseMission = "Escalation";
+
+        /// <summary>WarBox is built from the largest installed mission of each shipped map: picker key, launch id, the
+        /// mission it copies, the map's name. (The mod's own maps bring their WarBox themselves, see Maps.)</summary>
+        internal static readonly (string Key, string Id, string Base, string Map)[] WarBoxes =
+        {
+            ("WarBox", "warbox", BaseMission, "Heartland"),
+            ("WarBox Archipelago", "warbox-archipelago", "Terminal Control", "Ignus Archipelago"),
+        };
+
+        /// <summary>The WarBox of a picker key or launch id, or -1.</summary>
+        internal static int WarBoxOf(string keyOrId)
+        {
+            for (int n = 0; n < WarBoxes.Length; n++)
+                if (string.Equals(WarBoxes[n].Key, keyOrId, StringComparison.OrdinalIgnoreCase) || string.Equals(WarBoxes[n].Id, keyOrId, StringComparison.OrdinalIgnoreCase)) return n;
+            return -1;
+        }
         internal static readonly string[] FuzzballAircraft =
             { "COIN", "trainer", "VTOLTrainer1", "CAS1", "SmallFighter1", "Fighter1", "Multirole1" };
         internal static readonly string[] HeavyweightAircraft =
@@ -25,12 +41,13 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
 
         internal static GameModeKind FromId(string id)
         {
+            if (WarBoxOf(id) >= 0) return GameModeKind.WarBox;
             foreach (GameModeKind mode in new[] { GameModeKind.WarBox, GameModeKind.Fuzzball, GameModeKind.Heavyweight })
                 if (string.Equals(Title(mode), id, StringComparison.OrdinalIgnoreCase)) return mode;
             return GameModeKind.None;
         }
 
-        internal static string Apply(string baseJson, GameModeKind mode)
+        internal static string Apply(string baseJson, GameModeKind mode, string baseName = BaseMission)
         {
             if (mode == GameModeKind.None) throw new ArgumentOutOfRangeException(nameof(mode));
             JObject root;
@@ -50,7 +67,11 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             settings["allowRespawn"] = true;
             settings["allowEventContent"] = false;
             settings["playerMode"] = "SingleAndMultiplayer";
-            settings["description"] = Briefing(mode) + "\n\n" + GamemodeRules.Marker(mode);
+            string briefing = Briefing(mode);
+            if (baseName != BaseMission)   // the briefing speaks of Escalation's own win conditions
+                briefing = briefing.Replace("the Escalation baseline", "the " + baseName + " baseline")
+                    .Replace("Win by destroying the enemy aircraft factories and reinforcement carrier.", "Win through the objectives of " + baseName + ".");
+            settings["description"] = briefing + "\n\n" + GamemodeRules.Marker(mode);
             if (mode == GameModeKind.WarBox) BuildWarBox(root, settings, factions);
             else BuildCompetitive(root, settings, factions, mode);
             return root.ToString(Formatting.None);

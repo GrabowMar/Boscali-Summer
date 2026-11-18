@@ -6,6 +6,8 @@ using System.Reflection;
 using System.Text;
 using BoscaliSummer.Core.Util;
 using BoscaliSummer.Modules.Maps.Domain;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using NuclearOption.SceneLoading;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -13,9 +15,20 @@ using Object = UnityEngine.Object;
 namespace BoscaliSummer.Modules.Maps.Runtime
 {
     /// <summary>One map the mod ships: its manifest, and once it has been built its open bundle and game objects.</summary>
+    /// <summary>A game mode of a map, from <c>&lt;id&gt;.modes.json</c> (written by <c>nomod map modes</c>): a piece of mission
+    /// laid over the game's default one, who owns the map's red and blue structures in it (a faction name, or "" for
+    /// nobody), and what to add when the BOTE ships mod is installed.</summary>
+    internal sealed class MapMode
+    {
+        public string name = "";
+        public Dictionary<string, string> sides;
+        public JObject mission, bote;
+    }
+
     internal sealed class MapEntry
     {
         public MapManifest Manifest;
+        public MapMode[] Modes = new MapMode[0];
         /// <summary>First 8 hex digits of the bundle's SHA-256, from the sidecar: the build id of the handshake.</summary>
         public string Hash;
         public MapDetails Details;
@@ -209,7 +222,19 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             Sprite card = CardSprite(assembly, manifest.id, tag);
             details.MapImage = card;
             Plugin.Logger?.LogInfo("[Maps] " + manifest.displayName + " (" + manifest.prefabName + ", build " + manifest.bundleHash + ") is available.");
-            return new MapEntry { Manifest = manifest, Hash = manifest.bundleHash, Details = details, Card = card };
+            var modes = new MapMode[0];
+            byte[] extra = EmbeddedResources.ReadAll(assembly, Prefix + manifest.id + ".modes.json", MaxSidecarBytes);
+            if (extra != null)
+                try
+                {
+                    modes = JsonConvert.DeserializeObject<MapMode[]>(Encoding.UTF8.GetString(extra).TrimStart('\uFEFF'),
+                        new JsonSerializerSettings { DateParseHandling = DateParseHandling.None }) ?? modes;
+                }
+                catch (JsonException error)
+                {
+                    Plugin.Logger?.LogError("[Maps] The modes of " + manifest.displayName + " could not be read: " + error.Message);
+                }
+            return new MapEntry { Manifest = manifest, Hash = manifest.bundleHash, Details = details, Card = card, Modes = modes.Where(m => m != null && !string.IsNullOrEmpty(m.name)).ToArray() };
         }
 
         /// <summary>The map's lit preview; a plain tile in the map's tag colour when the card is missing.</summary>

@@ -3,3 +3,138 @@ name = "Hvitsund"
 biome = "arctic"
 seed = 7
 cell = 20
+
+# ---- hand work (nomod map edit / paint / prop): rock through the ice, and a camp on it
+
+[[edit]]            # the rock pocket: crags, not slopes
+op = "roughen"
+x = 6000
+z = -17000
+radius = 13000
+amount = 6
+size = 220
+
+[[edit]]
+op = "cliff"
+x = -500
+z = -10000
+radius = 7000
+amount = 1.1
+
+[[edit]]            # a chain of nunataks across the west of the sheet
+op = "ridge"
+x = -25000
+z = 5000
+to = [-18000, 9000, -12000, 8000]
+radius = 1500
+amount = 360
+
+[[edit]]
+op = "cliff"
+x = -25000
+z = 5000
+to = [-18000, 9000, -12000, 8000]
+radius = 2200
+amount = 0.9
+
+[[edit]]            # a lone horn in the east
+op = "raise"
+x = 22000
+z = 12000
+radius = 2100
+amount = 380
+
+[[edit]]
+op = "cliff"
+x = 22000
+z = 12000
+radius = 2400
+amount = 1.0
+
+[[edit]]            # twin teeth mid-sheet
+op = "ridge"
+x = -4200
+z = 15600
+to = [-1800, 14400]
+radius = 1100
+amount = 330
+
+[[edit]]            # an ice stream draws the sheet down toward the sea
+op = "lower"
+x = 16000
+z = 22000
+to = [17500, 8000, 19000, -4000]
+radius = 3200
+amount = 70
+
+[[edit]]            # a dome to the north-east
+op = "raise"
+x = 26000
+z = 30000
+radius = 11000
+amount = 110
+
+[[paint]]
+layer = "rock"
+x = -25000
+z = 5000
+to = [-18000, 9000, -12000, 8000]
+radius = 1150
+
+[[paint]]
+layer = "rock"
+x = 22000
+z = 12000
+radius = 1500
+
+[[paint]]
+layer = "rock"
+x = -4200
+z = 15600
+to = [-1800, 14400]
+radius = 800
+
+[[prop]]            # Camp Breen, the drill site on the ice
+kind = "drill_rig"
+at = "Breen"
+x = 1100
+z = -850
+scale = 2.0
+
+[[prop]]
+kind = "station_module"
+at = "Breen"
+x = 1260
+z = -990
+yaw = 60
+variant = 0
+
+[[prop]]
+kind = "station_module"
+at = "Breen"
+x = 1310
+z = -910
+yaw = 60
+variant = 2
+
+[[prop]]
+kind = "antenna_field"
+at = "Breen"
+x = 980
+z = -690
+
+[[prop]]
+kind = "containers"
+at = "Breen"
+x = 1220
+z = -760
+yaw = 150
+variant = 0
+
+[[prop]]
+kind = "dish"
+at = "Breen"
+x = 1010
+z = -940
+yaw = 200
+variant = 1

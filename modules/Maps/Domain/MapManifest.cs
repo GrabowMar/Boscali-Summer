@@ -36,6 +36,9 @@ namespace BoscaliSummer.Modules.Maps.Domain
         /// <summary>The kit kind name of each <c>scenery.bin</c> kind byte.</summary>
         public string[] kinds = new string[0];
         public Strip[] strips = new Strip[0];
+        /// <summary>The game's own buildings and scenery objects the map's mission stands (airfield buildings, depots,
+        /// factories, defences): the generator places them, <c>MapMissions</c> writes them into the mission.</summary>
+        public Structure[] structures = new Structure[0];
         public Zone[] detail = new Zone[0];
         public Lake[] lakes = new Lake[0];
         public Lane[] lanes = new Lane[0];
@@ -63,6 +66,9 @@ namespace BoscaliSummer.Modules.Maps.Domain
             public float x, y, z, length, width = 40f, padLength, padWidth;
             public int heading;
         }
+        /// <summary>One of the game's buildings (or, <c>scenery</c>, scenery objects) by its mission key, at map metres,
+        /// facing compass <c>yaw</c>; <c>side</c> red | blue | ""; <c>airbase</c> the strip it belongs to, or -1.</summary>
+        [Serializable] internal sealed class Structure { public string type = "", side = ""; public float x, y, z, yaw; public int airbase = -1; public bool scenery; }
         [Serializable] internal sealed class Zone { public float x, z, radius; }
         [Serializable] internal sealed class Lake { public float x, z, level, area; public float[] color; }
         /// <summary>One sea lane: x0, z0, x1, z1, ... in map metres.</summary>

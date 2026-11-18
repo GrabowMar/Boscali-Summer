@@ -125,8 +125,10 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             var shape = new Shape { Template = template };
             if (kind.solid) return shape;
             Matrix4x4 toTemplate = template.transform.worldToLocalMatrix;
+            bool levels = template.GetComponent<LODGroup>() != null; // a modelled shape: merged scenery draws its middle level
             foreach (MeshFilter filter in template.GetComponentsInChildren<MeshFilter>(true))
             {
+                if (levels && filter.name != "lod1") continue;
                 Mesh mesh = filter.sharedMesh;
                 var renderer = filter.GetComponent<MeshRenderer>();
                 Material[] materials = renderer != null ? renderer.sharedMaterials : null;

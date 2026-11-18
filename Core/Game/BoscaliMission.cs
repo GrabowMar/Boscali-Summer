@@ -1,5 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using UnityEngine;
 using BoscaliSummer.Core.Config;
 using BoscaliSummer.Core.Diagnostics;
 using BoscaliSummer.Core.Scenario;
@@ -33,6 +37,73 @@ namespace BoscaliSummer.Core.Game
 
         /// <summary>Picker groups to add to the game's mission list (the scripted missions). Asked whenever the game reads its list.</summary>
         internal static Func<IReadOnlyList<MissionGroup>> ExtraGroups;
+
+        /// <summary>The picker label of a provider's own mission ("WARBOX / Heartland"); null for a key that is not the
+        /// provider's. A mission nobody labels is a campaign chapter.</summary>
+        internal static Func<MissionKey, string> Labels;
+
+        private static OneGroup one;
+
+        /// <summary>
+        /// The one "Boscali Summer" tab of the picker: every mission of every provider's group, named KIND / TITLE and
+        /// ordered campaign, WarBox, the other modes, free flight. The providers' own groups are not shown; each still
+        /// builds its missions and loads them for the launch argument.
+        /// </summary>
+        private sealed class OneGroup : MissionGroup
+        {
+            private readonly Dictionary<string, MissionKey> own = new Dictionary<string, MissionKey>(StringComparer.Ordinal);
+
+            internal OneGroup() : base("Boscali Summer") { }
+
+            private static string Label(MissionKey key)
+            {
+                if (Labels != null)
+                    foreach (Func<MissionKey, string> provider in Labels.GetInvocationList())
+                    {
+                        string label = provider(key);
+                        if (!string.IsNullOrEmpty(label)) return label;
+                    }
+                return "CAMPAIGN / " + key.Name;
+            }
+
+            private static int Rank(string label) =>
+                label.StartsWith("CAMPAIGN /", StringComparison.Ordinal) ? 0 : label.StartsWith("WARBOX /", StringComparison.Ordinal) ? 1 :
+                label.StartsWith("FREE FLIGHT /", StringComparison.Ordinal) ? 3 : 2;
+
+            public override IEnumerable<MissionKey> GetMissions()
+            {
+                var listed = new List<MissionKey>();
+                own.Clear();
+                if (ExtraGroups != null)
+                    foreach (Func<IReadOnlyList<MissionGroup>> provider in ExtraGroups.GetInvocationList())
+                        foreach (MissionGroup group in provider() ?? Array.Empty<MissionGroup>())
+                        {
+                            if (group == null) continue;
+                            foreach (MissionKey key in group.GetMissions())
+                            {
+                                if (own.ContainsKey(key.Key)) continue;
+                                own[key.Key] = key;
+                                listed.Add(new MissionKey(key.Key, Label(key), null, this));
+                            }
+                        }
+                return listed.OrderBy(k => Rank(k.Name)).ToArray();   // a stable sort: a provider's own order (campaign chapters) is kept
+            }
+
+            private bool Find(string key, out MissionKey found)
+            {
+                if (!own.ContainsKey(key)) GetMissions();   // a recent mission is loaded before the list was ever read
+                return own.TryGetValue(key, out found);
+            }
+
+            public override bool TryGetJson(MissionKey key, out string json)
+            {
+                json = null;
+                return Find(key.Key, out MissionKey found) && found.Group.TryGetJson(found, out json);
+            }
+
+            public override UniTask<Sprite> GetPreview(string key, CancellationToken token = default(CancellationToken)) =>
+                Find(key, out MissionKey found) ? found.Group.GetPreview(found.Key, token) : UniTask.FromResult<Sprite>(null);
+        }
 
         /// <summary>Required rules of a mod gamemode, or null for ordinary missions.</summary>
         internal static Func<Mission, string[]> PresetModulesOff;
@@ -200,15 +271,8 @@ namespace BoscaliSummer.Core.Game
             if (__result == null || ExtraGroups == null) return;
             try
             {
-                var expanded = new List<MissionGroup>(__result);
-                foreach (Func<IReadOnlyList<MissionGroup>> provider in ExtraGroups.GetInvocationList())
-                {
-                    IReadOnlyList<MissionGroup> extra = provider();
-                    if (extra == null) continue;
-                    foreach (MissionGroup group in extra)
-                        if (group != null && !expanded.Contains(group)) expanded.Add(group);
-                }
-                if (expanded.Count != __result.Length) __result = expanded.ToArray();
+                one = one ?? new OneGroup();
+                if (Array.IndexOf(__result, one) < 0) __result = __result.Concat(new MissionGroup[] { one }).ToArray();
             }
             catch (Exception e) { PatchGuard.Report("MissionGroups", e); }
         }

@@ -1,5 +1,18 @@
 # Additional Boscali Summer missions
 
+> **State, 2026-11-18.** The picker has one **Boscali Summer** tab; every mission in it is named `KIND / TITLE`
+> (`CAMPAIGN / ...`, `WARBOX / Heartland`, `NAVAL WAR / Marisol Islands`, `FREE FLIGHT / Ashkara`).
+> WarBox exists for every map: Heartland (from Escalation, `-mission gamemode:warbox`), Ignus Archipelago (from
+> Terminal Control, `-mission gamemode:warbox-archipelago`) and the mod's own three maps (generated with the map,
+> `-mission "<Map> - WarBox"`). The mod's maps also carry Naval War, King of the Hill and Slippery Slope.
+>
+> **Fuzzball and Heavyweight are played on Tassara**, the mod's bare desert map (`FUZZBALL / Tassara`,
+> `HEAVYWEIGHT / Tassara`; `-mission gamemode:fuzzball`, `-mission gamemode:heavyweight`), no longer on Heartland.
+> Heavyweight's road there: the smugglers' strip Camp Tifa in the west, over the border range to Bir Anzar in the
+> east; the army intercepts from Fort Tassara in the north, as far from one as from the other. Their missions are
+> generated with the map (`nomod map modes tassara`); this module runs the matches. The sections below still
+> describe the Heartland airfields. **TODO:** more maps of their own, and a second Heavyweight destination.
+
 Open the native mission picker and choose **Boscali Summer Gamemodes**. WarBox,
 Fuzzball and Heavyweight are generated from the installed **Escalation** mission;
 the original mission and player mission files are not edited. Dedicated-server

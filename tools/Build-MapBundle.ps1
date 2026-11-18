@@ -32,10 +32,13 @@ if (-not (Test-Path -LiteralPath $manifestPath) -or (Get-Content -LiteralPath $m
     Set-Content -LiteralPath $manifestPath -Value $manifest -Encoding UTF8
 }
 Set-Content -LiteralPath (Join-Path $ProjectDirectory 'ProjectSettings/ProjectVersion.txt') -Value 'm_EditorVersion: 2022.3.62f3' -Encoding UTF8
-foreach ($shader in 'MapSurface.shader', 'MapIce.shader') { Copy-Input (Join-Path $repoDirectory "modules/Maps/Assets/Source/$shader") (Join-Path $mapAssets $shader) }
+foreach ($shader in 'MapSurface.shader', 'MapIce.shader', 'MapWater.shader') { Copy-Input (Join-Path $repoDirectory "modules/Maps/Assets/Source/$shader") (Join-Path $mapAssets $shader) }
+foreach ($texture in 'ice_base_color', 'ice_mask', 'ice_normal', 'perlin_noise_texture', 'snow', 'snow_normal') { Copy-Input (Join-Path $repoDirectory "modules/Maps/Assets/Source/Ice/$texture.png") (Join-Path $mapAssets "$texture.png") }
 foreach ($script in 'BuildMapBundle.cs', 'MapKitShapes.cs') { Copy-Input (Join-Path $PSScriptRoot "MapAssets/$script") (Join-Path $ProjectDirectory "Assets/Editor/$script") }
 
 $method = 'BuildMapBundle.RunKit'
+$models = Join-Path $repoDirectory 'modules/Maps/Assets/Source/kit_models.bytes'   # tools/MapAssets/blender/make_kit.py writes it
+if ($Kit -and (Test-Path -LiteralPath $models)) { Copy-Item -LiteralPath $models -Destination (Join-Path $mapAssets 'kit_models.bytes') -Force }
 $arguments = @()
 if (-not $Kit) {
     if (-not $Source) { throw 'Give -Source <folder nomod map gen wrote>, or -Kit.' }

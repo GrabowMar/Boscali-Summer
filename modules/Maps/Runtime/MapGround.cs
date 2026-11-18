@@ -274,6 +274,9 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     if (bytes < 12 || bytes % 12 != 0 || donorMaterial == null) continue;
                     TreeRenderer tree = kept.Count == 0 ? first : Copy(first);
                     tree.PositionData = positions;
+                    // The game keeps room for a tenth of a forest on screen, enough on its own wide maps. A whole island
+                    // is in view at once here; past the room the draw reads beyond the buffer and trees flicker.
+                    tree.VisibleBufferSizePercent = 1f;
                     if (lush != null) tree.LushMap = lush;
                     tree.AltitudeRange = new MinMax(forest.altitudeMin, forest.altitudeMax);
 

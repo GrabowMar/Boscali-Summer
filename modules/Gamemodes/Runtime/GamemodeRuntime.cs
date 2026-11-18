@@ -80,7 +80,7 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
                 RemainingSeconds = ready ? report.Remaining : 0f,
                 Score0 = ready ? report.Score0 : 0, Score1 = ready ? report.Score1 : 0,
                 Objective = ready && kind == GameModeKind.Heavyweight && report.Phase == GamemodePhase.Running
-                    ? "Haul cargo from Maris to your assigned field. Release it on the ground: 1 point per crate. Interceptors deny deliveries."
+                    ? "Haul cargo from the source field to your assigned field. Release it on the ground: 1 point per crate. Interceptors deny deliveries."
                     : !string.IsNullOrEmpty(report.Instruction) ? report.Instruction : "Waiting for a fresh authoritative mission report.",
                 Route = ready ? report.Route ?? "" : "", Detail = detail
             };
@@ -140,11 +140,16 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
         private bool FindRoute()
         {
             var bases = FactionRegistry.airbaseLookup;
-            if (!bases.TryGetValue("Maris Airport", out source) ||
-                !bases.TryGetValue("K92 Highway Strip", out destinations[0]) ||
-                !bases.TryGetValue("South Boscali General Aviation", out destinations[1]))
+            bool found = false;
+            foreach (string[] route in Routes)   // source, then the two fields a load is sent to in turn (one field twice: a single road)
+                if (bases.TryGetValue(route[0], out source) && bases.TryGetValue(route[1], out destinations[0]) && bases.TryGetValue(route[2], out destinations[1]))
+                {
+                    found = true;
+                    break;
+                }
+            if (!found)
             {
-                problem = "Heavyweight route unavailable: required airfields missing. Restart with the installed Escalation map.";
+                problem = "Heavyweight route unavailable: this map has none of the mode's airfields.";
                 return false;
             }
             foreach (Airbase airbase in bases.Values)
@@ -152,6 +157,13 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             problem = null;
             return true;
         }
+
+        /// <summary>The mode's road on each map it is played on: Heartland, and the mod's desert (Camp Tifa to Bir Anzar).</summary>
+        private static readonly string[][] Routes =
+        {
+            new[] { "Maris Airport", "K92 Highway Strip", "South Boscali General Aviation" },
+            new[] { "Tassara Strip 1", "Tassara Strip 2", "Tassara Strip 2" },
+        };
 
         private int Team(FactionHQ hq) => hq == null ? -1 : hq == teams[0] ? 0 : hq == teams[1] ? 1 : -1;
         private static string Field(Airbase airbase) => airbase?.SavedAirbase?.UniqueName ?? "";
@@ -303,7 +315,7 @@ namespace BoscaliSummer.Modules.Gamemodes.Runtime
             status.Instruction = Kind == GameModeKind.WarBox ?
                 "Sustained war. Brief at MIS; choose a role, complete contracts, return and resupply. Native strategic victory." :
                 Kind == GameModeKind.Fuzzball ? "Enemy plane kills only. First to 75, or highest score after 20 minutes. Unlimited airborne respawns." :
-                "Load container cargo at Maris. Fly to the assigned field and release it on the ground; 1 point per delivered crate. Interceptors score by denying deliveries.";
+                "Load container cargo at the source field. Fly to the assigned field and release it on the ground; 1 point per delivered crate. Interceptors score by denying deliveries.";
             if (Kind == GameModeKind.Heavyweight)
             {
                 Airbase destination = destinations[(int)((GamemodeRules.HeavyweightLegSeconds - Math.Min(GamemodeRules.HeavyweightLegSeconds, match.RemainingSeconds)) / 300) % 2];

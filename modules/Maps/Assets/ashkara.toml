@@ -3,3 +3,194 @@ name = "Ashkara"
 biome = "desert"
 seed = 7
 cell = 20
+
+# ---- hand work (nomod map edit / paint / prop): the lie of a battered volcanic island
+
+[[edit]]            # small relief everywhere: hummocks and washes
+op = "roughen"
+x = 0
+z = 0
+radius = 60000
+amount = 5
+size = 240
+
+[[edit]]            # the volcano's gullies cut sharper
+op = "cliff"
+x = 2400
+z = 600
+radius = 5200
+amount = 1.1
+
+[[edit]]            # a deeper caldera
+op = "crater"
+x = 2410
+z = 610
+radius = 700
+amount = 150
+
+[[edit]]            # the south-west tableland steps down in strata
+op = "terrace"
+x = -6000
+z = -5000
+radius = 4500
+amount = 28
+
+[[edit]]
+op = "cliff"
+x = -6000
+z = -5000
+radius = 4500
+amount = 0.8
+
+[[edit]]            # wadis off the mountain
+op = "carve"
+x = 0
+z = -2500
+to = [-2500, -6000, -3200, -7200]
+radius = 320
+amount = 34
+
+[[edit]]
+op = "carve"
+x = 4200
+z = -1200
+to = [5200, -3600, 4600, -6400]
+radius = 280
+amount = 26
+
+[[edit]]
+op = "carve"
+x = 1200
+z = 3400
+to = [600, 6200, -600, 9000]
+radius = 300
+amount = 28
+
+[[edit]]            # dune fields on the low ground
+op = "dunes"
+x = -5000
+z = 11000
+radius = 3200
+amount = 12
+size = 280
+angle = 60
+
+[[edit]]
+op = "dunes"
+x = 7000
+z = -8000
+radius = 2600
+amount = 8
+size = 220
+angle = 100
+
+[[edit]]
+op = "dunes"
+x = -3000
+z = -15000
+radius = 3000
+amount = 9
+size = 240
+angle = 75
+
+[[edit]]            # the strike that broke the array
+op = "crater"
+at = "Helios Array"
+x = -650
+z = -420
+radius = 380
+amount = 34
+
+[[edit]]            # and what fell short of it
+op = "crater"
+at = "Helios Array"
+radius = 55
+count = 60
+spread = 2400
+
+[[edit]]            # a shelled beach
+op = "crater"
+at = "Beach Red"
+radius = 40
+count = 30
+spread = 800
+
+[[prop]]
+kind = "debris"
+at = "Beach Red"
+radius = 550
+count = 12
+scale = 1.5
+
+[[edit]]            # a shelled beach
+op = "crater"
+at = "Beach Green"
+radius = 40
+count = 30
+spread = 800
+
+[[prop]]
+kind = "debris"
+at = "Beach Green"
+radius = 550
+count = 12
+scale = 1.5
+
+[[edit]]            # a shelled beach
+op = "crater"
+at = "Beach Gold"
+radius = 40
+count = 20
+spread = 800
+
+[[prop]]
+kind = "debris"
+at = "Beach Gold"
+radius = 550
+count = 12
+scale = 1.5
+
+[[paint]]
+layer = "ash"
+x = 3150
+z = 250
+radius = 2600
+amount = 0.75
+
+[[paint]]
+layer = "scorch"
+at = "Helios Array"
+x = -650
+z = -420
+radius = 800
+amount = 0.9
+
+[[paint]]
+layer = "rust"
+at = "Helios Array"
+radius = 1500
+amount = 0.25
+
+[[paint]]
+layer = "rock"
+x = -6000
+z = -5000
+radius = 4200
+amount = 0.45
+
+[[paint]]            # an oasis by the northern town
+layer = "grass"
+at = "Al Ashkar"
+x = 700
+z = -600
+radius = 520
+amount = 0.9
+
+[[prop]]
+kind = "palm"
+at = "Al Ashkar"
+x = 700
+z = -600
+radius = 420
+count = 160
+

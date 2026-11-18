@@ -1,0 +1,83 @@
+id = "tassara"
+name = "Tassara"
+biome = "desert"
+seed = 7
+cell = 20
+latitude = 23
+heightmap = "Source/tassara.height.png"   # tools/MapAssets/tassara_height.py: a sand sea of megadunes, a gravel pan under each airfield, the border range half buried. No sea.
+height_min = 100
+height_max = 1200
+
+# Nothing but desert and three airfields in a triangle: the smugglers' strip in the west, the strip they fly to across
+# the border range in the east, and the army's base to the north, as far from one as from the other.
+[preset]
+superweapon = ""
+bare = true      # no towns, rivers or plants: sand, rock and three airfields
+lakes = 0
+
+[preset.lanes]
+style = "none"
+
+[preset.checks]
+land = [0, 100]
+strips_min = 3
+
+[[preset.strips]]
+name = "Camp Tifa"
+role = "forward"
+length = 1200
+surface = "gravel"
+x = -24000
+z = -12000
+heading = 70
+
+[[preset.strips]]
+name = "Bir Anzar"
+role = "forward"
+length = 1200
+surface = "gravel"
+x = 25000
+z = -9000
+heading = 110
+
+[[preset.strips]]
+name = "Fort Tassara"
+role = "plateau"
+length = 2200
+surface = "asphalt"
+x = 1000
+z = 27000
+heading = 90
+
+[[prop]]            # palms at the water: Camp Tifa
+kind = "palm"
+x = -25600
+z = -10900
+radius = 260
+count = 22
+scale = 1.3
+
+[[prop]]            # palms at the water: Bir Anzar
+kind = "palm"
+x = 26500
+z = -7600
+radius = 260
+count = 22
+scale = 1.3
+
+[[prop]]            # palms at the water: Fort Tassara
+kind = "palm"
+x = -900
+z = 28600
+radius = 260
+count = 22
+scale = 1.3
+
+[[prop]]            # palms at the water: the lost well
+kind = "palm"
+x = -8000
+z = 6000
+radius = 260
+count = 22
+scale = 1.3
+
