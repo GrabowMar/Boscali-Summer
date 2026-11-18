@@ -1,4 +1,4 @@
-{"bundleHash": "5ba063e3", "bundleBytes": 63853074,
+{"bundleHash": "fbe755f5", "bundleBytes": 63874367,
  "id": "tassara",
  "displayName": "Tassara",
  "prefabName": "bs.tassara",
@@ -104,14 +104,10 @@
   "tank_trap",
   "drill_rig",
   "antenna_field",
-  "rock_spire",
-  "ice_spire",
   "chapel",
   "castle",
   "ruins",
-  "oil_rig",
-  "shrub",
-  "cypress"
+  "oil_rig"
  ],
  "structures": [
   {
@@ -3126,7 +3122,7 @@
   "gulfKm": 0.0,
   "lakes": 0,
   "forestTrees": 0,
-  "scenery": 4696,
+  "scenery": 3596,
   "towns": 0,
   "rivers": 0,
   "bridges": 0,

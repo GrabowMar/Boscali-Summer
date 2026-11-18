@@ -1,4 +1,4 @@
-{"bundleHash": "bacd1d47", "bundleBytes": 47889275,
+{"bundleHash": "d182c76c", "bundleBytes": 47822904,
  "id": "marisol",
  "displayName": "Marisol Islands",
  "prefabName": "bs.marisol",
@@ -113,14 +113,10 @@
   "tank_trap",
   "drill_rig",
   "antenna_field",
-  "rock_spire",
-  "ice_spire",
   "chapel",
   "castle",
   "ruins",
-  "oil_rig",
-  "shrub",
-  "cypress"
+  "oil_rig"
  ],
  "structures": [
   {
@@ -10152,7 +10148,7 @@
   "gulfKm": 0.0,
   "lakes": 0,
   "forestTrees": 399667,
-  "scenery": 21357,
+  "scenery": 12357,
   "towns": 6,
   "rivers": 7,
   "bridges": 1,

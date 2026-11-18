@@ -168,7 +168,10 @@ public static class BuildMapBundle
             var root = new GameObject("MapKit");
             var lines = new List<string>();
             int shapes = 0, kindIndex = 0;
-            var modelled = KitModels(root, still, lines, ref shapes);
+            Material textured = NewMaterial(shader, "KitModel", 0f, 0f, .12f); // MapKitCatalog lays the game's surfaces on it
+            textured.EnableKeyword("_TEXTURED");
+            EditorUtility.SetDirty(textured);
+            var modelled = KitModels(root, textured, lines, ref shapes);
             foreach (MapKitShapes.Kind kind in MapKitShapes.Kinds)
             {
                 var random = new System.Random(4242 + kindIndex++);
@@ -230,7 +233,7 @@ public static class BuildMapBundle
         if (!File.Exists(Dir + "kit_models.bytes")) return new HashSet<string>();
         using (var r = new BinaryReader(File.OpenRead(Dir + "kit_models.bytes")))
         {
-            if (new string(r.ReadChars(4)) != "BSK1") throw new Exception("kit_models.bytes is not a kit model file.");
+            if (new string(r.ReadChars(4)) != "BSK2") throw new Exception("kit_models.bytes is not a kit model file.");
             for (int count = r.ReadInt32(); count > 0; count--)
             {
                 string name = new string(r.ReadChars(r.ReadByte()));
@@ -248,12 +251,13 @@ public static class BuildMapBundle
                     var at = new Vector3[n];
                     var normals = new Vector3[n];
                     var colours = new Color[n];
+                    var uvs = new Vector2[n];
                     for (int i = 0; i < n; i++)
                     {
                         at[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
                         normals[i] = new Vector3(r.ReadSingle(), r.ReadSingle(), r.ReadSingle());
-                        colours[i] = new Color(Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), 1f);
-                        r.ReadByte();
+                        colours[i] = new Color(Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), Mathf.Pow(r.ReadByte() / 255f, 2.2f), r.ReadByte() / 255f); // alpha: which of the game's surfaces
+                        uvs[i] = new Vector2(r.ReadSingle(), r.ReadSingle());
                     }
                     var triangles = new int[r.ReadInt32()];
                     for (int i = 0; i < triangles.Length; i++) triangles[i] = (int)r.ReadUInt32();
@@ -261,7 +265,7 @@ public static class BuildMapBundle
                     mesh.vertices = at;
                     mesh.normals = normals;
                     mesh.colors = colours;
-                    mesh.uv = new Vector2[n];
+                    mesh.uv = uvs;
                     mesh.triangles = triangles;
                     mesh.RecalculateBounds();
                     Keep(mesh);

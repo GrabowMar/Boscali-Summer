@@ -1,4 +1,4 @@
-{"bundleHash": "8dc07925", "bundleBytes": 42757262,
+{"bundleHash": "606c45aa", "bundleBytes": 42470423,
  "id": "ashkara",
  "displayName": "Ashkara",
  "prefabName": "bs.ashkara",
@@ -118,14 +118,10 @@
   "tank_trap",
   "drill_rig",
   "antenna_field",
-  "rock_spire",
-  "ice_spire",
   "chapel",
   "castle",
   "ruins",
-  "oil_rig",
-  "shrub",
-  "cypress"
+  "oil_rig"
  ],
  "structures": [
   {
@@ -5260,7 +5256,7 @@
   "gulfKm": 0.0,
   "lakes": 0,
   "forestTrees": 81517,
-  "scenery": 25168,
+  "scenery": 7110,
   "towns": 3,
   "rivers": 0,
   "bridges": 4,
