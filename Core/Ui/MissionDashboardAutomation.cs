@@ -1,6 +1,7 @@
 #if !PUBLIC_RELEASE
 using System.Collections.Generic;
 using BoscaliSummer.Core.Game;
+using HarmonyLib;
 using NOAvionics;
 using NuclearOption.Networking;
 using NuclearOption.UI;
@@ -60,7 +61,7 @@ namespace BoscaliSummer.Core.Ui
                 case "operations": ClickDashboard("01  /  DEPLOYMENT"); break;
                 case "settings": ClickDashboard("FLIGHT SETTINGS"); break;
                 case "close_settings":
-                    var settings = menu != null ? SettingsMenuField.GetValue(menu) as GameObject : null;
+                    var settings = menu != null ? AccessTools.Field(typeof(LeaderboardMenu), "settingsMenu")?.GetValue(menu) as GameObject : null;
                     if (settings != null) Destroy(settings);
                     break;
                 case "join_bdf": ClickDashboard("DEPLOY  /  BOSCALI"); break;

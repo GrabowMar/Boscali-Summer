@@ -49,7 +49,6 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         /// <summary>The line's words as last written and their widths (set when the text changes, not per frame), the widest the content has been while this alert stayed up (the box never shrinks and shifts back).</summary>
         private float kindW, middleW, callW, stickyContent;
         private string middleShown = "";
-        private bool lineUp;
         private readonly TextMeshProUGUI[] ringLabels = new TextMeshProUGUI[RingMax];
         private readonly int[] ringKeys = new int[RingMax];
         private CanvasGroup calloutGroup, nativeList;
@@ -193,7 +192,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (ring.gameObject.activeSelf != show) ring.gameObject.SetActive(show);
             if (!show)
             {
-                TopCentre.LineUp = lineUp = false;
+                TopCentre.LineUp = false;
                 NativeList(false);
                 return;
             }
@@ -226,7 +225,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             bool up = board.Banner(now, out AlertKind kind);
             if (line.gameObject.activeSelf != up) line.gameObject.SetActive(up);
-            TopCentre.LineUp = lineUp = up;
+            TopCentre.LineUp = up;
             float top = h * 0.5f - TopCentre.LineTop + TopCentre.Lift, rowY = top - TopCentre.LineHeight * 0.5f + 2f;      // the row sits a little high: the fuse is under it
             bool jamShown = !up && !TopCentre.CardUp && jam;
             if (jamWord.gameObject.activeSelf != jamShown) jamWord.gameObject.SetActive(jamShown);
@@ -571,7 +570,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         public void Hide()
         {
             on = false;
-            TopCentre.LineUp = lineUp = false;
+            TopCentre.LineUp = false;
             board.Reset();
             NativeList(false);
             if (root != null) root.gameObject.SetActive(false);

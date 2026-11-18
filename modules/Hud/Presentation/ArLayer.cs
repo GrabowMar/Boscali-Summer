@@ -107,6 +107,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal bool Glitching { get; private set; }
         internal int Quads => lines != null ? lines.Buffer.Count + fx.Buffer.Count : 0;
 
+#if !PUBLIC_RELEASE
         /// <summary>Legacy automation hook retained for existing scenarios; the retired flight path stays off.</summary>
         internal float ForcePullG = float.NaN;
         /// <summary>Legacy automation turn fixture; no geometry is drawn.</summary>
@@ -115,6 +116,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         internal float ForcePitchDeg = float.NaN;
         /// <summary>Test and showcase hook: stand the home beacon whatever the fuel and damage.</summary>
         internal bool ForceHome;
+#else
+        private const bool ForceHome = false;
+#endif
 
         public bool Ensure()
         {

@@ -19,7 +19,6 @@ namespace BoscaliSummer.Core.Ui
         private static readonly FieldInfo MenuModeField = AccessTools.Field(typeof(LeaderboardMenu), "currentMode");
         private static readonly FieldInfo SettingsButtonField = AccessTools.Field(typeof(LeaderboardMenu), "settingsButton");
         private static readonly FieldInfo PrimaryButtonField = AccessTools.Field(typeof(LeaderboardMenu), "primaryActionButton");
-        private static readonly FieldInfo SettingsMenuField = AccessTools.Field(typeof(LeaderboardMenu), "settingsMenu");
         private static readonly FieldInfo QuitPanelField = AccessTools.Field(typeof(QuitMissionButton), "confirmLeavePanel");
         internal static MissionPrompt Active { get; private set; }
         internal static bool DashboardOpen => Active != null && Active.window != null;
@@ -339,14 +338,14 @@ namespace BoscaliSummer.Core.Ui
 
             private sealed class FactionCard
             {
-                private readonly DashboardDeck deck;
+                private readonly MissionPrompt owner;
                 private readonly TMP_Text name, status, stats;
                 private readonly Image logo;
                 private readonly AvControl join;
                 private LeaderboardFactionItem item;
                 public FactionCard(DashboardDeck deck, int index, float x, Color accent)
                 {
-                    this.deck = deck;
+                    owner = deck.owner;
                     var panel = Panel(deck.layout, "Faction " + index, x, 196, 484, 350, accent);
                     var scope = AvLay.Child(panel, "Scope");
                     AvLay.Place(scope, 302, 56, 158, 158);
@@ -359,7 +358,7 @@ namespace BoscaliSummer.Core.Ui
                     name = Text(panel, "", 34, Ink, 24, 72, 280, 120, role: AvTextRole.Title);
                     Line(panel, 24, 224, 436, Edge);
                     stats = Text(panel, "", 18, Muted, 24, 242, 436, 28, role: AvTextRole.Data);
-                    join = Button(panel, "DEPLOY", () => { if (item != null) deck.owner.Join(item.HQ); }, 24, 286, 436, 48, AvIcon.Plane, accent, AvButtonStyle.Primary);
+                    join = Button(panel, "DEPLOY", () => { if (item != null) owner.Join(item.HQ); }, 24, 286, 436, 48, AvIcon.Plane, accent, AvButtonStyle.Primary);
                 }
                 public void Bind(LeaderboardFactionItem source)
                 {

@@ -730,11 +730,10 @@ namespace BoscaliSummer.Modules.Support.Runtime
             return why;
         }
 
-        /// <param name="requireRear">False for a player-picked base: any legal ground around it, scored 0 (no deep-rear refusal).</param>
-        private bool TryAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal, out Candidate candidate, bool requireRear = true)
+        private bool TryAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal, out Candidate candidate)
         {
             var found = new List<Candidate>(1);
-            CollectAround(owner, origin, parent, diagonal, found, 1, requireRear);
+            CollectAround(owner, origin, parent, diagonal, found, 1, requireRear: true);
             candidate = found.Count > 0 ? found[0] : default;
             return found.Count > 0;
         }
@@ -742,13 +741,12 @@ namespace BoscaliSummer.Modules.Support.Runtime
         private void CollectAround(FactionHQ owner, Vector3 origin, Airbase parent, float diagonal,
             List<Candidate> candidates, int limit, bool requireRear)
         {
-            int start = candidates.Count;
             float exclusion = Mathf.Clamp(500f * Mathf.Clamp(diagonal / 150000f, 0.4f, 2.5f), 250f, 1000f);
             float radius = (parent != null ? parent.GetRadius() : 500f) + exclusion + 120f;
             for (int ring = 0; ring < 3; ring++)
                 for (int step = 0; step < 12; step++)
                 {
-                    if (candidates.Count - start >= limit || candidates.Count >= UplinkPlacement.MaxCandidates) return;
+                    if (candidates.Count >= limit) return;
                     float angle = (step * 5 % 12) * Mathf.PI / 6f;
                     Vector3 desired = origin + new Vector3(Mathf.Sin(angle), 0f, Mathf.Cos(angle)) * (radius + ring * 240f);
                     float rear = 0f;

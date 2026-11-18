@@ -22,7 +22,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         public uint[] Targets = new uint[0];
         public PlanStart Start = PlanStart.Exec;
         /// <summary>T+: seconds after EXECUTE; AFTER: seconds after the other step is done.</summary>
-        public float Delay;
+        public float Delay = 0f;
         public int AfterLane = -1, AfterStep = -1;
         public PlanEnd End = PlanEnd.Arrive;
         public float EndSeconds;
@@ -115,7 +115,7 @@ namespace BoscaliSummer.Modules.Wing.Domain
         }
 
         /// <summary>Whether step (l, s) — or anything it waits for — waits for (tl, ts): the step before it in its lane, and its AFTER.</summary>
-        internal static bool WaitsFor(WingPlan plan, int l, int s, int tl, int ts, int depth = 0)
+        private static bool WaitsFor(WingPlan plan, int l, int s, int tl, int ts, int depth)
         {
             if (l == tl && s == ts) return true;
             if (depth > WingPlan.Lanes * WingPlan.MaxSteps) return true;

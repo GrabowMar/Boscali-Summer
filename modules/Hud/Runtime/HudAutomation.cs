@@ -791,7 +791,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
             private const int Cap = 60000;
             private static readonly MarkerRefs Refs = new MarkerRefs();
             private static readonly float[] errors = new float[Cap];
-            private static int count, frames, okFrames, shiftFrames, rollSamples, fpmSamples, centreSamples;
+            private static int count, frames, okFrames, shiftFrames, fpmSamples, centreSamples;
             private static float max, sum, shiftMax, notOkMax, centreMax, centreSum, rollMax, fpmMax, fpmSum;
             private static int lateAt, forcedAt, lastFrame = -1, notOkSamples;
             private static Vector3 lastOrigin;
@@ -799,7 +799,7 @@ namespace BoscaliSummer.Modules.Hud.Runtime
 
             public static void Start()
             {
-                count = frames = okFrames = shiftFrames = rollSamples = fpmSamples = centreSamples = notOkSamples = 0;
+                count = frames = okFrames = shiftFrames = fpmSamples = centreSamples = notOkSamples = 0;
                 max = sum = shiftMax = notOkMax = centreMax = centreSum = rollMax = fpmMax = fpmSum = 0f;
                 lateAt = BoscaliSummer.Core.Ui.HudLayer.LateFrames;
                 forcedAt = BoscaliSummer.Core.Ui.HudLayer.ForcedRebuilds;
@@ -867,7 +867,6 @@ namespace BoscaliSummer.Modules.Hud.Runtime
                     }
                     float wantRoll = -(camera.transform.eulerAngles.z - cockpit.eulerAngles.z);
                     float re = Mathf.Abs(Mathf.DeltaAngle(centre.eulerAngles.z, wantRoll));
-                    rollSamples++;
                     if (re > rollMax) rollMax = re;
                 }
                 if (flight.velocityVector != null && flight.velocityVector.gameObject.activeSelf)
