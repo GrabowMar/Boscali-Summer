@@ -213,6 +213,8 @@ public static class MapKitShapes
         new Kind("outcrop", 4, 120, "m", true, false, 10f, 36f),
         new Kind("sea_stack", 3, 160, "l", true, false, 25f, 75f),
         new Kind("palm", 5, 220, "s", false, true, 8f, 17f),
+        new Kind("acacia", 3, 200, "s", false, true, 6f, 14f),      // the flat-topped wadi tree of the Sahara
+        new Kind("cairn", 2, 50, "s", false, false, 1.4f, 2.6f),    // a pile of stones stacked where the piste bends
         new Kind("conifer", 4, 60, "s", false, true, 13f, 23f),
         new Kind("conifer_snow", 3, 60, "s", false, true, 13f, 23f),
         new Kind("conifer_clump", 2, 120, "", false, true, 13f, 26f),
@@ -256,6 +258,8 @@ public static class MapKitShapes
             case "outcrop": Outcrop(b, random, variant); break;
             case "sea_stack": SeaStack(b, random, variant); break;
             case "palm": Palm(b, random); break;
+            case "acacia": Acacia(b, random); break;
+            case "cairn": Cairn(b, random, variant); break;
             case "conifer": Conifer(b, random, false); break;
             case "conifer_snow": Conifer(b, random, true); break;
             case "conifer_clump":
@@ -472,6 +476,76 @@ public static class MapKitShapes
                 if (s > 0) { b.Quad(previous, previous + 1, left + 1, left); b.Quad(previous + 1, previous + 2, left + 2, left + 1); }
                 previous = left;
             }
+        }
+    }
+
+    /// <summary>The flat-topped acacia of the wadis: a leaning forked trunk, then an umbrella canopy — blades radiating
+    /// from the crown, rising a little then flattening out, in two shells so the top reads flat from the ground and
+    /// from the air. Dry-season grey-green, darker where the canopy is dense.</summary>
+    private static void Acacia(MapMeshBuilder b, System.Random random)
+    {
+        float height = Range(random, 5.5f, 8.5f), lean = Range(random, .3f, 1.1f), turn = Range(random, 0f, Mathf.PI * 2f);
+        var leanTo = new Vector3(Mathf.Cos(turn), 0f, Mathf.Sin(turn));
+        Color bark = Mul(Rgb(96, 82, 64), Range(random, .85f, 1.1f)), leaf = Mul(Rgb(94, 110, 62), Range(random, .8f, 1.05f));
+        const int Sides = 5, Rings = 3;
+        int first = b.Vertices.Count;
+        for (int ring = 0; ring <= Rings; ring++)
+        {
+            float t = ring / (float)Rings, radius = Mathf.Lerp(.22f, .09f, t);
+            Vector3 centre = Vector3.up * (height * t) + leanTo * (lean * t * t);
+            for (int side = 0; side < Sides; side++)
+            {
+                float a = side * Mathf.PI * 2f / Sides;
+                var outward = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                b.Add(centre + outward * radius, outward, Mul(bark, Mathf.Lerp(.82f, 1.05f, t)), t * t);
+            }
+        }
+        for (int ring = 0; ring < Rings; ring++)
+            for (int side = 0; side < Sides; side++)
+            {
+                int a = first + ring * Sides + side, c = first + ring * Sides + (side + 1) % Sides;
+                b.Quad(a, a + Sides, c + Sides, c);
+            }
+        Vector3 crown = Vector3.up * height + leanTo * lean;
+        int blades = random.Next(16, 22);
+        for (int shell = 0; shell < 2; shell++)   // two shells: the lower flat, the upper slightly smaller, so the top reads flat
+        {
+            float rise = shell == 0 ? .9f : 1.8f, spread = shell == 0 ? 1f : .72f, thin = shell == 0 ? 1f : .7f;
+            Color tone = Mul(leaf, shell == 0 ? .82f : 1f);
+            for (int f = 0; f < blades; f++)
+            {
+                float a = turn + f * Mathf.PI * 2f / blades + Range(random, -.2f, .2f);
+                float length = Range(random, 3.6f, 6.2f) * spread;
+                var along = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                var across = new Vector3(-along.z, 0f, along.x);
+                int previous = -1;
+                const int Segments = 3;
+                for (int s = 0; s <= Segments; s++)
+                {
+                    float t = s / (float)Segments, width = Mathf.Sin(Mathf.Lerp(.25f, 1f, t) * Mathf.PI) * .62f * thin + .03f;
+                    Vector3 spine = crown + along * (length * t) + Vector3.up * (rise * t - .25f * t * t);
+                    Vector3 normal = (Vector3.up + along * (1f - t) * .6f).normalized, sag = Vector3.down * (width * .5f);
+                    Color shade = Mul(tone, .8f + .3f * t);
+                    int left = b.Add(spine - across * width + sag, (normal - across * .5f).normalized, Mul(shade, .85f), 1f);
+                    b.Add(spine, normal, shade, 1f);
+                    b.Add(spine + across * width + sag, (normal + across * .5f).normalized, Mul(shade, .85f), 1f);
+                    if (s > 0) { b.Quad(previous, previous + 1, left + 1, left); b.Quad(previous + 1, previous + 2, left + 2, left + 1); }
+                    previous = left;
+                }
+            }
+        }
+    }
+
+    /// <summary>A cairn: stones stacked in a shrinking pile, the way the pistes and passes of the Sahara are marked.</summary>
+    private static void Cairn(MapMeshBuilder b, System.Random random, int variant)
+    {
+        int stones = 4 + variant + random.Next(2);
+        Color tone = Mul(Rgb(136, 126, 112), Range(random, .85f, 1.1f));
+        for (int s = 0; s < stones; s++)
+        {
+            float t = s / (float)stones, y = .32f + t * t * 1.5f, r = Mathf.Lerp(.9f, .3f, t) * Range(random, .8f, 1.2f);
+            Lump(b, random, V(Range(random, -.15f, .15f) * r, y, Range(random, -.15f, .15f) * r),
+                V(r, r * .7f, r) * Range(random, .85f, 1.15f), 2, .7f, 1.25f, Mul(tone, .85f + .3f * t));
         }
     }
 

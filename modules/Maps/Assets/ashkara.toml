@@ -4,6 +4,9 @@ biome = "desert"
 seed = 7
 cell = 20
 
+[preset]
+lakes = 0       # no crater lake in the caldera: the array's ruin keeps the summit
+
 # ---- hand work (nomod map edit / paint / prop): the lie of a battered volcanic island
 
 [[edit]]            # small relief everywhere: hummocks and washes

@@ -59,6 +59,82 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             return new Dictionary<string, object> { ["ok"] = wrong.Count == 0, ["ships"] = ships, ["vehicles"] = vehicles, ["wrong"] = string.Join("; ", wrong) };
         }
 
+        /// <summary>The airfield AI acceptance probe: with no args it reports, for every aircraft in the world,
+        /// whether it is airborne (over 50 m or climbing), its altitude, speed and the state its pilot is in. A sim
+        /// spawns aircraft in hangars of an `airbase` and, minutes later, calls this and asserts they flew. The
+        /// verdict is the scenario's `result_above` check; this only measures, so it never returns ok=false (which
+        /// the call op treats as an error).</summary>
+        public static Dictionary<string, object> Departure(Dictionary<string, object> args)
+        {
+            var lines = new List<string>();
+            int airborne = 0, fleet = 0;
+            foreach (Aircraft aircraft in UnityEngine.Object.FindObjectsOfType<Aircraft>())
+            {
+                if (aircraft == null || aircraft.disabled) continue;
+                fleet++;
+                float height = aircraft.transform.position.y;
+                Pilot pilot = aircraft.pilots != null && aircraft.pilots.Length > 0 ? aircraft.pilots[0] : null;
+                string state = pilot != null && pilot.currentState != null ? pilot.currentState.stateDisplayName : "?";
+                bool flying = height > 50f || (aircraft.speed > 40f && height > 12f);
+                if (flying) airborne++;
+                lines.Add((aircraft.unitName ?? "?") + ": " + (flying ? "AIRBORNE" : "ground") + " at " + height.ToString("F0") + " m, " +
+                          aircraft.speed.ToString("F0") + " m/s, " + state);
+            }
+            Plugin.Logger?.LogInfo("[Maps] Departure: " + airborne + " of " + fleet + " airborne" + (lines.Count > 0 ? " — " + string.Join(" | ", lines) : ""));
+            return new Dictionary<string, object> { ["airborne"] = airborne, ["fleet"] = fleet, ["list"] = string.Join(" | ", lines) };
+        }
+
+        /// <summary>The donor vanilla airstrip that MapBuilder copies, taken apart for the airfield work: every child
+        /// of every vanilla land airbase with its transform, meshes (name, vertices, bounds in metres) and materials
+        /// (shader, textures, tiling), written to a JSON file. Nothing is spawned or changed.</summary>
+        public static Dictionary<string, object> Donor(Dictionary<string, object> args)
+        {
+            string path = args != null && args.TryGetValue("path", out object given) && given != null ? given.ToString() : Path.Combine(Path.GetTempPath(), "bs_map_donor.json");
+            MapSettingsManager manager = MapSettingsManager.i;
+            var airbases = new JArray();
+            if (manager != null)
+                foreach (MapSettings map in manager.Maps.Where(m => m != null && m.Prefab != null && !MapGround.IsOurs(m.Prefab)).Select(m => m.Prefab))
+                    foreach (Airbase airbase in map.GetComponentsInChildren<Airbase>(true))
+                    {
+                        if (airbase == null) continue;
+                        airbases.Add(new JObject { ["map"] = map.name, ["name"] = airbase.name, ["children"] = Parts(airbase.transform) });
+                    }
+            File.WriteAllText(path, airbases.ToString(Formatting.None));
+            Plugin.Logger?.LogInfo("[Maps] Donor: " + airbases.Count + " vanilla airbases -> " + path);
+            return new Dictionary<string, object> { ["ok"] = true, ["path"] = path, ["airbases"] = airbases.Count };
+        }
+
+        /// <summary>One node of the hierarchy: its name, local position and rotation, its renderer's bounds and
+        /// materials, and its children. The leaves that matter are the meshes; their bounds say what they are.</summary>
+        private static JObject Parts(Transform at)
+        {
+            var node = new JObject { ["name"] = at.name, ["pos"] = new JArray(at.localPosition.x, at.localPosition.y, at.localPosition.z),
+                                     ["rot"] = new JArray(at.localEulerAngles.x, at.localEulerAngles.y, at.localEulerAngles.z) };
+            var filter = at.GetComponent<MeshFilter>();
+            var render = at.GetComponent<MeshRenderer>();
+            if (filter != null && render != null && filter.sharedMesh != null)
+            {
+                Bounds bounds = filter.sharedMesh.bounds;
+                node["mesh"] = new JObject { ["name"] = filter.sharedMesh.name, ["vertices"] = filter.sharedMesh.vertexCount,
+                                             ["bounds"] = new JArray(bounds.size.x, bounds.size.y, bounds.size.z) };
+                var materials = new JArray();
+                foreach (Material material in render.sharedMaterials)
+                {
+                    if (material == null) continue;
+                    var textures = new JArray();
+                    if (material.HasProperty("_MainTex") && material.mainTexture != null)
+                        textures.Add(new JObject { ["name"] = material.mainTexture.name, ["size"] = new JArray(material.mainTexture.width, material.mainTexture.height),
+                                                   ["scale"] = new JArray(material.mainTextureScale.x, material.mainTextureScale.y) });
+                    materials.Add(new JObject { ["name"] = material.name, ["shader"] = material.shader != null ? material.shader.name : "", ["textures"] = textures });
+                }
+                node["materials"] = materials;
+            }
+            var children = new JArray();
+            for (int i = 0; i < at.childCount; i++) children.Add(Parts(at.GetChild(i)));
+            if (children.Count > 0) node["children"] = children;
+            return node;
+        }
+
         /// <summary>Args: <c>path</c>, the JSON file to write (default: bs_map_catalogue.json in the temp folder).</summary>
         public static Dictionary<string, object> Catalogue(Dictionary<string, object> args)
         {

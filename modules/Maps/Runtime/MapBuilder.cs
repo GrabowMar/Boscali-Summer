@@ -25,6 +25,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         private const int MapPrefix = 77; // the high byte of this map's network object ids; vanilla maps use small numbers
         private static readonly AccessTools.FieldRef<MapSettings, object> musicRef = AccessTools.FieldRefAccess<MapSettings, object>("factionMusic");
         private static readonly AccessTools.FieldRef<Airbase, RoadNetwork> taxiRef = AccessTools.FieldRefAccess<Airbase, RoadNetwork>("taxiNetwork");
+        private static readonly AccessTools.FieldRef<Airbase, Transform[]> serviceRef = AccessTools.FieldRefAccess<Airbase, Transform[]>("servicePoints");
         private static readonly AccessTools.FieldRef<Airbase, SavedAirbase> savedRef = AccessTools.FieldRefAccess<Airbase, SavedAirbase>("airbaseSettings");
         private static GameObject holder;
 
@@ -171,10 +172,13 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         }
 
         /// <summary>
-        /// A strip is a copy of a vanilla airstrip (its paved mesh, runway ends, exits, service points and taxi routes),
-        /// turned and moved so its runway lies on the map's flattened pad. Hangars come from the mission, as on any map.
-        /// A map has two to four strips; whatever the surface (asphalt, gravel, ice), the baked slab is the runway and
-        /// rolls like a paved one.
+        /// A strip is a copy of a vanilla airstrip turned and moved so its runway lies on the map's flattened pad —
+        /// but nothing else of the donor survives: its paved mesh is hidden (the bake paves the airfield the
+        /// generator planned) and its taxi routes, runway exits, service points and vertical pad are REPLACED by
+        /// that plan, so what the AI taxis over is what is drawn and reaches where the hangars stand. Hangars come
+        /// from the mission, as on any map: hangar_med, shelter1, revetment1 and the Helipad all carry the game's
+        /// Hangar. A map has two to four strips; whatever the surface (asphalt, gravel, ice), the baked slab is the
+        /// runway and rolls like a paved one.
         /// </summary>
         private static List<NetworkIdentity> BuildAirbases(Transform airfields, MapManifest manifest, MapSettingsManager manager)
         {
@@ -190,7 +194,25 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Plugin.Logger?.LogWarning("[Maps] No vanilla airstrip to copy: " + manifest.displayName + " has no land bases, carriers still work.");
                 return identities;
             }
-            Matrix4x4 donorPose = donor.transform.localToWorldMatrix;
+            // The vanilla airfield's own pavement, by name from the donor's fields: runway1 for the runway (the
+            // shader the game's own runways use), asphalt for the taxiway and apron. The bake's runway_markings
+            // decals are vertex-colour shapes of the donor's own mesh, so our baked white bars keep their material.
+            // The bake's plain colours are the fallback when the game has nothing to lend.
+            var surfaces = new Dictionary<string, Material>();
+            foreach (MeshRenderer part in donor.GetComponentsInChildren<MeshRenderer>(true))
+                if (part != null && part.sharedMaterial != null && !surfaces.ContainsKey(part.sharedMaterial.name))
+                    surfaces[part.sharedMaterial.name] = part.sharedMaterial;
+            Material Paved()
+            {
+                if (surfaces.TryGetValue("asphalt", out Material plain)) return plain;
+                return donor.GetComponentsInChildren<MeshRenderer>(true)
+                    .Where(r => r != null && r.sharedMaterial != null && r.bounds.size.x * r.bounds.size.z > 0f)
+                    .OrderByDescending(r => r.bounds.size.x * r.bounds.size.z)
+                    .Select(r => r.sharedMaterial).FirstOrDefault();
+            }
+            Material pavedLook = Paved();
+            Material runwayLook = surfaces.Keys.FirstOrDefault(k => k.IndexOf("runway", StringComparison.OrdinalIgnoreCase) >= 0)
+                is string found && surfaces.TryGetValue(found, out Material marked) ? marked : pavedLook;
             for (int n = 0; n < manifest.strips.Length; n++)
             {
                 MapManifest.Strip strip = manifest.strips[n];
@@ -207,9 +229,18 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 Vector3 middle = (runway.Start.position + runway.End.position) * .5f;
                 copy.transform.position += new Vector3(strip.x, strip.y + .15f, strip.z) - middle;
 
-                // Taxi routes and saved points are stored in map coordinates, not under the transform: move them the same way.
-                Matrix4x4 move = copy.transform.localToWorldMatrix * donorPose.inverse;
-                Move(taxiRef(airbase), move);
+                // The donor's own paved mesh is the aprons and taxiways of its home field, in its own layout: ours
+                // are baked. Its COLLIDERS go too — hidden meshes still collide, and an invisible wall where the
+                // donor's apron stood is what a landing AI taxis into at 60 km/h. Only its edge lights stay (they
+                // ride its runway, which lies on ours, and a strip without night lights is a hole in the dark).
+                foreach (Collider solid in copy.GetComponentsInChildren<Collider>(true)) solid.enabled = false;
+                foreach (Renderer mesh in copy.GetComponentsInChildren<Renderer>(true))
+                    mesh.enabled = mesh.name == "lights" || mesh.sharedMaterial != null && mesh.sharedMaterial.name == "MeshLight";
+
+                // The airfield's plan, written by the generator: the AI's taxi network, the runway exits, the
+                // service points and the vertical pad — all in map metres, on the flat pad. The donor's routes
+                // were drawn for the donor's own apron and had nothing to do with where our hangars stand.
+                taxiRef(airbase) = Network(strip.taxi);
                 SavedAirbase saved = savedRef(airbase);
                 if (saved != null)
                 {
@@ -217,13 +248,29 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     saved.DisplayName = string.IsNullOrEmpty(strip.name) ? saved.UniqueName : strip.name;
                     saved.faction = "";
                     saved.Tower = "";
-                    Move(saved.roads, move);
-                    Move(saved.ServicePoints, move);
-                    Move(saved.VerticalLandingPoints, move);
+                    saved.roads = Network(strip.taxi);
+                    saved.ServicePoints = Points(strip.service);
+                    saved.VerticalLandingPoints = Points(PadOf(strip));
+                    if (saved.runways != null && saved.runways.Count > 0 && saved.runways[0] != null)
+                        saved.runways[0].exitPoints = Exits(strip);
                 }
-                // The vanilla strip's own mesh is the aprons, taxiways and decals of its home field (its runway is part of
-                // that map's ground): it is shown, on the map's flat pad, beside the baked runway slab.
-                foreach (Collider paved in pad.GetComponentsInChildren<Collider>(true)) paved.gameObject.layer = PhysicsLayers.Statics;
+                Exits(airbase, runway, strip);
+                Service(airbase, strip);
+                Pads(airbase, strip);
+                // The baked pieces of this strip's paving, dressed with the game's own airfield surfaces: runway and
+                // taxiway with what the donor's fields are paved with (our baked white bars keep their own material:
+                // the game's markings are vertex-colour shapes of its own mesh). The bake's flat colours stay where
+                // the game has nothing.
+                int dressed = 0;
+                foreach (MeshRenderer baked in pad.GetComponentsInChildren<MeshRenderer>(true))
+                {
+                    if (baked == null || baked.sharedMaterial == null) continue;
+                    if (baked.name.StartsWith("runway") && runwayLook != null) { baked.sharedMaterial = runwayLook; dressed++; }
+                    else if ((baked.name.StartsWith("taxi") || baked.name.StartsWith("apron")) && pavedLook != null) { baked.sharedMaterial = pavedLook; dressed++; }
+                }
+                Plugin.Logger?.LogInfo("[Maps] Strip " + (n + 1) + " of " + manifest.displayName + ": " + dressed + " paving pieces dressed with the game's own " +
+                    "surfaces (runway " + (runwayLook != null ? runwayLook.name : "none") + ", apron " + (pavedLook != null ? pavedLook.name : "none") + ").");
+                foreach (Collider collider in pad.GetComponentsInChildren<Collider>(true)) collider.gameObject.layer = PhysicsLayers.Statics;
                 identities.Add(copy.GetComponent<NetworkIdentity>());
                 float room = Mathf.Max(strip.length + 300f, strip.padLength);
                 if (along.magnitude > room + 20f)
@@ -233,21 +280,85 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             return identities;
         }
 
-        private static void Move(RoadNetwork network, Matrix4x4 move)
+        /// <summary>One road per pair of flat x, y, z, x, y, z points: straight roads joining at their shared end
+        /// points, the shape the game's road pathfinder is built for.</summary>
+        private static RoadNetwork Network(float[] flat)
         {
-            if (network == null || network.roads == null) return;
-            foreach (Road road in network.roads)
+            var network = new RoadNetwork();
+            for (int i = 0; flat != null && i + 5 < flat.Length; i += 6)
             {
-                Move(road.points, move);
-                road.UpdateBB();
+                var road = new Road();
+                road.AddPoint(new GlobalPosition(flat[i], flat[i + 1], flat[i + 2]));
+                road.AddPoint(new GlobalPosition(flat[i + 3], flat[i + 4], flat[i + 5]));
+                road.UpdateBB();   // the pathfinder's spatial lookup: without it every road is nowhere
                 road.CalcLength();
+                network.roads.Add(road);
             }
+            return network;
         }
 
-        private static void Move(List<GlobalPosition> points, Matrix4x4 move)
+        private static List<GlobalPosition> Points(float[] flat)
         {
-            if (points == null) return;
-            for (int i = 0; i < points.Count; i++) points[i] = new GlobalPosition(move.MultiplyPoint3x4(points[i].AsVector3()));
+            var list = new List<GlobalPosition>();
+            for (int i = 0; flat != null && i + 2 < flat.Length; i += 3) list.Add(new GlobalPosition(flat[i], flat[i + 1], flat[i + 2]));
+            return list;
         }
+
+        private static float[] PadOf(MapManifest.Strip strip) => strip.pad == null ? new float[0] : strip.pad;
+
+        /// <summary>Where a landed aircraft turns off: the first three of every four flat numbers are a position.</summary>
+        private static GlobalPosition[] Exits(MapManifest.Strip strip)
+        {
+            var points = new List<GlobalPosition>();
+            for (int i = 0; strip.exits != null && i + 2 < strip.exits.Length; i += 4)
+                points.Add(new GlobalPosition(strip.exits[i], strip.exits[i + 1], strip.exits[i + 2]));
+            return points.ToArray();
+        }
+
+        /// <summary>Replaces the donor's runway exits with the plan's: two turn-offs down the length for whichever
+        /// way the rollout runs, two off the ends, each turned to the heading the generator gave it.</summary>
+        private static void Exits(Airbase airbase, Airbase.Runway runway, MapManifest.Strip strip)
+        {
+            foreach (Transform point in runway.exitPoints ?? Array.Empty<Transform>()) if (point != null) Object.Destroy(point.gameObject);
+            var made = new List<Transform>();
+            for (int i = 0; strip.exits != null && i + 3 < strip.exits.Length; i += 4)
+            {
+                Transform exit = new GameObject("exit_" + made.Count).transform;
+                exit.parent = airbase.transform;
+                exit.position = new Vector3(strip.exits[i], strip.exits[i + 1], strip.exits[i + 2]);
+                exit.rotation = Quaternion.Euler(0f, strip.exits[i + 3], 0f);
+                made.Add(exit);
+            }
+            runway.exitPoints = made.Count > 0 ? made.ToArray() : new Transform[] { runway.Start, runway.End };
+        }
+
+        /// <summary>Where aircraft are serviced: the donor's points are moved onto the apron's own places (extras
+        /// beyond the plan's are destroyed, so the count is exactly the plan's).</summary>
+        private static void Service(Airbase airbase, MapManifest.Strip strip)
+        {
+            Transform[] points = serviceRef(airbase) ?? Array.Empty<Transform>();
+            for (int i = 0; i < points.Length; i++)
+            {
+                if (points[i] == null) continue;
+                if (strip.service == null || i * 3 + 2 >= strip.service.Length)
+                {
+                    Object.Destroy(points[i].gameObject);
+                    points[i] = null;
+                    continue;
+                }
+                points[i].position = new Vector3(strip.service[i * 3], strip.service[i * 3 + 1], strip.service[i * 3 + 2]);
+            }
+            serviceRef(airbase) = points;
+        }
+
+        /// <summary>The vertical pad the VTOLs come down on, where the generator stood the Helipad.</summary>
+        private static void Pads(Airbase airbase, MapManifest.Strip strip)
+        {
+            foreach (Airbase.VerticalLandingPoint old in airbase.verticalLandingPoints ?? new Airbase.VerticalLandingPoint[0])
+                if (old != null && old.point != null) Object.Destroy(old.point.gameObject);
+            if (strip.pad == null || strip.pad.Length < 3) return;
+            airbase.verticalLandingPoints = new[] { Airbase.VerticalLandingPoint.FromSaved(airbase, new GlobalPosition(strip.pad[0], strip.pad[1], strip.pad[2])) };
+        }
+
     }
 }

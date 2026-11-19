@@ -80,11 +80,14 @@ Shader "Boscali/MapSurface"
                 f = f * f * (3 - 2 * f);
                 return lerp(lerp(Hash(i), Hash(i + float2(1, 0)), f.x), lerp(Hash(i + float2(0, 1)), Hash(i + float2(1, 1)), f.x), f.y);
             }
+            float Grain(float2 p) { return Noise(p * .9) * .6 + Noise(p * .11) * .4; }
             half4 frag(Varyings i, half facing : VFACE) : SV_Target
             {
                 half3 normal = normalize(i.normalWS) * (facing < 0 ? -1 : 1);
-                // Object-space grain at two scales: it stays put when the floating origin shifts the map.
-                half grain = Noise(i.positionOS.xz * .9) * .6 + Noise(i.positionOS.xz * .11) * .4;
+                // Object-space grain at two scales: it stays put when the floating origin shifts the map. Its relief
+                // as well as its colour, faded with distance (a frequency below a pixel only shimmers) — the same
+                // field perturbs the normal so kit rock and markings catch the light at close range.
+                half grain = Grain(i.positionOS.xz);
                 half3 albedo = i.color.rgb * (1 - _Detail * .5 + _Detail * grain);
                 #ifdef _TEXTURED
                 half3 concrete = SAMPLE_TEXTURE2D(_TexA, sampler_TexA, i.uv * _TexTile.x).rgb * _TexGain.x;
@@ -92,9 +95,19 @@ Shader "Boscali/MapSurface"
                 half3 gabion = SAMPLE_TEXTURE2D(_TexC, sampler_TexA, i.uv * _TexTile.z).rgb * _TexGain.z;
                 albedo *= i.color.a > .75 ? concrete : i.color.a < .25 ? metal : gabion;
                 #endif
+                float fade = saturate(300.0 / distance(_WorldSpaceCameraPos, i.positionWS));
+                float e = .6;
+                float2 dg = float2(Grain(i.positionOS.xz + float2(e, 0)) - Grain(i.positionOS.xz - float2(e, 0)),
+                                   Grain(i.positionOS.xz + float2(0, e)) - Grain(i.positionOS.xz - float2(0, e))) / (2.0 * e);
+                half3 across = normalize(cross(normal, float3(0.04, 1, 0.03)));
+                normal = normalize(normal - (across * dg.x + cross(normal, across) * dg.y) * (.45 * _Detail * fade));
                 Light sun = GetMainLight(TransformWorldToShadowCoord(i.positionWS));
-                half diffuse = saturate(dot(normal, sun.direction));
-                half3 light = max(half3(.03, .035, .04), SampleSH(normal)) + sun.color * (diffuse * sun.distanceAttenuation * sun.shadowAttenuation);
+                // Wrap the diffuse a little (after Journey's sand: matte ground does not go black in its own shade),
+                // and a faint forward-scatter glow when the sun is behind what you look at.
+                half diffuse = saturate((dot(normal, sun.direction) + .3) / 1.3);
+                half3 view = normalize(_WorldSpaceCameraPos - i.positionWS);
+                half glow = pow(saturate(dot(-view, sun.direction)), 4) * .07;
+                half3 light = max(half3(.03, .035, .04), SampleSH(normal)) + sun.color * ((diffuse + glow) * sun.distanceAttenuation * sun.shadowAttenuation);
                 return half4(MixFog(albedo * light, i.fog), 1);
             }
             ENDHLSL

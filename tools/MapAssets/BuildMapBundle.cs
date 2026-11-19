@@ -15,7 +15,10 @@ public static class BuildMapBundle
     private const string Dir = "Assets/Map/";
     private const long BundleLimit = 80L * 1024 * 1024; // embedded in the mod DLL: past this, ship the bundle as a loose file
 
-    [Serializable] private class StripInfo { public float x, y, z, length, width = 40f, padLength = 1500f, padWidth = 300f; public float heading; public string surface = "asphalt"; }
+    [Serializable] private class StripInfo { public float x, y, z, length, width = 40f, padLength = 1500f, padWidth = 300f; public float heading; public string surface = "asphalt";
+        public float[] taxi = new float[0];   // the AI's routes, flat x, y, z, x, y, z: each pair one straight road
+        public float[] pad = new float[0];    // the vertical pad: x, y, z, heading
+        public float[] pave = new float[0]; } // the apron, strip-frame metres: half-length along, across from, across to
     [Serializable] private class ForestInfo { public string name; }
     [Serializable] private class LotInfo { public string kind; public float x, z, yaw; }
     [Serializable] private class BridgeInfo { public float x, z, heading, length, width; }
@@ -129,6 +132,15 @@ public static class BuildMapBundle
                     ImportTexture(Dir + extra, false, false, false, extra == "macro_normal.png" ? 4096 : 2048, extra == "macro_normal.png");
                     extras.Add(Dir + extra);
                 }
+            // The map's own ground skins (skin_<name>_b/_n): the generator's aeolian ripples on the game's sand
+            // slots — the detail the game's own sand texture cannot know about this erg.
+            foreach (string skin in new[] { "skin_sand", "skin_dunes" })
+                foreach (string part in new[] { "_b", "_n" })
+                    if (File.Exists(Dir + skin + part + ".png"))
+                    {
+                        ImportTexture(Dir + skin + part + ".png", part == "_b", false, false, 2048, part == "_n");
+                        extras.Add(Dir + skin + part + ".png");
+                    }
             Directory.CreateDirectory("BundleOutput");
             var names = new List<string> { prefabPath, Dir + "map.json", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image,
                 Dir + "macro.png", Dir + "splat_grass.png", Dir + "splat_rock.png", Dir + "splat_lush.png", Dir + "grass_mask.png" };
@@ -436,14 +448,53 @@ public static class BuildMapBundle
     private static void BuildTerrain(GameObject parent, MapInfo info, float[] heights, Color32[] colours, Material material)
     {
         int res = info.res, tile = info.tile, block = tile * 8;
+        groundTile = tile;
         groundHeights = heights; groundColours = colours; groundRes = res; groundCell = info.cell; groundPads = info.strips ?? new StripInfo[0];
+        // The tiles the shoreline crosses — land and water in one tile — are drawn at a quarter of the land stride
+        // (never coarser than the field's own samples): the coast is the 0-contour of the mesh, and at the coarse
+        // stride of a big flat map it renders as a literal staircase. So are the tiles of genuinely STEEP ground
+        // (the steepest local slope over 26 degrees, seen at a quarter of the tile's cells: a dune field has range
+        // without walls and stays coarse; a cliff face or a nunatak becomes rock), counted the same way in the budget.
+        coastTiles.Clear();
+        int coastLand = 0;
+        for (int z0 = 0; z0 < res; z0 += tile)
+            for (int x0 = 0; x0 < res; x0 += tile)
+            {
+                int x1 = Mathf.Min(x0 + tile, res - 1), z1 = Mathf.Min(z0 + tile, res - 1);
+                float top = Top(heights, res, x0, z0, x1, z1);
+                bool coast = top > 0f && Bottom(heights, res, x0, z0, x1, z1) <= 0f;
+                bool cliff = false;
+                if (top > 0f)
+                    for (int z = z0; z < z1 && !cliff; z += 4)
+                        for (int x = x0; x < x1 && !cliff; x += 4)
+                        {
+                            float across = Mathf.Abs(heights[z * res + Mathf.Min(x + 4, res - 1)] - heights[z * res + x]);
+                            float up = Mathf.Abs(heights[Mathf.Min(z + 4, res - 1) * res + x] - heights[z * res + x]);
+                            if (Mathf.Max(across, up) > 2f * info.cell) cliff = true;   // 26 degrees over 80 m
+                        }
+                if (coast || cliff)
+                {
+                    coastTiles.Add(z0 / tile * 100000L + x0 / tile);
+                    coastLand++;
+                }
+            }
         // ponytail: one land stride for the whole map, the finest that fits the vertex budget; per-tile strides if mountains need more
         long land = 0;
         for (int z0 = 0; z0 < res; z0 += tile)
             for (int x0 = 0; x0 < res; x0 += tile)
                 if (Top(heights, res, x0, z0, Mathf.Min(x0 + tile, res - 1), Mathf.Min(z0 + tile, res - 1)) > 0f) land++;
         landStride = .5f;
-        while (landStride < 4f && land * (tile / landStride + 1) * (tile / landStride + 1) > (info.vertexBudget > 0 ? info.vertexBudget : 3300000)) landStride *= 2f;   // near-LOD land vertices in the whole map
+        // The coast's own stride: a quarter of the land stride, but never finer than one sample (20 m) — an island
+        // map's every tile is coast, and spending the budget on 10 m shores would coarsen its volcanoes instead.
+        Func<float, float> coastOf = s => s <= 1f ? s : Mathf.Max(s * .25f, 1f);
+        long budget = info.vertexBudget > 0 ? info.vertexBudget : 3300000;
+        while (landStride < 4f && Vertices(land - coastLand, landStride) + Vertices(coastLand, coastOf(landStride))
+               > budget) landStride *= 2f;   // near-LOD land vertices, coast tiles at their own stride
+        coastStride = coastOf(landStride);
+        // and when a map is more cliff than hill (a dune sea cut by a border range, an ice sheet full of nunataks),
+        // the fine tiles themselves coarsen until the budget holds — 40 m rock beats a 200 MB bundle.
+        while (coastStride < 4f && Vertices(land - coastLand, landStride) + Vertices(coastLand, coastStride) > budget)
+            coastStride *= 2f;
         // Tiles with a river or a lake in them are drawn twice as fine, near and far: a river is a few samples wide,
         // and the waterline is where the ground crosses its level sheet.
         wetTiles.Clear();
@@ -557,6 +608,21 @@ public static class BuildMapBundle
         return top;
     }
 
+    private static float Bottom(float[] heights, int res, int x0, int z0, int x1, int z1)
+    {
+        float low = float.MaxValue;
+        for (int z = z0; z <= z1; z++)
+            for (int x = x0; x <= x1; x++) low = Mathf.Min(low, heights[z * res + x]);
+        return low;
+    }
+
+    /// <summary>What a number of tiles drawn at a stride costs in near-LOD vertices.</summary>
+    private static long Vertices(long tiles, float stride)
+    {
+        int side = (int)(groundTile / stride) + 1;
+        return tiles * side * side;
+    }
+
     private static void Piece(GameObject parent, MapInfo info, float[] heights, Color32[] colours, Material material, string name, int x0, int z0, int size, int step)
     {
         int res = info.res, x1 = Mathf.Min(x0 + size, res - 1), z1 = Mathf.Min(z0 + size, res - 1);
@@ -565,7 +631,10 @@ public static class BuildMapBundle
         // A piece's origin is its own south-west sample, in map coordinates: small numbers keep float precision.
         go.transform.localPosition = new Vector3(-half + (x0 + .5f) * info.cell, 0f, -half + (z0 + .5f) * info.cell);
         bool fine = step == 1 && size == groundTile && wetTiles.Contains((z0 / size) * 100000L + x0 / size);
-        Mesh near = GridMesh(name, x0, z0, x1, z1, fine ? landStride * .5f : step == 1 ? landStride : step, fine ? landStride : 0f);
+        bool coast = step == 1 && size == groundTile && coastTiles.Contains((z0 / size) * 100000L + x0 / size);
+        Mesh near = GridMesh(name, x0, z0, x1, z1,
+            coast ? coastStride : fine ? landStride * .5f : step == 1 ? landStride : step,   // the shoreline at a quarter of the land stride,
+            coast || fine ? landStride : 0f);   // welded to its coarser neighbours' straight edges
         go.AddComponent<MeshFilter>().sharedMesh = near;
         var renderer = go.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = material;
@@ -596,8 +665,10 @@ public static class BuildMapBundle
     private static float groundCell;
     private static StripInfo[] groundPads;
     private static float landStride = .5f;
+    private static float coastStride = .5f;
     private static int groundTile = 64;
     private static readonly HashSet<long> wetTiles = new HashSet<long>();
+    private static readonly HashSet<long> coastTiles = new HashSet<long>();
     private static Material iceMaterial;
     private static byte[] groundIce;
 
@@ -1014,40 +1085,90 @@ public static class BuildMapBundle
 
     // ---- airstrips ---------------------------------------------------------------------------------------------------
 
-    /// <summary>A runway with centre-line and threshold marks and an apron beside it, lying just above the flattened pad.</summary>
+    /// <summary>A runway with centre-line and threshold marks, the apron, taxiway and hangar stubs of the airfield the
+    /// generator planned beside it (map.json's taxi routes and apron), and the vertical pad — all lying just above the
+    /// flattened pad. Each role is its own named child (runway, marks, taxi, apron) so the runtime can dress them with
+    /// the game's own airfield materials, as it does for roads and city blocks.</summary>
     private static void BuildStrip(GameObject parent, int n, StripInfo strip, Material material)
     {
         var go = Child(parent, "strip_" + n);
         go.transform.localPosition = new Vector3(strip.x, strip.y, strip.z);
-        go.transform.localRotation = Quaternion.Euler(0f, strip.heading, 0f); // local +z runs along the runway
-        var b = new Builder();
+        go.transform.localRotation = Quaternion.Euler(0f, strip.heading, 0f); // local +z runs along the runway, +x to its right
         bool marked = strip.surface == "asphalt";
         var asphalt = marked ? new Color(.13f, .13f, .14f) : strip.surface == "ice" ? new Color(.62f, .74f, .82f) : new Color(.36f, .33f, .29f);
         var paint = new Color(.82f, .82f, .78f);
         float half = strip.length * .5f;
-        Slab(b, new Vector3(0f, .12f, 0f), 22f, half, asphalt);
-        Slab(b, new Vector3(-72f, .12f, 0f), 50f, 110f, asphalt * 1.15f);          // apron
-        Slab(b, new Vector3(-36f, .12f, 0f), 14f, 12f, asphalt * 1.15f);           // its link to the runway
-        for (float z = -half + 90f; marked && z < half - 90f; z += 60f) Slab(b, new Vector3(0f, .16f, z), .45f, 15f, paint);
-        foreach (float end in new[] { -half + 14f, half - 14f })
-            for (int bar = -4; marked && bar <= 4; bar++)
-                if (bar != 0) Slab(b, new Vector3(bar * 4.2f, .16f, end), .9f, 10f, paint);
-        var mesh = new Mesh { name = go.name };
-        mesh.SetVertices(b.Vertices);
-        mesh.SetNormals(b.Normals);
-        mesh.SetColors(b.Colours);
-        mesh.SetTriangles(b.Triangles, 0);
-        go.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
-        go.AddComponent<MeshRenderer>().sharedMaterial = material;
+
+        void Pave(string name, Action<Builder> draw)
+        {
+            var part = Child(go, name);
+            var b = new Builder();
+            draw(b);
+            var mesh = new Mesh { name = go.name + "_" + name };
+            mesh.SetVertices(b.Vertices);
+            mesh.SetNormals(b.Normals);
+            mesh.SetColors(b.Colours);
+            mesh.SetTriangles(b.Triangles, 0);
+            part.AddComponent<MeshFilter>().sharedMesh = Keep(mesh);
+            part.AddComponent<MeshRenderer>().sharedMaterial = material;
+        }
+
+        Pave("runway", b => Slab(b, new Vector3(0f, .12f, 0f), 22f, half, asphalt));
+        Pave("marks", b =>
+        {
+            for (float z = -half + 90f; marked && z < half - 90f; z += 60f) Slab(b, new Vector3(0f, .16f, z), .45f, 15f, paint);
+            foreach (float end in new[] { -half + 14f, half - 14f })
+                for (int bar = -4; marked && bar <= 4; bar++)
+                    if (bar != 0) Slab(b, new Vector3(bar * 4.2f, .16f, end), .9f, 10f, paint);
+        });
+        // The airfield's own paving: the apron between the runway and the hangar row, then every route of the AI's
+        // taxi network as a ribbon, then the vertical pad. Routes arrive in map metres; the strip object is local.
+        Quaternion unturn = Quaternion.Euler(0f, -strip.heading, 0f);
+        Vector3 Local(float x, float y, float z) => unturn * new Vector3(x - strip.x, y - strip.y, z - strip.z);
+        Pave("apron", b =>
+        {
+            if (strip.pave != null && strip.pave.Length == 3 && strip.pave[0] > 0f)
+                Slab(b, new Vector3((strip.pave[1] + strip.pave[2]) * .5f, .12f, 0f), (strip.pave[2] - strip.pave[1]) * .5f, strip.pave[0], asphalt * 1.15f);
+            if (strip.pad != null && strip.pad.Length == 4)
+                Slab(b, Local(strip.pad[0], strip.pad[1], strip.pad[2]) + Vector3.up * .01f, 22f, 22f, asphalt * 1.15f);
+        });
+        Pave("taxi", b =>
+        {
+            for (int i = 0; strip.taxi != null && i + 5 < strip.taxi.Length; i += 6)
+                Ribbon(b, Local(strip.taxi[i], strip.taxi[i + 1], strip.taxi[i + 2]), Local(strip.taxi[i + 3], strip.taxi[i + 4], strip.taxi[i + 5]), 7f, asphalt * 1.08f);
+        });
         // Wheels roll on one flat slab, not on the paint.
         var surface = Child(go, "surface");
         var flat = new Builder();
         Slab(flat, new Vector3(0f, .12f, 0f), 22f, half, asphalt);
-        Slab(flat, new Vector3(-61f, .12f, 0f), 61f, 110f, asphalt);
+        if (strip.pave != null && strip.pave.Length == 3 && strip.pave[0] > 0f)
+            Slab(flat, new Vector3((strip.pave[1] + strip.pave[2]) * .5f, .12f, 0f), (strip.pave[2] - strip.pave[1]) * .5f, Mathf.Min(strip.pave[0], half), asphalt);
         var collision = new Mesh { name = go.name + "_surface" };
         collision.SetVertices(flat.Vertices);
         collision.SetTriangles(flat.Triangles, 0);
         surface.AddComponent<MeshCollider>().sharedMesh = Keep(collision);
+    }
+
+    /// <summary>A straight strip of pavement from one point to another, of the given half width, at the points'
+    /// height, in the game's own road UV convention: u 0..1 across, one texture picture every eight widths along.</summary>
+    private static void Ribbon(Builder b, Vector3 a, Vector3 c, float halfWidth, Color colour)
+    {
+        Vector3 along = c - a;
+        along.y = 0f;
+        float run = along.magnitude;
+        if (run < .01f) return;
+        Vector3 side = new Vector3(-along.z / run, 0f, along.x / run) * halfWidth;
+        float y = Mathf.Max(a.y, c.y);
+        int p0 = b.Add(new Vector3(a.x - side.x, y, a.z - side.z), Vector3.up, colour, 0f);
+        int p1 = b.Add(new Vector3(c.x - side.x, y, c.z - side.z), Vector3.up, colour, 0f);
+        int p2 = b.Add(new Vector3(c.x + side.x, y, c.z + side.z), Vector3.up, colour, 0f);
+        int p3 = b.Add(new Vector3(a.x + side.x, y, a.z + side.z), Vector3.up, colour, 0f);
+        float tiles = run / (8f * 2f * halfWidth);
+        b.Uvs[b.Uvs.Count - 4] = new Vector2(0f, 0f);
+        b.Uvs[b.Uvs.Count - 3] = new Vector2(0f, tiles);
+        b.Uvs[b.Uvs.Count - 2] = new Vector2(1f, tiles);
+        b.Uvs[b.Uvs.Count - 1] = new Vector2(1f, 0f);
+        b.Quad(p0, p1, p2, p3);
     }
 
     private static void Slab(Builder b, Vector3 centre, float halfWidth, float halfLength, Color colour)
@@ -1056,6 +1177,14 @@ public static class BuildMapBundle
         int c = b.Add(centre + new Vector3(-halfWidth, 0f, halfLength), Vector3.up, colour, 0f);
         int d = b.Add(centre + new Vector3(halfWidth, 0f, halfLength), Vector3.up, colour, 0f);
         int e = b.Add(centre + new Vector3(halfWidth, 0f, -halfLength), Vector3.up, colour, 0f);
+        // The game's paving convention, as its own road meshes use it: u 0..1 across the strip's width, one texture
+        // picture every eight widths along it — so the game's own asphalt and runway surfaces tile over ours exactly
+        // as they do over its fields.
+        float tile = 8f * 2f * halfWidth;
+        b.Uvs[b.Uvs.Count - 4] = new Vector2(0f, 0f);
+        b.Uvs[b.Uvs.Count - 3] = new Vector2(0f, 2f * halfLength / tile);
+        b.Uvs[b.Uvs.Count - 2] = new Vector2(1f, 2f * halfLength / tile);
+        b.Uvs[b.Uvs.Count - 1] = new Vector2(1f, 0f);
         b.Quad(a, c, d, e);
     }
 
