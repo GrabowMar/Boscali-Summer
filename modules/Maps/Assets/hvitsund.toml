@@ -138,3 +138,45 @@ x = 1010
 z = -940
 yaw = 200
 variant = 1
+
+[[edit]]            # wind-carved snow: sastrugi in long ridges across the sheet, all one way
+op = "roughen"
+x = -3000
+z = 8000
+to = [6000, 26000, 2000, 38000]
+radius = 5000
+amount = 1.6
+size = 70
+
+[[edit]]
+op = "roughen"
+x = 16000
+z = 6000
+to = [12000, 28000, 8000, 38000]
+radius = 5000
+amount = 1.4
+size = 70
+
+[[prop]]            # Nordkapp's fuel point: what the garrison lives on
+kind = "containers"
+at = "Nordkapp"
+x = 260
+z = -180
+yaw = 30
+variant = 1
+
+[[prop]]
+kind = "hut"
+at = "Nordkapp"
+x = 180
+z = 60
+yaw = 200
+variant = 1
+
+[[prop]]            # the sealer that stayed too long: frozen into the fast ice, listed over
+kind = "wreck"
+x = -6980
+z = -17760
+yaw = 70
+y = -2
+scale = 1.8

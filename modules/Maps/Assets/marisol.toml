@@ -14,11 +14,81 @@ radius = 60000
 amount = 5
 size = 220
 
-[[edit]]            # the northern volcano
+[[edit]]            # the northern volcano: its ridges stay sharp, but not so sharp the encoder flattens the crest
 op = "cliff"
 at = "Summit"
 radius = 4500
-amount = 1.0
+amount = 0.55
+
+[[edit]]            # the caldera: a bowl in the cone's top, its thrown-up rim round it
+op = "crater"
+at = "Summit"
+radius = 700
+amount = 140
+
+[[edit]]            # parasitic cinder cones on the volcano's shoulders
+op = "crater"
+at = "Summit"
+x = -1800
+z = 1500
+radius = 200
+amount = 35
+
+[[edit]]
+op = "crater"
+at = "Summit"
+x = 2400
+z = -900
+radius = 170
+amount = 30
+
+[[edit]]
+op = "crater"
+at = "Summit"
+x = -900
+z = -2600
+radius = 230
+amount = 40
+
+[[paint]]
+layer = "ash"
+at = "Summit"
+x = -1800
+z = 1500
+radius = 550
+amount = 0.5
+
+[[paint]]
+layer = "ash"
+at = "Summit"
+x = 2400
+z = -900
+radius = 450
+amount = 0.45
+
+[[paint]]
+layer = "ash"
+at = "Summit"
+x = -900
+z = -2600
+radius = 600
+amount = 0.5
+
+[[paint]]            # the volcano's own dark shores: ash and cinder where its flows reached the sea
+layer = "ash"
+at = "Summit"
+x = -6500
+z = 300
+radius = 2200
+amount = 0.55
+
+[[paint]]
+layer = "ash"
+at = "Summit"
+x = -3000
+z = -4500
+radius = 1800
+amount = 0.5
 
 [[edit]]            # ridges and ravines of the north island
 op = "cliff"
@@ -235,3 +305,19 @@ radius = 3000
 count = 6
 y = -3
 sea = true
+
+[[prop]]            # the freighter that did not make the strait: aground off Isla Brava's north shore
+kind = "wreck"
+at = "Isla Brava"
+x = -5000
+z = -3500
+scale = 2.2
+sea = true
+
+[[edit]]            # the coastal headland the San Coral road has to cross: rounded to a whaleback, so the road walks over it
+op = "smooth"
+x = 5000
+z = 31700
+to = [5520, 31690, 5680, 31708, 6160, 31775]
+radius = 420
+amount = 320
