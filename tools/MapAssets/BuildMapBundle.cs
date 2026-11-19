@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -132,15 +133,14 @@ public static class BuildMapBundle
                     ImportTexture(Dir + extra, false, false, false, extra == "macro_normal.png" ? 4096 : 2048, extra == "macro_normal.png");
                     extras.Add(Dir + extra);
                 }
-            // The map's own ground skins (skin_<name>_b/_n): the generator's aeolian ripples on the game's sand
-            // slots — the detail the game's own sand texture cannot know about this erg.
-            foreach (string skin in new[] { "skin_sand", "skin_dunes" })
-                foreach (string part in new[] { "_b", "_n" })
-                    if (File.Exists(Dir + skin + part + ".png"))
-                    {
-                        ImportTexture(Dir + skin + part + ".png", part == "_b", false, false, 2048, part == "_n");
-                        extras.Add(Dir + skin + part + ".png");
-                    }
+            // The map's own ground skins (skin_<name>_b/_n): whatever detail textures the generator wrote for the
+            // game's terrain slots — aeolian ripples, grass, cracked rock. They repeat: wrap, never clamp.
+            foreach (string skin in Directory.GetFiles(Dir, "skin_*_b.png").Concat(Directory.GetFiles(Dir, "skin_*_n.png")))
+            {
+                string part = Path.GetFileName(skin).EndsWith("_n.png") ? "_n" : "_b";
+                ImportTexture(skin, part == "_b", false, false, 2048, part == "_n", true);
+                extras.Add(skin);
+            }
             Directory.CreateDirectory("BundleOutput");
             var names = new List<string> { prefabPath, Dir + "map.json", Dir + "ocean_depth.png", Dir + "ocean_color.png", Dir + "colormap.png", Dir + image,
                 Dir + "macro.png", Dir + "splat_grass.png", Dir + "splat_rock.png", Dir + "splat_lush.png", Dir + "grass_mask.png" };
@@ -152,9 +152,25 @@ public static class BuildMapBundle
                 BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null) // LZMA: a height field packs far smaller than with LZ4
                 throw new Exception("Map bundle build returned no manifest.");
             long bytes = new FileInfo("BundleOutput/" + info.id + ".bsmap").Length;
-            if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 80 MiB: " + bytes + " bytes.");
-            File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain tiles ({landTiles} with land, a vertex every {landStride * info.cell:0} m), " +
-                $"{triangleCount} triangles, {info.strips.Length} strips; bundle {bytes} bytes.");
+            if (bytes > BundleLimit)
+            {
+                // A map whose ground earned its variation (a varied whole-map colour costs megabytes over a flat
+                // one) ships its macro at half the texels: the broad colour reads the same from the air, and the
+                // fine detail lives in the skins and the relief normal anyway.
+                ImportTexture(Dir + "macro.png", true, false, false, 2048);
+                if (BuildPipeline.BuildAssetBundles("BundleOutput", new[] { build },
+                    BuildAssetBundleOptions.StrictMode, BuildTarget.StandaloneWindows64) == null)
+                    throw new Exception("Map bundle rebuild returned no manifest.");
+                bytes = new FileInfo("BundleOutput/" + info.id + ".bsmap").Length;
+                if (bytes > BundleLimit) throw new Exception("Map bundle exceeds 80 MiB even with a half-resolution macro: " + bytes + " bytes.");
+                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain tiles ({landTiles} with land, a vertex every {landStride * info.cell:0} m), " +
+                    $"{triangleCount} triangles, {info.strips.Length} strips; bundle {bytes} bytes (macro at 2048).");
+            }
+            else
+            {
+                File.WriteAllText("result.txt", $"PASS: {info.displayName}: {chunkCount} terrain tiles ({landTiles} with land, a vertex every {landStride * info.cell:0} m), " +
+                    $"{triangleCount} triangles, {info.strips.Length} strips; bundle {bytes} bytes.");
+            }
             EditorApplication.Exit(0);
         }
         catch (Exception error)
@@ -1190,7 +1206,7 @@ public static class BuildMapBundle
 
     // ---- import settings and the final check -----------------------------------------------------------------------
 
-    private static void ImportTexture(string path, bool srgb, bool readable, bool sprite, int maxSize = 2048, bool normal = false)
+    private static void ImportTexture(string path, bool srgb, bool readable, bool sprite, int maxSize = 2048, bool normal = false, bool tiled = false)
     {
         var importer = AssetImporter.GetAtPath(path) as TextureImporter;
         if (importer == null) throw new Exception(path + " was not imported as a texture.");
@@ -1199,7 +1215,7 @@ public static class BuildMapBundle
         importer.sRGBTexture = srgb;
         importer.isReadable = readable;
         importer.mipmapEnabled = !sprite;
-        importer.wrapMode = TextureWrapMode.Clamp;
+        importer.wrapMode = tiled ? TextureWrapMode.Repeat : TextureWrapMode.Clamp;
         importer.filterMode = FilterMode.Bilinear;
         importer.maxTextureSize = maxSize;
         importer.npotScale = TextureImporterNPOTScale.None;

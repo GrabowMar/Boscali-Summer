@@ -1,4 +1,4 @@
-{"bundleHash": "e17f6e84", "bundleBytes": 42787111,
+{"bundleHash": "12de07c5", "bundleBytes": 44820341,
  "id": "marisol",
  "displayName": "Marisol Islands",
  "prefabName": "bs.marisol",
@@ -53,11 +53,31 @@
   "windScale": 1.0
  },
  "skins": {
-  "sand": "sand"
+  "sand": "sand",
+  "grass": "grass",
+  "grassDetail": "grassdetail",
+  "rock": "rock",
+  "lush": "lush"
  },
  "grass": {
   "density": 1.0,
-  "tints": null
+  "tints": [
+   [
+    0.44,
+    0.42,
+    0.2
+   ],
+   [
+    0.52,
+    0.48,
+    0.26
+   ],
+   [
+    0.38,
+    0.42,
+    0.22
+   ]
+  ]
  },
  "forests": [
   {

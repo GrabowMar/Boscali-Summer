@@ -9,6 +9,7 @@ using BoscaliSummer.Modules.Maps.Domain;
 using HarmonyLib;
 using NuclearOption.Effects;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Object = UnityEngine.Object;
 
 namespace BoscaliSummer.Modules.Maps.Runtime
@@ -82,6 +83,17 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 listed = true;
                 Plugin.Logger?.LogInfo("[Maps] Ground uses the game's " + donor.shader.name + ": textures " + string.Join(", ", donor.GetTexturePropertyNames()) +
                     "; breakup terrain " + Float(donor, BreakupTerrain) + ", normal " + Float(donor, BreakupNormal) + ", splat " + Float(donor, BreakupSplat) + ".");
+                var scalars = new List<string>();
+                for (int i = 0; i < donor.shader.GetPropertyCount(); i++)
+                {
+                    ShaderPropertyType type = donor.shader.GetPropertyType(i);
+                    string one = donor.shader.GetPropertyName(i);
+                    if (type == ShaderPropertyType.Float || type == ShaderPropertyType.Range)
+                        scalars.Add(one + "=" + donor.GetFloat(one).ToString("0.####", System.Globalization.CultureInfo.InvariantCulture));
+                    else if (type == ShaderPropertyType.Vector)
+                        scalars.Add(one + "=" + donor.GetVector(one).ToString("F3"));
+                }
+                Plugin.Logger?.LogInfo("[Maps] Terrain material scalars: " + string.Join(", ", scalars) + "; keywords: " + string.Join(",", donor.shaderKeywords) + ".");
             }
             if (Has(material, "_macro_basecolor")) material.SetTexture("_macro_basecolor", colour);
             foreach ((string texture, string property, int fallback) in Layers)
@@ -102,6 +114,13 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             SetBreakup(material, BreakupSplat, breakup.splat);
             foreach (KeyValuePair<string, string> skin in manifest.skins ?? new Dictionary<string, string>())
                 Skin(material, entry, skin.Key, skin.Value);
+            if (SkinSlots.TryGetValue("sand", out (string[] albedo, string[] normal) sandIds) && reported.Add("readback"))
+                foreach (string id in sandIds.albedo)
+                {
+                    string property = Sample + id + SampleEnd;
+                    if (Has(material, property) && material.GetTexture(property) is Texture dressed)
+                        Plugin.Logger?.LogInfo("[Maps] The sand ground detail is " + dressed.name + " (" + dressed.width + "x" + dressed.height + ").");
+                }
             foreach (MeshRenderer renderer in terrain.GetComponentsInChildren<MeshRenderer>(true))
             {
                 if (renderer.name == "ice") continue; // the bake's ice skin, drawn over the ground with its own shader
@@ -161,6 +180,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 foreach (MeshCollider collider in map.Prefab.GetComponentsInChildren<MeshCollider>(true))
                 {
                     if (collider.sharedMaterial != ground || !collider.TryGetComponent(out MeshRenderer renderer) || renderer.sharedMaterial == null) continue;
+                    if (!listed) Plugin.Logger?.LogInfo("[Maps] The ground is borrowed from the game's " + map.Prefab.name + ".");
                     return renderer.sharedMaterial;
                 }
             }

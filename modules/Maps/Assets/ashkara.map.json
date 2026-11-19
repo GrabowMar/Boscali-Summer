@@ -1,4 +1,4 @@
-{"bundleHash": "81bdbb4a", "bundleBytes": 44138943,
+{"bundleHash": "95be1905", "bundleBytes": 45886177,
  "id": "ashkara",
  "displayName": "Ashkara",
  "prefabName": "bs.ashkara",
@@ -53,11 +53,25 @@
   "windScale": 1.3
  },
  "skins": {
-  "sand": "sand"
+  "sand": "sand",
+  "grass": "grass",
+  "grassDetail": "grassdetail",
+  "rock": "rock"
  },
  "grass": {
-  "density": 1.0,
-  "tints": null
+  "density": 0.5,
+  "tints": [
+   [
+    0.46,
+    0.43,
+    0.24
+   ],
+   [
+    0.52,
+    0.47,
+    0.27
+   ]
+  ]
  },
  "forests": [
   {

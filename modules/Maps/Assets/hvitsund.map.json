@@ -1,4 +1,4 @@
-{"bundleHash": "d2a80f80", "bundleBytes": 74048884,
+{"bundleHash": "34e3eefe", "bundleBytes": 75055263,
  "id": "hvitsund",
  "displayName": "Hvitsund",
  "prefabName": "bs.hvitsund",
@@ -53,10 +53,11 @@
   "windScale": 1.8
  },
  "skins": {
-  "sand": "sand"
+  "sand": "sand",
+  "rock": "rock"
  },
  "grass": {
-  "density": 1.0,
+  "density": 0.0,
   "tints": null
  },
  "forests": [],

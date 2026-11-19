@@ -1,4 +1,4 @@
-{"bundleHash": "95591cbf", "bundleBytes": 77342694,
+{"bundleHash": "217489e2", "bundleBytes": 76490744,
  "id": "tassara",
  "displayName": "Tassara",
  "prefabName": "bs.tassara",
@@ -57,8 +57,19 @@
   "dunes": "dunes"
  },
  "grass": {
-  "density": 1.0,
-  "tints": null
+  "density": 0.5,
+  "tints": [
+   [
+    0.46,
+    0.43,
+    0.24
+   ],
+   [
+    0.52,
+    0.47,
+    0.27
+   ]
+  ]
  },
  "forests": [],
  "kinds": [
