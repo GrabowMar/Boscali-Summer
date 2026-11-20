@@ -108,6 +108,7 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                             root.Merge(mode.bote, new JsonMergeSettings { MergeArrayHandling = MergeArrayHandling.Concat });
                     }
                     Stand(root, entry.Manifest, mode?.sides);
+                    Own(root, entry.Manifest);
                     json = root.ToString(Formatting.None);
                     return true;
                 }
@@ -115,6 +116,23 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 {
                     Plugin.Logger?.LogWarning("[Maps] Could not make the " + key.Key + " mission: " + error.Message);
                     return false;
+                }
+            }
+
+            /// <summary>The map's own strips, held by the side the generator dealt them to. An unheld strip would
+            /// spawn aircraft of no headquarters, and the game's own weapon picker dereferences a null HQ — its free
+            /// flight fields get away with it only because they stand no hangars. Ours do.</summary>
+            private static void Own(JObject root, MapManifest manifest)
+            {
+                if (!(root["airbases"] is JArray airbases)) root["airbases"] = airbases = new JArray();
+                for (int n = 0; n < manifest.strips.Length; n++)
+                {
+                    MapManifest.Strip strip = manifest.strips[n];
+                    string side = strip?.side == "red" ? "Primeva" : strip?.side == "blue" ? "Boscali" : "Neutral";
+                    string name = manifest.displayName + " Strip " + (n + 1);
+                    JToken there = airbases.FirstOrDefault(a => (string)a["UniqueName"] == name);
+                    if (there != null) there["faction"] = side;
+                    else airbases.Add(new JObject { ["UniqueName"] = name, ["faction"] = side, ["Capturable"] = true });
                 }
             }
 

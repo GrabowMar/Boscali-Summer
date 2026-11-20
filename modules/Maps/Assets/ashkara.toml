@@ -4,6 +4,9 @@ biome = "desert"
 seed = 7
 cell = 20
 
+[preset]
+lakes = 0       # no crater lake in the caldera: the array's ruin keeps the summit
+
 # ---- hand work (nomod map edit / paint / prop): the lie of a battered volcanic island
 
 [[edit]]            # small relief everywhere: hummocks and washes
@@ -193,4 +196,33 @@ x = 700
 z = -600
 radius = 420
 count = 160
+
+[[edit]]            # the sabkha: a salt pan by the south-west shore, flat as a table
+op = "flatten"
+x = -7800
+z = -1800
+radius = 1900
+
+[[paint]]
+layer = "salt"
+x = -7800
+z = -1800
+radius = 1700
+amount = 0.85
+
+[[prop]]            # a few rocks standing out of the crust
+kind = "boulder"
+x = -7800
+z = -1800
+radius = 1500
+count = 10
+scale = 0.6
+
+[[prop]]            # the ore carrier that took the reef at night: hard aground, half sunk
+kind = "wreck"
+x = 8660
+z = -7640
+yaw = 280
+scale = 1.6
+sea = true
 

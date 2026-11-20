@@ -62,9 +62,19 @@ namespace BoscaliSummer.Modules.Maps.Domain
         [Serializable]
         internal sealed class Strip
         {
-            public string name = "", role = "", surface = "";
+            public string name = "", role = "", surface = "", side = "";
             public float x, y, z, length, width = 40f, padLength, padWidth;
             public int heading;
+            /// <summary>The AI's taxi routes of the airfield, made by the generator: flat x, y, z, x, y, z — each pair
+            /// one straight road, joining the others at shared end points. The bake paves them and MapBuilder gives
+            /// them to the game's <see cref="NuclearOption.Airbase"/> as its taxi network.</summary>
+            public float[] taxi = new float[0];
+            /// <summary>Runway exits, for what lands: flat x, y, z, heading, four of them.</summary>
+            public float[] exits = new float[0];
+            /// <summary>Where aircraft are serviced: flat x, y, z.</summary>
+            public float[] service = new float[0];
+            /// <summary>The vertical-landing pad: x, y, z and the heading it faces.</summary>
+            public float[] pad = new float[0];
         }
         /// <summary>One of the game's buildings (or, <c>scenery</c>, scenery objects) by its mission key, at map metres,
         /// facing compass <c>yaw</c>; <c>side</c> red | blue | ""; <c>airbase</c> the strip it belongs to, or -1.</summary>

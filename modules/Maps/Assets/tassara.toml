@@ -4,17 +4,19 @@ biome = "desert"
 seed = 7
 cell = 20
 latitude = 23
-heightmap = "Source/tassara.height.png"   # tools/MapAssets/tassara_height.py: a sand sea of megadunes, a gravel pan under each airfield, the border range half buried. No sea.
+heightmap = "Source/tassara.height.png"   # tools/MapAssets/tassara_height.py: the Grand Erg Oriental — seif chains running with the wind, gourds where the erg is thickest, caravan corridors between them, two Ubari lakes, a wadi, and the drowned border range
 height_min = 100
 height_max = 1200
 
-# Nothing but desert and three airfields in a triangle: the smugglers' strip in the west, the strip they fly to across
-# the border range in the east, and the army's base to the north, as far from one as from the other.
+# A sand sea of the central Sahara, on the old caravan pistes: three airstrips in a triangle, salt lakes where
+# the deflation hollows reach water, palm oases and a ksar on their shores, an oil camp in the northeast, and
+# the border range half-buried along the middle.
 [preset]
 description = "A sea of sand with no coast: megadunes, gravel pans and a half-buried border range between three airstrips. Camp Tifa in the west, Bir Anzar across the range in the east, the army's Fort Tassara to the north."
 superweapon = ""
-bare = true      # no towns, rivers or plants: sand, rock and three airfields
-lakes = 0
+bare = true      # no towns, rivers or plants: sand, rock, lakes and what travellers left behind
+lakes = 3        # the closed hollows of the erg hold salt lakes, as the Ubari sand sea's do
+wind = [0.71, 0.0, -0.71]   # the bearing the erg marches toward (x east, z north): the seif ridges run across it
 
 [preset.lanes]
 style = "none"
@@ -50,35 +52,481 @@ x = 1000
 z = 27000
 heading = 90
 
-[[prop]]            # palms at the water: Camp Tifa
+# ---- the western lake and its oasis (the Ubari lakes' mineral water, palms, ghurfas, a ksar on the rise)
+
+[[prop]]            # the palm groves: the oasis lives on its dates, on the shore rise above the salt
 kind = "palm"
-x = -25600
-z = -10900
-radius = 260
-count = 22
+x = -35900
+z = 12700
+radius = 420
+count = 46
+
+[[prop]]
+kind = "palm"
+x = -32100
+z = 16300
+radius = 380
+count = 38
+
+[[prop]]            # the ghurfa village on the lake's shore
+kind = "hut"
+x = -36300
+z = 15900
+radius = 240
+count = 7
+
+[[prop]]
+kind = "ruins"
+x = -31700
+z = 13400
+yaw = 40
+variant = 1
+scale = 1.5
+
+[[prop]]
+kind = "wreck"
+x = -35100
+z = 16000
+yaw = 200
+scale = 1.2
+
+[[prop]]            # the ksar: the fortified granary above the oasis
+kind = "castle"
+x = -36800
+z = 17600
+yaw = 160
+variant = 0
+scale = 1.4
+
+[[prop]]
+kind = "hut"
+x = -36400
+z = 18000
+radius = 200
+count = 4
+
+[[prop]]
+kind = "water_tower"
+x = -37200
+z = 17100
+yaw = 20
+
+# ---- the great lake and its shores (the generator's flood found its own bowl: the biggest water in the erg)
+
+[[prop]]            # a boat out on the salt water, as the tourist runs at Ubari
+kind = "boat"
+x = -9100
+z = -11200
+y = 372
+yaw = 30
+
+[[prop]]            # palms on the lake's north shore rise
+kind = "palm"
+x = -9300
+z = -9800
+radius = 380
+count = 34
+
+[[prop]]
+kind = "hut"
+x = -8900
+z = -9600
+radius = 200
+count = 4
+
+[[prop]]            # and on the east shore
+kind = "palm"
+x = -7600
+z = -11800
+radius = 320
+count = 26
+
+# ---- the southern lake
+
+[[prop]]
+kind = "boat"
+x = 28800
+z = 27000
+y = 307
+yaw = 210
+
+[[prop]]
+kind = "palm"
+x = 29200
+z = 25800
+radius = 340
+count = 30
+
+[[prop]]
+kind = "hut"
+x = 28900
+z = 25600
+radius = 180
+count = 3
+
+# ---- the southern lake and its wells
+
+[[prop]]
+kind = "palm"
+x = 6100
+z = -23700
+radius = 400
+count = 42
+
+[[prop]]
+kind = "palm"
+x = 9900
+z = -28400
+radius = 360
+count = 34
+
+[[prop]]
+kind = "hut"
+x = 10300
+z = -28000
+radius = 240
+count = 6
+
+[[prop]]
+kind = "ruins"
+x = 5800
+z = -28300
+radius = 200
+count = 3
 scale = 1.3
 
-[[prop]]            # palms at the water: Bir Anzar
-kind = "palm"
-x = 26500
-z = -7600
-radius = 260
-count = 22
-scale = 1.3
+# ---- the oil camp (this is Libya): drill rigs, tanks and stores on the reg
 
-[[prop]]            # palms at the water: Fort Tassara
-kind = "palm"
-x = -900
-z = 28600
-radius = 260
-count = 22
-scale = 1.3
+[[prop]]
+kind = "drill_rig"
+x = 21600
+z = 14400
+yaw = 15
+scale = 1.2
 
-[[prop]]            # palms at the water: the lost well
+[[prop]]
+kind = "drill_rig"
+x = 22300
+z = 13700
+yaw = 340
+scale = 1.0
+
+[[prop]]
+kind = "fuel_tank"
+x = 20900
+z = 13900
+radius = 160
+count = 3
+
+[[prop]]
+kind = "containers"
+x = 22100
+z = 15200
+radius = 180
+count = 5
+
+[[prop]]
+kind = "warehouse"
+x = 21100
+z = 15100
+yaw = 70
+
+[[prop]]
+kind = "antenna_field"
+x = 21700
+z = 15500
+
+[[prop]]
+kind = "hut"
+x = 21400
+z = 14700
+radius = 150
+count = 3
+
+[[paint]]
+layer = "gravel"
+x = 21700
+z = 14400
+radius = 700
+amount = 0.6
+
+# ---- the wadi: acacias down the deflation hollow, from the range to the western lake
+
+[[prop]]
+kind = "acacia"
+x = 3300
+z = 13800
+
+[[prop]]
+kind = "acacia"
+x = 2500
+z = 15400
+
+[[prop]]
+kind = "acacia"
+x = 1400
+z = 16800
+
+[[prop]]
+kind = "acacia"
+x = -400
+z = 15900
+
+[[prop]]
+kind = "acacia"
+x = -2400
+z = 17200
+
+[[prop]]
+kind = "acacia"
+x = -4900
+z = 16100
+
+[[prop]]
+kind = "acacia"
+x = -8200
+z = 16600
+
+[[prop]]
+kind = "acacia"
+x = -10600
+z = 15600
+
+[[prop]]
+kind = "acacia"
+x = -13100
+z = 16300
+
+[[prop]]
+kind = "acacia"
+x = -15600
+z = 16900
+
+[[prop]]
+kind = "acacia"
+x = -18300
+z = 16100
+
+[[prop]]
+kind = "acacia"
+x = -20800
+z = 15600
+
+[[prop]]
+kind = "acacia"
+x = -23400
+z = 16200
+
+[[prop]]
+kind = "acacia"
+x = -26100
+z = 15500
+
+[[prop]]
+kind = "acacia"
+x = -28800
+z = 15000
+
+[[prop]]            # and a lonely one out on the reg, for the horizon
+kind = "acacia"
+x = -8000
+z = -20000
+
+[[prop]]
+kind = "acacia"
+x = 15000
+z = 22000
+
+# ---- the old pistes, marked
+
+[[prop]]            # cairns where the route bends
+kind = "cairn"
+x = 3000
+z = 12500
+
+[[prop]]
+kind = "cairn"
+x = -1400
+z = 14300
+
+[[prop]]
+kind = "cairn"
+x = -6800
+z = 15900
+
+[[prop]]
+kind = "cairn"
+x = -11600
+z = 15700
+
+[[prop]]
+kind = "cairn"
+x = -16200
+z = 16400
+
+[[prop]]
+kind = "cairn"
+x = -21400
+z = 15800
+
+[[prop]]
+kind = "cairn"
+x = -27000
+z = 15300
+
+# ---- what the desert keeps
+
+[[prop]]            # the convoy that never crossed: what the wind keeps of it, out on the piste
+kind = "debris"
+x = -19061
+z = 1520
+radius = 260
+count = 14
+scale = 1.4
+
+[[prop]]
+kind = "wreck"
+x = -19110
+z = 1450
+yaw = 40
+scale = 1.8
+
+[[prop]]
+kind = "wreck"
+x = -18990
+z = 1690
+yaw = 190
+scale = 1.5
+
+[[paint]]
+layer = "scorch"
+x = -19061
+z = 1520
+radius = 320
+amount = 0.6
+
+[[prop]]            # the lost well: huts, a sealed store, old stones
+kind = "hut"
+x = -8060
+z = 5960
+yaw = 200
+variant = 0
+
+[[prop]]
+kind = "hut"
+x = -7980
+z = 6070
+yaw = 120
+variant = 2
+
+[[prop]]
+kind = "containers"
+x = -7920
+z = 5920
+yaw = 30
+variant = 1
+
+[[prop]]
+kind = "ruins"
+x = -8140
+z = 6120
+variant = 1
+scale = 1.4
+
+[[prop]]
 kind = "palm"
 x = -8000
 z = 6000
 radius = 260
-count = 22
-scale = 1.3
+count = 16
 
+[[paint]]
+layer = "gravel"
+x = -8000
+z = 6000
+radius = 700
+amount = 0.6
+
+[[prop]]            # the caravanserai off the old road
+kind = "ruins"
+x = -13000
+z = 15000
+radius = 300
+count = 4
+scale = 1.5
+
+[[prop]]
+kind = "hut"
+x = -12950
+z = 15050
+yaw = 60
+variant = 1
+
+[[paint]]
+layer = "gravel"
+x = -13000
+z = 15000
+radius = 380
+amount = 0.55
+
+[[paint]]            # the border range shows its rock through the sand
+layer = "rock"
+x = 4000
+z = -20000
+to = [4600, -8000, 4800, 2000]
+radius = 700
+amount = 0.5
+
+[[prop]]            # inselbergs: rock teeth standing out of the range's crest
+kind = "outcrop"
+x = 4540
+z = -3880
+radius = 4200
+count = 26
+
+[[prop]]
+kind = "boulder"
+x = 4540
+z = -3880
+radius = 5000
+count = 60
+
+[[edit]]            # the sabkha: a pan in the low ground east of Bir Anzar, flat as a table
+op = "flatten"
+x = 18500
+z = -16500
+radius = 2200
+
+[[paint]]
+layer = "salt"
+x = 18500
+z = -16500
+radius = 2000
+amount = 0.85
+
+[[prop]]            # the checkpoint at the border saddle, where the Fort road crosses the range
+kind = "tank_trap"
+x = 11284
+z = 19440
+radius = 130
+count = 18
+
+[[prop]]
+kind = "bunker"
+x = 11350
+z = 19300
+yaw = 250
+variant = 1
+
+[[prop]]
+kind = "gun_emplacement"
+x = 11240
+z = 19570
+yaw = 70
+
+[[paint]]
+layer = "gravel"
+x = 11284
+z = 19440
+radius = 300
+amount = 0.7
