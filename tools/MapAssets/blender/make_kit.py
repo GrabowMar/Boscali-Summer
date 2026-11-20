@@ -1433,6 +1433,101 @@ def shed(b, v):
         b.decal((2.3, 0, 1.8), (0.7, 0.5), (0, 90, 0), (1, 0))
 
 
+def fence(b, v):
+    """A 6 m modular boundary: 0 chain-link, 1 wooden rail, 2 concrete wall."""
+    if v == 0:
+        for x in (-2.8, 2.8):
+            b.beam((x, 0, 0), (x, 0, 2.2), 0.07, IRON, 4)
+        b.beam((-2.8, 0, 2.1), (2.8, 0, 2.1), 0.05, STEEL, 3)
+        b.box((0, 0, 1.1), (2.8, 0.03, 1.0), STEEL)
+        b.box((0, 0, 2.25), (2.8, 0.03, 0.05), STEEL)
+        return
+    if v == 1:
+        for x in (-2.8, 2.8):
+            b.box((x, 0, 0.9), (0.09, 0.09, 0.9), WOOD)
+        for z in (0.7, 1.5):
+            b.beam((-2.8, 0, z), (2.8, 0, z), 0.05, WOOD, 3)
+        for x in (-1.8, -0.6, 0.6, 1.8):
+            b.box((x, 0, 1.1), (0.08, 0.04, 0.8), WOOD)
+        return
+    b.box((0, 0, 0.7), (3.0, 0.18, 0.7), CONCRETE)
+    b.box((0, 0, 1.48), (3.1, 0.22, 0.08), CONCRETE_D)
+    b.box((0, 0, 0.85), (1.0, 0.02, 0.25), CONCRETE_D)
+
+
+def utility_pole(b, v):
+    """A roadside pole: 0 power pole with crossarm, 1 street lamp."""
+    if v == 0:
+        b.beam((0, 0, 0), (0, 0, 8), 0.14, WOOD, 4)
+        b.box((0, 0, 7.2), (1.4, 0.1, 0.1), WOOD)
+        for x in (-1.2, 0, 1.2):
+            b.cyl((x, 0, 7.25), 0.09, 0.25, GLASS, 5)
+        b.box((0, 0, 5.0), (0.4, 0.25, 0.5), PANEL_D)
+        b.box((0, 0, 0.3), (0.25, 0.25, 0.3), CONCRETE_D)
+        return
+    b.beam((0, 0, 0), (0, 0, 7), 0.1, IRON, 4)
+    b.beam((0, 0, 7), (2.0, 0, 7.2), 0.06, IRON, 3)
+    b.box((2.1, 0, 7.15), (0.35, 0.2, 0.12), PANEL_D)
+    b.box((2.1, 0, 7.02), (0.3, 0.15, 0.04), WHITE)
+    b.box((0, 0, 0.3), (0.2, 0.2, 0.3), CONCRETE_D)
+    b.box((0, 0.12, 3.4), (0.35, 0.02, 0.5), WHITE)
+
+
+def water_pump(b, v):
+    """A rural windpump on four legs."""
+    for x in (-1.2, 1.2):
+        for y in (-1.2, 1.2):
+            b.beam((x, y, 0), (x * 0.5, y * 0.5, 6), 0.08, IRON, 3)
+    b.box((0, 0, 6.1), (1.2, 1.2, 0.2), PANEL_D)
+    b.cyl((0, 2.0, 6.4), 0.3, 0.5, IRON, 6, rot=(90, 0, 0))
+    for k in range(4):
+        a = k * math.pi / 2
+        b.box((0.9 * math.sin(a), 2.0, 6.4 + 0.9 * math.cos(a)), (0.58, 0.05, 0.16),
+              PANEL, (0, -math.degrees(a), 0))
+    b.box((0, -2.2, 6.4), (0.1, 1.2, 0.6), PANEL_D)
+    b.box((0, 0, 0.8), (0.5, 0.5, 0.5), CONCRETE_D)
+    b.beam((0, 0, 0.8), (0, 0, 6.0), 0.08, IRON, 3)
+
+
+def market(b, v):
+    """A row of market stalls."""
+    for k, x in enumerate((-2.4, 0, 2.4)):
+        for dx in (-1.0, 1.0):
+            for dy in (-0.8, 0.8):
+                b.beam((x + dx, dy, 0), (x + dx, dy, 2.2), 0.06, WOOD, 3)
+        b.box((x, 0, 2.3), (1.2, 1.0, 0.1), (RED, BLUE, OLIVE)[k % 3], (0, 0, 4 * k))
+        b.box((x, 0, 0.8), (1.0, 0.7, 0.08), WOOD)
+    if b.fine:
+        for x in (-2.4, 0, 2.4):
+            b.box((x + 0.3, -0.5, 1.0), (0.3, 0.3, 0.25), WOOD)
+        b.decal((0, -1.2, 0.2), (2.0, 0.7), (0, 0, 0), (0, 2))
+
+
+def pier(b, v):
+    """A small coastal pier: 0 a jetty, 1 a boathouse and slip."""
+    if v == 0:
+        b.box((0, 0, 1.2), (2.2, 8, 0.2), WOOD)
+        for y in (-7, -3, 1, 5, 8):
+            for x in (-1.8, 1.8):
+                b.beam((x, y, -2), (x, y, 1.2), 0.18, WOOD, 4)
+        railing(b, (-2.1, -8, 1.4), (-2.1, 8, 1.4), 0.8, 6)
+        for y in (-6, 6):
+            b.cyl((-2.0, y, 1.6), 0.22, 0.3, PANEL_D, 6)
+        b.box((1.4, 3, 1.5), (0.7, 0.9, 0.4), WOOD)
+        return
+    b.box((0, 0, 1.6), (4.0, 3.0, 1.6), HULL)
+    b.box((0, 0, 3.5), (4.3, 3.3, 0.8), TILE, taper=(0.02, 1))
+    b.box((0, 3.1, 0.8), (2.0, 2.5, 0.2), WOOD, (-8, 0, 0))
+    for x in (-3.2, 3.2):
+        b.beam((x, 0, -2), (x, 0, 1.6), 0.18, WOOD, 4)
+    door(b, (0, 3.05, 1.3), 1.6, 2.2, 0)
+    for x in (-2.2, 2.2):
+        b.box((x, 3.05, 2.0), (0.7, 0.05, 0.6), PANEL_D)
+        b.box((x, 3.12, 2.0), (0.5, 0.03, 0.4), GLASS)
+    if b.fine:
+        b.decal((0, 4.4, 2.0), (1.0, 0.8), (-90, 0, 0), (2, 0))
+
+
 SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
           ("castle", castle, 2, 1, "l"), ("ruins", ruins, 3, 1, "l"), ("oil_rig", oil_rig, 1, 1, "l"), ("debris", debris, 3, 0, "m"),
           ("station_hub", station_hub, 1, 1, "l"), ("station_module", station_module, 3, 1, "l"), ("dish", dish, 2, 1, "l"),
@@ -1443,7 +1538,10 @@ SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l
           ("tank_trap", tank_trap, 1, 0, "s"), ("drill_rig", drill_rig, 1, 1, "l"), ("antenna_field", antenna_field, 1, 0, "m"),
           ("chapel", chapel, 2, 1, "l"), ("radar_dome", radar_dome, 1, 1, "l"),
           ("house", house, 3, 1, "l"), ("shop", shop, 2, 1, "l"),
-          ("barn", barn, 2, 1, "l"), ("shed", shed, 1, 1, "l"))
+          ("barn", barn, 2, 1, "l"), ("shed", shed, 1, 1, "l"),
+          ("fence", fence, 3, 1, "m"), ("utility_pole", utility_pole, 2, 1, "m"),
+          ("water_pump", water_pump, 1, 1, "m"), ("market", market, 1, 0, "m"),
+          ("pier", pier, 2, 1, "l"))
 
 
 def dressed(folder: Path):
