@@ -22,7 +22,7 @@ NEW_CAPS = {
     "house": 550, "shop": 500, "barn": 500, "shed": 320, "fence": 160,
     "utility_pole": 200, "water_pump": 320, "market": 300, "pier": 420,
     "checkpoint": 340, "watchtower": 420, "camp": 320, "fuel_point": 380,
-    "clutter": 140, "wreck": 280, "billboard": 180,
+    "clutter": 280, "wreck": 280, "billboard": 180,
 }
 NEW = {"house", "shop", "barn", "shed", "fence", "utility_pole", "water_pump",
        "market", "pier", "checkpoint", "watchtower", "camp", "fuel_point",

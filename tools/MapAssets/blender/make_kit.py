@@ -1324,7 +1324,6 @@ def house(b, v):
                 b.box((side * 5.12, -1, 2.2), (0.03, 0.6, 0.7), GLASS)
             b.beam((-5.05, 3, 0), (-5.05, 3, 4), 0.08, IRON, 3)
             b.box((2.4, -1, 7.5), (0.6, 0.6, 0.2), CONCRETE_D)
-            b.box((-3, 5.2, 0.8), (0.6, 0.6, 0.8), WOOD)
             b.decal((0, 4.2, 3.4), (1.0, 0.7), (-90, 0, 0), (0, 1))
         return
     if v == 1:
@@ -1336,11 +1335,8 @@ def house(b, v):
                 for x in (-2.4, 2.4):
                     b.box((x, 3.55, z), (0.9, 0.05, 0.9), PANEL_D)
                     b.box((x, 3.62, z), (0.7, 0.03, 0.7), GLASS)
-            b.box((0, 4.2, 5.0), (2.0, 0.9, 0.2), PANEL_D)
-            railing(b, (-1.8, 4.6, 5.1), (1.8, 4.6, 5.1), 0.8, 4)
             b.box((2.0, 4.5, 3.0), (0.8, 0.6, 0.3), IRON)
         if b.fine:
-            b.beam((-4.6, 3, 0), (-4.6, 3, 7.5), 0.08, IRON, 3)
             b.box((-4.5, 4.4, 0.2), (1.0, 0.7, 0.2), CONCRETE_D)
             b.decal((0, 3.7, 6.2), (0.9, 0.7), (-90, 0, 0), (1, 0))
         return
@@ -1447,7 +1443,7 @@ def fence(b, v):
             b.box((x, 0, 0.9), (0.09, 0.09, 0.9), WOOD)
         for z in (0.7, 1.5):
             b.beam((-2.8, 0, z), (2.8, 0, z), 0.05, WOOD, 3)
-        for x in (-1.8, -0.6, 0.6, 1.8):
+        for x in (-1.2, 1.2):
             b.box((x, 0, 1.1), (0.08, 0.04, 0.8), WOOD)
         return
     b.box((0, 0, 0.7), (3.0, 0.18, 0.7), CONCRETE)
@@ -1528,6 +1524,137 @@ def pier(b, v):
         b.decal((0, 4.4, 2.0), (1.0, 0.8), (-90, 0, 0), (2, 0))
 
 
+def checkpoint(b, v):
+    """A roadside checkpoint: booth, boom barrier, lamps and sandbags."""
+    b.box((0, 0, 1.4), (1.4, 1.2, 1.4), PANEL)
+    b.box((0, 0, 3.0), (1.6, 1.4, 0.2), PANEL_D)
+    b.box((0, 1.22, 2.0), (1.0, 0.05, 0.6), GLASS)
+    b.box((1.4, 0, 1.0), (0.25, 0.25, 1.0), CONCRETE_D)
+    b.beam((1.4, 0, 1.8), (6.5, 0, 1.8), 0.08, YELLOW, 4)
+    for x in (-1.8, 4.5):
+        b.beam((x, 2.0, 0), (x, 2.0, 3.6), 0.08, IRON, 3)
+        b.box((x, 2.0, 3.7), (0.25, 0.25, 0.15), PANEL_D)
+    if b.fine:
+        for x in (-2.4, 4.8):
+            b.rock((x, 1.4, 0.4), 0.9, SANDBAG, 81 + int(x), (1.4, 0.9, 0.5))
+        b.decal((0, 1.25, 1.8), (0.9, 0.6), (-90, 0, 0), (1, 0))
+
+
+def watchtower(b, v):
+    """A field watchtower with ladder, roof and radio."""
+    for x in (-1.8, 1.8):
+        for y in (-1.8, 1.8):
+            b.beam((x, y, 0), (x * 0.7, y * 0.7, 6.5), 0.14, WOOD, 3)
+    b.box((0, 0, 6.4), (2.4, 2.4, 0.2), WOOD)
+    railing(b, (-2.2, -2.2, 6.5), (2.2, -2.2, 6.5), 0.9, 4)
+    railing(b, (-2.2, 2.2, 6.5), (2.2, 2.2, 6.5), 0.9, 4)
+    b.box((0, 0, 8.4), (2.8, 2.8, 0.2), TILE, taper=(0.1, 1))
+    b.box((1.5, 1.2, 7.4), (0.5, 0.5, 0.6), PANEL_D)
+    if b.mid:
+        ladder(b, (0, -2.2, 0), 6.4, 0, rungs=7)
+    if b.fine:
+        b.beam((1.5, 1.2, 8.0), (1.5, 1.2, 10.5), 0.05, IRON, 3)
+        b.rock((0, -3.0, 0.4), 0.8, SANDBAG, 88, (1.4, 0.9, 0.5))
+
+
+def camp(b, v):
+    """A field camp: 0 two tents, 1 a field kitchen."""
+    if v == 0:
+        for k, x in enumerate((-2.2, 2.2)):
+            b.box((x, 0, 0.9), (1.6, 2.2, 0.9), OLIVE, (0, 0, 8 * k))
+            b.box((x, 0, 1.9), (1.8, 2.4, 0.15), OLIVE, (0, 0, 8 * k), 0.4)
+            for dy in (-2.0, 2.0):
+                b.beam((x - 1.4, dy, 0), (x, dy * 0.2, 1.9), 0.03, IRON, 3)
+        b.box((0, -2.5, 0.5), (0.8, 0.8, 0.5), WOOD)
+        b.box((-0.8, -2.4, 0.4), (0.3, 0.3, 0.4), WOOD)
+        return
+    for x in (-2.4, 2.4):
+        for y in (-1.6, 1.6):
+            b.beam((x, y, 0), (x, y, 2.4), 0.08, IRON, 3)
+    b.box((0, 0, 2.5), (2.8, 2.0, 0.12), PANEL_D, (0, 6, 0))
+    b.box((0, 0, 0.9), (2.2, 0.8, 0.15), WOOD)
+    b.cyl((-1.2, 0, 1.0), 0.4, 0.5, IRON, 6)
+    b.cyl((-0.4, 0, 1.0), 0.35, 0.4, PANEL_D, 6)
+    if b.fine:
+        for x in (-1.8, 0.4):
+            b.box((x, -1.2, 0.5), (0.5, 0.4, 0.4), WOOD)
+        b.decal((0, 2.0, 1.4), (0.8, 0.5), (-90, 0, 0), (1, 0))
+
+
+def fuel_point(b, v):
+    """A small fuel point: 0 a tank and pump, 1 a generator set."""
+    if v == 0:
+        b.cyl((0, 0, 0.3), 2.2, 2.4, WHITE, 10)
+        b.cyl((0, 0, 2.7), 2.3, 0.4, PANEL, 10, r2=0.5)
+        b.box((3.0, 0, 0.8), (0.8, 0.6, 0.8), PANEL_D)
+        b.beam((3.0, 0, 1.6), (3.8, 0, 0.4), 0.08, IRON, 3)
+        b.box((0, 2.3, 0.6), (2.6, 0.3, 0.4), CONCRETE_D)
+        if b.fine:
+            b.decal((0, 2.05, 1.6), (0.8, 0.6), (-90, 0, 0), (3, 0))
+        return
+    b.box((0, 0, 0.5), (1.8, 1.2, 0.5), CONCRETE_D)
+    b.box((0, 0, 1.4), (1.4, 1.0, 0.9), PANEL)
+    b.beam((0.8, 0, 2.0), (0.8, 0, 3.0), 0.08, IRON, 3)
+    b.cyl((-2.1, 0, 0.4), 0.9, 1.2, WHITE, 8)
+    b.box((2.3, 0, 0.9), (0.6, 0.6, 0.7), PANEL_D)
+    if b.fine:
+        b.decal((0, 1.02, 1.5), (0.7, 0.5), (-90, 0, 0), (3, 0))
+
+
+def clutter(b, v):
+    """Small lived-in clutter: 0 crates, 1 barrels, 2 pallets and tyres, 3 a cable spool."""
+    if v == 0:
+        for k, (x, y, z) in enumerate(((-0.6, 0, 0.4), (0.6, 0, 0.4), (-0.2, 0, 1.2), (0.4, 0.4, 1.8))):
+            b.box((x, y, z), (0.45, 0.45, 0.45), WOOD, (0, 12 * k, 0))
+        return
+    if v == 1:
+        for k, x in enumerate((-0.9, 0, 0.9)):
+            b.cyl((x, 0, 0), 0.35, 1.0, (RED, BLUE, OLIVE)[k], 6)
+        b.cyl((0, 0.8, 0), 0.35, 1.0, OLIVE, 6)
+        return
+    if v == 2:
+        b.box((0, 0, 0.15), (1.2, 0.9, 0.12), WOOD)
+        for x in (-0.5, 0.5):
+            b.cyl((x, 0, 0.3), 0.35, 0.25, BLACK, 6)
+        return
+    b.cyl((-0.7, 0, 0.7), 0.8, 0.15, WOOD, 8, rot=(0, 90, 0))
+    b.cyl((0.7, 0, 0.7), 0.8, 0.15, WOOD, 8, rot=(0, 90, 0))
+    b.beam((-0.7, 0, 0.7), (0.7, 0, 0.7), 0.08, IRON, 4)
+
+
+def wreck(b, v):
+    """A wrecked vehicle: 0 a car, 1 a truck."""
+    if v == 0:
+        b.box((0, 0, 0.7), (2.2, 0.9, 0.35), RUST)
+        b.box((0, -0.2, 1.3), (1.1, 0.8, 0.35), HULL)
+        for x in (-1.5, 1.5):
+            for y in (-0.8, 0.8):
+                b.cyl((x, y, 0.35), 0.35, 0.25, BLACK, 6, rot=(90, 0, 0))
+        if b.fine:
+            b.box((1.8, 0.8, 1.1), (0.7, 0.05, 0.4), HULL, (0, 20, 0))
+            b.decal((0, 0.92, 0.8), (0.8, 0.5), (-90, 0, 0), (2, 0))
+        return
+    b.box((0, 0, 0.8), (3.6, 1.1, 0.4), HULL_D)
+    b.box((-2.6, 0, 1.8), (1.2, 1.0, 0.9), RUST)
+    b.box((1.4, 0, 1.7), (2.4, 1.0, 0.9), HULL_D, (0, 4, 0))
+    for x in (-3.0, 1.2, 2.8):
+        for y in (-1.0, 1.0):
+            b.cyl((x, y, 0.45), 0.45, 0.3, BLACK, 6, rot=(90, 0, 0))
+    if b.fine:
+        b.decal((2.0, 1.02, 1.8), (1.0, 0.6), (-90, 0, 0), (1, 0))
+
+
+def billboard(b, v):
+    """A roadside billboard with two posts and a painted face."""
+    for x in (-2.0, 2.0):
+        b.beam((x, 0, 0), (x, 0, 6), 0.16, IRON, 4)
+    b.box((0, 0, 5.0), (3.4, 0.15, 1.6), PANEL_D)
+    b.box((0, 0, 5.0), (3.2, 0.05, 1.45), PANEL)
+    if b.fine:
+        b.decal((0, 0.1, 5.0), (3.0, 1.3), (-90, 0, 0), (2, 0))
+        b.beam((2.0, 0, 0), (2.0, 0, 3), 0.04, IRON, 3)
+
+
 SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
           ("castle", castle, 2, 1, "l"), ("ruins", ruins, 3, 1, "l"), ("oil_rig", oil_rig, 1, 1, "l"), ("debris", debris, 3, 0, "m"),
           ("station_hub", station_hub, 1, 1, "l"), ("station_module", station_module, 3, 1, "l"), ("dish", dish, 2, 1, "l"),
@@ -1541,7 +1668,10 @@ SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l
           ("barn", barn, 2, 1, "l"), ("shed", shed, 1, 1, "l"),
           ("fence", fence, 3, 1, "m"), ("utility_pole", utility_pole, 2, 1, "m"),
           ("water_pump", water_pump, 1, 1, "m"), ("market", market, 1, 0, "m"),
-          ("pier", pier, 2, 1, "l"))
+          ("pier", pier, 2, 1, "l"), ("checkpoint", checkpoint, 1, 1, "m"),
+          ("watchtower", watchtower, 1, 1, "m"), ("camp", camp, 2, 0, "m"),
+          ("fuel_point", fuel_point, 2, 1, "m"), ("clutter", clutter, 4, 0, "m"),
+          ("wreck", wreck, 2, 0, "m"), ("billboard", billboard, 1, 0, "m"))
 
 
 def dressed(folder: Path):
