@@ -9,6 +9,7 @@ The game's own surfaces go over the colours at run time: u v are metres across t
 says which surface a face takes - 255 concrete, 128 gabion, 0 sheet metal."""
 
 import math
+import random
 import struct
 import sys
 from pathlib import Path
@@ -44,6 +45,7 @@ class B:
         self.bm, self.lod, self.k = bmesh.new(), lod, 0
         self.c = self.bm.loops.layers.float_color.new("c")
         self.uv = self.bm.loops.layers.uv.new("uv")
+        self.duv = self.bm.loops.layers.uv.new("duv")
 
     fine = property(lambda s: s.lod == 0)
     mid = property(lambda s: s.lod <= 1)
@@ -51,17 +53,18 @@ class B:
     def seg(self, n: int) -> int:
         return max(5, round(n * (1, 0.6, 0.4)[self.lod]))
 
-    def _add(self, verts, col, m, smooth=None, shade=1.0):
+    def _add(self, verts, col, m, smooth=None, shade=1.0, alpha=None):
         faces = list({f for v in verts for f in v.link_faces})
         for f in faces:
             f.smooth = bool(smooth and smooth(f))
         bmesh.ops.transform(self.bm, matrix=m, verts=verts)
         rgb, surface = lin(col), 0.0 if tuple(col) in METAL else 0.5 if tuple(col) == SANDBAG else 1.0
+        a = surface if alpha is None else alpha
         for f in faces:
             self.k += 1
             j = shade * (0.96 + 0.08 * ((self.k * 7919) % 13) / 12)   # panels differ a little
             for corner in f.loops:
-                corner[self.c] = (rgb[0] * j, rgb[1] * j, rgb[2] * j, surface)
+                corner[self.c] = (rgb[0] * j, rgb[1] * j, rgb[2] * j, a)
         return faces
 
     def box(self, c, half, col, rot=(0, 0, 0), taper=1.0):
@@ -99,6 +102,21 @@ class B:
             q.co *= 1 + rough * noise.noise(q.co * 1.3 + Vector((seed * 7.1, seed * 3.3, 0))) + rough * 0.45 * noise.noise(q.co * 3.1 + Vector((seed, 0, seed * 1.7)))
         self._add(v, col, Matrix.Translation(c) @ turn(rot) @ Matrix.Diagonal((r * scale[0], r * scale[1], r * scale[2], 1)))
 
+    def decal(self, center, half, rot, cell, col=WHITE):
+        """An atlas-mapped cutout quad; alpha 192 tells the shader it is a decal."""
+        v = bmesh.ops.create_grid(self.bm, x_segments=1, y_segments=1, size=1)["verts"]
+        m = (Matrix.Translation(center) @ turn(rot)
+             @ Matrix.Translation((0, 0, 0.015))
+             @ Matrix.Diagonal((half[0], half[1], 1, 1)))
+        f = self._add(v, col, m, alpha=192 / 255)[0]
+        i, j = cell
+        pad = 8 / 1024
+        x0, y0 = i * 0.25 + pad, j * 0.25 + pad
+        x1, y1 = (i + 1) * 0.25 - pad, (j + 1) * 0.25 - pad
+        for corner, uv in zip(f.loops, ((x0, y0), (x1, y0), (x1, y1), (x0, y1))):
+            corner[self.duv].uv = uv
+        return f
+
     def mesh(self):
         """(vertices [n, 10] float32: position, normal, linear rgba; indices) with ambient occlusion in the colours."""
         bm = self.bm
@@ -121,8 +139,11 @@ class B:
                 k = light[corner.vert.index]
                 c = corner[self.c]
                 corner[self.c] = (c[0] * k, c[1] * k, c[2] * k, c[3])
-                p, n = corner.vert.co, f.normal   # the face's flattest view, upright on a wall
-                corner[self.uv].uv = (p.x, p.y) if abs(n.z) >= max(abs(n.x), abs(n.y)) else (p.y, p.z) if abs(n.x) > abs(n.y) else (p.x, p.z)
+                if 0.72 <= c[3] <= 0.78:
+                    corner[self.uv].uv = corner[self.duv].uv
+                else:
+                    p, n = corner.vert.co, f.normal   # the face's flattest view, upright on a wall
+                    corner[self.uv].uv = (p.x, p.y) if abs(n.z) >= max(abs(n.x), abs(n.y)) else (p.y, p.z) if abs(n.x) > abs(n.y) else (p.x, p.z)
         me = bpy.data.meshes.new("shape")
         bm.to_mesh(me)
         me.color_attributes.active_color = me.color_attributes["c"]
@@ -150,6 +171,93 @@ def around(n, r, start=0.0):
     for k in range(n):
         a = start + k * 2 * math.pi / n
         yield k, r * math.sin(a), r * math.cos(a), -math.degrees(a)
+
+
+def window_strip(b, center, count, w, h, gap, yaw=0, sill=True):
+    """A row of framed windows on a face; local +Y is outward."""
+    rad, step = math.radians(yaw), w + gap
+    s, c0 = math.sin(rad), math.cos(rad)
+    for i in range(count):
+        x = (i - (count - 1) / 2) * step
+        c = (center[0] + x * c0, center[1] + x * s, center[2])
+        b.box(c, (w / 2 + 0.10, 0.05, h / 2 + 0.10), PANEL_D, (0, 0, yaw))
+        b.box((c[0] - 0.06 * s, c[1] + 0.06 * c0, c[2]),
+              (w / 2, 0.03, h / 2), GLASS, (0, 0, yaw))
+        if sill:
+            b.box((c[0] - 0.10 * s, c[1] + 0.10 * c0, c[2] - h / 2 - 0.06),
+                  (w / 2 + 0.14, 0.14, 0.06), CONCRETE_D, (0, 0, yaw))
+
+
+def door(b, center, width, height, yaw=0, roller=False):
+    """A framed personnel or roller door; local +Y is outward."""
+    s, c0 = math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
+    b.box(center, (width / 2 + 0.14, 0.08, height / 2 + 0.12), PANEL_D, (0, 0, yaw))
+    b.box((center[0] - 0.10 * s, center[1] + 0.10 * c0, center[2]),
+          (width / 2, 0.05, height / 2),
+          PANEL if roller else BLACK, (0, 0, yaw))
+    if roller:
+        for z in (-height * .3, 0, height * .3):
+            b.box((center[0] - 0.17 * s, center[1] + 0.17 * c0, center[2] + z),
+                  (width / 2 - .05, .03, .03), STEEL, (0, 0, yaw))
+
+
+def vent(b, center, size, yaw=0, louvres=4):
+    """A louvred wall or roof vent; local +Y is outward."""
+    rad, s, c0 = math.radians(yaw), math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
+    b.box(center, (size[0] / 2, size[1] / 2, size[2] / 2), PANEL_D, (0, 0, yaw))
+    for k in range(louvres):
+        z = (k - (louvres - 1) / 2) * size[2] / louvres
+        b.box((center[0] - size[1] / 2 * s, center[1] + size[1] / 2 * c0, center[2] + z),
+              (size[0] * .42, .02, .02), IRON, (0, 0, yaw))
+
+
+def ladder(b, base, height, yaw=0, cage=False):
+    """Rails, rungs and an optional cage; the ladder stands on the ground at base."""
+    c, s, c0 = Vector(base), math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
+    for side in (-0.28, 0.28):
+        a = (c.x + side * c0, c.y + side * s, c.z)
+        b.beam(a, (a[0], a[1], a[2] + height), 0.035, IRON, 3)
+    for z in np.arange(0.35, height, 0.32):
+        b.box((c.x, c.y, c.z + z), (0.32, 0.03, 0.025), IRON, (0, 0, yaw))
+    if cage:
+        for z in (height * .35, height * .7, height * .95):
+            b.cyl((c.x, c.y, c.z + z - .03), .46, .04, IRON, 8, caps=False)
+
+
+def pipe_run(b, points, radius, col, clamps=2):
+    """Straight pipe runs with simple elbows and wall clamps."""
+    for a, c in zip(points, points[1:]):
+        b.beam(a, c, radius, col, 6)
+    for p in points[1:-1]:
+        b.cyl((p[0], p[1], p[2] - radius), radius * 1.5, radius * .8, IRON, 6)
+    if len(points) > 1:
+        for k in np.linspace(.2, .8, clamps):
+            p, q = points[0], points[-1]
+            b.box((p[0] + (q[0] - p[0]) * k, p[1] + (q[1] - p[1]) * k,
+                   p[2] + (q[2] - p[2]) * k),
+                  (radius * 1.6, radius * 1.6, radius * .4), IRON)
+
+
+def railing(b, a, c, height, posts):
+    """Posts and two rails between two points."""
+    a, c = Vector(a), Vector(c)
+    for k in range(posts + 1):
+        p = a.lerp(c, k / posts)
+        b.box((p.x, p.y, p.z + height / 2), (.04, .04, height / 2), IRON)
+    for z in (height * .55, height):
+        b.beam((a.x, a.y, a.z + z), (c.x, c.y, c.z + z), .035, IRON, 3)
+
+
+def rubble(b, center, radius, seed, count):
+    """Deterministic slab and chunk scatter for ruins and broken ground."""
+    rng = random.Random(seed)
+    for k in range(count):
+        r = rng.uniform(.12, .45)
+        a = rng.uniform(0, 2 * math.pi)
+        d = rng.uniform(0, radius)
+        b.rock((center[0] + math.cos(a) * d, center[1] + math.sin(a) * d,
+                center[2] + r * .35), r, CONCRETE_D, seed * 31 + k,
+               (rng.uniform(1, 1.8), rng.uniform(.6, 1.2), rng.uniform(.25, .5)))
 
 
 def lattice(b, a, c, w0, w1, col, bays=5):
@@ -778,20 +886,20 @@ def warehouse(b, v):
         b.box((-14.2, 6, 5.1), (3.4, 14.4, 0.2), roof, (0, -9, 0))
     if b.mid:
         b.box((0, 0, 0.9), (11.05, long + 0.05, 0.6), CONCRETE)            # the plinth course
-        for k in range(-1, 2):                                             # roller doors
+        for k in range(-1, 2):                                             # loading bays
             b.box((11.06, k * long * 0.6, 3.4), (0.08, 3.2, 2.8), PANEL_D)
             b.box((11.1, k * long * 0.6, 1.6), (0.08, 3.2, 1), BLACK)
-        b.box((0, long + 0.06, 3.6), (3.6, 0.08, 3), PANEL_D)
-        b.box((0, long + 0.1, 1.7), (3.6, 0.08, 1.1), BLACK)
-        for k in range(-2, 3):                                             # ridge vents
-            b.box((0, k * long * 0.36, 11.7), (0.8, 1.6, 0.5), PANEL_D)
+        door(b, (0, long + 0.06, 3.2), 3.6, 4.2, 0)                        # office door
+        vent(b, (0, 0, 11.7), (1.2, 1.2, 0.8), 0, 2)                       # ridge vent
     if b.fine:
-        for side in (-1, 1):
-            for k in range(-2, 3):
-                if v == 1:                                                 # roof lights
+        for k in ((-1, 1) if v == 1 else (-1,)):
+            b.box((11.06, k * long * 0.4, 6.6), (0.05, 2.2, 0.75), PANEL_D)
+            b.box((11.12, k * long * 0.4, 6.6), (0.03, 2.0, 0.6), GLASS)   # high windows
+        b.decal((11.035, long * 0.3, 6.2), (0.9, 0.9), (0, 90, 0), (1, 0))
+        if v == 1:
+            for side in (-1, 1):
+                for k in range(-2, 3):                                     # roof lights
                     b.box((side * 5.6, k * long * 0.36, 10.25), (2.4, 2, 0.08), GLASS, (0, side * 16.2, 0))
-                else:
-                    b.box((side * 11.06, k * long * 0.36 + long * 0.18, 6.6), (0.06, 1.6, 0.5), GLASS)
         b.box((13.4, -long * 0.3, 0.9), (1, 2, 0.6), BLUE)
         b.box((7, long + 2.4, 1), (1.2, 1.2, 0.8), WOOD)
 
