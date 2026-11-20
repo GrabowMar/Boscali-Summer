@@ -7,7 +7,10 @@ namespace BoscaliSummer.Modules.Performance.Configuration
         public ConfigEntry<bool> Enabled { get; }
         public ConfigEntry<bool> LodBiasFloor { get; }
         public ConfigEntry<bool> ShadowDistanceCap { get; }
+        public ConfigEntry<bool> NoShadows { get; }
+        public ConfigEntry<bool> DetailCap { get; }
         public ConfigEntry<bool> RenderScaleCap { get; }
+        public ConfigEntry<MsaaCap> AntiAliasingCap { get; }
         public ConfigEntry<float> RenderScale { get; }
         public ConfigEntry<bool> CleanupOnSceneChange { get; }
         public ConfigEntry<bool> QuietUnityLogs { get; }
@@ -30,17 +33,27 @@ namespace BoscaliSummer.Modules.Performance.Configuration
                 "Never changes game physics, camera distance, or graphics quality. " +
                 "Applies during the current mission; no restart required.");
             LodBiasFloor = config.Bind("Performance", "LodBiasFloor", false,
-                "Client-local Unity tuning: lower the LOD bias to at most 1.5 (game default 4) so distant " +
+                "Client-local Unity tuning: lower the LOD bias to at most 1.0 (game default 4) so distant " +
                 "models drop to cheaper levels sooner. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
             ShadowDistanceCap = config.Bind("Performance", "ShadowDistanceCap", false,
                 "Client-local Unity tuning: cap shadow distance at 1000 m (game default 2000 m), dropping far " +
                 "shadow-cascade work. Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
+            NoShadows = config.Bind("Performance", "NoShadows", false,
+                "Client-local Unity tuning: no sun shadows at all (shadow distance 0). The biggest single saving on CPU " +
+                "and GPU in busy missions, at an obvious cost to the look. Restored exactly when switched off. Applies immediately.");
+            DetailCap = config.Bind("Performance", "DetailCap", false,
+                "Client-local Unity tuning: no grass and trees drawn to half range (the game's own GRASS and TREE RANGE), " +
+                "without touching your saved game settings. Restored exactly when switched off. Applies immediately.");
             RenderScaleCap = config.Bind("Performance", "RenderScaleCap", false,
                 "Client-local Unity tuning: render the 3D scene at most at RenderScale resolution and upscale it " +
                 "(screen-overlay HUD stays sharp). Restored exactly when switched off. " +
                 "Applies immediately; no restart required.");
+            AntiAliasingCap = config.Bind("Performance", "AntiAliasingCap", MsaaCap.Game,
+                "Client-local Unity tuning: at most this many MSAA samples, whatever the game's anti-aliasing menu says " +
+                "(Game leaves it alone). Measured in Escalation at 1080p: 8x -> 4x saves about 1.2 ms a frame, 8x -> 2x about 2.1 ms. " +
+                "Never raises the game's setting; restored exactly when set back to Game. Applies immediately.");
             RenderScale = config.Bind("Performance", "RenderScale", 0.8f,
                 new ConfigDescription("Share of the screen resolution the 3D scene renders at while RenderScaleCap " +
                     "is on (0.8 = 80%). Lower is faster and softer. Applies immediately.",
@@ -92,4 +105,7 @@ namespace BoscaliSummer.Modules.Performance.Configuration
                     new AcceptableValueRange<float>(0f, 1f)));
         }
     }
+
+    /// <summary>Most MSAA samples allowed; the value is the sample count, Game = no cap.</summary>
+    internal enum MsaaCap { Game = 0, X4 = 4, X2 = 2, Off = 1 }
 }

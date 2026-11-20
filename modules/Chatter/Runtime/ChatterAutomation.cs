@@ -73,6 +73,15 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             return new Dictionary<string, object> { ["ok"] = true, ["step"] = step, ["accepted"] = accepted };
         }
 
+        /// <summary>Hold the comms strip dark (<c>on</c>, the default) or let it show again (<c>off</c>): spoken lines still reach the voices, prompts and the MFD log. Capture prep, the same idea as Hud's option hook.</summary>
+        public static Dictionary<string, object> Quiet(Dictionary<string, object> args)
+        {
+            if (!Guard(out ChatterHost host, out Dictionary<string, object> failure)) return failure;
+            bool on = args == null || !(args.TryGetValue("off", out object off) && off is bool offB && offB);
+            host.StripSuppressed = on;
+            return new Dictionary<string, object> { ["ok"] = true, ["quiet"] = on };
+        }
+
         private static int simYes, simNo;
         private static int acceptanceSerial;
 

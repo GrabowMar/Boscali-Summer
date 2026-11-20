@@ -110,8 +110,9 @@ namespace BoscaliSummer.Modules.Command.Configuration
                 "Panel color theme: Portal, Steel, Ace, Phosphor, FieldOps (FIELD OPS), Amber (AMBER CRT), Glass (GLASS MFD), NightOps (NIGHT OPS), Custom (built from the three Custom* keys). Unknown saved names fall back to Portal.");
             AvionicsFxTier = config.Bind("Avionics", "FxTier", AvFxTier.Full,
                 "Panel effects: Off (none), Lite (glass and static glow), Full (shine, scan-in, alerts, EMP glitch).");
-            AvionicsBlurBehind = config.Bind("Avionics", "BlurBehind", false,
-                "Blur the world behind floating windows (up to ~0.4 ms GPU; frosted glass when off).");
+            // New key (was BlurBehind, default off) so every install starts with the frosted MFD.
+            AvionicsBlurBehind = config.Bind("Avionics", "FrostedGlass", true,
+                "Frosted glass: the blurred world shows faintly through the MFD deck, its panels and floating windows (~0.4 ms GPU). Off = plain tinted glass.");
             AvionicsReducedMotion = config.Bind("Avionics", "ReducedMotion", false,
                 "Snap every panel animation to its end state.");
             PanelGrid = config.Bind("Avionics", "PanelGrid", true, "Faint grid crosses in the empty part of each console page.");

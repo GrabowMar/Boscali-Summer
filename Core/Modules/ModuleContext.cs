@@ -94,9 +94,10 @@ namespace BoscaliSummer.Core.Modules
 
         /// <summary>Publish a client-local enum to SET as a segment strip; <paramref name="names"/> follow the enum's order.</summary>
         public void AddClientChoice<T>(string section, string label, string help, BepInEx.Configuration.ConfigEntry<T> entry,
-            string[] names, ClientSettingToggle requires = null) where T : Enum
+            string[] names, ClientSettingToggle requires = null, T[] presets = null) where T : Enum
         {
-            if (entry != null) Track(new ClientSettingChoice(section, label, help, entry, names, requires));
+            if (entry != null) Track(new ClientSettingChoice(section, label, help, entry, names, requires,
+                presets == null ? null : Array.ConvertAll(presets, v => (object)v)));
         }
 
         private T Track<T>(T row) where T : ClientSetting

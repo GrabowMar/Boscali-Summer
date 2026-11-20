@@ -49,6 +49,24 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
             markers = null; cardCount = 0;
             nextContent = 0f; textSize = 0f;
             for (int i = 0; i < cards.Length; i++) cards[i] = default;
+            ground.Clear();
+        }
+
+        /// <summary>Ground height (global y) under a contract target, so the marker sits on the land and not at sea
+        /// level inside a hill (tester report: beachhead and recon-pass markers buried). One ray per target, cached;
+        /// a miss (terrain not loaded that far out) is retried every 2 s and falls back to sea level meanwhile.</summary>
+        private readonly Dictionary<long, (float y, bool hit, float retry)> ground = new Dictionary<long, (float, bool, float)>();
+
+        private float GroundY(float x, float z)
+        {
+            long key = ((long)Mathf.RoundToInt(x) << 32) ^ (uint)Mathf.RoundToInt(z);
+            if (ground.TryGetValue(key, out var known) && (known.hit || Time.unscaledTime < known.retry)) return known.y;
+            if (ground.Count > 64) ground.Clear();
+            Vector3 top = new GlobalPosition(x, 9000f, z).ToLocalPosition();
+            bool hit = Physics.Raycast(top, Vector3.down, out RaycastHit ray, 12000f, PhysicsLayers.StaticsMask, QueryTriggerInteraction.Ignore);
+            float y = hit ? Mathf.Max(0f, ray.point.ToGlobalPosition().y) : 0f;
+            ground[key] = (y, hit, Time.unscaledTime + 2f);
+            return y;
         }
 
         private void OnDestroy() => ResetForScene();
@@ -129,7 +147,7 @@ namespace BoscaliSummer.Modules.DynamicOperations.Runtime
                 }
 
                 ContractCard card = cards[i];
-                GlobalPosition target = new GlobalPosition(card.X, 0f, card.Z);
+                GlobalPosition target = new GlobalPosition(card.X, GroundY(card.X, card.Z), card.Z);
                 Vector3 world = target.ToLocalPosition();
                 if (!Project(camera, hud, world, halfWidth, halfHeight, out float x, out float y, out float bearing, out bool clamped))
                 {

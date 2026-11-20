@@ -24,6 +24,7 @@ namespace BoscaliSummer
         private void Awake()
         {
             Logger = base.Logger;
+            var bootClock = System.Diagnostics.Stopwatch.StartNew();
             // The built-in wing replaces the stand-alone Wing Command plugin; stop it before it loads.
             BoscaliSummer.Core.Game.ExternalWingGuard.Install(Logger);
             BoscaliSummer.Core.Game.BlueprinterMaterialBindings.Install(Logger);
@@ -40,7 +41,7 @@ namespace BoscaliSummer
             Logger.LogInfo($"Effective fire tuning: bullet ignition={Settings.FireAndDestruction.BulletIgnitionChance:0.####}, " +
                 $"explosive ignition={Settings.FireAndDestruction.ExplosiveIgnitionChance:0.####}, intensity={Settings.FireAndDestruction.FireIntensity.Value:0.##}, " +
                 $"active-site cap={Settings.FireAndDestruction.MaxActiveFires}.");
-            Logger.LogInfo($"{PluginName} {PluginVersion} loaded. All world changes remain host authoritative.");
+            Logger.LogInfo($"{PluginName} {PluginVersion} loaded in {bootClock.ElapsedMilliseconds} ms. All world changes remain host authoritative.");
         }
 
         private void OnDestroy()

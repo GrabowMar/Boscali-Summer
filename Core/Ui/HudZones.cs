@@ -54,7 +54,7 @@ namespace BoscaliSummer.Core.Ui
                 case HudZone.Map: side = Side.Left; x = 12; y = 808; w = 281; h = 260; break;
                 case HudZone.Lane: side = Side.Centre; x = 960f - TopCentre.Width * 0.5f; y = TopCentre.LineTop; w = TopCentre.Width; h = TopCentre.CardHeight; break;
                 case HudZone.Callout: side = Side.Centre; x = 890; y = 641; w = 140; h = 38; break;      // centred on x 960 and on CombatAlerts.CalloutDown (y 660)
-                case HudZone.BoardTop: side = Side.Right; x = 1148; y = 12; w = 760; h = 82; break;      // ONE BAR: the 894 x 96 bar at the default Scale 0.85, right edge 1908
+                case HudZone.BoardTop: side = Side.Right; x = 1105; y = 12; w = 803; h = 82; break;      // ONE BAR: the 944 x 96 bar at the default Scale 0.85, right edge 1908
                 case HudZone.BoardSpine: side = Side.Right; x = 1534; y = 107; w = 374; h = SpineBottom - 107; break;      // the 440 column, 16 under the bar; its bottom stays 666
                 case HudZone.Feeds: side = Side.Right; x = 1644; y = 714; w = 264; h = 342; break;
                 default: side = Side.Centre; x = 960f - CentreW * 0.5f; y = 324; w = CentreW; h = 432; break;      // left = NOTICE's right (574) + 16

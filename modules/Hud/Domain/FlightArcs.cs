@@ -17,7 +17,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float ThrottleNativeSweepDeg = 26f;
         /// <summary>The stroke core lit and unlit (px at 1080 high), the soft edge each side fades over, the unlit track's alpha, and the angle step of the polygon that draws the curve
         /// (1 degree on a ~320 px circle is a 5.6 px chord, 0.01 px off the true circle: no visible facet).</summary>
-        public const float LitWidth = 2.5f, UnlitWidth = 1f, Feather = 1f, UnlitAlpha = 0.35f, StepDeg = 1f;
+        public const float LitWidth = 2f, UnlitWidth = 1f, Feather = 1f, UnlitAlpha = 0.35f, StepDeg = 1f;
+
+        /// <summary>How far the arcs' ink is lifted toward INK-HI so it matches the native centre HUD round it (additive, paler on sky).</summary>
+        public const float InkLift = 0.35f;
 
         /// <summary>How many segments are lit (the sim probe's 22-step count of the fill; the arc itself is drawn continuous) at <paramref name="fraction"/> (0..1): a segment is lit when its middle is at or below the fraction, so 0 is none and 1 is all.</summary>
         public static int Lit(float fraction)

@@ -98,14 +98,17 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public const float BarH = 96f, ShelfY = 9f, RuleY = 19f, R1 = 35f, R2 = 59f, R3 = 82f;
         public const float CellGap = 14f, StackLineGap = 10f;
 
-        // ---- WIDE: box 894 = WPN 280 + 14 + CM 146 + 14 + [SYS 226 + 14 + INFO 200], the bracket being the spine's 440 column. The cells sit at fixed slots (nothing slides when a neighbour is missing).
-        public const float WideW = 894f, WingW = 440f;
-        public const float WpnX = 0f, WpnW = 250f, CmX = 264f, CmW = 176f, SysX = 454f, SysW = 226f, InfoX = 694f, InfoW = 200f;
+        // ---- WIDE: box 944 = WPN 280 + 14 + CM 196 + 14 + [SYS 226 + 14 + INFO 200], the bracket being the spine's 440 column. The cells sit at fixed slots (nothing slides when a neighbour is missing).
+        public const float WideW = 944f, WingW = 440f;
+        public const float WpnX = 0f, WpnW = 280f, CmX = 294f, CmW = 196f, SysX = 504f, SysW = 226f, InfoX = 744f, InfoW = 200f;
         /// <summary>Where the spine column starts in WIDE (SYS's x, WideW - WingW): STACK's line B is the WIDE x less this, from the inset.</summary>
         public const float Fold = SysX;
 
-        // ---- STACK: box 448, the lines 440 wide at the inset StackX; line A keeps WPN's and CM's WIDE x, line B is SYS | INFO folded (x - Fold).
-        public const float StackX = 4f, StackInnerW = 440f;
+        // ---- STACK: box 448, the lines 440 wide at the inset StackX; line A is WPN | CM at their narrower STACK widths (WIDE's would overrun 440), line B is SYS | INFO folded (x - Fold).
+        public const float StackX = 4f, StackInnerW = 440f, StackWpnW = 250f, StackCmX = 264f, StackCmW = 176f;
+
+        /// <summary>The CM cell's width in either arrangement.</summary>
+        public static float CmWOf(bool stack) => stack ? StackCmW : CmW;
 
         /// <summary>What hangs under the bar and between the panels; the gauge line hangs under the last panel.</summary>
         public const float PageGap = HudZones.Gutter;
@@ -155,8 +158,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
             if (stack)
             {
                 float lineB = BarH + StackLineGap;
-                if (hero) g.Wpn = new BoardRect(StackX + WpnX, 0f, WpnW, BarH);
-                if (exp) g.Cm = new BoardRect(StackX + CmX, 0f, CmW, BarH);
+                if (hero) g.Wpn = new BoardRect(StackX + WpnX, 0f, StackWpnW, BarH);
+                if (exp) g.Cm = new BoardRect(StackX + StackCmX, 0f, StackCmW, BarH);
                 if (sys) g.Sys = new BoardRect(StackX + SysX - Fold, lineB, SysW, BarH);
                 if (info) g.Info = new BoardRect(StackX + InfoX - Fold, lineB, InfoW, BarH);
                 if (hero || exp) { g.Bar0 = new BoardRect(StackX, 0f, StackInnerW, BarH); g.FrameLeft0 = hero ? g.Wpn.X : g.Cm.X; }

@@ -143,8 +143,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
         /// <summary>The rounds numeral: BRIGHT; amber when none is left or a fifth is; INK while the station reloads (the amber word beside the name carries the countdown).</summary>
         public static ScopeTone RoundsTone(bool reloading, bool empty, bool low) => reloading ? ScopeTone.Ink : empty || low ? ScopeTone.Amber : ScopeTone.Hi;
 
-        /// <summary>The line art's tint: INK while master arm is SAFE, BRIGHT armed or hot, amber when low, empty or reloading.</summary>
-        public static ScopeTone ArtTone(StoreState s, bool low) => low || s == StoreState.Reload || s == StoreState.Empty ? ScopeTone.Amber : s == StoreState.Safe ? ScopeTone.Ink : ScopeTone.Hi;
+        /// <summary>The line art's tint: DIM (greyed out) while master arm is SAFE, BRIGHT armed or hot, amber when low, empty or reloading.</summary>
+        public static ScopeTone ArtTone(StoreState s, bool low) => low || s == StoreState.Reload || s == StoreState.Empty ? ScopeTone.Amber : s == StoreState.Safe ? ScopeTone.Dim : ScopeTone.Hi;
 
         /// <summary>The class word's tone: GUN is furniture (DIM), "STA 3 AGM" carries a digit, so it is data (INK).</summary>
         public static ScopeTone ClassTone(StoreClass c) => c == StoreClass.Gun ? ScopeTone.Dim : ScopeTone.Ink;

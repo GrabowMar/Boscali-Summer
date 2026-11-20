@@ -102,7 +102,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             routeGroup.ignoreParentGroups = true;
             routeGroup.interactable = routeGroup.blocksRaycasts = false;
             routeSurface = Pinned(routeRoot, "Route", false);
-            routeVector = AvVector.Create(routeSurface, "Strokes", RouteQuads);
+            routeVector = AvVector.Create(routeSurface, "Strokes", RouteQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             routeText = new ScopeText(Holder(routeSurface, "Words"), font, fontMaterial);
             routeCanvas = new ScopeCanvas(routeVector.Buffer, routeText, "scope.route");
             PlaceCornerRoots();

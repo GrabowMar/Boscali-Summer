@@ -83,7 +83,7 @@ namespace BoscaliSummer.Core.Game
         private static readonly System.Collections.Generic.Dictionary<Material, Material> sourceOf = new System.Collections.Generic.Dictionary<Material, Material>();
 
         /// <summary>The halo's alpha and spread, and the face's dilate (the native face is thin, -0.19, and frayed on bright cloud once there was no backdrop behind it).</summary>
-        internal const float HaloAlpha = 0.3f, HaloDilate = 0.05f, HaloSoftness = 0.3f, FaceDilate = -0.06f;
+        internal const float HaloAlpha = HudGlow.Alpha, HaloDilate = HudGlow.TextDilate, HaloSoftness = HudGlow.TextSoftness, FaceDilate = -0.06f;
 
         /// <summary>
         /// The hair-thin dark edge round every glyph (2026-11-16, the approved mockup's 1 px dark-green rim: small text reads on bright sky and cloud). TMP's own outline, centred on the glyph edge: it

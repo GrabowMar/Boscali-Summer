@@ -143,7 +143,7 @@
          sidecar <id>.map.json (the manifest plus the bundle's hash) and the preview <id>.card.png. The Maps module lists
          every BoscaliSummer.Maps.*.map.json resource and opens a bundle only when its map is played; a loose
          <plugin folder>\Maps\<id>.bsmap wins over the embedded one. mapkit.bskit is the shared scenery kit (`nomod map kit`). -->
-    <EmbeddedResource Include="modules\Maps\Assets\*.bsmap;modules\Maps\Assets\*.map.json;modules\Maps\Assets\*.modes.json;modules\Maps\Assets\*.card.png;modules\Maps\Assets\*.bskit" LogicalName="BoscaliSummer.Maps.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="modules\Maps\Assets\*.bsmap;modules\Maps\Assets\*.map.json;modules\Maps\Assets\*.modes.json;modules\Maps\Assets\*.card.png;modules\Maps\Assets\*.chart.png;modules\Maps\Assets\*.bskit" LogicalName="BoscaliSummer.Maps.%(Filename)%(Extension)" />
   </ItemGroup>
   <Target Name="WarnWhenNoMapBundle" BeforeTargets="CoreCompile">
     <ItemGroup><MapSidecar Include="modules\Maps\Assets\*.map.json" /></ItemGroup>
@@ -159,6 +159,14 @@
     </EmbeddedResource>
     <EmbeddedResource Include="modules\Vanguard\Assets\Textures\SA74N_*.png">
       <LogicalName>BoscaliSummer.Vanguard.Textures.%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup Label="G-240 Breakwater artwork">
+    <EmbeddedResource Include="modules\Megaplane\Assets\megaplane.mesh.gz" Condition="Exists('modules\Megaplane\Assets\megaplane.mesh.gz')">
+      <LogicalName>BoscaliSummer.Megaplane.megaplane.mesh.gz</LogicalName>
+    </EmbeddedResource>
+    <EmbeddedResource Include="modules\Megaplane\Assets\BS_Megaplane_*.png">
+      <LogicalName>BoscaliSummer.Megaplane.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup Label="Avionics UI bundle">
@@ -344,7 +352,7 @@
   </ItemGroup>
 
   <ItemGroup Label="Superevent posters">
-    <EmbeddedResource Include="modules\Events\Assets\Posters\*.png">
+    <EmbeddedResource Include="modules\Events\Assets\Posters\*.jpg">
       <LogicalName>BoscaliSummer.EventsArt.%(Filename)%(Extension)</LogicalName>
     </EmbeddedResource>
   </ItemGroup>

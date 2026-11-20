@@ -100,13 +100,16 @@ namespace BoscaliSummer.Core.Ui
         private readonly Array values;
 
         internal ClientSettingChoice(string section, string label, string help, ConfigEntryBase entry, string[] names,
-            ClientSettingToggle requires) : base(section, label, help, entry, requires)
+            ClientSettingToggle requires, object[] presets = null) : base(section, label, help, entry, requires)
         {
             values = Enum.GetValues(entry.SettingType);
             Names = names;
+            Presets = presets;
         }
 
         public string[] Names { get; }
+        /// <summary>The value each SET PERF preset (QUALITY, BALANCED, FAST) picks; null when presets leave it alone.</summary>
+        public object[] Presets { get; }
         public int Index => Array.IndexOf(values, Entry.BoxedValue);
         public void Select(int i) => Entry.BoxedValue = values.GetValue(i);
     }
@@ -134,6 +137,10 @@ namespace BoscaliSummer.Core.Ui
         private readonly List<ClientSetting> rows = new List<ClientSetting>();
         private readonly List<ClientKeySetting> keys = new List<ClientKeySetting>();
 
+        /// <summary>The mod's one board, for sim automation (<see cref="Diagnostics.ClientPresetAutomation"/>).</summary>
+        internal static ClientSettingsBoard Live { get; private set; }
+        internal ClientSettingsBoard() => Live = this;
+
         public IReadOnlyList<ClientSetting> Rows => rows;
         public IReadOnlyList<ClientKeySetting> Keys => keys;
 
@@ -157,13 +164,20 @@ namespace BoscaliSummer.Core.Ui
         public void ApplyPreset(int preset)
         {
             foreach (ClientSetting row in rows)
+            {
                 if (row is ClientSettingToggle t && t.Presets != null && t.Value != t.Presets[preset]) t.Set(t.Presets[preset]);
+                else if (row is ClientSettingChoice c && c.Presets != null && !Equals(c.Entry.BoxedValue, c.Presets[preset]))
+                    c.Entry.BoxedValue = c.Presets[preset];
+            }
         }
 
         public bool MatchesPreset(int preset)
         {
             foreach (ClientSetting row in rows)
+            {
                 if (row is ClientSettingToggle t && t.Presets != null && t.Value != t.Presets[preset]) return false;
+                if (row is ClientSettingChoice c && c.Presets != null && !Equals(c.Entry.BoxedValue, c.Presets[preset])) return false;
+            }
             return true;
         }
     }

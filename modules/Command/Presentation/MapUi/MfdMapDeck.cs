@@ -72,7 +72,11 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
 
             if (backdropBaseImage != null)
             {
-                backdropBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(opacity);
+                // With frosted glass the tint is opaque (no sharp world under the blur); MFD OPACITY then sets how much blur bleeds through.
+                bool frosted = AvBlurSource.Enabled;
+                backdropBaseImage.color = AvStyleHost.FuiColor("ground", AvTheme.Ground).WithAlpha(frosted ? 1f : opacity);
+                AvFrost frost = backdrop.GetComponentInChildren<AvFrost>(true);
+                if (frost != null) frost.Bleed = Mathf.Clamp(1.33f - opacity, .38f, .8f);
             }
 
             if (backdropGradientImage != null)
@@ -279,6 +283,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             backdropBaseImage.raycastTarget = false;
             backdropBaseImage.enabled = true;
             AvSurfaceGradient.Apply(backdropBaseImage, Color.white, (Color.white * .72f).WithAlpha(1f));
+
+            // Frosted glass: the blurred world over the opaque deck tint, under the screen gradient.
+            if (root.GetComponentInChildren<AvFrost>(true) == null) AvFrost.Add(root, "Frost", .38f).Rect.SetAsFirstSibling();
 
             if (backdropGradientImage == null || backdropGradientImage.transform.parent != root)
                 backdropGradientImage = CreateGradient(root, "ScreenGradient", Color.white.WithAlpha(0.38f));

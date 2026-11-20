@@ -70,7 +70,10 @@ namespace BoscaliSummer.Core.Lifecycle
                 if (moduleIds != null && !moduleIds.Contains(entry.ModuleId)) continue;
                 try
                 {
+                    long t0 = System.Diagnostics.Stopwatch.GetTimestamp();
                     entry.Service.ResetForScene();
+                    double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - t0) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+                    if (ms >= 50) Plugin.Logger.LogInfo("Slow scene reset: " + entry.Service.GetType().Name + " (" + entry.ModuleId + ") " + ms.ToString("0") + " ms");
                 }
                 catch (Exception e)
                 {

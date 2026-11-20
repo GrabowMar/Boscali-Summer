@@ -1,0 +1,256 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using BepInEx.Configuration;
+using NuclearOption.SavedMission;
+using UnityEngine;
+
+namespace BoscaliSummer.Modules.Megaplane
+{
+    internal sealed class MegaplaneSettings
+    {
+        public ConfigEntry<string> BayFighter { get; }
+        public ConfigEntry<KeyboardShortcut> DropFighterKey { get; }
+        public ConfigEntry<KeyboardShortcut> RecallFighterKey { get; }
+        public ConfigEntry<string> BayPayload { get; }
+
+        public MegaplaneSettings(ConfigFile config)
+        {
+            const string S = "Megaplane";
+            BayFighter = config.Bind(S, "BayFighter", "Fighter1",
+                "Fighter carried on the G-240's two belly trapezes: a prefab name, unit key or unit name (Fighter1 = FS-12 Revoker, SmallFighter1 = FS-20 Vortex). Needs a mission restart.");
+            DropFighterKey = config.Bind(S, "DropFighterKey", new KeyboardShortcut(KeyCode.Insert),
+                "While flying the G-240: open the belly bay, swing the next fighter down on its trapeze and release it as a live AI aircraft of your side.");
+            BayPayload = config.Bind(S, "BayPayload", "Fighters",
+                new ConfigDescription("What the G-240's belly bay carries: Fighters (two parasite fighters on trapezes) or Railgun (the RG-240 Trident on a lowering mount). Every player must use the same choice. Needs a game restart.",
+                    new AcceptableValueList<string>("Fighters", "Railgun")));
+            RecallFighterKey = config.Bind(S, "RecallFighterKey", new KeyboardShortcut(KeyCode.Delete),
+                "While flying the G-240: recall the released bay fighters. The bay opens and lowers its empty trapezes; the carrier's datalink flies each fighter to a gate behind and below the bay, then up onto the hook (an automated FICON / DARPA Gremlins style capture). Hold course and speed while they dock.");
+        }
+
+        internal static MegaplaneSettings Current;
+        internal static bool Railgun => Current != null && Current.BayPayload.Value == "Railgun";
+    }
+
+    /// <summary>Belly fighter bay of the G-240 (build_megaplane.py fighter_bay): two parasite fighters hang on FICON-style
+    /// trapezes. The template carries a render-only copy of the chosen fighter on each yoke; a drop opens the door pairs,
+    /// swings the trapeze down 90 deg below the belly and, on the host, spawns that fighter as a real AI aircraft of the
+    /// carrier's side at the copy's pose and the carrier's velocity, then retracts and closes.</summary>
+    internal static class MegaplaneBayTemplate
+    {
+        internal static readonly string[] Slots = { "F", "A" };
+        private static readonly Regex Hidden = new Regex("gear|wheel|strut|lg_|tyre|tire|damage|destroy|broken|debris|pilot|ladder|chock", RegexOptions.IgnoreCase);
+
+        internal static AircraftDefinition Pick(Encyclopedia encyclopedia)
+        {
+            string want = MegaplaneSettings.Current?.BayFighter.Value ?? "Fighter1";
+            bool Is(AircraftDefinition d, string s) => d.unitPrefab != null && (d.unitPrefab.name == s || d.jsonKey == s || d.unitName == s);
+            return encyclopedia.aircraft.FirstOrDefault(d => d != null && Is(d, want))
+                ?? encyclopedia.aircraft.FirstOrDefault(d => d != null && Is(d, "Fighter1"));
+        }
+
+        internal static void Build(Encyclopedia encyclopedia, Aircraft aircraft, Dictionary<string, Transform> nodes)
+        {
+            AircraftDefinition fighter = Pick(encyclopedia);
+            if (fighter == null) { Debug.LogWarning("[Megaplane] no bay fighter found"); return; }
+            foreach (string key in Slots)
+                if (nodes.TryGetValue("FighterSlot_" + key, out Transform slot)) Visual(fighter.unitPrefab, slot, key);
+            aircraft.gameObject.AddComponent<MegaplaneBay>().FighterKey = fighter.jsonKey;
+        }
+
+        private static bool Shown(Transform t, Transform root)
+        {
+            for (; t != null; t = t == root ? null : t.parent)
+                if (!t.gameObject.activeSelf || Hidden.IsMatch(t.name)) return false;
+            return true;
+        }
+
+        /// <summary>Render-only copy (top level of detail, gear hidden) hung with its top-centre on the hook point.</summary>
+        private static void Visual(GameObject prefab, Transform slot, string key)
+        {
+            var lower = new HashSet<Renderer>();
+            foreach (LODGroup g in prefab.GetComponentsInChildren<LODGroup>(true))
+            {
+                LOD[] lods = g.GetLODs();
+                for (int i = 1; i < lods.Length; i++) foreach (Renderer r in lods[i].renderers) if (r != null) lower.Add(r);
+            }
+            var root = new GameObject("BayFighter_" + key).transform;
+            root.SetParent(slot, false);
+            Matrix4x4 toRoot = prefab.transform.worldToLocalMatrix;
+            var bounds = new Bounds();
+            bool any = false;
+            foreach (MeshRenderer r in prefab.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                MeshFilter mf = r.GetComponent<MeshFilter>();
+                if (lower.Contains(r) || !r.enabled || mf == null || mf.sharedMesh == null || !Shown(r.transform, prefab.transform)) continue;
+                Matrix4x4 m = toRoot * r.transform.localToWorldMatrix;
+                var go = new GameObject(r.name);
+                go.transform.SetParent(root, false);
+                go.transform.localPosition = m.GetColumn(3);
+                go.transform.localRotation = m.rotation;
+                go.transform.localScale = m.lossyScale;
+                go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;
+                go.AddComponent<MeshRenderer>().sharedMaterials = r.sharedMaterials;
+                Bounds b = mf.sharedMesh.bounds;
+                for (int c = 0; c < 8; c++)
+                {
+                    Vector3 p = m.MultiplyPoint3x4(b.center + Vector3.Scale(b.extents, new Vector3((c & 1) * 2 - 1, (c & 2) - 1, (c & 4) / 2 - 1)));
+                    if (!any) { bounds = new Bounds(p, Vector3.zero); any = true; } else bounds.Encapsulate(p);
+                }
+            }
+            root.localPosition = -new Vector3(bounds.center.x, bounds.max.y, bounds.center.z);
+        }
+    }
+
+    internal sealed class MegaplaneBay : MonoBehaviour
+    {
+        [SerializeField] internal string FighterKey;
+        internal const float DoorOpen = 100f, ArmL = 9f;
+        private const float DoorRate = 35f, ArmRate = 22f;
+        private Aircraft carrier;
+        private readonly List<(Transform t, Quaternion rest, float sign)> doors = new List<(Transform, Quaternion, float)>();
+        private readonly Transform[] arms = new Transform[2], yokes = new Transform[2], visuals = new Transform[2];
+        internal readonly float[] Arm = new float[2];
+        internal readonly int[] State = new int[2];   // 0 stowed, 1 dropping, 2 released (empty), 3 waiting to catch, 4 stowing a caught fighter
+        internal readonly float[] ReadyAt = new float[2];   // a recovered fighter is refuelled and rearmed before it can drop again
+        internal const float RearmSeconds = 90f;
+        internal Aircraft Carrier => carrier;
+        internal float Door { get; private set; }
+        internal Aircraft[] Released { get; } = new Aircraft[2];
+
+        private void Awake()
+        {
+            carrier = GetComponent<Aircraft>();
+            Dictionary<string, Transform> all = GetComponentsInChildren<Transform>(true).GroupBy(t => t.name).ToDictionary(g => g.Key, g => g.First());
+            foreach (KeyValuePair<string, Transform> kv in all.Where(kv => kv.Key.StartsWith("FighterDoor_")))
+                doors.Add((kv.Value, kv.Value.localRotation, kv.Key.EndsWith("_L") ? -1f : 1f));
+            for (int i = 0; i < 2; i++)
+            {
+                string k = MegaplaneBayTemplate.Slots[i];
+                all.TryGetValue("TrapezeArm_" + k, out arms[i]);
+                all.TryGetValue("TrapezeYoke_" + k, out yokes[i]);
+                all.TryGetValue("BayFighter_" + k, out visuals[i]);
+                if (visuals[i] == null) State[i] = 2;
+            }
+        }
+
+        /// <summary>Host: start releasing the next stowed fighter (front first). False when none is left.</summary>
+        internal bool Drop(int slot = -1)
+        {
+            bool Ready(int i) => State[i] == 0 && Time.time >= ReadyAt[i];
+            if (slot < 0) slot = Ready(0) ? 0 : Ready(1) ? 1 : -1;
+            if (slot < 0 || slot > 1 || !Ready(slot)) return false;
+            State[slot] = 1;
+            return true;
+        }
+
+        /// <summary>Host: call every released, still-flying fighter back; returns how many were called.</summary>
+        internal int Recall()
+        {
+            int n = 0;
+            for (int i = 0; i < 2; i++)
+            {
+                Aircraft f = Released[i];
+                if (State[i] != 2 || f == null || f.disabled || !carrier.IsServer) continue;
+                State[i] = 3;
+                MegaplaneCapture c = f.GetComponent<MegaplaneCapture>() ?? f.gameObject.AddComponent<MegaplaneCapture>();
+                c.Bay = this;
+                c.Slot = i;
+                n++;
+            }
+            return n;
+        }
+
+        /// <summary>Where the caught fighter's root sits: the hidden stowed copy rides the yoke.</summary>
+        internal Vector3 HookPoint(int slot) => visuals[slot].position;
+
+        internal void Latch(int slot, Aircraft fighter)
+        {
+            if (State[slot] != 3) return;
+            State[slot] = 4;
+            Released[slot] = null;
+            visuals[slot].gameObject.SetActive(true);
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner != null && spawner.IsServer && fighter != null) spawner.ServerObjectManager.Destroy(fighter.gameObject);   // stowed, not lost
+        }
+
+        private void Update()
+        {
+            KeyboardShortcut key = MegaplaneSettings.Current != null ? MegaplaneSettings.Current.DropFighterKey.Value : KeyboardShortcut.Empty;
+            // ponytail: host-only drop; a client pilot's key and the door motion are not sent over the network yet
+            bool mine = carrier.IsServer && GameManager.GetLocalAircraft(out Aircraft me) && me == carrier;
+            if (mine && key.MainKey != KeyCode.None && key.IsDown()) Drop();
+            KeyboardShortcut recall = MegaplaneSettings.Current != null ? MegaplaneSettings.Current.RecallFighterKey.Value : KeyboardShortcut.Empty;
+            if (mine && recall.MainKey != KeyCode.None && recall.IsDown()) Recall();
+            for (int i = 0; i < 2; i++)   // a fighter shot down on the way back frees its slot
+                if (State[i] == 3 && (Released[i] == null || Released[i].disabled)) State[i] = 2;
+            float dt = Time.deltaTime;
+            bool busy = State[0] == 1 || State[1] == 1 || State[0] >= 3 || State[1] >= 3 || Arm[0] > 0.5f || Arm[1] > 0.5f;
+            Door = Mathf.MoveTowards(Door, busy ? DoorOpen : 0f, DoorRate * dt);
+            foreach ((Transform t, Quaternion rest, float sign) in doors) t.localRotation = rest * Quaternion.AngleAxis(sign * Door, Vector3.forward);
+            for (int i = 0; i < 2; i++)
+            {
+                if (arms[i] == null || yokes[i] == null) continue;
+                float target = (State[i] == 1 || State[i] == 3) && Door >= DoorOpen - 0.5f ? 90f : 0f;
+                Arm[i] = Mathf.MoveTowards(Arm[i], target, ArmRate * dt);
+                Quaternion swing = Quaternion.AngleAxis(-Arm[i], Vector3.right);
+                arms[i].localRotation = swing;
+                yokes[i].localPosition = arms[i].localPosition + swing * (Vector3.back * ArmL);
+                if (State[i] == 1 && Arm[i] >= 90f) Release(i);
+                if (State[i] == 4 && Arm[i] <= 0f) { State[i] = 0; ReadyAt[i] = Time.time + RearmSeconds; }
+            }
+        }
+
+        private void Release(int i)
+        {
+            State[i] = 2;
+            Transform v = visuals[i];
+            if (v == null) return;
+            Vector3 position = v.position;
+            v.gameObject.SetActive(false);
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (!carrier.IsServer || spawner == null || !(Encyclopedia.Lookup.TryGetValue(FighterKey, out UnitDefinition unit) && unit is AircraftDefinition def)) return;
+            Loadout loadout = null;
+            float fuel = 1f;
+            foreach (StandardLoadout option in def.aircraftParameters?.StandardLoadouts ?? new StandardLoadout[0])
+                if (option != null && !option.disabled && option.loadout != null) { loadout = option.loadout; fuel = option.FuelRatio > 0f ? option.FuelRatio : 1f; break; }
+            Released[i] = spawner.SpawnAircraft(null, def.unitPrefab, loadout, fuel, default, position.ToGlobalPosition(), carrier.transform.rotation,
+                carrier.rb.velocity - carrier.transform.up * 4f, null, carrier.NetworkHQ, null, 0.8f, 0.8f);
+        }
+    }
+
+    /// <summary>Datalink capture of one recalled bay fighter (host). The carrier flies it, as automated aerial refuelling
+    /// and DARPA Gremlins recovery do: to a gate behind and below the bay at up to 90 m/s over the carrier's speed, to a
+    /// point 25 m straight under the lowered hook, then up at walking pace onto the hook, where the bay latches it.</summary>
+    internal sealed class MegaplaneCapture : MonoBehaviour
+    {
+        internal MegaplaneBay Bay;
+        internal int Slot;
+        internal int Phase;   // 0 to the gate, 1 under the hook, 2 rising onto it
+        private Aircraft self;
+        private const float GateBack = 260f, GateBelow = 70f, Under = 25f;
+
+        private void Awake() => self = GetComponent<Aircraft>();
+
+        private void FixedUpdate()
+        {
+            if (Bay == null || self == null || self.disabled || Bay.State[Slot] != 3) { Destroy(this); return; }
+            Transform c = Bay.transform;
+            Vector3 hook = Bay.HookPoint(Slot), p = self.transform.position, cv = Bay.Carrier.rb.velocity;
+            Vector3 aim = Phase == 0 ? hook - c.forward * GateBack - c.up * GateBelow : Phase == 1 ? hook - c.up * Under : hook;
+            Vector3 err = aim - p;
+            if (Phase == 0 && err.magnitude < 40f) Phase = 1;
+            else if (Phase == 1 && err.magnitude < 3f) Phase = 2;
+            float gain = Phase == 0 ? .08f : Phase == 1 ? .3f : .5f, most = Phase == 0 ? 90f : Phase == 1 ? 15f : 3f;
+            Vector3 want = cv + Vector3.ClampMagnitude(err * gain, most);
+            Rigidbody rb = self.rb;
+            float dt = Time.fixedDeltaTime;
+            rb.velocity = Vector3.MoveTowards(rb.velocity, want, (Phase == 0 ? 30f : 12f) * dt);
+            rb.angularVelocity = Vector3.zero;
+            Quaternion look = Phase == 0 && want.sqrMagnitude > 1f ? Quaternion.LookRotation(want, c.up) : c.rotation;
+            rb.MoveRotation(Quaternion.RotateTowards(rb.rotation, look, (Phase == 0 ? 25f : 10f) * dt));
+            if (Phase == 2 && err.magnitude < 1.5f && (rb.velocity - cv).magnitude < 4f) Bay.Latch(Slot, self);
+        }
+    }
+}
+

@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Wing.Presentation
             background.rectTransform.offsetMin = new Vector2(-ShadeMargin, -ShadeMargin);
             background.rectTransform.offsetMax = new Vector2(ShadeMargin, ShadeMargin);
             background.color = HudSprites.BackdropColor;
-            chrome = AvVector.Create(root, "Chrome", 24);
+            chrome = AvVector.Create(root, "Chrome", 24, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             chromeKey = 0;
             // A kit accent rail down the left edge says it is the wing's.
             rail = WingUi.Rule(root, new Rect(0f, -4f, 2f, LineHeight * 2f), AvTheme.Accent);

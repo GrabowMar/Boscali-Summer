@@ -63,7 +63,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             logGroup.ignoreParentGroups = true;      // the pilot's opacity is this group's alone, as the board's is
             logGroup.interactable = logGroup.blocksRaycasts = false;
             logSurface = Pinned(logRoot, "Log", false);
-            logVector = AvVector.Create(logSurface, "Strokes", LogQuads);
+            logVector = AvVector.Create(logSurface, "Strokes", LogQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             logText = new ScopeText(Holder(logSurface, "Words"), font, fontMaterial);
             logCanvas = new ScopeCanvas(logVector.Buffer, logText, "scope.eventlog");
             PlaceCornerRoots();

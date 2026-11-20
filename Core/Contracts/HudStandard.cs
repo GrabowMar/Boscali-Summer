@@ -63,7 +63,7 @@ namespace BoscaliSummer.Core.Contracts
     internal static class HudInk
     {
         /// <summary>How far toward white INK-HI is (LAYOUT.md 1), and how far INK-DIM is darkened toward the edge colour: a tone, not an alpha (an alpha also thins the rim). INK/DIM is about 1.6:1 in luminance.</summary>
-        public const float HiLift = 0.80f, DimDarken = 0.22f;
+        public const float HiLift = 0.55f, DimDarken = 0.22f;
 
         /// <summary>The relative-luminance floors of INK, CAUTION and WARNING (<see cref="FloorY"/>). The default theme sits above all three (INK 0.764, AMBER 0.548, RED 0.234).</summary>
         public const float InkFloorY = 0.45f, CautionFloorY = 0.45f, WarningFloorY = 0.22f;
@@ -144,6 +144,16 @@ namespace BoscaliSummer.Core.Contracts
         }
 
         private static Rgba Mix(Rgba a, Rgba b, float k) => new Rgba(a.R + (b.R - a.R) * k, a.G + (b.G - a.G) * k, a.B + (b.B - a.B) * k);
+    }
+
+    /// <summary>
+    /// THE GLOW of the visor (2026-11-19, user: "shadows and glow standardised and reactive to element size ... AR vibe"): every word and stroke of the mod's HUD is light with one soft halo of its own colour,
+    /// never a dark shadow. The halo starts at <see cref="Alpha"/> of the element's alpha and its reach follows the element's size: a stroke's halo is <see cref="Stroke"/> x its width each side (hairline 1.25,
+    /// heavy 2.5 units), a word's is TMP's underlay in SDF units (<see cref="TextDilate"/>/<see cref="TextSoftness"/>), which scale with the glyph, so a HERO numeral glows wider than a LABEL.
+    /// </summary>
+    internal static class HudGlow
+    {
+        public const float Alpha = 0.3f, Stroke = 1.25f, TextDilate = 0.05f, TextSoftness = 0.3f;
     }
 
     /// <summary>THE LINE WEIGHTS, design units: hairline (rules, ticks, frames), standard (rails, scope rings, brackets), heavy (the one emphasised element of a block, the banner bar).</summary>

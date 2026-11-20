@@ -42,7 +42,8 @@ namespace BoscaliSummer.Modules.Skylark
 
         private static readonly string[] Optional =
         {
-            "GunTurret_Yaw", "GunTurret_Pitch", "GunBarrel", "GunMuzzle", "GunGlow", "GunCoil0", "GunCoil1", "GunCoil2", "GunCoil3", "GunCoil4", "GunCoil5", "Hardpoint_L3", "Hardpoint_R3", "Hardpoint_C", "Intake_Door_L", "Intake_Door_R",
+            "GunTurret_Yaw", "GunTurret_Pitch", "GunBarrel", "GunMuzzle", "GunGlow", "GunBayDoor_R", "GunBayDoor_L",
+            "GunCoil0", "GunCoil1", "GunCoil2", "GunCoil3", "GunCoil4", "GunCoil5", "Hardpoint_L3", "Hardpoint_R3", "Hardpoint_C", "Intake_Door_L", "Intake_Door_R",
             "Exhaust_Shutter_L", "Exhaust_Shutter_R", "C2_Mast", "Strobe_Top", "Strobe_Bottom"
         };
 

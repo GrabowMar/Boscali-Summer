@@ -99,7 +99,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             for (int i = 0; i < slots.Length; i++)
             {
                 var s = new Slot { Holder = CombatAlerts.Holder(root, i < TapeLayout.MaxMarks ? "Mark" : "Sweep") };
-                s.Shape = AvVector.Create(s.Holder, "Shape", 8);
+                s.Shape = AvVector.Create(s.Holder, "Shape", 8, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
                 s.Text = new ScopeText(s.Holder, font, fontMaterial);
                 s.Holder.gameObject.SetActive(false);
                 slots[i] = s;

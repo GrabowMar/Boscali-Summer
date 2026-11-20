@@ -11,6 +11,7 @@ namespace BoscaliSummer.Core.Util
             width = 0;
             height = 0;
             if (data == null || data.Length < 24) return false;
+            if (data[0] == 0xFF && data[1] == 0xD8) return JpegSize(data, maxDimension, out width, out height);
             for (int i = 0; i < Signature.Length; i++)
                 if (data[i] != Signature[i]) return false;
             if (data[12] != (byte)'I' || data[13] != (byte)'H' || data[14] != (byte)'D' || data[15] != (byte)'R')
@@ -21,6 +22,29 @@ namespace BoscaliSummer.Core.Util
             width = (int)rawWidth;
             height = (int)rawHeight;
             return true;
+        }
+
+        /// <summary>A JPEG's size from its first start-of-frame marker (baseline or progressive); walks segment headers only.</summary>
+        private static bool JpegSize(byte[] data, int maxDimension, out int width, out int height)
+        {
+            width = height = 0;
+            for (int i = 2; i + 9 < data.Length;)
+            {
+                if (data[i] != 0xFF) return false;
+                byte marker = data[i + 1];
+                if (marker == 0xFF) { i++; continue; }
+                int length = (data[i + 2] << 8) | data[i + 3];
+                if (marker >= 0xC0 && marker <= 0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC)
+                {
+                    int h = (data[i + 5] << 8) | data[i + 6], w = (data[i + 7] << 8) | data[i + 8];
+                    if (w == 0 || h == 0 || w > maxDimension || h > maxDimension) return false;
+                    width = w; height = h;
+                    return true;
+                }
+                if (length < 2) return false;
+                i += 2 + length;
+            }
+            return false;
         }
 
         private static uint BigEndian(byte[] data, int offset) =>

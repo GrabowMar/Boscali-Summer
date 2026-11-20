@@ -118,7 +118,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cornerGroup.ignoreParentGroups = true;
             cornerGroup.interactable = cornerGroup.blocksRaycasts = false;
             cornerSurface = Pinned(cornerFurniture, "Corners", false);
-            cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads);
+            cornerVector = AvVector.Create(cornerSurface, "Strokes", CornerQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             cornerText = new ScopeText(Holder(cornerSurface, "Words"), font, fontMaterial);
             cornerCanvas = new ScopeCanvas(cornerVector.Buffer, cornerText, "scope.corners");
             PlaceCornerRoots();

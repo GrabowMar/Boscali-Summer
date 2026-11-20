@@ -1,7 +1,0 @@
-A compact military tiltrotor cargo shuttle with a tall rectangular rear-ramp fuselage, rounded structural chamfers, high shoulder wing and a raised ordinary two-seat cockpit. Exactly two open tilting proprotors are mounted at the wingtips, one per side; each has a clear transverse nacelle pivot. The baseline reference shows vertical-lift nacelle orientation with sharp stationary horizontal rotor blades. No ducts and no four-fan arrangement.
-
-The baseline operating assumption is autonomous/supervised flight. The two-seat flight deck preserves an optional future crewed configuration; it does not create extra personnel. A crewed variant must assign its pilots explicitly in the crew roster/mass ledger rather than adding uncounted crew or silently consuming the 128 infantry allocation.
-
-A single vertical tail and high horizontal stabilizer leave a distinct rear loading opening. The broad rear ramp is shut in the primary image. Robust extended landing gear supports the cargo body, with separate main struts/wheels and a nose unit. Include a small crew door, practical steps, cargo tie-down fittings, accessible machinery covers and restrained navigation lights. There is no armament in the baseline model.
-
-Use the carrier family's light service-gray paint, darker machinery/access panels, dark glazing/rubber and cause-based wear. The cargo body, loading route and two large rotors must dominate the silhouette. Keep cockpit and access details at human scale. Render/model the shuttle alone; troops, containers and ground drones are separate payload objects.

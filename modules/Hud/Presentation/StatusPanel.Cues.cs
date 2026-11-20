@@ -144,7 +144,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             cueGroup.ignoreParentGroups = true;      // the pilot's opacity is this group's alone, as the board's is
             cueGroup.interactable = cueGroup.blocksRaycasts = false;
             cueSurface = Pinned(cueRoot, "Cues", false);
-            cueVector = AvVector.Create(cueSurface, "Strokes", CueQuads);
+            cueVector = AvVector.Create(cueSurface, "Strokes", CueQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             cueText = new ScopeText(Holder(cueSurface, "Words"), font, fontMaterial);
             cueCanvas = new ScopeCanvas(cueVector.Buffer, cueText, "scope.cues");
             PlaceCornerRoots();

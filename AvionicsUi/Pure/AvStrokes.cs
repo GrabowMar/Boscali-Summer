@@ -43,6 +43,14 @@ namespace NOAvionics
         /// <summary>False for a buffer redrawn every frame anyway (<c>AvVector.Commit(force: true)</c> clears it): <see cref="Add"/> stops folding into <see cref="ContentHash"/>.</summary>
         public bool Hashing { get; set; } = true;
 
+        /// <summary>
+        /// The AR glow of every <see cref="AvStrokes.Line"/> and <see cref="AvStrokes.Arc"/> into this buffer: a soft halo each side, <see cref="Glow"/> times the stroke's width wide (so a heavy
+        /// stroke glows wider than a hairline), starting at <see cref="GlowAlpha"/> of the stroke's alpha and fading to nothing. 0 is off. A glowing buffer needs three quads per stroke quad.
+        /// </summary>
+        public float Glow { get; set; }
+
+        public float GlowAlpha { get; set; } = 0.3f;
+
         private void Fold(float v) => ContentHash = (ContentHash ^ (uint)BitConverter.SingleToInt32Bits(v)) * 1099511628211UL;
 
         /// <summary>
@@ -99,6 +107,13 @@ namespace NOAvionics
                 Rgba fade = c.WithAlpha(0f);
                 ok &= AddStrip(b, ax, ay, bx, by, nx, ny, hw, hw + feather, c, fade);
                 ok &= AddStrip(b, ax, ay, bx, by, nx, ny, -hw, -(hw + feather), c, fade);
+            }
+            if (b.Glow > 0f)
+            {
+                float g = hw + Math.Max(feather, width * b.Glow);
+                Rgba halo = c.WithAlpha(c.A * b.GlowAlpha), none = c.WithAlpha(0f);
+                ok &= AddStrip(b, ax, ay, bx, by, nx, ny, hw, g, halo, none);
+                ok &= AddStrip(b, ax, ay, bx, by, nx, ny, -hw, -g, halo, none);
             }
             return ok;
         }
@@ -163,6 +178,13 @@ namespace NOAvionics
                 float innerAx = cx + cosA * (radius - hw), innerAy = cy + sinA * (radius - hw);
 
                 ok &= b.Add(outerAx, outerAy, outerBx, outerBy, innerBx, innerBy, innerAx, innerAy, c, c, c, c);
+                if (b.Glow > 0f)
+                {
+                    float g = width * b.Glow, ro = radius + hw + g, ri = Math.Max(0f, radius - hw - g);
+                    Rgba halo = c.WithAlpha(c.A * b.GlowAlpha), none = c.WithAlpha(0f);
+                    ok &= b.Add(outerAx, outerAy, outerBx, outerBy, cx + cosB * ro, cy + sinB * ro, cx + cosA * ro, cy + sinA * ro, halo, halo, none, none);
+                    ok &= b.Add(innerAx, innerAy, innerBx, innerBy, cx + cosB * ri, cy + sinB * ri, cx + cosA * ri, cy + sinA * ri, halo, halo, none, none);
+                }
             }
             return ok;
         }

@@ -165,7 +165,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
             card = Holder(root, "Ace Card", 0f, 0f, TopCentre.Width, TopCentre.CardHeight);
             cardGroup = card.gameObject.AddComponent<CanvasGroup>();
             cardGroup.blocksRaycasts = false;
-            cardLines = AvVector.Create(Holder(card, "Lines", 0f, 0f, 0f, 0f), "Lines", 16);
+            cardLines = AvVector.Create(Holder(card, "Lines", 0f, 0f, 0f, 0f), "Lines", 16, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             portrait = ImageBox(card, 0f, 0f, PortraitSize);
             header = Label(card, "ENEMY ACE", TopCentre.LabelPt, HudStep.Label, Tone.Caution, false, true);
             headerW = header.GetPreferredValues(header.text).x;
@@ -176,7 +176,7 @@ namespace BoscaliSummer.Modules.Progression.Presentation
 
             // Marker: drawn in the root's own space (screen centre origin), so it is not placed by the slot.
             marker = Holder(root, "Ace Marker", 0f, 0f, 0f, 0f);
-            markerLines = AvVector.Create(marker, "Lines", 24);      // the marker holder is zero-size: its strokes' origin is the screen centre
+            markerLines = AvVector.Create(marker, "Lines", 24, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);      // the marker holder is zero-size: its strokes' origin is the screen centre
             markerLabel = MarkerLabel(marker);
             marker.gameObject.SetActive(false);
 

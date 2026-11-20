@@ -98,7 +98,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The ring and the edge glow move every frame: their own holder on the Motion root, so their rebuild never re-batches the banner.
             ring = Holder(HudLayer.Motion, "BoscaliThreatRing");
             edgeLines = AvVector.Create(ring, "EdgeGlow", 32);      // first: behind every other piece
-            ringLines = AvVector.Create(ring, "Ring", 160);
+            ringLines = AvVector.Create(ring, "Ring", 160, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             for (int i = 0; i < RingMax; i++)
             {
                 ringLabels[i] = Text(ring, "RingLabel", TopCentre.ValuePt, LineSpacing, bold: true);
@@ -109,7 +109,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
             // The warning line: the ticks and the fuse in one mesh, then the three words (kind at the left, detail after it, the call at the right).
             line = Holder(root, "Line");
-            lineLines = AvVector.Create(line, "Lines", 16);
+            lineLines = AvVector.Create(line, "Lines", 16, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             kindWord = Word(line, "Kind", TopCentre.ValuePt, HudStep.Value, 0f);
             middle = Word(line, "Detail", TopCentre.DetailPt, HudStep.Body, 0f);
             middle.overflowMode = TextOverflowModes.Ellipsis;
@@ -119,7 +119,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             calloutGroup = callout.gameObject.AddComponent<CanvasGroup>();
             calloutGroup.blocksRaycasts = false;
             calloutGroup.interactable = false;
-            calloutLines = AvVector.Create(callout, "Lines", 16);
+            calloutLines = AvVector.Create(callout, "Lines", 16, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             calloutWord = Text(callout, "Word", TopCentre.NamePt, WordSpacing, bold: true);
             calloutIcon = Icon(callout, TopCentre.NamePt);
             calloutSub = Text(callout, "Sub", TopCentre.LabelPt, LineSpacing);

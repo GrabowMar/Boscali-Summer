@@ -188,7 +188,8 @@ namespace BoscaliSummer.Modules.Wing.Networking
         private static void OnServerStarted()
         {
             ClearPlayers();
-            NetworkManagerNuclearOption.i.Server.MessageHandler.RegisterHandler<WcToHost>(FromClient, false);
+            // the hooked manager, not NetworkManagerNuclearOption.i: Mirage late events fire inside AddListener, before .i is set
+            manager?.Server?.MessageHandler?.RegisterHandler<WcToHost>(FromClient, false);
             WingLog.Logger.LogInfo("[Net] host handlers registered");
         }
 
@@ -197,7 +198,7 @@ namespace BoscaliSummer.Modules.Wing.Networking
             HostGreeted = false;
             Mirror = null;
             // Only the host sends to a client; the client's connection to it is its only player.
-            NetworkManagerNuclearOption.i.Client.MessageHandler.RegisterHandler<WcToClient>(FromHost, true);
+            manager?.Client?.MessageHandler?.RegisterHandler<WcToClient>(FromHost, true);
             WingLog.Logger.LogInfo("[Net] client handlers registered");
         }
 

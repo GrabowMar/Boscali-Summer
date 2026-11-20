@@ -430,7 +430,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             };
             if (ScopeFeeds.TryRead(out StoresScope stores)) { inputs.Stations = stores.StationCount; inputs.HasSafety = stores.Selected >= 0; inputs.Safe = stores.Safe; }
             RefreshIdentity(aircraft, true);
-            boot.Begin(mode, Time.unscaledTime, inputs, identityCallsign);
+            boot.Begin(mode, Time.unscaledTime, inputs, null);      // no name on the visor (2026-11-19, user)
             bootedFor = aircraft;
             everBooted = true;
         }
@@ -699,6 +699,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (filter != null && filter.HasFlightAssist()) s.FlightAssist = a.flightAssist;
             if (filter != null && filter.HasAutoHover()) s.AutoHover = a.IsAutoHoverEnabled();
             if (a.radar != null) s.RadarEmitting = a.radar.activated;
+            LaserDesignator laser = a.GetLaserDesignator();
+            if (laser != null) s.Laser = laser.LasedTargetCount() > 0;
             if (BoscaliSummer.Core.Game.GameAccess.TryGetNightVisionState(out bool nvg, out _)) { s.NightVision = nvg; s.NvgLegend = BoscaliSummer.Core.Game.NightVisionLink.Legend; }
             return s;
         }

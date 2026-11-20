@@ -28,9 +28,12 @@ namespace BoscaliSummer.Modules.Vanguard.Domain
             return slot;
         }
 
-        public static Vector3 World(Vector3 position, Vector3 forward, Vector3 right, Vector3 up, int slot, bool big)
+        /// <param name="span">Launcher span: a launcher wider than 60 m (the G-240) pushes every slot clear of its own wings.</param>
+        public static Vector3 World(Vector3 position, Vector3 forward, Vector3 right, Vector3 up, int slot, bool big, float span = 0f)
         {
             Vector3 local = big ? BigLocal(slot) : Local(slot);
+            float clear = Mathf.Max(0f, span * 0.5f - 30f);
+            local += new Vector3(Mathf.Sign(local.x) * clear, 0f, -clear * 0.5f);
             return position + right * local.x + up * local.y + forward * local.z;
         }
     }

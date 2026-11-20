@@ -18,6 +18,15 @@ namespace NOAvionics
         /// Builds a stretched, non-interactive vector surface parented under
         /// <paramref name="parent"/>, backed by a fresh buffer of <paramref name="capacity"/> quads.
         /// </summary>
+        /// <summary><paramref name="glow"/> &gt; 0 makes every line and arc glow (<see cref="AvQuadBuffer.Glow"/>; the buffer gets three times the quads).</summary>
+        public static AvVector Create(RectTransform parent, string name, int capacity, float glow, float glowAlpha)
+        {
+            AvVector v = Create(parent, name, glow > 0f ? capacity * 3 : capacity);
+            v.Buffer.Glow = glow;
+            v.Buffer.GlowAlpha = glowAlpha;
+            return v;
+        }
+
         public static AvVector Create(RectTransform parent, string name, int capacity)
         {
             var go = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(AvVector));

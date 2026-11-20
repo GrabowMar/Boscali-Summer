@@ -30,6 +30,9 @@ namespace BoscaliSummer.Modules.FireAndDestruction
             ImpactFireManager fires = context.AddSceneService<ImpactFireManager>(10);
             fires.Configure(context.Services);
             context.AddSceneService<ImpactScorchManager>(15);
+            context.AddClientSetting("WORLD FX", "IMPACT SCORCH",
+                "Scorch marks and dust where explosive hits land on building walls. Client-local cosmetic; applies to new hits.",
+                context.Settings.FireAndDestruction.ImpactScorchEnabled, ClientPreset.Light);
             context.AddSceneService<BuildingCarver>(16);
             context.AddSceneService<BuildingHitLedger>(17);
             context.AddSceneService<RuinAftermathManager>(20);

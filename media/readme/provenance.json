@@ -1,128 +1,93 @@
 {
-  "captured_date": "2026-10-12 (flight and command runs), 2026-10-20 (epic run)",
+  "captured_date": "2026-11-18",
   "timezone": "Europe/Warsaw",
   "tool": "nomodkit sim run",
-  "mission": "Free Flight (flight and epic runs), Escalation (command run)",
   "mode": "scripted single-player development capture",
-  "game_version_target": "0.34.2",
-  "mod_version": "0.2.0",
-  "mod_dll_sha256": "4f8b22aceec07a9fedb1f6ce67706bb0e1a799a3aeec08d6ee0597df7f9745c7",
-  "capture_result": "status ok on every run; eleven captures visually inspected",
-  "staging": "Flight run: player seated in an FS-20 Vortex with two scripted FS-20s ahead, scripted level flight, library skies pinned through the weather console path, exterior and cockpit views, the weather console and an inert line-up of the VANGUARD models. Command run: player orbiting at 9000 m over a running Escalation war with the STR and OPS consoles opened. Existing development settings and other installed plugins retained. Epic run (nomodkit readme-epic scenario, 2026-10-20): spectator camera with the mod's Cinematography rigs (follow and orbit) over AI-flown FS-20s off the north coast and at sea, golden hour 17:27-17:42 against an 18:00 sunset, library skies 18 (altocumulus over cumulus), 32 (sea of cloud) and 17 (isolated cumulonimbus with the supercell and distant Cb set-pieces); clouds at full resolution with the temporal update off (CloudHalfResolution and CloudTemporalUpdate false).",
+  "game_version_target": "0.34.6",
+  "mod_builds": {
+    "note": "Development builds of the main working tree, not the 0.2.14 release package. Both include unreleased work (SA-74N thermonuclear remaster, prerendered cutscene videos, VS-4 Skylark Blueprinter loading). The 30503eb9 build adds the scenario-only ChatterAutomation.Quiet comms-strip hook used for the cockpit shots.",
+    "build_a": {
+      "version": "0.2.14-dev",
+      "dll_sha256": "21b287d23592c5c629cfb9a29bb6f64a3a548c070df78253b208551a4cfc306f"
+    },
+    "build_b": {
+      "version": "0.2.15-dev",
+      "dll_sha256": "30503eb9f68f816df8eed9a2dd0ba23ae859644a7d2193e4e8b61365adab7d80"
+    }
+  },
+  "capture_result": "the contributing scenario sections completed with status ok; every published frame was visually inspected, and multi-frame shots were picked from several inspected candidates",
+  "staging": {
+    "readme-epic": "Free Flight, spectator camera with the mod's Cinematography rigs (chase and orbit) over AI-flown three-ships of FS-20 Vortex at golden hour; library skies pinned: 18 (altocumulus over cumulus) for the hero, 32 (sea of cloud) for the deck, 17 (isolated cumulonimbus) for the storm.",
+    "readme-flight": "Free Flight, player seated in an FS-20 Vortex with two scripted FS-20s ahead; pinned library skies, cockpit view with the TAC BOARD configured, the MET OFFICE console opened for its capture, and an inert VANGUARD showcase staged over the coast. The comms strip was held dark for the cockpit shots (scenario-only quiet hook).",
+    "readme-command": "Escalation, player orbiting at 9000 m over a running war with the STR board opened for its capture.",
+    "readme-ops": "Escalation, player orbiting at 9000 m; the SPACE front funded and built a launch pad and launched the DARKSTAR optical satellite (timescaled build), then the SPACE window was opened over the ops map console for the capture."
+  },
   "image_processing": "None. Original PNG captures copied without editing.",
-  "limitations": "Short capture runs only. Not a performance benchmark, gameplay acceptance test or multiplayer test. The flight run was made twice; coast.png comes from the first pass (same scenario before the wingmen were moved ahead of the camera), every other flight image from the second. The DLL is the development build installed that day, not the 0.2.0 release package. Terrain and aircraft include native Nuclear Option assets. Development settings and support allocation are not representative of balanced gameplay. The epic run used a development build of the main working tree from 2026-10-19 (uncommitted work included, among it the ocean and sun passes) in a private game copy; its night shot did not complete.",
+  "limitations": "Short scripted single-player runs. Not a performance benchmark, gameplay acceptance test or multiplayer test. Development settings and support allocation are not representative of balanced gameplay. Terrain and aircraft include native Nuclear Option assets. The hero frame comes from a run whose later MET-console section failed on a stale set-piece press (since removed from the scenario); the hero section itself completed before the failure. The storm frame shows heavy overcast: the pinned sky's convection sat out of frame, so the caption says overcast, not a thunderhead. The weather console's METAR line reports the pinned sky instance's real layers, which include a high veil besides the card's nominal low cumulus (FEW049), so the METAR cloud base differs from the card's catalog code while the Sky Overhead readout agrees with the card.",
   "files": [
     {
-      "file": "cockpit.png",
-      "sha256": "87794e0168b92b15e0aab99cd6cc2a24298ed521b7f56a55e6acb1eafc630d4f",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "cockpit-storm.png",
-      "sha256": "f5b73560c7c4fd36de566864edf41828c1321e0338051200959fd1ba23f711d5",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "weather-console.png",
-      "sha256": "0b8e8e2b9b854a2cc943304cbb8bbbf5b982f862490b456684b5c3514514258f",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "vanguard.png",
-      "sha256": "65a04464a4bcf688e29a3afd468b5ff4f03444f07c00162c5871b65171b3c5f9",
-      "width": 1920,
-      "height": 1080,
-      "run": "flight",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "command.png",
-      "sha256": "421257d532eaca7c7d65501b92ed864443ff73295f7d5279818c0bbbca04d9ef",
-      "width": 1920,
-      "height": 1080,
-      "run": "command",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "sitrep.png",
-      "sha256": "d6f2c67e96100a7c77540ebe4e89fd28670c9803fe77c097d697080cfc77eb65",
-      "width": 1920,
-      "height": 1080,
-      "run": "command",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "support.png",
-      "sha256": "b0aea8c1360b01485c70f3ec8ef360260d7afef20dd4930267d8bcde32891ad8",
-      "width": 1920,
-      "height": 1080,
-      "run": "command",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "support-space.png",
-      "sha256": "26b176ed7f1059d27c40de5d7c9ec8bdb143d6bb6fd51b63e53412d9c49c8574",
-      "width": 1920,
-      "height": 1080,
-      "run": "command",
-      "captured_date": "2026-10-12"
-    },
-    {
-      "file": "support-cyber.png",
-      "sha256": "024f2a070c63d53bc0fb31e10e28dfa922510d00b74de58ca11ebbdd1e88b3f8",
-      "width": 1920,
-      "height": 1080,
-      "run": "command",
-      "captured_date": "2026-10-12"
-    },
-    {
       "file": "hero.png",
-      "sha256": "646d1bb4c142132fc28a2daf8ffab4920ed7cf6e8f24896a1f61af30ca1dde5a",
+      "sha256": "ecf18dee8565f8fb3d8fc99a0498371e09ae9d02a249452dfa464c774d749557",
       "width": 1920,
       "height": 1080,
-      "run": "epic",
-      "captured_date": "2026-10-20"
+      "run": "readme-epic (frame hero-front-2 of run 20261118-231207-0963)",
+      "build": "build_a"
     },
     {
       "file": "storm.png",
-      "sha256": "802d18ab47e77d3c1c07dde0f4a361640d33b24f6ffcad4345488108a22c5ceb",
+      "sha256": "1e6518b295cd7ee4eb37f4d96ef4339a147c5a505c7deaa75ecacb50b3fe3c11",
       "width": 1920,
       "height": 1080,
-      "run": "epic",
-      "captured_date": "2026-10-20"
+      "run": "readme-epic (frame storm-orbit-2 of run 20261118-232005-0bdc)",
+      "build": "build_a"
+    },
+    {
+      "file": "cockpit.png",
+      "sha256": "4fa591be347fcd4fa3d5b19e5c5548216c471d499bc2851805dca2e3072c4417",
+      "width": 1920,
+      "height": 1080,
+      "run": "readme-flight (run 20261118-234623-87ab)",
+      "build": "build_b"
     },
     {
       "file": "cloud-sea.png",
-      "sha256": "5b7e37930737225dedc688daaeeb79dc6d2b3d967b5970c02dcd5514a8cfe0f3",
+      "sha256": "14ec255ce06e761ba9045247a214f00fe1a33b857549badff1c7acfd8d0c8889",
       "width": 1920,
       "height": 1080,
-      "run": "epic",
-      "captured_date": "2026-10-20"
+      "run": "readme-epic (frame deck-orbit-2 of run 20261118-232005-0bdc)",
+      "build": "build_a"
     },
     {
-      "file": "sea-skim.png",
-      "sha256": "047355c0f1811aea0e7cff2e1360d20fc8d9c3591c3bdeb8f11192ee24ac62e1",
+      "file": "command.png",
+      "sha256": "d6a637df8e3cce423e453e59a2c9ce8bcd0047c4a3a8036425ab5cfe49c73f17",
       "width": 1920,
       "height": 1080,
-      "run": "epic",
-      "captured_date": "2026-10-20"
+      "run": "readme-command (run 20261118-230958-9310)",
+      "build": "build_a"
     },
     {
-      "file": "low-pass.png",
-      "sha256": "2b75a2bb36723959e175c488c41c996ca671879d8a998dbe01b8d0bb7e7e8256",
+      "file": "support-space.png",
+      "sha256": "801f1ff98b3c31658fbdc482a2dfc0cdba3b53b7ba096ef03a3cbc86dc93a768",
       "width": 1920,
       "height": 1080,
-      "run": "epic",
-      "captured_date": "2026-10-20"
+      "run": "readme-ops (run 20261118-235148-0fc3)",
+      "build": "build_b"
+    },
+    {
+      "file": "weather-console.png",
+      "sha256": "f49884e009c81d2dcdcb2dfa00dc2075d0d35d86023950f04b248db7f5ef63df",
+      "width": 1920,
+      "height": 1080,
+      "run": "readme-flight (run 20261118-234623-87ab)",
+      "build": "build_b"
+    },
+    {
+      "file": "vanguard.png",
+      "sha256": "ed0e2945eb732ad6450b9821cbda3396e2598b0bc71014adafd9b927861cfe71",
+      "width": 1920,
+      "height": 1080,
+      "run": "readme-flight (run 20261118-233858-5c36)",
+      "build": "build_b"
     }
   ]
 }

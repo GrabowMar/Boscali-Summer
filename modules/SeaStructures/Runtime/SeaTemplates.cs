@@ -111,7 +111,7 @@ namespace BoscaliSummer.Modules.SeaStructures.Runtime
                 name = key + "_" + map, hideFlags = HideFlags.HideAndDontSave,
                 wrapMode = repeat ? TextureWrapMode.Repeat : TextureWrapMode.Clamp, filterMode = FilterMode.Trilinear, anisoLevel = 8
             };
-            int size = repeat ? 1024 : map == "albedo" ? 4096 : 2048;
+            int size = repeat ? 1024 : 2048;
             if (!ImageConversion.LoadImage(texture, bytes, false) || texture.width != size || texture.height != size)
             {
                 UnityEngine.Object.Destroy(texture);

@@ -14,6 +14,8 @@ namespace BoscaliSummer.Modules.Hud.Domain
     {
         public GearLamp Gear;
         public bool? FlightAssist, AutoHover, RadarEmitting, NightVision;
+        /// <summary>The laser designator: null = the aircraft has none; true while it holds a lased target (LASR).</summary>
+        public bool? Laser;
         /// <summary>The fuel state (its JOKER / BINGO calls light FUEL; not <see cref="FuelState.Valid"/>: no aircraft, no FUEL or DMG lamp) and the damage state (DMG).</summary>
         public FuelState Fuel;
         public DamageState Damage;
@@ -34,7 +36,7 @@ namespace BoscaliSummer.Modules.Hud.Domain
     }
 
     /// <summary>
-    /// The aircraft's own annunciator lamps (bar v3), read-only: the SYS cell's fixed 4 x 2 grid, R2 the urgent row FUEL DMG ACE GEAR, R3 the modes RDR NVG HOVR FA OFF (<see cref="Slot"/>). FUEL and DMG are the one
+    /// The aircraft's own annunciator lamps (bar v3), read-only: the SYS cell's fixed 4 x 2 grid, R2 the urgent row LASR (or the fuel call) DMG ACE GEAR, R3 the modes RDR NVG HOVR FA OFF (<see cref="Slot"/>). FUEL and DMG are the one
     /// home of the fuel calls (JOKER amber, BINGO red) and the damage state (FIRE / ENG red, LEAK / STR amber, STR red past StructureWarning). Lit means "this is on" for modes, and a mode that is normally on (flight assist)
     /// lights only when it is off (FA OFF); RDR emitting is On, never amber; ACE is a steady caution while the heat is high or aces hunt the pilot (the hunt's red home is the ACE HUNT gauge). A missing system leaves its
     /// slot empty. Pure; fills a caller-owned array, no allocation.
@@ -51,12 +53,10 @@ namespace BoscaliSummer.Modules.Hud.Domain
 
         public static void Fill(in SystemStates s, Lamp[] lamps)
         {
-            lamps[Fuel] = new Lamp
-            {
-                Legend = s.Fuel.Bingo ? "BINGO" : s.Fuel.Joker ? "JOKER" : "FUEL", Present = s.Fuel.Valid,
-                State = s.Fuel.Bingo ? LampState.Warning : s.Fuel.Joker ? LampState.Caution : LampState.Dark,
-                Flash = s.Fuel.Bingo,
-            };
+            // Slot 0 (2026-11-19, user: the fuel tank with its % read as a second capacitor): LASR, lit while the designator holds a target; a fuel call (JOKER amber, BINGO red flashing) takes the slot while it stands.
+            lamps[Fuel] = s.Fuel.Valid && (s.Fuel.Joker || s.Fuel.Bingo)
+                ? new Lamp { Legend = s.Fuel.Bingo ? "BINGO" : "JOKER", Present = true, State = s.Fuel.Bingo ? LampState.Warning : LampState.Caution, Flash = s.Fuel.Bingo }
+                : Mode("LASR", s.Laser, LampState.On);
             SystemsHeadline h = SystemsMath.Headline(s.Damage, default(FuelState));
             ScopeTone tone = SystemsMath.HeadlineTone(h, s.Damage);
             lamps[Dmg] = new Lamp

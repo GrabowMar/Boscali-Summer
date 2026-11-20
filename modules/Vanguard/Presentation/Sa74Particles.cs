@@ -220,6 +220,11 @@ namespace BoscaliSummer.Modules.Vanguard.Presentation
                 (1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(35f, 55f, age)));
             float arrival = Domain.Sa74BlastShape.ArrivalSeconds(Sa74Fallout.ShockRadius);
             float pressureFade = 1f - Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(arrival, arrival + 20f, age));
+            // A layer that has faded out is emptied once, not rebuilt particle by particle every frame until the rig retires.
+            bool gone = layer.Kind == Kind.Condensation ? condensationFade < .004f
+                : layer.Kind == Kind.PressureShell ? pressureFade <= 0f
+                : layer.Kind == Kind.PressureMist && pressureFade <= 0f && condensationFade < .004f;
+            if (gone) { if (layer.System.particleCount > 0) layer.System.SetParticles(layer.Buffer, 0); return; }
             for (int i = 0; i < layer.Buffer.Length; i++)
             {
                 uint seed = unchecked(id * 7919u + (uint)i * 104729u + (uint)layer.Kind * 4937u);

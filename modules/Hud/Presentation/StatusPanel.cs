@@ -130,7 +130,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             rootGroup.ignoreParentGroups = true;
 
             BuildShade();      // first: behind everything
-            shellVector = AvVector.Create(root, "Shell", ShellQuads);
+            shellVector = AvVector.Create(root, "Shell", ShellQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             RectTransform shellWords = Holder(root, "ShellWords");
             shellText = new ScopeText(shellWords, font, fontMaterial);
             shellCanvas = new ScopeCanvas(shellVector.Buffer, shellText, "scope.shell");
@@ -139,7 +139,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // The stores header: one surface over the top of the board (board coordinates), above the shell, away from the scope.
             storesRect = Pinned(root, "Stores", false);
             storesGroup = Quiet(storesRect.gameObject);
-            storesVector = AvVector.Create(storesRect, "Strokes", StoresQuads);
+            storesVector = AvVector.Create(storesRect, "Strokes", StoresQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             storesText = new ScopeText(Holder(storesRect, "Words"), font, fontMaterial);
             storesCanvas = new ScopeCanvas(storesVector.Buffer, storesText, "scope.stores");
 
@@ -148,15 +148,15 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             scopeRect = Pinned(root, "Scope", true);
             scopeGroup = Quiet(scopeRect.gameObject);
             pageRect = Pinned(scopeRect, "Page", true);
-            pageVector = AvVector.Create(pageRect, "Strokes", PageQuads);
+            pageVector = AvVector.Create(pageRect, "Strokes", PageQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             pageText = new ScopeText(Holder(pageRect, "Words"), font, fontMaterial);
             pageCanvas = new ScopeCanvas(pageVector.Buffer, pageText, "scope.page");
             overlayRect = Pinned(scopeRect, "Overlay", false);
-            overlayVector = AvVector.Create(overlayRect, "Strokes", OverlayQuads);
+            overlayVector = AvVector.Create(overlayRect, "Strokes", OverlayQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             overlayText = new ScopeText(Holder(overlayRect, "Words"), font, fontMaterial);
             overlayCanvas = new ScopeCanvas(overlayVector.Buffer, overlayText, "scope.overlay");
             frameRect = Pinned(scopeRect, "Frame", false);
-            frameVector = AvVector.Create(frameRect, "Strokes", FrameQuads);
+            frameVector = AvVector.Create(frameRect, "Strokes", FrameQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             frameCanvas = new ScopeCanvas(frameVector.Buffer, null, "scope.frame");
             pageSurfaces[0] = new PageSurface
             {
@@ -169,7 +169,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             // STATUS: the aircraft's compact SYSTEMS strip under a warning page, so the RWR never takes the aircraft's state off the board. One masked surface: body, shelf and brackets.
             statusRect = Pinned(root, "Status", true);
             statusGroup = Quiet(statusRect.gameObject);
-            statusVector = AvVector.Create(statusRect, "Strokes", PageQuads);
+            statusVector = AvVector.Create(statusRect, "Strokes", PageQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             statusText = new ScopeText(Holder(statusRect, "Words"), font, fontMaterial);
             statusCanvas = new ScopeCanvas(statusVector.Buffer, statusText, "scope.status");
 
@@ -182,13 +182,13 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             s.Scope = Pinned(root, "Scope" + (slot + 1), true);
             s.Group = Quiet(s.Scope.gameObject);
             s.Body = Pinned(s.Scope, "Page", true);
-            s.BodyVector = AvVector.Create(s.Body, "Strokes", PageQuads);
+            s.BodyVector = AvVector.Create(s.Body, "Strokes", PageQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             s.BodyCanvas = new ScopeCanvas(s.BodyVector.Buffer, new ScopeText(Holder(s.Body, "Words"), font, fontMaterial), "scope.page" + slot);
             s.Overlay = Pinned(s.Scope, "Overlay", false);
-            s.OverlayVector = AvVector.Create(s.Overlay, "Strokes", OverlayQuads);
+            s.OverlayVector = AvVector.Create(s.Overlay, "Strokes", OverlayQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             s.OverlayCanvas = new ScopeCanvas(s.OverlayVector.Buffer, new ScopeText(Holder(s.Overlay, "Words"), font, fontMaterial), "scope.overlay" + slot);
             s.Frame = Pinned(s.Scope, "Frame", false);
-            s.FrameVector = AvVector.Create(s.Frame, "Strokes", FrameQuads);
+            s.FrameVector = AvVector.Create(s.Frame, "Strokes", FrameQuads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             s.FrameCanvas = new ScopeCanvas(s.FrameVector.Buffer, null, "scope.frame" + slot);
             Show(s.Scope, false);
             return s;

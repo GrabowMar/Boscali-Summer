@@ -61,7 +61,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             root = CombatAlerts.Holder(BoscaliSummer.Core.Ui.HudLayer.Ensure() ? BoscaliSummer.Core.Ui.HudLayer.Static : canvasRoot, "BoscaliRim");
             group = root.gameObject.AddComponent<CanvasGroup>();
             group.interactable = group.blocksRaycasts = false;
-            mesh = AvVector.Create(root, "Rim", Quads);
+            mesh = AvVector.Create(root, "Rim", Quads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             text = new ScopeText(CombatAlerts.Holder(root, "Words"), font, fontMaterial);
             root.gameObject.SetActive(false);
             lastK = 0f;
@@ -120,14 +120,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             text.End();
         }
 
-        /// <summary>The right-hand etched line: callsign and airframe; a field that is not known is left out.</summary>
-        private int Compose(char[] into)
-        {
-            int n = 0;
-            n = Put(into, n, callsign);
-            if (airframe.Length > 0) { n = Put(into, n, " · "); n = Put(into, n, airframe); }
-            return n;
-        }
+        /// <summary>The right-hand etched line: the airframe alone (2026-11-19, user: the pilot's Steam name is not printed on the visor).</summary>
+        private int Compose(char[] into) => Put(into, 0, airframe);
 
         private static int Put(char[] into, int n, string s)
         {

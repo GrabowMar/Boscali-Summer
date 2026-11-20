@@ -44,8 +44,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         private bool inLayer, shown, subscribed;
         private float ownScale = 1f;
         private readonly Row[] rows = new Row[Rows];
-        private readonly TextMeshProUGUI shelf, channel, prompt;
-        private readonly RectTransform shelfLine, promptTrack, promptBar;
+        private TextMeshProUGUI shelf, channel, prompt;
+        private RectTransform shelfLine, promptTrack, promptBar;
         private readonly RectTransform[] ticks = new RectTransform[Rows];
         /// <summary>The net the shelf's flag was last written for (-1: none yet): the flag is rewritten only when the net changes.</summary>
         private int paintedNet = -1;
@@ -61,6 +61,17 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
         {
             this.parent = parent;
             Mount();
+            RefreshFace();
+            SetVisible(false);
+            subscribed = true;
+            HudLayer.Paint += OnPaint;
+        }
+
+        /// <summary>The labels and bars; built on the first mount and again when the HUD canvas they lived under was destroyed
+        /// (scene change), which left them dead and threw an NRE every paint.</summary>
+        private void Build()
+        {
+            used = 0; paintedNet = -1; face = null; faceMaterial = null;
             shelf = Label("Shelf", LeftHudStack.HeaderSize);
             shelf.fontStyle = FontStyles.Bold;      // caption family: 12 bold DIM like the board's shelves
             shelf.text = "COMMS";
@@ -80,10 +91,6 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 text.overflowMode = TextOverflowModes.Truncate;
                 rows[i].Text = text;
             }
-            RefreshFace();
-            SetVisible(false);
-            subscribed = true;
-            HudLayer.Paint += OnPaint;
         }
 
         private readonly Transform parent;
@@ -126,7 +133,8 @@ namespace BoscaliSummer.Modules.Chatter.Presentation
                 dataRoot = Layer("Data");
             }
             else host = AvHudHost.Create("Boscali / Chatter", parent, 3);
-            if (shelf == null) return;      // the first mount: the labels are built next
+            // Unity null: the first mount, or the old canvas took the labels down with it.
+            if (shelf == null || shelfLine == null) { Build(); SetVisible(false); return; }
             Move(shelf); Move(channel); Move(prompt);
             for (int i = 0; i < Rows; i++) Move(rows[i].Text);
             Move(shelfLine, true); Move(promptTrack, true); Move(promptBar, true);

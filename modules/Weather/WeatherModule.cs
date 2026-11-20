@@ -72,7 +72,9 @@ namespace BoscaliSummer.Modules.Weather
                 "LOW: soft clouds, cheapest. MEDIUM: a little softer than HIGH. HIGH: the default look. " +
                 "ULTRA: crisper far cloud and every cloud pixel redrawn each frame (about 4x the GPU cost of HIGH). " +
                 "CUSTOM: your own mix from CLOUD DETAIL below.",
-                weather.Quality, new[] { "LOW", "MEDIUM", "HIGH", "ULTRA", "CUSTOM" }, clouds);
+                weather.Quality, new[] { "LOW", "MEDIUM", "HIGH", "ULTRA", "CUSTOM" }, clouds,
+                // the costliest mod knob measured (Escalation: HIGH -> clouds off saves ~2.8 ms): every preset sets it
+                new[] { WeatherQuality.High, WeatherQuality.Medium, WeatherQuality.Low });
             ClientSettingToggle halfRes = context.AddClientSetting("CLOUD DETAIL", "HALF-RES CLOUDS",
                 "Draw clouds at half resolution and upscale (about 4x cheaper). Off draws every pixel at full resolution: " +
                 "sharpest edges, heaviest cost.", weather.CloudHalfResolution, null, clouds);
@@ -91,6 +93,9 @@ namespace BoscaliSummer.Modules.Weather
             context.AddClientSetting("SKY", "AURORA & SPRITES",
                 "Aurora on clear nights; red sprites and blue jets above distant night storms. Client-local; applies now.",
                 context.Settings.Weather.SkyPhenomenaEnabled, ClientPreset.Light);
+            context.AddClientSetting("SKY", "LIGHTNING",
+                "Storm lightning bolts, cloud flashes and delayed thunder. Client-local; applies now.",
+                context.Settings.Weather.LightningEnabled, ClientPreset.Light);
             context.AddClientSetting("SKY", "DARK NIGHTS",
                 "Darker, moonlit blue-grey nights: a new moon is truly dark, a full moon lights the ground. Client-local; applies now.",
                 context.Settings.Weather.DarkNightsEnabled);
@@ -100,7 +105,7 @@ namespace BoscaliSummer.Modules.Weather
                 context.Settings.Weather.OceanWavesEnabled, ClientPreset.Light);
             context.AddClientSetting("SEA", "SEA SPRAY",
                 "Spray behind aircraft flying low and fast over water. Client-local; applies now.",
-                context.Settings.Weather.SeaSprayEnabled);
+                context.Settings.Weather.SeaSprayEnabled, ClientPreset.Light);
             context.AddClientSetting("SEA", "SURFACE WAKES",
                 "Moving ships leave stern wakes; aircraft downwash breaks up the custom ocean surface. Requires OCEAN WAVES.",
                 context.Settings.Weather.OceanInteractionsEnabled, ClientPreset.Light, oceanWaves);

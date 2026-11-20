@@ -11,6 +11,7 @@ height_max = 1200
 # Nothing but desert and three airfields in a triangle: the smugglers' strip in the west, the strip they fly to across
 # the border range in the east, and the army's base to the north, as far from one as from the other.
 [preset]
+description = "A sea of sand with no coast: megadunes, gravel pans and a half-buried border range between three airstrips. Camp Tifa in the west, Bir Anzar across the range in the east, the army's Fort Tassara to the north."
 superweapon = ""
 bare = true      # no towns, rivers or plants: sand, rock and three airfields
 lakes = 0

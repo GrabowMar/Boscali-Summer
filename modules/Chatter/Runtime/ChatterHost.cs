@@ -299,6 +299,9 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             finally { director.Level = ChatterLevel.Off; }
         }
 
+        /// <summary>Scenario-only (ChatterAutomation 'quiet'): while true, spoken lines still reach the voices, prompts and the MFD log, but the comms strip stays dark for a capture.</summary>
+        public bool StripSuppressed { get; set; }
+
         private void Set(string condition, bool on)
         {
             if (on) director.Conditions.Add(condition); else director.Conditions.Remove(condition);
@@ -319,7 +322,7 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             // A question's line opens its answer window, and its row stays up for as long as the window is open.
             if (questions.OnAired(line)) line.Seconds += ChatterQuestions.AnswerSeconds;
             if (strip == null && !Application.isBatchMode) strip = new ChatterStrip(transform);
-            strip?.Show(line);
+            if (!StripSuppressed) strip?.Show(line);
             // The MFD's tactical log keeps the radio with the game's own messages.
             if (ModuleServices.TryGet<ITacticalLog>(out var tactical))
                 tactical.Radio(ChatterStrip.Tag(line.Net) + " " + (line.Speaker ?? "").ToUpperInvariant() + ": " + line.Text);

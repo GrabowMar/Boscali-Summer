@@ -12,7 +12,7 @@ namespace BoscaliSummer.Modules.Performance.Domain
     /// </summary>
     internal static class ClientTuningMath
     {
-        public const float LodBiasCap = 1.5f;
+        public const float LodBiasCap = 1.0f;
         public const float ShadowDistanceCapMeters = 1000f;
         // URP renders the 3D scene at this share of the screen and upscales it (0.8 = 64% of the pixels).
         public const float RenderScaleCap = 0.8f;
@@ -23,6 +23,10 @@ namespace BoscaliSummer.Modules.Performance.Domain
         public const float FarMeters = 7500f;
         public const float SleepMeters = 15000f;
         public const float WakeMeters = 14000f;
+        // SLEEP FAR UNITS (a FAST-only saving) hides models past 8 km, where an aircraft is two or three pixels at 1080p;
+        // measured 2026-11-19 against the unmodded game: 15 km left FAST behind it. Tracer thinning keeps its own 15 km.
+        public const float UnitSleepMeters = 8000f;
+        public const float UnitWakeMeters = 7300f;
 
         /// <summary>Share of another player's visual-only bullets still drawn at this distance.</summary>
         public static float TracerKeep(float distanceSq, bool tracer)
@@ -33,10 +37,10 @@ namespace BoscaliSummer.Modules.Performance.Domain
             return 1f;
         }
 
-        /// <summary>A unit sleeps past 15 km and wakes inside 14 km, so it never flickers on the edge.</summary>
+        /// <summary>A unit sleeps past 8 km and wakes inside 7.3 km, so it never flickers on the edge.</summary>
         public static bool ShouldSleep(float distanceSq, bool sleeping)
         {
-            float edge = sleeping ? WakeMeters : SleepMeters;
+            float edge = sleeping ? UnitWakeMeters : UnitSleepMeters;
             return distanceSq >= edge * edge;
         }
 
@@ -47,10 +51,11 @@ namespace BoscaliSummer.Modules.Performance.Domain
             return current <= 0f ? current : Math.Min(current, LodBiasCap);
         }
 
-        public static float PlanShadowDistance(float current, bool enabled)
+        public static float PlanShadowDistance(float current, bool enabled, float cap = ShadowDistanceCapMeters)
         {
-            if (!enabled || current <= 0f || current <= ShadowDistanceCapMeters) return current;
-            return ShadowDistanceCapMeters;
+            // cap 0 is NO SHADOWS: URP draws no main-light shadows at a zero shadow distance
+            if (!enabled || current <= 0f || current <= cap) return current;
+            return cap;
         }
 
         public static float ClampRenderScale(float cap) =>
@@ -67,8 +72,8 @@ namespace BoscaliSummer.Modules.Performance.Domain
         public static float RestoreLodBias(float original, float current) =>
             current == PlanLodBias(original, true) ? original : current;
 
-        public static float RestoreShadowDistance(float original, float current) =>
-            current == PlanShadowDistance(original, true) ? original : current;
+        public static float RestoreShadowDistance(float original, float current, float cap = ShadowDistanceCapMeters) =>
+            current == PlanShadowDistance(original, true, cap) ? original : current;
 
         public static float RestoreRenderScale(float original, float current, float cap = RenderScaleCap) =>
             current == PlanRenderScale(original, true, cap) ? original : current;

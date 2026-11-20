@@ -15,7 +15,7 @@ namespace BoscaliSummer.Modules.Maps
     internal sealed class MapsModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("maps", "Custom maps");
-        public Type[] PatchTypes => new[] { typeof(MapLoaderListPatch), typeof(MapEnablePatch), typeof(NewMissionTilesPatch), typeof(MapLaunchPatch), typeof(MapGroundPatch) };
+        public Type[] PatchTypes => new[] { typeof(MapLoaderListPatch), typeof(MapEnablePatch), typeof(NewMissionTilesPatch), typeof(MapLaunchPatch), typeof(MapGroundPatch), typeof(MapForeignAirbasePatch) };
 
         private static string Entry(MapEntry entry) => entry.Manifest.prefabName + ":" + entry.Hash;
 

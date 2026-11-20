@@ -58,9 +58,6 @@ namespace BoscaliSummer.Modules.Hud.Domain
         public static byte SideOf(float lateralM, float centreBand) =>
             (byte)(lateralM < -centreBand ? ZoneSide.Left : lateralM > centreBand ? ZoneSide.Right : ZoneSide.Centre);
 
-        /// <summary>"RDY" ready, "ON" while jamming, "CHG" while the capacitor recharges.</summary>
-        public static string JamWord(in CmStation s) => s.Active ? "ON" : s.Charge >= 0.98f ? "RDY" : "CHG";
-
         /// <summary>The G gauge is live from this absolute load (G) and for this many seconds after the load last was that high: level cruise has no G gauge.</summary>
         public const float GaugeLiveG = 2.5f, GaugeHoldSeconds = 3f;
 

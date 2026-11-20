@@ -181,9 +181,11 @@ namespace BoscaliSummer.Modules.Skylark
     {
         internal const float EvRate = 300f, HybridRate = 550f;
         internal static readonly Color Tracer = new Color(.25f, 1.6f, 2.6f);
-        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .6f, StowPitch = -15f, EvVolume = .45f;
+        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .8f, StowPitch = -15f, EvVolume = .45f;
+        private const float DoorOpenR = -65f, DoorOpenL = 65f;    // the blister doors: authored open, closed at local Y = 0
         private static Material coilLit;
         [SerializeField] private Transform yaw, pitch, barrel;
+        [SerializeField] private Transform[] doors;
         [SerializeField] private Renderer[] coils;
         [SerializeField] private Renderer glow;
         private Material[] coilRest;
@@ -191,6 +193,7 @@ namespace BoscaliSummer.Modules.Skylark
         private Material glowRest;
         private Light glowLight;
         private Quaternion yawRest, pitchRest;
+        private Quaternion[] doorRest;
         private Vector3 barrelPosition, barrelAxis;
         private Turret turret;
         private Transform elevation;
@@ -215,6 +218,9 @@ namespace BoscaliSummer.Modules.Skylark
             yaw = nodes["GunTurret_Yaw"];
             pitch = nodes["GunTurret_Pitch"];
             barrel = nodes.TryGetValue("GunBarrel", out Transform b) ? b : null;
+            // the blister doors are optional art: the gun still folds without them (older bundles)
+            doors = new[] { nodes.TryGetValue("GunBayDoor_R", out Transform dr) ? dr : null,
+                            nodes.TryGetValue("GunBayDoor_L", out Transform dl) ? dl : null };
             coils = Enumerable.Range(0, 6).Select(i => nodes.TryGetValue("GunCoil" + i, out Transform c) ? c.GetComponent<Renderer>() : null).Where(r => r != null).ToArray();
             glow = nodes.TryGetValue("GunGlow", out Transform g) ? g.GetComponent<Renderer>() : null;
             if (coils.Length > 0 || glow != null) CoilMaterial();
@@ -237,6 +243,7 @@ namespace BoscaliSummer.Modules.Skylark
             drive = GetComponent<SkylarkDrive>();
             yawRest = Quaternion.Inverse(transform.rotation) * yaw.rotation;
             pitchRest = Quaternion.Inverse(transform.rotation) * pitch.rotation;
+            doorRest = doors.Select(d => d != null ? Quaternion.Inverse(transform.rotation) * d.rotation : Quaternion.identity).ToArray();
             coilRest = coils.Select(r => r.sharedMaterial).ToArray();
             coilOn = new bool[coils.Length];
             if (glow != null)
@@ -315,10 +322,16 @@ namespace BoscaliSummer.Modules.Skylark
                 ? aircraft.weaponManager.currentWeaponStation != null && aircraft.weaponManager.currentWeaponStation == aircraft.weaponStations[0]
                 : Time.time - lastShot < 3f || Mathf.Abs(yawAngle) > 2f || Mathf.Abs(pitchAngle) > 2f;
             deploy = Mathf.MoveTowards(deploy, selected ? 1f : 0f, dt / DeploySeconds);
-            float fold = Mathf.SmoothStep(0f, 1f, deploy);
+            // The doors lead the sequence: fully open by a quarter of it, closed only once the gun is nearly home.
+            float doorPhase = Mathf.Clamp01(deploy / .25f);
+            float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((deploy - .2f) / .8f));
             Quaternion pivot = transform.rotation * Quaternion.Euler(0f, yawAngle * fold, 0f);
             yaw.rotation = pivot * yawRest;
             pitch.rotation = pivot * Quaternion.Euler(Mathf.Lerp(StowPitch, pitchAngle, fold), 0f, 0f) * pitchRest;
+            for (int i = 0; i < doors.Length; i++)
+                if (doors[i] != null)
+                    doors[i].rotation = transform.rotation * doorRest[i]
+                        * Quaternion.Euler(0f, (i == 0 ? DoorOpenR : DoorOpenL) * doorPhase, 0f);
             if (barrel != null && (kick > 0f || barrel.localPosition != barrelPosition))
             {
                 kick = Mathf.MoveTowards(kick, 0f, dt * Recoil / RecoilReturn);

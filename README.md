@@ -27,7 +27,7 @@
 </p>
 
 <p align="center">
-  <a href="#screenshots"><img src="media/readme/hero.png" alt="Three FS-20 Vortex fighters low over the sea off Boscali at sunset, the sun's path burning on the water" width="100%"></a>
+  <a href="#screenshots"><img src="media/readme/hero.png" alt="Three FS-20 Vortex fighters fly in loose formation over a hazy sea under a green-gold sunset sky, with cumulus clouds and a distant mountain range" width="100%"></a>
 </p>
 
 > *"All flights, Control. Weather is closing from the west, the front moved four klicks overnight and somebody is jamming the tower. Good morning, Boscali."*
@@ -141,34 +141,34 @@ Run other visual mods? **SET > COMPAT** shares the sky with **NoAtmoFX** and spl
 
 <table>
 <tr>
-<td width="33%"><a href="media/readme/storm.png"><img src="media/readme/storm.png" alt="A three-ship of FS-20 Vortex fighters under the cloud base at dusk, a cumulonimbus tower and its anvil rising beside the low sun"></a></td>
-<td width="33%"><a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="FS-20 Vortex cockpit with the HUD and two wingmen ahead over broken cloud"></a></td>
-<td width="33%"><a href="media/readme/cloud-sea.png"><img src="media/readme/cloud-sea.png" alt="Three FS-20 Vortex fighters above a sea of cloud at sunset, contrails behind them"></a></td>
+<td width="33%"><a href="media/readme/storm.png"><img src="media/readme/storm.png" alt="Three FS-20s fly abreast under a dark, heavy overcast with a dusky sun glowing on the water beneath them"></a></td>
+<td width="33%"><a href="media/readme/cockpit.png"><img src="media/readme/cockpit.png" alt="Cockpit view of an FS-20 Vortex over a hazy, partly cloudy sky with low cumulus banks above a coastline, with the green HUD showing speed, altitude, heading, fuel and throttle"></a></td>
+<td width="33%"><a href="media/readme/cloud-sea.png"><img src="media/readme/cloud-sea.png" alt="A low sun glows over a sea of pale cloud, with three FS-20s flying above the deck and a faint exhaust trail behind the centre jet"></a></td>
 </tr>
 <tr>
-<td align="center"><sub><b>Storm season</b> · the wing under a cumulonimbus</sub></td>
-<td align="center"><sub><b>Cockpit</b> · HUD, TAC BOARD and the wing</sub></td>
-<td align="center"><sub><b>Above the deck</b> · a sea of cloud</sub></td>
+<td align="center"><sub><b>Storm season</b> · the wing under heavy overcast</sub></td>
+<td align="center"><sub><b>Cockpit</b> · the HUD over the coast</sub></td>
+<td align="center"><sub><b>Above the deck</b> · a sea of cloud at sunset</sub></td>
 </tr>
 <tr>
-<td width="33%"><a href="media/readme/command.png"><img src="media/readme/command.png" alt="The STR board beside the relief map with frontline, operations and sortie offers"></a></td>
-<td width="33%"><a href="media/readme/support-space.png"><img src="media/readme/support-space.png" alt="The SPACE front window with satellite coverage circles and the programme queue"></a></td>
-<td width="33%"><a href="media/readme/weather-console.png"><img src="media/readme/weather-console.png" alt="The weather console with synoptic chart, sky picker and set-pieces"></a></td>
+<td width="50%"><a href="media/readme/command.png"><img src="media/readme/command.png" alt="The theater command screen shows a shaded relief map of the island with coloured front lines, green and yellow operation arrows, and a left-hand panel of war plan, sorties and platforms"></a></td>
+<td width="50%"><a href="media/readme/support-space.png"><img src="media/readme/support-space.png" alt="The OPS SPACE FRONT window open over a dark relief map, with a cyan-outlined satellite coverage footprint around the on-station DARKSTAR optical satellite, and the panel listing its status, pad and fleet counts and the launch queue"></a></td>
 </tr>
 <tr>
 <td align="center"><sub><b>Theater command</b> · the STR board over a live war</sub></td>
-<td align="center"><sub><b>Space front</b> · satellites and programmes</sub></td>
+<td align="center"><sub><b>Space front</b> · satellites, coverage and programmes</sub></td>
+</tr>
+<tr>
+<td width="50%"><a href="media/readme/weather-console.png"><img src="media/readme/weather-console.png" alt="The MET OFFICE weather console in a cockpit view, with the Fair-Weather Cumulus preset selected and the Sky Overhead readout showing FEW at 6% cover"></a></td>
+<td width="50%"><a href="media/readme/vanguard.png"><img src="media/readme/vanguard.png" alt="A VANGUARD formation of drones, missiles, pods and gliders flies over a coastal bay and green hills"></a></td>
+</tr>
+<tr>
 <td align="center"><sub><b>MET OFFICE</b> · the host's weather console</sub></td>
-</tr>
-<tr>
-<td colspan="3"><a href="media/readme/vanguard.png"><img src="media/readme/vanguard.png" alt="The VANGUARD gliders, missiles and pods lined up in the air above the coast" width="100%"></a></td>
-</tr>
-<tr>
-<td colspan="3" align="center"><sub><b>VANGUARD</b> · the experimental shelf over the coast</sub></td>
+<td align="center"><sub><b>VANGUARD</b> · the experimental shelf over the coast</sub></td>
 </tr>
 </table>
 
-<p align="center"><sub>Unedited in-game captures. Some show earlier versions of the panels.</sub></p>
+<p align="center"><sub>Unedited in-game captures.</sub></p>
 
 ## Install
 

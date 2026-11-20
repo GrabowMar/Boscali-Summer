@@ -35,6 +35,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         /// <summary>The small preview shown while the bundle is closed; the bundle's chart replaces it while it is open.</summary>
         public Sprite Card;
         public AssetBundle Bundle;
+        /// <summary>The stream the bundle was opened from; Unity reads it for as long as the bundle is loaded.</summary>
+        public Stream BundleStream;
         public MapSettings Template;
         /// <summary>The game's copy of the template that is in the scene now (a destroyed object when the map is not loaded).</summary>
         public MapSettings Live;
@@ -117,6 +119,24 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                 if (other != keep && other.Live == null) Unload(other, manager);
         }
 
+        /// <summary>A seekable stream of one of the mod's map files: the loose <c>&lt;plugin folder&gt;/Maps/&lt;file&gt;</c> when it
+        /// exists, else the embedded resource (memory the assembly image already holds, no copy); null when neither exists.</summary>
+        public static Stream OpenAsset(string file, out string source)
+        {
+            Assembly assembly = typeof(MapCatalog).Assembly;
+            try
+            {
+                string loose = Path.Combine(Path.GetDirectoryName(assembly.Location) ?? "", "Maps", file);
+                if (File.Exists(loose)) { source = loose; return File.OpenRead(loose); }
+            }
+            catch (Exception error) when (error is IOException || error is UnauthorizedAccessException || error is ArgumentException || error is NotSupportedException)
+            {
+                Plugin.Logger?.LogWarning("[Maps] The loose " + file + " could not be read (" + error.Message + "); using the built-in copy.");
+            }
+            source = "the mod";
+            return assembly.GetManifestResourceStream(Prefix + file);
+        }
+
         /// <summary>A file of the mod's maps: <c>&lt;plugin folder&gt;/Maps/&lt;file&gt;</c> when it exists, else the embedded
         /// resource; null when neither can be read.</summary>
         public static byte[] ReadAsset(string file, int maxBytes, out string source)
@@ -147,17 +167,22 @@ namespace BoscaliSummer.Modules.Maps.Runtime
         {
             if (entry.Bundle != null) return true;
             MapManifest manifest = entry.Manifest;
-            byte[] bytes = ReadAsset(manifest.id + ".bsmap", MaxBundleBytes, out string source);
-            string problem = manifest.BundleProblem(bytes);
-            if (problem == null && (entry.Bundle = AssetBundle.LoadFromMemory(bytes)) == null) problem = "Unity could not open the bundle";
+            // Streamed, not read into a byte[]: a 40-64 MiB managed copy per map open was never compacted by Mono's GC
+            // and piled up across map switches. The stream stays open while the bundle is (Unity reads from it).
+            Stream stream = OpenAsset(manifest.id + ".bsmap", out string source);
+            string problem = stream == null || stream.Length > MaxBundleBytes ? "the bundle is missing or too large" : manifest.BundleProblem(stream);
+            if (problem == null && (entry.Bundle = AssetBundle.LoadFromStream(stream)) == null) problem = "Unity could not open the bundle";
             if (problem != null)
             {
+                stream?.Dispose();
                 Plugin.Logger?.LogError("[Maps] " + manifest.displayName + " cannot be loaded from " + source + ": " + problem + ".");
                 return false;
             }
-            var chart = entry.Bundle.LoadAsset<Sprite>("bs_" + manifest.id + "_map");
+            entry.BundleStream = stream;
+            long size = stream.Length;
+            var chart = ChartSprite(entry) ?? entry.Bundle.LoadAsset<Sprite>("bs_" + manifest.id + "_map");
             if (chart != null) entry.Details.MapImage = chart;
-            Plugin.Logger?.LogInfo("[Maps] " + manifest.displayName + " build " + entry.Hash + " opened from " + source + " (" + bytes.Length / (1024 * 1024) + " MiB).");
+            Plugin.Logger?.LogInfo("[Maps] " + manifest.displayName + " build " + entry.Hash + " opened from " + source + " (" + size / (1024 * 1024) + " MiB).");
             return true;
         }
 
@@ -177,6 +202,8 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             entry.TreeMaterials.Clear();
             if (entry.Bundle != null) entry.Bundle.Unload(true);
             entry.Bundle = null;
+            entry.BundleStream?.Dispose();
+            entry.BundleStream = null;
             Plugin.Logger?.LogInfo("[Maps] " + entry.Manifest.displayName + " closed.");
         }
 
@@ -235,6 +262,25 @@ namespace BoscaliSummer.Modules.Maps.Runtime
                     Plugin.Logger?.LogError("[Maps] The modes of " + manifest.displayName + " could not be read: " + error.Message);
                 }
             return new MapEntry { Manifest = manifest, Hash = manifest.bundleHash, Details = details, Card = card, Modes = modes.Where(m => m != null && !string.IsNullOrEmpty(m.name)).ToArray() };
+        }
+
+        /// <summary>The map screen's chart in the game's own style (<c>&lt;id&gt;.chart.png</c>, kit <c>mapgen.pipeline.chart</c>),
+        /// which replaces the brighter chart baked into older bundles; null when the map has none. Named like the baked
+        /// sprite (<c>bs_&lt;id&gt;_map</c>): the relief MFD finds its heightfield by that name. Freed with the map.</summary>
+        private static Sprite ChartSprite(MapEntry entry)
+        {
+            byte[] png = ReadAsset(entry.Manifest.id + ".chart.png", 16 * 1024 * 1024, out _);
+            if (png == null) return null;
+            var texture = new Texture2D(2, 2, TextureFormat.RGB24, true);
+            if (!texture.LoadImage(png, true)) { Object.Destroy(texture); return null; }
+            texture.name = "bs_" + entry.Manifest.id + "_map";
+            texture.wrapMode = TextureWrapMode.Clamp;
+            texture.anisoLevel = 4;
+            var sprite = Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(.5f, .5f), 100f);
+            sprite.name = texture.name;
+            entry.Owned.Add(texture);
+            entry.Owned.Add(sprite);
+            return sprite;
         }
 
         /// <summary>The map's lit preview; a plain tile in the map's tag colour when the card is missing.</summary>

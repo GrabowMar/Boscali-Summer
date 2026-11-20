@@ -84,6 +84,24 @@ namespace BoscaliSummer.Modules.Maps.Patches
         }
     }
 
+    /// <summary>Missions made from the game's default mission (Free Flight, the map's own empty mission) carry overrides
+    /// for Heartland's airfields. On one of our maps those are not in the scene and every load shows eight "not found in
+    /// scene but is Override but not Attached" load errors; they are dropped here. Carriers (attached) and custom fields stay.</summary>
+    [HarmonyPatch(typeof(Mission), "SetupAirbase")]
+    internal static class MapForeignAirbasePatch
+    {
+        private static void Prefix(Mission __instance)
+        {
+            try
+            {
+                if (__instance?.airbases == null || MapCatalog.Loaded() == null) return;
+                var lookup = FactionRegistry.airbaseLookup;
+                __instance.airbases.RemoveAll(a => a != null && a.IsOverride && !a.IsAttached() && !lookup.ContainsKey(a.UniqueName));
+            }
+            catch (Exception e) { PatchGuard.Report("Maps.ForeignAirbases", e); }
+        }
+    }
+
     /// <summary>The <c>-mission</c> launch argument looks only in the game's own mission groups; a map's display name
     /// ("Marisol Islands") launches that map's empty mission. Every other name is left to the game.</summary>
     [HarmonyPatch(typeof(CommandLineArgParser), nameof(CommandLineArgParser.LoadMission))]

@@ -34,7 +34,7 @@ namespace BoscaliSummer.Modules.Performance
                 "Takes effect after sampling; no mission or game restart.",
                 context.Settings.Performance.Enabled, ClientPreset.Saver);
             context.AddClientSetting("BASE GAME", "LOD CAP",
-                "Lower the LOD bias to at most 1.5 (game default 4) so distant models simplify sooner. " +
+                "Lower the LOD bias to at most 1.0 (game default 4) so distant models simplify sooner. " +
                 "Helps a GPU-limited machine only; expect more model pop-in. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.LodBiasFloor, ClientPreset.LastResort);
@@ -43,6 +43,20 @@ namespace BoscaliSummer.Modules.Performance
                 "Helps a GPU-limited machine only. " +
                 "Client-local; the game's own value is restored when switched off.",
                 context.Settings.Performance.ShadowDistanceCap, ClientPreset.LastResort);
+            context.AddClientSetting("BASE GAME", "DETAIL CAP",
+                "No grass, and trees drawn to half range, whatever the game's own detail settings say. Your saved game " +
+                "settings are not touched. Client-local; restored when switched off.",
+                context.Settings.Performance.DetailCap, ClientPreset.LastResort);
+            context.AddClientSetting("BASE GAME", "NO SHADOWS",
+                "No sun shadows at all. The biggest single saving in busy missions (Escalation, FAST: about 8 % more fps), " +
+                "at an obvious cost to the look. Client-local; the game's own value is restored when switched off.",
+                context.Settings.Performance.NoShadows, ClientPreset.LastResort);
+            context.AddClientChoice("BASE GAME", "MSAA CAP",
+                "Most anti-aliasing samples, whatever the game's own menu says. GAME leaves it alone. Measured at 1080p in " +
+                "Escalation: 8x -> 4x saves about 1.2 ms a frame, 8x -> 2x about 2.1 ms. Never raises the game's value; " +
+                "client-local, restored exactly on GAME.",
+                context.Settings.Performance.AntiAliasingCap, new[] { "GAME", "4X", "2X", "OFF" }, null,
+                new[] { Configuration.MsaaCap.Game, Configuration.MsaaCap.X4, Configuration.MsaaCap.Off });
             ClientSettingToggle scale = context.AddClientSetting("BASE GAME", "RENDER SCALE",
                 "Render the 3D world at the RESOLUTION below and upscale it. " +
                 "Helps a GPU-limited machine only; the world looks softer. " +

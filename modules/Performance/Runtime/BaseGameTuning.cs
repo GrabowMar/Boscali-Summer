@@ -1,4 +1,5 @@
 using System;
+using HarmonyLib;
 using BoscaliSummer.Modules.Performance.Configuration;
 using BoscaliSummer.Modules.Performance.Domain;
 using BoscaliSummer.Core.Diagnostics;
@@ -27,12 +28,15 @@ namespace BoscaliSummer.Modules.Performance.Runtime
         private float lodOriginal = 1f;
         private bool shadowApplied;
         private float shadowOriginal;
+        private float shadowCap = ClientTuningMath.ShadowDistanceCapMeters;
         // The game renders with URP, which ignores QualitySettings.shadowDistance.
         private UniversalRenderPipelineAsset shadowAsset;
         private bool scaleApplied;
         private float scaleOriginal = 1f;
         private UniversalRenderPipelineAsset scaleAsset;
         private float scaleCap = ClientTuningMath.RenderScaleCap;
+        private UniversalRenderPipelineAsset msaaAsset;
+        private int msaaOriginal = 1, msaaCap;
         private float lastCleanup = -CleanupSpacingSeconds;
         private const float CleanupSpacingSeconds = 30f;
         private bool tracesApplied;
@@ -72,10 +76,16 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             if (settings == null) return;
             bool usable = Usable;
             SyncLod(usable && settings.LodBiasFloor.Value);
-            SyncShadow(usable && settings.ShadowDistanceCap.Value);
+            // NO SHADOWS is the shadow cap at 0 m; a cap change hands the game value back first, then caps again
+            float wantCap = settings.NoShadows.Value ? 0f : ClientTuningMath.ShadowDistanceCapMeters;
+            if (shadowApplied && wantCap != shadowCap) SyncShadow(false);
+            shadowCap = wantCap;
+            SyncShadow(usable && (settings.ShadowDistanceCap.Value || settings.NoShadows.Value));
             HoldShadowCap();
             SyncScale(usable && settings.RenderScaleCap.Value);
             HoldScaleCap();
+            SyncMsaa(usable ? (int)settings.AntiAliasingCap.Value : 0);
+            SyncDetail(usable && settings.DetailCap.Value);
             SyncLogTraces(usable && settings.QuietUnityLogs.Value);
             SyncStreaming(usable && settings.TextureStreaming.Value);
             SyncUploadBuffer(usable && settings.PreallocateUploadBuffer.Value);
@@ -122,7 +132,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     if (asset == null) return;
                     shadowAsset = asset;
                     shadowOriginal = asset.shadowDistance;
-                    asset.shadowDistance = ClientTuningMath.PlanShadowDistance(shadowOriginal, true);
+                    asset.shadowDistance = ClientTuningMath.PlanShadowDistance(shadowOriginal, true, shadowCap);
                     shadowApplied = true;
                     Plugin.Logger?.LogInfo("Performance: shadow distance cap on (game " +
                         shadowOriginal.ToString("F0") + " m -> " +
@@ -133,7 +143,7 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                     // Restore the asset we changed, even if a new quality preset swapped the active one.
                     shadowApplied = false;
                     if (shadowAsset == null) return;
-                    shadowAsset.shadowDistance = ClientTuningMath.RestoreShadowDistance(shadowOriginal, shadowAsset.shadowDistance);
+                    shadowAsset.shadowDistance = ClientTuningMath.RestoreShadowDistance(shadowOriginal, shadowAsset.shadowDistance, shadowCap);
                     Plugin.Logger?.LogInfo("Performance: shadow distance restored to " +
                         shadowAsset.shadowDistance.ToString("F0") + " m.");
                     shadowAsset = null;
@@ -156,9 +166,9 @@ namespace BoscaliSummer.Modules.Performance.Runtime
                 return;
             }
             float current = shadowAsset.shadowDistance;
-            if (current <= ClientTuningMath.ShadowDistanceCapMeters) return;
+            if (current <= shadowCap) return;
             shadowOriginal = current;
-            shadowAsset.shadowDistance = ClientTuningMath.ShadowDistanceCapMeters;
+            shadowAsset.shadowDistance = shadowCap;
         }
 
         private void SyncScale(bool want)
@@ -210,6 +220,79 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             if (current <= scaleCap) return;
             scaleOriginal = current;
             scaleAsset.renderScale = scaleCap;
+        }
+
+        /// <summary>
+        /// MSAA cap: <paramref name="cap"/> samples at most (0 = no cap). The game's sample count is captured when the cap
+        /// takes over, re-captured when the game writes a higher value (its graphics menu, a mission load), and handed back
+        /// only while the asset still holds our cap. Checked every frame like the other caps: one int compare.
+        /// </summary>
+        private void SyncMsaa(int cap)
+        {
+            var asset = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            // A new cap, or the game swapped its pipeline asset: hand the game's value back first.
+            if (msaaAsset != null && (cap != msaaCap || !ReferenceEquals(asset, msaaAsset)))
+            {
+                // Only while the asset still holds our cap: a lower value the player picked meanwhile stays.
+                if (msaaAsset.msaaSampleCount == msaaCap) msaaAsset.msaaSampleCount = msaaOriginal;
+                Plugin.Logger?.LogInfo("Performance: MSAA restored to " + msaaAsset.msaaSampleCount + "x.");
+                msaaAsset = null;
+            }
+            if (cap == 0 || asset == null) return;
+            int current = asset.msaaSampleCount;
+            if (msaaAsset != null)
+            {
+                if (current > cap) { msaaOriginal = current; asset.msaaSampleCount = cap; }   // the game wrote it back up
+                return;
+            }
+            if (current <= cap) return;   // already at or under the cap: nothing to own
+            msaaAsset = asset;
+            msaaOriginal = current;
+            msaaCap = cap;
+            asset.msaaSampleCount = cap;
+            Plugin.Logger?.LogInfo("Performance: MSAA cap on (game " + msaaOriginal + "x -> " + cap + "x).");
+        }
+
+        // The game's DetailSettings setters write PlayerPrefs; the backing fields keep the cap out of the saved settings.
+        private static readonly AccessTools.FieldRef<NuclearOption.Effects.DetailSettings, bool> GrassField =
+            Field<bool>("_grassEnabled");
+        private static readonly AccessTools.FieldRef<NuclearOption.Effects.DetailSettings, float> TreeField =
+            Field<float>("_treeRangeMultiplier");
+        private const float DetailTreeCap = 0.5f;
+        private NuclearOption.Effects.DetailSettings detailOwner;
+        private bool grassOriginal;
+        private float treeOriginal;
+
+        /// <summary>DETAIL CAP: grass off and trees at half range, held each frame (the game's menu may write them),
+        /// handed back on release. The game's DetailRenderer re-reads both every LateUpdate.</summary>
+        private void SyncDetail(bool want)
+        {
+            NuclearOption.Effects.DetailSettings detail = PlayerSettings.DetailSettings;
+            if (GrassField == null || TreeField == null) return;
+            if (detailOwner != null && (!want || !ReferenceEquals(detail, detailOwner)))
+            {
+                if (!GrassField(detailOwner)) GrassField(detailOwner) = grassOriginal;
+                if (TreeField(detailOwner) == DetailTreeCap) TreeField(detailOwner) = treeOriginal;
+                detailOwner = null;
+                Plugin.Logger?.LogInfo("Performance: detail cap off (grass " + grassOriginal + ", trees x" + treeOriginal.ToString("F2") + ").");
+            }
+            if (!want || detail == null) return;
+            if (detailOwner == null)
+            {
+                detailOwner = detail;
+                grassOriginal = GrassField(detail);
+                treeOriginal = TreeField(detail);
+                Plugin.Logger?.LogInfo("Performance: detail cap on (grass off, trees x" + treeOriginal.ToString("F2") + " -> x" + DetailTreeCap.ToString("F2") + ").");
+            }
+            if (GrassField(detail)) { grassOriginal = true; GrassField(detail) = false; }
+            float trees = TreeField(detail);
+            if (trees > DetailTreeCap) { treeOriginal = trees; TreeField(detail) = DetailTreeCap; }
+        }
+
+        private static AccessTools.FieldRef<NuclearOption.Effects.DetailSettings, T> Field<T>(string name)
+        {
+            try { return AccessTools.FieldRefAccess<NuclearOption.Effects.DetailSettings, T>(name); }
+            catch (Exception) { return null; }
         }
 
         private void RunCleanup()
@@ -315,6 +398,8 @@ namespace BoscaliSummer.Modules.Performance.Runtime
             SyncLod(false);
             SyncShadow(false);
             SyncScale(false);
+            SyncMsaa(0);
+            SyncDetail(false);
             SyncLogTraces(false);
             SyncStreaming(false);
             SyncUploadBuffer(false);

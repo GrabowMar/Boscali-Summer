@@ -127,7 +127,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             VanillaHudStyle.TryHudFont(out font, out fontMaterial);
 
             root = Holder(HudLayer.Under, "BoscaliArLayer");      // the layer's Under root: its own batch, under the game's own symbology (the world is behind the HUD)
-            lines = AvVector.Create(root, "World", 1600);
+            lines = AvVector.Create(root, "World", 1600, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             fx = AvVector.Create(root, "Fx", 96);
             for (int i = 0; i < LabelMax; i++)
             {

@@ -72,7 +72,7 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
             flow.Ticker.Add(page, AvTickRate.Slow, fx.Refresh);
             ToggleCell(flow, page, "REDUCED MOTION", "Snap every panel animation to its end state, WMC included.",
                 () => settings.AvionicsReducedMotion.Value, v => settings.AvionicsReducedMotion.Value = v);
-            ToggleCell(flow, page, "BLUR BEHIND", "Soften the world behind floating windows. OFF keeps the static glass surface.",
+            ToggleCell(flow, page, "FROSTED GLASS", "The blurred world shows faintly through the MFD and its panels. OFF keeps plain tinted glass.",
                 () => settings.AvionicsBlurBehind.Value, v => settings.AvionicsBlurBehind.Value = v);
             ToggleCell(flow, page, "ADAPT TO LIGHT", "Let ambient light vary the glass reflection. OFF keeps it steady.",
                 () => settings.DisplayAutoLight.Value, v => { settings.DisplayEffects.Value = true; settings.DisplayAutoLight.Value = v; });

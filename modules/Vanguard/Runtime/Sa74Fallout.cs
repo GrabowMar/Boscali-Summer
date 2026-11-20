@@ -59,6 +59,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private readonly Color[] beforeSkyColours = new Color[SkyColours.Length];
         private readonly ParticleSystem.Particle[] snow = new ParticleSystem.Particle[1500];
         private ParticleSystem ash;
+        private ParticleSystemRenderer ashRenderer;
         private Material ashMaterial;
         private Texture2D ashTexture;
         private AudioSource geiger;
@@ -358,6 +359,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             flashLight = lightObject.AddComponent<Light>();
             flashLight.type = LightType.Directional; flashLight.shadows = LightShadows.None;
             flashLight.color = new Color(1f, .91f, .73f); flashLight.intensity = 0f;
+            lightObject.AddComponent<Sa74MoonCookieLift>();
             CreateAsh();
             CreateGeiger();
         }
@@ -411,12 +413,15 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             // A periodic world-space field remains populated after high-speed flight, floating-origin shifts and aged snapshots.
             // Two size/depth bands share one 1,500-particle draw system; no terrain rays or per-frame allocations.
             GlobalPosition eye = camera.transform.position.ToGlobalPosition();
-            if (eye.y < -1f) { ash.SetParticles(snow, 0); return; }
+            if (eye.y < -1f || falloutBlend < .012f) { ash.SetParticles(snow, 0); return; }   // every flake would be under .01 alpha
             Vector3 wind = level != null ? Vector3.ClampMagnitude(level.windVelocity, 12f) : new Vector3(2.5f, 0f, .8f);
             float light = level != null ? Mathf.Clamp(level.GetAmbientLight() * 2.5f, .18f, 1f) : 1f;
             float age = 0f;
             foreach (Site site in Sites) age = Mathf.Max(age, Time.time - site.Started);
             int count = 0;
+            // One matrix for the frame instead of 1,500 native InverseTransformPoint calls (the aftermath runs for 40 minutes).
+            Matrix4x4 toDatum = Datum.origin.worldToLocalMatrix;
+            Vector3 cameraAt = camera.transform.position;
             for (int i = 0; i < snow.Length; i++)
             {
                 uint seed = unchecked((uint)i * 104729u + 74074u);
@@ -436,7 +441,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 if (alpha < .01f) continue;
                 snow[count++] = new ParticleSystem.Particle
                 {
-                    position = Datum.origin.InverseTransformPoint(camera.transform.position + relative),
+                    position = toDatum.MultiplyPoint3x4(cameraAt + relative),
                     startSize = near ? .07f + a * .18f : .24f + a * .32f,
                     startColor = new Color((.36f + c * .1f) * light, (.34f + c * .09f) * light, (.32f + c * .08f) * light, alpha), // ash, not snow
                     rotation = a * 360f + age * (b - .5f) * 15f,
@@ -444,7 +449,8 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
                 };
             }
             ash.SetParticles(snow, count);
-            ash.GetComponent<ParticleSystemRenderer>().bounds = new Bounds(camera.transform.position, Vector3.one * 240f);
+            if (ashRenderer == null) ashRenderer = ash.GetComponent<ParticleSystemRenderer>();
+            ashRenderer.bounds = new Bounds(cameraAt, Vector3.one * 240f);
         }
 
         private static float SnowHash(uint value)
@@ -492,6 +498,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private void LateUpdate()
         {
             if (!Active) return;
+            if (!Application.isBatchMode) Sa74PowerCut.Tick();
             CaptureWinter();
             Winter(NetworkSceneSingleton<LevelInfo>.i);
             if (Application.isBatchMode) return;
@@ -615,6 +622,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         internal void Clear()
         {
             Sa74Destruction.Reset();
+            Sa74PowerCut.Reset();
             BoscaliSummer.Core.Contracts.RadioAftermath.Reset();
             Sa74NativeGround.Reset();
             terrain.Clear();
@@ -638,7 +646,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             if (ashTexture != null) UnityEngine.Object.Destroy(ashTexture);
             FxVoiceBus.EndLoop("sa74-geiger");
             dressing = ashRoot = null; profile = null; volume = null; grade = null; balance = null; bloom = null; radiationGrain = null; radiationFringe = null; radiationVignette = null; radiationGrainBase = 0f; flashLight = null;
-            ash = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null;
+            ash = null; ashRenderer = null; ashMaterial = null; ashTexture = null; geiger = null; crackle = null;
             flashExposure = thermalPulse = winterBlend = falloutBlend = darkBlend = radiationStrength = 0f;
             Sites.Clear(); Events = NativeBlasts = BlastColliders = ExposedParts = 0;
             lastReceivedId = 0;
@@ -704,4 +712,21 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         private static void Prefix(LevelInfo __instance) => Sa74Fallout.Winter(__instance);
     }
 
+    /// <summary>
+    /// The thermal light outshines the moon, so URP demotes the moon to an additional light, which cannot show a cookie
+    /// and logged "Additional Directional light ... has a light cookie" every frame of the aftermath (5,000+ lines a soak).
+    /// While the thermal light is on, the moon goes without the cloud-shadow cookie; the weather writes it back the next frame after.
+    /// Runs after every default-order LateUpdate (the weather's cookie writer included).
+    /// </summary>
+    [DefaultExecutionOrder(10000)]
+    internal sealed class Sa74MoonCookieLift : MonoBehaviour
+    {
+        private Light own;
+        private void Awake() => own = GetComponent<Light>();
+        private void LateUpdate()
+        {
+            Light moon = LevelInfo.i != null ? LevelInfo.i.moon : null;
+            if (own != null && own.enabled && moon != null && moon.cookie != null) moon.cookie = null;
+        }
+    }
 }

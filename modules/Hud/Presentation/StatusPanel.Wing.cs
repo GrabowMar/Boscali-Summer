@@ -62,7 +62,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
             for (int i = 0; i < lamps.Length; i++)
                 gridDrawn[i] = allow.ShowLamps && lamps[i].Present && HudLamps.Drawn(lamps[i].State, recent[i], showDark) && (!allow.ThreatLampsOnly || lamps[i].State >= LampState.Caution);
-            cmLampsLeft = PlaceGroup(GroupCm, ScopeLayout.CmW, showDark);
+            cmLampsLeft = PlaceGroup(GroupCm, ScopeLayout.CmWOf(boardStack), showDark);
         }
 
         private void AddLamp(int group, int item, string legend)
@@ -152,7 +152,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 PaintFrame(g, geo, geo.Bar1);
             }
             // The CM shelf keeps its slot without dispensers (the threat lamps have no other home); with the stores hidden it has none.
-            BoardRect cm = geo.Cm.Present ? geo.Cm : allow.ShowStores ? new BoardRect(boardStack ? ScopeLayout.StackX + ScopeLayout.CmX : ScopeLayout.CmX, 0f, ScopeLayout.CmW, ScopeLayout.BarH) : default;
+            BoardRect cm = geo.Cm.Present ? geo.Cm : allow.ShowStores ? new BoardRect(boardStack ? ScopeLayout.StackX + ScopeLayout.StackCmX : ScopeLayout.CmX, 0f, ScopeLayout.CmWOf(boardStack), ScopeLayout.BarH) : default;
             int index = 0;      // the lamp test sweeps the CM shelf, then the grid's slots 0..7
             if (cm.Present)
             {
@@ -167,7 +167,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 {
                     if (!gridDrawn[i]) continue;
                     HudLamps.Slot(i, r.W, out float x, out int row);
-                    DrawLamp(g, r.X + x, r.Y + (row == 0 ? ScopeLayout.R2 : ScopeLayout.R3), LampLine.Width(lamps[i].Legend.Length), lamps[i], recent[i], index++, flashOn);
+                    DrawGridLamp(g, i, r.X + x, r.Y + (row == 0 ? ScopeLayout.R2 : ScopeLayout.R3), r.W / 4f - 4f, lamps[i], recent[i], index++, flashOn);
                 }
             }
             if (geo.Mission.Present && hasMission) PaintMissionStatus(g, geo.Mission);
@@ -244,6 +244,52 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 g.Text(lamp.Legend, x, cy - 1f, Faint);
             }
         }
+
+        /// <summary>
+        /// A SYS grid lamp (2026-11-19, user: "more visual cues"): a caution or warning is its WORD, as on a real caution panel (BINGO, FIRE, GEAR in transit); otherwise the lamp is a GLYPH and a short word (fuel: its level),
+        /// lit BRIGHT with the bar under it when the mode is on, FAINT when dark. Glyphs follow real cockpits: three gear lights, a fuel tank with its level, the airframe, radar waves, goggles, a hover arrow over the ground,
+        /// an attitude ball struck through for flight assist off. <paramref name="w"/> is the slot's room.
+        /// </summary>
+        private void DrawGridLamp(ScopeCanvas g, int slot, float x, float cy, float w, in Lamp lamp, bool changed, int index, bool flashOn)
+        {
+            if (!booting && lamp.State >= LampState.Caution) { DrawLamp(g, x, cy, LampLine.Width(lamp.Legend.Length), lamp, changed, index, flashOn); return; }
+            bool lit = booting ? LampTest.Lit(index, bootAge) : lamp.State != LampState.Dark || changed;
+            ScopeTone tone = lit ? Hi : Faint;
+            float gx = x + 6f, wx = x + 16f;
+            string word = lamp.Legend;
+            switch (slot)
+            {
+                case HudLamps.Fuel:      // LASR (fuel calls are words, above): the designator's beam from its pod to a ringed spot
+                    g.Fill(gx - 7f, cy - 1.5f, 3f, 3f, tone); g.Line(gx - 4f, cy, gx + 2f, cy, tone); g.Ring(gx + 4.5f, cy, 2.5f, tone);
+                    break;
+                case HudLamps.Dmg: g.Jet(gx, cy, 0f, 6f, tone); break;
+                case HudLamps.Ace: g.Diamond(gx, cy, 5f, tone); g.Fill(gx - 1f, cy - 1f, 2f, 2f, tone); break;
+                case HudLamps.Gear:
+                    g.Tri(gx, cy - 4f, 180f, 3f, tone, lit); g.Tri(gx - 5f, cy + 4f, 180f, 3f, tone, lit); g.Tri(gx + 5f, cy + 4f, 180f, 3f, tone, lit);      // Airbus gear lights: three down triangles, solid when down and locked
+                    break;
+                case HudLamps.Rdr:
+                    g.Fill(x, cy - 1f, 2f, 2f, tone);
+                    g.Arc(x + 1f, cy, 5f, 55f, 125f, tone); g.Arc(x + 1f, cy, 9f, 60f, 120f, tone);
+                    if (!lit) g.Line(x, cy + 6f, x + 11f, cy - 6f, tone);      // silent: the waves struck through (the F-16 HUD's NO RAD)
+                    break;
+                case HudLamps.Nvg:
+                    g.Ring(gx - 3.5f, cy, 3f, tone); g.Ring(gx + 3.5f, cy, 3f, tone);
+                    if (word.StartsWith("NVG ")) word = word.Substring(4);      // NVG A, NVG 2: the goggles say NVG
+                    break;
+                case HudLamps.Hovr:
+                    g.Line(gx, cy - 6f, gx, cy + 6f, tone);      // the AV-8 hover trident: a fork over a stem
+                    g.Line(gx - 5f, cy - 5f, gx - 5f, cy, tone); g.Line(gx - 5f, cy, gx + 5f, cy, tone); g.Line(gx + 5f, cy, gx + 5f, cy - 5f, tone);
+                    break;
+                case HudLamps.FaOff:
+                    g.Ring(gx, cy, 5f, tone); g.Line(gx - 5f, cy, gx + 5f, cy, tone);
+                    if (lit) g.Line(gx - 7f, cy + 7f, gx + 7f, cy - 7f, tone);
+                    word = "FA";
+                    break;
+            }
+            float tw = g.Text(word, wx, cy - 1f, tone, HudType.Label, ScopeAlign.Left, lit);
+            if (lit) g.Fill(x, cy + 8f, Math.Min(w, 16f + tw), 2f, tone);
+        }
+
 
         // ---- the gauge line
 

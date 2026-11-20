@@ -195,6 +195,8 @@ namespace BoscaliSummer.Core
 #endif
             if (BoscaliSummer.Modules.Vanguard.VanguardModule.Available) modules.Add(new BoscaliSummer.Modules.Vanguard.VanguardModule());
             modules.Add(new BoscaliSummer.Modules.Skylark.SkylarkModule());
+            // Registers on every peer (network prefab), like the Skylark.
+            modules.Add(new BoscaliSummer.Modules.Megaplane.MegaplaneModule());
             return modules.ToArray();
         }
 
@@ -274,6 +276,8 @@ namespace BoscaliSummer.Core
             var installed = new Dictionary<string, bool>(StringComparer.Ordinal);
             foreach (string id in existing) installed[id] = true;
             var candidates = new List<LoadedModule>(modules.Count);
+            var bootMs = new Dictionary<string, long>(StringComparer.Ordinal);
+            var clock = System.Diagnostics.Stopwatch.StartNew();
 
             for (int orderIndex = 0; orderIndex < order.Length; orderIndex++)
             {
@@ -293,7 +297,9 @@ namespace BoscaliSummer.Core
                     context = new ModuleContext(
                         moduleMetadata.Id, runtimeRoot, sceneLifecycle, logger, settings, services,
                         hostSettings, clientSettings);
+                    clock.Restart();
                     module.Install(context);
+                    bootMs[moduleMetadata.Id] = clock.ElapsedMilliseconds;
                     candidates.Add(new LoadedModule
                     {
                         Module = module,
@@ -332,7 +338,10 @@ namespace BoscaliSummer.Core
 
                 try
                 {
+                    clock.Restart();
                     InstallPatches(candidate.Module, candidate.Harmony);
+                    bootMs.TryGetValue(candidate.Metadata.Id, out long installMs);
+                    bootMs[candidate.Metadata.Id] = installMs + clock.ElapsedMilliseconds;
                     loadedModules.Add(candidate);
                     started[candidate.Metadata.Id] = true;
                     logger.LogInfo("Module loaded: " + candidate.Metadata.DisplayName + ".");
@@ -347,6 +356,13 @@ namespace BoscaliSummer.Core
             }
 
             ReportPatches();
+            var slow = new List<KeyValuePair<string, long>>(bootMs);
+            slow.Sort((a, b) => b.Value.CompareTo(a.Value));
+            long total = 0;
+            foreach (var t in slow) total += t.Value;
+            var top = new System.Text.StringBuilder();
+            for (int i = 0; i < slow.Count && i < 10; i++) top.Append(i == 0 ? "" : ", ").Append(slow[i].Key).Append(' ').Append(slow[i].Value);
+            logger.LogInfo("Module startup " + total + " ms; slowest (install+patch ms): " + top);
         }
 
         private static void ValidatePatchOwnership(IReadOnlyList<IModule> modules)

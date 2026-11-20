@@ -166,7 +166,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 ScopeCanvas.Polar(a + 180f, 6f, out float bx, out float by);
                 g.Arrow(cx + bx, r2 + by, cx + hx, r2 + hy, Ink, 1f, 1f, 4f);
                 int dir = SystemsMath.WindFromDegrees(d.WindFromDeg);
-                float end = tx + g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, units)), null), tx, r2, Ink, HudType.Body);
+                float end = tx + g.Text(ScopeStr.Cat(dir < 10 ? "00" : dir < 100 ? "0" : "", dir, "/", (int)Math.Round(NOAvionics.AvUnitTable.Speed(d.WindMps, units)), null), tx, r2, Ink, HudType.Label);
                 end += 4f + g.Text(ScopeStr.SpeedUnit(units), end + 4f, r2, Dim, HudType.Label);
                 if (d.GustMps >= 5f)
                 {
@@ -176,20 +176,29 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             }
 
             // R3: the sky at the left (IMC is its one home), the temperature or TURB at the right (dropped first when it would touch the sky words).
+            // The sky as the weather map's station circle (2026-11-19, user: more visual cues): filled in quarters for FEW / SCT / BKN / OVC, empty for clear, full and BRIGHT in cloud; the base beside it, rain as streaks.
             float skyEnd = tx;
             if (!d.HasCloud) skyEnd += g.Text("--", tx, r3, Dim, HudType.Label);
-            else if (d.InCloud) skyEnd += g.Text("IMC", tx, r3, Hi, HudType.Label, ScopeAlign.Left, true);
             else
             {
-                string sky = SystemsMath.SkyWord(d.Cover);
-                skyEnd += g.Text(sky, skyEnd, r3, Ink, HudType.Label);
-                if (d.Cover >= 0.1f)
+                float cover = d.InCloud ? 1f : d.Cover < 0.1f ? 0f : d.Cover < 0.3f ? 0.25f : d.Cover < 0.6f ? 0.5f : d.Cover < 0.9f ? 0.75f : 1f;
+                ScopeTone skyTone = d.InCloud ? Hi : Ink;
+                g.Ring(cx, r3, 6f, skyTone);
+                if (cover > 0f) g.Arc(cx, r3, 3f, 0f, cover * 360f - 0.01f, skyTone, 1f, 6f);
+                if (d.InCloud) skyEnd += g.Text("IMC", tx, r3, Hi, HudType.Label, ScopeAlign.Left, true);
+                else if (cover <= 0f) skyEnd += g.Text("CLR", tx, r3, Dim, HudType.Label);
+                else
                 {
                     bool ft = units == NOAvionics.AvUnits.Imperial;
                     int baseH = (int)Math.Round(NOAvionics.AvUnitTable.Altitude(d.CloudBaseM, units) / 100f) * 100;
-                    skyEnd += g.Text(ScopeStr.Cat(" ", baseH, ft ? "FT" : "M"), skyEnd, r3, Ink, HudType.Label);
+                    skyEnd += g.Text(ScopeStr.Cat("", baseH, ft ? "FT" : "M"), tx, r3, Ink, HudType.Label);
                 }
-                if (d.Rain01 >= 0.15f) skyEnd += g.Text(d.Rain01 >= 0.6f ? " +RA" : " RA", skyEnd, r3, Ink, HudType.Label);
+                if (d.Rain01 >= 0.15f)
+                {
+                    int streaks = d.Rain01 >= 0.6f ? 3 : 2;
+                    for (int k = 0; k < streaks; k++) g.Line(skyEnd + 6f + k * 4f, r3 - 4f, skyEnd + 3f + k * 4f, r3 + 4f, Ink);
+                    skyEnd += 6f + streaks * 4f;
+                }
             }
             if (d.HasWind)
             {
@@ -202,7 +211,14 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                     bool ft = units == NOAvionics.AvUnits.Imperial;
                     int tc = (int)Math.Round(ft ? d.TempC * 1.8f + 32f : d.TempC);
                     ReadOnlySpan<char> temp = ScopeStr.Cat(tc >= 0 ? "+" : "", tc, ft ? "°F" : "°C");
-                    if (right - ScopeCanvas.TextW(temp, HudType.Label) >= skyEnd + 6f) g.Text(temp, right, r3, Ink, HudType.Label, ScopeAlign.Right);
+                    float left = right - ScopeCanvas.TextW(temp, HudType.Label);
+                    if (left - 9f >= skyEnd + 6f)
+                    {
+                        g.Text(temp, right, r3, Ink, HudType.Label, ScopeAlign.Right);
+                        g.Line(left - 5f, r3 - 6f, left - 5f, r3 + 2f, Dim);      // a thermometer: the stem and its bulb
+                        g.Ring(left - 5f, r3 + 4f, 2f, Dim);
+                    }
+                    else if (left >= skyEnd + 6f) g.Text(temp, right, r3, Ink, HudType.Label, ScopeAlign.Right);
                 }
             }
         }

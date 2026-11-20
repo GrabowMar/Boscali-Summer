@@ -24,8 +24,8 @@ namespace BoscaliSummer.Modules.Hud.Presentation
 
         /// <summary>The pictures the last <see cref="Paint"/> wants drawn: the weapon's (lit share, then the spent share of a magazine) and the jammer's. An unused slot has icon 0.</summary>
         public readonly ArtSlot[] Art = new ArtSlot[ArtSlots];
-        public const int ArtSlots = 3;
-        private const int HeroLit = 0, HeroSpent = 1, JamArt = 2;
+        public const int ArtSlots = 2;
+        private const int HeroLit = 0, HeroSpent = 1;
 
         /// <summary>What the last <see cref="Paint"/> drew, and so which native object it stands in for.</summary>
         public bool WeaponDrawn, CmDrawn, CapDrawn;

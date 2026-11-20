@@ -91,7 +91,8 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             }
         }
 
-        /// <summary>The built-in packs as folders in the BepInEx cache, written once per game run (a file is rewritten only when its size changed).</summary>
+        /// <summary>The built-in packs as folders in the BepInEx cache. One folder for every build: a new build rewrites only the clips whose bytes changed
+        /// (and drops clips it no longer ships); the same build only checks sizes.</summary>
         private List<string> BuiltInFolders()
         {
             if (builtInFolders != null) return builtInFolders;
@@ -99,8 +100,16 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
             try
             {
                 var assembly = typeof(ChatterVoices).Assembly;
-                string root = Path.Combine(Paths.CachePath, "BoscaliSummer", "voices", assembly.ManifestModule.ModuleVersionId.ToString("N"));
+                string voices = Path.Combine(Paths.CachePath, "BoscaliSummer", "voices"), root = Path.Combine(voices, "built-in");
+                // Older builds unpacked into one ~14 MB folder each; nothing reads those again.
+                if (Directory.Exists(voices))
+                    foreach (string old in Directory.GetDirectories(voices))
+                        if (!string.Equals(old, root, StringComparison.OrdinalIgnoreCase))
+                            try { Directory.Delete(old, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                string stamp = Path.Combine(root, "build.txt"), build = assembly.ManifestModule.ModuleVersionId.ToString("N");
+                bool sameBuild = File.Exists(stamp) && File.ReadAllText(stamp) == build;
                 var folders = new SortedSet<string>(StringComparer.Ordinal);
+                var shipped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { stamp };
                 foreach (string name in assembly.GetManifestResourceNames())
                 {
                     if (!name.StartsWith(BuiltInPrefix, StringComparison.Ordinal)) continue;
@@ -108,11 +117,29 @@ namespace BoscaliSummer.Modules.Chatter.Runtime
                     string[] parts = name.Substring(BuiltInPrefix.Length).Split('\\', '/');
                     if (parts.Length != 2 || parts[0].Length == 0 || parts[1].Length == 0) continue;
                     string folder = Path.Combine(root, parts[0]), file = Path.Combine(folder, parts[1]);
-                    byte[] bytes = BoscaliSummer.Core.Util.EmbeddedResources.ReadAll(assembly, name, (int)MaxFileBytes);
-                    if (bytes == null) continue;
-                    Directory.CreateDirectory(folder);
-                    if (!File.Exists(file) || new FileInfo(file).Length != bytes.Length) File.WriteAllBytes(file, bytes);
+                    using (Stream stream = assembly.GetManifestResourceStream(name))
+                    {
+                        if (stream == null || stream.Length <= 0 || stream.Length > MaxFileBytes) continue;
+                        bool sized = File.Exists(file) && new FileInfo(file).Length == stream.Length;
+                        if (!sized || !sameBuild)
+                        {
+                            byte[] bytes = BoscaliSummer.Core.Util.EmbeddedResources.ReadAll(stream, (int)MaxFileBytes);
+                            if (bytes == null) continue;
+                            if (!sized || !System.Linq.Enumerable.SequenceEqual(File.ReadAllBytes(file), bytes))
+                            {
+                                Directory.CreateDirectory(folder);
+                                File.WriteAllBytes(file, bytes);
+                            }
+                        }
+                    }
+                    shipped.Add(file);
                     folders.Add(folder);
+                }
+                if (!sameBuild)
+                {
+                    foreach (string file in Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+                        if (!shipped.Contains(file)) File.Delete(file);
+                    File.WriteAllText(stamp, build);
                 }
                 builtInFolders.AddRange(folders);
             }

@@ -67,8 +67,10 @@ namespace BoscaliSummer.Modules.Immersion.Runtime
             float night = LightPoints.NightLevel();
             LightPoints.Night(night);
             Vector3 global = eye.ToGlobalPosition().AsVector3();
-            airfield.Tick(global, on && settings.AirfieldLightsEnabled.Value && !ForeignMods.AirfieldYielded, night, Time.time);
-            city.Tick(global, on && settings.CityLightsEnabled.Value, night);
+            // An SA-74N burst takes the grid down for the rest of the mission: no street, window or runway lights.
+            bool grid = !BoscaliSummer.Core.Contracts.RadioAftermath.Active;
+            airfield.Tick(global, on && grid && settings.AirfieldLightsEnabled.Value && !ForeignMods.AirfieldYielded, night, Time.time);
+            city.Tick(global, on && grid && settings.CityLightsEnabled.Value, night);
             tunnel.Tick(global, on && settings.ArTunnelEnabled.Value && ImmersionManager.IsCockpitActive, airfield, cam.mainCamera);
             vapour.Tick(eye, on && settings.VapourEnabled.Value, Humidity(), light);
             Optics(cam.mainCamera, global, on && settings.SkyOpticsEnabled.Value, dt);

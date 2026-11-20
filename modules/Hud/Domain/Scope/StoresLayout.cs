@@ -15,11 +15,9 @@ namespace BoscaliSummer.Modules.Hud.Domain
         // ---- WPN (ONE BAR spec 4.2): rows come from ScopeLayout (ShelfY, RuleY, R1..R3); x values are cell-local.
         public const float NumeralX = 1f, NumeralGap = 8f, MaxSize = 12f, MaxGap = 5f, MaxDy = 4f;
         /// <summary>The numeral's room bound (<see cref="NumeralSize"/>); the arm word itself is right-aligned to the cell end.</summary>
-        public const float ArmWordX = 200f, ArmSize = HudType.Value;
-        /// <summary>The arm pip (ARMED filled, SAFE hollow): its size, and its left edge this far left of the arm word's start.</summary>
-        public const float ArmMarker = 6f, ArmMarkerGap = 10f;
-        public const float NameSize = HudType.Body, WordSize = 12f, WordGap = 10f, TagGap = 10f;
-        public const float ArtY = 48f, ArtH = 24f, GlyphMaxW = 220f, GlyphHalf = 8f;
+        public const float ArmWordX = 200f;
+        public const float NameSize = HudType.Label, WordSize = 12f, WordGap = 10f, TagGap = 10f;
+        public const float ArtY = 23f, ArtH = 49f, GlyphMaxW = 220f, GlyphHalf = 8f;
 
         /// <summary>The rounds numeral: EMPHASIS (22, still the biggest value of the stores) when it and its "/max" (LABEL) end <see cref="NumeralGap"/> short of the arm column, else VALUE (16). The sizes are steps of the type scale; the board draws them at the boost.</summary>
         public static float NumeralSize(int digits, int maxDigits)

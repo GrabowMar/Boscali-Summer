@@ -37,40 +37,31 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 }
             }
 
-            // R1: the rounds (smaller only when four digits would run into the arm word), the full load beside it, the arm word at the cell's end.
+            // R1 + R2 left (2026-11-19, user: ammo next to the weapon, the weapon bigger): the rounds (R1) with the full load under them (R2), the picture right beside them over both rows. No ARMED / SAFE word:
+            // a weapon that cannot fire is greyed out (numeral and picture DIM).
             float r1 = y + ScopeLayout.R1;
             string figure = ScopeStr.Int(total);
-            int maxDigits = max > 1 ? ScopeStr.Int(max).Length : 0;
-            float size = StoresLayout.NumeralSize(figure.Length, maxDigits);
-            g.Text(figure, x + StoresLayout.NumeralX, r1, StoresMath.RoundsTone(rel, empty, low), size, ScopeAlign.Left, true);
-            if (max > 1)
-                g.Text(ScopeStr.Cat("/", max, null), x + StoresLayout.NumeralX + ScopeCanvas.TextW(figure, size) + StoresLayout.MaxGap, r1 + StoresLayout.MaxDy, Dim, StoresLayout.MaxSize);
-            // The arm word: RELOAD / EMPTY VALUE bold amber / red with no marker; SAFE a hollow DIM pip and the word DIM; IN RNG (every launch requirement met) and ARMED (and a shot just gone) a filled BRIGHT pip and the word
-            // LABEL bold BRIGHT, IN RNG also in the outlined pulsing call box.
-            string arm = StoresMath.Word(state);
-            if (state == StoreState.Reload || state == StoreState.Empty)
-                g.Text(arm, right, r1, state == StoreState.Empty ? Red : Amber, StoresLayout.ArmSize, ScopeAlign.Right, true);
-            else
-            {
-                bool safe = state == StoreState.Safe, inRange = state == StoreState.Armed && d.InRange;
-                if (inRange) arm = "IN RNG";
-                ScopeTone at = safe ? Dim : Hi;
-                float markerLeft = right - ScopeCanvas.TextW(arm, HudType.Label) - StoresLayout.ArmMarkerGap;
-                g.Marker(markerLeft, r1, StoresLayout.ArmMarker, at, !safe);
-                g.Text(arm, right, r1, at, HudType.Label, ScopeAlign.Right, !safe);
-                if (inRange) g.Box(markerLeft - 4f, r1 - 10f, right - markerLeft + 6f, 20f, Hi, flashOn ? 1f : 0.4f);
-            }
+            Span<char> load = stackalloc char[12];
+            int ln = max > 1 ? Put(load, Put(load, 0, "/"), ScopeStr.Int(max)) : 0;
+            int maxDigits = max > 1 ? ln - 1 : 0;
+            int digits = Math.Max(figure.Length, maxDigits);      // sized and spaced for the full load, so the picture never slides left as rounds go 500 > 99 > 9
+            float size = StoresLayout.NumeralSize(digits, maxDigits);
+            bool safe = state == StoreState.Safe;
+            g.Text(figure, x + StoresLayout.NumeralX, r1, safe ? Dim : StoresMath.RoundsTone(rel, empty, low), size, ScopeAlign.Left, true);
+            float loadW = ln > 0 ? ScopeCanvas.TextW(load.Slice(0, ln), StoresLayout.MaxSize) : 0f;
+            if (ln > 0) g.Text(load.Slice(0, ln), x + StoresLayout.NumeralX, y + ScopeLayout.R2, Dim, StoresLayout.MaxSize);
+            float artX = x + StoresLayout.NumeralX + Math.Max(ScopeCanvas.TextW("00000000".AsSpan(0, Math.Min(8, digits)), size), loadW) + StoresLayout.ArtGap;
 
-            // R2: the TGT word at the end, the lock pips before it (one per round: Hi filled = leaves on the next trigger at a target, INK hollow = loaded, FAINT small = spent), the picture in what is left.
+            // R2 right: the TGT word at the end, the lock pips before it (one per round: Hi filled = leaves on the next trigger at a target, INK hollow = loaded, FAINT small = spent); the picture in what is left of R1 + R2.
             // With pips, "n TGT" only when it says more than the filled pips (more targets than cued rounds); its room stays reserved so the art never jumps on a lock.
-            float r2 = y + ScopeLayout.R2, artW = r.W;
+            float r2 = y + ScopeLayout.R2, artW = right - artX;
             if (StoresMath.ShowTargets(cls))
             {
                 bool pips = StoresMath.ShowPips(cls, max);
                 int cued = StoresMath.Cued(total, d.Targets, d.Salvo);
                 if (d.Targets <= 0) g.Text("NO TGT", right, r2, Dim, HudType.Label, ScopeAlign.Right);
                 else if (!pips || d.Targets > cued) g.Text(ScopeStr.Cat("", d.Targets, " TGT"), right, r2, Hi, HudType.Label, ScopeAlign.Right, true);
-                artW = r.W - StoresLayout.TgtW - StoresLayout.ArtGap;
+                artW = right - StoresLayout.TgtW - StoresLayout.ArtGap - artX;
                 if (pips)
                 {
                     float pipRight = right - StoresLayout.TgtW - StoresLayout.PipGap;
@@ -80,21 +71,26 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                         float ps = loaded ? StoresLayout.PipSize : StoresLayout.SpentPip;
                         g.Marker(pipRight - (max - 1 - i) * StoresLayout.PipPitch - ps / 2f, r2, ps, i < cued ? Hi : loaded ? Ink : Faint, i < cued);
                     }
-                    artW = pipRight - (max - 1) * StoresLayout.PipPitch - StoresLayout.PipSize / 2f - StoresLayout.ArtGap - x;
+                    artW = pipRight - (max - 1) * StoresLayout.PipPitch - StoresLayout.PipSize / 2f - StoresLayout.ArtGap - artX;
                 }
             }
-            PaintArt(g, s, StoresMath.ArtTone(state, low), frac, StoresMath.Magazine(cls, max), x, y + StoresLayout.ArtY, artW);
+            PaintArt(g, s, StoresMath.ArtTone(state, low), frac, StoresMath.Magazine(cls, max), artX, y + StoresLayout.ArtY, artW);
 
-            // R3: the weapon, its class (none for the gun, else "STA 3 AGM") and, amber, the reload countdown. Low is the amber numeral and art tone, not a word.
-            Span<char> classWord = stackalloc char[12], extra = stackalloc char[10];
-            int cn = cls == StoreClass.Gun ? 0 : Put(classWord, Put(classWord, 0, ScopeStr.Cat("STA ", s.Slot, " ")), StoresMath.ClassWord(cls));
-            int en = rel && !float.IsNaN(s.ReloadLeftS) ? Put(extra, 0, ScopeStr.Cat("", Math.Max(0f, s.ReloadLeftS), 1, "S")) : 0;
-            float cw = ScopeCanvas.TextW(classWord.Slice(0, cn), StoresLayout.WordSize), ew = en > 0 ? ScopeCanvas.TextW(extra.Slice(0, en), StoresLayout.WordSize) : 0f;
-            float ny = y + ScopeLayout.R3, nameMax = r.W - StoresLayout.WordGap - cw - (en > 0 ? StoresLayout.WordGap + ew : 0f);
-            g.FitText(s.Name, x, ny, nameMax, Ink, StoresLayout.NameSize, StoresLayout.WordSize, ScopeAlign.Left);
-            float wx = right - ew - (en > 0 && cn > 0 ? StoresLayout.WordGap : 0f) - cw;
-            if (cn > 0) g.Text(classWord.Slice(0, cn), wx, ny, Dim, StoresLayout.WordSize);
-            if (en > 0) g.Text(extra.Slice(0, en), right, ny, Amber, StoresLayout.WordSize, ScopeAlign.Right, true);
+            // R3: the weapon, then at the end either the call (RELOAD + countdown amber, EMPTY red, IN RNG BRIGHT in the outlined pulsing call box) or, with no call, the class ("STA 3 AGM"; none for the gun).
+            float ny = y + ScopeLayout.R3;
+            bool inRange = state == StoreState.Armed && d.InRange;
+            Span<char> tail = stackalloc char[16];
+            int tn;
+            ScopeTone tailTone;
+            if (state == StoreState.Reload) { tn = Put(tail, 0, "RELOAD"); if (!float.IsNaN(s.ReloadLeftS)) tn = Put(tail, tn, ScopeStr.Cat(" ", Math.Max(0f, s.ReloadLeftS), 1, "S")); tailTone = Amber; }
+            else if (state == StoreState.Empty) { tn = Put(tail, 0, "EMPTY"); tailTone = Red; }
+            else if (inRange) { tn = Put(tail, 0, "IN RNG"); tailTone = Hi; }
+            else { tn = cls == StoreClass.Gun ? 0 : Put(tail, Put(tail, 0, ScopeStr.Cat("STA ", s.Slot, " ")), StoresMath.ClassWord(cls)); tailTone = Dim; }
+            bool call = tailTone != Dim;
+            float tw = tn > 0 ? ScopeCanvas.TextW(tail.Slice(0, tn), StoresLayout.WordSize) : 0f;
+            g.FitText(s.Name, x, ny, r.W - (tn > 0 ? StoresLayout.WordGap + tw + (inRange ? 8f : 0f) : 0f), safe ? Dim : Ink, StoresLayout.NameSize, StoresLayout.WordSize, ScopeAlign.Left);
+            if (tn > 0) g.Text(tail.Slice(0, tn), right - (inRange ? 4f : 0f), ny, tailTone, StoresLayout.WordSize, ScopeAlign.Right, call);
+            if (inRange) g.Box(right - tw - 8f, ny - 9f, tw + 8f, 18f, Hi, flashOn ? 1f : 0.4f);
         }
 
         /// <summary>
@@ -107,6 +103,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (kind != ArtKind.None)
             {
                 ArtPlace place = StoreArt.Fit(ink, width, height, x, by, w, StoresLayout.ArtH);
+                if (place.W > 0f && place.W < w - 0.5f) place = StoreArt.Fit(ink, width, height, x, by, place.W, StoresLayout.ArtH);      // against the rounds, not centred in the room left
                 if (place.W > 0f)
                 {
                     bool mask = kind == ArtKind.Mask;

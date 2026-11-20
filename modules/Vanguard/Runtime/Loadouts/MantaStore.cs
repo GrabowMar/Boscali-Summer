@@ -257,6 +257,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             foreach (KeyValuePair<string, List<int>> entry in leads)
             {
                 if (Pairs.ContainsKey(entry.Key)) continue; // paired on an earlier pass
+                if (entry.Key == "BS_Megaplane") continue;  // G-240 stores beams: a MANTA fits one rack, no partner station
                 HardpointSet[] sets = PrefabSets(entry.Key);
                 if (sets == null) continue;
                 Vector3[][] points = Points(entry.Key, sets);

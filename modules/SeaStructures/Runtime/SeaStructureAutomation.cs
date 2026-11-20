@@ -231,7 +231,7 @@ namespace BoscaliSummer.SeaStructures
                 if (map == "albedo" && material != null && !material.HasProperty(property)) property = "_MainTex";
                 Texture2D texture = material != null && material.HasProperty(property) ? material.GetTexture(property) as Texture2D : null;
                 if (map == "albedo") albedo = texture;
-                int size = detail ? 1024 : map == "albedo" ? 4096 : 2048;
+                int size = detail ? 1024 : 2048;
                 string expectedName = detail ? "Sea_detail_" + (map == "detailAlbedo" ? "albedo" : "normal") : target.Layout.Key + "_" + map;
                 bool valid = texture != null && texture.width == size && texture.height == size &&
                              texture.name == expectedName && texture.isDataSRGB == (map == "albedo") &&

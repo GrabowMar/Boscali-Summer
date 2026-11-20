@@ -103,7 +103,7 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
             Transform lt = launcher.transform;
             Vector3 leadVel = launcher.rb != null ? launcher.rb.velocity : lt.forward * 200f;
             GlobalPosition slotPos = launcher.GlobalPosition() +
-                FormationSlot.World(Vector3.zero, lt.forward, lt.right, lt.up, slot, manta);
+                FormationSlot.World(Vector3.zero, lt.forward, lt.right, lt.up, slot, manta, launcher.definition != null ? launcher.definition.width : 0f);
             // Throttle on along-track error: ahead of the slot -> ease off, behind -> push (up to the boost, so it keeps up in afterburner).
             float along = Vector3.Dot(slotPos - pos, lt.forward);
             missile.SetThrottle(Mathf.Clamp(0.55f + along / 300f, 0f, RemoraArcher.Boost));

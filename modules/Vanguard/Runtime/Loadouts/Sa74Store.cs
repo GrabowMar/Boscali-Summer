@@ -256,8 +256,17 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
 
     internal sealed class Sa74CargoService : MonoBehaviour, ISceneService
     {
-        public void ResetForScene() => Sa74Store.Resolve();
-        private void Update() { Sa74Store.Resolve(); Sa74Store.EnsureRegistered(false); }
+        private float next;
+        public void ResetForScene() { Sa74Store.Resolve(); next = 0f; }
+        // Once a second: Resolve walks every aircraft prefab that cannot carry the store (it only remembers the ones
+        // that can), which cost 0.11 ms every frame in Escalation for nothing.
+        private void Update()
+        {
+            if (Time.unscaledTime < next) return;
+            next = Time.unscaledTime + 1f;
+            Sa74Store.Resolve();
+            Sa74Store.EnsureRegistered(false);
+        }
     }
 
     internal sealed class Sa74Seat : MonoBehaviour

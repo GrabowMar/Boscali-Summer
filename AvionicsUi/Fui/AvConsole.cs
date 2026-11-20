@@ -82,6 +82,8 @@ namespace NOAvionics
 
             frame = AvFrame.Add(Root, "Frame", AvChamfer.Diagonal(6f));
             AvLay.Fill(frame.rectTransform);
+            // Frosted glass over the tint: the blurred world bleeds through a little, lit at the top (nothing without blur).
+            AvFrost.Add(Root, "Frost", .32f, 1f);
             // Ground: matte terminal glass (one shared texture, tinted per scheme) inside the frame, under everything else.
             Texture2D contours = AvBundle.Ground;
             if (contours != null)

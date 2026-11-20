@@ -121,7 +121,9 @@ namespace BoscaliSummer.Core.Game
         [
             typeof(MissionGroupsPatch), typeof(MissionSelectGroupsPatch), typeof(SetMissionPatch), typeof(SceneLoadedPatch),
             typeof(SyncMissionPatch), typeof(StopMissionPatch), typeof(MissionEnvironmentPatch),
-            .. MissionContentPatches.PatchTypes
+            .. MissionContentPatches.PatchTypes,
+            // Guards for game bugs: on in every mission, whatever modules the mission switches off.
+            typeof(MissileMotorGuardPatch), typeof(ThreatItemNoAircraftPatch),
         ];
 
         internal static void EnsureRegistered(ModConfiguration configuration) => settings = configuration;

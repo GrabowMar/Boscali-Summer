@@ -13,7 +13,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
     /// (the UI has no MSAA: a hard 1-3 px quad on a slant aliases into dashes). Ticks cross the stroke radially, centred on it, with no letters (2026-11-17 refit: the colour is the word). Fuel carries a JOKER and a BINGO tick at the board's own numbers
     /// (<see cref="FuelState.Need"/>, plus <see cref="FuelEndurance.JokerMargin"/>): Dim until reached, then amber; the fill is Ink, amber once joker is reached, and the number (VALUE bold amber and a
     /// Dim %) shows only then. Throttle carries the game's own afterburner detent (the throttle past it lights the burner; read off the game's gauge, none when the aircraft has none): a Dim tick, Hi once
-    /// passed, and the fill Ink up to it and Hi past it. Throttle's value (the game's throttle word 79% / AIRBRAKE / AFTERBURNER) is VALUE bold Hi with a Dim %, above its top end; each caption (bold InkDim) sits below its bottom end.
+    /// passed, and the fill Ink up to it and Hi past it. Throttle's value (the game's throttle word 79% / AIRBRAKE / AFTERBURNER) is VALUE bold Hi with a Dim %, above its top end; each caption (regular, the arcs' lifted ink) sits below its bottom end.
     /// <para>They replace the game's two plain arcs (<see cref="NativeFlightArcs"/>) and stand exactly where those are: centre, radius and axis are measured off the game's gauges every frame.
     /// FAIL OPEN: the game's gauges are hidden (renderer alpha only) in the very frame this layer has painted and is showing, and shown again the same frame it is not wanted (<c>want</c> false:
     /// switch off, external view, pause, map, a board tick gone stale), cannot measure, or throws (<see cref="Fail"/>). Built like <see cref="TapeHud"/>: a holder under the native HUD canvas
@@ -93,7 +93,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         {
             s.Centre = CombatAlerts.Holder(root, name);
             s.Rot = CombatAlerts.Holder(s.Centre, "Rot");
-            s.Mesh = AvVector.Create(s.Rot, "Segments", Quads);
+            s.Mesh = AvVector.Create(s.Rot, "Segments", Quads, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             s.Text = new ScopeText(CombatAlerts.Holder(s.Centre, "Words"), font, fontMaterial);
             s.Signature = int.MinValue;
             s.X = float.NaN;
@@ -118,7 +118,9 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ControlInputs inputs = aircraft.GetInputs();
             float throttle = Mathf.Clamp01(inputs != null ? inputs.throttle : 0f);
             VanillaHudStyle.Palette palette = VanillaHudStyle.Colours;
-            Color ink = palette.AllClear, amber = palette.Warning;
+            // The arcs stand among the game's own centre HUD (ladder, speed, altitude: additive, so the sky lifts them to a pale mint, measured 135-157,234-255,191-209 vs INK 96,255,153): INK lifted
+            // FlightArcs.InkLift toward INK-HI matches them (2026-11-19, user: "fuel throttle still kinda different tone").
+            Color ink = Color.Lerp(palette.AllClear, VanillaHudStyle.InkHi, FlightArcs.InkLift), amber = palette.Warning;
             float bingoAt = hasNeed ? need : float.NaN, jokerAt = hasNeed ? Mathf.Min(need + FuelEndurance.JokerMargin, 1f) : float.NaN;
             bingoReached = bingo || (hasNeed && level <= bingoAt);
             jokerReached = hasNeed && level <= jokerAt;
@@ -197,7 +199,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             ScopeText t = s.Text;
             t.Begin();
             int n = low ? FlightArcs.PercentText(scratch, 0, percent) - 1 : 0;      // the number shows at caution only, its % apart
-            Ends(t, new System.ReadOnlySpan<char>(scratch, 0, n), true, "FUEL", axis, radius, true, amber);
+            Ends(t, new System.ReadOnlySpan<char>(scratch, 0, n), true, "FUEL", axis, radius, true, amber, ink);
             t.End();
         }
 
@@ -214,7 +216,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             t.Begin();
             string w = word ?? "";
             bool pct = w.Length > 1 && w[w.Length - 1] == '%';
-            Ends(t, System.MemoryExtensions.AsSpan(w, 0, pct ? w.Length - 1 : w.Length), pct, "THROTTLE", axis, radius, false, Lift(ink));
+            Ends(t, System.MemoryExtensions.AsSpan(w, 0, pct ? w.Length - 1 : w.Length), pct, "THROTTLE", axis, radius, false, Lift(ink), ink);
             t.End();
         }
 
@@ -237,14 +239,23 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             if (Mathf.Abs(span) < 0.01f) return;
             int steps = Mathf.CeilToInt(Mathf.Abs(span) / FlightArcs.StepDeg);
             float hw = width * 0.5f, inner = radius - hw, outer = radius + hw, f = FlightArcs.Feather;
-            Rgba clear = c.WithAlpha(0f);
+            Rgba clear = c.WithAlpha(0f), halo = c.WithAlpha(c.A * b.GlowAlpha);
+            float g = width * b.Glow;
             float ca = Mathf.Cos(from * Mathf.Deg2Rad), sa = Mathf.Sin(from * Mathf.Deg2Rad);
             for (int i = 1; i <= steps; i++)
             {
                 float a = (from + span * i / steps) * Mathf.Deg2Rad, cb = Mathf.Cos(a), sb = Mathf.Sin(a);
                 Ring(b, ca, sa, cb, sb, inner, outer, c, c);
-                Ring(b, ca, sa, cb, sb, outer, outer + f, c, clear);
-                Ring(b, ca, sa, cb, sb, inner, inner - f, c, clear);
+                if (g <= 0f)
+                {
+                    Ring(b, ca, sa, cb, sb, outer, outer + f, c, clear);
+                    Ring(b, ca, sa, cb, sb, inner, inner - f, c, clear);
+                }
+                else      // the HudGlow halo stands in for the soft edge: both stacked read as a thicker, greener band than the board's strokes
+                {
+                    Ring(b, ca, sa, cb, sb, outer, outer + g, halo, clear);      // the HudGlow halo, its reach following the band's width
+                    Ring(b, ca, sa, cb, sb, inner, Mathf.Max(0f, inner - g), halo, clear);
+                }
                 ca = cb;
                 sa = sb;
             }
@@ -278,10 +289,10 @@ namespace BoscaliSummer.Modules.Hud.Presentation
         private static float Snap(float refPx) => Mathf.Round(refPx * devPerRef) / devPerRef;
 
         /// <summary>
-        /// The same on both arcs: the value just above the full (top) end, the caption (LABEL bold InkDim) centred just below the empty (bottom) end. A value with a <paramref name="percent"/> sign is its digits
+        /// The same on both arcs: the value just above the full (top) end, the caption (LABEL regular, <paramref name="captionColour"/>) centred just below the empty (bottom) end. A value with a <paramref name="percent"/> sign is its digits
         /// (VALUE bold) right-aligned at the anchor + 6 and a Dim % (LABEL) left-aligned at the anchor + 10; any other word (AIRBRAKE) is VALUE bold, centred.
         /// </summary>
-        private static void Ends(ScopeText t, System.ReadOnlySpan<char> value, bool percent, string caption, float axis, float radius, bool reversed, Color valueColour)
+        private static void Ends(ScopeText t, System.ReadOnlySpan<char> value, bool percent, string caption, float axis, float radius, bool reversed, Color valueColour, Color captionColour)
         {
             Anchor(axis, radius, FlightArcs.At(1f, reversed), out float x, out float y);
             float vy = y - Snap(EndGap + PercentPt * 0.5f);
@@ -290,12 +301,12 @@ namespace BoscaliSummer.Modules.Hud.Presentation
                 if (percent)
                 {
                     t.Draw(value, x + 6f, vy, PercentPt, ScopeAlign.Right, valueColour, true);
-                    t.Draw("%", x + 10f, vy + 2f, CaptionPt, ScopeAlign.Left, VanillaHudStyle.InkDim, false);
+                    t.Draw("%", x + 10f, vy + 2f, CaptionPt, ScopeAlign.Left, captionColour, false);
                 }
                 else t.Draw(value, x, vy, PercentPt, ScopeAlign.Center, valueColour, true);
             }
             Anchor(axis, radius, FlightArcs.At(0f, reversed), out x, out y);
-            t.Draw(caption, x, y + Snap(EndGap + CaptionPt * 0.5f), CaptionPt, ScopeAlign.Center, VanillaHudStyle.InkDim, false);      // regular, as the board draws LABEL captions: bold with the text edge turned chunky in game
+            t.Draw(caption, x, y + Snap(EndGap + CaptionPt * 0.5f), CaptionPt, ScopeAlign.Center, captionColour, false);      // the arcs' lifted ink, as the native labels round them; regular, as the board draws LABEL captions: bold with the text edge turned chunky in game
         }
 
         /// <summary>The game's gauges back, this layer down: the same frame, every time. Safe to call every frame.</summary>

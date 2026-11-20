@@ -31,9 +31,9 @@ namespace BoscaliSummer.Modules.Command.Presentation.MapUi
                         Echo("PRESET — " + ClientPreset.Names[i]);
                         Changed();
                     }));
-                preset.Options[0].Help = "QUALITY: every Boscali visual on, full panel effects, no savings applied.";
-                preset.Options[1].Help = "BALANCED: drops the costliest extras (pilot reflection, terrain wet pass, panel blur) and turns ADAPTIVE FX and the invisible far-unit savings on.";
-                preset.Options[2].Help = "FAST: all optional visuals off, panel effects off, LOD and shadow caps on, units past 15 km not drawn. Sound and motion are left alone.";
+                preset.Options[0].Help = "QUALITY: every Boscali visual on, HIGH clouds, the game's own anti-aliasing, full panel effects, no savings applied.";
+                preset.Options[1].Help = "BALANCED: MEDIUM clouds, MSAA capped at 4x, drops the costliest extras (pilot reflection, terrain wet pass, panel blur) and turns ADAPTIVE FX and the invisible far-unit savings on.";
+                preset.Options[2].Help = "FAST: faster than the unmodded game. LOW clouds, no MSAA, no sun shadows, LOD cap, all optional visuals off, panel effects off, units past 15 km not drawn. Sound and motion are left alone.";
                 flow.Ticker.Add(page, AvTickRate.Slow, preset.Refresh);
                 BuildBoardRows(flow, page, CPerf);
             }

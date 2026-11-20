@@ -159,6 +159,20 @@ namespace BoscaliSummer.Modules.Maps.Domain
             return string.Equals(actual, bundleHash, StringComparison.Ordinal) ? null : "the bundle is build " + actual + ", the sidecar says " + bundleHash;
         }
 
+        /// <summary>The same check on a seekable stream (an embedded resource or loose file), with no managed copy of the
+        /// bundle; the stream is left at its start for AssetBundle.LoadFromStream.</summary>
+        public string BundleProblem(System.IO.Stream stream)
+        {
+            if (string.IsNullOrEmpty(bundleHash)) return "the sidecar has no bundleHash (it was not written by the bake)";
+            if (stream == null || !stream.CanSeek || stream.Length == 0) return "the bundle is missing or empty";
+            if (bundleBytes > 0 && stream.Length != bundleBytes) return "the bundle is " + stream.Length + " bytes, the sidecar says " + bundleBytes;
+            string actual;
+            using (SHA256 sha = SHA256.Create())
+                actual = BitConverter.ToString(sha.ComputeHash(stream), 0, 4).Replace("-", "").ToLowerInvariant();
+            stream.Position = 0;
+            return string.Equals(actual, bundleHash, StringComparison.Ordinal) ? null : "the bundle is build " + actual + ", the sidecar says " + bundleHash;
+        }
+
         /// <summary>Grid cells are 10 km; the map, centred on the offset, has to lie inside the grid.</summary>
         private static bool GridFits(int offset, float size, int cells) => offset >= size / 2f && offset + size / 2f <= cells * 10000f;
     }

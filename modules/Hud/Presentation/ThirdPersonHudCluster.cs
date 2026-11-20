@@ -165,7 +165,7 @@ namespace BoscaliSummer.Modules.Hud.Presentation
             card = BuildTargetCard("TargetCard", "TARGET CAM");
             missile = BuildTargetCard("MissileCard", "MISSILE CAM");
             // Root is zero-size at screen centre, so this surface's origin is screen centre: RectF space.
-            symbols = AvVector.Create(root, "Symbols", 900);
+            symbols = AvVector.Create(root, "Symbols", 900, BoscaliSummer.Core.Contracts.HudGlow.Stroke, BoscaliSummer.Core.Contracts.HudGlow.Alpha);
             lastSymbols = 0;
 
             rootObject.SetActive(false);

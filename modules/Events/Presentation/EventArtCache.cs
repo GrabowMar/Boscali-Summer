@@ -139,6 +139,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                     if (!string.IsNullOrEmpty(root))
                     {
                         string path = Path.Combine(root, key + ".png");
+                        if (!File.Exists(path)) path = Path.Combine(root, key + ".jpg");
                         if (File.Exists(path))
                         {
                             var info = new FileInfo(path);
@@ -153,7 +154,7 @@ namespace BoscaliSummer.Modules.Events.Presentation
                 catch { /* An unreadable override must not hide bundled art. */ }
 
                 byte[] data = EmbeddedResources.ReadAll(
-                    typeof(EventArtCache).Assembly, "BoscaliSummer.EventsArt." + key + ".png", MaximumFileBytes);
+                    typeof(EventArtCache).Assembly, "BoscaliSummer.EventsArt." + key + ".jpg", MaximumFileBytes);
                 return data == null ? null : Decode(data);
             }
             catch
