@@ -211,13 +211,15 @@ def vent(b, center, size, yaw=0, louvres=4):
               (size[0] * .42, .02, .02), IRON, (0, 0, yaw))
 
 
-def ladder(b, base, height, yaw=0, cage=False):
+def ladder(b, base, height, yaw=0, cage=False, rungs=None):
     """Rails, rungs and an optional cage; the ladder stands on the ground at base."""
     c, s, c0 = Vector(base), math.sin(math.radians(yaw)), math.cos(math.radians(yaw))
     for side in (-0.28, 0.28):
         a = (c.x + side * c0, c.y + side * s, c.z)
         b.beam(a, (a[0], a[1], a[2] + height), 0.035, IRON, 3)
-    for z in np.arange(0.35, height, 0.32):
+    n = rungs if rungs is not None else max(2, int(height / 0.32))
+    for k in range(n):
+        z = .35 + (height - .7) * k / max(n - 1, 1)
         b.box((c.x, c.y, c.z + z), (0.32, 0.03, 0.025), IRON, (0, 0, yaw))
     if cage:
         for z in (height * .35, height * .7, height * .95):
@@ -770,6 +772,10 @@ def water_tower(b, v):
             b.cyl((0, 0, 21), 6.06, 0.8, RED, 12, caps=False)
             b.cyl((0, 0, 16.6), 6.6, 0.3, IRON, 12)                        # the walkway
             b.beam((0, 0, 25.6), (0, 0, 27.6), 0.08, IRON, 3)
+            ladder(b, (5.46, 0, 0), 16.4, 0, rungs=8)
+            pipe_run(b, [(1.2, 0, 0), (1.2, 0, 14.5)], 0.12, IRON, 2)
+        if b.fine:
+            b.decal((0, 6.06, 19.5), (1.2, 1.2), (-90, 0, 0), (2, 0))
         return
     b.cyl((0, 0, 0), 5, 1, CONCRETE_D, 10)
     b.cyl((0, 0, 1), 3.5, 21, CONCRETE, 10, r2=2.6)
@@ -781,11 +787,14 @@ def water_tower(b, v):
         b.box((0, 3.4, 2.2), (0.8, 0.2, 1.2), BLACK)
         b.cyl((0, 0, 32.8), 1.4, 1, CONCRETE_D, 6)
         b.beam((0, 0, 33.8), (0, 0, 37), 0.08, IRON, 3)
+        ladder(b, (2.9, 0, 1.2), 19.8, 0, rungs=12)
+        pipe_run(b, [(3.4, 0, 1), (3.4, 0, 22)], 0.12, IRON, 2)
     if b.fine:
         for k, x, y, yaw in around(8, 3.3):
             if k % 2:
                 b.box((x * 0.92, y * 0.92, 14), (0.4, 0.1, 0.9), BLACK, (0, 0, yaw))
         b.box((6, -3, 1.2), (2, 1.6, 1.2), CONCRETE)
+        b.decal((0, 9.06, 25), (1.2, 1.2), (-90, 0, 0), (2, 0))
 
 
 def pylon(b, v):
@@ -806,6 +815,11 @@ def pylon(b, v):
         for x in (-3.25, 3.25):
             for y in (-3.25, 3.25):
                 b.box((x, y, 0.3), (0.6, 0.6, 0.3), CONCRETE_D)
+        for k in range(3):
+            z, w = 20.5 + 4.5 * k, 8.5 - 2 * k
+            for side in (-1, 1):
+                b.box((side * w, 0, z - 1.9), (0.22, 0.22, 0.22), STEEL)
+        b.box((0, -0.9, 6), (0.5, 0.05, 0.5), YELLOW)
 
 
 def wind_turbine(b, v):
@@ -822,8 +836,11 @@ def wind_turbine(b, v):
         b.box((26 * s, 5.2, 81 + 26 * c), (1.9, 0.28, 20), WHITE, (0, d, 12), 0.22)          # blade, pitched
     if b.mid:
         b.box((0, 2.35, 2.2), (0.6, 0.1, 1.1), PANEL_D)
+        b.box((0, 2.35, 2.9), (0.7, 0.1, 0.2), YELLOW)
         b.cyl((0, 0, 79.4), 1.6, 0.5, PANEL, 8)
         b.box((0, -4.2, 83.2), (0.5, 0.5, 0.4), PANEL_D)
+        for z in (80.2, 82.0):
+            b.box((0, -4.6, z), (0.1, 0.6, 0.45), PANEL_D)
     if b.fine:
         b.cyl((0, 0, 30), 2.0, 0.4, RED, 10, caps=False)
         b.box((4, -3, 1), (1.4, 1, 1), PANEL)
@@ -854,6 +871,11 @@ def crane(b, v):
         for x in (-1.2, 1.2):
             b.beam((x, 30, 31), (x, 30, 14), 0.06, IRON, 3)
         b.box((0, 30, 13.6), (1.3, 6.2, 0.4), YELLOW)
+        b.box((0, 19.05, 30.4), (1.0, 0.1, 0.8), PANEL_D)                  # cab door
+        railing(b, (0, -3, 33.2), (0, 42, 33.2), 1.0, 9)                   # boom walkway
+        for x in (-1.2, 1.2):
+            for y in (28.8, 31.2):
+                b.box((x, y, 13.2), (0.18, 0.18, 0.18), STEEL)             # spreader twistlocks
     if b.fine:
         b.box((0, -5, 38.4), (4.7, 5.2, 0.2), PANEL_D)
         b.beam((8.9, -7, 1.2), (8.9, -7, 31), 0.1, IRON, 3)
@@ -873,6 +895,10 @@ def containers(b, v):
             b.box((c[0], c[1] - 6.12, c[2]), (1.1, 0.03, 1.15), tuple(int(q * 0.8) for q in col))
             for dx in (-0.5, 0.5):
                 b.box((c[0] + dx, c[1] - 6.17, c[2]), (0.04, 0.03, 1.1), STEEL)
+        if b.fine:
+            b.box((c[0] + 1.24, c[1] + 1.5, c[2] + 0.55), (0.02, 0.55, 0.32), WHITE)
+            if k == 0:
+                b.decal((c[0] + 1.26, c[1] - 1.0, c[2]), (0.55, 0.45), (0, 90, 0), (1, 0))
 
 
 def warehouse(b, v):
@@ -924,6 +950,11 @@ def silo(b, v):
             b.box((-19.5, 12, 4.5), (3.3, 3.3, 0.6), TILE, taper=(0.02, 1))
             for k in range(4):
                 b.beam((k * 8.5 - 12.75, 0, 26), (k * 8.5 - 12.75, 0, 27), 0.5, PANEL_D, 4)
+            ladder(b, (16.75, 0, 0.5), 23, 90, rungs=10)
+            pipe_run(b, [(-19.5, 0, 30), (-19.5, 0, 8), (-13, 0, 8)], 0.15, IRON, 2)
+            railing(b, (-18, 0, 28.6), (14, 0, 28.6), 0.8, 8)
+        if b.fine:
+            b.decal((-19.5, 2.05, 20), (1.0, 1.0), (-90, 0, 0), (3, 0))
         return
     for x, y, hx, hy in ((0, -9, 15, 0.4), (0, 10, 15, 0.4), (-15, 0.5, 0.4, 9.9), (15, 0.5, 0.4, 9.9)):   # the bund wall
         b.box((x, y, 0.7), (hx, hy, 0.7), CONCRETE_D)
@@ -938,6 +969,9 @@ def silo(b, v):
         b.beam((-1, 0, 1), (2, 1, 1), 0.3, STEEL, 4)
         b.beam((7, -4, 1), (7, -11, 1), 0.3, STEEL, 4)
         b.box((7, -12.5, 1.3), (1.8, 1.4, 1.3), PANEL_D)                   # the pump house
+        ladder(b, (6.0, 0, 0.2), 8, 0, rungs=8)
+    if b.fine:
+        b.decal((7, 6.05, 5), (1.0, 1.0), (-90, 0, 0), (1, 0))
 
 
 def boat(b, v):
