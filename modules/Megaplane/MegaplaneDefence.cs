@@ -25,7 +25,9 @@ namespace BoscaliSummer.Modules.Megaplane
             Vector3 at = aircraft.transform.position;
             foreach (Unit unit in UnitRegistry.allUnits)
             {
-                if (!(unit is Missile missile) || missile.disabled || missile.NetworkHQ == hq) continue;
+                if (!(unit is Missile missile) || missile.disabled) continue;
+                FactionHQ mhq = missile.NetworkHQ;
+                if (mhq == null || mhq == hq) continue;   // only a live foreign faction's missiles are threats
                 if ((missile.transform.position - at).sqrMagnitude > Range * Range) continue;
                 hq.RpcUpdateTrackingInfo(missile.persistentID);
                 n++;

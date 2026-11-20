@@ -181,8 +181,10 @@ namespace BoscaliSummer.Modules.Skylark
     {
         internal const float EvRate = 300f, HybridRate = 550f;
         internal static readonly Color Tracer = new Color(.25f, 1.6f, 2.6f);
-        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .8f, StowPitch = -15f, EvVolume = .45f;
-        private const float DoorOpenR = -65f, DoorOpenL = 65f;    // the blister doors: authored open, closed at local Y = 0
+        private const float Recoil = .035f, RecoilReturn = .09f, RippleSeconds = .1f, GlowSeconds = .05f, DeploySeconds = .25f, StowPitch = -8f, EvVolume = .45f;
+        // 2026-11-20 rework, the M230 pattern: no doors, the gun is always mounted. The stow is a spring
+        // return that lies the barrel along the rising chin skin; actioning is instant (no door phase).
+        private const float DoorOpenR = -65f, DoorOpenL = 65f;    // retired with the blister: kept for older bundles
         private static Material coilLit;
         [SerializeField] private Transform yaw, pitch, barrel;
         [SerializeField] private Transform[] doors;
@@ -322,12 +324,14 @@ namespace BoscaliSummer.Modules.Skylark
                 ? aircraft.weaponManager.currentWeaponStation != null && aircraft.weaponManager.currentWeaponStation == aircraft.weaponStations[0]
                 : Time.time - lastShot < 3f || Mathf.Abs(yawAngle) > 2f || Mathf.Abs(pitchAngle) > 2f;
             deploy = Mathf.MoveTowards(deploy, selected ? 1f : 0f, dt / DeploySeconds);
-            // The doors lead the sequence: fully open by a quarter of it, closed only once the gun is nearly home.
-            float doorPhase = Mathf.Clamp01(deploy / .25f);
-            float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((deploy - .2f) / .8f));
+            // No doors in the barbette rework: the spring stow is the only sequence, so the fold tracks
+            // deploy directly. Older bundles with blister doors keep their phased swing below.
+            float fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(deploy * 1.25f));
+            if (doors.Length > 0) fold = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01((deploy - .2f) / .8f));
             Quaternion pivot = transform.rotation * Quaternion.Euler(0f, yawAngle * fold, 0f);
             yaw.rotation = pivot * yawRest;
             pitch.rotation = pivot * Quaternion.Euler(Mathf.Lerp(StowPitch, pitchAngle, fold), 0f, 0f) * pitchRest;
+            float doorPhase = Mathf.Clamp01(deploy / .25f);
             for (int i = 0; i < doors.Length; i++)
                 if (doors[i] != null)
                     doors[i].rotation = transform.rotation * doorRest[i]

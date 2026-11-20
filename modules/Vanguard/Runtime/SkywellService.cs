@@ -109,6 +109,9 @@ namespace BoscaliSummer.Modules.Vanguard.Runtime
         public static float FuelKg(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.FuelKg : -1f;
 
+        internal static string StateOf(Aircraft tanker) =>
+            instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.State.ToString() : "none";
+
         public static int Rounds(Aircraft tanker) =>
             instance != null && tanker != null && instance.kits.TryGetValue(tanker, out Kit k) ? k.Rounds : -1;
 

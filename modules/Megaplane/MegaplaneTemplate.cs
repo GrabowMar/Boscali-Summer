@@ -14,12 +14,16 @@ namespace BoscaliSummer.Modules.Megaplane
     internal static class MegaplaneTemplate
     {
         internal const string Key = "BS_Megaplane";
-        internal const int PrefabHash = 0x42534D50;
+        // one hash per payload: peers with the same choice agree, and a peer with the other choice fails to spawn
+        // the unit loudly instead of silently instantiating different art under the same network identity
+        internal const int PrefabHashFighters = 0x42534D50, PrefabHashRailgun = 0x42534D52;
+        internal static int PrefabHash => MegaplaneSettings.Railgun ? PrefabHashRailgun : PrefabHashFighters;
         internal const float Mass = 6500000f;          // 380 m, past CL-1201 (study gross 5,375 t at 340 m); flight is acceleration-driven, so this only weighs collisions
         internal static AircraftDefinition Definition { get; private set; }
         internal static string LastError { get; private set; }
         private static GameObject holder;
         private static bool building, failed;
+        private static int failures;
 
         private static void Set(object o, string field, object value) => AccessTools.Field(o.GetType(), field).SetValue(o, value);
 
@@ -43,7 +47,9 @@ namespace BoscaliSummer.Modules.Megaplane
             }
             catch (Exception e)
             {
-                failed = true;
+                // a pack that has not loaded yet leaves no donor: retry on the next AfterLoad rather than latch
+                // the failure for the whole session (three strikes, then it stays quiet)
+                if (++failures >= 3) failed = true;
                 LastError = e.ToString();
                 Debug.LogError("[Megaplane] Registration failed: " + e);
             }
@@ -110,8 +116,12 @@ namespace BoscaliSummer.Modules.Megaplane
             go.AddComponent<MegaplaneDefence>();
             definition.mass = Mass;
             go.GetComponent<Rigidbody>().mass = Mass;
+            go.AddComponent<MegaplaneDamage>();
             go.AddComponent<MegaplaneFlight>();
             go.AddComponent<MegaplaneGear>();
+            go.AddComponent<MegaplaneFans>();
+            go.AddComponent<MegaplaneSurfaces>();
+            go.AddComponent<MegaplaneLights>();
             return definition;
         }
 
@@ -138,6 +148,8 @@ namespace BoscaliSummer.Modules.Megaplane
         private static void RefitAirframe(Aircraft aircraft, Transform model, Dictionary<string, Transform> nodes)
         {
             Transform root = aircraft.transform;
+            // Collect the art before it is handed to the islands: afterwards most of it is no longer under the model.
+            MeshFilter[] art = model.GetComponentsInChildren<MeshFilter>(true);
             AeroPart[] parts = root.GetComponentsInChildren<AeroPart>(true);
             foreach (Renderer r in root.GetComponentsInChildren<Renderer>(true).Where(r => !r.transform.IsChildOf(model))) r.enabled = false;
             foreach (LODGroup lod in root.GetComponentsInChildren<LODGroup>(true)) Object.DestroyImmediate(lod);
@@ -157,6 +169,7 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 if (Mapping.TryGetValue(part.name, out string node) && !NoArt.Contains(part.name)) nodes[node].SetParent(part.transform, true);
                 if (ExtraArt.TryGetValue(part.name, out string extra)) nodes[extra].SetParent(part.transform, true);
+                Set(part, "criticalPart", MegaplaneDamage.Critical.Contains(part.name));   // wings kill through MegaplaneDamage's lift rule
                 Set(part, "centerOfLift", Vector3.zero);
                 Set(part, "centerOfMass", null);
                 part.SetWingArea(0f);   // game-logic flight: no native lift to fight the controller
@@ -170,7 +183,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 part.mass *= scale;
                 Set(part, "baseMass", part.mass);   // parts reset to baseMass on spawn
             }
-            foreach (MeshFilter mesh in model.GetComponentsInChildren<MeshFilter>(true))
+            foreach (MeshFilter mesh in art)
             {
                 AeroPart owner = mesh.GetComponentInParent<AeroPart>(true);
                 if (owner == null || mesh.name.Contains("Canopy")) continue;   // glazing: no hull of its own
@@ -195,9 +208,25 @@ namespace BoscaliSummer.Modules.Megaplane
         [SerializeField] internal MegaplaneDamageGroup Group;
         [SerializeField] internal float BlastShare = 1f;   // one blast reaches every mesh of an island: split it, as the Skylark does
         // Island hit points are a fixed 0..100 scale (UnitPart.Awake), so toughness divides what arrives instead.
-        public void TakeDamage(float pierce, float blast, float affected, float fire, float impact, PersistentID dealer) =>
-            Owner.TakeDamage(pierce / HitPointScale, blast / HitPointScale, pierce == 0f && blast > 0f ? affected * BlastShare : affected, fire, impact, dealer);
-        public void ApplyDamage(float pierce, float blast, float fire, float impact) => Owner.ApplyDamage(pierce, blast, fire, impact);
+        public void TakeDamage(float pierce, float blast, float affected, float fire, float impact, PersistentID dealer)
+        {
+            pierce /= HitPointScale;
+            blast /= HitPointScale;
+            if (pierce == 0f && blast > 0f) affected *= BlastShare;
+            float before = Owner.hitPoints;
+            Owner.TakeDamage(pierce, blast, affected, fire, impact, dealer);
+            // A host applies the RpcDamage at once; elsewhere predict it the way UnitPart.TakeDamage does.
+            ArmorProperties a = Owner.GetArmorProperties();
+            float net = Mathf.Max(pierce - a.pierceArmor, 0f) / Mathf.Max(a.pierceTolerance, .01f) + blast * affected / Mathf.Max(a.blastTolerance, .01f)
+                + Mathf.Max(fire - a.fireArmor, 0f) / Mathf.Max(a.fireTolerance, .01f) + impact;
+            float after = Owner.hitPoints < before ? Owner.hitPoints : before - net;
+            if (damage == null) damage = Owner.parentUnit != null ? Owner.parentUnit.GetComponent<MegaplaneDamage>() : null;
+            if (damage != null) damage.AfterHit(Owner, after);
+        }
+        private MegaplaneDamage damage;
+        public void ApplyDamage(float pierce, float blast, float fire, float impact) =>
+            // the same 20x toughness as TakeDamage: one entry point must not armour the island 20x weaker than the other
+            Owner.ApplyDamage(pierce / HitPointScale, blast / HitPointScale, fire, impact);
         public void TakeShockwave(Vector3 origin, float overpressure, float blastPower)
         {
             if (Group.AcceptShockwave(origin)) Owner.TakeShockwave(origin, overpressure, blastPower);

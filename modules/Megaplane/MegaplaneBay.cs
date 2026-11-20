@@ -105,11 +105,12 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneBay : MonoBehaviour
     {
         [SerializeField] internal string FighterKey;
-        internal const float DoorOpen = 100f, ArmL = 9f;
-        private const float DoorRate = 35f, ArmRate = 22f;
+        private const float DoorOpen = 100f;   // degrees: the door leaves swing down and outboard
+        private const float DoorRate = 35f, ArmRate = 22f;   // deg/s: the doors lead, the arms follow
         private Aircraft carrier;
         private readonly List<(Transform t, Quaternion rest, float sign)> doors = new List<(Transform, Quaternion, float)>();
         private readonly Transform[] arms = new Transform[2], yokes = new Transform[2], visuals = new Transform[2];
+        private readonly float[] armL = new float[2];   // authored arm length, read from the art: the ×1.246 build scale moved it past any constant
         internal readonly float[] Arm = new float[2];
         internal readonly int[] State = new int[2];   // 0 stowed, 1 dropping, 2 released (empty), 3 waiting to catch, 4 stowing a caught fighter
         internal readonly float[] ReadyAt = new float[2];   // a recovered fighter is refuelled and rearmed before it can drop again
@@ -131,7 +132,32 @@ namespace BoscaliSummer.Modules.Megaplane
                 all.TryGetValue("TrapezeYoke_" + k, out yokes[i]);
                 all.TryGetValue("BayFighter_" + k, out visuals[i]);
                 if (visuals[i] == null) State[i] = 2;
+                else visuals[i].gameObject.SetActive(State[i] != 2 && State[i] != 3);
+                // the authored rest pose carries the arm length (design 9 m, built 11.2 after the span pass): read it,
+                // so the yoke and its fighter always ride the arm tip exactly where the art hangs them
+                armL[i] = arms[i] != null && yokes[i] != null ? Vector3.Distance(yokes[i].localPosition, arms[i].localPosition) : 9f;
             }
+            MegaplaneNet.Register(this);
+        }
+
+        private void OnDestroy() => MegaplaneNet.Unregister(this);
+
+        /// <summary>Host: one slot changed state — tell every peer, and let the visual follow the state.</summary>
+        private void SetSlot(int slot, int value)
+        {
+            State[slot] = value;
+            if (visuals[slot] != null) visuals[slot].gameObject.SetActive(value != 2 && value != 3);
+            if (carrier != null && carrier.IsServer)
+                MegaplaneNet.Broadcast(carrier.persistentID.Id, slot, (byte)value);
+        }
+
+        /// <summary>Peer: the host's state for one slot. Drives the same door and trapeze animation locally.</summary>
+        internal void RemoteState(int slot, byte value)
+        {
+            if (carrier != null && carrier.IsServer || slot < 0 || slot > 1 || value > 4) return;
+            if (State[slot] == value) return;
+            State[slot] = value;
+            if (visuals[slot] != null) visuals[slot].gameObject.SetActive(value != 2 && value != 3);
         }
 
         /// <summary>Host: start releasing the next stowed fighter (front first). False when none is left.</summary>
@@ -139,8 +165,8 @@ namespace BoscaliSummer.Modules.Megaplane
         {
             bool Ready(int i) => State[i] == 0 && Time.time >= ReadyAt[i];
             if (slot < 0) slot = Ready(0) ? 0 : Ready(1) ? 1 : -1;
-            if (slot < 0 || slot > 1 || !Ready(slot)) return false;
-            State[slot] = 1;
+            if (slot < 0 || slot > 1 || !Ready(slot) || !carrier.IsServer) return false;
+            SetSlot(slot, 1);
             return true;
         }
 
@@ -152,7 +178,7 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 Aircraft f = Released[i];
                 if (State[i] != 2 || f == null || f.disabled || !carrier.IsServer) continue;
-                State[i] = 3;
+                SetSlot(i, 3);
                 MegaplaneCapture c = f.GetComponent<MegaplaneCapture>() ?? f.gameObject.AddComponent<MegaplaneCapture>();
                 c.Bay = this;
                 c.Slot = i;
@@ -167,9 +193,8 @@ namespace BoscaliSummer.Modules.Megaplane
         internal void Latch(int slot, Aircraft fighter)
         {
             if (State[slot] != 3) return;
-            State[slot] = 4;
+            SetSlot(slot, 4);
             Released[slot] = null;
-            visuals[slot].gameObject.SetActive(true);
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
             if (spawner != null && spawner.IsServer && fighter != null) spawner.ServerObjectManager.Destroy(fighter.gameObject);   // stowed, not lost
         }
@@ -177,13 +202,21 @@ namespace BoscaliSummer.Modules.Megaplane
         private void Update()
         {
             KeyboardShortcut key = MegaplaneSettings.Current != null ? MegaplaneSettings.Current.DropFighterKey.Value : KeyboardShortcut.Empty;
-            // ponytail: host-only drop; a client pilot's key and the door motion are not sent over the network yet
-            bool mine = carrier.IsServer && GameManager.GetLocalAircraft(out Aircraft me) && me == carrier;
-            if (mine && key.MainKey != KeyCode.None && key.IsDown()) Drop();
+            // the pilot's key works on any peer: the host runs the bay directly, a client asks it over the wire
+            bool mine = GameManager.GetLocalAircraft(out Aircraft me) && me == carrier;
+            if (mine && key.MainKey != KeyCode.None && key.IsDown())
+            {
+                if (carrier.IsServer) Drop();
+                else MegaplaneNet.Ask(carrier, MegaplaneWire.DropVerb);
+            }
             KeyboardShortcut recall = MegaplaneSettings.Current != null ? MegaplaneSettings.Current.RecallFighterKey.Value : KeyboardShortcut.Empty;
-            if (mine && recall.MainKey != KeyCode.None && recall.IsDown()) Recall();
-            for (int i = 0; i < 2; i++)   // a fighter shot down on the way back frees its slot
-                if (State[i] == 3 && (Released[i] == null || Released[i].disabled)) State[i] = 2;
+            if (mine && recall.MainKey != KeyCode.None && recall.IsDown())
+            {
+                if (carrier.IsServer) Recall();
+                else MegaplaneNet.Ask(carrier, MegaplaneWire.RecallVerb);
+            }
+            for (int i = 0; i < 2; i++)   // host: a fighter shot down on the way back frees its slot
+                if (carrier.IsServer && State[i] == 3 && (Released[i] == null || Released[i].disabled)) SetSlot(i, 2);
             float dt = Time.deltaTime;
             bool busy = State[0] == 1 || State[1] == 1 || State[0] >= 3 || State[1] >= 3 || Arm[0] > 0.5f || Arm[1] > 0.5f;
             Door = Mathf.MoveTowards(Door, busy ? DoorOpen : 0f, DoorRate * dt);
@@ -195,21 +228,20 @@ namespace BoscaliSummer.Modules.Megaplane
                 Arm[i] = Mathf.MoveTowards(Arm[i], target, ArmRate * dt);
                 Quaternion swing = Quaternion.AngleAxis(-Arm[i], Vector3.right);
                 arms[i].localRotation = swing;
-                yokes[i].localPosition = arms[i].localPosition + swing * (Vector3.back * ArmL);
-                if (State[i] == 1 && Arm[i] >= 90f) Release(i);
-                if (State[i] == 4 && Arm[i] <= 0f) { State[i] = 0; ReadyAt[i] = Time.time + RearmSeconds; }
+                yokes[i].localPosition = arms[i].localPosition + swing * (Vector3.back * armL[i]);
+                if (State[i] == 1 && Arm[i] >= 90f && carrier.IsServer) Release(i);
+                if (State[i] == 4 && Arm[i] <= 0f && carrier.IsServer) { SetSlot(i, 0); ReadyAt[i] = Time.time + RearmSeconds; }
             }
         }
 
         private void Release(int i)
         {
-            State[i] = 2;
+            SetSlot(i, 2);
             Transform v = visuals[i];
             if (v == null) return;
             Vector3 position = v.position;
-            v.gameObject.SetActive(false);
             Spawner spawner = NetworkSceneSingleton<Spawner>.i;
-            if (!carrier.IsServer || spawner == null || !(Encyclopedia.Lookup.TryGetValue(FighterKey, out UnitDefinition unit) && unit is AircraftDefinition def)) return;
+            if (spawner == null || !(Encyclopedia.Lookup.TryGetValue(FighterKey, out UnitDefinition unit) && unit is AircraftDefinition def)) return;
             Loadout loadout = null;
             float fuel = 1f;
             foreach (StandardLoadout option in def.aircraftParameters?.StandardLoadouts ?? new StandardLoadout[0])

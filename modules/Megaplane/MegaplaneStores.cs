@@ -94,7 +94,8 @@ namespace BoscaliSummer.Modules.Megaplane
                 "HOLD STARBOARD" => vehicles.Skip(1).FirstOrDefault() ?? vehicles.FirstOrDefault(),
                 _ => s.weaponOptions.FirstOrDefault(),
             }).ToList() };
-            parameters.loadouts = new List<Loadout> { fit, fit };
+            // two separate instances: one aliased object let the hangar and air-start loadouts rewrite each other
+            parameters.loadouts = new List<Loadout> { fit, new Loadout { weapons = new List<WeaponMount>(fit.weapons) } };
             parameters.StandardLoadouts = new[] { new StandardLoadout { Name = "INVASION", loadout = fit, FuelRatio = 1f } };
             aircraft.gameObject.AddComponent<MegaplaneRamp>();
             Summary = string.Join(", ", counts) + "; fit " + string.Join(" / ", fit.weapons.Select(w => w != null ? w.jsonKey : "-"));
@@ -102,11 +103,12 @@ namespace BoscaliSummer.Modules.Megaplane
         }
     }
 
-    /// <summary>Ramp and petal doors follow the hold's native BayDoor (opened by every peer's cargo/troop fire replay).</summary>
+    /// <summary>Ramp and petal doors follow the hold's native BayDoor (opened by every peer's cargo/troop fire replay).
+    /// The ventral mission-bay doors open with them at a restrained angle: the aft belly opens as one service line.</summary>
     internal sealed class MegaplaneRamp : MonoBehaviour
     {
-        // Rest-to-open rotations in the art's local axes (Unity rotations are the negated Blender ones about X and Y).
-        internal const float RampOpen = 23f, PetalOpen = 70f;
+        // Rest-to-open rotations in the art's local axes: Blender ramp +22.6 deg about X, petals +-95 about Y (= Unity Z); Unity negates both.
+        internal const float RampOpen = -22.6f, PetalOpen = 95f, BayDoorOpen = 60f;
         private static readonly AccessTools.FieldRef<BayDoor, float> Amount = AccessTools.FieldRefAccess<BayDoor, float>("openAmount");
         private BayDoor door;
         private readonly List<(Transform t, Quaternion rest, Vector3 axis, float angle)> parts = new List<(Transform, Quaternion, Vector3, float)>();
@@ -118,15 +120,42 @@ namespace BoscaliSummer.Modules.Megaplane
             {
                 if (t.name == "BS_HoldDoor") door = t.GetComponent<BayDoor>();
                 else if (t.name == "Ramp") parts.Add((t, t.localRotation, Vector3.right, RampOpen));
-                else if (t.name == "AftDoor_L") parts.Add((t, t.localRotation, Vector3.up, PetalOpen));
-                else if (t.name == "AftDoor_R") parts.Add((t, t.localRotation, Vector3.up, -PetalOpen));
+                else if (t.name == "AftDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -PetalOpen));
+                else if (t.name == "AftDoor_R") parts.Add((t, t.localRotation, Vector3.forward, PetalOpen));
+                else if (t.name == "BayDoor_L") parts.Add((t, t.localRotation, Vector3.forward, -BayDoorOpen));
+                else if (t.name == "BayDoor_R") parts.Add((t, t.localRotation, Vector3.forward, BayDoorOpen));
             }
         }
 
         private void Update()
         {
             float k = Mathf.SmoothStep(0f, 1f, Open);
-            foreach ((Transform t, Quaternion rest, Vector3 axis, float angle) in parts) if (t != null) t.localRotation = rest * Quaternion.AngleAxis(angle * k, axis);
+            // a piece that broke off keeps its own pose: it no longer follows the carrier's hold door
+            foreach ((Transform t, Quaternion rest, Vector3 axis, float angle) in parts)
+                if (t != null && t.IsChildOf(transform)) t.localRotation = rest * Quaternion.AngleAxis(angle * k, axis);
+        }
+    }
+}
+
+namespace BoscaliSummer.Modules.Megaplane
+{
+    internal static class MegaplaneCargoStation
+    {
+        internal static readonly AccessTools.FieldRef<WeaponManager, Aircraft> AircraftRef = AccessTools.FieldRefAccess<WeaponManager, Aircraft>("aircraft");
+    }
+
+    /// <summary>Vanilla files every cargo mount into one station (a Tarantula has one bay). The G-240's hold lanes and the SKYWELL
+    /// kit are separate loads: on the carrier, cargo shares a station only with the same cargo, so each is its own selection.</summary>
+    [HarmonyLib.HarmonyPatch(typeof(WeaponManager), "StationExistsForWeaponInfo")]
+    internal static class MegaplaneCargoStationPatch
+    {
+        private static bool Prefix(WeaponManager __instance, WeaponInfo weaponInfo, ref WeaponStation existingStation, ref bool __result)
+        {
+            Aircraft aircraft = MegaplaneCargoStation.AircraftRef(__instance);
+            if (!MegaplaneModule.Is(aircraft)) return true;
+            existingStation = weaponInfo == null ? null : System.Linq.Enumerable.FirstOrDefault(aircraft.weaponStations, s => s.WeaponInfo == weaponInfo);
+            __result = existingStation != null;
+            return false;
         }
     }
 }

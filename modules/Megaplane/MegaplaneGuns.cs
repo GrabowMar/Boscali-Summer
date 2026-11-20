@@ -119,7 +119,9 @@ namespace BoscaliSummer.Modules.Megaplane
             foreach (Turret turret in clone.GetComponentsInChildren<Turret>(true))
             {
                 Unit.SetValue(turret, aircraft);
-                Parts.SetValue(turret, new UnitPart[0]);
+                // The island it sits on: destroyed or shot off, the gun goes quiet (Turret_OnPartDamage / OnDetachedFromUnit).
+                AeroPart island = turret.GetComponentInParent<AeroPart>(true);
+                Parts.SetValue(turret, island != null && island.gameObject != aircraft.gameObject ? new UnitPart[] { island } : new UnitPart[0]);
                 FireCtl.SetValue(turret, null);
                 Detectors.SetValue(turret, new List<TargetDetector>());
                 Mode.SetValue(turret, System.Enum.Parse(Mode.FieldType, mode));   // private enum
@@ -261,10 +263,12 @@ namespace BoscaliSummer.Modules.Megaplane
                 if (!(Stations.GetValue(turret) is WeaponStation[] st)) continue;
                 foreach (WeaponStation station in st)
                 {
+                    // a station without weapons would throw out of this Harmony prefix and break the manager's pass
+                    if (station.Weapons == null || station.Weapons.Count == 0 || station.Weapons[0] == null) continue;
                     if (aircraft.weaponStations.Contains(station)) continue;
                     station.WeaponInfo = station.Weapons[0].info;
                     if (station.Turrets == null || !station.Turrets.Contains(turret)) station.AssignTurret(turret);
-                    if (station.FullAmmo == 0) station.Rearm(station.Weapons.Sum(w => w.GetFullAmmo()) - station.GetAmmoTotal());
+                    if (station.FullAmmo == 0) station.Rearm(station.Weapons.Sum(w => w != null ? w.GetFullAmmo() : 0) - station.GetAmmoTotal());
                     aircraft.RegisterWeaponStation(station);
                 }
             }
@@ -274,10 +278,11 @@ namespace BoscaliSummer.Modules.Megaplane
     [HarmonyPatch(typeof(WeaponManager), "OrganizeWeaponStations")]
     internal static class MegaplaneTurretPatch
     {
+        private static readonly AccessTools.FieldRef<WeaponManager, Aircraft> AircraftRef = AccessTools.FieldRefAccess<WeaponManager, Aircraft>("aircraft");
+
         private static void Prefix(WeaponManager __instance)
         {
-            Aircraft aircraft = Traverse.Create(__instance).Field<Aircraft>("aircraft").Value;
-            if (MegaplaneModule.Is(aircraft)) MegaplaneGuns.Register(aircraft);
+            if (MegaplaneModule.Is(AircraftRef(__instance))) MegaplaneGuns.Register(AircraftRef(__instance));
         }
     }
 }

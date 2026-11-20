@@ -10,8 +10,12 @@ namespace BoscaliSummer.Modules.Megaplane
     internal sealed class MegaplaneModule : IModule
     {
         public ModuleMetadata Metadata => new ModuleMetadata("megaplane", "G-240 Breakwater");
-        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch) };
-        public void Install(ModuleContext context) => MegaplaneSettings.Current = context.Settings.Megaplane;
+        public Type[] PatchTypes => new[] { typeof(MegaplaneBlueprinterPatch), typeof(MegaplaneEncyclopediaPatch), typeof(MegaplaneAeroInitializePatch), typeof(MegaplanePhysicsLodPatch), typeof(MegaplaneFilterPatch), typeof(MegaplaneTurretPatch), typeof(MegaplaneCargoStationPatch) };
+        public void Install(ModuleContext context)
+        {
+            MegaplaneSettings.Current = context.Settings.Megaplane;
+            MegaplaneNet.Ensure();   // the bay/railgun art replication: up before any scene can hold a carrier
+        }
 
         internal static bool Is(Unit unit) => unit != null && unit.definition != null && unit.definition.jsonKey == MegaplaneTemplate.Key;
     }

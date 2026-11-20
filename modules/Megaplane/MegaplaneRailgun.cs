@@ -17,6 +17,7 @@ namespace BoscaliSummer.Modules.Megaplane
         [SerializeField] private Vector3 restLocal, deployedLocal;
         private Quaternion yawRest, pitchRest;
         private float home;   // 0 following the native turret .. 1 art back at rest (stowing)
+        private bool remoteWant, lastWant;   // peers follow the host's mount state (selection and targets only resolve host-side)
         private readonly List<(Transform t, Quaternion rest, float sign)> doors = new List<(Transform, Quaternion, float)>();
         private Aircraft aircraft;
 
@@ -38,9 +39,15 @@ namespace BoscaliSummer.Modules.Megaplane
             yaw = nodes["Railgun_Yaw"];
             pitch = nodes["Railgun_Pitch"];
             restLocal = elevator.localPosition;
-            // ponytail: the art's Railgun_Deployed empty is shifted by the 380 m scale pass; the design drop (8.7 m x 1.246) is used instead
-            deployedLocal = restLocal + elevator.parent.InverseTransformDirection(GetComponent<Aircraft>().transform.up) * -Drop;
+            // the art's Railgun_Deployed empty sits exactly one authored drop below the elevator rest, span/scale pass
+            // included; read it, so the mount always lands where the art says it should
+            Vector3 drop = nodes.TryGetValue("Railgun_Deployed", out Transform deployed) && deployed != null
+                ? elevator.parent.InverseTransformPoint(deployed.position) - elevator.parent.InverseTransformPoint(elevator.position)
+                : elevator.parent.InverseTransformDirection(GetComponent<Aircraft>().transform.up) * -Drop;
+            deployedLocal = restLocal + drop;
         }
+
+        private void OnDestroy() => MegaplaneNet.UnregisterRailgun(this);
 
         private void Awake()
         {
@@ -48,14 +55,32 @@ namespace BoscaliSummer.Modules.Megaplane
             if (yaw != null) { yawRest = yaw.localRotation; pitchRest = pitch.localRotation; }
             foreach (Transform t in GetComponentsInChildren<Transform>(true).Where(x => x.name.StartsWith("FighterDoor_")))
                 doors.Add((t, t.localRotation, t.name.EndsWith("_L") ? -1f : 1f));
+            MegaplaneNet.RegisterRailgun(this);   // per spawned carrier, not the dormant template copy
         }
+
+        /// <summary>Peer: the host's mount state.</summary>
+        internal void RemoteWant(bool value) { if (aircraft != null && !aircraft.IsServer) remoteWant = value; }
+
+        internal bool Wanted => lastWant;   // the net layer's late-joiner refresh
+        internal uint UnitId => aircraft != null ? aircraft.persistentID.Id : 0;
 
         private void Update()
         {
             if (turret == null || aircraft == null) return;
             WeaponStation station = turret.GetWeaponStation();
             bool selected = station != null && aircraft.weaponManager != null && aircraft.weaponManager.currentWeaponStation == station;
-            bool want = !aircraft.disabled && (Command ?? (selected || turret.GetTarget() != null)) && (station == null || station.Ammo > 0 || selected);
+            bool want;
+            if (aircraft.IsServer)
+            {
+                // host: the station selection and the turret's target only resolve here; tell every peer the verdict
+                want = !aircraft.disabled && (Command ?? (selected || turret.GetTarget() != null)) && (station == null || station.Ammo > 0 || selected);
+                if (want != lastWant)
+                {
+                    lastWant = want;
+                    MegaplaneNet.Broadcast(aircraft.persistentID.Id, MegaplaneWire.RailgunIndex, (byte)(want ? 1 : 0));
+                }
+            }
+            else want = remoteWant;
             float dt = Time.deltaTime;
             // Stowing: the art swings the barrel home over HomeSeconds (the native turret is already stowed), then the mount rises.
             home = Mathf.MoveTowards(home, want ? 0f : 1f, dt / HomeSeconds);

@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Megaplane
                 registered = true, speed = a.rb.velocity.magnitude, altitude = a.GlobalPosition().y, radarAlt = a.radarAlt,
                 climbRate = a.rb.velocity.y, heading = e.y,
                 slip = Mathf.Abs(Mathf.DeltaAngle(e.y, Mathf.Atan2(a.rb.velocity.x, a.rb.velocity.z) * Mathf.Rad2Deg)), pitch = Mathf.DeltaAngle(0, e.x), bank = Mathf.DeltaAngle(0, e.z),
-                holdHeading = flight.Heading, holdAltitude = flight.HoldAltitude, thrust = flight.Thrust,
+                holdHeading = flight.Heading, holdAltitude = flight.HoldAltitude, thrust = flight.Thrust, fans = a.GetComponent<MegaplaneFans>()?.Count ?? 0, fanSpool = a.GetComponent<MegaplaneFans>()?.Spool ?? 0f,
                 mass = a.rb.mass, simple = HarmonyLib.Traverse.Create(a).Field<bool>("simplePhysics").Value,
                 bodies = a.GetComponentsInChildren<Rigidbody>().Length, disabled = a.disabled,
                 gear = a.gearState.ToString(), input = new { input.pitch, input.roll, input.yaw, input.throttle },
@@ -68,6 +68,79 @@ namespace BoscaliSummer.Modules.Megaplane
 
         private static float[] V(Vector3 v) => new[] { v.x, v.y, v.z };
 
+        /// <summary>Hardpoint stores: "fire" = text in a station's weapon name or mount key (e.g. "REMORA", "Paratroop", "UGV"),
+        /// launched once through the station's own LaunchMount (target: the "idTarget" unit, else none). Reads every station,
+        /// the hold door, and what the carrier has put out (live drones it owns, friendly ground vehicles on the map).</summary>
+        public static object Stores(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a)) return new { ok = false };
+            args.TryGetValue("idTargetUnit", out object tv);
+            Unit target = tv as Unit;
+            string fired = null;
+            int vehiclesNow = UnitRegistry.allUnits.Count(u => u is GroundVehicle g && !g.disabled && g.NetworkHQ == a.NetworkHQ);
+            if (args.ContainsKey("reset")) vehicleBase = vehiclesNow;
+            if (args.TryGetValue("fire", out object f) && f is string want)
+                foreach (WeaponStation s in a.weaponStations)
+                {
+                    string name = (s.WeaponInfo != null ? s.WeaponInfo.weaponName : "") + "|" + string.Join("|", s.Weapons.Select(w => HarmonyLib.Traverse.Create(w).Field<WeaponMount>("mount").Value?.jsonKey));
+                    bool cargo = want == "cargo" && (s.Cargo || s.WeaponInfo != null && s.WeaponInfo.cargo) && !(s.WeaponInfo?.weaponName ?? "").Contains("SKYWELL") && !name.Contains("Skywell");
+                    if (s.Ammo <= 0 || !cargo && name.IndexOf(want, System.StringComparison.OrdinalIgnoreCase) < 0) continue;
+                    s.LaunchMount(a, target, target != null ? target.GlobalPosition() : (a.transform.position + a.transform.forward * 3000f - a.transform.up * 4000f).ToGlobalPosition());
+                    fired = name;
+                    break;
+                }
+            var ramp = a.GetComponent<MegaplaneRamp>();
+            return new
+            {
+                ok = true, fired, summary = MegaplaneStores.Summary, door = ramp != null ? ramp.Open : -1f,
+                sets = a.weaponManager.hardpointSets.Select(s => s.name + ":" + (s.weaponMount != null ? s.weaponMount.jsonKey : "-")).ToArray(),
+                stations = a.weaponStations.Select(s => (s.WeaponInfo != null ? s.WeaponInfo.weaponName : "-") + " " + s.Ammo).ToArray(),
+                drones = UnitRegistry.allUnits.Count(u => u is Missile m && !m.disabled && m.owner == a && m.definition != null && m.definition.jsonKey.StartsWith("VG_")),
+                mounts = a.weaponManager.hardpointSets.Select(s => s.name + ": " + string.Join(" ", s.hardpoints.Select(h => h.transform == null ? "null" : h.transform.childCount + "c/" + h.transform.GetComponentsInChildren<Renderer>().Count(x => x.enabled) + "r/" + h.transform.GetComponentsInChildren<Renderer>().Select(x => x.bounds.size.magnitude).DefaultIfEmpty(0f).Max().ToString("0.0") + "m"))).ToArray(),
+                tender = BoscaliSummer.Modules.Vanguard.Runtime.SkywellService.StateOf(a), vehiclesNew = vehiclesNow - vehicleBase, hasTender = a.weaponStations.Any(s => s.WeaponInfo != null && s.WeaponInfo.name.Contains("Skywell")),
+            };
+        }
+
+        private static int vehicleBase;
+        private static readonly List<Missile> threats = new List<Missile>();
+        private static int pdAmmoStart;
+
+        /// <summary>Point-defence test: "count" hostile missiles ("key", default AAM2) are spawned "range" m out on the beams and
+        /// quarters, owned by any enemy unit and aimed at the carrier. Without "count" it reads: alive, hits so far, the
+        /// point-defence rounds spent (CIWS + RAM stations) and how many hostile missiles the conformal arrays track.</summary>
+        public static object Threat(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a)) return new { ok = false };
+            int PdAmmo() => a.weaponStations.Where(s => s.HasTurret() && s.WeaponInfo != MegaplaneGuns.Bastion && s.WeaponInfo != MegaplaneGuns.Trident).Sum(s => s.Ammo);
+            string error = null;
+            if (args.TryGetValue("count", out object c))
+            {
+                threats.Clear();
+                pdAmmoStart = PdAmmo();
+                string key = args.TryGetValue("key", out object k) ? (string)k : "AAM2";
+                float range = args.TryGetValue("range", out object r) ? System.Convert.ToSingle(r) : 4000f;
+                Unit enemy = UnitRegistry.allUnits.FirstOrDefault(u => u != null && !u.disabled && u.NetworkHQ != null && u.NetworkHQ != a.NetworkHQ && !(u is Missile));
+                if (!(Encyclopedia.Lookup.TryGetValue(key, out UnitDefinition def) && def is MissileDefinition md)) error = "no missile " + key;
+                else if (enemy == null) error = "no enemy unit to own the missiles";
+                else
+                    for (int i = 0; i < System.Convert.ToInt32(c); i++)
+                    {
+                        float bearing = 50f + 260f * i / Mathf.Max(1, System.Convert.ToInt32(c) - 1);   // around the carrier, never dead ahead
+                        Vector3 from = a.transform.position + Quaternion.AngleAxis(bearing, a.transform.up) * a.transform.forward * range + Vector3.up * 300f;
+                        Missile m = NetworkSceneSingleton<Spawner>.i.SpawnMissile(md, from, Quaternion.LookRotation(a.transform.position - from), (a.transform.position - from).normalized * 300f, a, enemy);
+                        if (m != null) threats.Add(m);
+                    }
+            }
+            return new
+            {
+                ok = error == null, error, spawned = threats.Count, alive = threats.Count(m => m != null && !m.disabled),
+                pdSpent = pdAmmoStart - PdAmmo(), tracked = a.GetComponent<MegaplaneDefence>()?.Tracked ?? -1,
+                pdStations = a.weaponStations.Where(s => s.HasTurret() && s.WeaponInfo != MegaplaneGuns.Bastion && s.WeaponInfo != MegaplaneGuns.Trident)
+                    .Select(s => s.WeaponInfo.weaponName + " " + s.Ammo + (s.Turrets.Count > 0 && s.Turrets[0].GetTarget() != null ? " ->" + s.Turrets[0].GetTarget().unitName : "")).ToArray(),
+                role = new { a.definition.roleIdentity.antiAir, a.definition.roleIdentity.antiMissile },
+            };
+        }
+
         /// <summary>Destroy the damage islands carrying the named art nodes (e.g. "Pod_L1,Pod_L2"): an engine-loss test.</summary>
         public static object Detach(Dictionary<string, object> args)
         {
@@ -75,9 +148,47 @@ namespace BoscaliSummer.Modules.Megaplane
             var names = ((string)args["nodes"]).Split(',');
             var hit = a.GetComponentsInChildren<Transform>(true).Where(t => names.Contains(t.name))
                 .Select(t => t.GetComponentInParent<AeroPart>()).Where(p => p != null && p.gameObject != a.gameObject).Distinct().ToList();
-            foreach (AeroPart part in hit) part.Detach(a.rb.velocity, Vector3.zero);
+            var damage = a.GetComponent<MegaplaneDamage>();
+            foreach (AeroPart part in hit) damage.Break(part);
             return new { ok = hit.Count > 0, parts = hit.Select(p => p.name).ToArray() };
         }
+
+        /// <summary>Shoot the islands carrying the named art nodes through their own hitboxes ("pierce" per hitbox call,
+        /// "times" calls each): the real damage path, so islands break off when their hit points run out. Reads the damage state.</summary>
+        public static object Hit(Dictionary<string, object> args)
+        {
+            if (!(args.TryGetValue("idUnit", out object value) && value is Aircraft a) || !(a.GetComponent<MegaplaneDamage>() is MegaplaneDamage d)) return new { ok = false };
+            if (args.TryGetValue("nodes", out object n))
+            {
+                string[] names = ((string)n).Split(',');
+                float pierce = args.TryGetValue("pierce", out object p) ? System.Convert.ToSingle(p) : 2000f;
+                int times = args.TryGetValue("times", out object t) ? System.Convert.ToInt32(t) : 1;
+                List<MegaplaneHitbox> all = a.GetComponentsInChildren<MegaplaneHitbox>(true).ToList();
+                // One hitbox per named island (donor part name, e.g. wing1b_L), else every hitbox under a named art node.
+                List<MegaplaneHitbox> boxes = names.Select(nm => all.FirstOrDefault(h => h.Owner != null && h.Owner.name == nm)).Where(h => h != null).ToList();
+                if (boxes.Count == 0) boxes = all.Where(h => names.Any(nm => h.transform.name == nm || h.transform.parent != null && h.transform.parent.name == nm)).ToList();
+                if (boxes.Count == 0) return new { state = DamageState(a, d), boxes = all.Take(40).Select(h => h.name + ">" + (h.Owner != null ? h.Owner.name : "-")).ToArray(), before = -1f, after = -1f, armor = (float[])null };
+                ArmorProperties armor = boxes.Count > 0 ? boxes[0].Owner.GetArmorProperties() : null;
+                float before = boxes.Count > 0 ? boxes[0].Owner.hitPoints : -1f;
+                foreach (MegaplaneHitbox h in boxes)
+                    for (int i = 0; i < times; i++) h.TakeDamage(pierce, 0f, 1f, 0f, 0f, default);
+                return new { state = DamageState(a, d), boxes = boxes.Select(b => b.name + ">" + (b.Owner != null ? b.Owner.name : "-")).ToArray(), before,
+                    after = boxes.Count > 0 ? boxes[0].Owner.hitPoints : -1f, armor = armor == null ? null : new[] { armor.pierceArmor, armor.pierceTolerance, armor.blastArmor, armor.blastTolerance } };
+            }
+            return DamageState(a, d);
+        }
+
+        private static object DamageState(Aircraft a, MegaplaneDamage d) => new
+        {
+            ok = true, owners = a.GetComponentsInChildren<MegaplaneHitbox>(true).GroupBy(h => h.Owner != null ? h.Owner.name : "-").Select(g => g.Key + " " + g.Count()).ToArray(),
+            wingPath = a.GetComponentsInChildren<Transform>(true).Where(t => t.name == "Wing_Outer_L").Select(t => { string s = t.name; for (Transform q = t.parent; q != null; q = q.parent) s = q.name + "/" + s; return s + " meshes " + t.GetComponentsInChildren<MeshFilter>(true).Length + " boxes " + t.GetComponentsInChildren<MegaplaneHitbox>(true).Length; }).ToArray(),
+            liftL = d.LiftL, liftR = d.LiftR, pitchAuth = d.PitchAuthority, yawAuth = d.YawAuthority, lost = d.Lost.ToArray(), lostCount = d.Lost.Count(),
+            hp = a.partLookup.OfType<AeroPart>().Where(p => !p.IsDetached()).Select(p => p.name + " " + Mathf.RoundToInt(p.hitPoints)).ToArray(),
+            disabled = a.disabled, bodies = Object.FindObjectsOfType<Rigidbody>().Count(r => r.GetComponent<AeroPart>() is AeroPart ap && ap.parentUnit == a),
+            turretsDisabled = a.GetComponentsInChildren<Turret>(true).Count(t => HarmonyLib.Traverse.Create(t).Field<bool>("disabled").Value),
+            altitude = a.GlobalPosition().y, climbRate = a.rb.velocity.y, bank = Mathf.DeltaAngle(0, a.transform.eulerAngles.z), pitch = Mathf.DeltaAngle(0, a.transform.eulerAngles.x),
+            speed = a.rb.velocity.magnitude, nan = float.IsNaN(a.rb.velocity.x),
+        };
 
         /// <summary>Belly fighter bay: start a drop ("slot" 0 front, 1 aft, -1 next) and/or read the bay state.</summary>
         public static object Bay(Dictionary<string, object> args)
