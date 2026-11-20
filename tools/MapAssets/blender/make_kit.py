@@ -104,6 +104,11 @@ class B:
 
     def decal(self, center, half, rot, cell, col=WHITE):
         """An atlas-mapped cutout quad; alpha 192 tells the shader it is a decal."""
+        n = (turn(rot).to_3x3() @ Vector((0, 0, 1))).normalized()
+        tree = BVHTree.FromBMesh(self.bm)
+        hit = tree.ray_cast(Vector(center) + n * 0.5, -n, 1.0)
+        if hit[0] is not None:
+            center = hit[0]
         v = bmesh.ops.create_grid(self.bm, x_segments=1, y_segments=1, size=1)["verts"]
         m = (Matrix.Translation(center) @ turn(rot)
              @ Matrix.Translation((0, 0, 0.015))
@@ -857,7 +862,7 @@ def water_tower(b, v):
         b.cyl((0, 0, 23.5), 6.3, 2.2, TILE, 12, r2=0.5)
         b.cyl((0, 0, 0), 0.6, 15, IRON, 5)
         if b.mid:
-            b.cyl((0, 0, 21), 6.06, 0.8, RED, 12, caps=False)
+            b.cyl((0, 0, 21), 6.01, 0.8, RED, 12, caps=False)
             b.cyl((0, 0, 16.6), 6.6, 0.3, IRON, 12)                        # the walkway
             b.beam((0, 0, 25.6), (0, 0, 27.6), 0.08, IRON, 3)
         if b.fine:
@@ -871,7 +876,7 @@ def water_tower(b, v):
     b.cyl((0, 0, 27), 9, 4, CONCRETE, 12)
     b.cyl((0, 0, 31), 9, 1.8, CONCRETE_D, 12, r2=2)
     if b.mid:
-        b.cyl((0, 0, 28.6), 9.06, 0.7, BLUE, 12, caps=False)
+        b.cyl((0, 0, 28.6), 9.01, 0.7, BLUE, 12, caps=False)
         b.box((0, 3.4, 2.2), (0.8, 0.2, 1.2), BLACK)
         b.cyl((0, 0, 32.8), 1.4, 1, CONCRETE_D, 6)
         b.beam((0, 0, 33.8), (0, 0, 37), 0.08, IRON, 3)
@@ -1028,7 +1033,7 @@ def silo(b, v):
             b.cyl((x, 0, 23.5), 4.1, 2.6, PANEL_D, 12, r2=0.7)
             if b.fine:
                 for z in (8, 16):
-                    b.cyl((x, 0, z), 4.05, 0.3, PANEL_D, 12, caps=False)
+                    b.cyl((x, 0, z), 4.01, 0.3, PANEL_D, 12, caps=False)
         b.box((-19.5, 0, 16), (2, 2, 16), PANEL_D)                         # the elevator leg and its head house
         b.box((-19.5, 0, 33), (2.6, 2.6, 1.6), PANEL)
         b.box((-2, 0, 27.6), (17, 1.2, 1), PANEL_D)                        # the gallery over the bins
@@ -1223,6 +1228,7 @@ def antenna_field(b, v):
         for i in (-1, 1):
             for j in (-1, 1):
                 b.box((i * 26, j * 26, 0.5), (1.2, 1.2, 0.4), CONCRETE_D)
+        b.box((36, 34, 0.8), (1.4, 1.0, 0.6), PANEL_D)
         b.box((0, -2, 1.0), (1.4, 1.0, 0.8), PANEL_D)
         b.beam((-26, -26, 0.8), (0, -2, 1.4), 0.08, IRON, 3)
         b.beam((26, -26, 0.8), (0, -2, 1.4), 0.08, IRON, 3)
@@ -1405,7 +1411,7 @@ def barn(b, v):
         return
     for x in (-4.5, 4.5):
         for y in (-2.5, 2.5):
-            b.beam((x, y, 0), (x, y, 4), 0.18, WOOD, 3)
+            b.beam((x, y, 0), (x, y, 4.4), 0.18, WOOD, 3)
     b.box((0, 0, 4.4), (5.2, 3.2, 0.3), TILE, (0, -8, 0))
     if b.mid:
         for x in (-3, 0, 3):
@@ -1476,6 +1482,7 @@ def water_pump(b, v):
             b.beam((x, y, 0), (x * 0.5, y * 0.5, 6), 0.08, IRON, 3)
     b.box((0, 0, 6.1), (1.2, 1.2, 0.2), PANEL_D)
     b.cyl((0, 2.0, 6.4), 0.3, 0.5, IRON, 6, rot=(90, 0, 0))
+    b.cyl((0, 2.0, 6.4), 1.15, 0.08, PANEL, 10, rot=(90, 0, 0))
     for k in range(4):
         a = k * math.pi / 2
         b.box((0.9 * math.sin(a), 2.0, 6.4 + 0.9 * math.cos(a)), (0.58, 0.05, 0.16),
@@ -1570,7 +1577,7 @@ def camp(b, v):
         return
     for x in (-2.4, 2.4):
         for y in (-1.6, 1.6):
-            b.beam((x, y, 0), (x, y, 2.4), 0.08, IRON, 3)
+            b.beam((x, y, 0), (x, y, 2.6), 0.08, IRON, 3)
     b.box((0, 0, 2.5), (2.8, 2.0, 0.12), PANEL_D, (0, 6, 0))
     b.box((0, 0, 0.9), (2.2, 0.8, 0.15), WOOD)
     b.cyl((-1.2, 0, 1.0), 0.4, 0.5, IRON, 6)
@@ -1720,6 +1727,22 @@ def dressed(folder: Path):
     return mat
 
 
+def solo(ob):
+    """Hide every other mesh from the render, so a QA scene of 79 shapes shows one."""
+    hidden = []
+    for other in bpy.data.objects:
+        if other.type == 'MESH' and other is not ob and not other.hide_render:
+            other.hide_render = True
+            hidden.append(other)
+    ob.hide_render = False
+    return hidden
+
+
+def restore(hidden) -> None:
+    for other in hidden:
+        other.hide_render = False
+
+
 def picture(me, path: Path, mat=None) -> None:
     """A lit picture of one mesh, framed on it, for checking the kit by eye."""
     scene = bpy.context.scene
@@ -1727,6 +1750,7 @@ def picture(me, path: Path, mat=None) -> None:
         me.materials.append(mat)
     ob = bpy.data.objects.new("o", me)
     scene.collection.objects.link(ob)
+    hidden = solo(ob)
     lo, hi = np.min([v.co for v in me.vertices], 0), np.max([v.co for v in me.vertices], 0)
     mid, size = Vector((lo + hi) / 2), float(np.linalg.norm(hi - lo))
     cam = bpy.data.objects.new("c", bpy.data.cameras.new("c"))
@@ -1740,7 +1764,33 @@ def picture(me, path: Path, mat=None) -> None:
     bpy.data.objects.remove(cam)
 
 
-def main(out: Path, preview: Path | None, textures: Path | None = None) -> None:
+def views(me, stem, out: Path) -> None:
+    """Six orthographic views plus a 3/4, for the QA contact sheet."""
+    scene = bpy.context.scene
+    ob = bpy.data.objects.new("v", me)
+    scene.collection.objects.link(ob)
+    hidden = solo(ob)
+    lo = np.min([v.co for v in me.vertices], 0)
+    hi = np.max([v.co for v in me.vertices], 0)
+    mid = Vector((lo + hi) / 2)
+    size = float(np.linalg.norm(hi - lo))
+    cam = bpy.data.objects.new("vc", bpy.data.cameras.new("vc"))
+    scene.collection.objects.link(cam)
+    cam.data.type, cam.data.ortho_scale = 'ORTHO', size * 1.05
+    for name, vec in (("front", (0, 1, 0)), ("back", (0, -1, 0)),
+                      ("left", (-1, 0, 0)), ("right", (1, 0, 0)),
+                      ("top", (0, 0, 1)), ("threequarter", (.9, 1.3, .75))):
+        cam.location = mid + Vector(vec).normalized() * size * 3
+        cam.rotation_euler = (mid - cam.location).to_track_quat('-Z', 'Y').to_euler()
+        scene.camera, scene.render.filepath = cam, str(out / (stem + "_" + name + ".png"))
+        bpy.ops.render.render(write_still=True)
+    restore(hidden)
+    bpy.data.objects.remove(ob)
+    bpy.data.objects.remove(cam)
+
+
+def main(out: Path, preview: Path | None, textures: Path | None = None,
+         views_dir: Path | None = None, blend: Path | None = None) -> None:
     for o in list(bpy.data.objects):   # the startup file's cube, camera and lamp
         bpy.data.objects.remove(o)
     scene = bpy.context.scene
@@ -1763,6 +1813,15 @@ def main(out: Path, preview: Path | None, textures: Path | None = None) -> None:
                 me, rows, index = b.mesh()
                 if preview and lod in (0, 2):
                     picture(me, preview / f"{kind}_{v}_lod{lod}.png", mat)
+                if views_dir and lod == 0:
+                    views(me, f"{kind}_{v}", views_dir)
+                keep = blend is not None and lod == 0
+                if keep:
+                    qa = bpy.data.materials.get("KitQA") or bpy.data.materials.new("KitQA")
+                    me.materials.append(qa)
+                    ob = bpy.data.objects.new(f"{kind}_{v}", me)
+                    bpy.context.scene.collection.objects.link(ob)
+                    ob.hide_render = True
                 rows[:, :6] = rows[:, [0, 2, 1, 3, 5, 4]]                                         # Unity: y up, z forward
                 col = np.rint(np.clip(rows[:, 6:10], 0, 1) ** (1 / 2.2) * 255).astype(np.uint8)   # ponytail: a 2.2 gamma, not the sRGB curve; the bake undoes the same
                 col[:, 3] = np.rint(rows[:, 9] * 255)
@@ -1771,12 +1830,18 @@ def main(out: Path, preview: Path | None, textures: Path | None = None) -> None:
                 index = index.reshape(-1, 3)[:, ::-1].reshape(-1)                                 # the swap mirrors: turn the triangles back
                 part.append(struct.pack("<i", len(rows)) + packed.tobytes() + struct.pack("<i", len(index)) + index.astype("<u4").tobytes())
                 counts.append(len(index) // 3)
-                bpy.data.meshes.remove(me)
+                if not keep:
+                    bpy.data.meshes.remove(me)
                 b.bm.free()
             blob.append(b"".join(part))
             total += 1
             lines.append(f"{kind}_{v}: {counts[0]} / {counts[1]} / {counts[2]} triangles")
     out.write_bytes(b"BSK2" + struct.pack("<i", total) + b"".join(blob))
+    if blend:
+        for other in bpy.data.objects:
+            if other.type == 'MESH':
+                other.hide_render = False
+        bpy.ops.wm.save_as_mainfile(filepath=str(blend))
     print("\n".join(lines))
     print(f"PASS: {total} shapes of {len(SHAPES)} kinds, {out.stat().st_size} bytes: {out}")
 
@@ -1786,4 +1851,8 @@ if __name__ == "__main__":
     shown = Path(args[1]) if len(args) > 1 else None
     if shown:
         shown.mkdir(parents=True, exist_ok=True)
-    main(Path(args[0]), shown, Path(args[2]) if len(args) > 2 else None)
+    views_dir = Path(args[3]) if len(args) > 3 else None
+    if views_dir:
+        views_dir.mkdir(parents=True, exist_ok=True)
+    main(Path(args[0]), shown, Path(args[2]) if len(args) > 2 else None,
+         views_dir, Path(args[4]) if len(args) > 4 else None)
