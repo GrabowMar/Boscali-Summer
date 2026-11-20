@@ -1254,18 +1254,11 @@ public static class BuildMapBundle
         DonorAirfield donor = string.IsNullOrEmpty(strip.donor) ? null : DonorOf(strip.donor);
         if (donor != null)
         {
-            float rise = .12f - DonorRunwayTop(donor.ground);   // the runway's surface stands where the wheels roll
-            EmitDonor(go, donor.ground, material, strip.donor + "_ground", rise);
-            EmitDonor(go, donor.decals, material, strip.donor + "_decals", rise);
-            // Wheels roll on one flat slab, not on the donor's relief.
-            var runwayFloor = new Builder();
-            Slab(runwayFloor, new Vector3(0f, .12f, 0f), strip.width, strip.length * .5f, new Color(.13f, .13f, .14f));
-            var runwayFloorMesh = new Mesh { name = go.name + "_surface" };
-            runwayFloorMesh.SetVertices(runwayFloor.Vertices);
-            runwayFloorMesh.SetTriangles(runwayFloor.Triangles, 0);
-            var floorCollider = Child(go, "surface");
-            floorCollider.AddComponent<MeshCollider>().sharedMesh = Keep(runwayFloorMesh);
-            return;
+            // The donor's field has relief and its own aprons; our pad is flat and our apron and taxiways are baked below.
+            // So only the runway strip and its paint are kept, laid flat where the wheels roll.
+            // (the extracted decals mesh lies 50 m across and 486 m along from the runway surface it was painted on)
+            EmitDonor(go, donor.ground, material, strip.donor + "_ground", .12f, 0f, 0f, 0f);
+            EmitDonor(go, donor.decals, material, strip.donor + "_decals", .12f, .05f, 50f, 486f);
         }
         bool marked = strip.surface == "asphalt";
         var asphalt = marked ? new Color(.13f, .13f, .14f) : strip.surface == "ice" ? new Color(.62f, .74f, .82f) : new Color(.36f, .33f, .29f);
@@ -1286,14 +1279,17 @@ public static class BuildMapBundle
             part.AddComponent<MeshRenderer>().sharedMaterial = material;
         }
 
-        Pave("runway", b => Slab(b, new Vector3(0f, .12f, 0f), 22f, half, asphalt));
-        Pave("marks", b =>
+        if (donor == null)
         {
-            for (float z = -half + 90f; marked && z < half - 90f; z += 60f) Slab(b, new Vector3(0f, .16f, z), .45f, 15f, paint);
-            foreach (float end in new[] { -half + 14f, half - 14f })
-                for (int bar = -4; marked && bar <= 4; bar++)
-                    if (bar != 0) Slab(b, new Vector3(bar * 4.2f, .16f, end), .9f, 10f, paint);
-        });
+            Pave("runway", b => Slab(b, new Vector3(0f, .12f, 0f), 22f, half, asphalt));
+            Pave("marks", b =>
+            {
+                for (float z = -half + 90f; marked && z < half - 90f; z += 60f) Slab(b, new Vector3(0f, .16f, z), .45f, 15f, paint);
+                foreach (float end in new[] { -half + 14f, half - 14f })
+                    for (int bar = -4; marked && bar <= 4; bar++)
+                        if (bar != 0) Slab(b, new Vector3(bar * 4.2f, .16f, end), .9f, 10f, paint);
+            });
+        }
         // The airfield's own paving: the apron between the runway and the hangar row, then every route of the AI's
         // taxi network as a ribbon, then the vertical pad. Routes arrive in map metres; the strip object is local.
         Quaternion unturn = Quaternion.Euler(0f, -strip.heading, 0f);
@@ -1310,6 +1306,7 @@ public static class BuildMapBundle
             for (int i = 0; strip.taxi != null && i + 5 < strip.taxi.Length; i += 6)
                 Ribbon(b, Local(strip.taxi[i], strip.taxi[i + 1], strip.taxi[i + 2]), Local(strip.taxi[i + 3], strip.taxi[i + 4], strip.taxi[i + 5]), 7f, asphalt * 1.08f);
         });
+        if (donor != null) return; // the pad itself is flat; the donor field never had a collider slab (landings failed with one)
         // Wheels roll on one flat slab, not on the paint.
         var surface = Child(go, "surface");
         var flat = new Builder();
@@ -1338,10 +1335,12 @@ public static class BuildMapBundle
 
     /// <summary>One donor mesh part, split per material into named children the runtime dresses: the game's own
     /// runway, apron, markings, skidmarks and dirt edges — every paint stroke the artists shipped.</summary>
-    private static void EmitDonor(GameObject strip, DonorPart part, Material material, string group, float rise)
+    private static void EmitDonor(GameObject strip, DonorPart part, Material material, string group, float rise, float lift, float shiftX, float shiftZ)
     {
         for (int s = 0; s < part.submeshes.Length; s++)
         {
+            // the donor's apron, its dirt edges and its side exits lie in its own layout: only the runway's strip stays
+            if (part.submeshes[s] == "asphalt" || part.submeshes[s] == "asphalt_dirtedge") continue;
             string key = group + "_" + part.submeshes[s];
             if (!donorMeshes.TryGetValue(key, out Mesh mesh))
             {
@@ -1359,8 +1358,16 @@ public static class BuildMapBundle
                 }
                 int at = 0;
                 for (int t = 0; t < s; t++) at += part.triCounts[t];
-                var tris = new int[part.triCounts[s]];
-                for (int i = 0; i < tris.Length; i++) tris[i] = part.triangles[at + i];
+                // flat: the surface at 0, each paint layer a hair above it (skidmarks under the markings)
+                for (int i = 0; i < count; i++)
+                    positions[i] = new Vector3(positions[i].x + shiftX, lift > 0f ? lift + (part.submeshes[s] == "runway_skidmarks" ? 0f : .015f) : 0f, positions[i].z + shiftZ);
+                var kept = new List<int>();
+                for (int i = 0; i + 2 < part.triCounts[s]; i += 3)
+                {
+                    int a = part.triangles[at + i], b = part.triangles[at + i + 1], c = part.triangles[at + i + 2];
+                    if (Mathf.Abs((positions[a].x + positions[b].x + positions[c].x) / 3f) <= 26f) kept.AddRange(new[] { a, b, c });
+                }
+                var tris = kept.ToArray();
                 mesh = new Mesh { name = "donor_" + key };
                 mesh.SetVertices(positions);
                 mesh.SetUVs(0, uvs);

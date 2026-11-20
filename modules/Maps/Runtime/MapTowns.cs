@@ -97,13 +97,21 @@ namespace BoscaliSummer.Modules.Maps.Runtime
             if (!Handles(kind)) return false;
             List<Shape> shapes = kind == "suburb" ? low : mid.Count > 0 ? mid : low;
             if (set == null || shapes.Count == 0) return true; // the lot stays empty: the mod has no town buildings of its own
-            Shape shape = shapes[Math.Abs(pick * 7919 + Mathf.RoundToInt(position.x)) % shapes.Count];
+            int index = Math.Abs(pick * 7919 + Mathf.RoundToInt(position.x)) % shapes.Count;
+            if (shapes.Count > 1 && index == lastPick && (position - lastAt).sqrMagnitude < 160f * 160f)
+                index = (index + 1 + Math.Abs(pick) % (shapes.Count - 1)) % shapes.Count;   // never the same block beside itself
+            lastPick = index;
+            lastAt = position;
+            Shape shape = shapes[index];
             GameObject building = Object.Instantiate(shape.Template, set);
             building.transform.localPosition = position;
             building.transform.localRotation = Quaternion.Euler(0f, yaw + (shape.Deep ? 90f : 0f), 0f);
             building.SetActive(true);
             return true;
         }
+
+        private static int lastPick = -1;
+        private static Vector3 lastAt;
 
         /// <summary>How many buildings the set holds; forgets the templates.</summary>
         public static int End()
