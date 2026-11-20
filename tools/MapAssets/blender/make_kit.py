@@ -298,6 +298,10 @@ def railgun(b, v):
                 b.box((x, y, 6.7), (5, 3, 2.2), CONCRETE, (0, 0, yaw), 0.7)
         b.box((-32, 22, 7.5), (8, 5, 3), CONCRETE_D, (0, 0, 35))
         b.box((0, 36.2, 3.4), (4, 0.3, 1.4), BLACK)
+    if b.fine:
+        for side in (-1, 1):
+            b.box((side * 18, -2, 20), (1.2, 6, 0.8), PANEL_D)
+        b.box((0, 0, 14.2), (10, 0.3, 0.3), YELLOW)
     if v == 2:                                                             # the gutted mount
         b.cyl((0, 0, 13), 31, 0.6, STEEL, 14)
         b.cyl((0, 0, 13.6), 22, 0.3, BLACK, 10)
@@ -372,6 +376,11 @@ def helios_core(b, v):
         b.box((0, 66, 11.5), (12, 14, 1.5), CONCRETE_D)
         for k in range(4):
             b.rock((-70 + k * 9, -62 - 5 * (k % 2), 11), 6 + k % 2 * 3, CONCRETE_D, 70 + k, (1.3, 1, 0.6))
+        for side in (-1, 1):
+            b.box((side * 30, 20, 20), (2, 5, 4), PANEL_D)
+        b.beam((-30, 20, 22), (30, 20, 22), 0.3, IRON, 3)
+        b.box((0, 52.2, 30), (2.5, 0.2, 3), BLACK)
+        b.decal((0, 52.3, 45), (3, 2), (-90, 0, 0), (0, 2))
 
 
 def capacitor(b, v):
@@ -382,6 +391,9 @@ def capacitor(b, v):
         lattice(b, (2, 1, 2.6), (50, 20, 1.6), 4.5, 1.6, IRON, 7)
         for k in range(3 if b.mid else 0):
             b.cyl((30 + 7 * k, 14 + 3 * k - 5 * (k % 2), 0.2), 3.4, 0.8, PANEL_D, 8, rot=(8 * k, 14, 0))
+        if b.fine:
+            b.box((40, 16, 0.8), (1.2, 1.2, 0.6), PANEL_D)
+            b.decal((30, 10.2, 0.8), (1.0, 0.6), (-90, 0, 0), (1, 0))
         return
     lattice(b, (0, 0, 3.2), (0, 0, 46), 4.5, 1.6, IRON, 7)
     b.cyl((0, 0, 46), 0.9, 10, IRON, 6, r2=0.4)
@@ -393,6 +405,14 @@ def capacitor(b, v):
             b.box((0, 0, z), (5.5, 0.3, 0.3), PANEL_D)
             for side in (-1, 1):
                 b.cyl((side * 5.2, 0, z - 2.4), 0.5, 2.2, WHITE, 5)
+    if b.fine:
+        for x in (-6, 6):
+            for y in (-6, 6):
+                b.box((x, y, 5), (0.18, 0.18, 5), IRON)
+        for z in (2, 9):
+            b.box((0, 6, z), (6, 0.1, 0.1), IRON)
+        b.box((0, 0, 30), (0.3, 5, 0.3), PANEL_D)
+        b.decal((6.1, 0, 22), (1.2, 0.9), (0, 90, 0), (1, 0))
 
 
 def castle(b, v):
@@ -435,6 +455,11 @@ def castle(b, v):
         b.box((6.6, -13, 51.5), (1.6, 0.05, 1), RED)
         for z in (20, 27):
             b.box((0, 1.05, z), (1, 0.1, 1.5), BLACK)
+        for x in (-2.5, 0, 2.5):
+            b.box((x, 35.2, 12), (0.3, 0.1, 3.2), BLACK)
+        for x, y in ((-20, 24), (18, 28), (-26, -4)):
+            b.box((x, y, 11.5), (1.4, 1.4, 0.8), WOOD)
+        b.decal((0, 35.16, 14), (2.0, 1.2), (-90, 0, 0), (2, 0))
 
 
 def ruins(b, v):
@@ -458,6 +483,10 @@ def ruins(b, v):
             b.cyl((-6, 3, 2.9), 1.1, 5, STONE, 6, rot=(90, 0, 25))         # fallen drums
             b.cyl((9, -2, 2.9), 1.1, 3, STONE, 6, rot=(90, 0, -50))
             b.box((2, -9, 2.6), (3, 1.3, 0.6), STONE, (0, 6, 18))
+            for x in (-12, 0, 12):
+                b.beam((x, -9, 2.2), (x, -9, 4.6), 0.05, RUST, 3)
+            b.box((4, 6, 2.2), (3.2, 1.6, 0.4), STONE, (0, 4, -12))
+            rubble(b, (0, 0, 0.3), 10, 61, 3)
         return
     if v == 1:
         for k, tall in enumerate((9, 9, 5, 9, 9, 3)):
@@ -524,6 +553,12 @@ def oil_rig(b, v):
         b.beam((-24, -22, 55.5), (-24, -22, 68), 0.2, IRON, 3)
         for x, y in legs:
             b.cyl((x, y, -1), 3.6, 4, RUST, 8)
+        railing(b, (-33, -33, 40.5), (33, -33, 40.5), 1.0, 6)
+        railing(b, (33, -33, 40.5), (33, 33, 40.5), 1.0, 6)
+        pipe_run(b, [(-24, -10, 40.5), (-24, 18, 40.5), (-16, 18, 40.5)], 0.18, IRON, 2)
+        pipe_run(b, [(24, 10, 40.5), (24, -18, 40.5), (16, -18, 40.5)], 0.18, IRON, 2)
+        for x in (-8, 0, 8):
+            b.box((x, -31, 40.6), (1.2, 0.2, 0.1), YELLOW)
 
 
 def debris(b, v):
@@ -536,6 +571,11 @@ def debris(b, v):
         b.rock((3.5, -2.5, 0.4), 1.1, CONCRETE, 44 + v, (1.2, 1, 0.6))
         b.box((-2, -3, 0.5), (2, 1.2, 0.4), CONCRETE_D, (0, 14, 110 + 30 * v))
         b.beam((1, -4, 0.2), (5 + v, -1, 1.2), 0.2, RUST, 3)
+    if b.fine:
+        b.box((0.5, 1.0, 1.1), (2.2, 0.8, 0.08), RUST, (18, 8, 30 - 10 * v))
+        b.box((-1.5, -1.5, 0.7), (1.8, 1.0, 0.12), HULL_D, (-8, 14, 55))
+        for k in range(2 + v):
+            b.beam((-4 + k * 2.4, -2, 0.1), (-2.5 + k * 2.4, 3, 1.8), 0.05, IRON, 3)
 
 
 def station_hub(b, v):
@@ -718,6 +758,13 @@ def bunker(b, v):
             b.cyl((2.5, -2, 5.3), 0.4, 1, IRON, 5)
             for k in (-1, 1):
                 b.rock((k * 8.5, 3, 0.4), 2.6, SANDBAG, 12 + k, (1.2, 1, 0.5))
+            for k in (-1, 0, 1):
+                a = k * math.pi / 3
+                b.box((6.0 * math.sin(a), 6.0 * math.cos(a), 3.1),
+                      (2.4, 0.2, 0.55), CONCRETE_D, (0, 0, -math.degrees(a)))
+            b.box((0, -8, 0.3), (1.3, 0.5, 0.1), IRON)
+        if b.fine:
+            b.box((-2.6, -9.5, 0.8), (0.6, 0.6, 0.5), OLIVE)
         return
     b.box((0, 0, 3), (10, 8, 3), CONCRETE, taper=0.88)
     b.box((0, 0, 6.5), (9.8, 7.8, 0.5), CONCRETE_D)
@@ -732,11 +779,14 @@ def bunker(b, v):
         b.beam((-7, -5, 7), (-7, -5, 21), 0.2, IRON, 3)
         b.box((-7, -5, 19), (2, 0.08, 0.08), IRON)
         b.box((-7, -5, 17), (0.08, 1.6, 0.08), IRON)
+        for x in (-4, 4):
+            b.box((x, -7.0, 7.8), (0.6, 0.6, 0.5), PANEL_D)
     if b.fine:
         b.box((7, -9.5, 1), (2, 1.2, 1), OLIVE)
         b.box((-13, 3.05, 1.2), (0.8, 0.1, 1.2), BLACK)
         for k in range(3):
             b.rock((-9 + 9 * k, 13.5, 0.5), 1.6, SANDBAG, 20 + k, (1.5, 1, 0.6))
+        b.decal((0, 12.82, 2.4), (1.0, 0.8), (-90, 0, 0), (2, 0))
 
 
 def revetment(b, v):
@@ -758,6 +808,9 @@ def revetment(b, v):
         for k in range(3):
             b.cyl((9, -10 + 1.5 * k, 0.3), 0.5, 1.3, RED if k == 1 else OLIVE, 6)
         b.beam((11.5, 11, 0), (11.5, 11, 6), 0.1, IRON, 3)
+        b.box((0, -9, 0.7), (2.2, 0.6, 0.4), CONCRETE_D)
+        b.box((0, -6, 0.65), (1.4, 0.5, 0.35), SAND_D)
+        b.decal((0, -2, 0.2), (2.2, 1.0), (0, 0, 0), (0, 2))
 
 
 def gun_emplacement(b, v):
@@ -781,6 +834,10 @@ def gun_emplacement(b, v):
         for k in range(4):
             b.rock((-9 + 6 * k, 12.6 - abs(k - 1.5) * 1.2, 1.5), 1.8, SANDBAG, 30 + k, (1.4, 1, 0.6))
         b.beam((-4, -4, 2), (-4, -4, 5.2), 0.08, IRON, 3)
+        for x in (-1.2, 1.2):
+            b.beam((x, 0.5, 3.8), (x, 0.5, 5.2), 0.12, IRON, 3)
+        b.box((3.5, -2.6, 1.6), (1.2, 0.4, 0.25), OLIVE)
+        b.decal((0, 0, 1.25), (2.4, 2.4), (0, 0, 0), (1, 2))
 
 
 def water_tower(b, v):
@@ -1021,6 +1078,11 @@ def boat(b, v):
             b.beam((0, 1, 3), (0, 5.5, 5), 0.07, IRON, 3)
             b.cyl((-1, -6.3, 2.1), 0.7, 2, ORANGE, 6, rot=(0, 90, 0))      # the net drum
             b.box((0, 3.6, 1.9), (0.9, 0.9, 0.35), PANEL_D)
+        if b.fine:
+            railing(b, (-2.0, -1, 1.7), (2.0, -1, 1.7), 0.7, 4)
+            for side in (-1, 1):
+                b.box((side * 2.5, 0, 1.2), (0.2, 1.2, 0.5), BLACK)
+            b.box((0.8, 1.8, 1.8), (0.8, 0.8, 0.4), WOOD)
         return
     b.box((0, -2, 1.5), (5, 20, 2.5), HULL_D, (0, 180, 0), 0.78)
     b.box((0, 18, 1.5), (3.54, 3.54, 2.5), HULL_D, (0, 180, 45), 0.78)
@@ -1045,6 +1107,8 @@ def boat(b, v):
             b.box((side * 4.3, -19, 5.6), (0.5, 1.6, 0.5), ORANGE)
         b.beam((0, -16, 11.6), (0, -16, 15), 0.08, IRON, 3)
         b.box((0, -16, 13.6), (1.4, 0.06, 0.06), IRON)
+        railing(b, (-4, -10, 4.6), (4, -10, 4.6), 0.9, 4)
+        b.box((2, 8, 4.8), (0.9, 0.9, 0.5), PANEL_D)
 
 
 def landing_craft(b, v):
@@ -1066,6 +1130,11 @@ def landing_craft(b, v):
         part((0, -6.95, 3.9), (2.6, 0.05, 0.45), BLACK)
         part((0, -9, 5.2), (3.6, 2.2, 0.1), hull)
         part((0, -5, 0.86), (2.8, 5.6, 0.06), DARK)
+        for k in (-4, 0, 4):
+            part((0, k, 1.0), (3.0, 0.15, 0.8), steel)
+        for side in (-1, 1):
+            part((side * 3.3, 2, 3.2), (0.08, 0.2, 0.2), YELLOW)
+        part((0, 11.8, 1.7), (2.7, 0.25, 0.2), IRON)
     if v == 0:
         b.box((0, 13.8, 0.55), (2.9, 2.8, 0.15), HULL, (-12, 0, 0))        # the ramp, down
         if b.mid:
@@ -1094,6 +1163,10 @@ def tank_trap(b, v):
         b.beam((posts[k], 3, 1.5), (posts[k + 1], 3, 1.5), 0.025, IRON, 3)
         b.beam((posts[k], 3, 0.4), (posts[k + 1], 3, 1.5), 0.025, IRON, 3)
         b.beam((posts[k], 3, 1.5), (posts[k + 1], 3, 0.4), 0.025, IRON, 3)
+    if b.fine:
+        for x in (-4.5, 0, 4.5):
+            b.box((x, 0, 1.92), (0.18, 0.18, 0.1), RUST)
+        b.rock((3, -2, 0.2), 1.1, CONCRETE_D, 51, (1.6, 1.2, 0.4))
 
 
 def drill_rig(b, v):
@@ -1120,6 +1193,9 @@ def drill_rig(b, v):
         for side in (-1, 1):
             b.box((side * 5, 0, 7), (0.05, 5, 0.5), YELLOW)
             b.box((0, side * 5, 7), (5, 0.05, 0.5), YELLOW)
+        railing(b, (-4, -8, 6.3), (4, -8, 6.3), 0.9, 4)
+        b.box((-5, 4, 3), (1.2, 1.0, 0.8), PANEL_D)
+        b.box((5, 4, 3), (1.2, 1.0, 0.8), PANEL_D)
 
 
 def antenna_field(b, v):
@@ -1176,6 +1252,10 @@ def chapel(b, v):
             for side in (-1, 1):                                           # buttresses
                 for y in (-7.6, 0, 7.6):
                     b.box((side * 5.5, y + 1.9, 2.6), (0.5, 0.5, 2.6), WHITE, taper=0.6)
+            for x, y in ((-4, -15), (0, -16), (4, -15), (-6, 8)):
+                b.box((x, y, 0.8), (0.35, 0.2, 0.8), CONCRETE_D)
+            b.box((0, 13.6, 17.2), (0.7, 0.7, 0.6), YELLOW)
+            b.decal((0, 16.56, 3.4), (1.0, 1.2), (-90, 0, 0), (2, 0))
         return
     stone = (196, 184, 162)
     b.box((0, 0, 4.8), (10, 10, 4.8), stone)
@@ -1201,6 +1281,9 @@ def chapel(b, v):
             b.box((x, y, 11.3), (0.6, 0.06, 0.7), GLASS, (0, 0, yaw))
         for side in (-1, 1):
             b.box((side * 10, 20, 1), (0.4, 3, 1), stone)
+        b.box((12.2, 9, 2.2), (0.1, 0.8, 1.8), PANEL_D)
+        b.box((12.0, 9, 2.2), (0.06, 0.6, 1.5), BLACK)
+        b.decal((0, 13.08, 3.8), (1.6, 1.2), (-90, 0, 0), (1, 0))
 
 
 def radar_dome(b, v):
@@ -1223,6 +1306,133 @@ def radar_dome(b, v):
         b.box((0, 6.1, 4.0), (0.8, 0.08, 0.8), YELLOW)
 
 
+def house(b, v):
+    """A lived-in house: 0 single-storey rural, 1 two-storey village, 2 damaged and boarded."""
+    if v == 0:
+        b.box((0, 0, 2), (5, 4, 2), WHITE)
+        b.box((0, 0, 4.7), (5.4, 4.4, 1.2), TILE, taper=(0.02, 1))
+        b.box((2.4, -1, 6.1), (0.5, 0.5, 1.3), CONCRETE_D)
+        if b.mid:
+            door(b, (0, 4.06, 1.4), 1.2, 2.4, 0)
+            for x in (-3, 3):
+                b.box((x, 4.05, 2.2), (1.0, 0.05, 1.2), PANEL_D)
+                b.box((x, 4.12, 2.2), (0.8, 0.03, 1.0), GLASS)
+            b.box((0, 5.1, 0.2), (2.0, 1.2, 0.2), CONCRETE_D)
+        if b.fine:
+            for side in (-1, 1):
+                b.box((side * 5.05, -1, 2.2), (0.05, 0.8, 0.9), PANEL_D)
+                b.box((side * 5.12, -1, 2.2), (0.03, 0.6, 0.7), GLASS)
+            b.beam((-5.05, 3, 0), (-5.05, 3, 4), 0.08, IRON, 3)
+            b.box((2.4, -1, 7.5), (0.6, 0.6, 0.2), CONCRETE_D)
+            b.box((-3, 5.2, 0.8), (0.6, 0.6, 0.8), WOOD)
+            b.decal((0, 4.2, 3.4), (1.0, 0.7), (-90, 0, 0), (0, 1))
+        return
+    if v == 1:
+        b.box((0, 0, 3.6), (4.5, 3.5, 3.6), WHITE)
+        b.box((0, 0, 7.8), (4.9, 3.9, 0.9), TILE, taper=(0.02, 1))
+        if b.mid:
+            door(b, (0, 3.56, 1.5), 1.3, 2.6, 0)
+            for z in (2.2, 5.0):
+                for x in (-2.4, 2.4):
+                    b.box((x, 3.55, z), (0.9, 0.05, 0.9), PANEL_D)
+                    b.box((x, 3.62, z), (0.7, 0.03, 0.7), GLASS)
+            b.box((0, 4.2, 5.0), (2.0, 0.9, 0.2), PANEL_D)
+            railing(b, (-1.8, 4.6, 5.1), (1.8, 4.6, 5.1), 0.8, 4)
+            b.box((2.0, 4.5, 3.0), (0.8, 0.6, 0.3), IRON)
+        if b.fine:
+            b.beam((-4.6, 3, 0), (-4.6, 3, 7.5), 0.08, IRON, 3)
+            b.box((-4.5, 4.4, 0.2), (1.0, 0.7, 0.2), CONCRETE_D)
+            b.decal((0, 3.7, 6.2), (0.9, 0.7), (-90, 0, 0), (1, 0))
+        return
+    b.box((0, 0, 1.8), (4.8, 3.8, 1.8), CONCRETE)
+    b.box((0, 0, 3.9), (4.6, 3.6, 0.6), TILE, taper=(0.1, 1))
+    if b.mid:
+        for x in (-3, 0, 3):
+            b.box((x, 3.85, 1.8), (0.9, 0.05, 0.9), BLACK)
+        b.box((1.5, 0, 3.2), (1.6, 2.5, 0.8), TILE, (0, 18, 0))
+        b.box((-2, 3.8, 0.9), (1.2, 0.1, 1.0), WOOD)
+    if b.fine:
+        rubble(b, (0, 5, 0.2), 3, 71, 4)
+        b.beam((-4, 2, 0), (-4, 2, 4.2), 0.06, RUST, 3)
+        b.box((3.85, 0, 1.4), (0.05, 1.0, 0.9), BLACK)
+        b.decal((3.92, 0, 1.4), (1.0, 0.7), (0, 90, 0), (1, 0))
+
+
+def shop(b, v):
+    """A village shop: 0 a corner shop with awning, 1 a small cafe kiosk."""
+    if v == 0:
+        b.box((0, 0, 2.2), (4, 3, 2.2), WHITE)
+        b.box((0, 0, 4.6), (4.2, 3.2, 0.3), PANEL_D)
+        b.box((0, 3.05, 3.4), (4.0, 0.1, 0.5), RED)
+        if b.mid:
+            for x in (-2.2, 0, 2.2):
+                b.box((x, 3.05, 2.3), (0.9, 0.05, 0.9), PANEL_D)
+                b.box((x, 3.12, 2.3), (0.7, 0.03, 0.7), GLASS)
+            door(b, (3.0, -1, 1.4), 1.0, 2.2, 90)
+            b.box((0, 4.4, 3.0), (4.2, 1.2, 0.1), RED, (0, -8, 0))
+            b.box((0, 4.4, 3.15), (4.0, 1.2, 0.05), WHITE, (0, -8, 0))
+        if b.fine:
+            for x in (-1.2, 0.8):
+                b.box((x, 4.5, 0.6), (0.7, 0.7, 0.6), WOOD)
+            b.decal((0, 3.2, 3.9), (1.2, 0.6), (-90, 0, 0), (2, 0))
+        return
+    b.box((0, 0, 1.6), (2.6, 2.2, 1.6), PANEL)
+    b.box((0, 0, 3.3), (3.0, 2.6, 0.2), RED)
+    b.box((0, 2.2, 2.2), (2.4, 0.1, 0.4), GLASS)
+    if b.mid:
+        door(b, (0, -2.25, 1.2), 1.0, 2.0, 180)
+        b.box((0, 3.0, 2.2), (2.6, 0.8, 0.1), PANEL_D)
+    if b.fine:
+        for x in (-1.5, 1.5):
+            b.cyl((x, 2.7, 0), 0.25, 1.0, IRON, 6)
+            b.cyl((x, 2.7, 1.0), 0.35, 0.1, WOOD, 8)
+        b.decal((0, 2.35, 2.6), (1.2, 0.5), (-90, 0, 0), (3, 0))
+
+
+def barn(b, v):
+    """A farm building: 0 a timber barn, 1 an open hay shed."""
+    if v == 0:
+        b.box((0, 0, 2.5), (6, 4, 2.5), WOOD)
+        b.box((0, 0, 5.8), (6.4, 4.4, 1.4), TILE, taper=(0.02, 1))
+        b.box((-4, 2, 1.4), (2, 3, 1.4), WOOD)
+        b.box((-4, 2, 3.1), (2.4, 3.4, 0.3), TILE, (0, -15, 0))
+        if b.mid:
+            door(b, (0, 4.05, 1.8), 2.6, 3.6, 0)
+            b.box((0, 4.05, 5.2), (1.2, 0.08, 1.0), PANEL_D)
+        if b.fine:
+            for x in (-3.5, 3.5):
+                b.box((x, 4.06, 2.2), (0.8, 0.05, 0.7), PANEL_D)
+                b.box((x, 4.12, 2.2), (0.6, 0.03, 0.5), GLASS)
+            for x in (-2, 0, 2):
+                b.box((x, -4.5, 0.8), (0.6, 0.8, 0.6), SAND_D)
+            b.decal((0, 4.1, 5.0), (1.0, 0.8), (-90, 0, 0), (2, 0))
+        return
+    for x in (-4.5, 4.5):
+        for y in (-2.5, 2.5):
+            b.beam((x, y, 0), (x, y, 4), 0.18, WOOD, 3)
+    b.box((0, 0, 4.4), (5.2, 3.2, 0.3), TILE, (0, -8, 0))
+    if b.mid:
+        for x in (-3, 0, 3):
+            b.box((x, 0, 0.6), (0.8, 1.2, 0.6), SAND_D)
+    if b.fine:
+        b.box((0, -2.7, 1.2), (5.0, 0.3, 0.3), WOOD)
+        b.decal((4.6, 0, 2.4), (0.7, 0.5), (0, 90, 0), (1, 0))
+
+
+def shed(b, v):
+    """A small workshop or garden shed."""
+    b.box((0, 0, 1.4), (2.2, 1.6, 1.4), PANEL)
+    b.box((0, 0, 3.0), (2.4, 1.8, 0.2), PANEL_D, (0, -8, 0))
+    if b.mid:
+        door(b, (0, 1.65, 1.1), 0.9, 2.0, 0)
+    if b.fine:
+        b.box((-2.25, 0, 1.8), (0.05, 0.6, 0.5), GLASS)
+        b.box((1.2, 1.7, 1.0), (0.8, 0.5, 0.2), WOOD)
+        for x in (-1.2, 0):
+            b.box((x, 0, 0.4), (0.4, 0.4, 0.4), WOOD)
+        b.decal((2.3, 0, 1.8), (0.7, 0.5), (0, 90, 0), (1, 0))
+
+
 SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),
           ("castle", castle, 2, 1, "l"), ("ruins", ruins, 3, 1, "l"), ("oil_rig", oil_rig, 1, 1, "l"), ("debris", debris, 3, 0, "m"),
           ("station_hub", station_hub, 1, 1, "l"), ("station_module", station_module, 3, 1, "l"), ("dish", dish, 2, 1, "l"),
@@ -1231,7 +1441,9 @@ SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l
           ("pylon", pylon, 1, 1, "m"), ("wind_turbine", wind_turbine, 1, 1, "l"), ("crane", crane, 1, 1, "l"), ("containers", containers, 3, 1, "m"),
           ("warehouse", warehouse, 2, 1, "l"), ("silo", silo, 2, 1, "l"), ("boat", boat, 2, 0, "m"), ("landing_craft", landing_craft, 2, 1, "m"),
           ("tank_trap", tank_trap, 1, 0, "s"), ("drill_rig", drill_rig, 1, 1, "l"), ("antenna_field", antenna_field, 1, 0, "m"),
-          ("chapel", chapel, 2, 1, "l"), ("radar_dome", radar_dome, 1, 1, "l"))
+          ("chapel", chapel, 2, 1, "l"), ("radar_dome", radar_dome, 1, 1, "l"),
+          ("house", house, 3, 1, "l"), ("shop", shop, 2, 1, "l"),
+          ("barn", barn, 2, 1, "l"), ("shed", shed, 1, 1, "l"))
 
 
 def dressed(folder: Path):
