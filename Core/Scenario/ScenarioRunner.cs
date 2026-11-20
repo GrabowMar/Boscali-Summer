@@ -36,6 +36,17 @@ namespace BoscaliSummer.Core.Scenario
         /// <summary>Puts the pilot, already on a side, into an aircraft of that name in the air. Host and single player only.</summary>
         void Seat(string aircraft, float x, float y, float z, float heading, float speed);
 
+        /// <summary>Host only: takes the pilot's aircraft out of the world, so a later <c>seat</c> can hand over another.</summary>
+        void Leave();
+
+        /// <summary>Host only: gives a scripted aircraft something to fly. <paramref name="order"/> is "orbit" (a circle of <paramref name="radius"/> metres round x, z),
+        /// "follow" (<paramref name="target"/> is a unit name or "player") or "free" (back to the game's own behaviour).</summary>
+        void Orders(string unit, string order, string target, float x, float z, float radius);
+
+        /// <summary>Offers the pilot two replies (paragon / renegade) under a prompt and waits (<see cref="Waiting"/>) until the stage calls <see cref="ScenarioRunner.Answer"/>;
+        /// after <paramref name="timeout"/> seconds unanswered the stage answers paragon.</summary>
+        void Reply(string prompt, string paragon, string renegade, float timeout);
+
         /// <summary>Plays a music file under the story, or with a null name fades out what is playing.</summary>
         void Music(string file, float volume, bool loop);
 
@@ -110,6 +121,8 @@ namespace BoscaliSummer.Core.Scenario
 
         public bool Finished { get; private set; }
 
+        private ScenarioAction? replying;
+
         /// <summary>Nothing is playing and nothing waits.</summary>
         public bool Idle => current == null && queue.Count == 0 && raised.Count == 0 && now >= busyUntil && !stage.Waiting;
 
@@ -174,6 +187,28 @@ namespace BoscaliSummer.Core.Scenario
                 if (step >= current.Actions.Count) { current = null; continue; }
                 Run(current.Actions[step++]);
             }
+        }
+
+        /// <summary>
+        /// The pilot answered the open <c>reply</c> (the stage's timeout answers paragon). Sets the flag <c>&lt;id&gt;-paragon</c> or <c>&lt;id&gt;-renegade</c>, adds one to the
+        /// campaign's tally (the remembered flags <c>paragon-1</c>, <c>paragon-2</c>, ...: the tally is the highest one set) and speaks the chosen line.
+        /// </summary>
+        public void Answer(bool paragon)
+        {
+            if (replying == null) return;
+            ScenarioAction offer = replying.Value;
+            replying = null;
+            string kind = paragon ? "paragon" : "renegade";
+            string flag = offer.Name + "-" + kind;
+            if (Flags.Add(flag)) Raise(TriggerKind.Flag, flag);
+            int count = 1;
+            while (Has(kind + "-" + count)) count++;
+            Flags.Add(kind + "-" + count);
+            stage.Remember(kind + "-" + count);
+            Run(new ScenarioAction
+            {
+                Kind = ActionKind.Say, Name = offer.Title, Text = paragon ? offer.Paragon : offer.Renegade, Voice = paragon ? offer.ParagonVoice : offer.RenegadeVoice
+            });
         }
 
         private void Fire(ScenarioBeat beat)
@@ -247,6 +282,16 @@ namespace BoscaliSummer.Core.Scenario
                     break;
                 case ActionKind.Choose:
                     stage.Choose();
+                    break;
+                case ActionKind.Leave:
+                    stage.Leave();
+                    break;
+                case ActionKind.Orders:
+                    stage.Orders(action.Name, action.Title, action.Text, action.X, action.Z, action.Speed);
+                    break;
+                case ActionKind.Reply:
+                    replying = action;
+                    stage.Reply(action.Text, action.Paragon, action.Renegade, action.Seconds);
                     break;
                 case ActionKind.Seat:
                     stage.Seat(action.Name, action.X, action.Y, action.Z, action.Heading, action.Speed);

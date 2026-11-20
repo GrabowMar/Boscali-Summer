@@ -105,7 +105,7 @@ namespace BoscaliSummer.Core.Scenario
                 {
                     case "card": case "say": case "hint": case "wait":
                     case "flag": case "unflag": case "remember": case "finish":
-                    case "dip": case "video": case "sky": case "clock": case "music": case "enlist": case "choose": case "seat":
+                    case "dip": case "video": case "sky": case "clock": case "music": case "enlist": case "choose": case "seat": case "leave": case "reply": case "orders":
                     case "start": case "complete": case "cancel": case "countdown": case "ace": case "random":
                         if (beat == null) error = "'" + keyword + "' belongs under a 'beat'";
                         else error = ReadAction(keyword, row, beat);
@@ -144,7 +144,7 @@ namespace BoscaliSummer.Core.Scenario
                 case "campaign":
                     def.Campaign = row.Next();
                     if (!ScenarioDef.IsId(def.Campaign)) return "a campaign id is lower-case letters, digits and '-'";
-                    if (!row.Number(out float chapter) || chapter < 1f || chapter != (int)chapter) return "campaign needs a chapter number, 1 or more";
+                    if (!row.Number(out float chapter) || chapter < 0f || chapter != (int)chapter) return "campaign needs a chapter number, 0 (a prologue) or more";
                     def.Chapter = (int)chapter;
                     return null;
                 case "without": def.Without.AddRange(row.Rest()); return def.Without.Count > 0 ? null : "without needs module ids";
@@ -428,6 +428,43 @@ namespace BoscaliSummer.Core.Scenario
                     if (string.IsNullOrEmpty(action.Name) || action.Name.IndexOfAny(new[] { '/', '\\', ':' }) >= 0) return "video needs a file name (.mp4 or .webm beside the script)";
                     break;
                 case "choose": action.Kind = ActionKind.Choose; break;
+                case "leave": action.Kind = ActionKind.Leave; break;
+                case "reply":
+                    action.Kind = ActionKind.Reply;
+                    action.Seconds = 12f;
+                    action.Name = row.More && !row.Args[row.At].Quoted ? row.Next() : null;
+                    if (!ScenarioDef.IsId(action.Name) || action.Name.Length > 48) return "reply needs an id (lower-case letters, digits, '-'): reply <id> \"Prompt\" paragon=\"...\" renegade=\"...\"";
+                    if (row.Quoted(out action.Text) && !Words(action.Text)) return "a reply's prompt is up to " + MaxTextChars + " characters";
+                    action.Paragon = row.Opt("paragon");
+                    action.Renegade = row.Opt("renegade");
+                    if (!Words(action.Paragon) || !Words(action.Renegade)) return "reply needs paragon=\"line\" and renegade=\"line\", up to " + MaxTextChars + " characters each";
+                    action.ParagonVoice = row.Opt("paragon_voice");
+                    action.RenegadeVoice = row.Opt("renegade_voice");
+                    if (action.ParagonVoice != null && !IsFileName(action.ParagonVoice) || action.RenegadeVoice != null && !IsFileName(action.RenegadeVoice))
+                        return "paragon_voice and renegade_voice need a file name (an .mp3 or .ogg beside the script)";
+                    action.Title = row.Opt("as") ?? "ronin";
+                    if (!row.Opt("timeout", ref action.Seconds) || action.Seconds < 2f || action.Seconds > 120f) return "timeout is 2 to 120 seconds";
+                    break;
+                case "orders":
+                    action.Kind = ActionKind.Orders;
+                    action.Name = row.Next();
+                    action.Title = (row.Next() ?? "").ToLowerInvariant();
+                    action.Speed = 3000f;
+                    if (string.IsNullOrEmpty(action.Name)) return "orders needs a unit: orders <unit> orbit <x> <z> [radius], follow <unit|player> or free";
+                    if (action.Title == "cap") action.Title = "orbit";
+                    if (action.Title == "orbit")
+                    {
+                        if (!row.Number(out action.X) || !row.Number(out action.Z)) return "orbit needs a centre: orders <unit> orbit <x> <z> [radius]";
+                        if (row.More && !row.Number(out action.Speed)) return "the orbit radius is a number of metres";
+                        if (action.Speed < 500f || action.Speed > 20000f) return "the orbit radius is 500 to 20000 metres";
+                    }
+                    else if (action.Title == "follow")
+                    {
+                        action.Text = row.Next();
+                        if (string.IsNullOrEmpty(action.Text) || action.Text == action.Name) return "follow needs another unit, or 'player'";
+                    }
+                    else if (action.Title != "free") return "orders are orbit (or cap), follow or free";
+                    break;
                 case "seat":
                     action.Kind = ActionKind.Seat;
                     action.Name = row.Next();
@@ -524,6 +561,8 @@ namespace BoscaliSummer.Core.Scenario
                 {
                     if (action.Kind == ActionKind.Say && !def.Cast.ContainsKey(action.Name))
                         def.Error(beat.Line, "beat '" + beat.Id + "': nobody in the cast is called '" + action.Name + "'");
+                    if (action.Kind == ActionKind.Reply && !def.Cast.ContainsKey(action.Title))
+                        def.Error(beat.Line, "beat '" + beat.Id + "': the reply is spoken by '" + action.Title + "', who is not in the cast");
                 }
             }
         }
@@ -603,7 +642,7 @@ namespace BoscaliSummer.Core.Scenario
         private static bool IsOptionName(string text, int length)
         {
             for (int i = 0; i < length; i++)
-                if (!char.IsLetter(text[i])) return false;
+                if (!char.IsLetter(text[i]) && text[i] != '_') return false;
             return true;
         }
     }

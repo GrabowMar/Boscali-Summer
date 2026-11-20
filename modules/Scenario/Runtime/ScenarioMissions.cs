@@ -136,7 +136,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         /// <summary>The base mission by name: one that ships with the game first, then one of the pilot's own.</summary>
         private static bool TryBase(string name, out string json)
         {
-            foreach (MissionGroup source in new MissionGroup[] { MissionGroup.BuiltIn, MissionGroup.Default, MissionGroup.Tutorial, MissionGroup.User })
+            foreach (MissionGroup source in BaseSources())
             {
                 if (source == null || !source.ContainsMission(name)) continue;
                 if (source.TryGetJson(new MissionKey(name, source), out json) && !string.IsNullOrEmpty(json)) return true;
@@ -145,11 +145,25 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             return false;
         }
 
+        /// <summary>Where a base mission is looked for: the game's groups, then the mod's map missions ("Tassara - Fuzzball" lives in "Boscali Summer Maps").</summary>
+        private static IEnumerable<MissionGroup> BaseSources()
+        {
+            yield return MissionGroup.BuiltIn;
+            yield return MissionGroup.Default;
+            yield return MissionGroup.Tutorial;
+            yield return MissionGroup.User;
+            MissionGroup[] all = MissionGroup.AllGroups;
+            if (all != null)
+                foreach (MissionGroup group in all)
+                    // The game's list holds only the one "Boscali Summer" tab (BoscaliMission.OneGroup), which forwards every provider's missions, the map ones included.
+                    if (group != null && (group.Name == "Boscali Summer Maps" || group.Name == "Boscali Summer")) yield return group;
+        }
+
         private UniTask<Sprite> Preview(string group, string title, CancellationToken token)
         {
             ScenarioDef script = Script(group, title);
             if (script != null)
-                foreach (MissionGroup source in new MissionGroup[] { MissionGroup.BuiltIn, MissionGroup.Default, MissionGroup.Tutorial, MissionGroup.User })
+                foreach (MissionGroup source in BaseSources())
                     if (source != null && source.ContainsMission(script.Base)) return source.GetPreview(script.Base, token);
             return UniTask.FromResult<Sprite>(null);
         }

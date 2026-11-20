@@ -41,7 +41,8 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
         private ScenarioDef script;
         private Mission bound;
         private float boundAt, startedAt, changedAt;
-        private bool started, joined, hadAircraft, airborne, collecting, choosing, ownJoin;
+        private bool started, joined, hadAircraft, airborne, collecting, choosing, ownJoin, replying;
+        private float replyUntil;
         private const int MaxMusicBytes = 24 * 1024 * 1024, MaxVideoBytes = 160 * 1024 * 1024;
         private const float MusicFadeSeconds = 3.5f;
         private AudioSource music;
@@ -144,6 +145,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 runner.Raise(TriggerKind.Start);
             }
             Watch(now);
+            if (GameAccess.IsServer()) FlightOrders().Tick(now);
             // A script that puts the pilot on a side itself keeps the game's join screen out of the way until it has.
             if (ownJoin && !joined) HideGameUi();
             if (view.VideoPlaying)
@@ -155,6 +157,12 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             {
                 if (Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1)) Enlist(ScenarioSide.Bdf);
                 else if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) Enlist(ScenarioSide.Pala);
+            }
+            if (replying)
+            {
+                // Y / 1: the paragon reply; N / 2: the renegade one; nothing in time: the paragon one.
+                if (Input.GetKeyDown(KeyCode.Y) || Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1) || now >= replyUntil) Answered(true);
+                else if (Input.GetKeyDown(KeyCode.N) || Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2)) Answered(false);
             }
             runner.TextSpeed = settings.TextSpeed.Value;
             runner.Tick(now - startedAt);
@@ -201,17 +209,18 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             collecting = false;
             view = ScenarioStageView.Create(transform);
             boundAt = Time.time;
-            started = joined = hadAircraft = airborne = choosing = ownJoin = false;
+            started = joined = hadAircraft = airborne = choosing = ownJoin = replying = false;
             var recordings = new List<string>();
             foreach (ScenarioBeat beat in running.Beats)
                 foreach (ScenarioAction action in beat.Actions)
                 {
                     if (action.Kind == ActionKind.Enlist || action.Kind == ActionKind.Choose) ownJoin = true;
-                    if (action.Voice != null && !voiceClips.ContainsKey(action.Voice))
-                    {
-                        voiceClips[action.Voice] = null;
-                        recordings.Add(action.Voice);
-                    }
+                    foreach (string recording in new[] { action.Voice, action.ParagonVoice, action.RenegadeVoice })
+                        if (recording != null && !voiceClips.ContainsKey(recording))
+                        {
+                            voiceClips[recording] = null;
+                            recordings.Add(recording);
+                        }
                 }
             // Every recording decodes now, so the first line and a line in a firefight are both ready when they are needed.
             if (recordings.Count > 0) LoadVoices(recordings, voiceRound, voiceLifetime.Token).Forget();
@@ -232,6 +241,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             named.Clear();
             seen.Clear();
             fullHealth.Clear();
+            flightOrders?.Clear();
             ace = null;
             flown = null;
             if (view != null) Destroy(view.gameObject);
@@ -521,7 +531,58 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
 
         // ------------------------------------------------------------------ IScenarioStage
 
-        public bool Waiting => choosing || (view != null && view.VideoPlaying);
+        public bool Waiting => choosing || replying || (view != null && view.VideoPlaying);
+
+        public void Reply(string prompt, string paragon, string renegade, float timeout)
+        {
+            replying = true;
+            replyUntil = Time.time + timeout;
+            view.Reply(prompt, paragon, renegade, Time.time, replyUntil);
+        }
+
+        private void Answered(bool paragon)
+        {
+            replying = false;
+            view.Reply(null, null, null, 0f, 0f);
+            runner.Answer(paragon);
+        }
+
+        /// <summary>
+        /// Takes the pilot's aircraft out of the world, host only. The game's own way off an aircraft is the ejection sequence (it calls <c>Player.RemoveAircraft</c>, which
+        /// clears <c>Player.Aircraft</c>, after switching every pilot that is not the player's to no state); this does those two steps, then removes the airframe the way a
+        /// game master removes a unit: through the server object manager, no kill and no credit.
+        /// </summary>
+        public void Leave()
+        {
+            if (!GameManager.GetLocalPlayer(out NuclearOption.Networking.Player player) || player.Aircraft == null) return;
+            Spawner spawner = NetworkSceneSingleton<Spawner>.i;
+            if (spawner == null || !spawner.IsServer) return;
+            Aircraft aircraft = player.Aircraft;
+            if (aircraft.pilots != null)
+                foreach (Pilot pilot in aircraft.pilots)
+                    if (pilot != null && !(pilot.currentState is PilotPlayerState)) pilot.SwitchState(null);
+            player.RemoveAircraft(aircraft);
+            Mirage.ServerObjectManager objects = GameAccess.NetworkManagerOrNull?.ServerObjectManager;
+            if (objects != null && aircraft.Identity != null) objects.Destroy(aircraft.Identity, !aircraft.Identity.IsSceneObject);
+            else Destroy(aircraft.gameObject);
+            log?.LogInfo("[Scenario] the pilot's aircraft was removed.");
+        }
+
+        private ScenarioOrders flightOrders;
+
+        private ScenarioOrders FlightOrders() => flightOrders ?? (flightOrders = new ScenarioOrders(name => Named(name), ScriptedAircraft));
+
+        private IEnumerable<string> ScriptedAircraft()
+        {
+            if (script != null)
+                foreach (ScenarioUnit unit in script.Units)
+                    if (unit.Kind == "aircraft") yield return unit.Name;
+        }
+
+        public void Orders(string unit, string order, string target, float x, float z, float radius)
+        {
+            if (GameAccess.IsServer()) FlightOrders().Give(unit, order, target, x, z, radius);
+        }
 
         public void Video(string file)
         {

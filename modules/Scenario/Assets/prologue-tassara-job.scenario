@@ -1,0 +1,400 @@
+# Boscali Summer, prologue: The Tassara Job.
+# Meridian Freight & Aviation Services, a half-legal contractor, is hired by the Tassara Ministry to stop an unmarked cargo flight leaving Camp Tifa. The escorts
+# fire first, the cargo plane is forced down near the border range, and two hours later the player flies a helicopter with the ground team to the wreck.
+# The crew's cargo is PALA weapons for the coup in the Boscali Republic: the hook into chapter 1, Twelve Miles Out.
+# Design: docs/superpowers/specs/2026-11-19-prologue-tassara-job-design.md. Voice lines: docs/superpowers/specs/2026-11-19-prologue-voice-manifest.tsv.
+# Generated from a template (voice file ids numbered per cast, vehicle heights read from the map); edit this file directly from now on.
+# The company name is only written in the cast roles and the briefing: search for Meridian to rename it.
+
+scenario prologue-tassara-job
+title "Prologue: The Tassara Job"
+base "Tassara - Fuzzball"
+group "Boscali Summer"
+campaign boscali-summer 0
+# This is the Fuzzball map but not the mode: the description marker is replaced by the script's own. Everything that could start a fight of its own is off.
+without events theater-ops air-survival strategic-command dynamic-operations support high-command squad progression kaiju spooktober urban-combat trenches nation
+
+about
+| Tassara, a sand sea with three airstrips and a rock range down the border. The army cannot be seen stopping an unmarked cargo flight that left the
+| smugglers' strip at Camp Tifa at dawn, so the Ministry has hired somebody who does not officially exist: Meridian Freight & Aviation Services,
+| cargo on the books, security consulting off them.
+|
+| You fly for Meridian as RONIN. Identify the cargo aircraft, shadow it, and do not fire first. Make it turn back or put it down. Two hours later,
+| be in a helicopter over the crash site with a ground team, before the smugglers' trucks arrive.
+|
+| Your replies in the radio net are your own. The firm's boss, Mr. Ledger, keeps count.
+
+# ------------------------------------------------------------------------------------------------ the world
+time 11
+weather 0.1
+ending 15
+gamemusic off
+# The regular sides stay out of it: the pilot is enlisted into the firm by the story.
+lock bdf
+lock pala
+peace pmc bdf pala
+peace pirates bdf pala
+
+# Meridian's flight, in the air south of Fort Tassara with the player. Pickle is young and gets in the way of things.
+unit deacon       new aircraft CAS1 side=pmc at -1800 2300 8300 heading=215 speed=200 skill=0.9 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
+unit pickle       new aircraft CAS1 side=pmc at -2250 2330 8200 heading=215 speed=200 skill=0.35 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
+unit widow        new aircraft CAS1 side=pmc at -1600 2300 8700 heading=215 speed=200 skill=0.8 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3++AAM3_double+AGM1_double
+
+# The smugglers' cargo flight: a VL-49 and four light fighters, out of Camp Tifa and bound east for the border range.
+unit hauler_plane new aircraft QuadVTOL1 side=pirates at -9500 1700 -2800 heading=75 speed=110 skill=0.6
+unit esc_1        new aircraft SmallFighter1 side=pirates at -9000 1800 -2300 heading=75 speed=150 skill=0.45 loadout=gun_20mm_internal_500+AAM2_single_internal+AAM2_single_internal+AShM2_double+AAM1_single
+unit esc_2        new aircraft SmallFighter1 side=pirates at -9000 1800 -3300 heading=75 speed=150 skill=0.4 loadout=gun_20mm_internal_500+AAM2_single_internal+AAM2_single_internal+AShM2_double+AAM1_single
+unit esc_3        new aircraft SmallFighter1 side=pirates at -10200 1900 -2000 heading=75 speed=150 skill=0.4 loadout=gun_20mm_internal_500+AAM2_single_internal+AAM2_single_internal+AShM2_double+AAM1_single
+unit esc_4        new aircraft SmallFighter1 side=pirates at -10200 1900 -3600 heading=75 speed=150 skill=0.4 loadout=gun_20mm_internal_500+AAM2_single_internal+AAM2_single_internal+AShM2_double+AAM1_single
+
+# The crash site (the LZ) is a flat pan at -500, -3500, west of the range. Meridian's ground team arrives when the helicopter sets down.
+unit gravel_1     new vehicle Truck2-MRAP side=pmc at -380 438.7 -3560 heading=270 skill=0.8
+unit gravel_2     new vehicle Truck2-MRAP side=pmc at -330 439.7 -3420 heading=270 skill=0.8
+unit gravel_3     new vehicle LCV45 side=pmc at -440 441.5 -3350 heading=270 skill=0.8
+
+# The smugglers' recovery party: technicals from the west, then a gunship that was not on the manifest, then trucks and a gun that points up.
+unit tech_1       new vehicle LCV45 side=pirates at -3000 390.3 -3900 heading=90 skill=0.5 to=-600,-3550
+unit tech_2       new vehicle LCV45 side=pirates at -3100 383.4 -3300 heading=90 skill=0.5 to=-600,-3400
+unit tech_3       new vehicle Truck2-MRAP side=pirates at -3300 390.5 -3650 heading=90 skill=0.5 to=-650,-3500
+unit gunship      new aircraft AttackHelo1 side=pirates at -4300 640 -2200 heading=100 speed=50 skill=0.6 loadout=turret_30mmHE_750+AGM1_quad_internal+RocketPod1_triple+IRMS1_double+IRMS1_double
+unit mrap_1       new vehicle Truck2-MRAP side=pirates at -600 412.8 -6300 heading=0 skill=0.5 to=-500,-3700
+unit mrap_2       new vehicle Truck2-MRAP side=pirates at -300 418.1 -6500 heading=0 skill=0.5 to=-400,-3700
+unit aa_1         new vehicle SPAAG1 side=pirates at -1500 393.8 -5800 heading=20 skill=0.6 to=-300,-4300
+
+# Staging.
+objective stage_wing wait 8
+  then spawn deacon pickle widow
+objective stage_convoy wait 2
+  then spawn hauler_plane esc_1 esc_2 esc_3 esc_4
+
+# Part 1: the cargo flight.
+objective find_cargo pmc "Find the cargo flight" reach -9500 1800 -2800 range=5000
+  then start roe escorts force_down cargo_escaped shots_clock
+objective roe pmc "Shadow and identify. Do not fire first." wait 3000
+objective escorts pmc "Destroy the escorts" destroy esc_1 esc_2 esc_3 esc_4
+objective force_down pmc "Force the cargo aircraft down" destroy hauler_plane
+  then stop cargo_escaped
+# The escorts open fire by themselves; if nobody has been hit by this time the story says they did.
+objective shots_clock wait 40
+# Lose: the cargo crosses the range and the buyer takes delivery.
+objective cargo_escaped pirates wait 600
+  then victory 8
+
+# Part 2: the crash site, two hours later.
+objective lz pmc "Fly low to the crash site" reach -500 480 -3500 range=400
+objective team_drop wait 2
+  then spawn gravel_1 gravel_2 gravel_3
+  then start hold_lz wave_1 wave_2 wave_3 team_lost
+objective wave_1 wait 20
+  then spawn tech_1 tech_2 tech_3
+  then start techs
+objective wave_2 wait 60
+  then spawn gunship
+  then start gunship_wave
+objective wave_3 wait 105
+  then spawn mrap_1 mrap_2 aa_1
+objective techs pmc "Hold off the technicals" destroy tech_1 tech_2 tech_3
+objective gunship_wave pmc "Stop the gunship" destroy gunship
+objective hold_lz pmc "Hold the site" wait 150
+  then start interrogate
+# Lose: the ground team is cut down.
+objective team_lost pirates destroy gravel_1 gravel_2 gravel_3 need=60%
+  then victory 8
+objective interrogate pmc "Question the crew" wait 3000
+# The end: the story completes this after the last line; the clock is a fallback.
+objective north pmc "Head north to Ignus" wait 3000
+  then victory 15
+
+# ------------------------------------------------------------------------------------------------ the story
+cast ronin     wing    "RONIN"        "Meridian flight lead"
+cast widow     wing    "WIDOW"        "Meridian, weapons officer"
+cast deacon    wing    "DEACON"       "Meridian, wing"
+cast pickle    wing    "PICKLE"       "Meridian, wing"
+cast speedbump wing    "SPEEDBUMP"    "Meridian, helicopter pilot"
+cast gravel    wing    "GRAVEL"       "Meridian ground team"
+cast sentry    awacs   "SENTRY"       "Ministry air control, on loan"
+cast ops       command "MERIDIAN OPS" "Meridian dispatch"
+cast ledger    command "LEDGER"       "Managing director, Meridian"
+cast kestrel   enemy   "KESTREL"      "Escort lead"
+cast hauler    enemy   "HAULER"       "Cargo pilot"
+
+beat intro when start
+  card "PROLOGUE" "The Tassara Job" seconds=5
+  dip
+  enlist pmc
+  seat "A-19 Brawler" at -2000 2300 8500 heading=215 speed=200
+
+# Radio check, tasking, the rules. Short turns, people step on each other, the boss leaks one memory and moves on.
+beat brief when join
+  # The flight is staged after the join (it was staged at mission start, before the pilot joined the firm's side).
+  start stage_wing
+  orders deacon follow player
+  orders widow follow player
+  orders pickle follow player
+  say ops "Meridian flight, Ops. Channel's recorded. Check in, in order." voice=pro-ops-01.mp3
+  say deacon "Deacon, up." voice=pro-deacon-01.mp3
+  say widow "Widow, up." voice=pro-widow-01.mp3
+  say pickle "Pickle, up! Uh, three. Pickle three, up. Sorry." voice=pro-pickle-01.mp3
+  say deacon "Pickle. Just up." voice=pro-deacon-02.mp3
+  say ops "Ronin, you're on the board. Camp Tifa departure, oh six forty. One heavy, four escorts. Eastbound." voice=pro-ops-02.mp3
+  hint "Find the cargo flight, south-west of you"
+  say widow "Escorts armed?" voice=pro-widow-02.mp3
+  say ops "Assume so." voice=pro-ops-03.mp3
+  say ledger "Morning. The army can't be seen stopping that flight. We can." voice=pro-ledger-01.mp3
+  say ledger "Flat fee. Bonus if the cargo comes back intact. Airframes we lose come off the top." voice=pro-ledger-02.mp3
+  say pickle "Intact like whole, or intact like landed? Because those are two, those are--" voice=pro-pickle-02.mp3
+  say deacon "Pickle." voice=pro-deacon-03.mp3
+  say ledger "Rules. Identify. Shadow. Turn them--" voice=pro-ledger-03.mp3
+  say sentry "Meridian flight, Sentry. One heavy, four fast, no squawk. Two one zero, fourteen kilometres." voice=pro-sentry-01.mp3
+  say ledger "Turn them back, or put them down." voice=pro-ledger-04.mp3
+  say deacon "Copy." voice=pro-deacon-04.mp3
+  say ledger "Nobody fires first. I signed for a first shot once." voice=pro-ledger-05.mp3
+  reply roe "LEDGER: nobody fires first." paragon="Copy. We look, we don't touch." renegade="And if they shoot first?" paragon_voice=pro-ronin-01.mp3 renegade_voice=pro-ronin-02.mp3 timeout=15
+
+beat roe-p when flag roe-paragon
+  say ledger "Good. That costs nothing." voice=pro-ledger-06.mp3
+  flag roe-done
+
+beat roe-r when flag roe-renegade
+  say ledger "Then there's a clause. Self-defence is billable. A dead pilot is not." voice=pro-ledger-07.mp3
+  flag roe-done
+
+beat approach when flag roe-done
+  start stage_convoy find_cargo
+  orders esc_1 follow hauler_plane
+  orders esc_2 follow hauler_plane
+  orders esc_3 follow hauler_plane
+  orders esc_4 follow hauler_plane
+  say sentry "Ronin, Sentry. Convoy's twelve kilometres ahead. Stay high. Stay boring." voice=pro-sentry-02.mp3
+  hint "Find the cargo flight" seconds=12
+
+beat found when done find_cargo
+  music "synthetic-warfront.mp3" volume=0.3 loop
+  say pickle "Tally! Tally five, they're just, they're flying. Straight and level. Is that normal?" voice=pro-pickle-03.mp3
+  say deacon "They're not hiding. They're not worried." voice=pro-deacon-05.mp3
+  say widow "Widow. Four escorts, two missiles each. Transport's unarmed. Probably." voice=pro-widow-03.mp3
+  say kestrel "Unidentified flight, escort lead. Restricted airspace. Turn away. I ask once." voice=pro-kestrel-01.mp3
+  say ops "Flight, Ops. Registration check. Transport belongs to a company in a free port. That company belongs to a company in another free port." voice=pro-ops-04.mp3
+  hint "Shadow the cargo aircraft. Do not fire first" seconds=15
+
+beat src-hit when damaged pickle 90
+  flag fire-open
+
+beat src-clock when done shots_clock
+  flag fire-open
+
+beat shots when flag fire-open
+  say kestrel "Escorts. Weapons free." voice=pro-kestrel-02.mp3
+  say pickle "Tone! Ronin, I've got tone, I've got a--" voice=pro-pickle-04.mp3
+  say widow "Missile launch. Theirs. Ronin." voice=pro-widow-04.mp3
+  complete roe
+  hint "Destroy the escorts" seconds=15
+  reply fire "PICKLE has a missile on him. Your call." paragon="Pickle, flares, break right. Deacon, stay with him." renegade="Pickle, don't break. Kill him first." paragon_voice=pro-ronin-03.mp3 renegade_voice=pro-ronin-04.mp3 timeout=10
+
+beat fire-p when flag fire-paragon
+  say deacon "Covering. Pickle, flares. Now." voice=pro-deacon-06.mp3
+  say pickle "Flares! Flares going. Oh God. Okay, okay, okay--" voice=pro-pickle-05.mp3
+
+beat fire-r when flag fire-renegade
+  say deacon "Copy. Pickle. You heard him." voice=pro-deacon-07.mp3
+  say pickle "Staying! I'm staying, he's still on me, Ronin, he's, I can't--" voice=pro-pickle-06.mp3
+
+# The big one: fear first, then the shaky part. Nobody jokes here.
+beat pickle-down when destroyed pickle
+  flag pickle-down
+  say pickle "I'm hit! Ronin, I'm hit, it's on fire, the stick's, the stick's--" voice=pro-pickle-07.mp3
+  say deacon "Pickle. Eject." voice=pro-deacon-08.mp3
+  say pickle "I can't, Deacon, I can't, my hands--" voice=pro-pickle-08.mp3
+  say deacon "Eject. Now." voice=pro-deacon-09.mp3
+  say pickle "Ejecting, ejecting, eje--" voice=pro-pickle-09.mp3
+  say widow "Chute. I have one chute." voice=pro-widow-05.mp3
+  say deacon "Copy that. God." voice=pro-deacon-10.mp3
+  say pickle "Ronin? I'm alive. I'm okay. Am I okay? I think I'm okay." voice=pro-pickle-10.mp3
+  say pickle "My legs work. They work. Okay. Okay." voice=pro-pickle-11.mp3
+  say ledger "Ops, put the ground team on that pilot. Replacement is fourteen months." voice=pro-ledger-08.mp3
+  say ops "Ground team tasked." voice=pro-ops-05.mp3
+  hint "Pickle ejected: the ground team will pick him up" seconds=10
+
+beat kestrel-down when destroyed esc_1
+  say kestrel "That's not possible." voice=pro-kestrel-03.mp3
+  say kestrel "I'm hit! Cargo, go, go, make the range--" voice=pro-kestrel-04.mp3
+  say hauler "Kestrel? Kestrel, say again! They said boxes. Only boxes." voice=pro-hauler-01.mp3
+
+beat splash-2 when destroyed esc_2
+  say deacon "Splash one." voice=pro-deacon-11.mp3
+
+beat splash-3 when destroyed esc_3
+  say widow "Another down." voice=pro-widow-06.mp3
+
+beat src-cargo when done force_down
+  flag cargo-grounded
+
+beat escorts-down when done escorts unless=cargo-grounded
+  say sentry "Sentry. Escorts are gone. Cargo's turning for the range. I lose him in the passes." voice=pro-sentry-03.mp3
+  say ledger "The bonus is forty percent of the fee. It's on that airframe." voice=pro-ledger-09.mp3
+  reply cargo "HAULER is running for the range." paragon="Hauler, Ronin. Put it on the ground. Nobody else has to die." renegade="Widow. His engine." paragon_voice=pro-ronin-05.mp3 renegade_voice=pro-ronin-06.mp3 timeout=12
+
+beat cargo-p when flag cargo-paragon
+  say hauler "If I land, they'll... no. Okay. Okay. The flats, south of the range. Don't shoot." voice=pro-hauler-02.mp3
+
+beat cargo-r when flag cargo-renegade
+  say widow "Tracking. Fox two." voice=pro-widow-07.mp3
+  say hauler "Engine! I'm hit, I've lost the engine, putting her down, don't shoot, don't shoot--" voice=pro-hauler-03.mp3
+  say ledger "The engine was a third of the bonus. Noted." voice=pro-ledger-10.mp3
+
+beat cargo-down when done force_down
+  flag cargo-grounded
+  say sentry "Cargo's down on the flats. Wheels up. Three out of the aircraft." voice=pro-sentry-04.mp3
+  say deacon "Full flaps. Flat flare. That's a freight pilot." voice=pro-deacon-12.mp3
+  say ops "Recovery party moving from the west. Trucks. One gunship, not declared. Two hours out." voice=pro-ops-06.mp3
+  say ledger "Back to the strip. Fuel, rearm, the helicopter. We take that site first." voice=pro-ledger-11.mp3
+  music stop
+  flag part1-done
+
+# The time-skip: the pilot's aircraft is removed, the helicopter handed over, with a prerendered shot in between.
+beat skip when flag part1-done
+  card "TWO HOURS LATER" "Forward strip, Tassara border" seconds=5
+  dip
+  leave
+  video "pro-heli.mp4"
+  clock 13.5
+  seat "UH-90 Ibis" at -3000 760 4500 heading=190 speed=45
+  flag in-heli
+
+beat heli-brief when flag in-heli
+  say speedbump "Seven-One, Speedbump. I've got the checklist, you've got the stick. Rotors are turning. That's good. That's good, right?" voice=pro-speedbump-01.mp3
+  say widow "Widow, right seat. Radios and gun are mine. Speedbump. Breathe." voice=pro-widow-08.mp3
+  say gravel "Gravel. Four aboard. West side of the wreck, inside the berm." voice=pro-gravel-01.mp3
+  say sentry "Seven-One, Sentry. Trucks on the old road, ten minutes back. Rotary contact, nine seconds. Then nothing." voice=pro-sentry-05.mp3
+  say ledger "Every hour someone else holds that crew, they're worth less. Low and fast." voice=pro-ledger-12.mp3
+  hint "Fly low to the crash site" seconds=15
+  start lz
+  say speedbump "Ronin, soft or fast? On the ground, I mean. I've only done soft. On a pad. With a flag on it." voice=pro-speedbump-02.mp3
+  reply heli "SPEEDBUMP: soft or fast, Ronin?" paragon="Soft. We've got time." renegade="Fast. Hard if you have to." paragon_voice=pro-ronin-07.mp3 renegade_voice=pro-ronin-08.mp3 timeout=12
+
+beat heli-p when flag heli-paragon
+  say speedbump "Soft. Okay. Slow and smooth. I can do that. I did it once. In training. Mostly." voice=pro-speedbump-03.mp3
+  say widow "He's fine. Speedbump, eyes outside." voice=pro-widow-09.mp3
+
+beat heli-r when flag heli-renegade
+  say speedbump "Fast. Right. Fast and hard. Hard's sort of my thing. Ask the landing gear." voice=pro-speedbump-04.mp3
+  say gravel "Hard's fine." voice=pro-gravel-02.mp3
+
+beat lz-reached when done lz
+  flag lz-reached
+  say speedbump "That's the wreck. It's bigger. Up close, it's a lot bigger. Flat patch by the tail. There. There." voice=pro-speedbump-05.mp3
+  say gravel "LZ's cold. Put us down." voice=pro-gravel-03.mp3
+  hint "Land at the crash site" seconds=20
+  countdown 45 "LAND AT THE LZ" flag=lz-timeout
+
+beat touchdown when landed if=lz-reached unless=team-dropped
+  flag team-dropped
+  countdown stop
+  say gravel "Out. Wreck's ours. Ronin, watch the road." voice=pro-gravel-04.mp3
+  start team_drop
+
+beat lz-late when flag lz-timeout unless=team-dropped
+  flag team-dropped
+  say speedbump "I'm not landing in that! I'm hovering, I'm hovering, Gravel, go, go!" voice=pro-speedbump-06.mp3
+  say gravel "Ropes. Go." voice=pro-gravel-05.mp3
+  start team_drop
+
+beat pickle-found when flag team-dropped if=pickle-down
+  say gravel "Got your wingman. Truck two. Sunburn, nothing else." voice=pro-gravel-06.mp3
+  say pickle "Ronin? It's Pickle. I'm okay. They gave me water. I lost a boot. Sorry about the airplane." voice=pro-pickle-12.mp3
+  say ledger "Stay with the medic, Pickle." voice=pro-ledger-13.mp3
+
+beat wave1 when done wave_1
+  say sentry "Technicals, three, from the west. Fast." voice=pro-sentry-06.mp3
+  say gravel "Contact west. Speedbump." voice=pro-gravel-07.mp3
+  say speedbump "On it! I'm on it. Widow, that's three, that's three, right?" voice=pro-speedbump-07.mp3
+  say widow "Three. Left of the road. Engaging." voice=pro-widow-10.mp3
+  hint "Destroy the technicals" seconds=12
+
+beat techs-down when done techs
+  say gravel "West is clear." voice=pro-gravel-08.mp3
+
+beat wave2 when done wave_2
+  say sentry "Gunship. West, nine kilometres, low. Closing." voice=pro-sentry-07.mp3
+  say speedbump "That's us. We're the cover. That's us." voice=pro-speedbump-08.mp3
+  say widow "Launch! Flares. Ronin, break, break!" voice=pro-widow-11.mp3
+  say speedbump "Oh no." voice=pro-speedbump-09.mp3
+  hint "Stop the gunship" seconds=12
+
+beat gun-down when done gunship_wave
+  say widow "Gunship's down." voice=pro-widow-12.mp3
+  say speedbump "We got him. We, okay. We got him." voice=pro-speedbump-10.mp3
+  say gravel "Back to work." voice=pro-gravel-09.mp3
+
+beat wave3 when done wave_3
+  say sentry "More trucks from the south. And a gun that points up. Gravel, two minutes." voice=pro-sentry-08.mp3
+  say gravel "Copy. Ronin, stay up." voice=pro-gravel-10.mp3
+
+# The interrogation: the same facts either way, a different temperature.
+beat interrogate when done hold_lz
+  say gravel "Site's ours. Crew's alive. Pilot, loadmaster, a kid. Nobody's hurt." voice=pro-gravel-11.mp3
+  say hauler "I don't know what's in the crates. I don't. I fly, they pay me. I have a daughter." voice=pro-hauler-04.mp3
+  say gravel "Crates say PALA." voice=pro-gravel-12.mp3
+  say hauler "...I can read." voice=pro-hauler-05.mp3
+  say gravel "Ronin. He's stalling. How do you want it?" voice=pro-gravel-13.mp3
+  reply grill "GRAVEL: the pilot is stalling." paragon="Sit him down. Water. Let him talk." renegade="Do what you have to. We're short on time." paragon_voice=pro-ronin-09.mp3 renegade_voice=pro-ronin-10.mp3 timeout=15
+
+beat grill-p when flag grill-paragon
+  say gravel "Water. Blanket. Medic." voice=pro-gravel-14.mp3
+  say hauler "Thank you. Thank you." voice=pro-hauler-06.mp3
+  say gravel "Take your time." voice=pro-gravel-15.mp3
+  say hauler "A colonel. PALA. He pays in dollars. Cash." voice=pro-hauler-07.mp3
+  say gravel "Where. When." voice=pro-gravel-16.mp3
+  say hauler "Agrapol. The harbour. The twelfth of June. Rifles. Rockets, a lot of rockets. I knew it wasn't only boxes." voice=pro-hauler-08.mp3
+  flag grill-done
+
+beat grill-r when flag grill-renegade
+  say gravel "Copy." voice=pro-gravel-17.mp3
+  say hauler "No, no, wait, wait--" voice=pro-hauler-09.mp3
+  say hauler "PALA! It's PALA, a colonel, he pays double for quiet flights, Agrapol, the harbour, the twelfth, rifles, rockets, that's all, that's all I swear!" voice=pro-hauler-10.mp3
+  say widow "Gravel." voice=pro-widow-13.mp3
+  say gravel "Done. Twenty seconds. He'll live." voice=pro-gravel-18.mp3
+  say speedbump "...I'm watching the road." voice=pro-speedbump-11.mp3
+  flag grill-done
+
+beat intel when flag grill-done
+  say gravel "Twelfth of June. Agrapol. That's all of it." voice=pro-gravel-19.mp3
+  say widow "Agrapol's the Republic's fleet harbour." voice=pro-widow-14.mp3
+  say ops "Report's filed, Mr. Ledger." voice=pro-ops-07.mp3
+  say ledger "Ops. Days to the twelfth." voice=pro-ledger-14.mp3
+  say ops "Thirty-eight." voice=pro-ops-08.mp3
+  say ledger "Who do we have in Ignus?" voice=pro-ledger-15.mp3
+  say ops "Four contacts. Two PALA. Two government." voice=pro-ops-09.mp3
+  say ledger "Call all four." voice=pro-ledger-16.mp3
+  say ledger "Ronin, pack up. We're going north." voice=pro-ledger-17.mp3
+  start north
+  reply north "LEDGER: we're going north, to Ignus." paragon="The government ones first. They should know." renegade="What's the rate?" paragon_voice=pro-ronin-11.mp3 renegade_voice=pro-ronin-12.mp3 timeout=15
+
+beat north-p when flag north-paragon
+  say ledger "Government first. Then the others. Same hour." voice=pro-ledger-18.mp3
+  flag north-done
+
+beat north-r when flag north-renegade
+  say ledger "Double the Ministry's rate. Hazard on top. Same figure for all four." voice=pro-ledger-19.mp3
+  flag north-done
+
+beat ending-r when flag north-done if=renegade-4
+  say ledger "You priced everything today, Ronin. I noticed." voice=pro-ledger-20.mp3
+
+beat ending-p when flag north-done unless=renegade-4
+  say ledger "You kept the crew breathing and the firm clean. I don't know yet what that costs." voice=pro-ledger-21.mp3
+
+beat finale when flag north-done
+  say speedbump "North. Okay. Heading three five zero. I'm just going to fly now." voice=pro-speedbump-12.mp3
+  say sentry "Meridian, Sentry. Scope's clear. This conversation didn't happen." voice=pro-sentry-09.mp3
+  remember tassara-job
+  finish
+  card "Prologue complete" "Meridian Freight & Aviation Services bills the Ministry by the hour. Losses will be itemised." seconds=8
+  complete north
+
+# Losing.
+beat lost-team when done team_lost
+  say ledger "Gravel's team is gone. I won't put a number on that. Not on this net." voice=pro-ledger-22.mp3
+
+beat lost-cargo when done cargo_escaped
+  say ledger "Cargo's across the range. Penalty clause applies. I'll have the figure by morning." voice=pro-ledger-23.mp3

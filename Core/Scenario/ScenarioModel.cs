@@ -89,7 +89,7 @@ namespace BoscaliSummer.Core.Scenario
     /// </summary>
     internal enum TriggerKind : byte { Start, Join, Spawn, Airborne, Landed, Time, Started, Done, Flag, Destroyed, Damaged, Near, Below, Above, Down }
 
-    internal enum ActionKind : byte { Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat, Start, Complete, Cancel, Countdown, Ace, Random, Video }
+    internal enum ActionKind : byte { Card, Say, Hint, Wait, Flag, Unflag, Remember, Finish, Dip, Sky, Clock, Music, Enlist, Choose, Seat, Start, Complete, Cancel, Countdown, Ace, Random, Video, Leave, Reply, Orders }
 
     internal struct ScenarioAction
     {
@@ -106,6 +106,8 @@ namespace BoscaliSummer.Core.Scenario
         public float X, Y, Z, Heading, Speed;
         /// <summary>The objectives a <c>start</c>, <c>complete</c> or <c>cancel</c> acts on; the flags a <c>random</c> picks one of.</summary>
         public string[] Names;
+        /// <summary>A <c>reply</c>: the two lines the pilot picks between (Name is the reply's id, Text its prompt, Title the speaker, Seconds the timeout) and their recordings.</summary>
+        public string Paragon, Renegade, ParagonVoice, RenegadeVoice;
     }
 
     /// <summary>A piece of the story: when <see cref="Trigger"/> happens for a pilot it is meant for, its actions play in order.</summary>

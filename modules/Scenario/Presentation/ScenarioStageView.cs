@@ -221,7 +221,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             float hintAlpha = Window(game, hintFrom, hintUntil, 0.4f);
 
             if (videoBack != null && videoBack.enabled != VideoPlaying) videoBack.enabled = videoImage.enabled = videoSkip.enabled = VideoPlaying;
-            bool any = VideoPlaying || dip > 0.001f || cardAlpha > 0.001f || lineAlpha > 0.001f || hintAlpha > 0.001f || CombatShown;
+            bool any = VideoPlaying || dip > 0.001f || cardAlpha > 0.001f || lineAlpha > 0.001f || hintAlpha > 0.001f || CombatShown || ReplyShown;
             if (canvas.enabled != any) canvas.enabled = any;
             if (!any) return;
 
@@ -242,6 +242,7 @@ namespace BoscaliSummer.Modules.Scenario.Presentation
             hintAccent.color = AvTheme.Warning.WithAlpha(hintAlpha);
             hint.color = AvTheme.TextPrimary.WithAlpha(hintAlpha);
             PaintCombat(game, real);
+            PaintReply(game);
         }
 
         private void OnDestroy()

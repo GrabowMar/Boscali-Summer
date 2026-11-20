@@ -20,7 +20,7 @@ namespace BoscaliSummer.Modules.Scenario
 
         public ModuleMetadata Metadata => Module;
 
-        public Type[] PatchTypes => new[] { typeof(LaunchMissionPatch) };
+        public Type[] PatchTypes => new[] { typeof(LaunchMissionPatch), typeof(StopObjectivePatch) };
 
         public void Install(ModuleContext context)
         {

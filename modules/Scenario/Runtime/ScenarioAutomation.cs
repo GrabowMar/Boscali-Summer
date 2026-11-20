@@ -48,7 +48,7 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
             {
                 string key = name.Trim();
                 report["unit_" + key] = !UnitRegistry.customIDLookup.TryGetValue(key, out Unit unit) ? "absent"
-                    : unit == null || unit.disabled ? "down" : unit.GlobalPosition().x.ToString("0") + " " + unit.GlobalPosition().z.ToString("0");
+                    : unit == null ? "gone" : unit.disabled ? "down" : unit.GlobalPosition().x.ToString("0") + " " + unit.GlobalPosition().z.ToString("0") + " y" + unit.GlobalPosition().y.ToString("0");
             }
             bool flying = GameManager.GetLocalAircraft(out Aircraft own) && own != null;
             report["pilot"] = !flying ? "none" : own.disabled ? "down" : own.GlobalPosition().x.ToString("0") + " " + own.GlobalPosition().y.ToString("0") + " " +
@@ -81,6 +81,21 @@ namespace BoscaliSummer.Modules.Scenario.Runtime
                 if (leaks.Count > 0) report["leaks_" + hq.faction.factionName] = string.Join(", ", leaks);
             }
             return report;
+        }
+
+        private static readonly HashSet<string> completed = new HashSet<string>();
+
+        /// <summary>Sim-only: completes the named objectives (args <c>objectives</c>, comma-separated) through the host's own seam, as a story beat's <c>complete</c> does.</summary>
+        public static Dictionary<string, object> Complete(Dictionary<string, object> args)
+        {
+            ScenarioHost host = ScenarioHost.Instance;
+            string names = args != null && args.TryGetValue("objectives", out object list) ? list as string : null;
+            if (host == null || string.IsNullOrEmpty(names)) return new Dictionary<string, object> { ["ok"] = false, ["error"] = "needs the host and args.objectives" };
+            // args.present: a unit that must already exist; each objective list is completed once; so a test can call this on a timer until the story is ready for it.
+            if (args.TryGetValue("present", out object unitName) && !UnitRegistry.customIDLookup.ContainsKey((string)unitName)) return new Dictionary<string, object> { ["ok"] = true, ["skipped"] = 1 };
+            if (!completed.Add(names)) return new Dictionary<string, object> { ["ok"] = true, ["skipped"] = 1 };
+            host.Objectives(Core.Scenario.ActionKind.Complete, names.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries));
+            return new Dictionary<string, object> { ["ok"] = true, ["skipped"] = 0 };
         }
 
         /// <summary>Knocks out the named units (args <c>units</c>, comma-separated), as if shot down or sunk: lets a test walk a script's story.</summary>

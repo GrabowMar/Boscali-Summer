@@ -20,6 +20,7 @@ experimental; all players should use the same mod version.
 - **World and fixes:** forest fires leave glowing embers and cost less, Twelve Miles Out opens with a prerendered
   intro film, and a round of stability fixes.
 - **Multiplayer:** a client whose build of the hosted map differs is turned away with a reason.
+- **New prologue, The Tassara Job:** a short mission before Twelve Miles Out, flown for Meridian Freight (formerly Halyard) under the boss LEDGER. Your radio replies are now yours to choose, Paragon or Renegade, and the firm remembers. It has objectives, scripted ambushes and a prerendered helicopter cut-in. Chapter 1 now calls you RONIN and your wingman DEACON.
 
 **Install:** extract `BoscaliSummer-0.2.15.zip` into the Nuclear Option game folder, or install `BoscaliSummer.dll`
 with your mod manager. Requires BepInEx 5.4.23+; Blueprinter enables the bundled custom content.

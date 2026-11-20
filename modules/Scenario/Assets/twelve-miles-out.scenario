@@ -1,5 +1,5 @@
 # Boscali Summer, chapter 1: Twelve Miles Out.
-# Coup morning in the Ignus archipelago. The pilot flies for Halyard Risk Group, a private security firm, and keeps a client's three
+# Coup morning in the Ignus archipelago. The pilot flies for Meridian Risk Group, a private security firm, and keeps a client's three
 # freighters afloat outside the twelve-mile line while the Boscali Republic falls apart behind them. Republic (BDF) and PALA forces are at
 # peace with the firm and fight each other; the pirates are the only enemy. Design: docs/superpowers/specs/2026-10-20-boscali-summer-campaign-remake-design.md.
 # The format is documented in docs/SCENARIOS.md.
@@ -16,7 +16,7 @@ about
 | 12 June 2034, Ignus archipelago. At two this morning PALA took Agrapol. By dawn the Boscali Republic's navy is running for open
 | water and nobody in the capital answers the phone.
 |
-| None of that is your war. You fly for Halyard Risk Group, and Halyard has one contract this morning: three Calder Lines freighters
+| None of that is your war. You fly for Meridian Risk Group, and Meridian has one contract this morning: three Calder Lines freighters
 | holding beyond the twelve-mile limit, a hundred people aboard, and no navy left to look after them. Find the convoy and keep it afloat.
 |
 | Republic and PALA forces are neutral: they will not fire on you, and you are not paid to fire on them. Only pirates show as targets.
@@ -69,7 +69,7 @@ unit lancer_2     new aircraft Multirole1 side=pala at -12400 2500 1100 heading=
 unit calder_spirit new ship BS_ContainerFeeder side=pmc at 6000 6.0 27000 heading=74 skill=0.5 to=32000,34500
 unit calder_grace  new ship BS_ContainerFeeder side=pmc at 5400 6.0 26600 heading=74 skill=0.5 to=31400,34100
 unit calder_vale   new ship BS_ContainerFeeder side=pmc at 6400 6.0 26450 heading=74 skill=0.5 to=32400,33950
-# Summer Two, the wingman. He takes off with the pilot.
+# Deacon, the wingman. He takes off with the pilot.
 unit summer_two    new aircraft CAS1 side=pmc at 9300 1150 8250 heading=354 speed=150 skill=1 loadout=gun_ammo_35mm_720+gun_30mm_rotary_pod++gunpod_20mm+Rocket2_4Podx3+bomb_250_triple+AAM3_double+AGM1_double
 
 # The pirates. Fast boats first, then a Republic corvette whose crew has stopped waiting for its wages, then whatever money buys in the air.
@@ -83,7 +83,7 @@ unit raider_2     new aircraft COIN side=pirates at -4300 500 34000 heading=110 
 unit raider_helo  new aircraft AttackHelo1 side=pirates at -3500 140 33600 heading=110 speed=50 skill=0.5 loadout=turret_30mmHE_750+AGM1_quad_internal+RocketPod1_triple+IRMS1_double+IRMS1_double
 
 # Staging, timed to the two-minute intro video: the coup and the strike are under way while it plays (an addon ship type is ready a few
-# seconds after the mission is), and Summer Two takes off with the pilot as it ends.
+# seconds after the mission is), and Deacon takes off with the pilot as it ends.
 objective stage_convoy wait 20
   then spawn calder_spirit calder_grace calder_vale
 objective stage_coup wait 52
@@ -127,8 +127,8 @@ objective two_down destroy summer_two
 objective constance_lost destroy bdf_constance
 
 # ------------------------------------------------------------------------------------------------ the story
-cast ledger    command "LEDGER"                "Halyard Risk Group, operations"
-cast two       wing    "SUMMER TWO"            "Your wingman"
+cast ledger    command "LEDGER"                "Meridian Risk Group, operations"
+cast two       wing    "DEACON"            "Your wingman"
 cast spirit    tower   "CALDER SPIRIT"         "Convoy master, Calder Lines"
 cast viper     awacs   "VIPER LEAD"            "PALA gunships"
 cast authority awacs   "PROVISIONAL AUTHORITY" "PALA, on every frequency"
@@ -147,7 +147,7 @@ beat intro when start
   seat "A-19 Brawler" at 9000 1100 8500 heading=354 speed=150
 
 beat brief when join
-  say ledger "Summer Lead, Ledger. Good morning, and welcome to the end of the Boscali Republic. PALA has the capital, the airport and the television. None of that is billable." voice=tmo-ledger-01.mp3
+  say ledger "Ronin, Ledger. Good morning, and welcome to the end of the Boscali Republic. PALA has the capital, the airport and the television. None of that is billable." voice=tmo-ledger-01.mp3
   hint "Fly north to the Calder convoy"
   say ledger "What is billable: three Calder Lines feeders, holding north of the twelve-mile line. Find them and keep them afloat." voice=tmo-ledger-02.mp3
   hint "Republic and PALA forces are neutral"
@@ -157,12 +157,12 @@ beat brief when join
 
 beat viper when time 175 side=pmc
   say viper "Unidentified A-19 north of Feldspar, this is Viper Lead, Provisional Authority. You are inside a military operation. State your business." voice=tmo-viper-01.mp3
-  say two "Viper, Summer Two. Civilian contractor, merchant escort, outbound past the limit. We're not part of this." voice=tmo-two-01.mp3
-  say viper "Then stay out of it, Summer. Viper out." voice=tmo-viper-02.mp3
+  say two "Viper, Deacon. Civilian contractor, merchant escort, outbound past the limit. We're not part of this." voice=tmo-two-01.mp3
+  say viper "Then stay out of it, Ronin. Viper out." voice=tmo-viper-02.mp3
 
 beat mayday when time 215 side=pmc
   say constance "Any station, any station, this is Republic frigate Constance. We are under air attack north of Agrapol. Request assistance. Any station." voice=tmo-constance-01.mp3
-  say ledger "Not a station we answer to. Eyes north, Summer." voice=tmo-ledger-04.mp3
+  say ledger "Not a station we answer to. Eyes north, Ronin." voice=tmo-ledger-04.mp3
 
 beat authority when time 265 side=pmc
   say authority "All Republic vessels and aircraft. This is the Provisional Authority of the Boscali Republic. Return to port, strike your colours, and you will not be harmed." voice=tmo-authority-01.mp3
@@ -172,7 +172,7 @@ beat constance-sunk when done constance_lost side=pmc
   say ledger "Her missiles were sold in March to pay the electricity bill. She never had a chance." voice=tmo-ledger-05.mp3
 
 beat found when done find_convoy
-  say spirit "Summer flight, Calder Spirit. Very glad to see you. Three ships, forty crew and sixty company staff off the Agrapol office. Our navy escort left at four, without a word." voice=tmo-spirit-01.mp3
+  say spirit "Meridian flight, Calder Spirit. Very glad to see you. Three ships, forty crew and sixty company staff off the Agrapol office. Our navy escort left at four, without a word." voice=tmo-spirit-01.mp3
   say spirit "We've got small fast contacts closing, east and south-east. No transponders, and they're not answering." voice=tmo-spirit-02.mp3
   say skiff "Calder ships. Cut your engines and nobody needs to swim. This is a business, captain. Let's be businesslike." voice=tmo-skiff-01.mp3
   hint "Sink the boats before they board"
@@ -180,49 +180,49 @@ beat found when done find_convoy
   hint "Boats: rockets and gun, save the AGMs"
 
 beat boats-down when done boats
-  say spirit "Boats are burning. Thank you, Summer. Wait one. One of the navy ships has turned toward us. Corvette. She's the Ardent." voice=tmo-spirit-03.mp3
+  say spirit "Boats are burning. Thank you, Ronin. Wait one. One of the navy ships has turned toward us. Corvette. She's the Ardent." voice=tmo-spirit-03.mp3
   say ardent "Calder Spirit, this is the Republic corvette Ardent. My crew has not been paid in fourteen weeks, and you are carrying eighty containers. Heave to, and prepare to be boarded." voice=tmo-ardent-01.mp3
   flag ardent-hailed
 
-# Summer Two speaks up only if he is still flying.
+# Deacon speaks up only if he is still flying.
 beat two-warship when flag ardent-hailed unless=two-gone
   say two "Lead, Two. That's a warship. She's got missiles." voice=tmo-two-02.mp3
 
 beat ardent-orders when flag ardent-hailed
   hint "Ardent has SAMs: stay low and fast"
-  say ledger "She's got a crew that wants its wages and a flag nobody is paying for. Pirate is a job description, Summer. Sink her." voice=tmo-ledger-07.mp3
+  say ledger "She's got a crew that wants its wages and a flag nobody is paying for. Pirate is a job description, Ronin. Sink her." voice=tmo-ledger-07.mp3
   hint "AGMs from outside her guns, flares"
 
 beat ardent-down when done ardent_wave
-  say spirit "Ardent is on fire! Her crew are going over the side. Summer, radar has aircraft, low, from the north-west." voice=tmo-spirit-04.mp3
+  say spirit "Ardent is on fire! Her crew are going over the side. Ronin, radar has aircraft, low, from the north-west." voice=tmo-spirit-04.mp3
   say ledger "Somebody has been investing. Two light attack aircraft and a gunship. Keep them off the Spirit." voice=tmo-ledger-08.mp3
   hint "Pirate aircraft inbound from the NW"
 
 beat clear when done air_wave
-  say spirit "Scope's clear, Summer. We're making turns for open water. Whatever they're paying you, it isn't enough." voice=tmo-spirit-05.mp3
-  say ledger "It's exactly enough. I wrote the contract. Summer flight, the convoy is clear. Invoice is out." voice=tmo-ledger-09.mp3
-  say ledger "One more thing. The Provisional Authority just called the office. So did what's left of the Republic. Come home, Summer. We have a bidding war." voice=tmo-ledger-10.mp3
+  say spirit "Scope's clear, Ronin. We're making turns for open water. Whatever they're paying you, it isn't enough." voice=tmo-spirit-05.mp3
+  say ledger "It's exactly enough. I wrote the contract. Meridian flight, the convoy is clear. Invoice is out." voice=tmo-ledger-09.mp3
+  say ledger "One more thing. The Provisional Authority just called the office. So did what's left of the Republic. Come home, Ronin. We have a bidding war." voice=tmo-ledger-10.mp3
   remember twelve-miles-out
   finish
   music "synthetic-warfront.mp3" loop
   video "tmo-outro.mp4"
   music stop
-  card "Chapter complete" "Halyard Risk Group thanks you for your service. Losses will be deducted."
+  card "Chapter complete" "Meridian Risk Group thanks you for your service. Losses will be deducted."
   complete convoy_clear
 
 beat lost when done spirit_lost
   say spirit "Mayday, mayday, Calder Spirit. We are on fire and taking water. Abandoning ship." voice=tmo-spirit-06.mp3
-  say ledger "That was the client's flagship, sixty staff and our contract. Come home, Summer flight. Somebody will want to talk about this." voice=tmo-ledger-11.mp3
+  say ledger "That was the client's flagship, sixty staff and our contract. Come home, Meridian flight. Somebody will want to talk about this." voice=tmo-ledger-11.mp3
 
 beat grace-sunk when done grace_lost unless=chapter-decided
   say ledger "Calder Grace is gone. Hull and cargo, eleven million. That comes off somebody's bonus. Keep the other two alive." voice=tmo-ledger-12.mp3
 
 beat vale-sunk when done vale_lost unless=chapter-decided
-  say ledger "Calder Vale is down. The client is counting, Summer, and so am I." voice=tmo-ledger-13.mp3
+  say ledger "Calder Vale is down. The client is counting, Ronin, and so am I." voice=tmo-ledger-13.mp3
 
 beat two-lost when done two_down
   flag two-gone
-  say ledger "Summer Two is down. His beacon is up; the client's lifeboat will fetch him. You're on your own." voice=tmo-ledger-14.mp3
+  say ledger "Deacon is down. His beacon is up; the client's lifeboat will fetch him. You're on your own." voice=tmo-ledger-14.mp3
 
 beat decided when done air_wave
   flag chapter-decided
