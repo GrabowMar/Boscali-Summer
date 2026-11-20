@@ -555,6 +555,13 @@ def station_hub(b, v):
             b.box((side * 38, 0, 14.6), (8, 3, 2.2), PANEL)
         b.cyl((0, 0, 30), 3, 1.5, PANEL_D, 8)
         b.beam((0, 0, 31), (0, 0, 50), 0.4, IRON, 4)
+        for k in range(4):
+            a = k * math.pi / 2 + math.pi / 4
+            b.box((22 * math.cos(a), 22 * math.sin(a), 13.5),
+                  (1.8, 0.4, 1.2), PANEL_D, (0, 0, -math.degrees(a)))
+        b.box((0, 41.0, 15.8), (4.2, 2.2, 0.2), PANEL_D)
+        b.box((0, 41.0, 15.2), (0.1, 2.0, 0.5), IRON)
+        b.box((12, -20, 15.2), (1.2, 1.2, 0.8), PANEL_D)
     if b.fine:
         b.cyl((-20, -26, 12.4), 3, 3.5, ORANGE, 8)
         b.box((22, -26, 14), (4, 3, 1.6), ORANGE)
@@ -562,6 +569,7 @@ def station_hub(b, v):
         b.cyl((16, 26, 12.4), 2.2, 2.6, WHITE, 8, r2=0.4)
         for k, x, y, yaw in around(8, 36, math.pi / 8):
             b.box((x, y, 0.3), (2.8, 2.8, 0.3), CONCRETE_D)
+        b.decal((0, 41.16, 15.2), (1.2, 1.2), (-90, 0, 0), (2, 0))
 
 
 def station_module(b, v):
@@ -581,6 +589,16 @@ def station_module(b, v):
         b.box((0, 6.05, 10.2), (16, 0.08, 0.7), GLASS)
         b.box((0, -6.05, 10.2), (16, 0.08, 0.7), GLASS)
         b.box((13, 8.5, 3.3), (1.4, 3, 0.3), IRON, (-38, 0, 0))             # the stair
+        for side in (-1, 1):
+            for k in (-6, 6):
+                b.box((k, side * 6.05, 10.2), (1.8, 0.05, 1.6), PANEL_D)
+                b.box((k, side * 6.12, 10.2), (1.5, 0.03, 1.3), GLASS)
+        for side in (-1, 1):
+            b.box((side * 21.5, 0, 9), (0.08, 1.6, 2.0), PANEL_D)
+        b.box((14, -3, 13.0), (2.5, 0.4, 1.2), PANEL_D)
+        b.box((0, -6.1, 5.6), (10, 0.08, 0.3), IRON)
+    if b.fine:
+        b.decal((16, 6.14, 10.2), (1.0, 0.8), (-90, 0, 0), (1, 0))
     if v == 0:
         b.cyl((-10, 0, 13.3), 2.4, 2, WHITE, 8, r2=0.6)
         if b.mid:
@@ -622,6 +640,10 @@ def dish(b, v):
     if b.fine:
         b.box((6.5, -1, 1.2), (1.5, 2, 1.2), PANEL_D)
         b.beam((-3.4, 0, 4), (-3.4, 0, 11), 0.1, IRON, 3)
+        b.box(m @ Vector((0, 0, 0.1)), (3.2, 2.2, 0.2), PANEL_D)
+        railing(b, m @ Vector((-3, 0, 0.3)), m @ Vector((3, 0, 0.3)), 0.6, 3)
+        b.box(m @ Vector((0, 10, 0.2)), (2.2, 1.2, 0.2), WHITE)
+        b.box(m @ Vector((0, 0, -1.5)), (0.5, 0.5, 0.6), IRON)
 
 
 def tunnel_portal(b, v):
@@ -647,6 +669,12 @@ def tunnel_portal(b, v):
             b.cyl((x, 21, 0), 0.4, 1.4, YELLOW, 5)
         b.box((16, 12, 1.5), (1.4, 1.4, 1.5), PANEL_D)
         b.box((-13, 8.2, 4), (1.2, 0.2, 1.8), IRON)
+        for x in (-5.5, 9.5):
+            b.box((x, 4.8, 7), (0.15, 0.15, 5), IRON)
+        b.box((0, 8.2, 1.2), (4, 0.2, 0.2), YELLOW)
+        b.box((0, 14, 0.9), (3, 0.3, 0.1), IRON)
+        for x in (-10, 10):
+            b.box((x, 8.2, 14), (0.4, 0.2, 0.3), PANEL_D)
 
 
 def radar_tower(b, v):
@@ -665,6 +693,9 @@ def radar_tower(b, v):
         b.box((7, -5, 3.4), (3.2, 2.6, 0.2), PANEL_D)
         for z in (9.7, 19.3):
             b.box((0, 0, z), ((7 - 2.5 * z / 29) / 2, (7 - 2.5 * z / 29) / 2, 0.12), IRON)
+        b.box((7, -5.05, 2.2), (0.9, 0.05, 1.5), PANEL_D)
+        b.box((0, 0, 33.2), (0.3, 0.3, 0.3), RED)
+        ladder(b, (3.4, 0, 0), 29, 0, rungs=8)
     if b.fine:
         b.box((4.2, 0, 30.4), (0.1, 4, 0.8), IRON)
         b.box((-4.2, 0, 30.4), (0.1, 4, 0.8), IRON)
@@ -772,9 +803,9 @@ def water_tower(b, v):
             b.cyl((0, 0, 21), 6.06, 0.8, RED, 12, caps=False)
             b.cyl((0, 0, 16.6), 6.6, 0.3, IRON, 12)                        # the walkway
             b.beam((0, 0, 25.6), (0, 0, 27.6), 0.08, IRON, 3)
+        if b.fine:
             ladder(b, (5.46, 0, 0), 16.4, 0, rungs=8)
             pipe_run(b, [(1.2, 0, 0), (1.2, 0, 14.5)], 0.12, IRON, 2)
-        if b.fine:
             b.decal((0, 6.06, 19.5), (1.2, 1.2), (-90, 0, 0), (2, 0))
         return
     b.cyl((0, 0, 0), 5, 1, CONCRETE_D, 10)
@@ -787,9 +818,9 @@ def water_tower(b, v):
         b.box((0, 3.4, 2.2), (0.8, 0.2, 1.2), BLACK)
         b.cyl((0, 0, 32.8), 1.4, 1, CONCRETE_D, 6)
         b.beam((0, 0, 33.8), (0, 0, 37), 0.08, IRON, 3)
+    if b.fine:
         ladder(b, (2.9, 0, 1.2), 19.8, 0, rungs=12)
         pipe_run(b, [(3.4, 0, 1), (3.4, 0, 22)], 0.12, IRON, 2)
-    if b.fine:
         for k, x, y, yaw in around(8, 3.3):
             if k % 2:
                 b.box((x * 0.92, y * 0.92, 14), (0.4, 0.1, 0.9), BLACK, (0, 0, yaw))
@@ -950,10 +981,10 @@ def silo(b, v):
             b.box((-19.5, 12, 4.5), (3.3, 3.3, 0.6), TILE, taper=(0.02, 1))
             for k in range(4):
                 b.beam((k * 8.5 - 12.75, 0, 26), (k * 8.5 - 12.75, 0, 27), 0.5, PANEL_D, 4)
+        if b.fine:
             ladder(b, (16.75, 0, 0.5), 23, 90, rungs=10)
             pipe_run(b, [(-19.5, 0, 30), (-19.5, 0, 8), (-13, 0, 8)], 0.15, IRON, 2)
             railing(b, (-18, 0, 28.6), (14, 0, 28.6), 0.8, 8)
-        if b.fine:
             b.decal((-19.5, 2.05, 20), (1.0, 1.0), (-90, 0, 0), (3, 0))
         return
     for x, y, hx, hy in ((0, -9, 15, 0.4), (0, 10, 15, 0.4), (-15, 0.5, 0.4, 9.9), (15, 0.5, 0.4, 9.9)):   # the bund wall
@@ -969,8 +1000,8 @@ def silo(b, v):
         b.beam((-1, 0, 1), (2, 1, 1), 0.3, STEEL, 4)
         b.beam((7, -4, 1), (7, -11, 1), 0.3, STEEL, 4)
         b.box((7, -12.5, 1.3), (1.8, 1.4, 1.3), PANEL_D)                   # the pump house
-        ladder(b, (6.0, 0, 0.2), 8, 0, rungs=8)
     if b.fine:
+        ladder(b, (6.0, 0, 0.2), 8, 0, rungs=8)
         b.decal((7, 6.05, 5), (1.0, 1.0), (-90, 0, 0), (1, 0))
 
 
@@ -1113,6 +1144,12 @@ def antenna_field(b, v):
         b.box((34, 34, 3.1), (3.3, 2.7, 0.15), PANEL_D)
         b.box((34, 31.55, 1.1), (0.6, 0.05, 1.1), BLACK)
         b.box((38, 34, 0.8), (0.8, 1.2, 0.8), PANEL_D)
+        for i in (-1, 1):
+            for j in (-1, 1):
+                b.box((i * 26, j * 26, 0.5), (1.2, 1.2, 0.4), CONCRETE_D)
+        b.box((0, -2, 1.0), (1.4, 1.0, 0.8), PANEL_D)
+        b.beam((-26, -26, 0.8), (0, -2, 1.4), 0.08, IRON, 3)
+        b.beam((26, -26, 0.8), (0, -2, 1.4), 0.08, IRON, 3)
 
 
 def chapel(b, v):
@@ -1182,6 +1219,8 @@ def radar_dome(b, v):
         b.box((-8, 1, 0.8), (1, 0.8, 0.8), STEEL)
         b.box((6.05, 1.5, 3.4), (0.12, 1.5, 0.9), PANEL_D)
         b.cyl((0, 0, 9.4), 7.64, 0.25, PANEL, 14, caps=False)              # the panel seam
+        ladder(b, (6.05, 1.5, 0.6), 5.2, 0, rungs=4)
+        b.box((0, 6.1, 4.0), (0.8, 0.08, 0.8), YELLOW)
 
 
 SHAPES = (("railgun", railgun, 3, 1, "l"), ("helios_core", helios_core, 1, 1, "l"), ("capacitor", capacitor, 2, 1, "l"),

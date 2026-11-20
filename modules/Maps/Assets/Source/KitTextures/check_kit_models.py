@@ -139,6 +139,13 @@ def check(path, target):
     for i, (value, limit) in enumerate(zip(tot, limits)):
         if value > limit:
             problems.append("LOD%d total %d over %d" % (i, value, limit))
+    existing = [kinds[k]["lod"] for k in kinds if k in CAPS]
+    if existing:
+        ex_tot = [sum(v[i] for v in existing) for i in range(3)]
+        if ex_tot[1] > 14395:
+            problems.append("existing LOD1 %d over 14395" % ex_tot[1])
+        if ex_tot[2] > 5524:
+            problems.append("existing LOD2 %d over 5524" % ex_tot[2])
     report = {"shapes": len(shapes), "kinds": len(kinds), "lod": tot,
               "kinds_detail": kinds, "problems": problems}
     out = Path("reports/map-buildings-2026-11-20")
